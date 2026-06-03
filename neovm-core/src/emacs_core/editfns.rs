@@ -5,8 +5,8 @@
 //! `Buffer` stores **0-based Emacs-byte positions**.  Every Lisp↔Buffer boundary
 //! must convert:
 //!
-//! - Lisp char pos  →  byte pos:  `buf.text.char_to_emacs_byte(lisp_pos - 1)`
-//! - byte pos       →  Lisp char: `buf.text.emacs_byte_to_char(byte_pos) + 1`
+//! - Lisp char pos  →  byte pos:  `LispCharPos1::to_byte_pos`
+//! - byte pos       →  Lisp char: `EmacsBytePos::to_lisp`
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::OverlayModificationHook;
@@ -134,11 +134,10 @@ fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flo
 }
 
 pub(crate) fn byte_span_char_len(buf: &crate::buffer::Buffer, beg: usize, end: usize) -> usize {
-    let lo = beg.min(end);
-    let hi = beg.max(end);
-    buf.text
-        .emacs_byte_to_char(hi)
-        .saturating_sub(buf.text.emacs_byte_to_char(lo))
+    let range = EmacsByteRange::from_usize(beg.min(end), beg.max(end));
+    let start = buf.text.emacs_byte_pos_to_char_pos(range.start());
+    let end = buf.text.emacs_byte_pos_to_char_pos(range.end());
+    end.get().saturating_sub(start.get())
 }
 
 pub(crate) fn current_buffer_byte_span_char_len(

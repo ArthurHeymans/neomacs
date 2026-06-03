@@ -4,7 +4,9 @@ use super::*;
 // Buffer operations (require evaluator for BufferManager access)
 // ===========================================================================
 
-use crate::buffer::{BufferId, BufferManager, EmacsByteRange, StorageBytePos};
+use crate::buffer::{
+    BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos,
+};
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
 use crate::emacs_core::value::{
@@ -114,8 +116,8 @@ fn sync_current_buffer_to_selected_window(eval: &mut super::eval::Context) {
     }
 }
 
-fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
-    buf.text.emacs_byte_to_char(byte_pos) as i64 + 1
+fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
+    byte_pos.to_lisp(&buf.text).as_i64()
 }
 
 pub(crate) fn normalize_narrow_region_in_buffers(
@@ -149,8 +151,12 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     let start_char = if s > 0 { s as usize - 1 } else { 0 };
     let end_char = if e > 0 { e as usize - 1 } else { 0 };
     Ok((
-        buf.text.char_to_emacs_byte(start_char),
-        buf.text.char_to_emacs_byte(end_char),
+        buf.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(start_char))
+            .get(),
+        buf.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(end_char))
+            .get(),
     ))
 }
 
@@ -3950,8 +3956,8 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         if pos <= 0 {
             return Ok(Value::NIL);
         }
-        let point_min = point_char_pos(buf, buf.begv_byte);
-        let point_max = point_char_pos(buf, buf.zv_byte);
+        let point_min = point_char_pos(buf, EmacsBytePos::new(buf.begv_byte));
+        let point_max = point_char_pos(buf, EmacsBytePos::new(buf.zv_byte));
         if pos < point_min || pos >= point_max {
             return Ok(Value::NIL);
         }
@@ -3976,8 +3982,8 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         if pos <= 0 {
             return Ok(Value::NIL);
         }
-        let point_min = point_char_pos(buf, buf.begv_byte);
-        let point_max = point_char_pos(buf, buf.zv_byte);
+        let point_min = point_char_pos(buf, EmacsBytePos::new(buf.begv_byte));
+        let point_max = point_char_pos(buf, EmacsBytePos::new(buf.zv_byte));
         if pos <= point_min || pos > point_max {
             return Ok(Value::NIL);
         }
