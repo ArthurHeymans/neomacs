@@ -1775,7 +1775,7 @@ pub(crate) fn builtin_charset_after(
         buf.point()
     };
 
-    let point_max_byte = buf.point_max();
+    let point_max_byte = buf.accessible_emacs_byte_region().end_usize();
     if target_byte >= point_max_byte {
         return Ok(Value::NIL);
     }

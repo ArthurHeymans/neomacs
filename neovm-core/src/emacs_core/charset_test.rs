@@ -1280,6 +1280,30 @@ fn charset_after_eval_semantics() {
     assert!(builtin_charset_after(&mut eval, vec![Value::string("x")]).is_err());
 }
 
+#[test]
+fn charset_after_respects_narrowed_end() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buf = eval
+            .buffers
+            .current_buffer_mut()
+            .expect("current buffer must exist");
+        buf.insert("abé");
+        buf.narrow_to_byte_region(0, 2);
+    }
+
+    assert_eq!(
+        builtin_charset_after(&mut eval, vec![Value::fixnum(2)]).expect("pos 2"),
+        Value::symbol("ascii")
+    );
+    assert!(
+        builtin_charset_after(&mut eval, vec![Value::fixnum(3)])
+            .expect("pos 3 at ZV")
+            .is_nil()
+    );
+}
+
 // -----------------------------------------------------------------------
 // Round-trip tests
 // -----------------------------------------------------------------------
