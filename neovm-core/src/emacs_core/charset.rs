@@ -11,6 +11,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
+use crate::buffer::EmacsByteRange;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -1521,14 +1522,17 @@ pub(crate) fn builtin_find_charset_region(
         std::mem::swap(&mut a, &mut b);
     }
 
-    let start_byte = buf.lisp_pos_to_accessible_byte(a);
-    let end_byte = buf.lisp_pos_to_accessible_byte(b);
-    if start_byte == end_byte {
+    let byte_range = EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(a),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(b),
+    );
+    if byte_range.is_empty() {
         return Ok(Value::list(vec![Value::symbol("ascii")]));
     }
 
     let text = {
-        let string = buf.buffer_substring_lisp_string(start_byte, end_byte);
+        let string =
+            buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize());
         super::builtins::runtime_string_from_lisp_string(&string)
     };
     let charsets = classify_string_charsets(&text);
@@ -1767,7 +1771,7 @@ pub(crate) fn builtin_charset_after(
         if pos < point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        buf.lisp_pos_to_accessible_byte(pos)
+        buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
     } else {
         buf.point()
     };
