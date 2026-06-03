@@ -1585,9 +1585,8 @@ pub(crate) fn builtin_set_buffer_multibyte(
         BufferMultibyteConversionMode::ToMultibyte => old_props,
         BufferMultibyteConversionMode::AsUnibyte | BufferMultibyteConversionMode::AsMultibyte => {
             remap_text_property_table(&old_props, |char_pos| {
-                let byte_pos = shared_text.char_to_byte(char_pos);
                 let logical_byte = shared_text
-                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
+                    .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
                     .get();
                 let boundary = lisp_string_advance_byte_to_boundary(
                     &new_storage,

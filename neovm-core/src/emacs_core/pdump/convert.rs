@@ -11,12 +11,12 @@ use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
-use crate::buffer::BufferTextBackendKind;
 use crate::buffer::buffer::{Buffer, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
+use crate::buffer::{BufferTextBackendKind, EmacsBytePos};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -4383,6 +4383,12 @@ fn load_property_interval(
 
 // load_undo_record removed — undo state is loaded from buffer-local properties.
 
+#[inline]
+fn dump_buffer_byte_to_char_pos(text: &BufferText, byte_pos: usize) -> usize {
+    text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
+}
+
 fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
     let text = BufferText::from_dump_with_backend_kind(
         db.text.text.clone(),
@@ -4390,12 +4396,14 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         load_buffer_text_backend_kind(db.text.backend_kind),
     );
     let total_chars = text.char_count();
-    let begv_char = db.begv_char.unwrap_or_else(|| text.byte_to_char(db.begv));
+    let begv_char = db
+        .begv_char
+        .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, db.begv));
     let zv_char = db.zv_char.unwrap_or_else(|| {
         if db.zv == text.len() {
             total_chars
         } else {
-            text.byte_to_char(db.zv)
+            dump_buffer_byte_to_char_pos(&text, db.zv)
         }
     });
     let pt_char = db.pt_char.unwrap_or_else(|| {
@@ -4404,7 +4412,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         } else if db.pt == db.zv {
             zv_char
         } else {
-            text.byte_to_char(db.pt)
+            dump_buffer_byte_to_char_pos(&text, db.pt)
         }
     });
     let mark_char = match db.mark {
@@ -4414,7 +4422,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             } else if mark == db.zv {
                 zv_char
             } else {
-                text.byte_to_char(mark)
+                dump_buffer_byte_to_char_pos(&text, mark)
             }
         })),
         None => None,
