@@ -87,7 +87,8 @@ fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end
 impl Buffer {
     fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
         let mut bytes = Vec::new();
-        self.text.copy_emacs_bytes_to(start, end, &mut bytes);
+        self.text
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
         let mut string = lisp_string_from_buffer_bytes(bytes, self.get_multibyte());
         let props = self.text.text_props_slice(start, end);
         if !props.is_empty() {
@@ -543,7 +544,8 @@ impl Buffer {
         // walking chars and substituting the matched ones with to_bytes.
         use crate::emacs_core::emacs_char;
         let mut region_bytes = Vec::with_capacity(end - start);
-        self.text.copy_emacs_bytes_to(start, end, &mut region_bytes);
+        self.text
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut region_bytes);
         let mut replacement_bytes = Vec::with_capacity(region_bytes.len());
         let mut changed = false;
         if self.get_multibyte() {
@@ -679,12 +681,16 @@ impl Buffer {
         let mut region1 = Vec::with_capacity(end1_byte - start1_byte);
         let mut mid = Vec::with_capacity(start2_byte - end1_byte);
         let mut region2 = Vec::with_capacity(end2_byte - start2_byte);
+        self.text.copy_emacs_byte_range_to(
+            EmacsByteRange::from_usize(start1_byte, end1_byte),
+            &mut region1,
+        );
         self.text
-            .copy_emacs_bytes_to(start1_byte, end1_byte, &mut region1);
-        self.text
-            .copy_emacs_bytes_to(end1_byte, start2_byte, &mut mid);
-        self.text
-            .copy_emacs_bytes_to(start2_byte, end2_byte, &mut region2);
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(end1_byte, start2_byte), &mut mid);
+        self.text.copy_emacs_byte_range_to(
+            EmacsByteRange::from_usize(start2_byte, end2_byte),
+            &mut region2,
+        );
 
         let old_span = self.buffer_region_lisp_string(start1_byte, end2_byte);
 
