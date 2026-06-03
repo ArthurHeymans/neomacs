@@ -15,7 +15,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{BufferId, BufferManager, InsertionType};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, InsertionType};
 
 // ---------------------------------------------------------------------------
 // Marker struct (for documentation / internal helpers)
@@ -109,7 +109,7 @@ pub(crate) fn make_registered_buffer_marker(
 ) -> Value {
     let byte_pos = match buffers.get(buffer_id) {
         Some(buffer) => lisp_pos_to_byte(buffer, position),
-        None => 0,
+        None => EmacsBytePos::ZERO,
     };
     let marker = make_marker_value(Some(buffer_id), Some(position), insertion_type);
     let marker_id = buffers.allocate_marker_id();
@@ -126,7 +126,7 @@ pub(crate) fn make_registered_buffer_marker(
             marker_ptr,
             buffer_id,
             marker_id,
-            byte_pos,
+            byte_pos.get(),
             if insertion_type {
                 InsertionType::After
             } else {
@@ -330,9 +330,9 @@ fn marker_buffer_id(v: &Value) -> Option<BufferId> {
     v.as_marker_data().unwrap().buffer
 }
 
-fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> usize {
+fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> EmacsBytePos {
     // GNU Emacs: set-marker clamps to the full buffer, not the narrowed region.
-    buf.lisp_pos_to_full_buffer_byte(lisp_pos)
+    buf.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos)
 }
 
 fn marker_targets_current_mark(marker: &Value) -> bool {
@@ -598,7 +598,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
                     if let Some(byte_pos) =
                         buffers.get(buf_id).map(|buf| lisp_pos_to_byte(buf, pos))
                     {
-                        let _ = buffers.set_buffer_mark(buf_id, byte_pos);
+                        let _ = buffers.set_buffer_mark(buf_id, byte_pos.get());
                     }
                 }
                 None => {
@@ -691,7 +691,7 @@ fn register_marker_in_buffers(
             marker_ptr,
             buffers.get(buf_id).map(|buf| lisp_pos_to_byte(buf, pos)),
         ) {
-            let _ = buffers.register_marker_id(ptr, buf_id, mid, byte_pos, ins_type);
+            let _ = buffers.register_marker_id(ptr, buf_id, mid, byte_pos.get(), ins_type);
         }
     }
 }
