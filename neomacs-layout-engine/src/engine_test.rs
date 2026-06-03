@@ -3070,7 +3070,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
     for target in &targets {
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-            buffer.lisp_pos_to_byte(target.line_beg as i64)
+            buffer
+                .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
+                .get()
         };
         let _ = eval.buffer_manager_mut().goto_buffer_byte(buf_id, byte_pos);
         {
@@ -3302,7 +3304,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
     for target in &targets {
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-            buffer.lisp_pos_to_byte(target.line_beg as i64)
+            buffer
+                .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
+                .get()
         };
         let _ = eval.buffer_manager_mut().goto_buffer_byte(buf_id, byte_pos);
         {

@@ -1962,12 +1962,6 @@ impl Buffer {
         self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
     }
 
-    /// Convert a 1-based Lisp character position to a raw byte position,
-    /// clamping to the full buffer.
-    pub fn lisp_pos_to_byte(&self, lisp_pos: i64) -> usize {
-        self.lisp_pos_to_emacs_byte_pos(lisp_pos).get()
-    }
-
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the accessible region.
     pub fn lisp_pos_to_accessible_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {

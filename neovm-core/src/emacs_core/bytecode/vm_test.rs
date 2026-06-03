@@ -4202,8 +4202,8 @@ fn vm_current_buffer_query_builtins_use_shared_runtime_state() {
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("hello");
-                let start = buffer.lisp_pos_to_byte(2);
-                let end = buffer.lisp_pos_to_byte(5);
+                let start = buffer.lisp_pos_to_emacs_byte_pos(2).get();
+                let end = buffer.lisp_pos_to_emacs_byte_pos(5).get();
                 buffer.narrow_to_region(start, end);
             },
         ),
@@ -4246,8 +4246,8 @@ fn vm_navigation_predicates_and_line_positions_use_shared_narrowed_buffer_state(
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("wx\nab\ncd");
-                let start = buffer.lisp_pos_to_byte(4);
-                let end = buffer.lisp_pos_to_byte(6);
+                let start = buffer.lisp_pos_to_emacs_byte_pos(4).get();
+                let end = buffer.lisp_pos_to_emacs_byte_pos(6).get();
                 buffer.narrow_to_region(start, end);
                 buffer.goto_char(buffer.begv);
             },
@@ -7879,8 +7879,8 @@ fn vm_char_primitives_and_buffer_substring_use_narrowed_current_buffer_state() {
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("Hello, 世界");
-                let start = buffer.lisp_pos_to_byte(3);
-                let end = buffer.lisp_pos_to_byte(8);
+                let start = buffer.lisp_pos_to_emacs_byte_pos(3).get();
+                let end = buffer.lisp_pos_to_emacs_byte_pos(8).get();
                 buffer.narrow_to_region(start, end);
                 buffer.goto_char(buffer.begv);
             },
