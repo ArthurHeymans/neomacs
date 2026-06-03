@@ -332,7 +332,8 @@ fn next_char_property_change_for_buffer(
 ) -> Result<i64, Flow> {
     let byte_pos = textprop::validate_buffer_point(buf, position)?;
     let overlay_next = buf.overlays.next_boundary_after(byte_pos);
-    let point_max = textprop::byte_to_elisp_pos(buf, buf.point_max());
+    let accessible = buf.accessible_emacs_byte_region();
+    let point_max = textprop::byte_to_elisp_pos(buf, accessible.end_usize());
     let mut temp = overlay_next.map_or(point_max, |next| textprop::byte_to_elisp_pos(buf, next));
     if limit < temp {
         temp = limit;
@@ -340,7 +341,7 @@ fn next_char_property_change_for_buffer(
 
     if let Some(next) = buf.text.text_props_next_change(byte_pos) {
         let next_pos = textprop::byte_to_elisp_pos(buf, next);
-        if next < buf.point_max() && next_pos < temp {
+        if next < accessible.end_usize() && next_pos < temp {
             return Ok(next_pos);
         }
     }
@@ -354,7 +355,8 @@ fn previous_char_property_change_for_buffer(
 ) -> Result<i64, Flow> {
     let byte_pos = textprop::validate_buffer_point(buf, position)?;
     let overlay_prev = buf.overlays.previous_boundary_before(byte_pos);
-    let point_min = textprop::byte_to_elisp_pos(buf, buf.point_min());
+    let accessible = buf.accessible_emacs_byte_region();
+    let point_min = textprop::byte_to_elisp_pos(buf, accessible.start_usize());
     let mut temp = overlay_prev.map_or(point_min, |prev| textprop::byte_to_elisp_pos(buf, prev));
     if limit > temp {
         temp = limit;
@@ -362,7 +364,7 @@ fn previous_char_property_change_for_buffer(
 
     if let Some(prev) = buf.text.text_props_previous_change(byte_pos) {
         let prev_pos = textprop::byte_to_elisp_pos(buf, prev);
-        if prev > buf.point_min() && prev_pos > temp {
+        if prev > accessible.start_usize() && prev_pos > temp {
             return Ok(prev_pos);
         }
     }
@@ -404,7 +406,8 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let accessible = buf.accessible_emacs_byte_region();
+    let point_max = textprop::byte_to_elisp_pos(buf, accessible.end_usize());
     let mut get_args = vec![Value::fixnum(position), prop];
     if let Some(object) = object {
         get_args.push(*object);
@@ -478,7 +481,8 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let point_min = buf.point_min_char() as i64 + 1;
+    let accessible = buf.accessible_emacs_byte_region();
+    let point_min = textprop::byte_to_elisp_pos(buf, accessible.start_usize());
     let limit = match args.get(3) {
         Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
         _ => point_min,
