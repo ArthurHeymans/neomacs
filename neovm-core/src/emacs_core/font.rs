@@ -3622,6 +3622,7 @@ fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, defaults_frame: b
         ("highlight", LFaceAttr::InverseVideo) => Value::T,
         ("region", LFaceAttr::InverseVideo) => Value::T,
         ("mode-line", LFaceAttr::InverseVideo) => Value::T,
+        ("mode-line-active", LFaceAttr::Inherit) => Value::symbol("mode-line"),
         ("mode-line-highlight", LFaceAttr::Inherit) => Value::symbol("highlight"),
         ("mode-line-emphasis", LFaceAttr::Weight) => Value::symbol("bold"),
         ("mode-line-buffer-id", LFaceAttr::Weight) => Value::symbol("bold"),

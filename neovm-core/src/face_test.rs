@@ -155,6 +155,7 @@ fn face_table_standard_faces() {
     assert!(table.get("bold").is_some());
     assert!(table.get("italic").is_some());
     assert!(table.get("mode-line").is_some());
+    assert!(table.get("mode-line-active").is_some());
     assert!(table.get("tool-bar").is_some());
     assert!(table.get("tab-bar").is_some());
     assert!(table.get("tab-line").is_some());

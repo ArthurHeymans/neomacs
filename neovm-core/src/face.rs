@@ -1460,6 +1460,11 @@ impl FaceTable {
         });
         self.define("mode-line", mode_line);
 
+        // mode-line-active
+        let mut mode_line_active = Face::new("mode-line-active");
+        mode_line_active.inherit = Some(face_symbol_value("mode-line"));
+        self.define("mode-line-active", mode_line_active);
+
         // mode-line-inactive
         let mut mode_line_inactive = Face::new("mode-line-inactive");
         mode_line_inactive.foreground = Some(Color::rgb(64, 64, 64));
