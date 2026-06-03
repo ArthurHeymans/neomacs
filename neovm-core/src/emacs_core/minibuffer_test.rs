@@ -1162,6 +1162,22 @@ fn builtin_minibuffer_contents_returns_current_buffer_text() {
 }
 
 #[test]
+fn builtin_minibuffer_contents_respects_narrowing_in_current_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("scratch buffer");
+        buf.insert("012345");
+        buf.narrow_to_byte_region(1, 4);
+    }
+
+    let contents = builtin_minibuffer_contents_ctx(&mut eval, vec![]).unwrap();
+    assert_eq!(contents.as_utf8_str(), Some("123"));
+    let plain = builtin_minibuffer_contents_no_properties_ctx(&mut eval, vec![]).unwrap();
+    assert_eq!(plain.as_utf8_str(), Some("123"));
+}
+
+#[test]
 fn builtin_minibuffer_contents_no_properties_returns_current_buffer_text() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

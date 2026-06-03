@@ -1439,7 +1439,7 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
     let Some((point_max, current_id)) = eval
         .buffers
         .current_buffer()
-        .map(|buffer| (buffer.point_max(), buffer.id))
+        .map(|buffer| (buffer.accessible_emacs_byte_region().end_usize(), buffer.id))
     else {
         return Ok(LispString::from_utf8(""));
     };
