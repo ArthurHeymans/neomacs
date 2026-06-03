@@ -1531,8 +1531,7 @@ pub(crate) fn builtin_find_charset_region(
     }
 
     let text = {
-        let string =
-            buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize());
+        let string = buf.buffer_substring_lisp_string_range(byte_range);
         super::builtins::runtime_string_from_lisp_string(&string)
     };
     let charsets = classify_string_charsets(&text);

@@ -2089,10 +2089,36 @@ impl Buffer {
     }
 
     /// Return a raw Emacs-byte copy of the range `[start, end)`.
-    pub fn buffer_substring_bytes(&self, start: usize, end: usize) -> Vec<u8> {
+    pub fn buffer_substring_bytes_range(&self, range: EmacsByteRange) -> Vec<u8> {
         let mut out = Vec::new();
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut out);
+        self.copy_emacs_byte_range_to(range, &mut out);
         out
+    }
+
+    /// Return a raw Emacs-byte copy of the range `[start, end)`.
+    pub fn buffer_substring_bytes(&self, start: usize, end: usize) -> Vec<u8> {
+        self.buffer_substring_bytes_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    /// Return the range `[start, end)` as a Lisp string preserving the
+    /// buffer's multibyte/unibyte semantics.
+    pub fn buffer_substring_lisp_string_range(
+        &self,
+        range: EmacsByteRange,
+    ) -> crate::heap_types::LispString {
+        let bytes = self.buffer_substring_bytes_range(range);
+        let mut string = if self.get_multibyte() {
+            crate::heap_types::LispString::from_emacs_bytes(bytes)
+        } else {
+            crate::heap_types::LispString::from_unibyte(bytes)
+        };
+        let start = range.start_usize();
+        let end = range.end_usize();
+        let props = self.text.text_props_slice(start, end);
+        if !props.is_empty() {
+            *string.intervals_mut() = props;
+        }
+        string
     }
 
     /// Return the range `[start, end)` as a Lisp string preserving the
@@ -2102,22 +2128,17 @@ impl Buffer {
         start: usize,
         end: usize,
     ) -> crate::heap_types::LispString {
-        let bytes = self.buffer_substring_bytes(start, end);
-        let mut string = if self.get_multibyte() {
-            crate::heap_types::LispString::from_emacs_bytes(bytes)
-        } else {
-            crate::heap_types::LispString::from_unibyte(bytes)
-        };
-        let props = self.text.text_props_slice(start, end);
-        if !props.is_empty() {
-            *string.intervals_mut() = props;
-        }
-        string
+        self.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    /// Return the range `[start, end)` as a Lisp value string.
+    pub fn buffer_substring_value_range(&self, range: EmacsByteRange) -> Value {
+        Value::heap_string(self.buffer_substring_lisp_string_range(range))
     }
 
     /// Return the range `[start, end)` as a Lisp value string.
     pub fn buffer_substring_value(&self, start: usize, end: usize) -> Value {
-        Value::heap_string(self.buffer_substring_lisp_string(start, end))
+        self.buffer_substring_value_range(EmacsByteRange::from_usize(start, end))
     }
 
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.

@@ -388,8 +388,7 @@ pub(crate) fn eval_region_source_text_in_state(
             buffer.lisp_pos_to_accessible_emacs_byte_pos(raw_start),
             buffer.lisp_pos_to_accessible_emacs_byte_pos(raw_end),
         );
-        let text =
-            buffer.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize());
+        let text = buffer.buffer_substring_lisp_string_range(byte_range);
         (text, raw_start, raw_end)
     };
 

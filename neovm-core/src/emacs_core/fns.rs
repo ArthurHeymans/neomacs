@@ -540,7 +540,7 @@ pub(crate) fn read_buffer_region_bytes_in_manager(
     let buf = buffers
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    Ok(buf.buffer_substring_bytes(byte_range.start_usize(), byte_range.end_usize()))
+    Ok(buf.buffer_substring_bytes_range(byte_range))
 }
 
 pub(crate) fn replace_buffer_region_lisp_string_in_manager(
@@ -915,7 +915,7 @@ fn hash_slice_for_buffer_in_manager(
         buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
         buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
     );
-    Ok(buf.buffer_substring_bytes(byte_range.start_usize(), byte_range.end_usize()))
+    Ok(buf.buffer_substring_bytes_range(byte_range))
 }
 
 fn md5_hex_for_buffer_in_manager(
@@ -948,8 +948,7 @@ fn md5_hex_for_buffer_in_manager(
             buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
             buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
         );
-        let text =
-            buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize());
+        let text = buf.buffer_substring_lisp_string_range(byte_range);
         if text.is_multibyte() {
             return Ok(md5_hash(&crate::encoding::encode_lisp_string(
                 &text,

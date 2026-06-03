@@ -4479,7 +4479,7 @@ fn write_region_content_in_state(
         buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_start),
         buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_end),
     );
-    Ok(buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()))
+    Ok(buf.buffer_substring_lisp_string_range(byte_range))
 }
 
 struct DecodedFileContents {

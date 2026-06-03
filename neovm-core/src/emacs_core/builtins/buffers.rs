@@ -893,7 +893,7 @@ fn checked_buffer_slice_for_char_region(
 
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()),
+        &buf.buffer_substring_lisp_string_range(byte_range),
     ))
 }
 
@@ -956,7 +956,7 @@ fn checked_buffer_slice_for_char_region_in_manager(
 
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()),
+        &buf.buffer_substring_lisp_string_range(byte_range),
     ))
 }
 
