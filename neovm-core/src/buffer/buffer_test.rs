@@ -1,14 +1,41 @@
 use super::*;
-use crate::heap_types::OverlayData;
+use crate::heap_types::{LispString, OverlayData};
 
 // -----------------------------------------------------------------------
 // Helper: create a buffer with some text and correct zv.
 // -----------------------------------------------------------------------
 fn buf_with_text(text: &str) -> Buffer {
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
-    buf.text = BufferText::from_str(text);
+    buf_with_text_backend(text, BufferTextBackendKind::GapBuffer)
+}
+
+fn buf_with_text_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
+    let mut buf = Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), kind);
+    buf.text = BufferText::from_str_with_backend_kind(text, kind);
     buf.widen();
     buf
+}
+
+fn implemented_text_backends() -> [BufferTextBackendKind; 2] {
+    [
+        BufferTextBackendKind::GapBuffer,
+        BufferTextBackendKind::PieceTree,
+    ]
+}
+
+fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    buf.text
+        .text_props_intervals_snapshot()
+        .into_iter()
+        .map(|interval| {
+            let properties = interval
+                .key_order
+                .iter()
+                .copied()
+                .map(|key| (key, interval.properties[&key]))
+                .collect();
+            (interval.start, interval.end, properties)
+        })
+        .collect()
 }
 
 /// Test helper: allocate a scratch `MarkerObj` via the tagged heap and
@@ -754,6 +781,68 @@ fn marker_char_pos_tracks_multibyte_edits() {
     let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 1);
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BackendEditSnapshot {
+    buffer_string: String,
+    point_byte: usize,
+    point_char: usize,
+    mark_byte: Option<usize>,
+    mark_char: Option<usize>,
+    marker_position: Option<(usize, usize)>,
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+}
+
+fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
+    let mut buf = buf_with_text_backend("éaßbc", kind);
+    assert_eq!(buf.text.backend_kind(), kind);
+
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    assert!(buf.text.text_props_put_property(2, 6, face, bold));
+    register_marker_for_test(&mut buf, 42, 3, InsertionType::After);
+    buf.set_mark_byte(2);
+
+    buf.goto_byte(3);
+    buf.insert("日本");
+
+    let delete_start = buf.text.buf_charpos_to_bytepos(2);
+    let delete_end = buf.text.buf_charpos_to_bytepos(4);
+    buf.delete_region(delete_start, delete_end);
+
+    let replace_start = buf.text.buf_charpos_to_bytepos(1);
+    let replace_end = buf.text.buf_charpos_to_bytepos(3);
+    let replacement = LispString::from_utf8("Ωx");
+    buf.replace_region_lisp_string(replace_start, replace_end, &replacement);
+
+    let marker_position = buf
+        .text
+        .marker_chain_lookup(42)
+        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+
+    BackendEditSnapshot {
+        buffer_string: buf.buffer_string(),
+        point_byte: buf.point_byte(),
+        point_char: buf.point_char(),
+        mark_byte: buf.mark(),
+        mark_char: buf.mark_char(),
+        marker_position,
+        text_properties: buffer_text_property_snapshot(&buf),
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_edit_marker_and_property_side_effects() {
+    crate::test_utils::init_test_tracing();
+    let baseline = run_backend_edit_script(BufferTextBackendKind::GapBuffer);
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            run_backend_edit_script(kind),
+            baseline,
+            "{kind:?} edit side effects diverged from gap buffer"
+        );
+    }
 }
 
 // -----------------------------------------------------------------------
