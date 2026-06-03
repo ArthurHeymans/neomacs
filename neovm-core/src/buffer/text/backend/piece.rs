@@ -1,8 +1,9 @@
 use std::fmt;
 
-use crate::buffer::buffer_text::TextBackendDebugLayout;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes};
+use crate::buffer::text::{
+    TextBackendDebugLayout, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PieceSource {

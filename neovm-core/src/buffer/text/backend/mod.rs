@@ -4,11 +4,10 @@ mod piece;
 use std::fmt;
 
 use super::BufferTextBackendKind;
-use crate::buffer::buffer_text::TextBackendDebugLayout;
 use crate::buffer::position::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
-use crate::buffer::text::{TextEditRange, TextExtent};
+use crate::buffer::text::{TextBackendDebugLayout, TextEditRange, TextExtent};
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
 

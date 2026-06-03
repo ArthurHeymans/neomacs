@@ -17,47 +17,10 @@ use super::buffer::{BufferId, InsertionType};
 use super::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
 use super::text::backend::TextBackend;
 use super::text::{
-    BufferTextBackendKind, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
+    BufferTextBackendKind, GapDebugLayout, TextBackendDebugLayout, TextEditRange, TextExtent,
+    TextMetrics, emacs_char_count_bytes,
 };
 use super::text_props::{PropertyInterval, TextPropertyTable};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct GapDebugLayout {
-    pub gpt: CharPos0,
-    pub z: CharPos0,
-    pub gpt_byte: EmacsBytePos,
-    pub z_byte: EmacsBytePos,
-    pub gap_size: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextBackendDebugLayout {
-    Gap(GapDebugLayout),
-    PieceTree(TextMetrics),
-    Rope(TextMetrics),
-}
-
-impl TextBackendDebugLayout {
-    pub fn metrics(self) -> TextMetrics {
-        match self {
-            Self::Gap(layout) => TextMetrics::from_positions(layout.z, layout.z_byte),
-            Self::PieceTree(metrics) | Self::Rope(metrics) => metrics,
-        }
-    }
-
-    pub fn gap(self) -> Option<GapDebugLayout> {
-        match self {
-            Self::Gap(layout) => Some(layout),
-            Self::PieceTree(_) | Self::Rope(_) => None,
-        }
-    }
-}
-
-impl Default for TextBackendDebugLayout {
-    fn default() -> Self {
-        Self::Gap(GapDebugLayout::default())
-    }
-}
 
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
 /// buffer text has not changed since the entry was stored. Mirrors GNU

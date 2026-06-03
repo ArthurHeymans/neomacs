@@ -1,9 +1,8 @@
 use std::fmt;
 
-use crate::buffer::buffer_text::GapDebugLayout;
 use crate::buffer::gap_buffer::GapBuffer;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
-use crate::buffer::text::{TextEditRange, TextExtent};
+use crate::buffer::text::{GapDebugLayout, TextEditRange, TextExtent};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
