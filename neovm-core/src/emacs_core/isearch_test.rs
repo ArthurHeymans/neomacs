@@ -1094,7 +1094,7 @@ fn replace_string_and_regexp_preserve_unibyte_raw_bytes() {
 
     let current_id = {
         let buf = eval.buffers.current_buffer().expect("current buffer");
-        let text = buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max());
+        let text = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
         assert_eq!(text.as_bytes(), &[0xFE, 0xFE]);
         buf.id
     };
@@ -1114,7 +1114,7 @@ fn replace_string_and_regexp_preserve_unibyte_raw_bytes() {
     .unwrap();
 
     let buf = eval.buffers.current_buffer().expect("current buffer");
-    let text = buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max());
+    let text = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
     assert_eq!(text.as_bytes(), &[0xFE]);
 }
 
@@ -1135,7 +1135,7 @@ fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
     let raw_ff = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     builtin_keep_lines(&mut eval, vec![raw_ff]).unwrap();
     let buf = eval.buffers.current_buffer().expect("current buffer");
-    let kept = buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max());
+    let kept = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
     assert_eq!(kept.as_bytes(), &[0xFF, b'\n', 0xFF, b'\n']);
 
     let _ = eval.buffers.replace_buffer_contents_lisp_string(
@@ -1152,7 +1152,7 @@ fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
     )
     .unwrap();
     let buf = eval.buffers.current_buffer().expect("current buffer");
-    let flushed = buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max());
+    let flushed = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
     assert_eq!(flushed.as_bytes(), b"a\n");
 }
 

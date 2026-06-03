@@ -4452,7 +4452,7 @@ fn write_region_content_in_state(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     if start.is_nil() {
-        return Ok(buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()));
+        return Ok(buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range()));
     }
 
     let end = end.unwrap_or(&Value::NIL);
@@ -5498,10 +5498,7 @@ pub(crate) fn builtin_do_auto_save(
             let auto_name = buf.auto_save_file_name_lisp_string().cloned();
             let visit_name = buf.file_name_lisp_string().cloned();
             let mut bytes = Vec::new();
-            buf.copy_emacs_byte_range_to(
-                EmacsByteRange::from_usize(0, buf.total_bytes()),
-                &mut bytes,
-            );
+            buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut bytes);
 
             (auto_name, visit_name, bytes, buf.total_bytes() as i64)
         };

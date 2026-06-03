@@ -1331,9 +1331,9 @@ pub(crate) fn builtin_replace_buffer_contents(
         .unwrap_or(true);
     let source_text = source_id
         .and_then(|id| {
-            eval.buffers
-                .get(id)
-                .map(|buf| buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()))
+            eval.buffers.get(id).map(|buf| {
+                buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range())
+            })
         })
         .map(|text| buffer_insert_lisp_string_from_lisp_string(&text, target_multibyte))
         .unwrap_or_else(|| lisp_string_from_buffer_bytes(Vec::new(), target_multibyte));
@@ -1775,7 +1775,7 @@ pub(crate) fn builtin_buffer_text_pixel_size(
     let text = if let Some(id) = buffer_id {
         if let Some(buf) = buffers.get(id) {
             super::runtime_string_from_lisp_string(
-                &buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()),
+                &buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range()),
             )
         } else {
             String::new()

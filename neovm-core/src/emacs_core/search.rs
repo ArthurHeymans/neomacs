@@ -660,7 +660,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         (match_start, match_end)
     };
 
-    let source = buf.buffer_substring_lisp_string(0, buf.total_bytes());
+    let source = buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range());
     let mut replacement_match_data = md.clone();
     if replacement_match_data.searched_buffer.is_some()
         && !replacement_match_data.buffer_positions_are_bytes

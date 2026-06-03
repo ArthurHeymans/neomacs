@@ -1011,7 +1011,7 @@ fn scan_sexps_with_options(
         return Ok(Some(from));
     }
 
-    let chars = buffer_chars_in_range(buf, EmacsByteRange::from_usize(0, buf.total_bytes()));
+    let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
     let start_bound = buf.point_min_char();
     let stop_bound = buf.point_max_char();
 
@@ -1154,7 +1154,7 @@ fn scan_lists_with_options(
     initial_depth: i64,
     honor_properties: bool,
 ) -> Result<Option<usize>, ScanListError> {
-    let chars = buffer_chars_in_range(buf, EmacsByteRange::from_usize(0, buf.total_bytes()));
+    let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
     let mut idx = from;
     let start = buf.point_min_char();
     let stop = buf.point_max_char();

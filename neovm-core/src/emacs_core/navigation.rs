@@ -182,7 +182,7 @@ fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usi
 /// Return the full buffer text as raw Emacs bytes.
 fn buffer_bytes(buf: &crate::buffer::Buffer) -> Vec<u8> {
     let mut out = Vec::new();
-    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, buf.total_bytes()), &mut out);
+    buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut out);
     out
 }
 

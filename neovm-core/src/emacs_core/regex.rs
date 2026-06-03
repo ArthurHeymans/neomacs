@@ -2284,7 +2284,7 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
     };
 
     let source = crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        &buf.buffer_substring_bytes(0, buf.total_bytes()),
+        &buf.buffer_substring_bytes_range(buf.full_emacs_byte_range()),
         buf.get_multibyte(),
     );
     let buf_syntax = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);

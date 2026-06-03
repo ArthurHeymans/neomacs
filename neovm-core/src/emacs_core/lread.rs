@@ -268,7 +268,9 @@ pub(crate) fn eval_buffer_source_text_in_state(
     let buffer_id = resolve_eval_buffer_id_in_state(buffers, arg)?;
     buffers
         .get(buffer_id)
-        .map(|buffer| buffer.buffer_substring_lisp_string(buffer.point_min(), buffer.point_max()))
+        .map(|buffer| {
+            buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range())
+        })
         .ok_or_else(|| signal("error", vec![Value::string("No such buffer")]))
 }
 

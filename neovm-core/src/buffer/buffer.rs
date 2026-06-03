@@ -1944,6 +1944,16 @@ impl Buffer {
         self.text.emacs_byte_len()
     }
 
+    /// Full buffer range in Emacs bytes, ignoring narrowing.
+    pub fn full_emacs_byte_range(&self) -> EmacsByteRange {
+        EmacsByteRange::from_usize(0, self.total_bytes())
+    }
+
+    /// Accessible buffer range in Emacs bytes, respecting narrowing.
+    pub fn accessible_emacs_byte_range(&self) -> EmacsByteRange {
+        EmacsByteRange::from_usize(self.begv_byte, self.zv_byte)
+    }
+
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
@@ -2142,17 +2152,22 @@ impl Buffer {
     }
 
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.
-    pub fn buffer_substring(&self, start: usize, end: usize) -> String {
-        let bytes = self.buffer_substring_bytes(start, end);
+    pub fn buffer_substring_range(&self, range: EmacsByteRange) -> String {
+        let bytes = self.buffer_substring_bytes_range(range);
         crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
             &bytes,
             self.get_multibyte(),
         )
     }
 
+    /// Return a `String` copy of the Emacs-byte range `[start, end)`.
+    pub fn buffer_substring(&self, start: usize, end: usize) -> String {
+        self.buffer_substring_range(EmacsByteRange::from_usize(start, end))
+    }
+
     /// Return the entire accessible portion of the buffer as a `String`.
     pub fn buffer_string(&self) -> String {
-        self.buffer_substring(self.begv_byte, self.zv_byte)
+        self.buffer_substring_range(self.accessible_emacs_byte_range())
     }
 
     /// Emacs-byte length of the accessible portion.

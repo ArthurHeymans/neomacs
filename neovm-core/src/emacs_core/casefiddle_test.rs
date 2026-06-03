@@ -298,7 +298,7 @@ fn eval_upcase_region_preserves_raw_unibyte_bytes() {
         .expect("upcase-region");
 
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    let text = buffer.buffer_substring_lisp_string(buffer.point_min(), buffer.point_max());
+    let text = buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range());
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF, b'A', b'B']);
 }
@@ -320,7 +320,7 @@ fn eval_capitalize_word_preserves_raw_unibyte_bytes() {
     super::builtin_capitalize_word(&mut ev, vec![Value::fixnum(1)]).expect("capitalize-word");
 
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    let text = buffer.buffer_substring_lisp_string(buffer.point_min(), buffer.point_max());
+    let text = buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range());
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF, b'a', b'b']);
 }

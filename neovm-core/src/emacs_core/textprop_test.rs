@@ -191,7 +191,7 @@ fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
 
     let current_id = eval.buffers.current_buffer_id().expect("current buffer");
     let buffer = eval.buffers.get(current_id).expect("buffer exists");
-    let text = buffer.buffer_substring_lisp_string(buffer.point_min(), buffer.point_max());
+    let text = buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range());
     let shape: Vec<_> = text
         .intervals()
         .object_interval_runs(text.schars())

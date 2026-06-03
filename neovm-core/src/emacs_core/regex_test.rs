@@ -1992,7 +1992,7 @@ fn replace_match_buffer_preserves_unibyte_raw_bytes() {
     let result = replace_match_buffer(&mut buf, "\\&", false, false, 0, &md);
     assert!(result.is_ok());
 
-    let content = buf.buffer_substring_lisp_string(0, buf.total_bytes());
+    let content = buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range());
     assert!(!content.is_multibyte());
     assert_eq!(content.as_bytes(), &[0xFF]);
     assert_eq!(buf.total_bytes(), 1);
