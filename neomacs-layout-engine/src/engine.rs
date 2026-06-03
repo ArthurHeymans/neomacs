@@ -1941,11 +1941,13 @@ impl LayoutEngine {
             };
             let y = params.bounds.y + chrome_top;
 
+            let accessible_start = params.accessible_start_charpos().get();
+            let accessible_end = params.accessible_end_charpos().get();
             let metrics = Self::compute_vertical_scroll_bar_metrics(
                 info.window_start,
                 info.window_end,
-                params.buffer_begv,
-                params.buffer_size,
+                accessible_start,
+                accessible_end,
                 track_height,
             );
 
@@ -2359,7 +2361,9 @@ impl LayoutEngine {
             evaluator.setup_thread_locals();
             for params in &window_params_list {
                 let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-                let window_start = params.window_start.max(params.buffer_begv);
+                let accessible_start = params.accessible_start_charpos().get();
+                let accessible_end = params.accessible_end_charpos().get();
+                let window_start = params.window_start_charpos().get().max(accessible_start);
                 let text_height = params.bounds.height - params.mode_line_height;
                 let max_rows = if params.char_height > 0.0 {
                     (text_height / params.char_height).ceil() as i64
@@ -2367,7 +2371,7 @@ impl LayoutEngine {
                     50 // fallback
                 };
                 // Estimate the end of the visible region (generous: 200 chars/line).
-                let fontify_end = (window_start + max_rows * 200).min(params.buffer_size);
+                let fontify_end = (window_start + max_rows * 200).min(accessible_end);
                 Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
             }
 
@@ -2647,7 +2651,8 @@ impl LayoutEngine {
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
                                 let visible_region_empty =
-                                    mini_params.buffer_begv >= mini_params.buffer_size;
+                                    mini_params.accessible_start_charpos().get()
+                                        >= mini_params.accessible_end_charpos().get();
                                 let should_shrink = resize_mode.should_shrink(visible_region_empty);
 
                                 if should_shrink {
