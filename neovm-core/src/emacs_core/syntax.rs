@@ -13,7 +13,31 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
-use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
+
+#[inline]
+fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: usize) -> usize {
+    buf.text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
+}
+
+#[inline]
+fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
+    buf.text
+        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
+}
+
+#[inline]
+fn buffer_byte_to_lisp_pos(buf: &Buffer, byte_pos: usize) -> i64 {
+    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
+}
+
+#[inline]
+fn buffer_byte_char_delta(buf: &Buffer, from: usize, to: usize) -> i64 {
+    buffer_byte_to_char_pos(buf, to) as i64 - buffer_byte_to_char_pos(buf, from) as i64
+}
 
 thread_local! {
     static STANDARD_SYNTAX_TABLE_OBJECT: RefCell<Option<Value>> = const { RefCell::new(None) };
@@ -713,9 +737,10 @@ fn forward_word_with_options(
     // Convert byte pos to char index within accessible region.
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
-    let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
+    let mut idx =
+        buffer_byte_to_char_pos(buf, base + rel_byte) - buffer_byte_to_char_pos(buf, base);
 
-    let accessible_char_start = buf.text.emacs_byte_to_char(base);
+    let accessible_char_start = buffer_byte_to_char_pos(buf, base);
     let accessible_char_end = buf.point_max_char();
     let accessible_len = accessible_char_end - accessible_char_start;
 
@@ -738,7 +763,7 @@ fn forward_word_with_options(
         }
         if idx == accessible_len {
             let abs_char = accessible_char_start + idx;
-            return (buf.text.char_to_emacs_byte(abs_char), false);
+            return (buffer_char_to_byte_pos(buf, abs_char), false);
         }
         // Skip word characters
         while idx < accessible_len
@@ -760,7 +785,7 @@ fn forward_word_with_options(
 
     // Convert char index back to byte position (absolute).
     let abs_char = accessible_char_start + idx;
-    (buf.text.char_to_emacs_byte(abs_char), true)
+    (buffer_char_to_byte_pos(buf, abs_char), true)
 }
 
 /// Move backward over `count` words.  Returns the resulting byte position.
@@ -784,8 +809,9 @@ fn backward_word_with_options(
     );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
-    let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
-    let accessible_char_start = buf.text.emacs_byte_to_char(base);
+    let mut idx =
+        buffer_byte_to_char_pos(buf, base + rel_byte) - buffer_byte_to_char_pos(buf, base);
+    let accessible_char_start = buffer_byte_to_char_pos(buf, base);
 
     for _ in 0..count {
         // Skip non-word characters backward
@@ -806,7 +832,7 @@ fn backward_word_with_options(
         }
         if idx == 0 {
             let abs_char = accessible_char_start + idx;
-            return (buf.text.char_to_emacs_byte(abs_char), false);
+            return (buffer_char_to_byte_pos(buf, abs_char), false);
         }
         // Skip word characters backward
         while idx > 0
@@ -827,7 +853,7 @@ fn backward_word_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    (buf.text.char_to_emacs_byte(abs_char), true)
+    (buffer_char_to_byte_pos(buf, abs_char), true)
 }
 
 /// Skip forward over characters whose syntax class matches any character in
@@ -857,16 +883,17 @@ fn skip_syntax_forward_with_options(
     );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
-    let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
+    let mut idx =
+        buffer_byte_to_char_pos(buf, base + rel_byte) - buffer_byte_to_char_pos(buf, base);
 
-    let accessible_char_start = buf.text.emacs_byte_to_char(base);
+    let accessible_char_start = buffer_byte_to_char_pos(buf, base);
     let accessible_char_end = buf.point_max_char();
     let accessible_len = accessible_char_end - accessible_char_start;
 
     let char_limit = limit
         .map(|lim| {
             let lim_clamped = lim.min(buf.point_max());
-            buf.text.emacs_byte_to_char(lim_clamped) - accessible_char_start
+            buffer_byte_to_char_pos(buf, lim_clamped) - accessible_char_start
         })
         .unwrap_or(accessible_len);
 
@@ -886,7 +913,7 @@ fn skip_syntax_forward_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    buf.text.char_to_emacs_byte(abs_char)
+    buffer_char_to_byte_pos(buf, abs_char)
 }
 
 /// Skip backward over characters whose syntax class matches any character in
@@ -915,14 +942,15 @@ fn skip_syntax_backward_with_options(
     );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
-    let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
+    let mut idx =
+        buffer_byte_to_char_pos(buf, base + rel_byte) - buffer_byte_to_char_pos(buf, base);
 
-    let accessible_char_start = buf.text.emacs_byte_to_char(base);
+    let accessible_char_start = buffer_byte_to_char_pos(buf, base);
 
     let char_limit = limit
         .map(|lim| {
             let lim_clamped = lim.max(base);
-            buf.text.emacs_byte_to_char(lim_clamped) - accessible_char_start
+            buffer_byte_to_char_pos(buf, lim_clamped) - accessible_char_start
         })
         .unwrap_or(0);
 
@@ -942,7 +970,7 @@ fn skip_syntax_backward_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    buf.text.char_to_emacs_byte(abs_char)
+    buffer_char_to_byte_pos(buf, abs_char)
 }
 
 fn parse_skip_syntax_classes(syntax_chars: &str) -> (Vec<SyntaxClass>, bool) {
@@ -988,10 +1016,7 @@ fn scan_sexps_with_options(
     let stop_bound = buf.point_max_char();
 
     // Convert byte position to char index.
-    let mut idx = buf
-        .text
-        .emacs_byte_to_char(from)
-        .clamp(start_bound, stop_bound);
+    let mut idx = buffer_byte_to_char_pos(buf, from).clamp(start_bound, stop_bound);
 
     if count > 0 {
         for _ in 0..count {
@@ -1012,7 +1037,7 @@ fn scan_sexps_with_options(
         }
     }
 
-    Ok(Some(buf.text.char_to_emacs_byte(idx)))
+    Ok(Some(buffer_char_to_byte_pos(buf, idx)))
 }
 
 fn is_sexp_ignored_syntax(class: SyntaxClass) -> bool {
@@ -1971,7 +1996,7 @@ fn effective_syntax_entry_for_abs_char(
     abs_char: usize,
     honor_properties: bool,
 ) -> SyntaxEntry {
-    let byte_pos = buf.text.char_to_emacs_byte(abs_char);
+    let byte_pos = buffer_char_to_byte_pos(buf, abs_char);
     effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties)
 }
 
@@ -2365,9 +2390,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let char_index = pos as usize - 1;
-    let byte_index = buf
-        .text
-        .char_to_emacs_byte(char_index.min(buf.text.char_count()));
+    let byte_index = buffer_char_to_byte_pos(buf, char_index.min(buf.text.char_count()));
     let Some(ch) = buf.char_after(byte_index) else {
         return Ok(Value::NIL);
     };
@@ -3152,8 +3175,8 @@ pub(crate) fn builtin_forward_word(
         let table = SyntaxTable::for_buffer(buf);
         let honor_properties = parse_sexp_lookup_properties_enabled(eval);
         let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
-        let orig_char = buf.text.emacs_byte_to_char(buf.point()) as i64 + 1;
-        let raw_char = buf.text.emacs_byte_to_char(raw_byte) as i64 + 1;
+        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point());
+        let raw_char = buffer_byte_to_lisp_pos(buf, raw_byte);
         (raw_byte, completed, orig_char, raw_char)
     };
 
@@ -3185,7 +3208,7 @@ pub(crate) fn builtin_forward_word(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         // Convert constrained 1-based char position back to a byte offset.
         let zero_based = (constrained_char - 1).max(0) as usize;
-        buf.text.char_to_emacs_byte(zero_based)
+        buffer_char_to_byte_pos(buf, zero_based)
     };
 
     let current_id = eval
@@ -3492,14 +3515,10 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let table = SyntaxTable::for_buffer(buf);
 
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
-    let from_byte = buf
-        .text
-        .char_to_emacs_byte(from_char.min(buf.text.char_count()));
+    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.text.char_count()));
 
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
-        Ok(Some(new_byte)) => Ok(Value::fixnum(
-            buf.text.emacs_byte_to_char(new_byte) as i64 + 1,
-        )),
+        Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(buf, new_byte))),
         Ok(None) => Ok(Value::NIL),
         Err(err) => Err(signal("scan-error", err.signal_data())),
     }
@@ -3794,8 +3813,8 @@ fn parse_state_from_range_with_options(
     let chars = buffer_chars_in_range(
         buf,
         EmacsByteRange::from_usize(
-            buf.text.char_to_emacs_byte(from_char),
-            buf.text.char_to_emacs_byte(to_char),
+            buffer_char_to_byte_pos(buf, from_char),
+            buffer_char_to_byte_pos(buf, to_char),
         ),
     );
     let to_idx = chars.len();
@@ -4369,9 +4388,9 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if new_pos >= old_pt {
-        buf.text.emacs_byte_to_char(new_pos) as i64 - buf.text.emacs_byte_to_char(old_pt) as i64
+        buffer_byte_char_delta(buf, old_pt, new_pos)
     } else {
-        buf.text.emacs_byte_to_char(old_pt) as i64 - buf.text.emacs_byte_to_char(new_pos) as i64
+        buffer_byte_char_delta(buf, new_pos, old_pt)
     };
     Ok(Value::fixnum(chars_moved))
 }
@@ -4435,9 +4454,9 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if old_pt >= new_pos {
-        -(buf.text.emacs_byte_to_char(old_pt) as i64 - buf.text.emacs_byte_to_char(new_pos) as i64)
+        -buffer_byte_char_delta(buf, new_pos, old_pt)
     } else {
-        buf.text.emacs_byte_to_char(new_pos) as i64 - buf.text.emacs_byte_to_char(old_pt) as i64
+        buffer_byte_char_delta(buf, old_pt, new_pos)
     };
     Ok(Value::fixnum(chars_moved))
 }
