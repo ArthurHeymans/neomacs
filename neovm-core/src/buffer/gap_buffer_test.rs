@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::EmacsByteRange;
 
 // -----------------------------------------------------------------------
 // Construction & basic queries
@@ -680,10 +681,10 @@ fn copy_emacs_bytes_to_unibyte_storage_sentinels() {
     gb.move_gap_to(gap_pos);
 
     let mut out = Vec::new();
-    gb.copy_emacs_bytes_to(0, 4, &mut out);
+    gb.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, 4), &mut out);
     assert_eq!(out, vec![0xFF, b'\n', 0x80, b'A']);
 
-    gb.copy_emacs_bytes_to(1, 3, &mut out);
+    gb.copy_emacs_byte_range_to(EmacsByteRange::from_usize(1, 3), &mut out);
     assert_eq!(out, vec![b'\n', 0x80]);
 }
 
@@ -694,7 +695,7 @@ fn for_each_emacs_byte_chunk_visits_before_and_after_gap() {
     gb.move_gap_to(3);
 
     let mut chunks = Vec::new();
-    gb.for_each_emacs_byte_chunk(1, 5, |chunk| {
+    gb.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(1, 5), |chunk| {
         chunks.push(chunk.to_vec());
         Ok::<(), ()>(())
     })
@@ -708,7 +709,7 @@ fn for_each_emacs_byte_chunk_skips_empty_range() {
     let gb = GapBuffer::from_str("abcdef");
     let mut called = false;
 
-    gb.for_each_emacs_byte_chunk(2, 2, |_| {
+    gb.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(2, 2), |_| {
         called = true;
         Ok::<(), ()>(())
     })
@@ -722,15 +723,17 @@ fn contiguous_emacs_bytes_borrows_before_and_after_gap() {
     let mut gb = GapBuffer::from_str("abcdef");
     gb.move_gap_to(3);
 
-    assert!(gb.has_contiguous_emacs_bytes(0, 3));
+    assert!(gb.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(0, 3)));
     assert_eq!(
-        gb.with_contiguous_emacs_bytes(0, 3, |bytes| bytes.to_vec()),
+        gb.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(0, 3), |bytes| bytes
+            .to_vec()),
         Some(b"abc".to_vec())
     );
 
-    assert!(gb.has_contiguous_emacs_bytes(3, 6));
+    assert!(gb.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(3, 6)));
     assert_eq!(
-        gb.with_contiguous_emacs_bytes(3, 6, |bytes| bytes.to_vec()),
+        gb.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(3, 6), |bytes| bytes
+            .to_vec()),
         Some(b"def".to_vec())
     );
 }
@@ -741,8 +744,11 @@ fn contiguous_emacs_bytes_rejects_gap_spanning_range() {
     let mut gb = GapBuffer::from_str("abcdef");
     gb.move_gap_to(3);
 
-    assert!(!gb.has_contiguous_emacs_bytes(1, 5));
-    assert_eq!(gb.with_contiguous_emacs_bytes(1, 5, |_| ()), None);
+    assert!(!gb.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(1, 5)));
+    assert_eq!(
+        gb.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(1, 5), |_| ()),
+        None
+    );
 }
 
 // -----------------------------------------------------------------------

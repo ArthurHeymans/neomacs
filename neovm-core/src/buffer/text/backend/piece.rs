@@ -756,7 +756,7 @@ mod tests {
         let mut piece_bytes = Vec::new();
         let mut gap_bytes = Vec::new();
         copy_piece_bytes(piece, 0, piece.len(), &mut piece_bytes);
-        gap.copy_emacs_bytes_to(0, gap.len(), &mut gap_bytes);
+        gap.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, gap.len()), &mut gap_bytes);
         assert_eq!(piece_bytes, gap_bytes);
 
         for byte_pos in 0..piece.len() {

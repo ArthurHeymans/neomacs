@@ -332,31 +332,6 @@ impl GapBuffer {
         }
     }
 
-    /// Copy logical Emacs bytes in the range `[start, end)` into `out`.
-    ///
-    /// `out` is cleared first, then the Emacs bytes are appended.
-    ///
-    /// # Panics
-    /// Panics if `start > end` or `end > self.emacs_byte_len()`.
-    pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
-    }
-
-    /// Visit each physically contiguous chunk of logical Emacs bytes in
-    /// `[start, end)`.
-    ///
-    /// Gap-buffer storage has at most two chunks: bytes before the gap and
-    /// bytes after the gap. Non-gap backends can use the same contract without
-    /// pretending their text is contiguous.
-    pub fn for_each_emacs_byte_chunk<E>(
-        &self,
-        start: usize,
-        end: usize,
-        mut f: impl FnMut(&[u8]) -> Result<(), E>,
-    ) -> Result<(), E> {
-        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), &mut f)
-    }
-
     pub(crate) fn for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
@@ -389,12 +364,6 @@ impl GapBuffer {
         f(&self.buf[self.gap_start + gap..end + gap])
     }
 
-    /// Return whether logical Emacs bytes in `[start, end)` are physically
-    /// contiguous in the backing store.
-    pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
-        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-    }
-
     pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
         let start = range.start_usize();
         let end = range.end_usize();
@@ -408,18 +377,6 @@ impl GapBuffer {
             self.total_bytes
         );
         start == end || end <= self.gap_start_bytes || start >= self.gap_start_bytes
-    }
-
-    /// Borrow logical Emacs bytes in `[start, end)` if that range does not
-    /// cross the gap.  This mirrors GNU's direct use of the two gap-buffer
-    /// segments (`BEGV_ADDR`/`GAP_END_ADDR`) without copying.
-    pub fn with_contiguous_emacs_bytes<R>(
-        &self,
-        start: usize,
-        end: usize,
-        f: impl FnOnce(&[u8]) -> R,
-    ) -> Option<R> {
-        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub(crate) fn with_contiguous_emacs_byte_range<R>(
