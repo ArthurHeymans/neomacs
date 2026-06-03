@@ -4,7 +4,7 @@ use super::*;
 // Buffer operations (require evaluator for BufferManager access)
 // ===========================================================================
 
-use crate::buffer::{BufferId, BufferManager, EmacsByteRange};
+use crate::buffer::{BufferId, BufferManager, EmacsByteRange, StorageBytePos};
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
 use crate::emacs_core::value::{
@@ -1497,8 +1497,14 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     let data = overlay.as_overlay_data()?;
                     Some(OverlaySnapshot {
                         overlay,
-                        start_byte: buffer.text.storage_byte_to_emacs_byte(data.start),
-                        end_byte: buffer.text.storage_byte_to_emacs_byte(data.end),
+                        start_byte: buffer
+                            .text
+                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.start))
+                            .get(),
+                        end_byte: buffer
+                            .text
+                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.end))
+                            .get(),
                     })
                 })
                 .collect();
@@ -1506,21 +1512,36 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 id: *id,
                 pt_byte: buffer
                     .text
-                    .storage_byte_to_emacs_byte(buffer.pt_byte.min(buffer.text.len())),
+                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
+                        buffer.pt_byte.min(buffer.text.len()),
+                    ))
+                    .get(),
                 begv_byte: buffer
                     .text
-                    .storage_byte_to_emacs_byte(buffer.begv_byte.min(buffer.text.len())),
+                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
+                        buffer.begv_byte.min(buffer.text.len()),
+                    ))
+                    .get(),
                 zv_byte: buffer
                     .text
-                    .storage_byte_to_emacs_byte(buffer.zv_byte.min(buffer.text.len())),
+                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
+                        buffer.zv_byte.min(buffer.text.len()),
+                    ))
+                    .get(),
                 mark_byte: buffer.mark_byte().map(|mark| {
                     buffer
                         .text
-                        .storage_byte_to_emacs_byte(mark.min(buffer.text.len()))
+                        .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
+                            mark.min(buffer.text.len()),
+                        ))
+                        .get()
                 }),
                 last_window_start_byte: buffer
                     .text
-                    .storage_byte_to_emacs_byte(buffer.last_window_start.min(buffer.text.len())),
+                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
+                        buffer.last_window_start.min(buffer.text.len()),
+                    ))
+                    .get(),
                 overlays,
             });
         }
@@ -1553,7 +1574,9 @@ pub(crate) fn builtin_set_buffer_multibyte(
         BufferMultibyteConversionMode::AsUnibyte | BufferMultibyteConversionMode::AsMultibyte => {
             remap_text_property_table(&old_props, |char_pos| {
                 let byte_pos = shared_text.char_to_byte(char_pos);
-                let logical_byte = shared_text.storage_byte_to_emacs_byte(byte_pos);
+                let logical_byte = shared_text
+                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
+                    .get();
                 let boundary = lisp_string_advance_byte_to_boundary(
                     &new_storage,
                     logical_byte.min(new_total_bytes),
@@ -1568,7 +1591,9 @@ pub(crate) fn builtin_set_buffer_multibyte(
     // the same boundary arithmetic that the old snapshot+replace code
     // applied to its Vec copy.
     shared_text.remap_markers_through(|old_byte| {
-        let logical_byte = shared_text.storage_byte_to_emacs_byte(old_byte);
+        let logical_byte = shared_text
+            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(old_byte))
+            .get();
         let boundary =
             lisp_string_advance_byte_to_boundary(&new_storage, logical_byte.min(new_total_bytes));
         let new_char = lisp_string_byte_to_char(&new_storage, boundary);
