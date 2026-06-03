@@ -1481,15 +1481,16 @@ pub(crate) fn builtin_translate_region_internal(
     }
 
     // ----- Resolve region in the current buffer ------------------------------
-    let (buffer_id, start_byte, end_byte) =
-        super::fns::normalize_current_buffer_region_bounds_in_manager(
-            &eval.buffers,
-            &args[0],
-            &args[1],
-        )?;
-    if start_byte == end_byte {
+    let (buffer_id, byte_range) = super::fns::normalize_current_buffer_region_bounds_in_manager(
+        &eval.buffers,
+        &args[0],
+        &args[1],
+    )?;
+    if byte_range.is_empty() {
         return Ok(Value::fixnum(0));
     }
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
     let multibyte = eval
         .buffers
         .get(buffer_id)
@@ -1497,12 +1498,8 @@ pub(crate) fn builtin_translate_region_internal(
         .unwrap_or(true);
 
     // Read the whole region up front (whole-region replace strategy).
-    let source = super::fns::read_buffer_region_bytes_in_manager(
-        &eval.buffers,
-        buffer_id,
-        start_byte,
-        end_byte,
-    )?;
+    let source =
+        super::fns::read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
 
     // ----- String-table prep -------------------------------------------------
     let table_string_info: Option<(Vec<u8>, bool)> = table_str.map(|s| {

@@ -15,6 +15,7 @@ use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };
 use super::value::*;
+use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use flate2::{Decompress, FlushDecompress, Status};
@@ -95,12 +96,15 @@ pub(crate) fn builtin_zlib_decompress_region(
     } else {
         (end, start)
     };
-    let from_byte = buf.lisp_pos_to_accessible_byte(from);
-    let to_byte = buf.lisp_pos_to_accessible_byte(to);
+    let byte_range = EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+    );
+    let from_byte = byte_range.start_usize();
+    let to_byte = byte_range.end_usize();
 
     let buffer_id = buf.id;
-    let compressed =
-        read_buffer_region_bytes_in_manager(&ctx.buffers, buffer_id, from_byte, to_byte)?;
+    let compressed = read_buffer_region_bytes_in_manager(&ctx.buffers, buffer_id, byte_range)?;
 
     // Try gzip first (most common for Emacs .gz files), then fall back to zlib.
     // GNU uses inflateInit2 with MAX_WBITS + 32 which auto-detects format.
