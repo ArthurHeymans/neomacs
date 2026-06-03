@@ -292,52 +292,61 @@ impl BufferText {
     }
 
     pub fn byte_at(&self, pos: usize) -> u8 {
-        self.storage
-            .borrow()
-            .backend
-            .byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
+        self.byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(crate) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
+        self.storage.borrow().backend.byte_at_emacs_byte_pos(pos)
     }
 
     pub fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
-        self.storage
-            .borrow()
-            .backend
-            .emacs_byte_at_pos(EmacsBytePos::new(pos))
+        self.emacs_byte_at_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(crate) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.storage.borrow().backend.emacs_byte_at_pos(pos)
     }
 
     pub fn char_at(&self, pos: usize) -> Option<char> {
-        self.storage
-            .borrow()
-            .backend
-            .char_at_emacs_byte_pos(EmacsBytePos::new(pos))
+        self.char_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(crate) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.storage.borrow().backend.char_at_emacs_byte_pos(pos)
     }
 
     pub fn char_code_at(&self, pos: usize) -> Option<u32> {
+        self.char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(crate) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
         self.storage
             .borrow()
             .backend
-            .char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
+            .char_code_at_emacs_byte_pos(pos)
     }
 
     pub fn text_range(&self, start: usize, end: usize) -> String {
-        self.storage
-            .borrow()
-            .backend
-            .text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+        self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(crate) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
+        self.storage.borrow().backend.text_emacs_byte_range(range)
     }
 
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.storage
-            .borrow()
-            .backend
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+    }
+
+    pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.storage
             .borrow()
             .backend
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+            .copy_emacs_byte_range_to(range, out);
     }
 
     pub fn for_each_emacs_byte_chunk<E>(
@@ -346,17 +355,29 @@ impl BufferText {
         end: usize,
         f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
+        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), f)
+    }
+
+    pub(crate) fn for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
         self.storage
             .borrow()
             .backend
-            .for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), f)
+            .for_each_emacs_byte_range_chunk(range, f)
     }
 
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
+        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
         self.storage
             .borrow()
             .backend
-            .has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+            .has_contiguous_emacs_byte_range(range)
     }
 
     pub fn with_contiguous_emacs_bytes<R>(
@@ -365,10 +386,18 @@ impl BufferText {
         end: usize,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
+        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
+    }
+
+    pub(crate) fn with_contiguous_emacs_byte_range<R>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnOnce(&[u8]) -> R,
+    ) -> Option<R> {
         self.storage
             .borrow()
             .backend
-            .with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
+            .with_contiguous_emacs_byte_range(range, f)
     }
 
     pub fn insert_str(&mut self, pos: usize, text: &str) {
@@ -478,19 +507,33 @@ impl BufferText {
     }
 
     pub fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
-        self.storage
-            .borrow()
-            .backend
-            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
+        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
             .get()
     }
 
-    pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
+    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
+        &self,
+        byte_pos: StorageBytePos,
+    ) -> EmacsBytePos {
         self.storage
             .borrow()
             .backend
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
+            .storage_byte_pos_to_emacs_byte_pos(byte_pos)
+    }
+
+    pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
+        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
             .get()
+    }
+
+    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> StorageBytePos {
+        self.storage
+            .borrow()
+            .backend
+            .emacs_byte_pos_to_storage_byte_pos(byte_pos)
     }
 
     pub fn shared_clone(&self) -> Self {
