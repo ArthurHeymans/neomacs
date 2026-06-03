@@ -268,11 +268,12 @@ fn buffer_byte_to_char_result_in_manager(
 }
 
 fn search_failure_position(buf: &crate::buffer::Buffer, opts: SearchOptions) -> usize {
+    let accessible = buf.accessible_emacs_byte_region();
     match opts.bound {
-        Some(limit) => limit.get().clamp(buf.begv_byte, buf.zv_byte),
+        Some(limit) => accessible.clamp_usize(limit.get()),
         None => match opts.direction {
-            SearchDirection::Forward => buf.zv_byte,
-            SearchDirection::Backward => buf.begv_byte,
+            SearchDirection::Forward => accessible.end_usize(),
+            SearchDirection::Backward => accessible.start_usize(),
         },
     }
 }

@@ -5432,13 +5432,14 @@ fn scroll_by_lines_in_state(
         return Ok(Value::NIL);
     };
     let text = buf.text.to_string();
+    let accessible = buf.accessible_emacs_byte_region();
     let pt = buf
         .lisp_pos_to_emacs_byte_pos(window_point)
         .get()
-        .clamp(buf.begv_byte, buf.zv_byte);
+        .clamp(accessible.start_usize(), accessible.end_usize());
     let bytes = text.as_bytes();
-    let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
+    let begv = accessible.start_usize();
+    let zv = accessible.end_usize();
 
     let mut pos = pt;
 
@@ -5550,12 +5551,13 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
             return Ok(Value::NIL);
         };
         let text = buf.text.to_string();
+        let accessible = buf.accessible_emacs_byte_region();
         let pt = buf
             .lisp_pos_to_emacs_byte_pos(window_point)
             .get()
-            .clamp(buf.begv_byte, buf.zv_byte);
+            .clamp(accessible.start_usize(), accessible.end_usize());
         let bytes = text.as_bytes();
-        let begv = buf.begv_byte;
+        let begv = accessible.start_usize();
 
         // Go to beginning of current line.
         let mut pos = pt;

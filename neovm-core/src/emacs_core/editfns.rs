@@ -861,12 +861,13 @@ pub(crate) fn builtin_delete_char(
             let Some(buf) = ctx.buffers.get(current_id) else {
                 return Ok(Value::NIL);
             };
+            let accessible = buf.accessible_emacs_byte_region();
             let pt = buf.pt_byte;
             if n > 0 {
                 // Delete N characters forward from point.
                 let mut end = pt;
                 for _ in 0..n {
-                    if end >= buf.zv_byte {
+                    if end >= accessible.end_usize() {
                         return Err(signal("end-of-buffer", vec![]));
                     }
                     match buf.char_after_storage_len(end) {
@@ -881,7 +882,7 @@ pub(crate) fn builtin_delete_char(
                 // Delete |N| characters backward from point.
                 let mut start = pt;
                 for _ in 0..(-n) {
-                    if start <= buf.begv_byte {
+                    if start <= accessible.start_usize() {
                         return Err(signal("beginning-of-buffer", vec![]));
                     }
                     match buf.char_before_storage_len(start) {
@@ -1113,13 +1114,16 @@ pub(crate) fn builtin_following_char_0(ctx: &mut crate::emacs_core::eval::Contex
 
 fn following_char_value(ctx: &crate::emacs_core::eval::Context) -> EvalResult {
     match ctx.buffers.current_buffer() {
-        Some(buf) => match (buf.pt_byte < buf.zv_byte)
-            .then(|| buf.char_code_after(buf.pt_byte))
-            .flatten()
-        {
-            Some(code) => Ok(Value::fixnum(code as i64)),
-            None => Ok(Value::fixnum(0)),
-        },
+        Some(buf) => {
+            let accessible = buf.accessible_emacs_byte_region();
+            match (buf.pt_byte < accessible.end_usize())
+                .then(|| buf.char_code_after(buf.pt_byte))
+                .flatten()
+            {
+                Some(code) => Ok(Value::fixnum(code as i64)),
+                None => Ok(Value::fixnum(0)),
+            }
+        }
         None => Ok(Value::fixnum(0)),
     }
 }
@@ -1131,13 +1135,16 @@ pub(crate) fn builtin_preceding_char(
 ) -> EvalResult {
     expect_args("preceding-char", &args, 0)?;
     match ctx.buffers.current_buffer() {
-        Some(buf) => match (buf.pt_byte > buf.begv_byte)
-            .then(|| buf.char_code_before(buf.pt_byte))
-            .flatten()
-        {
-            Some(code) => Ok(Value::fixnum(code as i64)),
-            None => Ok(Value::fixnum(0)),
-        },
+        Some(buf) => {
+            let accessible = buf.accessible_emacs_byte_region();
+            match (buf.pt_byte > accessible.start_usize())
+                .then(|| buf.char_code_before(buf.pt_byte))
+                .flatten()
+            {
+                Some(code) => Ok(Value::fixnum(code as i64)),
+                None => Ok(Value::fixnum(0)),
+            }
+        }
         None => Ok(Value::fixnum(0)),
     }
 }

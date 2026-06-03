@@ -1873,7 +1873,7 @@ fn next_visible_line_start(
     mut pos: usize,
 ) -> Result<Option<usize>, Flow> {
     let point_max = match eval.buffers.get(buffer_id) {
-        Some(buf) => buf.point_max_byte(),
+        Some(buf) => buf.accessible_emacs_byte_region().end_usize(),
         None => return Ok(None),
     };
 
@@ -1908,7 +1908,10 @@ fn previous_visible_line_start(
     pos: usize,
 ) -> Result<Option<(usize, bool)>, Flow> {
     let (point_min, point_max) = match eval.buffers.get(buffer_id) {
-        Some(buf) => (buf.point_min_byte(), buf.point_max_byte()),
+        Some(buf) => {
+            let accessible = buf.accessible_emacs_byte_region();
+            (accessible.start_usize(), accessible.end_usize())
+        }
         None => return Ok(None),
     };
     if pos <= point_min {
@@ -2014,8 +2017,9 @@ pub(crate) fn builtin_vertical_motion(
     let Some(buf) = eval.buffers.get(current_id) else {
         return Ok(Value::fixnum(0));
     };
-    let pt = buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte);
-    let begv = buf.begv_byte;
+    let accessible = buf.accessible_emacs_byte_region();
+    let pt = accessible.clamp_usize(buf.pt_byte);
+    let begv = accessible.start_usize();
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
