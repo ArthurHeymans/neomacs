@@ -4252,7 +4252,12 @@ fn replace_accessible_portion_in_current_buffer(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        (buf.point_min_byte(), buf.point_max_byte(), buf.point_byte())
+        let accessible = buf.accessible_emacs_byte_region();
+        (
+            accessible.start_usize(),
+            accessible.end_usize(),
+            buf.point_byte(),
+        )
     };
     if start < end {
         buffers
@@ -4354,14 +4359,15 @@ fn run_after_insert_file_pipeline(
         return Ok(inserted);
     }
 
-    let (saved_pt, saved_pt_char, point_min, chars_modiff_before) = eval
+    let (saved_pt, saved_pt_char, accessible_start, chars_modiff_before) = eval
         .buffers
         .get(current_id)
         .map(|buf| {
+            let accessible = buf.accessible_emacs_byte_region();
             (
                 buf.pt_byte,
                 buf.pt,
-                buf.point_min_byte(),
+                accessible.start_usize(),
                 buf.chars_modified_tick(),
             )
         })
@@ -4374,7 +4380,7 @@ fn run_after_insert_file_pipeline(
     let pipeline_result = (|| -> Result<i64, Flow> {
         if replace_requested {
             eval.buffers
-                .goto_buffer_byte(current_id, point_min)
+                .goto_buffer_byte(current_id, accessible_start)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         }
 
@@ -4841,10 +4847,13 @@ pub(crate) fn builtin_insert_file_contents(
     // Snapshot buffer state before the file read for modification hooks.
     let pre_state = eval.buffers.current_buffer().map(|buf| {
         if replace_requested {
+            let accessible = buf.accessible_emacs_byte_region();
+            let start = accessible.start_usize();
+            let end = accessible.end_usize();
             (
-                buf.point_min_byte(),
-                buf.point_max_byte(),
-                super::editfns::byte_span_char_len(buf, buf.point_min_byte(), buf.point_max_byte()),
+                start,
+                end,
+                super::editfns::byte_span_char_len(buf, start, end),
             )
         } else {
             (buf.pt_byte, buf.pt_byte, 0)
@@ -5040,7 +5049,7 @@ pub(crate) fn builtin_insert_file_contents(
             .current_buffer()
             .map(|buf| {
                 if replace_requested {
-                    buf.point_max_byte()
+                    buf.accessible_emacs_byte_region().end_usize()
                 } else {
                     buf.pt_byte
                 }
