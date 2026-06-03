@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::buffer::buffer_text::TextBackendDebugLayout;
-use crate::buffer::position::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,15 +170,27 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn byte_to_char(&self, byte_pos: usize) -> usize {
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
+    }
+
+    pub(in crate::buffer) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
+        let byte_pos = byte_pos.get();
         assert!(
             byte_pos <= self.len(),
             "byte_to_char: byte_pos ({byte_pos}) > len ({})",
             self.len()
         );
-        self.byte_to_char_in_node(&self.root, byte_pos)
+        CharPos0::new(self.byte_to_char_in_node(&self.root, byte_pos))
     }
 
     pub(in crate::buffer) fn char_to_byte(&self, char_pos: usize) -> usize {
+        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
+    }
+
+    pub(in crate::buffer) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+        let char_pos = char_pos.get();
         let metrics = self.metrics();
         if char_pos >= metrics.chars() {
             if char_pos > metrics.chars() {
@@ -187,9 +199,9 @@ impl PieceTreeTextBackend {
                     metrics.chars()
                 );
             }
-            return metrics.emacs_bytes();
+            return EmacsBytePos::new(metrics.emacs_bytes());
         }
-        self.char_to_byte_in_node(&self.root, char_pos)
+        EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
     }
 
     pub(in crate::buffer) fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {

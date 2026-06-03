@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use crate::buffer::{EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent};
+use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent};
 
 /// Default extra gap bytes to pre-allocate on any growth.
 /// Matches GNU Emacs `GAP_BYTES_DFL` (`src/buffer.h:205`).
@@ -776,28 +776,36 @@ impl GapBuffer {
     /// Panics if `byte_pos > self.len()` or is not on an Emacs character
     /// boundary.
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
+    }
+
+    pub(crate) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
+        let byte_pos = byte_pos.get();
         assert!(
             byte_pos <= self.len(),
             "byte_to_char: byte_pos ({byte_pos}) > len ({})",
             self.len()
         );
         if byte_pos <= self.gap_start {
-            return emacs_byte_to_char_in_slice(
+            return CharPos0::new(emacs_byte_to_char_in_slice(
                 &self.buf[..self.gap_start],
                 byte_pos,
                 self.multibyte,
                 "byte_to_char pre-gap",
-            );
+            ));
         }
 
         let rel_pos = byte_pos - self.gap_start;
-        self.gap_start_chars
-            + emacs_byte_to_char_in_slice(
-                &self.buf[self.gap_end..],
-                rel_pos,
-                self.multibyte,
-                "byte_to_char post-gap",
-            )
+        CharPos0::new(
+            self.gap_start_chars
+                + emacs_byte_to_char_in_slice(
+                    &self.buf[self.gap_end..],
+                    rel_pos,
+                    self.multibyte,
+                    "byte_to_char post-gap",
+                ),
+        )
     }
 
     /// Convert a char position to a logical byte position.
@@ -808,25 +816,33 @@ impl GapBuffer {
     ///
     /// Panics if `char_pos > self.char_count()`.
     pub fn char_to_byte(&self, char_pos: usize) -> usize {
+        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
+    }
+
+    pub(crate) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+        let char_pos = char_pos.get();
         if char_pos == 0 {
-            return 0;
+            return EmacsBytePos::new(0);
         }
 
         if char_pos <= self.gap_start_chars {
-            return emacs_char_to_byte_in_slice(
+            return EmacsBytePos::new(emacs_char_to_byte_in_slice(
                 &self.buf[..self.gap_start],
                 char_pos,
                 self.multibyte,
-            );
+            ));
         }
 
         if char_pos <= self.total_chars {
-            return self.gap_start
-                + emacs_char_to_byte_in_slice(
-                    &self.buf[self.gap_end..],
-                    char_pos - self.gap_start_chars,
-                    self.multibyte,
-                );
+            return EmacsBytePos::new(
+                self.gap_start
+                    + emacs_char_to_byte_in_slice(
+                        &self.buf[self.gap_end..],
+                        char_pos - self.gap_start_chars,
+                        self.multibyte,
+                    ),
+            );
         }
 
         // Clamp to end of buffer instead of panicking — this can happen
@@ -835,7 +851,7 @@ impl GapBuffer {
             "char_to_byte: char_pos ({char_pos}) exceeds char_count ({}), clamping",
             self.total_chars
         );
-        return self.len();
+        EmacsBytePos::new(self.len())
     }
 
     // -----------------------------------------------------------------------

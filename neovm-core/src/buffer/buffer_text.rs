@@ -704,8 +704,14 @@ impl BufferText {
         let (start, end, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage.backend.byte_to_char(start),
-                storage.backend.byte_to_char(end),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
+                    .get(),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
+                    .get(),
                 storage.metrics.chars(),
             )
         };
@@ -797,8 +803,14 @@ impl BufferText {
         let (start, end, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage.backend.byte_to_char(start),
-                storage.backend.byte_to_char(end),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
+                    .get(),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
+                    .get(),
                 storage.metrics.chars(),
             )
         };
@@ -880,7 +892,10 @@ impl BufferText {
     pub fn text_props_merge_missing_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
         let char_offset = {
             let storage = self.storage.borrow();
-            storage.backend.byte_to_char(byte_offset)
+            storage
+                .backend
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_offset))
+                .get()
         };
         self.storage
             .borrow_mut()
@@ -892,8 +907,14 @@ impl BufferText {
         let (char_start, char_end) = {
             let storage = self.storage.borrow();
             (
-                storage.backend.byte_to_char(byte_start),
-                storage.backend.byte_to_char(byte_end),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_start))
+                    .get(),
+                storage
+                    .backend
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_end))
+                    .get(),
             )
         };
         self.storage
