@@ -1961,7 +1961,9 @@ impl Buffer {
             0
         };
         let clamped_char = char_pos.clamp(self.point_min_char(), self.point_max_char());
-        self.text.char_to_emacs_byte(clamped_char)
+        self.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+            .get()
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
@@ -1976,7 +1978,9 @@ impl Buffer {
             0
         };
         let clamped_char = char_pos.min(self.total_chars());
-        self.text.char_to_emacs_byte(clamped_char)
+        self.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+            .get()
     }
 
     /// Legacy narrowing accessor retained for Lisp-facing callers.
@@ -1994,7 +1998,9 @@ impl Buffer {
         } else if self.pt_byte == self.zv_byte {
             self.zv
         } else {
-            self.text.emacs_byte_to_char(self.pt_byte)
+            self.text
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.pt_byte))
+                .get()
         };
     }
 
@@ -2145,11 +2151,17 @@ impl Buffer {
         if pos == 0 || pos > self.total_bytes() {
             return None;
         }
-        let prior_char = self.text.emacs_byte_to_char(pos);
+        let prior_char = self
+            .text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
+            .get();
         if prior_char == 0 {
             return None;
         }
-        let prior_byte = self.text.char_to_emacs_byte(prior_char - 1);
+        let prior_byte = self
+            .text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(prior_char - 1))
+            .get();
         let storage_pos = self
             .text
             .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(prior_byte));
@@ -2191,8 +2203,16 @@ impl Buffer {
         if pos >= self.total_bytes() {
             return None;
         }
-        let char_idx = self.text.emacs_byte_to_char(pos);
-        Some(self.text.char_to_emacs_byte(char_idx + 1) - pos)
+        let char_idx = self
+            .text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
+            .get();
+        Some(
+            self.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(char_idx + 1))
+                .get()
+                - pos,
+        )
     }
 
     /// Emacs-byte width of the character ending at `pos`.
@@ -2200,11 +2220,17 @@ impl Buffer {
         if pos == 0 || pos > self.total_bytes() {
             return None;
         }
-        let prior_char = self.text.emacs_byte_to_char(pos);
+        let prior_char = self
+            .text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
+            .get();
         if prior_char == 0 {
             return None;
         }
-        let prior_byte = self.text.char_to_emacs_byte(prior_char - 1);
+        let prior_byte = self
+            .text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(prior_char - 1))
+            .get();
         Some(pos - prior_byte)
     }
 
@@ -2217,12 +2243,17 @@ impl Buffer {
         let e = end.clamp(s, total);
         let total_chars = self.text.char_count();
         self.begv_byte = s;
-        self.begv = self.text.emacs_byte_to_char(s);
+        self.begv = self
+            .text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(s))
+            .get();
         self.zv_byte = e;
         self.zv = if e == total {
             total_chars
         } else {
-            self.text.emacs_byte_to_char(e)
+            self.text
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(e))
+                .get()
         };
         // Clamp point into the new accessible region.
         self.goto_byte(self.pt_byte);
@@ -2251,7 +2282,9 @@ impl Buffer {
         } else if clamped == self.zv_byte {
             self.zv
         } else {
-            self.text.emacs_byte_to_char(clamped)
+            self.text
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
+                .get()
         };
         self.text.register_marker(
             marker_ptr,
@@ -2280,7 +2313,10 @@ impl Buffer {
     /// Set the mark to byte position `pos`, creating the marker if needed.
     pub fn set_mark_byte(&mut self, pos: usize) {
         let clamped = pos.min(self.total_bytes());
-        let char_pos = self.text.emacs_byte_to_char(clamped);
+        let char_pos = self
+            .text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
+            .get();
         if self.mark_marker_ptr.is_null() {
             // Create the marker eagerly and register in the chain so it
             // auto-adjusts on edits.
