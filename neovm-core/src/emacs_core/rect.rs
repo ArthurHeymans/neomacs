@@ -14,6 +14,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::*;
+use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -338,7 +339,7 @@ fn clamped_rect_inputs(
     let clamped_end = end.clamp(point_min_char, point_max_char);
     let pmin = buf.point_min();
     let pmax = buf.point_max();
-    let text = buf.buffer_substring_lisp_string(pmin, pmax);
+    let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(pmin, pmax));
 
     let rel_start = (clamped_start - point_min_char).max(0) as usize;
     let rel_end = (clamped_end - point_min_char).max(0) as usize;

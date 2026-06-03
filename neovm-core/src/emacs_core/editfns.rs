@@ -990,7 +990,7 @@ pub(crate) fn builtin_delete_and_extract_region(
                 vec![Value::make_buffer(current_id)],
             ));
         }
-        buf.buffer_substring_value(start_byte, end_byte)
+        buf.buffer_substring_value_range(byte_range)
     };
     crate::emacs_core::textprop::verify_text_read_only_in_state(
         &ctx.obarray,

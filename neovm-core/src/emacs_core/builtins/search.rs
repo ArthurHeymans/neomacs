@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::EmacsBytePos;
+use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::regex::{char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -1248,7 +1248,7 @@ pub(crate) fn builtin_match_string(
     };
     if md.uses_buffer_byte_positions() {
         if end <= buf.total_bytes() {
-            return Ok(buf.buffer_substring_value(start, end));
+            return Ok(buf.buffer_substring_value_range(EmacsByteRange::from_usize(start, end)));
         }
         return Ok(Value::NIL);
     }
@@ -1256,7 +1256,7 @@ pub(crate) fn builtin_match_string(
     let start_byte = buf.lisp_pos_to_emacs_byte_pos(start as i64);
     let end_byte = buf.lisp_pos_to_emacs_byte_pos(end as i64);
     if end_byte.get() <= buf.total_bytes() && start_byte <= end_byte {
-        Ok(buf.buffer_substring_value(start_byte.get(), end_byte.get()))
+        Ok(buf.buffer_substring_value_range(EmacsByteRange::new(start_byte, end_byte)))
     } else {
         Ok(Value::NIL)
     }
@@ -1848,7 +1848,10 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         let case_action = if fixedcase {
             crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
         } else {
-            let matched = buf.buffer_substring_lisp_string(replacement.0, replacement.1);
+            let matched = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
+                replacement.0,
+                replacement.1,
+            ));
             crate::emacs_core::casefiddle::replace_match_case_action(
                 &crate::emacs_core::search::storage_string_from_lisp_string(&matched),
             )
@@ -1870,7 +1873,8 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         && let Some(buf) = buffers.get_mut(current_id)
     {
         let start_char = buffer_byte_to_char_pos(buf, oldstart);
-        let cased_text = buf.buffer_substring_lisp_string(oldstart, newend);
+        let cased_text =
+            buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(oldstart, newend));
         let mut undo_list = buf.get_undo_list();
         if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
             crate::buffer::undo::undo_list_record_delete(

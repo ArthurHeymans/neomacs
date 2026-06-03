@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager};
+use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -451,7 +451,7 @@ pub(crate) fn builtin_current_indentation(
 
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
     let (bol, eol) = line_bounds(buf, buf.pt_byte);
-    let line = buf.buffer_substring_lisp_string(bol, eol);
+    let line = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, eol));
 
     let mut column = 0usize;
     for unit in decode_lisp_string_units(&line) {
@@ -601,7 +601,7 @@ pub(crate) fn builtin_indent_to(
     let pt = buf.point();
     let pmin = buf.point_min();
     let (bol, _) = line_bounds(buf, pt);
-    let line_prefix = buf.buffer_substring_lisp_string(bol, pt);
+    let line_prefix = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, pt));
     let tab_width = tab_width_in_state(&ctx.obarray, &[], Some(buf));
 
     let fromcol = column_for_lisp_string(&line_prefix, tab_width);

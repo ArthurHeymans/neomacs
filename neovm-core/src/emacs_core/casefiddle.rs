@@ -531,7 +531,7 @@ fn casify_region_in_state(
             resolve_case_region_in_buffers(&eval.buffers, beg_val, end_val, args.get(2))?;
         let beg = byte_range.start_usize();
         let end = byte_range.end_usize();
-        let text = buf.buffer_substring_lisp_string(beg, end);
+        let text = buf.buffer_substring_lisp_string_range(byte_range);
         (beg, end, text)
     };
 
@@ -565,7 +565,7 @@ fn casify_word_in_state(
         } else {
             (target, pt)
         };
-        let text = buf.buffer_substring_lisp_string(beg, end);
+        let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(beg, end));
         (
             beg,
             end,

@@ -21,7 +21,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferManager, EmacsByteRange};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -1156,7 +1156,10 @@ pub(crate) fn builtin_json_parse_buffer(
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let input = buf.buffer_substring_lisp_string(buf.point(), buf.point_max());
+        let input = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
+            buf.point(),
+            buf.point_max(),
+        ));
         (input, buf.point())
     };
 

@@ -852,7 +852,9 @@ fn buffer_slice_for_char_region(
     let char_count = buf.total_chars();
     let from_byte = char_pos_to_buffer_byte(buf, from_char.min(char_count));
     let to_byte = char_pos_to_buffer_byte(buf, to_char.min(char_count));
-    super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string(from_byte, to_byte))
+    super::runtime_string_from_lisp_string(
+        &buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(from_byte, to_byte)),
+    )
 }
 
 fn accessible_lisp_range_to_byte_range(buf: &Buffer, start: i64, end: i64) -> EmacsByteRange {

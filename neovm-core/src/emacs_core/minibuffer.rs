@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::buffer::{BufferId, BufferManager};
+use crate::buffer::{BufferId, BufferManager, EmacsByteRange};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -1452,7 +1452,7 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
     let start = buffer
         .lisp_pos_to_accessible_emacs_byte_pos(prompt_end_pos)
         .get();
-    Ok(buffer.buffer_substring_lisp_string(start, point_max))
+    Ok(buffer.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, point_max)))
 }
 
 fn resolve_minibuffer_buffer_arg(

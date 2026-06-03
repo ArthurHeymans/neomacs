@@ -88,7 +88,10 @@ fn minibuffer_result_lisp_string(
     if let Some(buf) = buffers.get(minibuf_id) {
         let total_len = buf.total_bytes();
         if total_len > prompt_byte_len {
-            return buf.buffer_substring_lisp_string(prompt_byte_len, total_len);
+            return buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
+                prompt_byte_len,
+                total_len,
+            ));
         }
         return empty_runtime_lisp_string(buf.get_multibyte());
     }

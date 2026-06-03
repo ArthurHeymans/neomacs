@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::{Value, ValueKind};
-use crate::buffer::{Buffer, EmacsBytePos};
+use crate::buffer::{Buffer, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ fn buffer_region_storage_string(
     start: usize,
     end: usize,
 ) -> (crate::heap_types::LispString, String) {
-    let text = buf.buffer_substring_lisp_string(start, end);
+    let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, end));
     let storage = crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
         text.as_bytes(),
         text.is_multibyte(),
