@@ -14,9 +14,9 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
-use super::position::{CharPos0, EmacsBytePos};
+use super::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 use super::text::backend::TextBackend;
-use super::text::{BufferTextBackendKind, TextMetrics};
+use super::text::{BufferTextBackendKind, TextEditRange, TextExtent, TextMetrics};
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -407,11 +407,26 @@ impl BufferText {
     }
 
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
+        self.insert_measured_emacs_bytes(
+            EmacsBytePos::new(pos),
+            bytes,
+            TextExtent::from_usize(nchars, bytes.len()),
+        );
+    }
+
+    pub(crate) fn insert_measured_emacs_bytes(
+        &mut self,
+        pos: EmacsBytePos,
+        bytes: &[u8],
+        extent: TextExtent,
+    ) {
         if bytes.is_empty() {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.backend.insert_emacs_bytes_both(pos, bytes, nchars);
+        storage
+            .backend
+            .insert_measured_emacs_bytes(pos, bytes, extent);
         Self::refresh_backend_debug_layout(&mut storage);
     }
 
@@ -425,22 +440,36 @@ impl BufferText {
     }
 
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        if start >= end {
+        let start_char = self.buf_bytepos_to_charpos(start);
+        let range = TextEditRange::from_usize(start, end, start_char, start_char + nchars);
+        self.delete_measured_range(range);
+    }
+
+    pub(crate) fn delete_measured_range(&mut self, range: TextEditRange) {
+        if range.is_empty() {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.backend.delete_range_both(start, end, nchars);
+        storage.backend.delete_measured_range(range);
         Self::refresh_backend_debug_layout(&mut storage);
     }
 
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
-        if start >= end {
+        self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+    }
+
+    pub(crate) fn replace_same_len_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        replacement: &[u8],
+    ) {
+        if range.is_empty() {
             return;
         }
         let mut storage = self.storage.borrow_mut();
         storage
             .backend
-            .replace_same_len_emacs_bytes(start, end, replacement);
+            .replace_same_len_emacs_bytes(range, replacement);
         Self::refresh_backend_debug_layout(&mut storage);
     }
 

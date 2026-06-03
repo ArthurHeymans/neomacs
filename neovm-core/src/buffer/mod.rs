@@ -14,9 +14,12 @@ pub use buffer::{
 };
 pub use buffer_text::{BufferText, GapDebugLayout, TextBackendDebugLayout};
 pub use overlay::{Overlay, OverlayList};
-pub use position::{CharPos0, DisplayColumn, EmacsBytePos, LispCharPos1, StorageBytePos};
+pub use position::{
+    CharLen, CharPos0, DisplayColumn, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    StorageBytePos,
+};
 pub use shared::SharedUndoState;
-pub use text::{BufferTextBackendKind, TextMetrics};
+pub use text::{BufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics};
 pub use text_props::TextPropertyTable;
 pub use undo::{
     truncate_undo_list, undo_list_boundary, undo_list_contains_boundary,

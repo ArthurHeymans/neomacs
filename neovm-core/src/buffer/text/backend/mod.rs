@@ -5,7 +5,8 @@ use std::fmt;
 
 use super::BufferTextBackendKind;
 use crate::buffer::buffer_text::TextBackendDebugLayout;
-use crate::buffer::position::TextPositionAnchor;
+use crate::buffer::position::{EmacsBytePos, EmacsByteRange, TextPositionAnchor};
+use crate::buffer::text::{TextEditRange, TextExtent};
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
 
@@ -224,15 +225,17 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn insert_emacs_bytes_both(
+    pub(in crate::buffer) fn insert_measured_emacs_bytes(
         &mut self,
-        pos: usize,
+        pos: EmacsBytePos,
         bytes: &[u8],
-        nchars: usize,
+        extent: TextExtent,
     ) {
         match self {
-            Self::Gap(gap) => gap.insert_emacs_bytes_both(pos, bytes, nchars),
-            Self::PieceTree(piece_tree) => piece_tree.insert_emacs_bytes_both(pos, bytes, nchars),
+            Self::Gap(gap) => gap.insert_measured_emacs_bytes(pos, bytes, extent),
+            Self::PieceTree(piece_tree) => {
+                piece_tree.insert_measured_emacs_bytes(pos, bytes, extent)
+            }
         }
     }
 
@@ -243,23 +246,22 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
+    pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
         match self {
-            Self::Gap(gap) => gap.delete_range_both(start, end, nchars),
-            Self::PieceTree(piece_tree) => piece_tree.delete_range_both(start, end, nchars),
+            Self::Gap(gap) => gap.delete_measured_range(range),
+            Self::PieceTree(piece_tree) => piece_tree.delete_measured_range(range),
         }
     }
 
     pub(in crate::buffer) fn replace_same_len_emacs_bytes(
         &mut self,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         replacement: &[u8],
     ) {
         match self {
-            Self::Gap(gap) => gap.replace_same_len_emacs_bytes(start, end, replacement),
+            Self::Gap(gap) => gap.replace_same_len_emacs_byte_range(range, replacement),
             Self::PieceTree(piece_tree) => {
-                piece_tree.replace_same_len_emacs_bytes(start, end, replacement)
+                piece_tree.replace_same_len_emacs_byte_range(range, replacement)
             }
         }
     }

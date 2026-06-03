@@ -2,7 +2,8 @@ use std::fmt;
 
 use crate::buffer::buffer_text::GapDebugLayout;
 use crate::buffer::gap_buffer::GapBuffer;
-use crate::buffer::position::{CharPos0, EmacsBytePos};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::text::{TextEditRange, TextExtent};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -163,31 +164,30 @@ impl GapTextBackend {
         self.gap.insert_emacs_bytes(pos, bytes);
     }
 
-    pub(in crate::buffer) fn insert_emacs_bytes_both(
+    pub(in crate::buffer) fn insert_measured_emacs_bytes(
         &mut self,
-        pos: usize,
+        pos: EmacsBytePos,
         bytes: &[u8],
-        nchars: usize,
+        extent: TextExtent,
     ) {
-        self.gap.insert_emacs_bytes_both(pos, bytes, nchars);
+        self.gap.insert_measured_emacs_bytes(pos, bytes, extent);
     }
 
     pub(in crate::buffer) fn delete_range(&mut self, start: usize, end: usize) {
         self.gap.delete_range(start, end);
     }
 
-    pub(in crate::buffer) fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        self.gap.delete_range_both(start, end, nchars);
+    pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
+        self.gap.delete_measured_range(range);
     }
 
-    pub(in crate::buffer) fn replace_same_len_emacs_bytes(
+    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
         &mut self,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         replacement: &[u8],
     ) {
         self.gap
-            .replace_same_len_emacs_bytes(start, end, replacement);
+            .replace_same_len_emacs_byte_range(range, replacement);
     }
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {

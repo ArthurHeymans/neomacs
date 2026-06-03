@@ -15,6 +15,16 @@ pub struct CharPos0(usize);
 #[repr(transparent)]
 pub struct EmacsBytePos(usize);
 
+/// Count of logical Emacs characters.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct CharLen(usize);
+
+/// Count of logical Emacs bytes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct EmacsByteLen(usize);
+
 /// 0-based physical storage byte position.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -29,6 +39,13 @@ pub struct LispCharPos1(i64);
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct DisplayColumn(usize);
+
+/// Half-open logical Emacs byte range `[start, end)`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EmacsByteRange {
+    start: EmacsBytePos,
+    end: EmacsBytePos,
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextPositionAnchor {
@@ -97,6 +114,38 @@ impl EmacsBytePos {
     }
 }
 
+impl CharLen {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(len: usize) -> Self {
+        Self(len)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl EmacsByteLen {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(len: usize) -> Self {
+        Self(len)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
 impl StorageBytePos {
     pub const ZERO: Self = Self(0);
 
@@ -106,6 +155,43 @@ impl StorageBytePos {
 
     pub const fn get(self) -> usize {
         self.0
+    }
+}
+
+impl EmacsByteRange {
+    pub const fn new(start: EmacsBytePos, end: EmacsBytePos) -> Self {
+        Self { start, end }
+    }
+
+    pub const fn from_usize(start: usize, end: usize) -> Self {
+        Self {
+            start: EmacsBytePos::new(start),
+            end: EmacsBytePos::new(end),
+        }
+    }
+
+    pub const fn start(self) -> EmacsBytePos {
+        self.start
+    }
+
+    pub const fn end(self) -> EmacsBytePos {
+        self.end
+    }
+
+    pub const fn start_usize(self) -> usize {
+        self.start.get()
+    }
+
+    pub const fn end_usize(self) -> usize {
+        self.end.get()
+    }
+
+    pub const fn len(self) -> EmacsByteLen {
+        EmacsByteLen::new(self.end.get().saturating_sub(self.start.get()))
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.start.get() >= self.end.get()
     }
 }
 
@@ -154,6 +240,18 @@ impl From<CharPos0> for usize {
     }
 }
 
+impl From<usize> for CharLen {
+    fn from(len: usize) -> Self {
+        Self(len)
+    }
+}
+
+impl From<CharLen> for usize {
+    fn from(len: CharLen) -> Self {
+        len.0
+    }
+}
+
 impl From<usize> for EmacsBytePos {
     fn from(pos: usize) -> Self {
         Self(pos)
@@ -163,6 +261,18 @@ impl From<usize> for EmacsBytePos {
 impl From<EmacsBytePos> for usize {
     fn from(p: EmacsBytePos) -> Self {
         p.0
+    }
+}
+
+impl From<usize> for EmacsByteLen {
+    fn from(len: usize) -> Self {
+        Self(len)
+    }
+}
+
+impl From<EmacsByteLen> for usize {
+    fn from(len: EmacsByteLen) -> Self {
+        len.0
     }
 }
 

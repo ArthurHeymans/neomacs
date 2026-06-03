@@ -1,7 +1,8 @@
 use std::fmt;
 
 use crate::buffer::buffer_text::TextBackendDebugLayout;
-use crate::buffer::text::TextMetrics;
+use crate::buffer::position::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PieceSource {
@@ -317,6 +318,21 @@ impl PieceTreeTextBackend {
         bytes: &[u8],
         nchars: usize,
     ) {
+        self.insert_measured_emacs_bytes(
+            EmacsBytePos::new(pos),
+            bytes,
+            TextExtent::from_usize(nchars, bytes.len()),
+        );
+    }
+
+    pub(in crate::buffer) fn insert_measured_emacs_bytes(
+        &mut self,
+        pos: EmacsBytePos,
+        bytes: &[u8],
+        extent: TextExtent,
+    ) {
+        let pos = pos.get();
+        let nchars = extent.chars().get();
         assert!(
             pos <= self.len(),
             "insert_emacs_bytes_both: position {pos} out of range (len {})",
@@ -325,6 +341,11 @@ impl PieceTreeTextBackend {
         if bytes.is_empty() {
             return;
         }
+        debug_assert_eq!(
+            extent.emacs_bytes().get(),
+            bytes.len(),
+            "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
+        );
         debug_assert_eq!(
             nchars,
             emacs_char_count_bytes(bytes, self.multibyte),
@@ -360,6 +381,19 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
+        let start_char = self.byte_to_char(start);
+        self.delete_measured_range(TextEditRange::from_usize(
+            start,
+            end,
+            start_char,
+            start_char + nchars,
+        ));
+    }
+
+    pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
+        let start = range.byte_start_usize();
+        let end = range.byte_end_usize();
+        let nchars = range.char_len().get();
         assert!(
             start <= end,
             "delete_range_both: start ({start}) > end ({end})"
@@ -390,6 +424,16 @@ impl PieceTreeTextBackend {
         end: usize,
         replacement: &[u8],
     ) {
+        self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+    }
+
+    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        replacement: &[u8],
+    ) {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"
@@ -410,10 +454,20 @@ impl PieceTreeTextBackend {
             return;
         }
 
-        let old_chars = self.byte_to_char(end) - self.byte_to_char(start);
-        self.delete_range_both(start, end, old_chars);
+        let start_char = self.byte_to_char(start);
+        let old_chars = self.byte_to_char(end) - start_char;
+        self.delete_measured_range(TextEditRange::from_usize(
+            start,
+            end,
+            start_char,
+            start_char + old_chars,
+        ));
         let new_chars = emacs_char_count_bytes(replacement, self.multibyte);
-        self.insert_emacs_bytes_both(start, replacement, new_chars);
+        self.insert_measured_emacs_bytes(
+            EmacsBytePos::new(start),
+            replacement,
+            TextExtent::from_usize(new_chars, replacement.len()),
+        );
     }
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {

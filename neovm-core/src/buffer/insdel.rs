@@ -6,6 +6,7 @@
 
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::undo;
+use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion};
 use crate::heap_types::LispString;
 
 #[inline]
@@ -118,6 +119,7 @@ impl Buffer {
             return;
         }
         let byte_len = bytes.len();
+        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
@@ -134,12 +136,12 @@ impl Buffer {
         }
 
         self.text
-            .insert_emacs_bytes_both(insert_pos, bytes, char_len);
+            .insert_measured_emacs_bytes(insertion.byte_pos(), bytes, insertion.extent());
         self.apply_byte_insert_side_effects(
-            insert_pos,
-            insert_char_pos,
-            byte_len,
-            char_len,
+            insertion.byte_pos_usize(),
+            insertion.char_pos_usize(),
+            insertion.extent().emacs_bytes().get(),
+            insertion.extent().chars().get(),
             true,
             false,
             true,
@@ -403,6 +405,8 @@ impl Buffer {
         let end_char = self.text.emacs_byte_to_char(end);
         let old_byte_len = end - start;
         let old_char_len = end_char - start_char;
+        let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
         let old_pt_byte = self.pt_byte;
         let old_pt = self.pt;
@@ -431,9 +435,9 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        self.text.delete_range_both(start, end, old_char_len);
+        self.text.delete_measured_range(old_range);
         self.text
-            .insert_emacs_bytes_both(start, new_bytes, new_char_len);
+            .insert_measured_emacs_bytes(old_range.byte_start(), new_bytes, new_extent);
 
         if start < old_pt_byte || old_pt_byte == end {
             let clamped = old_pt_byte.min(end);
@@ -462,15 +466,18 @@ impl Buffer {
         }
 
         self.text.adjust_markers_for_replace(
-            start,
-            end,
-            start_char,
-            end_char,
-            new_byte_len,
-            new_char_len,
+            old_range.byte_start_usize(),
+            old_range.byte_end_usize(),
+            old_range.char_start_usize(),
+            old_range.char_end_usize(),
+            new_extent.emacs_bytes().get(),
+            new_extent.chars().get(),
         );
-        self.text
-            .adjust_text_props_for_replace(start_char, old_char_len, new_char_len);
+        self.text.adjust_text_props_for_replace(
+            old_range.char_start_usize(),
+            old_range.char_len().get(),
+            new_extent.chars().get(),
+        );
         if text.has_intervals() {
             self.text.text_props_append_shifted(text.intervals(), start);
         } else if new_char_len > 0 {
@@ -514,10 +521,17 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        self.text
-            .delete_range_both(start, end, end_char - start_char);
+        let range = TextEditRange::from_usize(start, end, start_char, end_char);
+        self.text.delete_measured_range(range);
         self.apply_byte_delete_side_effects(
-            start, end, start_char, end_char, true, false, true, true,
+            range.byte_start_usize(),
+            range.byte_end_usize(),
+            range.char_start_usize(),
+            range.char_end_usize(),
+            true,
+            false,
+            true,
+            true,
         );
     }
 
@@ -614,8 +628,10 @@ impl Buffer {
             }
         }
 
-        self.text
-            .replace_same_len_emacs_bytes(start, end, &replacement_bytes);
+        self.text.replace_same_len_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            &replacement_bytes,
+        );
         self.apply_same_len_edit_side_effects(changed_chars, false);
         true
     }
@@ -754,8 +770,10 @@ impl Buffer {
         let new_point_char =
             transpose_position(self.pt, start1_char, end1_char, start2_char, end2_char);
 
-        self.text
-            .replace_same_len_emacs_bytes(start1_byte, end2_byte, &replacement);
+        self.text.replace_same_len_emacs_byte_range(
+            EmacsByteRange::from_usize(start1_byte, end2_byte),
+            &replacement,
+        );
         self.text.text_props_replace(replacement_props);
         if leave_markers {
             self.text

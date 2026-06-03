@@ -12,6 +12,8 @@
 
 use std::fmt;
 
+use crate::buffer::{EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent};
+
 /// Default extra gap bytes to pre-allocate on any growth.
 /// Matches GNU Emacs `GAP_BYTES_DFL` (`src/buffer.h:205`).
 const GAP_BYTES_DFL: usize = 2000;
@@ -446,6 +448,21 @@ impl GapBuffer {
     ///
     /// Mirrors GNU `insert_1_both` (`src/insdel.c:891`).
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
+        self.insert_measured_emacs_bytes(
+            EmacsBytePos::new(pos),
+            bytes,
+            TextExtent::from_usize(nchars, bytes.len()),
+        );
+    }
+
+    pub(crate) fn insert_measured_emacs_bytes(
+        &mut self,
+        pos: EmacsBytePos,
+        bytes: &[u8],
+        extent: TextExtent,
+    ) {
+        let pos = pos.get();
+        let nchars = extent.chars().get();
         assert!(
             pos <= self.len(),
             "insert_emacs_bytes_both: position {pos} out of range (len {})",
@@ -457,6 +474,11 @@ impl GapBuffer {
         debug_assert!(
             pos == self.len() || self.is_char_boundary(pos),
             "insert_emacs_bytes_both: position {pos} is not on an Emacs character boundary"
+        );
+        debug_assert_eq!(
+            extent.emacs_bytes().get(),
+            bytes.len(),
+            "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
         );
         debug_assert_eq!(
             nchars,
@@ -520,6 +542,19 @@ impl GapBuffer {
     ///
     /// Mirrors GNU `del_range_2` (`src/insdel.c:1991`).
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
+        let start_char = self.byte_to_char(start);
+        self.delete_measured_range(TextEditRange::from_usize(
+            start,
+            end,
+            start_char,
+            start_char + nchars,
+        ));
+    }
+
+    pub(crate) fn delete_measured_range(&mut self, range: TextEditRange) {
+        let start = range.byte_start_usize();
+        let end = range.byte_end_usize();
+        let nchars = range.char_len().get();
         assert!(
             start <= end,
             "delete_range_both: start ({start}) > end ({end})"
@@ -540,6 +575,11 @@ impl GapBuffer {
             end == self.len() || self.is_char_boundary(end),
             "delete_range_both: end ({end}) is not on an Emacs character boundary"
         );
+        debug_assert_eq!(
+            nchars,
+            self.byte_to_char(end) - self.byte_to_char(start),
+            "delete_range_both: caller-supplied nchars mismatches actual"
+        );
 
         self.move_gap_to(start);
         let deleted_bytes = end - start;
@@ -552,6 +592,16 @@ impl GapBuffer {
 
     /// Overwrite the logical byte range `[start, end)` with raw Emacs bytes.
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
+        self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+    }
+
+    pub(crate) fn replace_same_len_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        replacement: &[u8],
+    ) {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"
