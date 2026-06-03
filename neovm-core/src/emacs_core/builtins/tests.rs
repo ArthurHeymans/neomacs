@@ -11812,6 +11812,36 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
 }
 
 #[test]
+fn message_log_appends_after_full_messages_buffer_when_narrowed() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let messages_id = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .unwrap_or_else(|| eval.buffers.create_buffer("*Messages*"));
+    {
+        let messages = eval
+            .buffers
+            .get_mut(messages_id)
+            .expect("*Messages* buffer");
+        messages.insert("keep");
+        messages.narrow_to_byte_region(0, 2);
+        messages.goto_byte(2);
+    }
+
+    builtin_message(&mut eval, vec![Value::string("hello")])
+        .expect("message should append to *Messages*");
+
+    let messages = eval.buffers.get(messages_id).expect("*Messages* buffer");
+    assert_eq!(messages.buffer_string(), "ke");
+    assert_eq!(messages.point_byte(), 2);
+    assert_eq!(
+        messages.buffer_substring_range(messages.full_emacs_byte_range()),
+        "keephello\n"
+    );
+}
+
+#[test]
 fn message_respects_rebound_messages_buffer_name_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

@@ -45,8 +45,17 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     let old_buf = ctx.buffers.current_buffer().map(|b| b.id);
     let _ = ctx.set_current_buffer_unrecorded(buf_id);
     if let Some(buf) = ctx.buffers.get_mut(buf_id) {
-        let end = buf.point_max();
-        buf.goto_char(end);
+        let old_pt_byte = buf.point_byte();
+        let old_begv = buf.begv;
+        let old_begv_byte = buf.begv_byte;
+        let old_zv = buf.zv;
+        let old_zv_byte = buf.zv_byte;
+        let old_total_bytes = buf.total_bytes();
+        let point_at_end = old_pt_byte == old_total_bytes;
+        let zv_at_end = old_zv_byte == old_total_bytes;
+
+        buf.widen();
+        buf.goto_byte(buf.total_bytes());
         if buf.get_multibyte() == msg.is_multibyte() {
             buf.insert_lisp_string(msg);
         } else {
@@ -54,6 +63,24 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
             buf.insert(&text);
         }
         buf.insert("\n");
+
+        let new_total_bytes = buf.total_bytes();
+        let new_total_chars = buf.total_chars();
+        buf.begv = old_begv;
+        buf.begv_byte = old_begv_byte;
+        if zv_at_end {
+            buf.zv = new_total_chars;
+            buf.zv_byte = new_total_bytes;
+        } else {
+            buf.zv = old_zv;
+            buf.zv_byte = old_zv_byte;
+        }
+        let restored_point = if point_at_end {
+            new_total_bytes
+        } else {
+            old_pt_byte
+        };
+        buf.goto_byte(restored_point);
     }
     if let Some(old) = old_buf {
         ctx.restore_current_buffer_if_live(old);
