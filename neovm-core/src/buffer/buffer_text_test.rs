@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use crate::buffer::{BufferTextBackendKind, TextBackendDebugLayout, TextMetrics};
+use crate::buffer::text::TextBackendDebugLayout;
+use crate::buffer::{BufferTextBackendKind, TextMetrics};
 
 use super::BufferText;
 

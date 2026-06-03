@@ -285,11 +285,11 @@ impl BufferText {
         self.storage.borrow().metrics
     }
 
-    pub fn backend_debug_layout(&self) -> TextBackendDebugLayout {
+    pub(crate) fn backend_debug_layout(&self) -> TextBackendDebugLayout {
         self.storage.borrow().backend.debug_layout()
     }
 
-    pub fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
+    pub(crate) fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
         self.storage.borrow().backend.debug_layout().gap()
     }
 
