@@ -15,8 +15,8 @@ pub use buffer::{
 pub use buffer_text::BufferText;
 pub use overlay::{Overlay, OverlayList};
 pub use position::{
-    AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, DisplayColumn, EmacsByteLen,
-    EmacsBytePos, EmacsByteRange, LispCharPos1, StorageBytePos, TextPositionAnchor,
+    AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, DisplayColumn,
+    EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1, StorageBytePos, TextPositionAnchor,
 };
 pub use shared::SharedUndoState;
 pub use text::{BufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics};

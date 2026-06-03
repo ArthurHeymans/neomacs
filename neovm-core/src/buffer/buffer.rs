@@ -13,7 +13,8 @@ use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
 use super::position::{
-    AccessibleEmacsByteRange, CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos,
+    AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
+    EmacsByteRange, StorageBytePos,
 };
 use super::text::BufferTextBackendKind;
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
@@ -1960,6 +1961,11 @@ impl Buffer {
     /// meaning in the type for motion/search code.
     pub fn accessible_emacs_byte_region(&self) -> AccessibleEmacsByteRange {
         AccessibleEmacsByteRange::new(self.accessible_emacs_byte_range())
+    }
+
+    /// Accessible buffer bounds in internal character positions.
+    pub fn accessible_char_region(&self) -> AccessibleCharRange {
+        AccessibleCharRange::new(CharRange::from_usize(self.begv, self.zv))
     }
 
     pub fn is_narrowed(&self) -> bool {

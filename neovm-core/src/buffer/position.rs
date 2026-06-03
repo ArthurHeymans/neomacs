@@ -64,6 +64,16 @@ pub struct AccessibleEmacsByteRange {
     range: EmacsByteRange,
 }
 
+/// Accessible internal character range `[BEGV, ZV)`.
+///
+/// GNU syntax and parse code carries both character and byte positions. This
+/// companion to `AccessibleEmacsByteRange` keeps those character bounds
+/// explicit at call sites that must not scan outside the narrowed region.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AccessibleCharRange {
+    range: CharRange,
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextPositionAnchor {
     pub char_pos: CharPos0,
@@ -286,6 +296,52 @@ impl AccessibleEmacsByteRange {
 
     pub fn contains_preceding_char_boundary_usize(self, pos: usize) -> bool {
         self.start_usize() < pos && pos <= self.end_usize()
+    }
+
+    pub fn clamp_usize(self, pos: usize) -> usize {
+        pos.clamp(self.start_usize(), self.end_usize())
+    }
+}
+
+impl AccessibleCharRange {
+    pub const fn new(range: CharRange) -> Self {
+        Self { range }
+    }
+
+    pub const fn range(self) -> CharRange {
+        self.range
+    }
+
+    pub const fn start(self) -> CharPos0 {
+        self.range.start()
+    }
+
+    pub const fn end(self) -> CharPos0 {
+        self.range.end()
+    }
+
+    pub const fn start_usize(self) -> usize {
+        self.range.start_usize()
+    }
+
+    pub const fn end_usize(self) -> usize {
+        self.range.end_usize()
+    }
+
+    pub const fn len(self) -> CharLen {
+        self.range.len()
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.range.is_empty()
+    }
+
+    pub fn contains_usize(self, pos: usize) -> bool {
+        self.start_usize() <= pos && pos < self.end_usize()
+    }
+
+    pub fn contains_boundary_usize(self, pos: usize) -> bool {
+        self.start_usize() <= pos && pos <= self.end_usize()
     }
 
     pub fn clamp_usize(self, pos: usize) -> usize {
