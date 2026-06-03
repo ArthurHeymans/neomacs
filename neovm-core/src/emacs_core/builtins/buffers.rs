@@ -120,6 +120,12 @@ fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
     byte_pos.to_lisp(&buf.text).as_i64()
 }
 
+fn char_pos_to_buffer_byte(buf: &crate::buffer::Buffer, char_pos: usize) -> usize {
+    buf.text
+        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
+}
+
 pub(crate) fn normalize_narrow_region_in_buffers(
     buffers: &BufferManager,
     current_id: BufferId,
@@ -851,8 +857,8 @@ fn buffer_slice_for_char_region(
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
     let to_char = if to > 0 { to as usize - 1 } else { 0 };
     let char_count = buf.total_chars();
-    let from_byte = buf.text.char_to_emacs_byte(from_char.min(char_count));
-    let to_byte = buf.text.char_to_emacs_byte(to_char.min(char_count));
+    let from_byte = char_pos_to_buffer_byte(buf, from_char.min(char_count));
+    let to_byte = char_pos_to_buffer_byte(buf, to_char.min(char_count));
     super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string(from_byte, to_byte))
 }
 
@@ -1976,12 +1982,8 @@ pub(crate) fn builtin_compute_motion(
 
     // Convert 1-based char positions to byte offsets.
     let max_chars = buf.text.char_count();
-    let from_byte = buf
-        .text
-        .char_to_emacs_byte(((from - 1).max(0) as usize).min(max_chars));
-    let to_byte = buf
-        .text
-        .char_to_emacs_byte(((to - 1).max(0) as usize).min(max_chars));
+    let from_byte = char_pos_to_buffer_byte(buf, ((from - 1).max(0) as usize).min(max_chars));
+    let to_byte = char_pos_to_buffer_byte(buf, ((to - 1).max(0) as usize).min(max_chars));
 
     let from_pos = from_byte.clamp(begv, zv);
     let to_pos = to_byte.clamp(begv, zv);
@@ -2041,7 +2043,7 @@ pub(crate) fn builtin_compute_motion(
     }
 
     // Convert byte pos back to 1-based char position.
-    let final_charpos = buf.text.emacs_byte_to_char(pos.min(zv)) as i64 + 1;
+    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(zv)));
 
     Ok(Value::list(vec![
         Value::fixnum(final_charpos),
@@ -2340,8 +2342,8 @@ fn resolve_field_position_in_buffers(
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
     let pos = match position_value {
-        None => buf.text.emacs_byte_to_char(buf.pt_byte) as i64 + 1,
-        Some(value) if value.is_nil() => buf.text.emacs_byte_to_char(buf.pt_byte) as i64 + 1,
+        None => point_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
+        Some(value) if value.is_nil() => point_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
         Some(value) => expect_integer_or_marker_in_buffers(buffers, value)?,
     };
     if pos < point_min || pos > point_max {
@@ -3362,8 +3364,8 @@ pub(crate) fn builtin_subst_char_in_region(
         let hi = start.max(end) as usize;
         let start_char = lo.saturating_sub(1);
         let end_char = hi.saturating_sub(1);
-        let byte_start = buf.text.char_to_emacs_byte(start_char);
-        let byte_end = buf.text.char_to_emacs_byte(end_char);
+        let byte_start = char_pos_to_buffer_byte(buf, start_char);
+        let byte_end = char_pos_to_buffer_byte(buf, end_char);
         let needs_change = from_code != to_code
             && byte_start < byte_end
             && buf
@@ -4054,9 +4056,10 @@ pub(crate) fn builtin_byte_to_position(
         }
     }
 
-    Ok(Value::fixnum(
-        buf.text.emacs_byte_to_char(boundary) as i64 + 1,
-    ))
+    Ok(Value::fixnum(point_char_pos(
+        buf,
+        EmacsBytePos::new(boundary),
+    )))
 }
 
 pub(crate) fn builtin_position_bytes(
@@ -4076,7 +4079,7 @@ pub(crate) fn builtin_position_bytes(
         return Ok(Value::NIL);
     }
 
-    let byte_pos = buf.text.char_to_emacs_byte((pos - 1) as usize);
+    let byte_pos = char_pos_to_buffer_byte(buf, (pos - 1) as usize);
     Ok(Value::fixnum(byte_pos as i64 + 1))
 }
 
