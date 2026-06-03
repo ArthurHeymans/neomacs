@@ -924,6 +924,20 @@ pub(crate) fn builtin_neomacs_set_default_buffer_text_backend(
     Ok(buffer_text_backend_kind_value(kind))
 }
 
+pub(crate) fn builtin_neomacs_set_buffer_text_backend(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("neomacs-set-buffer-text-backend", &args, 1)?;
+    let kind = value_to_buffer_text_backend_kind(args[0])?;
+    let buffer = ctx
+        .buffers
+        .current_buffer_mut()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    buffer.text.convert_backend_kind(kind);
+    Ok(buffer_text_backend_kind_value(kind))
+}
+
 pub(super) fn reset_stubs_thread_locals() {
     super::super::sqlite::reset_sqlite_thread_locals();
     NEOMACS_CLIPBOARD_TEXT.with(|slot| *slot.borrow_mut() = None);

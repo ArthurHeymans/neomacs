@@ -6997,6 +6997,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
+        "neomacs-set-buffer-text-backend",
+        builtin_neomacs_set_buffer_text_backend,
+        0,
+        None,
+    );
+    ctx.defsubr(
         "buffer-local-toplevel-value",
         |ctx, args| super::custom::builtin_buffer_local_toplevel_value(ctx, args),
         0,

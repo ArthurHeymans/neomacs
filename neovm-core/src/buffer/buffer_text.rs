@@ -220,6 +220,12 @@ impl BufferText {
         storage.backend_layout = backend_layout;
     }
 
+    fn invalidate_position_caches(storage: &mut BufferTextStorage) {
+        storage.pos_cache.set(PositionCache::default());
+        storage.anchor_cache.borrow_mut().clear();
+        storage.anchor_cache_key.set((0, 0));
+    }
+
     pub fn new() -> Self {
         Self::from_backend(Self::empty_backend_for_kind(
             BufferTextBackendKind::GapBuffer,
@@ -258,6 +264,22 @@ impl BufferText {
 
     pub fn backend_kind(&self) -> BufferTextBackendKind {
         self.storage.borrow().backend.kind()
+    }
+
+    pub(crate) fn convert_backend_kind(&self, kind: BufferTextBackendKind) {
+        assert!(
+            kind.is_implemented(),
+            "buffer text backend {kind:?} is not implemented"
+        );
+        let mut storage = self.storage.borrow_mut();
+        if storage.backend.kind() == kind {
+            return;
+        }
+        let text = storage.backend.dump_text();
+        let multibyte = storage.backend.is_multibyte();
+        storage.backend = Self::dump_backend_for_kind(text, multibyte, kind);
+        Self::refresh_backend_layout(&mut storage);
+        Self::invalidate_position_caches(&mut storage);
     }
 
     pub fn len(&self) -> usize {
@@ -587,9 +609,7 @@ impl BufferText {
         // Wholesale content replacement: invalidate position caches. If the new
         // content happens to have the same (total_chars, total_bytes) as the old,
         // a stale pos_cache entry could otherwise return a wrong bytepos.
-        storage.pos_cache.set(PositionCache::default());
-        storage.anchor_cache.borrow_mut().clear();
-        storage.anchor_cache_key.set((0, 0));
+        Self::invalidate_position_caches(&mut storage);
     }
 
     /// Walk the intrusive marker chain and remap each marker's (bytepos,

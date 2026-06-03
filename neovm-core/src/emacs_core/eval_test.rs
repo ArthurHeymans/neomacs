@@ -573,6 +573,41 @@ fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_piece
 }
 
 #[test]
+fn neomacs_set_buffer_text_backend_converts_current_shared_text_storage() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(save-current-buffer
+                 (let ((base (get-buffer-create "convert-base")))
+                   (set-buffer base)
+                   (erase-buffer)
+                   (insert "abécd")
+                   (put-text-property 2 4 'face 'bold)
+                   (let ((m (copy-marker 4))
+                         (ind (make-indirect-buffer base "convert-ind" t)))
+                     (list
+                      (neomacs-buffer-text-backend)
+                      (neomacs-set-buffer-text-backend 'piece-tree)
+                      (neomacs-buffer-text-backend)
+                      (save-current-buffer
+                        (set-buffer ind)
+                        (neomacs-buffer-text-backend))
+                      (buffer-string)
+                      (save-current-buffer
+                        (set-buffer ind)
+                        (buffer-string))
+                      (get-text-property 3 'face)
+                      (marker-position m)
+                      (neomacs-set-buffer-text-backend 'gap-buffer)
+                      (save-current-buffer
+                        (set-buffer ind)
+                        (neomacs-buffer-text-backend))))))"#
+        ),
+        r#"OK (gap-buffer piece-tree piece-tree piece-tree #("abécd" 1 3 (face bold)) #("abécd" 1 3 (face bold)) bold 4 gap-buffer gap-buffer)"#
+    );
+}
+
+#[test]
 fn neomacs_buffer_text_backend_rejects_non_symbol_unknown_and_unimplemented_kinds() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
