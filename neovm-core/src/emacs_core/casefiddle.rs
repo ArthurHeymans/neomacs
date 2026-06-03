@@ -6,7 +6,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::syntax::forward_word;
 use super::value::*;
-use crate::buffer::Buffer;
+use crate::buffer::{Buffer, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -439,7 +439,7 @@ fn preserve_upcase_case_string_payload(code: i64) -> bool {
     )
 }
 
-fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> (usize, usize) {
+fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> EmacsByteRange {
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
 
@@ -449,9 +449,10 @@ fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> (usize, usize) {
         std::mem::swap(&mut a, &mut b);
     }
 
-    let a_byte = buf.lisp_pos_to_accessible_byte(a);
-    let b_byte = buf.lisp_pos_to_accessible_byte(b);
-    (a_byte, b_byte)
+    EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(a),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(b),
+    )
 }
 
 fn resolve_case_region_in_buffers(
@@ -459,7 +460,7 @@ fn resolve_case_region_in_buffers(
     beg: i64,
     end: i64,
     arg: Option<&Value>,
-) -> Result<(usize, usize), Flow> {
+) -> Result<EmacsByteRange, Flow> {
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -474,7 +475,7 @@ fn resolve_case_region_in_buffers(
             )
         })?;
         let pt = buf.point();
-        return Ok((pt.min(mark), pt.max(mark)));
+        return Ok(EmacsByteRange::from_usize(pt.min(mark), pt.max(mark)));
     }
 
     Ok(resolve_region(buf, beg, end))
@@ -526,8 +527,10 @@ fn casify_region_in_state(
         if super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
             return Err(signal("buffer-read-only", vec![buf.name_value()]));
         }
-        let (beg, end) =
+        let byte_range =
             resolve_case_region_in_buffers(&eval.buffers, beg_val, end_val, args.get(2))?;
+        let beg = byte_range.start_usize();
+        let end = byte_range.end_usize();
         let text = buf.buffer_substring_lisp_string(beg, end);
         (beg, end, text)
     };
