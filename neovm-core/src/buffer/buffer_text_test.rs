@@ -11,6 +11,21 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
 
     assert_eq!(text.backend_kind(), BufferTextBackendKind::GapBuffer);
     assert_eq!(text.backend_kind().symbol_name(), "gap-buffer");
+    assert_eq!(u8::from(BufferTextBackendKind::GapBuffer), 0);
+    assert_eq!(u8::from(BufferTextBackendKind::PieceTree), 1);
+    assert_eq!(u8::from(BufferTextBackendKind::Rope), 2);
+    assert_eq!(
+        BufferTextBackendKind::try_from(0),
+        Ok(BufferTextBackendKind::GapBuffer)
+    );
+    assert_eq!(
+        BufferTextBackendKind::try_from(1),
+        Ok(BufferTextBackendKind::PieceTree)
+    );
+    assert_eq!(
+        BufferTextBackendKind::try_from(2),
+        Ok(BufferTextBackendKind::Rope)
+    );
     assert!(text.backend_kind().is_implemented());
     assert_eq!(
         BufferTextBackendKind::from_str("piece-tree"),

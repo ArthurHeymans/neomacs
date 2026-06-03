@@ -2760,20 +2760,13 @@ fn dump_overlay_list(encoder: &mut DumpEncoder, ol: &OverlayList) -> DumpOverlay
 // buffer-local Lisp Value serialized through the properties map.
 
 fn dump_buffer_text_backend_kind(kind: BufferTextBackendKind) -> DumpBufferTextBackendKind {
-    match kind {
-        BufferTextBackendKind::GapBuffer => DumpBufferTextBackendKind::GapBuffer,
-        BufferTextBackendKind::PieceTree => DumpBufferTextBackendKind::PieceTree,
-        BufferTextBackendKind::Rope => {
-            panic!("rope text backend is not implemented")
-        }
-    }
+    DumpBufferTextBackendKind::try_from(u8::from(kind))
+        .unwrap_or_else(|_| panic!("{} text backend is not implemented", kind.symbol_name()))
 }
 
 fn load_buffer_text_backend_kind(kind: DumpBufferTextBackendKind) -> BufferTextBackendKind {
-    match kind {
-        DumpBufferTextBackendKind::GapBuffer => BufferTextBackendKind::GapBuffer,
-        DumpBufferTextBackendKind::PieceTree => BufferTextBackendKind::PieceTree,
-    }
+    BufferTextBackendKind::try_from(u8::from(kind))
+        .expect("pdump buffer text backend tag should be a runtime backend kind")
 }
 
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {

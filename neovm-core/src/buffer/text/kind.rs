@@ -1,12 +1,26 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    EnumString,
+    IntoPrimitive,
+    IntoStaticStr,
+    TryFromPrimitive,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BufferTextBackendKind {
     #[default]
-    GapBuffer,
-    PieceTree,
-    Rope,
+    GapBuffer = 0,
+    PieceTree = 1,
+    Rope = 2,
 }
 
 impl BufferTextBackendKind {
