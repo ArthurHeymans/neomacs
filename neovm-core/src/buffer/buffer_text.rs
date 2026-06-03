@@ -480,11 +480,11 @@ impl BufferText {
         Self::refresh_backend_metrics(&mut storage);
     }
 
-    pub(crate) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
+    pub fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         CharPos0::new(self.buf_bytepos_to_charpos(byte_pos.get()))
     }
 
-    pub(crate) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+    pub fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         EmacsBytePos::new(self.buf_charpos_to_bytepos(char_pos.get()))
     }
 

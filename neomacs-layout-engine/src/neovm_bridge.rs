@@ -4,7 +4,7 @@
 //! the Rust Context's state, replacing C FFI data sources.
 
 use neovm_core::buffer::{
-    Buffer,
+    Buffer, CharPos0, EmacsBytePos,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     buffer_text::BufferText,
     overlay::OverlayList,
@@ -1480,13 +1480,17 @@ impl InvisibleStatus {
 fn buffer_charpos_to_bytepos<B: LayoutBufferView>(buffer: &B, charpos: usize) -> usize {
     buffer
         .layout_text()
-        .char_to_byte(charpos.min(buffer.layout_point_max_char()))
+        .char_pos_to_emacs_byte_pos(CharPos0::new(charpos.min(buffer.layout_point_max_char())))
+        .get()
 }
 
 fn buffer_bytepos_to_charpos<B: LayoutBufferView>(buffer: &B, bytepos: usize) -> usize {
     buffer
         .layout_text()
-        .byte_to_char(bytepos.min(buffer.layout_point_max_byte()))
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+            bytepos.min(buffer.layout_point_max_byte()),
+        ))
+        .get()
         .min(buffer.layout_point_max_char())
 }
 
