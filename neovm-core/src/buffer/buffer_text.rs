@@ -191,10 +191,8 @@ impl BufferText {
     }
 
     fn byte_range_to_char_range(&self, range: EmacsByteRange) -> CharRange {
-        CharRange::new(
-            CharPos0::new(self.buf_bytepos_to_charpos(range.start_usize())),
-            CharPos0::new(self.buf_bytepos_to_charpos(range.end_usize())),
-        )
+        let storage = self.storage.borrow();
+        Self::byte_range_to_char_range_with_storage(&storage, range)
     }
 
     pub fn new() -> Self {
@@ -464,15 +462,19 @@ impl BufferText {
         if start >= end {
             return;
         }
-        let start_char = self.buf_bytepos_to_charpos(start);
-        let end_char = self.buf_bytepos_to_charpos(end);
-        let range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let byte_range = EmacsByteRange::from_usize(start, end);
+        let char_range = self.byte_range_to_char_range(byte_range);
+        let range = TextEditRange::new(byte_range, char_range.start(), char_range.end());
         self.delete_measured_range(range);
     }
 
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        let start_char = self.buf_bytepos_to_charpos(start);
-        let range = TextEditRange::from_usize(start, end, start_char, start_char + nchars);
+        let start_char = self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(start));
+        let range = TextEditRange::new(
+            EmacsByteRange::from_usize(start, end),
+            start_char,
+            CharPos0::new(start_char.get() + nchars),
+        );
         self.delete_measured_range(range);
     }
 
@@ -504,22 +506,32 @@ impl BufferText {
         Self::refresh_backend_metrics(&mut storage);
     }
 
+    pub(crate) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
+        CharPos0::new(self.buf_bytepos_to_charpos(byte_pos.get()))
+    }
+
+    pub(crate) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+        EmacsBytePos::new(self.buf_charpos_to_bytepos(char_pos.get()))
+    }
+
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
-        self.buf_bytepos_to_charpos(byte_pos)
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
     }
 
     pub fn char_to_byte(&self, char_pos: usize) -> usize {
-        self.buf_charpos_to_bytepos(char_pos)
+        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
     }
 
     pub fn emacs_byte_to_char(&self, byte_pos: usize) -> usize {
-        // Storage bytes == Emacs bytes in current NeoMacs, so this is an
-        // alias. If that ever diverges, do the extra translation first here.
-        self.buf_bytepos_to_charpos(byte_pos)
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
     }
 
     pub fn char_to_emacs_byte(&self, char_pos: usize) -> usize {
-        self.buf_charpos_to_bytepos(char_pos)
+        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
     }
 
     pub fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
