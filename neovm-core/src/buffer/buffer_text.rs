@@ -44,7 +44,6 @@ impl PositionCache {
 
 struct BufferTextStorage {
     metrics: TextMetrics,
-    backend_debug_layout: TextBackendDebugLayout,
     backend: TextBackend,
     modified_tick: i64,
     chars_modified_tick: i64,
@@ -67,7 +66,6 @@ impl Clone for BufferTextStorage {
     fn clone(&self) -> Self {
         Self {
             metrics: self.metrics,
-            backend_debug_layout: self.backend_debug_layout,
             backend: self.backend.clone(),
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
@@ -105,11 +103,10 @@ impl Default for BufferText {
 
 impl BufferText {
     fn from_backend(backend: TextBackend) -> Self {
-        let backend_debug_layout = backend.debug_layout();
+        let metrics = backend.debug_layout().metrics();
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
-                metrics: backend_debug_layout.metrics(),
-                backend_debug_layout,
+                metrics,
                 backend,
                 modified_tick: 1,
                 chars_modified_tick: 1,
@@ -173,10 +170,8 @@ impl BufferText {
         }
     }
 
-    fn refresh_backend_debug_layout(storage: &mut BufferTextStorage) {
-        let backend_debug_layout = storage.backend.debug_layout();
-        storage.metrics = backend_debug_layout.metrics();
-        storage.backend_debug_layout = backend_debug_layout;
+    fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
+        storage.metrics = storage.backend.debug_layout().metrics();
     }
 
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {
@@ -254,7 +249,7 @@ impl BufferText {
         let text = storage.backend.dump_text();
         let multibyte = storage.backend.is_multibyte();
         storage.backend = Self::dump_backend_for_kind(text, multibyte, kind);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
         Self::invalidate_position_caches(&mut storage);
     }
 
@@ -272,7 +267,7 @@ impl BufferText {
             return;
         }
         storage.backend.set_multibyte(multibyte);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
         Self::invalidate_position_caches(&mut storage);
     }
 
@@ -293,11 +288,11 @@ impl BufferText {
     }
 
     pub fn backend_debug_layout(&self) -> TextBackendDebugLayout {
-        self.storage.borrow().backend_debug_layout
+        self.storage.borrow().backend.debug_layout()
     }
 
     pub fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
-        self.storage.borrow().backend_debug_layout.gap()
+        self.storage.borrow().backend.debug_layout().gap()
     }
 
     pub fn modified_tick(&self) -> i64 {
@@ -462,7 +457,7 @@ impl BufferText {
         storage
             .backend
             .insert_measured_emacs_bytes(pos, bytes, extent);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
     }
 
     pub fn delete_range(&mut self, start: usize, end: usize) {
@@ -487,7 +482,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.delete_measured_range(range);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
     }
 
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
@@ -506,7 +501,7 @@ impl BufferText {
         storage
             .backend
             .replace_same_len_emacs_bytes(range, replacement);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
     }
 
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
@@ -679,7 +674,7 @@ impl BufferText {
         let kind = storage.backend.kind();
         storage.backend =
             Self::emacs_bytes_backend_for_kind(text.as_bytes(), text.is_multibyte(), kind);
-        Self::refresh_backend_debug_layout(&mut storage);
+        Self::refresh_backend_metrics(&mut storage);
         storage.text_props = text_props;
         // Wholesale content replacement: invalidate position caches. If the new
         // content happens to have the same (total_chars, total_bytes) as the old,
