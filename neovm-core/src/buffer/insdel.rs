@@ -6,7 +6,9 @@
 
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::undo;
-use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion};
+use crate::buffer::{
+    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
+};
 use crate::heap_types::LispString;
 
 #[inline]
@@ -25,6 +27,18 @@ fn lisp_string_from_buffer_bytes(bytes: Vec<u8>, multibyte: bool) -> LispString 
     } else {
         LispString::from_unibyte(bytes)
     }
+}
+
+#[inline]
+fn char_pos_for_emacs_byte(text: &super::BufferText, byte_pos: usize) -> usize {
+    text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
+}
+
+#[inline]
+fn emacs_byte_for_char_pos(text: &super::BufferText, char_pos: usize) -> usize {
+    text.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
 }
 
 #[inline]
@@ -200,7 +214,7 @@ impl Buffer {
             }
         }
         debug_assert_eq!(
-            self.text.emacs_byte_to_char(insert_pos),
+            char_pos_for_emacs_byte(&self.text, insert_pos),
             insert_char_pos,
             "insert-side-effect char position drifted from the source edit site"
         );
@@ -403,8 +417,8 @@ impl Buffer {
             return;
         }
 
-        let start_char = self.text.emacs_byte_to_char(start);
-        let end_char = self.text.emacs_byte_to_char(end);
+        let start_char = char_pos_for_emacs_byte(&self.text, start);
+        let end_char = char_pos_for_emacs_byte(&self.text, end);
         let old_byte_len = end - start;
         let old_char_len = end_char - start_char;
         let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
@@ -492,8 +506,8 @@ impl Buffer {
         if start >= end {
             return;
         }
-        let start_char = self.text.emacs_byte_to_char(start);
-        let end_char = self.text.emacs_byte_to_char(end);
+        let start_char = char_pos_for_emacs_byte(&self.text, start);
+        let end_char = char_pos_for_emacs_byte(&self.text, end);
         // Record undo: save the deleted text for restoration.
         let deleted_text = self.buffer_region_lisp_string(start, end);
         // GNU `record_delete` always calls `record_point`, and that path
@@ -538,7 +552,8 @@ impl Buffer {
         if start >= end {
             return false;
         }
-        let changed_chars = self.text.emacs_byte_to_char(end) - self.text.emacs_byte_to_char(start);
+        let changed_chars =
+            char_pos_for_emacs_byte(&self.text, end) - char_pos_for_emacs_byte(&self.text, start);
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
@@ -592,7 +607,7 @@ impl Buffer {
             self.undo_prepare_change(start, self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
-                let start_char = self.text.emacs_byte_to_char(start);
+                let start_char = char_pos_for_emacs_byte(&self.text, start);
                 let mut deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
                 let props = self.text.text_props_slice(start, end);
@@ -771,7 +786,7 @@ impl Buffer {
             self.text
                 .remap_markers_through_byte_char(|old_byte, old_char| {
                     if old_byte > start1_byte && old_byte <= end2_byte {
-                        (self.text.char_to_emacs_byte(old_char), old_char)
+                        (emacs_byte_for_char_pos(&self.text, old_char), old_char)
                     } else {
                         (old_byte, old_char)
                     }
@@ -1079,8 +1094,8 @@ impl BufferManager {
         let root_id = self.shared_text_root_id(id)?;
         let shared_ids = self.buffers_sharing_root_ids(root_id);
         let source = self.buffers.get(&id)?;
-        let start_char = source.text.emacs_byte_to_char(start);
-        let end_char = source.text.emacs_byte_to_char(end);
+        let start_char = char_pos_for_emacs_byte(&source.text, start);
+        let end_char = char_pos_for_emacs_byte(&source.text, end);
         let range = TextEditRange::from_usize(start, end, start_char, end_char);
         self.buffers.get_mut(&id)?.delete_region(start, end);
 
@@ -1122,8 +1137,8 @@ impl BufferManager {
         let root_id = self.shared_text_root_id(id)?;
         let shared_ids = self.buffers_sharing_root_ids(root_id);
         let source = self.buffers.get(&id)?;
-        let start_char = source.text.emacs_byte_to_char(start);
-        let end_char = source.text.emacs_byte_to_char(end);
+        let start_char = char_pos_for_emacs_byte(&source.text, start);
+        let end_char = char_pos_for_emacs_byte(&source.text, end);
         let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
@@ -1166,7 +1181,8 @@ impl BufferManager {
         let shared_ids = self.buffers_sharing_root_ids(root_id);
         let changed_chars = {
             let source = self.buffers.get(&id)?;
-            source.text.emacs_byte_to_char(end) - source.text.emacs_byte_to_char(start)
+            char_pos_for_emacs_byte(&source.text, end)
+                - char_pos_for_emacs_byte(&source.text, start)
         };
         let changed = self
             .buffers
