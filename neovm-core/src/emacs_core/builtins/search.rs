@@ -75,10 +75,20 @@ pub(crate) fn builtin_search_forward_with_state(
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
                 SearchDirection::Forward => super::regex::search_forward(
-                    buf, &pattern, opts.bound, false, case_fold, match_data,
+                    buf,
+                    &pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
-                    buf, &pattern, opts.bound, false, case_fold, match_data,
+                    buf,
+                    &pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    match_data,
                 ),
             }
         };
@@ -133,7 +143,7 @@ enum SearchErrorKind {
 
 #[derive(Clone, Copy)]
 struct SearchOptions {
-    bound: Option<usize>,
+    bound: Option<EmacsBytePos>,
     direction: SearchDirection,
     noerror_mode: SearchNoErrorMode,
     steps: usize,
@@ -157,9 +167,9 @@ fn search_bound_to_byte_in_manager(
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     value: &Value,
-) -> Result<usize, Flow> {
+) -> Result<EmacsBytePos, Flow> {
     let pos = super::buffers::expect_integer_or_marker_in_buffers(buffers, value)?;
-    Ok(buf.lisp_pos_to_accessible_byte(pos))
+    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos))
 }
 
 fn parse_search_options_in_manager(
@@ -259,7 +269,7 @@ fn buffer_byte_to_char_result_in_manager(
 
 fn search_failure_position(buf: &crate::buffer::Buffer, opts: SearchOptions) -> usize {
     match opts.bound {
-        Some(limit) => limit.clamp(buf.begv_byte, buf.zv_byte),
+        Some(limit) => limit.get().clamp(buf.begv_byte, buf.zv_byte),
         None => match opts.direction {
             SearchDirection::Forward => buf.zv_byte,
             SearchDirection::Backward => buf.begv_byte,
@@ -336,10 +346,20 @@ pub(crate) fn builtin_search_backward_with_state(
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
                 SearchDirection::Forward => super::regex::search_forward(
-                    buf, &pattern, opts.bound, false, case_fold, match_data,
+                    buf,
+                    &pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
-                    buf, &pattern, opts.bound, false, case_fold, match_data,
+                    buf,
+                    &pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    match_data,
                 ),
             }
         };
@@ -431,10 +451,22 @@ pub(crate) fn re_search_forward_with_state_posix(
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
                 SearchDirection::Forward => super::regex::re_search_forward_lisp_with_posix(
-                    buf, pattern, opts.bound, false, case_fold, posix, match_data,
+                    buf,
+                    pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    posix,
+                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
-                    buf, pattern, opts.bound, false, case_fold, posix, match_data,
+                    buf,
+                    pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    posix,
+                    match_data,
                 ),
             }
         };
@@ -526,10 +558,22 @@ pub(crate) fn re_search_backward_with_state_posix(
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
                 SearchDirection::Forward => super::regex::re_search_forward_lisp_with_posix(
-                    buf, pattern, opts.bound, false, case_fold, posix, match_data,
+                    buf,
+                    pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    posix,
+                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
-                    buf, pattern, opts.bound, false, case_fold, posix, match_data,
+                    buf,
+                    pattern,
+                    opts.bound.map(|bound| bound.get()),
+                    false,
+                    case_fold,
+                    posix,
+                    match_data,
                 ),
             }
         };

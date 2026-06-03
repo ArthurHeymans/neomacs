@@ -1099,7 +1099,7 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
             vec![Value::fixnum(pos), Value::fixnum(pos)],
         ));
     }
-    let prop_byte = buf.lisp_pos_to_accessible_byte(pos);
+    let prop_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get();
     if buf
         .text
         .text_props_get_property(prop_byte, Value::symbol("inhibit-read-only"))
