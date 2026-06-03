@@ -144,9 +144,10 @@ struct ColumnScan {
 }
 
 fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
-    let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
-    let pt = point.clamp(begv, zv);
+    let accessible = buf.accessible_emacs_byte_region();
+    let begv = accessible.start_usize();
+    let zv = accessible.end_usize();
+    let pt = accessible.clamp_usize(point);
 
     let mut bol = pt;
     while bol > begv && buf.text.emacs_byte_at(bol - 1) != Some(b'\n') {
@@ -386,8 +387,9 @@ fn delete_horizontal_space_at_point(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let pmin = buf.point_min();
-    let pmax = buf.point_max();
+    let accessible = buf.accessible_emacs_byte_region();
+    let pmin = accessible.start_usize();
+    let pmax = accessible.end_usize();
     let pt = buf.point();
 
     let mut left = pt;
@@ -480,7 +482,7 @@ pub(crate) fn builtin_current_column(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(Value::fixnum(0));
         };
-        buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte)
+        buf.accessible_emacs_byte_region().clamp_usize(buf.pt_byte)
     };
     let scan = scan_for_column(ctx, current_id, point, None)?;
     Ok(Value::fixnum(scan.column as i64))
@@ -507,7 +509,7 @@ pub(crate) fn builtin_move_to_column(
     };
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
     let read_only = super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
-    let pt = buf.pt_byte.clamp(buf.begv_byte, buf.zv_byte);
+    let pt = buf.accessible_emacs_byte_region().clamp_usize(buf.pt_byte);
     let buffer_name = buf.name_value();
 
     if target == 0 {
@@ -599,7 +601,7 @@ pub(crate) fn builtin_indent_to(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let pt = buf.point();
-    let pmin = buf.point_min();
+    let pmin = buf.accessible_emacs_byte_region().start_usize();
     let (bol, _) = line_bounds(buf, pt);
     let line_prefix = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, pt));
     let tab_width = tab_width_in_state(&ctx.obarray, &[], Some(buf));
