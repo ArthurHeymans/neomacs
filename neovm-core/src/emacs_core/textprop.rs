@@ -11,7 +11,7 @@ use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
-use crate::buffer::{BufferId, BufferManager};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos};
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
 
@@ -939,8 +939,8 @@ pub(crate) fn prepare_interval_modification_for_change(
         };
         let start = byte_start.min(byte_end);
         let end = byte_start.max(byte_end);
-        let lisp_start = buf.text.emacs_byte_to_char(start) as i64 + 1;
-        let lisp_end = buf.text.emacs_byte_to_char(end) as i64 + 1;
+        let lisp_start = EmacsBytePos::new(start).to_lisp(&buf.text).as_i64();
+        let lisp_end = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
         let mod_sym = Value::symbol("modification-hooks");
         let mut prev: Option<Value> = None;
         let mut hooks = Vec::new();
