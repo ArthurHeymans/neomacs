@@ -503,7 +503,8 @@ fn replace_current_buffer_region_in_buffers(
     super::fns::replace_buffer_region_lisp_string(eval, buffer_id, beg, end, replacement)?;
     if restore_point {
         if let Some(buf) = eval.buffers.current_buffer_mut() {
-            buf.goto_char(saved_pt.min(buf.point_max()));
+            let accessible_end = buf.accessible_emacs_byte_region().end_usize();
+            buf.goto_char(saved_pt.min(accessible_end));
         }
     }
     Ok(Value::NIL)
