@@ -782,10 +782,10 @@ mod tests {
 
         for char_pos in 0..=piece.metrics().chars() {
             let piece_byte = piece_char_to_byte(piece, char_pos);
-            let gap_byte = gap.char_to_byte(char_pos);
+            let gap_byte = gap_char_to_byte(gap, char_pos);
             assert_eq!(piece_byte, gap_byte, "char_to_byte({char_pos})");
             assert_eq!(piece_byte_to_char(piece, piece_byte), char_pos);
-            assert_eq!(gap.byte_to_char(gap_byte), char_pos);
+            assert_eq!(gap_byte_to_char(gap, gap_byte), char_pos);
             if char_pos < piece.metrics().chars() {
                 assert_eq!(
                     piece_char_code_at(piece, piece_byte),
@@ -793,6 +793,16 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn gap_byte_to_char(gap: &GapBuffer, byte_pos: usize) -> usize {
+        gap.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
+    }
+
+    fn gap_char_to_byte(gap: &GapBuffer, char_pos: usize) -> usize {
+        gap.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
     }
 
     fn sample_insert(seed: u8) -> &'static str {

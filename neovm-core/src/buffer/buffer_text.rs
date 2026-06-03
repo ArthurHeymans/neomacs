@@ -495,16 +495,6 @@ impl BufferText {
             .char_pos_to_storage_byte_pos(char_pos)
     }
 
-    pub fn byte_to_char(&self, byte_pos: usize) -> usize {
-        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-            .get()
-    }
-
-    pub fn char_to_byte(&self, char_pos: usize) -> usize {
-        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-            .get()
-    }
-
     pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,

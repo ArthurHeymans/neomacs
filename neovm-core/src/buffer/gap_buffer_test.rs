@@ -1,5 +1,15 @@
 use super::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
+
+fn byte_to_char(buf: &GapBuffer, byte_pos: usize) -> usize {
+    buf.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
+}
+
+fn char_to_byte(buf: &GapBuffer, char_pos: usize) -> usize {
+    buf.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
+}
 
 // -----------------------------------------------------------------------
 // Construction & basic queries
@@ -380,8 +390,8 @@ fn byte_char_roundtrip_ascii() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello");
     for i in 0..=5 {
-        assert_eq!(buf.byte_to_char(i), i);
-        assert_eq!(buf.char_to_byte(i), i);
+        assert_eq!(byte_to_char(&buf, i), i);
+        assert_eq!(char_to_byte(&buf, i), i);
     }
 }
 
@@ -389,20 +399,20 @@ fn byte_char_roundtrip_ascii() {
 fn byte_to_char_cjk() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("\u{4F60}\u{597D}\u{4E16}"); // 你好世
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.byte_to_char(3), 1);
-    assert_eq!(buf.byte_to_char(6), 2);
-    assert_eq!(buf.byte_to_char(9), 3);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(byte_to_char(&buf, 3), 1);
+    assert_eq!(byte_to_char(&buf, 6), 2);
+    assert_eq!(byte_to_char(&buf, 9), 3);
 }
 
 #[test]
 fn char_to_byte_cjk() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("\u{4F60}\u{597D}\u{4E16}"); // 你好世
-    assert_eq!(buf.char_to_byte(0), 0);
-    assert_eq!(buf.char_to_byte(1), 3);
-    assert_eq!(buf.char_to_byte(2), 6);
-    assert_eq!(buf.char_to_byte(3), 9);
+    assert_eq!(char_to_byte(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 1), 3);
+    assert_eq!(char_to_byte(&buf, 2), 6);
+    assert_eq!(char_to_byte(&buf, 3), 9);
 }
 
 #[test]
@@ -410,15 +420,15 @@ fn byte_char_roundtrip_mixed() {
     crate::test_utils::init_test_tracing();
     // "a你b" — byte offsets: a=0, 你=1..4, b=4
     let buf = GapBuffer::from_str("a\u{4F60}b");
-    assert_eq!(buf.byte_to_char(0), 0); // before 'a'
-    assert_eq!(buf.byte_to_char(1), 1); // before '你'
-    assert_eq!(buf.byte_to_char(4), 2); // before 'b'
-    assert_eq!(buf.byte_to_char(5), 3); // end
+    assert_eq!(byte_to_char(&buf, 0), 0); // before 'a'
+    assert_eq!(byte_to_char(&buf, 1), 1); // before '你'
+    assert_eq!(byte_to_char(&buf, 4), 2); // before 'b'
+    assert_eq!(byte_to_char(&buf, 5), 3); // end
 
-    assert_eq!(buf.char_to_byte(0), 0);
-    assert_eq!(buf.char_to_byte(1), 1);
-    assert_eq!(buf.char_to_byte(2), 4);
-    assert_eq!(buf.char_to_byte(3), 5);
+    assert_eq!(char_to_byte(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 1), 1);
+    assert_eq!(char_to_byte(&buf, 2), 4);
+    assert_eq!(char_to_byte(&buf, 3), 5);
 }
 
 #[test]
@@ -428,25 +438,25 @@ fn byte_char_conversion_with_gap_in_middle() {
     // Move gap to middle of the text.
     buf.move_gap_to(4); // between 你 and b
     // Conversions should be unaffected by gap position.
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.byte_to_char(1), 1);
-    assert_eq!(buf.byte_to_char(4), 2);
-    assert_eq!(buf.byte_to_char(5), 3);
-    assert_eq!(buf.byte_to_char(8), 4);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(byte_to_char(&buf, 1), 1);
+    assert_eq!(byte_to_char(&buf, 4), 2);
+    assert_eq!(byte_to_char(&buf, 5), 3);
+    assert_eq!(byte_to_char(&buf, 8), 4);
 
-    assert_eq!(buf.char_to_byte(0), 0);
-    assert_eq!(buf.char_to_byte(1), 1);
-    assert_eq!(buf.char_to_byte(2), 4);
-    assert_eq!(buf.char_to_byte(3), 5);
-    assert_eq!(buf.char_to_byte(4), 8);
+    assert_eq!(char_to_byte(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 1), 1);
+    assert_eq!(char_to_byte(&buf, 2), 4);
+    assert_eq!(char_to_byte(&buf, 3), 5);
+    assert_eq!(char_to_byte(&buf, 4), 8);
 }
 
 #[test]
 fn byte_char_conversion_empty() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::new();
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.char_to_byte(0), 0);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 0), 0);
 }
 
 #[test]
@@ -454,10 +464,10 @@ fn byte_to_char_emoji() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("x\u{1F600}y"); // x😀y
     // byte offsets: x=0, 😀=1..5, y=5
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.byte_to_char(1), 1);
-    assert_eq!(buf.byte_to_char(5), 2);
-    assert_eq!(buf.byte_to_char(6), 3);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(byte_to_char(&buf, 1), 1);
+    assert_eq!(byte_to_char(&buf, 5), 2);
+    assert_eq!(byte_to_char(&buf, 6), 3);
 }
 
 #[test]
@@ -467,14 +477,14 @@ fn byte_char_conversion_unibyte_storage_sentinels() {
         crate::emacs_core::string_escape::bytes_to_unibyte_storage_string(&[0x80, b'A', 0xFF]);
     let buf = GapBuffer::from_str(&storage);
     assert_eq!(buf.char_count(), 3);
-    assert_eq!(buf.char_to_byte(0), 0);
-    assert_eq!(buf.char_to_byte(1), 1);
-    assert_eq!(buf.char_to_byte(2), 2);
-    assert_eq!(buf.char_to_byte(3), 3);
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.byte_to_char(1), 1);
-    assert_eq!(buf.byte_to_char(2), 2);
-    assert_eq!(buf.byte_to_char(3), 3);
+    assert_eq!(char_to_byte(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 1), 1);
+    assert_eq!(char_to_byte(&buf, 2), 2);
+    assert_eq!(char_to_byte(&buf, 3), 3);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(byte_to_char(&buf, 1), 1);
+    assert_eq!(byte_to_char(&buf, 2), 2);
+    assert_eq!(byte_to_char(&buf, 3), 3);
 }
 
 #[test]
@@ -485,14 +495,14 @@ fn byte_char_conversion_unibyte_storage_sentinels_after_gap_move() {
     let mut buf = GapBuffer::from_str(&storage);
     buf.move_gap_to(2);
     assert_eq!(buf.char_count(), 3);
-    assert_eq!(buf.char_to_byte(0), 0);
-    assert_eq!(buf.char_to_byte(1), 1);
-    assert_eq!(buf.char_to_byte(2), 2);
-    assert_eq!(buf.char_to_byte(3), 3);
-    assert_eq!(buf.byte_to_char(0), 0);
-    assert_eq!(buf.byte_to_char(1), 1);
-    assert_eq!(buf.byte_to_char(2), 2);
-    assert_eq!(buf.byte_to_char(3), 3);
+    assert_eq!(char_to_byte(&buf, 0), 0);
+    assert_eq!(char_to_byte(&buf, 1), 1);
+    assert_eq!(char_to_byte(&buf, 2), 2);
+    assert_eq!(char_to_byte(&buf, 3), 3);
+    assert_eq!(byte_to_char(&buf, 0), 0);
+    assert_eq!(byte_to_char(&buf, 1), 1);
+    assert_eq!(byte_to_char(&buf, 2), 2);
+    assert_eq!(byte_to_char(&buf, 3), 3);
 }
 
 // -----------------------------------------------------------------------
@@ -622,7 +632,7 @@ fn move_gap_past_end_panics() {
 fn byte_to_char_past_end_panics() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hi");
-    buf.byte_to_char(3);
+    byte_to_char(&buf, 3);
 }
 
 #[test]
@@ -631,8 +641,8 @@ fn char_to_byte_past_end_clamps() {
     let buf = GapBuffer::from_str("hi");
     // char_to_byte clamps to buffer end instead of panicking
     // when char_pos exceeds char_count (for stale positions).
-    assert_eq!(buf.char_to_byte(3), buf.len());
-    assert_eq!(buf.char_to_byte(100), buf.len());
+    assert_eq!(char_to_byte(&buf, 3), buf.len());
+    assert_eq!(char_to_byte(&buf, 100), buf.len());
 }
 
 // -----------------------------------------------------------------------
@@ -810,7 +820,7 @@ fn is_char_boundary_matches_oracle_on_large_multibyte_buffer() {
     // byte_to_char must not panic (it asserts on boundary internally).
     for i in (0..gb.len()).step_by(gb.len() / 500 + 1) {
         if oracle_boundary[i] {
-            let _ = gb.byte_to_char(i);
+            let _ = byte_to_char(&gb, i);
         }
     }
 }
@@ -867,7 +877,7 @@ fn move_gap_both_matches_scanning_variant() {
 
     // Move the gap to a position inside the CJK run.
     let bytepos = 7 + "日".len(); // byte position of '本'
-    let charpos = a.byte_to_char(bytepos);
+    let charpos = byte_to_char(&a, bytepos);
 
     a.move_gap_to(bytepos);
     b.move_gap_both(bytepos, charpos);

@@ -522,7 +522,9 @@ impl GapBuffer {
     ///
     /// Mirrors GNU `del_range_2` (`src/insdel.c:1991`).
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        let start_char = self.byte_to_char(start);
+        let start_char = self
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
+            .get();
         self.delete_measured_range(TextEditRange::from_usize(
             start,
             end,
@@ -557,7 +559,11 @@ impl GapBuffer {
         );
         debug_assert_eq!(
             nchars,
-            self.byte_to_char(end) - self.byte_to_char(start),
+            self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
+                .get()
+                - self
+                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
+                    .get(),
             "delete_range_both: caller-supplied nchars mismatches actual"
         );
 
@@ -721,7 +727,7 @@ impl GapBuffer {
     // Position conversion
     // -----------------------------------------------------------------------
 
-    /// Convert a logical byte position to a logical character position.
+    /// Convert a logical Emacs byte position to a logical character position.
     ///
     /// Returns the number of complete characters before `byte_pos`.
     ///
@@ -729,11 +735,6 @@ impl GapBuffer {
     ///
     /// Panics if `byte_pos > self.len()` or is not on an Emacs character
     /// boundary.
-    pub fn byte_to_char(&self, byte_pos: usize) -> usize {
-        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-            .get()
-    }
-
     pub(crate) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         let byte_pos = byte_pos.get();
         assert!(
@@ -762,18 +763,10 @@ impl GapBuffer {
         )
     }
 
-    /// Convert a char position to a logical byte position.
+    /// Convert a char position to a logical Emacs byte position.
     ///
     /// `char_pos` is the number of characters from the start of the buffer.
     ///
-    /// # Panics
-    ///
-    /// Panics if `char_pos > self.char_count()`.
-    pub fn char_to_byte(&self, char_pos: usize) -> usize {
-        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-            .get()
-    }
-
     pub(crate) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         let char_pos = char_pos.get();
         if char_pos == 0 {
