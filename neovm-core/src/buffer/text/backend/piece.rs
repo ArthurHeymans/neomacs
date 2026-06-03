@@ -770,12 +770,22 @@ mod tests {
         gap.copy_emacs_bytes_to(0, gap.len(), &mut gap_bytes);
         assert_eq!(piece_bytes, gap_bytes);
 
+        for byte_pos in 0..piece.len() {
+            assert_eq!(piece.byte_at(byte_pos), gap.byte_at(byte_pos));
+            assert_eq!(piece.emacs_byte_at(byte_pos), gap.emacs_byte_at(byte_pos));
+        }
+        assert_eq!(piece.emacs_byte_at(piece.len()), None);
+        assert_eq!(gap.emacs_byte_at(gap.len()), None);
+
         for char_pos in 0..=piece.metrics().z {
             let piece_byte = piece.char_to_byte(char_pos);
             let gap_byte = gap.char_to_byte(char_pos);
             assert_eq!(piece_byte, gap_byte, "char_to_byte({char_pos})");
             assert_eq!(piece.byte_to_char(piece_byte), char_pos);
             assert_eq!(gap.byte_to_char(gap_byte), char_pos);
+            if char_pos < piece.metrics().z {
+                assert_eq!(piece.char_code_at(piece_byte), gap.char_code_at(gap_byte));
+            }
         }
     }
 
@@ -802,6 +812,18 @@ mod tests {
             .filter(|bytes| bytes.len() == len)
             .collect();
         (!matches.is_empty()).then(|| matches[seed as usize % matches.len()].clone())
+    }
+
+    fn sample_unibyte_insert(seed: u8) -> Vec<u8> {
+        match seed % 7 {
+            0 => vec![b'a'],
+            1 => vec![0xFF],
+            2 => vec![b'\n'],
+            3 => vec![0x80, b'Z'],
+            4 => vec![b'X', b'Y', b'Z'],
+            5 => vec![0, 1, 2],
+            _ => vec![seed, seed.wrapping_add(1)],
+        }
     }
 
     #[test]
@@ -917,6 +939,49 @@ mod tests {
                                 piece.replace_same_len_emacs_bytes(start, end, &replacement);
                                 gap.replace_same_len_emacs_bytes(start, end, &replacement);
                             }
+                        }
+                    }
+                }
+                assert_matches_gap(&piece, &gap);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn piece_tree_unibyte_random_edit_sequences_match_gap_buffer(
+            ops in prop::collection::vec((0u8..3, 0usize..200, 0usize..200, any::<u8>()), 0..80)
+        ) {
+            let initial = vec![0xFF, b'A', 0x80, b'\n', b'Z'];
+            let mut piece = PieceTreeTextBackend::from_emacs_bytes(&initial, false);
+            let mut gap = GapBuffer::from_emacs_bytes(&initial, false);
+            assert_matches_gap(&piece, &gap);
+
+            for (kind, a, b, seed) in ops {
+                match kind {
+                    0 => {
+                        let byte_pos = a % (piece.len() + 1);
+                        let bytes = sample_unibyte_insert(seed);
+                        piece.insert_emacs_bytes_both(byte_pos, &bytes, bytes.len());
+                        gap.insert_emacs_bytes_both(byte_pos, &bytes, bytes.len());
+                    }
+                    1 => {
+                        if !piece.is_empty() {
+                            let byte_a = a % (piece.len() + 1);
+                            let byte_b = b % (piece.len() + 1);
+                            let start = byte_a.min(byte_b);
+                            let end = byte_a.max(byte_b);
+                            piece.delete_range_both(start, end, end - start);
+                            gap.delete_range_both(start, end, end - start);
+                        }
+                    }
+                    _ => {
+                        if !piece.is_empty() {
+                            let start = a % piece.len();
+                            let end = (start + 1 + (b % 4)).min(piece.len());
+                            let replacement = vec![seed; end - start];
+                            piece.replace_same_len_emacs_bytes(start, end, &replacement);
+                            gap.replace_same_len_emacs_bytes(start, end, &replacement);
                         }
                     }
                 }
