@@ -708,8 +708,9 @@ fn builtin_call_process_region_impl(
                 let buf = buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let (region_beg, region_end) =
-                    super::process::checked_region_bytes(buf, start, end)?;
+                let region = super::process::checked_region_bytes(buf, start, end)?;
+                let region_beg = region.start_usize();
+                let region_end = region.end_usize();
                 (
                     encode_call_process_region_buffer_text(
                         buf.text.text_range(region_beg, region_end),

@@ -1206,7 +1206,9 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
             .buffers
             .get(current_id)
             .expect("current minibuffer must remain available");
-        let point_min_byte = buffer.lisp_pos_to_accessible_byte(point_min);
+        let point_min_byte = buffer
+            .lisp_pos_to_accessible_emacs_byte_pos(point_min)
+            .get();
         if buffer
             .text
             .text_props_get_property(point_min_byte, Value::symbol("field"))
@@ -1447,7 +1449,9 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
         .buffers
         .get(current_id)
         .expect("current buffer must remain available");
-    let start = buffer.lisp_pos_to_accessible_byte(prompt_end_pos);
+    let start = buffer
+        .lisp_pos_to_accessible_emacs_byte_pos(prompt_end_pos)
+        .get();
     Ok(buffer.buffer_substring_lisp_string(start, point_max))
 }
 

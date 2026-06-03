@@ -82,7 +82,7 @@ use super::threads::ThreadManager;
 use super::value::{
     StringTextPropertyRun, Value, ValueKind, VecLikeType, equal_value, list_to_vec, next_float_id,
 };
-use crate::buffer::{BufferManager, EmacsBytePos};
+use crate::buffer::{BufferManager, EmacsBytePos, EmacsByteRange};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::window::FrameManager;
@@ -2405,7 +2405,7 @@ pub(crate) fn checked_region_bytes(
     buf: &crate::buffer::Buffer,
     start: i64,
     end: i64,
-) -> Result<(usize, usize), Flow> {
+) -> Result<EmacsByteRange, Flow> {
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
     if start < point_min || start > point_max || end < point_min || end > point_max {
@@ -2419,12 +2419,12 @@ pub(crate) fn checked_region_bytes(
         ));
     }
 
-    let start_byte = buf.lisp_pos_to_accessible_byte(start);
-    let end_byte = buf.lisp_pos_to_accessible_byte(end);
+    let start_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(start);
+    let end_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(end);
     Ok(if start_byte <= end_byte {
-        (start_byte, end_byte)
+        EmacsByteRange::new(start_byte, end_byte)
     } else {
-        (end_byte, start_byte)
+        EmacsByteRange::new(end_byte, start_byte)
     })
 }
 
@@ -4205,7 +4205,7 @@ pub(crate) fn builtin_internal_default_process_filter(
         Ok(pos) => eval
             .buffers
             .get(buf_id)
-            .map(|b| b.lisp_pos_to_full_buffer_byte(pos))
+            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos).get())
             .unwrap_or(0),
         Err(_) => eval
             .buffers
@@ -4304,7 +4304,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
         Ok(pos) => eval
             .buffers
             .get(buf_id)
-            .map(|b| b.lisp_pos_to_full_buffer_byte(pos))
+            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos).get())
             .unwrap_or(0),
         Err(_) => eval
             .buffers
@@ -7646,8 +7646,8 @@ pub(crate) fn builtin_process_send_region_impl(
         let buf = buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (region_beg, region_end) = checked_region_bytes(buf, start, end)?;
-        buf.buffer_substring_lisp_string(region_beg, region_end)
+        let region = checked_region_bytes(buf, start, end)?;
+        buf.buffer_substring_lisp_string(region.start_usize(), region.end_usize())
     };
 
     if !processes.send_input(id, &region_text) {

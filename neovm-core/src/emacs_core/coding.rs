@@ -2545,8 +2545,8 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
         return Err(signal("args-out-of-range", vec![args[0], args[1]]));
     }
 
-    let start_byte = buffer.lisp_pos_to_full_buffer_byte(start);
-    let end_byte = buffer.lisp_pos_to_full_buffer_byte(end);
+    let start_byte = buffer.lisp_pos_to_full_buffer_emacs_byte_pos(start).get();
+    let end_byte = buffer.lisp_pos_to_full_buffer_emacs_byte_pos(end).get();
     let text = {
         let string = buffer.buffer_substring_lisp_string(start_byte, end_byte);
         super::builtins::runtime_string_from_lisp_string(&string)

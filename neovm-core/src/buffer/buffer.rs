@@ -1981,12 +1981,6 @@ impl Buffer {
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
     }
 
-    /// Convert a 1-based Lisp character position to a raw byte position,
-    /// clamping to the accessible region.
-    pub fn lisp_pos_to_accessible_byte(&self, lisp_pos: i64) -> usize {
-        self.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos).get()
-    }
-
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the *full* buffer range (ignoring narrowing).
     ///
@@ -2001,12 +1995,6 @@ impl Buffer {
         let clamped_char = char_pos.min(self.total_chars());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
-    }
-
-    /// Convert a 1-based Lisp character position to a raw byte position,
-    /// clamping to the full buffer range (ignoring narrowing).
-    pub fn lisp_pos_to_full_buffer_byte(&self, lisp_pos: i64) -> usize {
-        self.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos).get()
     }
 
     /// Legacy narrowing accessor retained for Lisp-facing callers.
