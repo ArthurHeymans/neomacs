@@ -1,4 +1,23 @@
+use std::str::FromStr;
+
+use crate::buffer::BufferTextBackendKind;
+
 use super::BufferText;
+
+#[test]
+fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
+    crate::test_utils::init_test_tracing();
+    let text = BufferText::new();
+
+    assert_eq!(text.backend_kind(), BufferTextBackendKind::GapBuffer);
+    assert_eq!(text.backend_kind().symbol_name(), "gap-buffer");
+    assert!(text.backend_kind().is_implemented());
+    assert_eq!(
+        BufferTextBackendKind::from_str("piece-tree"),
+        Ok(BufferTextBackendKind::PieceTree)
+    );
+    assert!(!BufferTextBackendKind::PieceTree.is_implemented());
+}
 
 #[test]
 fn from_lisp_string_preserves_unibyte_raw_bytes() {

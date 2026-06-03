@@ -3,6 +3,7 @@ pub mod buffer_text;
 pub mod gap_buffer;
 pub mod overlay;
 pub mod shared;
+pub mod text;
 pub mod text_props;
 pub mod undo;
 
@@ -13,6 +14,7 @@ pub use buffer::{
 pub use buffer_text::BufferText;
 pub use overlay::{Overlay, OverlayList};
 pub use shared::SharedUndoState;
+pub use text::BufferTextBackendKind;
 pub use text_props::TextPropertyTable;
 pub use undo::{
     truncate_undo_list, undo_list_boundary, undo_list_contains_boundary,

@@ -1,10 +1,9 @@
 //! Buffer text storage.
 //!
 //! GNU Emacs separates per-buffer metadata from the underlying text object.
-//! `BufferText` is the first local seam toward that design. Today it is a thin
-//! wrapper around `GapBuffer`; later it can absorb shared text state, char/byte
-//! caches, and interval ownership without forcing another tree-wide field-type
-//! rewrite.
+//! `BufferText` is the first local seam toward that design. It owns the
+//! Lisp-visible text semantics while the concrete byte storage backend remains
+//! hidden behind a private enum.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -15,7 +14,8 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
-use super::gap_buffer::GapBuffer;
+use super::text::BufferTextBackendKind;
+use super::text::backend::TextBackend;
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -45,7 +45,7 @@ struct PositionCache {
 
 struct BufferTextStorage {
     layout: BufferTextLayout,
-    gap: GapBuffer,
+    backend: TextBackend,
     modified_tick: i64,
     chars_modified_tick: i64,
     save_modified_tick: i64,
@@ -67,7 +67,7 @@ impl Clone for BufferTextStorage {
     fn clone(&self) -> Self {
         Self {
             layout: self.layout.clone(),
-            gap: self.gap.clone(),
+            backend: self.backend.clone(),
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
             save_modified_tick: self.save_modified_tick,
@@ -103,11 +103,11 @@ impl Default for BufferText {
 }
 
 impl BufferText {
-    fn from_gap(gap: GapBuffer) -> Self {
+    fn from_backend(backend: TextBackend) -> Self {
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
-                layout: Self::layout_from_gap(&gap),
-                gap,
+                layout: Self::layout_from_backend(&backend),
+                backend,
                 modified_tick: 1,
                 chars_modified_tick: 1,
                 save_modified_tick: 1,
@@ -120,55 +120,59 @@ impl BufferText {
         }
     }
 
-    fn layout_from_gap(gap: &GapBuffer) -> BufferTextLayout {
+    fn layout_from_backend(backend: &TextBackend) -> BufferTextLayout {
         BufferTextLayout {
-            gpt: gap.gpt(),
-            z: gap.z(),
-            gpt_byte: gap.gpt_byte(),
-            z_byte: gap.z_byte(),
-            gap_size: gap.gap_size(),
+            gpt: backend.gpt(),
+            z: backend.z(),
+            gpt_byte: backend.gpt_byte(),
+            z_byte: backend.z_byte(),
+            gap_size: backend.gap_size(),
         }
     }
 
     pub fn new() -> Self {
-        Self::from_gap(GapBuffer::new())
+        Self::from_backend(TextBackend::new_gap())
     }
 
     pub fn from_str(text: &str) -> Self {
-        Self::from_gap(GapBuffer::from_str(text))
+        Self::from_backend(TextBackend::from_str_gap(text))
     }
 
     pub fn from_lisp_string(text: &crate::heap_types::LispString) -> Self {
-        Self::from_gap(GapBuffer::from_emacs_bytes(
+        Self::from_backend(TextBackend::from_emacs_bytes_gap(
             text.as_bytes(),
             text.is_multibyte(),
         ))
     }
 
+    pub fn backend_kind(&self) -> BufferTextBackendKind {
+        self.storage.borrow().backend.kind()
+    }
+
     pub fn len(&self) -> usize {
-        self.storage.borrow().gap.len()
+        self.storage.borrow().backend.len()
     }
 
     pub fn is_multibyte(&self) -> bool {
-        self.storage.borrow().gap.is_multibyte()
+        self.storage.borrow().backend.is_multibyte()
     }
 
     pub fn set_multibyte(&self, multibyte: bool) {
         let mut storage = self.storage.borrow_mut();
-        storage.gap.set_multibyte(multibyte);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.set_multibyte(multibyte);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn is_empty(&self) -> bool {
-        self.storage.borrow().gap.is_empty()
+        self.storage.borrow().backend.is_empty()
     }
 
     pub fn char_count(&self) -> usize {
-        self.storage.borrow().gap.char_count()
+        self.storage.borrow().backend.char_count()
     }
 
     pub fn emacs_byte_len(&self) -> usize {
-        self.storage.borrow().gap.emacs_byte_len()
+        self.storage.borrow().backend.emacs_byte_len()
     }
 
     pub fn layout(&self) -> BufferTextLayout {
@@ -188,44 +192,40 @@ impl BufferText {
     }
 
     pub fn byte_at(&self, pos: usize) -> u8 {
-        self.storage.borrow().gap.byte_at(pos)
+        self.storage.borrow().backend.byte_at(pos)
     }
 
     pub fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
-        self.storage.borrow().gap.emacs_byte_at(pos)
+        self.storage.borrow().backend.emacs_byte_at(pos)
     }
 
     pub fn char_at(&self, pos: usize) -> Option<char> {
-        self.storage
-            .borrow()
-            .gap
-            .char_code_at(pos)
-            .and_then(char::from_u32)
+        self.storage.borrow().backend.char_at(pos)
     }
 
     pub fn char_code_at(&self, pos: usize) -> Option<u32> {
-        self.storage.borrow().gap.char_code_at(pos)
+        self.storage.borrow().backend.char_code_at(pos)
     }
 
     pub fn text_range(&self, start: usize, end: usize) -> String {
-        self.storage.borrow().gap.text_range(start, end)
+        self.storage.borrow().backend.text_range(start, end)
     }
 
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.storage.borrow().gap.copy_bytes_to(start, end, out);
+        self.storage.borrow().backend.copy_bytes_to(start, end, out);
     }
 
     pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
         self.storage
             .borrow()
-            .gap
+            .backend
             .copy_emacs_bytes_to(start, end, out);
     }
 
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
         self.storage
             .borrow()
-            .gap
+            .backend
             .has_contiguous_emacs_bytes(start, end)
     }
 
@@ -237,7 +237,7 @@ impl BufferText {
     ) -> Option<R> {
         self.storage
             .borrow()
-            .gap
+            .backend
             .with_contiguous_emacs_bytes(start, end, f)
     }
 
@@ -246,8 +246,8 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.gap.insert_str(pos, text);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.insert_str(pos, text);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
@@ -255,8 +255,8 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.gap.insert_emacs_bytes(pos, bytes);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.insert_emacs_bytes(pos, bytes);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
@@ -264,8 +264,8 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.gap.insert_emacs_bytes_both(pos, bytes, nchars);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.insert_emacs_bytes_both(pos, bytes, nchars);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn delete_range(&mut self, start: usize, end: usize) {
@@ -273,8 +273,8 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.gap.delete_range(start, end);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.delete_range(start, end);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
@@ -282,8 +282,8 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
-        storage.gap.delete_range_both(start, end, nchars);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend.delete_range_both(start, end, nchars);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
@@ -292,9 +292,9 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage
-            .gap
+            .backend
             .replace_same_len_emacs_bytes(start, end, replacement);
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.layout = Self::layout_from_backend(&storage.backend);
     }
 
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
@@ -318,14 +318,14 @@ impl BufferText {
     pub fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
         self.storage
             .borrow()
-            .gap
+            .backend
             .storage_byte_to_emacs_byte(byte_pos)
     }
 
     pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
         self.storage
             .borrow()
-            .gap
+            .backend
             .emacs_byte_to_storage_byte(byte_pos)
     }
 
@@ -340,11 +340,11 @@ impl BufferText {
     }
 
     pub(crate) fn dump_text(&self) -> Vec<u8> {
-        self.storage.borrow().gap.dump_text()
+        self.storage.borrow().backend.dump_text()
     }
 
     pub(crate) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::from_gap(GapBuffer::from_dump(text, multibyte))
+        Self::from_backend(TextBackend::from_dump_gap(text, multibyte))
     }
 
     pub fn set_modification_state(
@@ -388,7 +388,7 @@ impl BufferText {
         let mut bytes = Vec::with_capacity(end - start);
         self.storage
             .borrow()
-            .gap
+            .backend
             .copy_bytes_to(start, end, &mut bytes);
         if self.is_multibyte() {
             let mut pos = 0;
@@ -436,8 +436,8 @@ impl BufferText {
         text_props: TextPropertyTable,
     ) {
         let mut storage = self.storage.borrow_mut();
-        storage.gap = GapBuffer::from_emacs_bytes(text.as_bytes(), text.is_multibyte());
-        storage.layout = Self::layout_from_gap(&storage.gap);
+        storage.backend = TextBackend::from_emacs_bytes_gap(text.as_bytes(), text.is_multibyte());
+        storage.layout = Self::layout_from_backend(&storage.backend);
         storage.text_props = text_props;
         // Wholesale content replacement: invalidate position caches. If the new
         // content happens to have the same (total_chars, total_bytes) as the old,
@@ -510,9 +510,9 @@ impl BufferText {
         let (start, end, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage.gap.byte_to_char(start),
-                storage.gap.byte_to_char(end),
-                storage.gap.char_count(),
+                storage.backend.byte_to_char(start),
+                storage.backend.byte_to_char(end),
+                storage.backend.char_count(),
             )
         };
         self.storage
@@ -603,9 +603,9 @@ impl BufferText {
         let (start, end, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage.gap.byte_to_char(start),
-                storage.gap.byte_to_char(end),
-                storage.gap.char_count(),
+                storage.backend.byte_to_char(start),
+                storage.backend.byte_to_char(end),
+                storage.backend.char_count(),
             )
         };
         self.storage
@@ -686,7 +686,7 @@ impl BufferText {
     pub fn text_props_merge_missing_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
         let char_offset = {
             let storage = self.storage.borrow();
-            storage.gap.byte_to_char(byte_offset)
+            storage.backend.byte_to_char(byte_offset)
         };
         self.storage
             .borrow_mut()
@@ -698,8 +698,8 @@ impl BufferText {
         let (char_start, char_end) = {
             let storage = self.storage.borrow();
             (
-                storage.gap.byte_to_char(byte_start),
-                storage.gap.byte_to_char(byte_end),
+                storage.backend.byte_to_char(byte_start),
+                storage.backend.byte_to_char(byte_end),
             )
         };
         self.storage
@@ -1276,11 +1276,11 @@ impl BufferText {
     /// (`src/marker.c:167`).
     pub fn buf_charpos_to_bytepos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
-        let total_chars = storage.gap.char_count();
-        let total_bytes = storage.gap.emacs_byte_len();
+        let total_chars = storage.backend.char_count();
+        let total_bytes = storage.backend.emacs_byte_len();
 
         if target >= total_chars {
-            return storage.gap.len();
+            return storage.backend.len();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
@@ -1298,8 +1298,8 @@ impl BufferText {
         let mut best_below: (usize, usize) = (0, 0);
         let mut best_above: (usize, usize) = (total_chars, total_bytes);
 
-        let gpt = storage.gap.gpt();
-        let gpt_byte = storage.gap.gpt_byte();
+        let gpt = storage.backend.gpt();
+        let gpt_byte = storage.backend.gpt_byte();
         consider_anchor(target, (gpt, gpt_byte), &mut best_below, &mut best_above);
 
         let cached = storage.pos_cache.get();
@@ -1350,9 +1350,9 @@ impl BufferText {
         let walked_below = target.saturating_sub(best_below.0);
         let walked_above = best_above.0.saturating_sub(target);
         let result = if walked_below <= walked_above {
-            scan_forward(&storage.gap, best_below, target)
+            scan_forward(&storage.backend, best_below, target)
         } else {
-            scan_backward(&storage.gap, best_above, target)
+            scan_backward(&storage.backend, best_above, target)
         };
 
         // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
@@ -1375,8 +1375,8 @@ impl BufferText {
     /// to `buf_charpos_to_bytepos` — shares the same anchor + cache machinery.
     pub fn buf_bytepos_to_charpos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
-        let total_chars = storage.gap.char_count();
-        let total_bytes = storage.gap.emacs_byte_len();
+        let total_chars = storage.backend.char_count();
+        let total_bytes = storage.backend.emacs_byte_len();
 
         if target >= total_bytes {
             return total_chars;
@@ -1398,8 +1398,8 @@ impl BufferText {
         let mut best_below: (usize, usize) = (0, 0);
         let mut best_above: (usize, usize) = (total_bytes, total_chars);
 
-        let gpt = storage.gap.gpt();
-        let gpt_byte = storage.gap.gpt_byte();
+        let gpt = storage.backend.gpt();
+        let gpt_byte = storage.backend.gpt_byte();
         consider_anchor_byte(target, (gpt_byte, gpt), &mut best_below, &mut best_above);
 
         let cached = storage.pos_cache.get();
@@ -1445,9 +1445,9 @@ impl BufferText {
         let walked_below = target.saturating_sub(best_below.0);
         let walked_above = best_above.0.saturating_sub(target);
         let result = if walked_below <= walked_above {
-            scan_forward_bytes(&storage.gap, best_below, target)
+            scan_forward_bytes(&storage.backend, best_below, target)
         } else {
-            scan_backward_bytes(&storage.gap, best_above, target)
+            scan_backward_bytes(&storage.backend, best_above, target)
         };
 
         // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
@@ -1476,7 +1476,7 @@ impl BufferText {
 
 impl fmt::Display for BufferText {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.storage.borrow().gap.fmt(f)
+        self.storage.borrow().backend.fmt(f)
     }
 }
 
@@ -1518,18 +1518,18 @@ fn consider_anchor(
 
 /// Walk forward from `anchor = (charpos, bytepos)` to reach `target` chars.
 /// Returns the byte position.
-fn scan_forward(gap: &GapBuffer, anchor: (usize, usize), target: usize) -> usize {
+fn scan_forward(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
     let (mut cp, mut bp) = anchor;
     while cp < target {
-        if !gap.is_multibyte() {
+        if !backend.is_multibyte() {
             bp += 1;
             cp += 1;
             continue;
         }
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (gap.len() - bp).min(tmp.len());
+        let available = (backend.len() - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = gap.byte_at(bp + i);
+            *slot = backend.byte_at(bp + i);
         }
         let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
         bp += len;
@@ -1540,16 +1540,16 @@ fn scan_forward(gap: &GapBuffer, anchor: (usize, usize), target: usize) -> usize
 
 /// Walk backward from `anchor = (charpos, bytepos)` to reach `target` chars.
 /// Returns the byte position.
-fn scan_backward(gap: &GapBuffer, anchor: (usize, usize), target: usize) -> usize {
+fn scan_backward(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
     let (mut cp, mut bp) = anchor;
     while cp > target {
-        if !gap.is_multibyte() {
+        if !backend.is_multibyte() {
             bp -= 1;
             cp -= 1;
             continue;
         }
         let mut prev = bp - 1;
-        while prev > 0 && (gap.byte_at(prev) & 0xC0) == 0x80 {
+        while prev > 0 && (backend.byte_at(prev) & 0xC0) == 0x80 {
             prev -= 1;
         }
         bp = prev;
@@ -1575,18 +1575,18 @@ fn consider_anchor_byte(
 
 /// Walk forward from `anchor = (bytepos, charpos)` to reach `target` bytepos.
 /// Returns the char position.
-fn scan_forward_bytes(gap: &GapBuffer, anchor: (usize, usize), target: usize) -> usize {
+fn scan_forward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
     let (mut bp, mut cp) = anchor;
     while bp < target {
-        if !gap.is_multibyte() {
+        if !backend.is_multibyte() {
             bp += 1;
             cp += 1;
             continue;
         }
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (gap.len() - bp).min(tmp.len());
+        let available = (backend.len() - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = gap.byte_at(bp + i);
+            *slot = backend.byte_at(bp + i);
         }
         let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
         bp += len;
@@ -1597,16 +1597,16 @@ fn scan_forward_bytes(gap: &GapBuffer, anchor: (usize, usize), target: usize) ->
 
 /// Walk backward from `anchor = (bytepos, charpos)` to reach `target` bytepos.
 /// Returns the char position.
-fn scan_backward_bytes(gap: &GapBuffer, anchor: (usize, usize), target: usize) -> usize {
+fn scan_backward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
     let (mut bp, mut cp) = anchor;
     while bp > target {
-        if !gap.is_multibyte() {
+        if !backend.is_multibyte() {
             bp -= 1;
             cp -= 1;
             continue;
         }
         let mut prev = bp - 1;
-        while prev > 0 && (gap.byte_at(prev) & 0xC0) == 0x80 {
+        while prev > 0 && (backend.byte_at(prev) & 0xC0) == 0x80 {
             prev -= 1;
         }
         bp = prev;
