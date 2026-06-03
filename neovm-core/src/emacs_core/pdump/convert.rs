@@ -11,6 +11,7 @@ use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
+use crate::buffer::BufferTextBackendKind;
 use crate::buffer::buffer::{Buffer, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
@@ -2758,6 +2759,23 @@ fn dump_overlay_list(encoder: &mut DumpEncoder, ol: &OverlayList) -> DumpOverlay
 // dump_undo_record and dump_undo_list removed — undo state is now a
 // buffer-local Lisp Value serialized through the properties map.
 
+fn dump_buffer_text_backend_kind(kind: BufferTextBackendKind) -> DumpBufferTextBackendKind {
+    match kind {
+        BufferTextBackendKind::GapBuffer => DumpBufferTextBackendKind::GapBuffer,
+        BufferTextBackendKind::PieceTree => DumpBufferTextBackendKind::PieceTree,
+        BufferTextBackendKind::Rope => {
+            panic!("rope text backend is not implemented")
+        }
+    }
+}
+
+fn load_buffer_text_backend_kind(kind: DumpBufferTextBackendKind) -> BufferTextBackendKind {
+    match kind {
+        DumpBufferTextBackendKind::GapBuffer => BufferTextBackendKind::GapBuffer,
+        DumpBufferTextBackendKind::PieceTree => BufferTextBackendKind::PieceTree,
+    }
+}
+
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
     let is_shared_text_owner = buf.base_buffer.is_none();
     DumpBuffer {
@@ -2768,6 +2786,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         last_name: None,
         base_buffer: buf.base_buffer.map(|id| DumpBufferId(id.0)),
         text: DumpGapBuffer {
+            backend_kind: dump_buffer_text_backend_kind(buf.text.backend_kind()),
             text: buf.text.dump_text(),
         },
         pt: buf.pt_byte,
@@ -4371,7 +4390,11 @@ fn load_property_interval(
 // load_undo_record removed — undo state is loaded from buffer-local properties.
 
 fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
-    let text = BufferText::from_dump(db.text.text.clone(), db.multibyte);
+    let text = BufferText::from_dump_with_backend_kind(
+        db.text.text.clone(),
+        db.multibyte,
+        load_buffer_text_backend_kind(db.text.backend_kind),
+    );
     let total_chars = text.char_count();
     let begv_char = db.begv_char.unwrap_or_else(|| text.byte_to_char(db.begv));
     let zv_char = db.zv_char.unwrap_or_else(|| {

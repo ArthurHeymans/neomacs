@@ -529,8 +529,29 @@ pub struct DumpStringTextPropertyRun {
 // Buffer types
 // ---------------------------------------------------------------------------
 
+#[repr(u8)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    IntoPrimitive,
+    TryFromPrimitive,
+)]
+pub enum DumpBufferTextBackendKind {
+    #[default]
+    GapBuffer = 0,
+    PieceTree = 1,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpGapBuffer {
+    #[serde(default)]
+    pub backend_kind: DumpBufferTextBackendKind,
     pub text: Vec<u8>,
 }
 

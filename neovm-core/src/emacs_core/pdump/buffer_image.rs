@@ -10,13 +10,15 @@ use bytemuck::{Pod, Zeroable};
 use super::DumpError;
 use super::object_value_codec::{Cursor, write_bool, write_u8, write_u32, write_u64, write_value};
 use super::types::{
-    DumpBuffer, DumpBufferId, DumpBufferManager, DumpGapBuffer, DumpLispString, DumpMarker,
-    DumpOverlay, DumpOverlayList, DumpPropertyInterval, DumpRuntimeBindingValue, DumpSymId,
-    DumpTextPropertyTable, DumpUndoList, DumpUndoRecord, DumpValue,
+    DumpBuffer, DumpBufferId, DumpBufferManager, DumpBufferTextBackendKind, DumpGapBuffer,
+    DumpLispString, DumpMarker, DumpOverlay, DumpOverlayList, DumpPropertyInterval,
+    DumpRuntimeBindingValue, DumpSymId, DumpTextPropertyTable, DumpUndoList, DumpUndoRecord,
+    DumpValue,
 };
 
 const BUFFER_MAGIC: [u8; 16] = *b"NEOBUFFER\0\0\0\0\0\0\0";
-const BUFFER_FORMAT_VERSION: u32 = 5;
+const BUFFER_FORMAT_VERSION: u32 = 6;
+const BUFFER_FORMAT_VERSION_WITH_TEXT_BACKEND_KIND: u32 = 6;
 const BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER: u32 = 4;
 const MIN_BUFFER_FORMAT_VERSION: u32 = 5;
 
@@ -102,7 +104,10 @@ pub(crate) fn load_buffer_manager_section(section: &[u8]) -> Result<DumpBufferMa
     }
     let mut buffers = Vec::with_capacity(to_usize(header.buffer_count, "buffer count")?);
     for _ in 0..header.buffer_count {
-        buffers.push((read_buffer_id(&mut cursor)?, read_buffer(&mut cursor)?));
+        buffers.push((
+            read_buffer_id(&mut cursor)?,
+            read_buffer(&mut cursor, header.version)?,
+        ));
     }
 
     if !cursor.is_empty() {
@@ -196,7 +201,7 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     Ok(())
 }
 
-fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
+fn read_buffer(cursor: &mut Cursor<'_>, version: u32) -> Result<DumpBuffer, DumpError> {
     Ok(DumpBuffer {
         id: read_buffer_id(cursor)?,
         name_lisp: read_opt_lisp_string(cursor)?,
@@ -204,7 +209,7 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
         last_name_lisp: read_opt_lisp_string(cursor)?,
         last_name: read_opt_string(cursor)?,
         base_buffer: read_opt_buffer_id(cursor)?,
-        text: read_gap_buffer(cursor)?,
+        text: read_gap_buffer(cursor, version)?,
         pt: read_usize(cursor, "buffer point")?,
         pt_char: read_opt_usize(cursor, "buffer point char")?,
         mark: read_opt_usize(cursor, "buffer mark")?,
@@ -247,11 +252,21 @@ fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
 }
 
 fn write_gap_buffer(out: &mut Vec<u8>, buffer: &DumpGapBuffer) -> Result<(), DumpError> {
+    write_u8(out, buffer.backend_kind.into());
     write_bytes(out, &buffer.text)
 }
 
-fn read_gap_buffer(cursor: &mut Cursor<'_>) -> Result<DumpGapBuffer, DumpError> {
+fn read_gap_buffer(cursor: &mut Cursor<'_>, version: u32) -> Result<DumpGapBuffer, DumpError> {
+    let backend_kind = if version >= BUFFER_FORMAT_VERSION_WITH_TEXT_BACKEND_KIND {
+        let tag = cursor.read_u8("buffer text backend kind")?;
+        DumpBufferTextBackendKind::try_from(tag).map_err(|_| {
+            DumpError::ImageFormatError(format!("invalid buffer text backend kind tag: {tag}"))
+        })?
+    } else {
+        DumpBufferTextBackendKind::GapBuffer
+    };
     Ok(DumpGapBuffer {
+        backend_kind,
         text: read_bytes(cursor)?,
     })
 }
@@ -895,6 +910,7 @@ mod tests {
             last_name: Some("*old-scratch*".into()),
             base_buffer: Some(DumpBufferId(2)),
             text: DumpGapBuffer {
+                backend_kind: DumpBufferTextBackendKind::GapBuffer,
                 text: b"hello buffer".to_vec(),
             },
             pt: 1,
