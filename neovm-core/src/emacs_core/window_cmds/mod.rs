@@ -2272,13 +2272,13 @@ pub(crate) fn builtin_set_window_point(
                             {
                                 buffer_to_move = Some((
                                     buffer_id,
-                                    buffer.lisp_pos_to_emacs_byte_pos(clamped as i64).get(),
+                                    buffer.lisp_pos_to_emacs_byte_pos(clamped as i64),
                                 ));
                             }
                         }
                     }
                     if let Some((buffer_id, byte_pos)) = buffer_to_move {
-                        let _ = buffers.goto_buffer_byte(buffer_id, byte_pos);
+                        let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
                     }
                 }
             }
@@ -2314,13 +2314,13 @@ pub(crate) fn builtin_set_window_point(
                         {
                             buffer_to_move = Some((
                                 buffer_id,
-                                buffer.lisp_pos_to_emacs_byte_pos(clamped as i64).get(),
+                                buffer.lisp_pos_to_emacs_byte_pos(clamped as i64),
                             ));
                         }
                     }
                 }
                 if let Some((buffer_id, byte_pos)) = buffer_to_move {
-                    let _ = buffers.goto_buffer_byte(buffer_id, byte_pos);
+                    let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
                 }
                 Ok(Value::fixnum(clamped as i64))
             } else {
@@ -4044,8 +4044,8 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     // `record_buffer`.  Selection/display primitives record explicitly.
     buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
-        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point as i64).get();
-        let _ = buffers.goto_buffer_byte(buffer_id, byte_pos);
+        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point as i64);
+        let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
     }
 }
 

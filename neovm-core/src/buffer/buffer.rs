@@ -3972,6 +3972,10 @@ impl BufferManager {
         Some(point)
     }
 
+    pub fn goto_buffer_emacs_byte_pos(&mut self, id: BufferId, pos: EmacsBytePos) -> Option<usize> {
+        self.goto_buffer_byte(id, pos.get())
+    }
+
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         if !buf.overlays.is_empty() {

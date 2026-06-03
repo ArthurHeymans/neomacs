@@ -3051,13 +3051,15 @@ pub(crate) fn builtin_move_to_window_line(
     let byte_pos = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.lisp_pos_to_emacs_byte_pos(lisp_pos).get())
-        .unwrap_or(0);
+        .map(|b| b.lisp_pos_to_emacs_byte_pos(lisp_pos))
+        .unwrap_or(crate::buffer::EmacsBytePos::ZERO);
     let current_id = eval
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_byte(current_id, byte_pos);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, byte_pos);
 
     Ok(Value::fixnum(target_line as i64))
 }
