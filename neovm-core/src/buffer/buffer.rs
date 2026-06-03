@@ -8,6 +8,7 @@
 mod insdel;
 
 use std::collections::{HashMap, HashSet};
+use std::mem;
 use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
@@ -1606,6 +1607,40 @@ impl Buffer {
     pub fn syntax_chartable(&self) -> Value {
         self.slots[BUFFER_SLOT_SYNTAX_TABLE]
     }
+
+    fn swap_slot_with(&mut self, other: &mut Self, offset: usize) {
+        mem::swap(&mut self.slots[offset], &mut other.slots[offset]);
+    }
+
+    fn swap_owned_text_state_with(&mut self, other: &mut Self) {
+        mem::swap(&mut self.text, &mut other.text);
+        mem::swap(&mut self.pt, &mut other.pt);
+        mem::swap(&mut self.pt_byte, &mut other.pt_byte);
+        mem::swap(&mut self.begv, &mut other.begv);
+        mem::swap(&mut self.begv_byte, &mut other.begv_byte);
+        mem::swap(&mut self.zv, &mut other.zv);
+        mem::swap(&mut self.zv_byte, &mut other.zv_byte);
+        mem::swap(&mut self.mark_marker_id, &mut other.mark_marker_id);
+        mem::swap(&mut self.mark_marker_ptr, &mut other.mark_marker_ptr);
+        mem::swap(&mut self.state_markers, &mut other.state_markers);
+        mem::swap(&mut self.undo_state, &mut other.undo_state);
+        mem::swap(&mut self.overlays, &mut other.overlays);
+        self.swap_slot_with(other, BUFFER_SLOT_MARK_ACTIVE);
+        self.swap_slot_with(other, BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS);
+        self.swap_slot_with(other, BUFFER_SLOT_BIDI_DISPLAY_REORDERING);
+        self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION);
+        self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE);
+        self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_START_RE);
+        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
+        other.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
+    }
+
+    fn note_buffer_swap_text_self(&mut self) {
+        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
+        self.text.record_char_modification(2);
+        self.increment_overlay_modified_tick();
+        self.increment_overlay_modified_tick();
+    }
 }
 
 impl Buffer {
@@ -3080,6 +3115,23 @@ fn text_properties_set_undo_entries(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferSwapTextError {
+    DeadBuffer,
+    IndirectBuffer,
+    HasIndirectBuffers,
+}
+
+impl BufferSwapTextError {
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::DeadBuffer => "Cannot swap a dead buffer's text",
+            Self::IndirectBuffer => "Cannot swap indirect buffers's text",
+            Self::HasIndirectBuffers => "One of the buffers to swap has indirect buffers",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UndoExecutionResult {
     pub had_any_records: bool,
     pub had_boundary: bool,
@@ -3175,6 +3227,69 @@ impl BufferManager {
             "buffer text backend {kind:?} is not implemented"
         );
         self.default_text_backend_kind = kind;
+    }
+
+    fn has_indirect_buffers(&self, id: BufferId) -> bool {
+        self.buffers
+            .values()
+            .any(|buffer| buffer.base_buffer == Some(id))
+    }
+
+    pub(crate) fn swap_buffer_text(
+        &mut self,
+        current_id: BufferId,
+        other_id: BufferId,
+    ) -> Result<(), BufferSwapTextError> {
+        let Some(current) = self.buffers.get(&current_id) else {
+            return Err(BufferSwapTextError::DeadBuffer);
+        };
+        let Some(other) = self.buffers.get(&other_id) else {
+            return Err(BufferSwapTextError::DeadBuffer);
+        };
+
+        if current.base_buffer.is_some() || other.base_buffer.is_some() {
+            return Err(BufferSwapTextError::IndirectBuffer);
+        }
+        if self.has_indirect_buffers(current_id) || self.has_indirect_buffers(other_id) {
+            return Err(BufferSwapTextError::HasIndirectBuffers);
+        }
+
+        if current_id == other_id {
+            self.buffers
+                .get_mut(&current_id)
+                .ok_or(BufferSwapTextError::DeadBuffer)?
+                .note_buffer_swap_text_self();
+            let _ = self.record_buffer_state_markers(current_id);
+            return Ok(());
+        }
+
+        let mut current = self
+            .buffers
+            .remove(&current_id)
+            .ok_or(BufferSwapTextError::DeadBuffer)?;
+        {
+            let other = self
+                .buffers
+                .get_mut(&other_id)
+                .ok_or(BufferSwapTextError::DeadBuffer)?;
+            current.swap_owned_text_state_with(other);
+            current
+                .text
+                .retarget_markers_for_buffer_swap(other_id, current_id);
+            other
+                .text
+                .retarget_markers_for_buffer_swap(current_id, other_id);
+            current.overlays.retarget_buffer(other_id, current_id);
+            other.overlays.retarget_buffer(current_id, other_id);
+            current.text.record_char_modification(1);
+            other.text.record_char_modification(1);
+            current.increment_overlay_modified_tick();
+            other.increment_overlay_modified_tick();
+        }
+        self.buffers.insert(current_id, current);
+        let _ = self.record_buffer_state_markers(current_id);
+        let _ = self.record_buffer_state_markers(other_id);
+        Ok(())
     }
 
     /// Allocate a new indirect buffer that shares its root base buffer's text.

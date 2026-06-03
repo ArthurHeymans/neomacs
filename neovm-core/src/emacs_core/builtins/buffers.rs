@@ -1161,47 +1161,15 @@ pub(crate) fn builtin_buffer_swap_text(
     let buffers = &mut eval.buffers;
     expect_args("buffer-swap-text", &args, 1)?;
     let other_id = expect_buffer_id(&args[0])?;
-    if buffers.get(other_id).is_none() {
-        return Ok(Value::NIL);
-    }
-
     let current_id = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
         .id;
 
-    if current_id == other_id {
-        return Ok(Value::NIL);
-    }
-
-    let (current_text, current_multibyte) = buffers
-        .get(current_id)
-        .map(|buf| {
-            (
-                buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()),
-                buf.get_multibyte(),
-            )
-        })
-        .unwrap_or_else(|| (lisp_string_from_buffer_bytes(Vec::new(), true), true));
-    let (other_text, other_multibyte) = buffers
-        .get(other_id)
-        .map(|buf| {
-            (
-                buf.buffer_substring_lisp_string(buf.point_min(), buf.point_max()),
-                buf.get_multibyte(),
-            )
-        })
-        .unwrap_or_else(|| (lisp_string_from_buffer_bytes(Vec::new(), true), true));
-
-    let current_replacement =
-        buffer_insert_lisp_string_from_lisp_string(&other_text, current_multibyte);
-    let other_replacement =
-        buffer_insert_lisp_string_from_lisp_string(&current_text, other_multibyte);
-
-    let _ = buffers.replace_buffer_contents_lisp_string(current_id, &current_replacement);
-    let _ = buffers.replace_buffer_contents_lisp_string(other_id, &other_replacement);
-
-    Ok(Value::NIL)
+    buffers
+        .swap_buffer_text(current_id, other_id)
+        .map(|()| Value::NIL)
+        .map_err(|err| signal("error", vec![Value::string(err.message())]))
 }
 
 pub(crate) fn builtin_insert_buffer_substring(

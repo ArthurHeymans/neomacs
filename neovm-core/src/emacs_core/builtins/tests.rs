@@ -3058,6 +3058,218 @@ fn buffer_swap_text_preserves_unibyte_raw_bytes() {
     assert!(!second_text.is_multibyte());
 }
 
+fn buffer_swap_text_signal_message(result: EvalResult) -> String {
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            sig.data[0]
+                .as_runtime_string_owned()
+                .expect("error signal should carry a message")
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
+}
+
+fn full_buffer_bytes(buffer: &crate::buffer::Buffer) -> Vec<u8> {
+    buffer
+        .buffer_substring_lisp_string(0, buffer.total_bytes())
+        .as_bytes()
+        .to_vec()
+}
+
+#[test]
+fn buffer_swap_text_swaps_owned_backend_and_state() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let first_id = eval.buffers.create_buffer("*swap-state-a*");
+    let second_id = eval.buffers.create_buffer("*swap-state-b*");
+
+    eval.buffers
+        .insert_into_buffer(first_id, "abcde")
+        .expect("first insert should succeed");
+    eval.buffers
+        .insert_into_buffer(second_id, "uvwxyz")
+        .expect("second insert should succeed");
+
+    {
+        let second = eval
+            .buffers
+            .get(second_id)
+            .expect("second buffer should exist");
+        second
+            .text
+            .convert_backend_kind(crate::buffer::BufferTextBackendKind::PieceTree);
+    }
+
+    eval.buffers
+        .narrow_buffer_to_region(first_id, 1, 4)
+        .expect("first narrow should succeed");
+    eval.buffers
+        .goto_buffer_byte(first_id, 2)
+        .expect("first point should move");
+    eval.buffers
+        .goto_buffer_byte(second_id, 5)
+        .expect("second point should move");
+    eval.buffers
+        .set_buffer_mark(first_id, 3)
+        .expect("first mark should set");
+    eval.buffers
+        .set_buffer_mark(second_id, 1)
+        .expect("second mark should set");
+
+    {
+        let first = eval
+            .buffers
+            .get_mut(first_id)
+            .expect("first buffer should exist");
+        first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::T;
+        first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
+        first.set_undo_list(Value::symbol("first-undo"));
+    }
+    {
+        let second = eval
+            .buffers
+            .get_mut(second_id)
+            .expect("second buffer should exist");
+        second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::NIL;
+        second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(4);
+        second.set_undo_list(Value::symbol("second-undo"));
+    }
+
+    eval.buffers.set_current(second_id);
+    let overlay = builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(4)])
+        .expect("overlay creation should succeed");
+
+    eval.buffers.set_current(first_id);
+    assert_eq!(
+        builtin_buffer_swap_text(&mut eval, vec![Value::make_buffer(second_id)]).unwrap(),
+        Value::NIL
+    );
+
+    let first = eval
+        .buffers
+        .get(first_id)
+        .expect("first buffer should exist");
+    let second = eval
+        .buffers
+        .get(second_id)
+        .expect("second buffer should exist");
+
+    assert_eq!(full_buffer_bytes(first), b"uvwxyz");
+    assert_eq!(full_buffer_bytes(second), b"abcde");
+    assert_eq!(
+        first.text.backend_kind(),
+        crate::buffer::BufferTextBackendKind::PieceTree
+    );
+    assert_eq!(
+        second.text.backend_kind(),
+        crate::buffer::BufferTextBackendKind::GapBuffer
+    );
+    assert_eq!(first.point_byte(), 5);
+    assert_eq!(first.point_min_byte(), 0);
+    assert_eq!(first.point_max_byte(), 6);
+    assert_eq!(first.mark_byte(), Some(1));
+    assert_eq!(second.point_byte(), 2);
+    assert_eq!(second.point_min_byte(), 1);
+    assert_eq!(second.point_max_byte(), 4);
+    assert_eq!(second.mark_byte(), Some(3));
+    assert_eq!(
+        first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+        Value::NIL
+    );
+    assert_eq!(
+        second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+        Value::T
+    );
+    assert_eq!(
+        first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+        Value::NIL
+    );
+    assert_eq!(
+        second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+        Value::NIL
+    );
+    assert_eq!(first.get_undo_list(), Value::symbol("second-undo"));
+    assert_eq!(second.get_undo_list(), Value::symbol("first-undo"));
+    assert_eq!(overlay.as_overlay_data().unwrap().buffer, Some(first_id));
+    assert_eq!(first.overlays.len(), 1);
+    assert!(second.overlays.is_empty());
+}
+
+#[test]
+fn buffer_swap_text_rejects_dead_and_indirect_buffers_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let base_id = eval.buffers.create_buffer("*swap-base*");
+    let indirect_id = eval
+        .buffers
+        .create_indirect_buffer(base_id, "*swap-indirect*", false)
+        .expect("indirect buffer should be created");
+    let other_id = eval.buffers.create_buffer("*swap-other*");
+
+    eval.buffers.set_current(indirect_id);
+    let indirect_message = buffer_swap_text_signal_message(builtin_buffer_swap_text(
+        &mut eval,
+        vec![Value::make_buffer(other_id)],
+    ));
+    assert_eq!(indirect_message, "Cannot swap indirect buffers's text");
+
+    eval.buffers.set_current(base_id);
+    let has_indirect_message = buffer_swap_text_signal_message(builtin_buffer_swap_text(
+        &mut eval,
+        vec![Value::make_buffer(other_id)],
+    ));
+    assert_eq!(
+        has_indirect_message,
+        "One of the buffers to swap has indirect buffers"
+    );
+
+    let dead_id = eval.buffers.create_buffer("*swap-dead*");
+    assert!(eval.buffers.kill_buffer(dead_id));
+    eval.buffers.set_current(other_id);
+    let dead_message = buffer_swap_text_signal_message(builtin_buffer_swap_text(
+        &mut eval,
+        vec![Value::make_buffer(dead_id)],
+    ));
+    assert_eq!(dead_message, "Cannot swap a dead buffer's text");
+}
+
+#[test]
+fn buffer_swap_text_self_keeps_gnu_side_effects() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("*swap-self*");
+    eval.buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert should succeed");
+    {
+        let buffer = eval
+            .buffers
+            .get_mut(buffer_id)
+            .expect("buffer should exist");
+        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
+    }
+    let before_modified = eval.buffers.get(buffer_id).unwrap().modified_tick();
+    let before_chars_modified = eval.buffers.get(buffer_id).unwrap().chars_modified_tick();
+    let before_overlay_modified = eval.buffers.get(buffer_id).unwrap().overlay_modified_tick();
+
+    eval.buffers.set_current(buffer_id);
+    assert_eq!(
+        builtin_buffer_swap_text(&mut eval, vec![Value::make_buffer(buffer_id)]).unwrap(),
+        Value::NIL
+    );
+
+    let buffer = eval.buffers.get(buffer_id).expect("buffer should exist");
+    assert_eq!(full_buffer_bytes(buffer), b"abc");
+    assert_eq!(buffer.modified_tick(), before_modified + 2);
+    assert_eq!(buffer.chars_modified_tick(), before_chars_modified + 2);
+    assert_eq!(buffer.overlay_modified_tick(), before_overlay_modified + 2);
+    assert_eq!(
+        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+        Value::NIL
+    );
+}
+
 #[test]
 fn compare_buffer_substrings_nil_bounds_use_accessible_region() {
     crate::test_utils::init_test_tracing();

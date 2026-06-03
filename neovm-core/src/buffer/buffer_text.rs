@@ -1353,6 +1353,26 @@ impl BufferText {
         }
     }
 
+    /// Retarget marker owners after `buffer-swap-text` moves this whole
+    /// text object to another buffer. GNU swaps the marker chains with
+    /// `struct buffer_text`, then rewrites each marker's `buffer` slot to
+    /// the new owning buffer.
+    pub(crate) fn retarget_markers_for_buffer_swap(&self, from: BufferId, to: BufferId) {
+        let storage = self.storage.borrow();
+        let mut curr = storage.markers_head;
+        // SAFETY: same intrusive-chain invariant as `chain_unlink`; each node
+        // was linked through this BufferText and remains live while present.
+        unsafe {
+            while !curr.is_null() {
+                let data = &mut (*curr).data;
+                if data.buffer == Some(from) {
+                    data.buffer = Some(to);
+                }
+                curr = data.next_marker;
+            }
+        }
+    }
+
     /// Raw pointer to the `markers_head` slot inside this buffer's
     /// storage. ONLY for GC use — bypasses RefCell's runtime borrow
     /// checks. Callers must hold exclusive access to the tagged heap and

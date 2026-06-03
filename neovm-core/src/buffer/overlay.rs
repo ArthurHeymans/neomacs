@@ -10,6 +10,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound::{Excluded, Unbounded};
 
+use crate::buffer::BufferId;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::plist;
 use crate::emacs_core::value::{Value, ValueKind, eq_value};
@@ -299,6 +300,16 @@ impl OverlayList {
         self.by_start.clear();
         self.by_end.clear();
         self.itree = Itree::new();
+    }
+
+    pub(crate) fn retarget_buffer(&mut self, from: BufferId, to: BufferId) {
+        for overlay in self.overlays.iter().copied() {
+            let _ = overlay.with_overlay_data_mut(|data| {
+                if data.buffer == Some(from) {
+                    data.buffer = Some(to);
+                }
+            });
+        }
     }
 
     pub fn overlay_put(&mut self, overlay: Value, prop: Value, value: Value) -> Result<bool, Flow> {
