@@ -2030,7 +2030,7 @@ fn estimated_window_end_from_body_lines(
         return window_start;
     };
     let buffer_end = buf.text.char_count().saturating_add(1);
-    let text = buf.text.to_string();
+    let text = buf.text.full_text_string();
     let start_char = window_start.saturating_sub(1);
     let mut char_pos = start_char;
     let mut lines_seen = 0usize;
@@ -5431,7 +5431,7 @@ fn scroll_by_lines_in_state(
     let Some(buf) = buffers.get(buffer_id) else {
         return Ok(Value::NIL);
     };
-    let text = buf.text.to_string();
+    let text = buf.text.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let pt = buf
         .lisp_pos_to_emacs_byte_pos(window_point)
@@ -5550,7 +5550,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let Some(buf) = buffers.get(buffer_id) else {
             return Ok(Value::NIL);
         };
-        let text = buf.text.to_string();
+        let text = buf.text.full_text_string();
         let accessible = buf.accessible_emacs_byte_region();
         let pt = buf
             .lisp_pos_to_emacs_byte_pos(window_point)
@@ -8573,7 +8573,7 @@ pub(crate) fn builtin_fit_window_to_buffer(
     };
 
     // Count lines in the buffer.
-    let text = buf.text.to_string();
+    let text = buf.text.full_text_string();
     let buf_lines = text.chars().filter(|&c| c == '\n').count() + 1;
 
     // Parse optional height limits.

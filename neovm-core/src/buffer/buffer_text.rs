@@ -421,6 +421,11 @@ impl BufferText {
         self.storage.borrow().backend.text_emacs_byte_range(range)
     }
 
+    pub(crate) fn full_text_string(&self) -> String {
+        let byte_len = self.emacs_byte_len();
+        self.text_emacs_byte_range(EmacsByteRange::from_usize(0, byte_len))
+    }
+
     #[cfg(test)]
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
         self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
@@ -1963,7 +1968,7 @@ impl fmt::Display for BufferText {
 impl fmt::Debug for BufferText {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BufferText")
-            .field("len", &self.len())
+            .field("emacs_byte_len", &self.emacs_byte_len())
             .field("chars", &self.char_count())
             .finish()
     }

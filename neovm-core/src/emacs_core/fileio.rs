@@ -4666,7 +4666,7 @@ fn decide_auto_coding_for_insert_file_contents(
     let old_len = eval
         .buffers
         .get(work_buffer)
-        .map(|buf| buf.text.len())
+        .map(|buf| buf.text.emacs_byte_len())
         .unwrap_or(0);
     eval.buffers
         .delete_buffer_region(work_buffer, 0, old_len)

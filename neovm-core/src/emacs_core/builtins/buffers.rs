@@ -1337,7 +1337,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     let old_len_bytes = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.len())
+        .map(|buf| buf.text.emacs_byte_len())
         .unwrap_or(0);
     let old_len = super::editfns::current_buffer_byte_span_char_len(eval, 0, old_len_bytes);
     super::editfns::signal_before_change(eval, 0, old_len_bytes)?;
@@ -1347,7 +1347,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     let new_len = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.len())
+        .map(|buf| buf.text.emacs_byte_len())
         .unwrap_or(0);
     super::editfns::signal_after_change(eval, 0, new_len, old_len)?;
 
@@ -1929,7 +1929,7 @@ pub(crate) fn builtin_compute_motion(
             Value::NIL,
         ]));
     };
-    let text = buf.text.to_string();
+    let text = buf.text.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
         .map(|info| buf.slots[info.offset])
@@ -4129,7 +4129,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
     };
 
-    if byte_pos >= buf.text.len() {
+    if byte_pos >= buf.text.emacs_byte_len() {
         return Ok(Value::fixnum(0));
     }
 

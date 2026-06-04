@@ -1022,7 +1022,7 @@ pub(crate) fn builtin_erase_buffer(
     let buf_len = ctx
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.len())
+        .map(|buf| buf.text.emacs_byte_len())
         .unwrap_or(0);
     let old_len = current_buffer_byte_span_char_len(ctx, 0, buf_len);
     if buf_len > 0 {
@@ -1062,7 +1062,7 @@ pub(crate) fn erase_buffer_impl(
             return Ok(Value::NIL);
         };
         buf.widen();
-        buf.text.len()
+        buf.text.emacs_byte_len()
     };
     if len > 0 {
         let _ = buffers.delete_buffer_region(current_id, 0, len);
