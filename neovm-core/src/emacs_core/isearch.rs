@@ -356,6 +356,69 @@ fn string_matches_regexp(text: &str, pattern: &str, case_fold: bool) -> Result<b
         .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
 }
 
+fn delete_line_operation_byte_range(
+    eval: &mut super::eval::Context,
+    current_id: crate::buffer::BufferId,
+    start: usize,
+    end: usize,
+) -> Result<(), Flow> {
+    if start == end {
+        return Ok(());
+    }
+
+    {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        if buffer_read_only_active(eval, buf) {
+            return Err(signal(
+                "buffer-read-only",
+                vec![Value::make_buffer(current_id)],
+            ));
+        }
+    }
+
+    crate::emacs_core::textprop::verify_text_read_only_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        current_id,
+        start,
+        end,
+    )?;
+
+    let change = super::editfns::text_change_for_deletion_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(start, end),
+    )?;
+    super::editfns::signal_before_text_change(eval, change)?;
+    let _ = eval
+        .buffers
+        .delete_buffer_measured_region(current_id, change.old_range());
+    super::editfns::signal_after_text_change(eval, change)
+}
+
+fn delete_line_operation_ranges(
+    eval: &mut super::eval::Context,
+    current_id: crate::buffer::BufferId,
+    delete_ranges: Vec<(usize, usize)>,
+) -> Result<usize, Flow> {
+    let mut deleted_so_far = 0usize;
+    let mut deleted_ranges = 0usize;
+    for (original_start, original_end) in delete_ranges {
+        if original_start == original_end {
+            continue;
+        }
+        let start = original_start.saturating_sub(deleted_so_far);
+        let end = original_end.saturating_sub(deleted_so_far);
+        delete_line_operation_byte_range(eval, current_id, start, end)?;
+        deleted_so_far = deleted_so_far.saturating_add(original_end - original_start);
+        deleted_ranges += 1;
+    }
+    Ok(deleted_ranges)
+}
+
 fn count_string_regexp_matches(text: &str, pattern: &str, case_fold: bool) -> Result<i64, Flow> {
     let iterated = super::regex::iterate_string_matches_with_case_fold(pattern, text, 0, case_fold)
         .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
@@ -2017,38 +2080,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     if !delete_ranges.is_empty() {
-        // Signal once for the whole affected region.
-        let region_start = delete_ranges.last().map(|(s, _)| *s).unwrap_or(start);
-        let region_end = delete_ranges.first().map(|(_, e)| *e).unwrap_or(start);
-        let total_deleted: usize = delete_ranges.iter().map(|(s, e)| e - s).sum();
-        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
-            &eval.buffers,
-            current_id,
-            EmacsByteRange::from_usize(region_start.min(region_end), region_start.max(region_end)),
-        )?;
-        let old_len = old_range.char_len().get();
-        let measured_delete_ranges = delete_ranges
-            .iter()
-            .map(|(del_start, del_end)| {
-                super::editfns::buffer_edit_range_for_byte_range_in_manager(
-                    &eval.buffers,
-                    current_id,
-                    EmacsByteRange::from_usize(*del_start, *del_end),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        super::editfns::signal_before_change(eval, region_start, region_end)?;
-        for delete_range in measured_delete_ranges.into_iter().rev() {
-            let _ = eval
-                .buffers
-                .delete_buffer_measured_region(current_id, delete_range);
-        }
-        super::editfns::signal_after_change(
-            eval,
-            region_start,
-            region_end - total_deleted,
-            old_len,
-        )?;
+        delete_line_operation_ranges(eval, current_id, delete_ranges)?;
     }
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
 
@@ -2114,43 +2146,13 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let mut deleted_count = 0usize;
     if !delete_ranges.is_empty() {
-        let region_start = delete_ranges.first().map(|(s, _)| *s).unwrap_or(start);
-        let region_end = delete_ranges.last().map(|(_, e)| *e).unwrap_or(start);
-        let total_deleted: usize = delete_ranges.iter().map(|(s, e)| e - s).sum();
-        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
-            &eval.buffers,
-            current_id,
-            EmacsByteRange::from_usize(region_start, region_end),
-        )?;
-        let old_len = old_range.char_len().get();
-        let measured_delete_ranges = delete_ranges
-            .iter()
-            .map(|(del_start, del_end)| {
-                super::editfns::buffer_edit_range_for_byte_range_in_manager(
-                    &eval.buffers,
-                    current_id,
-                    EmacsByteRange::from_usize(*del_start, *del_end),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        super::editfns::signal_before_change(eval, region_start, region_end)?;
-        for delete_range in measured_delete_ranges.into_iter().rev() {
-            let _ = eval
-                .buffers
-                .delete_buffer_measured_region(current_id, delete_range);
-        }
-        super::editfns::signal_after_change(
-            eval,
-            region_start,
-            region_end - total_deleted,
-            old_len,
-        )?;
+        deleted_count = delete_line_operation_ranges(eval, current_id, delete_ranges)?;
     }
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
 
-    // Emacs returns integer 0 from flush-lines regardless of match count.
-    Ok(Value::fixnum(0))
+    Ok(Value::fixnum(deleted_count as i64))
 }
 
 /// `(how-many REGEXP &optional RSTART REND INTERACTIVE)` —

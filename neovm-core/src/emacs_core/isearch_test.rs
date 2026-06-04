@@ -1157,6 +1157,83 @@ fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
 }
 
 #[test]
+fn keep_lines_change_hooks_match_gnu_delete_region_sequence() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.eval_str(
+        r#"
+(progn
+  (erase-buffer)
+  (insert "a\nb\nc\nd\n")
+  (goto-char (point-min))
+  (setq neomacs-line-events nil)
+  (setq before-change-functions
+        (list (lambda (beg end)
+                (setq neomacs-line-events
+                      (cons (list 'before beg end) neomacs-line-events)))))
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq neomacs-line-events
+                      (cons (list 'after beg end old-len) neomacs-line-events))))))
+"#,
+    )
+    .expect("line hook setup should evaluate");
+
+    builtin_keep_lines(&mut eval, vec![Value::string("a\\|c")]).expect("keep-lines");
+
+    let rendered = crate::emacs_core::format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) (nreverse neomacs-line-events))
+"#,
+    ));
+
+    assert_eq!(
+        rendered,
+        "OK (\"a\nc\n\" ((before 3 5) (after 3 3 2) (before 5 7) (after 5 5 2)))"
+    );
+}
+
+#[test]
+fn flush_lines_returns_count_and_signals_gnu_delete_region_sequence() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.eval_str(
+        r#"
+(progn
+  (erase-buffer)
+  (insert "a\nb\nc\nd\n")
+  (goto-char (point-min))
+  (setq neomacs-line-events nil)
+    (setq before-change-functions
+          (list (lambda (beg end)
+                  (setq neomacs-line-events
+                        (cons (list 'before beg end) neomacs-line-events)))))
+    (setq after-change-functions
+          (list (lambda (beg end old-len)
+                  (setq neomacs-line-events
+                        (cons (list 'after beg end old-len) neomacs-line-events))))))
+"#,
+    )
+    .expect("line hook setup should evaluate");
+
+    let count = builtin_flush_lines(&mut eval, vec![Value::string("b\\|d")]).expect("flush-lines");
+    assert_eq!(count, Value::fixnum(2));
+
+    let rendered = crate::emacs_core::format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) (nreverse neomacs-line-events))
+"#,
+    ));
+
+    assert_eq!(
+        rendered,
+        "OK (\"a\nc\n\" ((before 3 5) (after 3 3 2) (before 5 7) (after 5 5 2)))"
+    );
+}
+
+#[test]
 fn count_matches_and_how_many_preserve_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
