@@ -14,6 +14,7 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
+use super::gap_buffer::{GAP_BYTES_DFL, GAP_BYTES_MIN};
 use super::position::{
     CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
@@ -47,6 +48,8 @@ impl PositionCache {
 struct BufferTextStorage {
     metrics: TextMetrics,
     backend: TextBackend,
+    virtual_gap_pos: CharPos0,
+    virtual_gap_size: usize,
     modified_tick: i64,
     chars_modified_tick: i64,
     save_modified_tick: i64,
@@ -69,6 +72,8 @@ impl Clone for BufferTextStorage {
         Self {
             metrics: self.metrics,
             backend: self.backend.clone(),
+            virtual_gap_pos: self.virtual_gap_pos,
+            virtual_gap_size: self.virtual_gap_size,
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
             save_modified_tick: self.save_modified_tick,
@@ -106,10 +111,16 @@ impl Default for BufferText {
 impl BufferText {
     fn from_backend(backend: TextBackend) -> Self {
         let metrics = backend.metrics();
+        let virtual_gap_pos = backend
+            .gap_compat_char_pos()
+            .unwrap_or_else(|| CharPos0::new(metrics.chars()));
+        let virtual_gap_size = backend.gap_compat_size().unwrap_or(GAP_BYTES_MIN);
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
                 metrics,
                 backend,
+                virtual_gap_pos,
+                virtual_gap_size,
                 modified_tick: 1,
                 chars_modified_tick: 1,
                 save_modified_tick: 1,
@@ -124,6 +135,47 @@ impl BufferText {
 
     fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
         storage.metrics = storage.backend.metrics();
+    }
+
+    fn virtual_gap_consume_bytes(storage: &mut BufferTextStorage, bytes: usize) {
+        if storage.virtual_gap_size < bytes {
+            let need = bytes - storage.virtual_gap_size;
+            storage.virtual_gap_size += need.saturating_add(GAP_BYTES_DFL);
+        }
+        storage.virtual_gap_size = storage.virtual_gap_size.saturating_sub(bytes);
+    }
+
+    fn note_virtual_gap_insert(
+        storage: &mut BufferTextStorage,
+        pos: EmacsBytePos,
+        extent: TextExtent,
+    ) {
+        if storage.backend.gap_compat_char_pos().is_some() {
+            return;
+        }
+        let start_char = storage.backend.emacs_byte_pos_to_char_pos(pos);
+        storage.virtual_gap_pos = CharPos0::new(start_char.get() + extent.chars().get());
+        Self::virtual_gap_consume_bytes(storage, extent.emacs_bytes().get());
+    }
+
+    fn note_virtual_gap_delete(storage: &mut BufferTextStorage, range: TextEditRange) {
+        if storage.backend.gap_compat_char_pos().is_some() {
+            return;
+        }
+        storage.virtual_gap_pos = range.char_start();
+        storage.virtual_gap_size += range.byte_len().get();
+    }
+
+    fn note_virtual_gap_replace(storage: &mut BufferTextStorage, replacement: TextReplacement) {
+        if storage.backend.gap_compat_char_pos().is_some() {
+            return;
+        }
+        let char_start = replacement.old_range().char_start();
+        storage.virtual_gap_pos = char_start;
+        storage.virtual_gap_size += replacement.old_range().byte_len().get();
+        storage.virtual_gap_pos =
+            CharPos0::new(char_start.get() + replacement.new_extent().chars().get());
+        Self::virtual_gap_consume_bytes(storage, replacement.new_extent().emacs_bytes().get());
     }
 
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {
@@ -230,9 +282,19 @@ impl BufferText {
         if storage.backend.kind() == kind {
             return;
         }
+        let virtual_gap_pos = storage
+            .backend
+            .gap_compat_char_pos()
+            .unwrap_or(storage.virtual_gap_pos);
+        let virtual_gap_size = storage
+            .backend
+            .gap_compat_size()
+            .unwrap_or(storage.virtual_gap_size);
         let text = storage.backend.dump_text();
         let multibyte = storage.backend.is_multibyte();
         storage.backend = TextBackend::from_dump(text, multibyte, kind);
+        storage.virtual_gap_pos = virtual_gap_pos;
+        storage.virtual_gap_size = virtual_gap_size;
         Self::refresh_backend_metrics(&mut storage);
         Self::invalidate_position_caches(&mut storage);
     }
@@ -269,6 +331,24 @@ impl BufferText {
 
     pub fn metrics(&self) -> TextMetrics {
         self.storage.borrow().metrics
+    }
+
+    pub(crate) fn gap_position_lisp(&self) -> i64 {
+        let storage = self.storage.borrow();
+        storage
+            .backend
+            .gap_compat_char_pos()
+            .unwrap_or(storage.virtual_gap_pos)
+            .to_lisp()
+            .as_i64()
+    }
+
+    pub(crate) fn gap_size_lisp(&self) -> usize {
+        let storage = self.storage.borrow();
+        storage
+            .backend
+            .gap_compat_size()
+            .unwrap_or(storage.virtual_gap_size)
     }
 
     #[cfg(test)]
@@ -414,6 +494,7 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
+        Self::note_virtual_gap_insert(&mut storage, pos, extent);
         storage
             .backend
             .insert_measured_emacs_bytes(pos, bytes, extent);
@@ -445,6 +526,7 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
+        Self::note_virtual_gap_delete(&mut storage, range);
         storage.backend.delete_measured_range(range);
         Self::refresh_backend_metrics(&mut storage);
     }
@@ -454,6 +536,7 @@ impl BufferText {
             return;
         }
         let mut storage = self.storage.borrow_mut();
+        Self::note_virtual_gap_replace(&mut storage, replacement);
         storage.backend.replace_measured_range(replacement, bytes);
         Self::refresh_backend_metrics(&mut storage);
     }
@@ -634,6 +717,11 @@ impl BufferText {
         let kind = storage.backend.kind();
         storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
         Self::refresh_backend_metrics(&mut storage);
+        storage.virtual_gap_pos = storage
+            .backend
+            .gap_compat_char_pos()
+            .unwrap_or_else(|| CharPos0::new(storage.metrics.chars()));
+        storage.virtual_gap_size = storage.backend.gap_compat_size().unwrap_or(GAP_BYTES_DFL);
         storage.text_props = text_props;
         // Wholesale content replacement: invalidate position caches. If the new
         // content happens to have the same (total_chars, total_bytes) as the old,

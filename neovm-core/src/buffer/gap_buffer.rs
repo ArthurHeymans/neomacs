@@ -22,13 +22,13 @@ use crate::buffer::{
 
 /// Default extra gap bytes to pre-allocate on any growth.
 /// Matches GNU Emacs `GAP_BYTES_DFL` (`src/buffer.h:205`).
-const GAP_BYTES_DFL: usize = 2000;
+pub(crate) const GAP_BYTES_DFL: usize = 2000;
 
 /// Floor for the gap after shrinking — not enforced today because we don't
 /// shrink yet, but kept as a named constant to match GNU's `GAP_BYTES_MIN`
 /// (`src/buffer.h:210`).
 #[allow(dead_code)]
-const GAP_BYTES_MIN: usize = 20;
+pub(crate) const GAP_BYTES_MIN: usize = 20;
 
 /// A gap buffer holding raw Emacs bytes.
 ///
@@ -73,10 +73,10 @@ impl GapBuffer {
 
     pub fn new_with_multibyte(multibyte: bool) -> Self {
         Self {
-            buf: vec![0u8; GAP_BYTES_DFL],
+            buf: vec![0u8; GAP_BYTES_MIN],
             multibyte,
             gap_start: 0,
-            gap_end: GAP_BYTES_DFL,
+            gap_end: GAP_BYTES_MIN,
             gap_start_chars: 0,
             total_chars: 0,
             gap_start_bytes: 0,

@@ -769,11 +769,7 @@ fn contiguous_emacs_bytes_rejects_gap_spanning_range() {
 fn new_buffer_has_gnu_default_gap_size() {
     crate::test_utils::init_test_tracing();
     let gb = GapBuffer::new();
-    assert!(
-        gb.gap_size() >= 2000,
-        "expected gap_size >= 2000, got {}",
-        gb.gap_size()
-    );
+    assert_eq!(gb.gap_size(), 20);
 }
 
 #[test]

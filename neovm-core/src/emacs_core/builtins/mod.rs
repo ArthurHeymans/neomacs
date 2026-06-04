@@ -5179,11 +5179,18 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gap-position",
-        |_ctx, args| builtin_gap_position(args),
+        |ctx, args| builtin_gap_position(ctx, args),
         0,
         Some(0),
     );
-    ctx.defsubr("gap-size", |_ctx, args| builtin_gap_size(args), 0, Some(0));
+    record_builtin_no_eval_policy("gap-position", BuiltinNoEvalPolicy::RequiresEvalState);
+    ctx.defsubr(
+        "gap-size",
+        |ctx, args| builtin_gap_size(ctx, args),
+        0,
+        Some(0),
+    );
+    record_builtin_no_eval_policy("gap-size", BuiltinNoEvalPolicy::RequiresEvalState);
     ctx.defsubr(
         "garbage-collect-heapsize",
         |_ctx, args| builtin_garbage_collect_heapsize(args),

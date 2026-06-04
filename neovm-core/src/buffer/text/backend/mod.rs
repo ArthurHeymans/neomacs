@@ -122,6 +122,20 @@ impl TextBackend {
         }
     }
 
+    pub(in crate::buffer) fn gap_compat_char_pos(&self) -> Option<CharPos0> {
+        match self {
+            Self::Gap(gap) => Some(CharPos0::new(gap.gpt())),
+            Self::PieceTree(_) | Self::Rope(_) => None,
+        }
+    }
+
+    pub(in crate::buffer) fn gap_compat_size(&self) -> Option<usize> {
+        match self {
+            Self::Gap(gap) => Some(gap.gap_size()),
+            Self::PieceTree(_) | Self::Rope(_) => None,
+        }
+    }
+
     pub(in crate::buffer) fn len(&self) -> usize {
         match self {
             Self::Gap(gap) => gap.len(),

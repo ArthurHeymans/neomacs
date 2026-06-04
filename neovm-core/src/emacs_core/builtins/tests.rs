@@ -10235,22 +10235,12 @@ fn dispatch_builtin_pure_handles_describe_and_delete_terminal_placeholders() {
 }
 
 #[test]
-fn dispatch_builtin_pure_handles_fringe_gap_and_garbage_placeholders() {
+fn dispatch_builtin_pure_handles_fringe_and_garbage_placeholders() {
     crate::test_utils::init_test_tracing();
     let fringe = dispatch_builtin_pure("fringe-bitmaps-at-pos", vec![Value::NIL, Value::NIL])
         .expect("fringe-bitmaps-at-pos should resolve")
         .expect("fringe-bitmaps-at-pos should evaluate");
     assert_eq!(fringe, Value::NIL);
-
-    let gap_pos = dispatch_builtin_pure("gap-position", vec![])
-        .expect("gap-position should resolve")
-        .expect("gap-position should evaluate");
-    assert_eq!(gap_pos, Value::fixnum(1));
-
-    let gap_size = dispatch_builtin_pure("gap-size", vec![])
-        .expect("gap-size should resolve")
-        .expect("gap-size should evaluate");
-    assert_eq!(gap_size, Value::fixnum(2001));
 
     let gc = dispatch_builtin_pure("garbage-collect-maybe", vec![Value::fixnum(0)])
         .expect("garbage-collect-maybe should resolve")
@@ -10267,6 +10257,60 @@ fn dispatch_builtin_pure_handles_fringe_gap_and_garbage_placeholders() {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),
     }
+}
+
+#[test]
+fn gap_position_and_size_use_current_buffer_storage() {
+    crate::test_utils::init_test_tracing();
+    assert!(dispatch_builtin_pure("gap-position", vec![]).is_none());
+    assert!(dispatch_builtin_pure("gap-size", vec![]).is_none());
+
+    let mut eval = super::super::eval::Context::new();
+    let current = eval
+        .buffers
+        .current_buffer_id()
+        .expect("scratch buffer should exist");
+    let initial = Value::list(vec![
+        builtin_gap_position(&mut eval, vec![]).expect("gap-position"),
+        builtin_gap_size(&mut eval, vec![]).expect("gap-size"),
+    ]);
+
+    eval.buffers
+        .insert_into_buffer(current, "abc")
+        .expect("insert should succeed");
+    let after_gap_insert = Value::list(vec![
+        builtin_gap_position(&mut eval, vec![]).expect("gap-position after insert"),
+        builtin_gap_size(&mut eval, vec![]).expect("gap-size after insert"),
+    ]);
+
+    eval.buffers
+        .get(current)
+        .expect("scratch buffer")
+        .text
+        .try_convert_backend_kind(crate::buffer::BufferTextBackendKind::PieceTree)
+        .expect("piece-tree backend should be implemented");
+    eval.buffers
+        .insert_into_buffer(current, "d")
+        .expect("non-gap insert should succeed");
+    let after_piece_tree_insert = Value::list(vec![
+        builtin_neomacs_buffer_text_backend(&mut eval, vec![]).expect("backend"),
+        builtin_gap_position(&mut eval, vec![]).expect("gap-position after backend conversion"),
+        builtin_gap_size(&mut eval, vec![]).expect("gap-size after backend conversion"),
+    ]);
+
+    let result = Value::list(vec![initial, after_gap_insert, after_piece_tree_insert]);
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::list(vec![Value::fixnum(1), Value::fixnum(20)]),
+            Value::list(vec![Value::fixnum(4), Value::fixnum(17)]),
+            Value::list(vec![
+                Value::symbol("piece-tree"),
+                Value::fixnum(5),
+                Value::fixnum(16),
+            ]),
+        ])
+    );
 }
 
 #[test]

@@ -1749,14 +1749,30 @@ pub(crate) fn builtin_fringe_bitmaps_at_pos(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_gap_position(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_gap_position(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("gap-position", &args, 0)?;
-    Ok(Value::fixnum(1))
+    let buffer = ctx
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    Ok(Value::fixnum(buffer.text.gap_position_lisp()))
 }
 
-pub(crate) fn builtin_gap_size(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_gap_size(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("gap-size", &args, 0)?;
-    Ok(Value::fixnum(2001))
+    Ok(Value::fixnum(
+        ctx.buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
+            .text
+            .gap_size_lisp() as i64,
+    ))
 }
 
 pub(crate) fn builtin_garbage_collect_maybe(args: Vec<Value>) -> EvalResult {
