@@ -40,6 +40,16 @@ impl GapTextBackend {
         }
     }
 
+    pub(in crate::buffer) fn from_dump_with_gap_compat_state(
+        text: Vec<u8>,
+        multibyte: bool,
+        gap_state: GapCompatState,
+    ) -> Self {
+        Self {
+            gap: GapBuffer::from_emacs_bytes_with_gap_compat_state(&text, multibyte, gap_state),
+        }
+    }
+
     pub(in crate::buffer) fn len(&self) -> usize {
         self.gap.len()
     }

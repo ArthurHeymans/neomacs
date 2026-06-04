@@ -13,7 +13,8 @@
 use std::fmt;
 
 use crate::buffer::text::{
-    emacs_byte_to_char_in_slice, emacs_char_count_bytes, emacs_char_to_byte_in_slice,
+    GapCompatState, emacs_byte_to_char_in_slice, emacs_char_count_bytes,
+    emacs_char_to_byte_in_slice,
 };
 use crate::buffer::{
     CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextReplacement,
@@ -100,6 +101,35 @@ impl GapBuffer {
             total_chars: char_count,
             gap_start_bytes: byte_count,
             total_bytes: byte_count,
+        }
+    }
+
+    pub(crate) fn from_emacs_bytes_with_gap_compat_state(
+        text: &[u8],
+        multibyte: bool,
+        gap_state: GapCompatState,
+    ) -> Self {
+        let total_chars = emacs_char_count_bytes(text, multibyte);
+        let gap_start_chars = gap_state.pos().get();
+        assert!(
+            gap_start_chars <= total_chars,
+            "from_emacs_bytes_with_gap_compat_state: gap char position {gap_start_chars} out of range ({total_chars})",
+        );
+        let gap_start_bytes = emacs_char_to_byte_in_slice(text, gap_start_chars, multibyte);
+        let gap = gap_state.size();
+        let mut buf = Vec::with_capacity(text.len() + gap);
+        buf.extend_from_slice(&text[..gap_start_bytes]);
+        buf.resize(gap_start_bytes + gap, 0);
+        buf.extend_from_slice(&text[gap_start_bytes..]);
+        Self {
+            buf,
+            multibyte,
+            gap_start: gap_start_bytes,
+            gap_end: gap_start_bytes + gap,
+            gap_start_chars,
+            total_chars,
+            gap_start_bytes,
+            total_bytes: text.len(),
         }
     }
 

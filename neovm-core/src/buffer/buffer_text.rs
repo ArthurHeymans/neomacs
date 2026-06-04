@@ -68,6 +68,18 @@ struct BufferTextStorage {
     anchor_cache_key: Cell<u64>,
 }
 
+impl BufferTextStorage {
+    fn gap_compat_state(&self) -> GapCompatState {
+        self.backend
+            .real_gap_compat_state()
+            .unwrap_or(self.virtual_gap)
+    }
+
+    fn uses_virtual_gap_compat_state(&self) -> bool {
+        self.backend.real_gap_compat_state().is_none()
+    }
+}
+
 fn emacs_multibyte_candidate_len(lead: u8) -> usize {
     if lead < 0x80 || (0x80..0xC0).contains(&lead) {
         1
@@ -176,11 +188,23 @@ impl Default for BufferText {
 }
 
 impl BufferText {
+    fn gap_compat_at_text_end(metrics: TextMetrics, size: usize) -> GapCompatState {
+        GapCompatState::new(CharPos0::new(metrics.chars()), size)
+    }
+
+    fn initial_virtual_gap_for_backend(
+        backend: &TextBackend,
+        metrics: TextMetrics,
+        non_gap_size: usize,
+    ) -> GapCompatState {
+        backend
+            .real_gap_compat_state()
+            .unwrap_or_else(|| Self::gap_compat_at_text_end(metrics, non_gap_size))
+    }
+
     fn from_backend(backend: TextBackend) -> Self {
         let metrics = backend.metrics();
-        let virtual_gap = backend
-            .real_gap_compat_state()
-            .unwrap_or_else(|| GapCompatState::new(CharPos0::new(metrics.chars()), GAP_BYTES_MIN));
+        let virtual_gap = Self::initial_virtual_gap_for_backend(&backend, metrics, GAP_BYTES_MIN);
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
                 metrics,
@@ -228,7 +252,7 @@ impl BufferText {
         pos: EmacsBytePos,
         extent: TextExtent,
     ) {
-        if storage.backend.real_gap_compat_state().is_some() {
+        if !storage.uses_virtual_gap_compat_state() {
             return;
         }
         let start_char = storage.backend.emacs_byte_pos_to_char_pos(pos);
@@ -239,7 +263,7 @@ impl BufferText {
     }
 
     fn note_virtual_gap_delete(storage: &mut BufferTextStorage, range: TextEditRange) {
-        if storage.backend.real_gap_compat_state().is_some() {
+        if !storage.uses_virtual_gap_compat_state() {
             return;
         }
         storage.virtual_gap = GapCompatState::new(
@@ -249,7 +273,7 @@ impl BufferText {
     }
 
     fn note_virtual_gap_replace(storage: &mut BufferTextStorage, replacement: TextReplacement) {
-        if storage.backend.real_gap_compat_state().is_some() {
+        if !storage.uses_virtual_gap_compat_state() {
             return;
         }
         let char_start = replacement.old_range().char_start();
@@ -265,7 +289,7 @@ impl BufferText {
         replacement: TextReplacement,
         bytes: &[u8],
     ) {
-        if storage.backend.real_gap_compat_state().is_some() {
+        if !storage.uses_virtual_gap_compat_state() {
             return;
         }
         let old_range = replacement.old_range();
@@ -436,14 +460,12 @@ impl BufferText {
         if storage.backend.kind() == kind {
             return;
         }
-        let virtual_gap = storage
-            .backend
-            .real_gap_compat_state()
-            .unwrap_or(storage.virtual_gap);
+        let gap_compat = storage.gap_compat_state();
         let text = storage.backend.dump_text();
         let multibyte = storage.backend.is_multibyte();
-        storage.backend = TextBackend::from_dump(text, multibyte, kind);
-        storage.virtual_gap = virtual_gap;
+        storage.backend =
+            TextBackend::from_dump_with_gap_compat_state(text, multibyte, kind, gap_compat);
+        storage.virtual_gap = gap_compat;
         Self::finish_backend_shape_change(&mut storage);
     }
 
@@ -481,21 +503,11 @@ impl BufferText {
     }
 
     pub(crate) fn gap_position_lisp(&self) -> i64 {
-        let storage = self.storage.borrow();
-        storage
-            .backend
-            .real_gap_compat_state()
-            .unwrap_or(storage.virtual_gap)
-            .lisp_position()
+        self.storage.borrow().gap_compat_state().lisp_position()
     }
 
     pub(crate) fn gap_size_lisp(&self) -> usize {
-        let storage = self.storage.borrow();
-        storage
-            .backend
-            .real_gap_compat_state()
-            .unwrap_or(storage.virtual_gap)
-            .size()
+        self.storage.borrow().gap_compat_state().size()
     }
 
     #[cfg(test)]
@@ -887,9 +899,8 @@ impl BufferText {
         let kind = storage.backend.kind();
         storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
         Self::finish_backend_content_mutation(&mut storage);
-        storage.virtual_gap = storage.backend.real_gap_compat_state().unwrap_or_else(|| {
-            GapCompatState::new(CharPos0::new(storage.metrics.chars()), GAP_BYTES_DFL)
-        });
+        storage.virtual_gap =
+            Self::initial_virtual_gap_for_backend(&storage.backend, storage.metrics, GAP_BYTES_DFL);
         storage.text_props = text_props;
     }
 

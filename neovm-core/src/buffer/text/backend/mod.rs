@@ -111,6 +111,25 @@ impl TextBackend {
         }
     }
 
+    pub(in crate::buffer) fn from_dump_with_gap_compat_state(
+        text: Vec<u8>,
+        multibyte: bool,
+        kind: ImplementedBufferTextBackendKind,
+        gap_state: GapCompatState,
+    ) -> Self {
+        match kind {
+            ImplementedBufferTextBackendKind::GapBuffer => Self::Gap(
+                GapTextBackend::from_dump_with_gap_compat_state(text, multibyte, gap_state),
+            ),
+            ImplementedBufferTextBackendKind::PieceTree => {
+                Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
+            }
+            ImplementedBufferTextBackendKind::Rope => {
+                Self::Rope(RopeTextBackend::from_dump(text, multibyte))
+            }
+        }
+    }
+
     pub(in crate::buffer) fn kind(&self) -> ImplementedBufferTextBackendKind {
         match self {
             Self::Gap(_) => ImplementedBufferTextBackendKind::GapBuffer,

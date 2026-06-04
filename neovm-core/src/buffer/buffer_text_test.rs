@@ -150,6 +150,45 @@ fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
 }
 
 #[test]
+fn backend_conversion_to_gap_preserves_virtual_gap_compatibility_state() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut text = BufferText::from_str("abéc");
+
+        text.try_convert_backend_kind(kind)
+            .expect("backend should be implemented");
+        text.insert_str(0, "Ω");
+        let virtual_gap_position = text.gap_position_lisp();
+        let virtual_gap_size = text.gap_size_lisp();
+        assert_eq!(text.to_string(), "Ωabéc");
+
+        text.try_convert_backend_kind(BufferTextBackendKind::GapBuffer)
+            .expect("gap backend should be implemented");
+        let real_gap = text
+            .gap_debug_layout()
+            .expect("converted backend should be a real gap buffer")
+            .compat_state();
+        assert_eq!(
+            real_gap.lisp_position(),
+            virtual_gap_position,
+            "{kind:?} virtual gap position should become the real GPT"
+        );
+        assert_eq!(
+            real_gap.size(),
+            virtual_gap_size,
+            "{kind:?} virtual gap size should become the real GAP_SIZE"
+        );
+        assert_eq!(text.gap_position_lisp(), virtual_gap_position);
+        assert_eq!(text.gap_size_lisp(), virtual_gap_size);
+
+        text.try_convert_backend_kind(kind)
+            .expect("backend should convert back to non-gap");
+        assert_eq!(text.gap_position_lisp(), virtual_gap_position);
+        assert_eq!(text.gap_size_lisp(), virtual_gap_size);
+    }
+}
+
+#[test]
 fn non_gap_same_len_replace_preserves_virtual_gap_byte_position() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::non_gap_implemented_variants() {
