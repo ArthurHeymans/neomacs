@@ -16,7 +16,7 @@ use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
     EmacsByteRange, StorageBytePos,
 };
-use super::text::BufferTextBackendKind;
+use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
 // in `Buffer::local_var_alist` (for LOCALIZED), `Buffer::slots[]`
 // (for FORWARDED BUFFER_OBJFWD), and `Buffer::keymap` / the
@@ -1666,13 +1666,13 @@ impl Buffer {
 
     /// Create a new, empty buffer.
     pub fn new(id: BufferId, name: Value) -> Self {
-        Self::new_with_text_backend_kind(id, name, BufferTextBackendKind::GapBuffer)
+        Self::new_with_text_backend_kind(id, name, ImplementedBufferTextBackendKind::GapBuffer)
     }
 
     pub(crate) fn new_with_text_backend_kind(
         id: BufferId,
         name: Value,
-        text_backend_kind: BufferTextBackendKind,
+        text_backend_kind: ImplementedBufferTextBackendKind,
     ) -> Self {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         Self {
@@ -3101,7 +3101,7 @@ pub struct BufferManager {
     next_id: u64,
     next_marker_id: u64,
     labeled_restrictions: HashMap<BufferId, Vec<LabeledRestriction>>,
-    default_text_backend_kind: BufferTextBackendKind,
+    default_text_backend_kind: ImplementedBufferTextBackendKind,
     /// Global default values for `BUFFER_OBJFWD` slots. Mirrors GNU's
     /// `buffer_defaults` (`buffer.c:84-90`), which is itself a
     /// sentinel `struct buffer` whose fields hold the global default
@@ -3299,7 +3299,7 @@ impl BufferManager {
             next_id: 1,
             next_marker_id: 1,
             labeled_restrictions: HashMap::new(),
-            default_text_backend_kind: BufferTextBackendKind::GapBuffer,
+            default_text_backend_kind: ImplementedBufferTextBackendKind::GapBuffer,
             buffer_defaults,
         };
         let scratch = mgr.create_buffer("*scratch*");
@@ -3358,14 +3358,10 @@ impl BufferManager {
     }
 
     pub fn default_text_backend_kind(&self) -> BufferTextBackendKind {
-        self.default_text_backend_kind
+        self.default_text_backend_kind.public_kind()
     }
 
-    pub fn set_default_text_backend_kind(&mut self, kind: BufferTextBackendKind) {
-        assert!(
-            kind.is_implemented(),
-            "buffer text backend {kind:?} is not implemented"
-        );
+    pub(crate) fn set_default_text_backend_kind(&mut self, kind: ImplementedBufferTextBackendKind) {
         self.default_text_backend_kind = kind;
     }
 
@@ -4951,12 +4947,8 @@ impl BufferManager {
         next_marker_id: u64,
         dumped_buffer_order: Option<&[BufferId]>,
         dumped_buffer_defaults: Option<&[crate::emacs_core::value::Value]>,
-        default_text_backend_kind: BufferTextBackendKind,
+        default_text_backend_kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        assert!(
-            default_text_backend_kind.is_implemented(),
-            "buffer text backend {default_text_backend_kind:?} is not implemented"
-        );
         let indirect_buffers: Vec<(BufferId, BufferId)> = buffers
             .iter()
             .filter_map(|(id, buffer)| buffer.base_buffer.map(|base_id| (*id, base_id)))

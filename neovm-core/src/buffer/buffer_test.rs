@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::heap_types::{LispString, OverlayData};
 
 // -----------------------------------------------------------------------
@@ -9,10 +10,17 @@ fn buf_with_text(text: &str) -> Buffer {
 }
 
 fn buf_with_text_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
-    let mut buf = Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), kind);
-    buf.text = BufferText::from_str_with_backend_kind(text, kind);
+    let implemented_kind = require_implemented_kind(kind);
+    let mut buf =
+        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
+    buf.text = BufferText::from_str_with_backend_kind(text, implemented_kind);
     buf.widen();
     buf
+}
+
+fn require_implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTextBackendKind {
+    kind.implemented()
+        .expect("test backend should be implemented")
 }
 
 fn implemented_text_backends() -> [BufferTextBackendKind; 2] {
@@ -221,7 +229,7 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         mgr.dump_next_marker_id(),
         None,
         None,
-        BufferTextBackendKind::GapBuffer,
+        require_implemented_kind(BufferTextBackendKind::GapBuffer),
     );
 
     let base = restored.get(base_id).expect("base buffer");
@@ -252,7 +260,7 @@ fn from_dump_preserves_dumped_buffer_order() {
         mgr.dump_next_marker_id(),
         Some(&[two, scratch, three, one]),
         None,
-        BufferTextBackendKind::GapBuffer,
+        require_implemented_kind(BufferTextBackendKind::GapBuffer),
     );
 
     assert_eq!(restored.buffer_list(), vec![two, scratch, three, one]);

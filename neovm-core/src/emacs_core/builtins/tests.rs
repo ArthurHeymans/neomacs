@@ -3097,9 +3097,11 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
             .buffers
             .get(second_id)
             .expect("second buffer should exist");
-        second
-            .text
-            .convert_backend_kind(crate::buffer::BufferTextBackendKind::PieceTree);
+        second.text.convert_backend_kind(
+            crate::buffer::BufferTextBackendKind::PieceTree
+                .implemented()
+                .expect("piece-tree backend should be implemented"),
+        );
     }
 
     eval.buffers

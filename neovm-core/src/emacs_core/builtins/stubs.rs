@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::{BufferManager, BufferTextBackendKind};
 use crate::emacs_core::display;
 use crate::emacs_core::fontset;
@@ -865,7 +866,9 @@ pub(crate) fn builtin_neomacs_core_backend(args: Vec<Value>) -> EvalResult {
     Ok(Value::string("rust"))
 }
 
-fn value_to_buffer_text_backend_kind(value: Value) -> Result<BufferTextBackendKind, Flow> {
+fn value_to_buffer_text_backend_kind(
+    value: Value,
+) -> Result<ImplementedBufferTextBackendKind, Flow> {
     let symbol = super::symbols::expect_symbol_id(&value)?;
     let name = resolve_sym(symbol);
     let kind = name.parse::<BufferTextBackendKind>().map_err(|_| {
@@ -885,7 +888,9 @@ fn value_to_buffer_text_backend_kind(value: Value) -> Result<BufferTextBackendKi
             ))],
         ));
     }
-    Ok(kind)
+    Ok(kind
+        .implemented()
+        .expect("implemented buffer text backend checked above"))
 }
 
 fn buffer_text_backend_kind_value(kind: BufferTextBackendKind) -> Value {
@@ -921,7 +926,7 @@ pub(crate) fn builtin_neomacs_set_default_buffer_text_backend(
     expect_args("neomacs-set-default-buffer-text-backend", &args, 1)?;
     let kind = value_to_buffer_text_backend_kind(args[0])?;
     ctx.buffers.set_default_text_backend_kind(kind);
-    Ok(buffer_text_backend_kind_value(kind))
+    Ok(buffer_text_backend_kind_value(kind.public_kind()))
 }
 
 pub(crate) fn builtin_neomacs_set_buffer_text_backend(
@@ -935,7 +940,7 @@ pub(crate) fn builtin_neomacs_set_buffer_text_backend(
         .current_buffer_mut()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     buffer.text.convert_backend_kind(kind);
-    Ok(buffer_text_backend_kind_value(kind))
+    Ok(buffer_text_backend_kind_value(kind.public_kind()))
 }
 
 pub(super) fn reset_stubs_thread_locals() {

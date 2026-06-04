@@ -19,8 +19,8 @@ use super::position::{
 };
 use super::text::backend::TextBackend;
 use super::text::{
-    BufferTextBackendKind, GapDebugLayout, TextBackendDebugLayout, TextEditRange, TextExtent,
-    TextMetrics, emacs_char_count_bytes,
+    BufferTextBackendKind, GapDebugLayout, ImplementedBufferTextBackendKind,
+    TextBackendDebugLayout, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
 };
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
@@ -120,38 +120,31 @@ impl BufferText {
         }
     }
 
-    fn empty_backend_for_kind(kind: BufferTextBackendKind) -> TextBackend {
+    fn empty_backend_for_kind(kind: ImplementedBufferTextBackendKind) -> TextBackend {
         match kind {
-            BufferTextBackendKind::GapBuffer => TextBackend::new_gap(),
-            BufferTextBackendKind::PieceTree => TextBackend::new_piece_tree(),
-            BufferTextBackendKind::Rope => {
-                panic!("rope text backend is not implemented")
-            }
+            ImplementedBufferTextBackendKind::GapBuffer => TextBackend::new_gap(),
+            ImplementedBufferTextBackendKind::PieceTree => TextBackend::new_piece_tree(),
         }
     }
 
-    fn str_backend_for_kind(text: &str, kind: BufferTextBackendKind) -> TextBackend {
+    fn str_backend_for_kind(text: &str, kind: ImplementedBufferTextBackendKind) -> TextBackend {
         match kind {
-            BufferTextBackendKind::GapBuffer => TextBackend::from_str_gap(text),
-            BufferTextBackendKind::PieceTree => TextBackend::from_str_piece_tree(text),
-            BufferTextBackendKind::Rope => {
-                panic!("rope text backend is not implemented")
-            }
+            ImplementedBufferTextBackendKind::GapBuffer => TextBackend::from_str_gap(text),
+            ImplementedBufferTextBackendKind::PieceTree => TextBackend::from_str_piece_tree(text),
         }
     }
 
     fn emacs_bytes_backend_for_kind(
         bytes: &[u8],
         multibyte: bool,
-        kind: BufferTextBackendKind,
+        kind: ImplementedBufferTextBackendKind,
     ) -> TextBackend {
         match kind {
-            BufferTextBackendKind::GapBuffer => TextBackend::from_emacs_bytes_gap(bytes, multibyte),
-            BufferTextBackendKind::PieceTree => {
-                TextBackend::from_emacs_bytes_piece_tree(bytes, multibyte)
+            ImplementedBufferTextBackendKind::GapBuffer => {
+                TextBackend::from_emacs_bytes_gap(bytes, multibyte)
             }
-            BufferTextBackendKind::Rope => {
-                panic!("rope text backend is not implemented")
+            ImplementedBufferTextBackendKind::PieceTree => {
+                TextBackend::from_emacs_bytes_piece_tree(bytes, multibyte)
             }
         }
     }
@@ -159,13 +152,14 @@ impl BufferText {
     fn dump_backend_for_kind(
         text: Vec<u8>,
         multibyte: bool,
-        kind: BufferTextBackendKind,
+        kind: ImplementedBufferTextBackendKind,
     ) -> TextBackend {
         match kind {
-            BufferTextBackendKind::GapBuffer => TextBackend::from_dump_gap(text, multibyte),
-            BufferTextBackendKind::PieceTree => TextBackend::from_dump_piece_tree(text, multibyte),
-            BufferTextBackendKind::Rope => {
-                panic!("rope text backend is not implemented")
+            ImplementedBufferTextBackendKind::GapBuffer => {
+                TextBackend::from_dump_gap(text, multibyte)
+            }
+            ImplementedBufferTextBackendKind::PieceTree => {
+                TextBackend::from_dump_piece_tree(text, multibyte)
             }
         }
     }
@@ -197,32 +191,35 @@ impl BufferText {
 
     pub fn new() -> Self {
         Self::from_backend(Self::empty_backend_for_kind(
-            BufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GapBuffer,
         ))
     }
 
-    pub(crate) fn new_with_backend_kind(kind: BufferTextBackendKind) -> Self {
+    pub(crate) fn new_with_backend_kind(kind: ImplementedBufferTextBackendKind) -> Self {
         Self::from_backend(Self::empty_backend_for_kind(kind))
     }
 
     pub fn from_str(text: &str) -> Self {
         Self::from_backend(Self::str_backend_for_kind(
             text,
-            BufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GapBuffer,
         ))
     }
 
-    pub(crate) fn from_str_with_backend_kind(text: &str, kind: BufferTextBackendKind) -> Self {
+    pub(crate) fn from_str_with_backend_kind(
+        text: &str,
+        kind: ImplementedBufferTextBackendKind,
+    ) -> Self {
         Self::from_backend(Self::str_backend_for_kind(text, kind))
     }
 
     pub fn from_lisp_string(text: &crate::heap_types::LispString) -> Self {
-        Self::from_lisp_string_with_backend_kind(text, BufferTextBackendKind::GapBuffer)
+        Self::from_lisp_string_with_backend_kind(text, ImplementedBufferTextBackendKind::GapBuffer)
     }
 
     pub(crate) fn from_lisp_string_with_backend_kind(
         text: &crate::heap_types::LispString,
-        kind: BufferTextBackendKind,
+        kind: ImplementedBufferTextBackendKind,
     ) -> Self {
         Self::from_backend(Self::emacs_bytes_backend_for_kind(
             text.as_bytes(),
@@ -235,13 +232,9 @@ impl BufferText {
         self.storage.borrow().backend.kind()
     }
 
-    pub(crate) fn convert_backend_kind(&self, kind: BufferTextBackendKind) {
-        assert!(
-            kind.is_implemented(),
-            "buffer text backend {kind:?} is not implemented"
-        );
+    pub(crate) fn convert_backend_kind(&self, kind: ImplementedBufferTextBackendKind) {
         let mut storage = self.storage.borrow_mut();
-        if storage.backend.kind() == kind {
+        if storage.backend.kind() == kind.public_kind() {
             return;
         }
         let text = storage.backend.dump_text();
@@ -533,14 +526,14 @@ impl BufferText {
         Self::from_backend(Self::dump_backend_for_kind(
             text,
             multibyte,
-            BufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GapBuffer,
         ))
     }
 
     pub(crate) fn from_dump_with_backend_kind(
         text: Vec<u8>,
         multibyte: bool,
-        kind: BufferTextBackendKind,
+        kind: ImplementedBufferTextBackendKind,
     ) -> Self {
         Self::from_backend(Self::dump_backend_for_kind(text, multibyte, kind))
     }
@@ -634,7 +627,11 @@ impl BufferText {
         text_props: TextPropertyTable,
     ) {
         let mut storage = self.storage.borrow_mut();
-        let kind = storage.backend.kind();
+        let kind = storage
+            .backend
+            .kind()
+            .implemented()
+            .expect("active buffer text backend is implemented");
         storage.backend =
             Self::emacs_bytes_backend_for_kind(text.as_bytes(), text.is_multibyte(), kind);
         Self::refresh_backend_metrics(&mut storage);

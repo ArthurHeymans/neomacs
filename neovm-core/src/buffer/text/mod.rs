@@ -6,6 +6,7 @@ mod metrics;
 
 pub use edit::{TextEditRange, TextExtent, TextInsertion};
 pub use kind::BufferTextBackendKind;
+pub(crate) use kind::ImplementedBufferTextBackendKind;
 pub use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
 

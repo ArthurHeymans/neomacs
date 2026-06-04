@@ -15,6 +15,7 @@ use crate::buffer::buffer::{Buffer, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
+use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
 use crate::buffer::{BufferTextBackendKind, EmacsBytePos};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
@@ -2764,9 +2765,13 @@ fn dump_buffer_text_backend_kind(kind: BufferTextBackendKind) -> DumpBufferTextB
         .unwrap_or_else(|_| panic!("{} text backend is not implemented", kind.symbol_name()))
 }
 
-fn load_buffer_text_backend_kind(kind: DumpBufferTextBackendKind) -> BufferTextBackendKind {
-    BufferTextBackendKind::try_from(u8::from(kind))
-        .expect("pdump buffer text backend tag should be a runtime backend kind")
+fn load_buffer_text_backend_kind(
+    kind: DumpBufferTextBackendKind,
+) -> ImplementedBufferTextBackendKind {
+    let kind = BufferTextBackendKind::try_from(u8::from(kind))
+        .expect("pdump buffer text backend tag should be a runtime backend kind");
+    kind.implemented()
+        .expect("pdump buffer text backend tag should be implemented")
 }
 
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {

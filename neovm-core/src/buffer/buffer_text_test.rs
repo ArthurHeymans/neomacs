@@ -1,9 +1,14 @@
 use std::str::FromStr;
 
-use crate::buffer::text::TextBackendDebugLayout;
+use crate::buffer::text::{ImplementedBufferTextBackendKind, TextBackendDebugLayout};
 use crate::buffer::{BufferTextBackendKind, EmacsByteRange, TextMetrics};
 
 use super::BufferText;
+
+fn implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTextBackendKind {
+    kind.implemented()
+        .expect("test backend should be implemented")
+}
 
 #[test]
 fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
@@ -39,8 +44,10 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
 #[test]
 fn buffer_text_can_use_piece_tree_backend() {
     crate::test_utils::init_test_tracing();
-    let mut text =
-        BufferText::from_str_with_backend_kind("abécd", BufferTextBackendKind::PieceTree);
+    let mut text = BufferText::from_str_with_backend_kind(
+        "abécd",
+        implemented_kind(BufferTextBackendKind::PieceTree),
+    );
 
     assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
     assert_eq!(
@@ -67,8 +74,10 @@ fn buffer_text_can_use_piece_tree_backend() {
 fn piece_tree_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);
-    let text =
-        BufferText::from_lisp_string_with_backend_kind(&raw, BufferTextBackendKind::PieceTree);
+    let text = BufferText::from_lisp_string_with_backend_kind(
+        &raw,
+        implemented_kind(BufferTextBackendKind::PieceTree),
+    );
 
     assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
     assert!(!text.is_multibyte());
@@ -85,7 +94,10 @@ fn piece_tree_lisp_string_preserves_unibyte_raw_bytes() {
 #[test]
 fn replace_lisp_string_preserves_piece_tree_backend() {
     crate::test_utils::init_test_tracing();
-    let text = BufferText::from_str_with_backend_kind("abc", BufferTextBackendKind::PieceTree);
+    let text = BufferText::from_str_with_backend_kind(
+        "abc",
+        implemented_kind(BufferTextBackendKind::PieceTree),
+    );
     let replacement = crate::heap_types::LispString::from_utf8("日本");
 
     text.replace_lisp_string(
