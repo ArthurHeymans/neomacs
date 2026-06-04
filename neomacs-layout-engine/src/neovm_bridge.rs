@@ -313,21 +313,8 @@ pub(crate) fn buffer_local_value<B: LayoutBufferView>(buffer: &B, name: &str) ->
 }
 
 fn effective_buffer_value(buffer: &Buffer, obarray: &Obarray, name: &str) -> Option<Value> {
-    // Phase 10D: BUFFER_OBJFWD slots (always-local AND conditional)
-    // store the live value in `buffer.slots[offset]`. After
-    // `set-default` propagation, conditional slots whose
-    // local-flags bit is clear still reflect the latest global
-    // default in their per-buffer slot, so reading the slot
-    // directly is correct in both cases. The legacy
-    // `obarray.symbol_value` reader returns None for FORWARDED,
-    // which would otherwise treat every slot as void here and
-    // collapse `effective_buffer_bool` to false.
-    if let Some(info) = neovm_core::buffer::buffer::lookup_buffer_slot(name) {
-        return Some(buffer.slots[info.offset]);
-    }
     buffer
-        .get_buffer_local_binding(name)
-        .and_then(|binding| binding.as_value())
+        .buffer_local_value(name)
         .or_else(|| obarray.symbol_value(name).copied())
 }
 
