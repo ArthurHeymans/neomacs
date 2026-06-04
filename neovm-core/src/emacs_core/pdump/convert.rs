@@ -2790,8 +2790,8 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         last_name: None,
         base_buffer: buf.base_buffer.map(|id| DumpBufferId(id.0)),
         text: DumpBufferText {
-            backend_kind: dump_buffer_text_backend_kind(buf.text.implemented_backend_kind()),
-            text: buf.text.dump_text(),
+            backend_kind: dump_buffer_text_backend_kind(buf.dump_text_backend_kind()),
+            text: buf.dump_text_bytes(),
         },
         pt: buf.pt_byte,
         pt_char: Some(buf.pt),
@@ -2822,7 +2822,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
             // Marker decode is preserved via `marker_id`; the load-side
             // chain reconstruction reuses the heap-allocated MarkerObj.
             let mut out = Vec::new();
-            buf.text.chain_walk_data(|data| {
+            buf.walk_marker_data_for_dump(|data| {
                 out.push(DumpMarker {
                     buffer: data.buffer.map(|id| DumpBufferId(id.0)),
                     insertion_type: data.insertion_type,
@@ -2858,7 +2858,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         local_binding_names: Vec::new(),
         local_map: encoder.dump_value(&buf.local_map()),
         text_props: if is_shared_text_owner {
-            dump_text_property_table(encoder, &buf.text.text_props_snapshot())
+            dump_text_property_table(encoder, &buf.text_props_snapshot())
         } else {
             dump_text_property_table(encoder, &TextPropertyTable::new())
         },

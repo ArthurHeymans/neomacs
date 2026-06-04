@@ -2024,6 +2024,14 @@ impl Buffer {
         self.text.backend_kind()
     }
 
+    pub(crate) fn dump_text_backend_kind(&self) -> ImplementedBufferTextBackendKind {
+        self.text.implemented_backend_kind()
+    }
+
+    pub(crate) fn dump_text_bytes(&self) -> Vec<u8> {
+        self.text.dump_text()
+    }
+
     pub(crate) fn convert_text_backend_kind(&mut self, kind: ImplementedBufferTextBackendKind) {
         self.text.convert_backend_kind(kind);
     }
@@ -2299,6 +2307,10 @@ impl Buffer {
         F: FnMut(usize) -> (usize, usize),
     {
         self.text.remap_markers_through(f);
+    }
+
+    pub(crate) fn walk_marker_data_for_dump<F: FnMut(&crate::heap_types::LispMarker)>(&self, f: F) {
+        self.text.chain_walk_data(f);
     }
 
     pub fn emacs_byte_range_contains_char_code(&self, range: EmacsByteRange, code: u32) -> bool {
