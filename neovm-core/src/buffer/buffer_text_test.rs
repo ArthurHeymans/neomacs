@@ -409,6 +409,31 @@ fn emacs_byte_chunks_cross_gap_without_copying_to_single_slice() {
 }
 
 #[test]
+fn range_contains_char_code_scans_non_contiguous_backend_chunks() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut text =
+            BufferText::from_str_with_backend_kind(&"a".repeat(1100), implemented_kind(kind));
+        let insert_at = text.char_pos_to_emacs_byte_pos(CharPos0::new(550));
+        text.insert_str(insert_at.get(), "é");
+
+        let mut chunks = 0;
+        text.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(0, text.len()), |_| {
+            chunks += 1;
+            Ok::<(), ()>(())
+        })
+        .unwrap();
+        assert!(
+            chunks > 1,
+            "{kind:?} should expose a multi-chunk range for this test"
+        );
+
+        assert!(text.range_contains_char_code(0, text.len(), 'é' as u32));
+        assert!(!text.range_contains_char_code(0, text.len(), '日' as u32));
+    }
+}
+
+#[test]
 fn buf_charpos_to_bytepos_matches_oracle() {
     let mut s = String::new();
     for i in 0..5000 {

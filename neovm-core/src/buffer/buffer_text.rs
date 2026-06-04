@@ -68,6 +68,72 @@ struct BufferTextStorage {
     anchor_cache_key: Cell<u64>,
 }
 
+fn emacs_multibyte_candidate_len(lead: u8) -> usize {
+    if lead < 0x80 || (0x80..0xC0).contains(&lead) {
+        1
+    } else if lead < 0xE0 {
+        2
+    } else if lead < 0xF0 {
+        3
+    } else if lead < 0xF8 {
+        4
+    } else if lead == 0xF8 {
+        crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH
+    } else {
+        1
+    }
+}
+
+fn multibyte_chunk_contains_char_code(chunk: &[u8], code: u32, carry: &mut Vec<u8>) -> bool {
+    let mut pos = 0;
+    if !carry.is_empty() {
+        let expected = emacs_multibyte_candidate_len(carry[0]);
+        let take = expected.saturating_sub(carry.len()).min(chunk.len());
+        carry.extend_from_slice(&chunk[..take]);
+        pos += take;
+        if carry.len() < expected {
+            return false;
+        }
+
+        let (decoded, len) = crate::emacs_core::emacs_char::string_char(carry);
+        if decoded == code {
+            return true;
+        }
+        if len < carry.len() {
+            let remaining = carry[len..].to_vec();
+            carry.clear();
+            if multibyte_chunk_contains_char_code(&remaining, code, carry) {
+                return true;
+            }
+            if !carry.is_empty() {
+                if multibyte_chunk_contains_char_code(&chunk[pos..], code, carry) {
+                    return true;
+                }
+                return false;
+            }
+        } else {
+            carry.clear();
+        }
+    }
+
+    while pos < chunk.len() {
+        let expected = emacs_multibyte_candidate_len(chunk[pos]);
+        let available = chunk.len() - pos;
+        if available < expected {
+            carry.extend_from_slice(&chunk[pos..]);
+            return false;
+        }
+
+        let (decoded, len) =
+            crate::emacs_core::emacs_char::string_char(&chunk[pos..pos + expected]);
+        if decoded == code {
+            return true;
+        }
+        pos += len;
+    }
+    false
+}
+
 impl Clone for BufferTextStorage {
     fn clone(&self) -> Self {
         Self {
@@ -753,31 +819,41 @@ impl BufferText {
         if range.is_empty() {
             return false;
         }
-        // Walk buffer bytes directly, avoiding the storage-form conversion
-        // previously done through text_range(). For multibyte buffers each
-        // Emacs char is decoded via emacs_char::string_char; for unibyte
-        // buffers each byte is one "character" in the range 0..=0xFF.
-        let mut bytes = Vec::with_capacity(range.len().get());
-        self.storage
-            .borrow()
-            .backend
-            .copy_emacs_byte_range_to(range, &mut bytes);
-        if self.is_multibyte() {
-            let mut pos = 0;
-            while pos < bytes.len() {
-                let (c, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-                if c == code {
-                    return true;
-                }
-                pos += len.max(1);
-            }
-            false
-        } else {
+        // Walk backend chunks directly, matching GNU's split-around-gap scan
+        // shape without forcing piece-tree/rope ranges into one temporary
+        // byte vector.
+        let storage = self.storage.borrow();
+        if !storage.backend.is_multibyte() {
             if code > 0xFF {
                 return false;
             }
-            bytes.iter().any(|&b| b as u32 == code)
+            return storage
+                .backend
+                .for_each_emacs_byte_range_chunk(range, |chunk| {
+                    if chunk.iter().any(|&b| b as u32 == code) {
+                        Err(())
+                    } else {
+                        Ok(())
+                    }
+                })
+                .is_err();
         }
+
+        let mut carry = Vec::with_capacity(crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH);
+        if storage
+            .backend
+            .for_each_emacs_byte_range_chunk(range, |chunk| {
+                if multibyte_chunk_contains_char_code(chunk, code, &mut carry) {
+                    Err(())
+                } else {
+                    Ok(())
+                }
+            })
+            .is_err()
+        {
+            return true;
+        }
+        !carry.is_empty() && crate::emacs_core::emacs_char::string_char(&carry).0 == code
     }
 
     pub fn text_props_is_empty(&self) -> bool {
