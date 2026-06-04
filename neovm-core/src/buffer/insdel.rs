@@ -5,6 +5,9 @@
 //! without changing behavior.
 
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
+use crate::buffer::edit_transaction::{
+    DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
+};
 use crate::buffer::undo;
 use crate::buffer::{
     CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
@@ -93,81 +96,6 @@ fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end
         (pos as isize + diff) as usize
     } else {
         pos - (start2 - start1)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InsertMarkerAdjustment {
-    ByInsertionType,
-    StrictAfter,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct InsertSideEffectPolicy {
-    update_state_fields: bool,
-    shift_begv: bool,
-    advance_point_at_insert: bool,
-    adjust_shared_markers: bool,
-    adjust_shared_text_props: bool,
-    overlay_before_markers: bool,
-    marker_adjustment: InsertMarkerAdjustment,
-}
-
-impl InsertSideEffectPolicy {
-    fn current_buffer(before_markers: bool, marker_adjustment: InsertMarkerAdjustment) -> Self {
-        Self {
-            update_state_fields: true,
-            shift_begv: false,
-            advance_point_at_insert: true,
-            adjust_shared_markers: true,
-            adjust_shared_text_props: true,
-            overlay_before_markers: before_markers,
-            marker_adjustment,
-        }
-    }
-
-    fn shared_buffer(
-        update_state_fields: bool,
-        overlay_before_markers: bool,
-        marker_adjustment: InsertMarkerAdjustment,
-    ) -> Self {
-        Self {
-            update_state_fields,
-            shift_begv: true,
-            advance_point_at_insert: false,
-            adjust_shared_markers: false,
-            adjust_shared_text_props: false,
-            overlay_before_markers,
-            marker_adjustment,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct DeleteSideEffectPolicy {
-    update_state_fields: bool,
-    shift_begv: bool,
-    adjust_shared_markers: bool,
-    adjust_shared_text_props: bool,
-}
-
-impl DeleteSideEffectPolicy {
-    fn current_buffer() -> Self {
-        Self {
-            update_state_fields: true,
-            shift_begv: false,
-            adjust_shared_markers: true,
-            adjust_shared_text_props: true,
-        }
-    }
-
-    fn shared_buffer(update_state_fields: bool) -> Self {
-        Self {
-            update_state_fields,
-            shift_begv: true,
-            adjust_shared_markers: false,
-            adjust_shared_text_props: false,
-        }
     }
 }
 

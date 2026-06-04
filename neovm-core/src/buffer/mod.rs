@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod buffer_text;
+mod edit_transaction;
 pub mod gap_buffer;
 pub mod overlay;
 pub mod position;
