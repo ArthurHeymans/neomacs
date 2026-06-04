@@ -372,7 +372,6 @@ fn previous_char_property_change_for_buffer(
     }
 
     if let Some(prev) = buf
-        .text
         .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
         .map(EmacsBytePos::get)
     {

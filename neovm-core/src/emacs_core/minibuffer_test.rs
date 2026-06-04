@@ -1001,9 +1001,7 @@ fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() 
             Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
             crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
-        let _ = buf
-            .text
-            .text_props_remove_property(0, prompt_end, Value::symbol("field"));
+        let _ = buf.text_props_remove_property(0, prompt_end, Value::symbol("field"));
     }
     eval.buffers.set_current(minibuf_id);
     eval.minibuffers

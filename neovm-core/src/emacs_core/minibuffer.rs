@@ -1219,7 +1219,6 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
             .expect("current minibuffer must remain available");
         let point_min_byte = buffer.lisp_pos_to_accessible_emacs_byte_pos(point_min);
         if buffer
-            .text
             .text_props_get_property_at_emacs_byte_pos(point_min_byte, Value::symbol("field"))
             .is_none()
         {

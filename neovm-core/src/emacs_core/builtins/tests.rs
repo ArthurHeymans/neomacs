@@ -1800,8 +1800,7 @@ fn make_indirect_buffer_shares_text_and_flattens_base_buffer_chain() {
         eval.buffers
             .get(base_id)
             .unwrap()
-            .text
-            .shares_storage_with(&eval.buffers.get(indirect_id).unwrap().text)
+            .shares_text_storage_with(eval.buffers.get(indirect_id).unwrap())
     );
 
     let _ = eval.buffers.goto_buffer_byte(base_id, 0);
@@ -7947,9 +7946,13 @@ fn delete_and_extract_region_preserves_buffer_text_properties() {
     let mut eval = crate::emacs_core::eval::Context::new();
     builtin_insert(&mut eval, vec![Value::string("AAABBBCCC")]).expect("insert should succeed");
     let buf = eval.buffers.current_buffer().expect("current buffer");
-    let _ = buf
-        .text
-        .text_props_put_property(3, 6, Value::symbol("face"), Value::symbol("italic"));
+    let _ = eval.buffers.put_buffer_text_property(
+        buf.id,
+        3,
+        6,
+        Value::symbol("face"),
+        Value::symbol("italic"),
+    );
 
     let extracted =
         builtin_delete_and_extract_region(&mut eval, vec![Value::fixnum(4), Value::fixnum(7)])

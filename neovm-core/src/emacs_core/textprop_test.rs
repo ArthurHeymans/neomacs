@@ -237,8 +237,7 @@ fn plain_insert_splits_inserted_nil_interval_like_gnu_graft() {
 
     let buffer = eval.buffers.current_buffer().expect("current buffer");
     let shape: Vec<_> = buffer
-        .text
-        .text_props_object_interval_runs(buffer.total_chars())
+        .text_props_object_interval_runs()
         .into_iter()
         .map(|(start, end, plist)| (start, end, plist.is_empty()))
         .collect();
@@ -620,8 +619,7 @@ fn buffer_multibyte_text_property_intervals_are_char_indexed() {
         .buffers
         .current_buffer()
         .unwrap()
-        .text
-        .text_props_intervals_snapshot();
+        .text_props_intervals_snapshot_for_test();
     assert_eq!(intervals.len(), 1);
     assert_eq!((intervals[0].start, intervals[0].end), (0, 1));
 }
@@ -1135,8 +1133,7 @@ fn set_text_properties_replaces_covered_buffer_intervals_with_one_run() {
         .buffers
         .current_buffer()
         .unwrap()
-        .text
-        .text_props_intervals_snapshot();
+        .text_props_intervals_snapshot_for_test();
     assert_eq!(intervals.len(), 2);
     assert_eq!((intervals[0].start, intervals[0].end), (0, 1));
     assert_eq!((intervals[1].start, intervals[1].end), (1, 3));

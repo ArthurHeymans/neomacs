@@ -2671,8 +2671,7 @@ pub(crate) fn builtin_object_intervals(
             return Ok(Value::NIL);
         };
         let intervals = buf
-            .text
-            .text_props_object_interval_runs(buf.total_chars())
+            .text_props_object_interval_runs()
             .into_iter()
             .map(|(start, end, plist)| {
                 let mut plist_values = Vec::with_capacity(plist.len() * 2);

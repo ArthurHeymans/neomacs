@@ -349,7 +349,6 @@ fn test_primitive_undo_restores_nil_text_property_value() {
         .buffers
         .current_buffer()
         .expect("scratch buffer")
-        .text
         .text_props_get_properties_ordered(1);
     assert_eq!(props, vec![(face, Value::NIL)]);
 }

@@ -2297,6 +2297,13 @@ impl Buffer {
         )
     }
 
+    pub fn text_props_remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
+        self.text_props_remove_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+        )
+    }
+
     pub fn text_props_remove_all_in_emacs_byte_range(&mut self, range: EmacsByteRange) {
         self.text
             .text_props_remove_all_in_emacs_byte_range(self.clamped_emacs_byte_range(range));
@@ -2348,6 +2355,13 @@ impl Buffer {
 
     pub fn text_props_snapshot(&self) -> TextPropertyTable {
         self.text.text_props_snapshot()
+    }
+
+    pub(crate) fn text_props_object_interval_runs(
+        &self,
+    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        self.text
+            .text_props_object_interval_runs(self.total_chars())
     }
 
     #[cfg(test)]
