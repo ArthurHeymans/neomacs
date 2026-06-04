@@ -456,6 +456,7 @@ impl BufferText {
             .with_contiguous_emacs_byte_range(range, f)
     }
 
+    #[cfg(test)]
     pub fn insert_str(&mut self, pos: usize, text: &str) {
         if text.is_empty() {
             return;
@@ -467,6 +468,7 @@ impl BufferText {
         self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), &bytes, extent);
     }
 
+    #[cfg(test)]
     pub fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
@@ -476,6 +478,7 @@ impl BufferText {
         self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), bytes, extent);
     }
 
+    #[cfg(test)]
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
         self.insert_measured_emacs_bytes(
             EmacsBytePos::new(pos),
@@ -501,6 +504,7 @@ impl BufferText {
         Self::refresh_backend_metrics(&mut storage);
     }
 
+    #[cfg(test)]
     pub fn delete_range(&mut self, start: usize, end: usize) {
         if start >= end {
             return;
@@ -511,6 +515,7 @@ impl BufferText {
         self.delete_measured_range(range);
     }
 
+    #[cfg(test)]
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
         let start_char = self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(start));
         let range = TextEditRange::new(
@@ -541,6 +546,7 @@ impl BufferText {
         Self::refresh_backend_metrics(&mut storage);
     }
 
+    #[cfg(test)]
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
         self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
     }
