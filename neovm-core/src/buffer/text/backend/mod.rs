@@ -1,5 +1,5 @@
 mod gap;
-mod piece;
+mod piece_tree;
 
 use std::fmt;
 
@@ -11,7 +11,7 @@ use crate::buffer::position::{
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
 use gap::GapTextBackend;
-use piece::PieceTreeTextBackend;
+use piece_tree::PieceTreeTextBackend;
 
 /// Physical storage for buffer text.
 ///
