@@ -71,8 +71,8 @@ pub struct AccessibleCharRange {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextPositionAnchor {
-    pub char_pos: CharPos0,
-    pub emacs_byte_pos: EmacsBytePos,
+    char_pos: CharPos0,
+    emacs_byte_pos: EmacsBytePos,
 }
 
 impl TextPositionAnchor {
@@ -88,6 +88,22 @@ impl TextPositionAnchor {
             char_pos: CharPos0::new(char_pos),
             emacs_byte_pos: EmacsBytePos::new(emacs_byte_pos),
         }
+    }
+
+    pub const fn char_pos(self) -> CharPos0 {
+        self.char_pos
+    }
+
+    pub const fn emacs_byte_pos(self) -> EmacsBytePos {
+        self.emacs_byte_pos
+    }
+
+    pub const fn char_pos_usize(self) -> usize {
+        self.char_pos.get()
+    }
+
+    pub const fn emacs_byte_pos_usize(self) -> usize {
+        self.emacs_byte_pos.get()
     }
 }
 

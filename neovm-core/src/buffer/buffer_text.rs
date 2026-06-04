@@ -1818,8 +1818,8 @@ impl BufferText {
                     &mut best_below,
                     &mut best_above,
                 );
-                if best_above.char_pos.get().saturating_sub(target.get()) < distance
-                    || target.get().saturating_sub(best_below.char_pos.get()) < distance
+                if best_above.char_pos_usize().saturating_sub(target.get()) < distance
+                    || target.get().saturating_sub(best_below.char_pos_usize()) < distance
                 {
                     break;
                 }
@@ -1828,8 +1828,8 @@ impl BufferText {
             }
         }
 
-        let walked_below = target.get().saturating_sub(best_below.char_pos.get());
-        let walked_above = best_above.char_pos.get().saturating_sub(target.get());
+        let walked_below = target.get().saturating_sub(best_below.char_pos_usize());
+        let walked_above = best_above.char_pos_usize().saturating_sub(target.get());
         let result = if walked_below <= walked_above {
             scan_forward(&storage.backend, best_below, target)
         } else {
@@ -1905,8 +1905,14 @@ impl BufferText {
                     &mut best_below,
                     &mut best_above,
                 );
-                if best_above.emacs_byte_pos.get().saturating_sub(target.get()) < distance
-                    || target.get().saturating_sub(best_below.emacs_byte_pos.get()) < distance
+                if best_above
+                    .emacs_byte_pos_usize()
+                    .saturating_sub(target.get())
+                    < distance
+                    || target
+                        .get()
+                        .saturating_sub(best_below.emacs_byte_pos_usize())
+                        < distance
                 {
                     break;
                 }
@@ -1915,8 +1921,12 @@ impl BufferText {
             }
         }
 
-        let walked_below = target.get().saturating_sub(best_below.emacs_byte_pos.get());
-        let walked_above = best_above.emacs_byte_pos.get().saturating_sub(target.get());
+        let walked_below = target
+            .get()
+            .saturating_sub(best_below.emacs_byte_pos_usize());
+        let walked_above = best_above
+            .emacs_byte_pos_usize()
+            .saturating_sub(target.get());
         let result = if walked_below <= walked_above {
             scan_forward_bytes(&storage.backend, best_below, target)
         } else {
@@ -1993,10 +2003,10 @@ fn consider_char_anchor(
     best_below: &mut TextPositionAnchor,
     best_above: &mut TextPositionAnchor,
 ) {
-    if anchor.char_pos <= target && anchor.char_pos > best_below.char_pos {
+    if anchor.char_pos() <= target && anchor.char_pos() > best_below.char_pos() {
         *best_below = anchor;
     }
-    if anchor.char_pos >= target && anchor.char_pos < best_above.char_pos {
+    if anchor.char_pos() >= target && anchor.char_pos() < best_above.char_pos() {
         *best_above = anchor;
     }
 }
@@ -2008,8 +2018,8 @@ fn scan_forward(
     anchor: TextPositionAnchor,
     target: CharPos0,
 ) -> EmacsBytePos {
-    let mut cp = anchor.char_pos.get();
-    let mut bp = anchor.emacs_byte_pos.get();
+    let mut cp = anchor.char_pos_usize();
+    let mut bp = anchor.emacs_byte_pos_usize();
     let total_bytes = backend.metrics().emacs_bytes();
     while cp < target.get() {
         if !backend.is_multibyte() {
@@ -2036,8 +2046,8 @@ fn scan_backward(
     anchor: TextPositionAnchor,
     target: CharPos0,
 ) -> EmacsBytePos {
-    let mut cp = anchor.char_pos.get();
-    let mut bp = anchor.emacs_byte_pos.get();
+    let mut cp = anchor.char_pos_usize();
+    let mut bp = anchor.emacs_byte_pos_usize();
     while cp > target.get() {
         if !backend.is_multibyte() {
             bp -= 1;
@@ -2061,10 +2071,10 @@ fn consider_byte_anchor(
     best_below: &mut TextPositionAnchor,
     best_above: &mut TextPositionAnchor,
 ) {
-    if anchor.emacs_byte_pos <= target && anchor.emacs_byte_pos > best_below.emacs_byte_pos {
+    if anchor.emacs_byte_pos() <= target && anchor.emacs_byte_pos() > best_below.emacs_byte_pos() {
         *best_below = anchor;
     }
-    if anchor.emacs_byte_pos >= target && anchor.emacs_byte_pos < best_above.emacs_byte_pos {
+    if anchor.emacs_byte_pos() >= target && anchor.emacs_byte_pos() < best_above.emacs_byte_pos() {
         *best_above = anchor;
     }
 }
@@ -2076,8 +2086,8 @@ fn scan_forward_bytes(
     anchor: TextPositionAnchor,
     target: EmacsBytePos,
 ) -> CharPos0 {
-    let mut bp = anchor.emacs_byte_pos.get();
-    let mut cp = anchor.char_pos.get();
+    let mut bp = anchor.emacs_byte_pos_usize();
+    let mut cp = anchor.char_pos_usize();
     let total_bytes = backend.metrics().emacs_bytes();
     while bp < target.get() {
         if !backend.is_multibyte() {
@@ -2104,8 +2114,8 @@ fn scan_backward_bytes(
     anchor: TextPositionAnchor,
     target: EmacsBytePos,
 ) -> CharPos0 {
-    let mut bp = anchor.emacs_byte_pos.get();
-    let mut cp = anchor.char_pos.get();
+    let mut bp = anchor.emacs_byte_pos_usize();
+    let mut cp = anchor.char_pos_usize();
     while bp > target.get() {
         if !backend.is_multibyte() {
             bp -= 1;
