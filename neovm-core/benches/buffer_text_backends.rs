@@ -8,7 +8,8 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use neovm_core::buffer::{BufferText, BufferTextBackendKind};
+use neovm_core::buffer::{Buffer, BufferId, BufferTextBackendKind, CharPos0, EmacsByteRange};
+use neovm_core::emacs_core::value::Value;
 
 const BACKENDS: [BufferTextBackendKind; 3] = [
     BufferTextBackendKind::GapBuffer,
@@ -40,16 +41,20 @@ fn sample_text(lines: usize) -> String {
     out
 }
 
-fn text_with_backend(text: &str, kind: BufferTextBackendKind) -> BufferText {
-    BufferText::try_from_str_with_backend_kind(text, kind).expect("backend should be implemented")
+fn buffer_with_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
+    let mut buffer =
+        Buffer::try_new_with_text_backend_kind(BufferId(1), Value::string("*bench*"), kind)
+            .expect("backend should be implemented");
+    buffer.insert(text);
+    buffer
 }
 
 fn byte_ranges_for_char_windows(
-    text: &BufferText,
+    buffer: &Buffer,
     count: usize,
     window_chars: usize,
 ) -> Vec<(usize, usize)> {
-    let total_chars = text.char_count();
+    let total_chars = buffer.total_chars();
     let max_start = total_chars.saturating_sub(window_chars);
     let mut ranges = Vec::with_capacity(count);
     for index in 0..count {
@@ -60,15 +65,19 @@ fn byte_ranges_for_char_windows(
         };
         let end_char = (start_char + window_chars).min(total_chars);
         ranges.push((
-            text.buf_charpos_to_bytepos(start_char),
-            text.buf_charpos_to_bytepos(end_char),
+            buffer
+                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start_char))
+                .get(),
+            buffer
+                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char))
+                .get(),
         ));
     }
     ranges
 }
 
-fn scattered_char_positions(text: &BufferText, count: usize) -> Vec<usize> {
-    let total_chars = text.char_count();
+fn scattered_char_positions(buffer: &Buffer, count: usize) -> Vec<usize> {
+    let total_chars = buffer.total_chars();
     let mut positions = Vec::with_capacity(count);
     for index in 0..count {
         positions.push(if total_chars == 0 {
@@ -86,7 +95,7 @@ fn bench_construct_large(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(input.len() as u64));
     for kind in BACKENDS {
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
-            b.iter(|| black_box(text_with_backend(black_box(input.as_str()), kind)));
+            b.iter(|| black_box(buffer_with_backend(black_box(input.as_str()), kind)));
         });
     }
     group.finish();
@@ -102,19 +111,25 @@ fn bench_scattered_edit_churn(c: &mut Criterion) {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
                 for _ in 0..iters {
-                    let mut text = text_with_backend(&input, kind);
+                    let mut buffer = buffer_with_backend(&input, kind);
                     let start = Instant::now();
                     for edit in 0..EDITS_PER_ITER {
-                        let chars = text.char_count();
+                        let chars = buffer.total_chars();
                         let char_pos = (edit * 9_973) % (chars + 1);
-                        let byte_pos = text.buf_charpos_to_bytepos(char_pos);
+                        let byte_pos = buffer
+                            .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+                            .get();
                         let inserted = inserts[edit % inserts.len()];
-                        text.insert_str(byte_pos, inserted);
-                        let end_pos =
-                            text.buf_charpos_to_bytepos(char_pos + inserted.chars().count());
-                        text.delete_range(byte_pos, end_pos);
+                        buffer.goto_byte(byte_pos);
+                        buffer.insert(inserted);
+                        let end_pos = buffer
+                            .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                                char_pos + inserted.chars().count(),
+                            ))
+                            .get();
+                        buffer.delete_region(byte_pos, end_pos);
                     }
-                    black_box(text.len());
+                    black_box(buffer.total_bytes());
                     total += start.elapsed();
                 }
                 total
@@ -129,8 +144,8 @@ fn bench_copy_ranges(c: &mut Criterion) {
     let mut group = c.benchmark_group("buffer_text_backend/copy_ranges");
     group.throughput(Throughput::Elements(COPY_RANGES_PER_ITER as u64));
     for kind in BACKENDS {
-        let text = text_with_backend(&input, kind);
-        let ranges = byte_ranges_for_char_windows(&text, COPY_RANGES_PER_ITER, 96);
+        let buffer = buffer_with_backend(&input, kind);
+        let ranges = byte_ranges_for_char_windows(&buffer, COPY_RANGES_PER_ITER, 96);
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
@@ -139,7 +154,10 @@ fn bench_copy_ranges(c: &mut Criterion) {
                     let start = Instant::now();
                     for &(start_byte, end_byte) in &ranges {
                         out.clear();
-                        text.copy_bytes_to(start_byte, end_byte, &mut out);
+                        buffer.copy_emacs_byte_range_to(
+                            EmacsByteRange::from_usize(start_byte, end_byte),
+                            &mut out,
+                        );
                         black_box(out.as_slice());
                     }
                     total += start.elapsed();
@@ -156,17 +174,19 @@ fn bench_char_to_byte(c: &mut Criterion) {
     let mut group = c.benchmark_group("buffer_text_backend/char_to_byte");
     group.throughput(Throughput::Elements(CONVERSIONS_PER_ITER as u64));
     for kind in BACKENDS {
-        let text = text_with_backend(&input, kind);
-        let positions = scattered_char_positions(&text, CONVERSIONS_PER_ITER);
+        let buffer = buffer_with_backend(&input, kind);
+        let positions = scattered_char_positions(&buffer, CONVERSIONS_PER_ITER);
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
                 for _ in 0..iters {
-                    let text = text_with_backend(&input, kind);
+                    let buffer = buffer_with_backend(&input, kind);
                     let start = Instant::now();
                     let mut checksum = 0usize;
                     for &position in &positions {
-                        checksum ^= text.buf_charpos_to_bytepos(position);
+                        checksum ^= buffer
+                            .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(position))
+                            .get();
                     }
                     black_box(checksum);
                     total += start.elapsed();

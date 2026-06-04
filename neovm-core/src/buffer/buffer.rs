@@ -1750,6 +1750,15 @@ impl Buffer {
         Self::new_with_text_backend_kind(id, name, ImplementedBufferTextBackendKind::GapBuffer)
     }
 
+    pub fn try_new_with_text_backend_kind(
+        id: BufferId,
+        name: Value,
+        text_backend_kind: BufferTextBackendKind,
+    ) -> Result<Self, BufferTextBackendKind> {
+        let implemented_kind = text_backend_kind.implemented().ok_or(text_backend_kind)?;
+        Ok(Self::new_with_text_backend_kind(id, name, implemented_kind))
+    }
+
     pub(crate) fn new_with_text_backend_kind(
         id: BufferId,
         name: Value,

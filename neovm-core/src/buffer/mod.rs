@@ -1,5 +1,5 @@
 pub mod buffer;
-pub mod buffer_text;
+pub(crate) mod buffer_text;
 mod edit_transaction;
 pub mod gap_buffer;
 pub mod overlay;
@@ -13,7 +13,7 @@ pub use buffer::{
     Buffer, BufferId, BufferManager, BufferTextSnapshot, InsertionType, LabeledRestriction,
     LabeledRestrictionLabel, SavedRestrictionKind, SavedRestrictionState,
 };
-pub use buffer_text::BufferText;
+pub(crate) use buffer_text::BufferText;
 pub use overlay::{Overlay, OverlayList};
 pub use position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, DisplayColumn,
