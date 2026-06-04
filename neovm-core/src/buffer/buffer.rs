@@ -1570,7 +1570,7 @@ pub struct Buffer {
     /// Base buffer when this is an indirect buffer.
     pub base_buffer: Option<BufferId>,
     /// The underlying text storage.
-    pub text: BufferText,
+    pub(crate) text: BufferText,
     /// Point — the current cursor character position.
     pub pt: usize,
     /// Point — the current cursor byte position.
