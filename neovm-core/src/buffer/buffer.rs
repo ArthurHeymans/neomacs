@@ -1599,10 +1599,10 @@ pub struct Buffer {
     /// Unique identifier.
     pub(crate) id: BufferId,
     /// Buffer name (e.g. `"*scratch*"`). Mirrors GNU `struct buffer.name_`.
-    pub name: Value,
+    pub(crate) name: Value,
     /// Buffer name before the last rename, or before death after kill.
     /// Mirrors GNU `struct buffer.last_name_` and `BVAR (buf, last_name)`.
-    pub last_name: Value,
+    pub(crate) last_name: Value,
     /// Base buffer when this is an indirect buffer.
     pub base_buffer: Option<BufferId>,
     /// The underlying text storage.
