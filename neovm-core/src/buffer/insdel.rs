@@ -96,6 +96,81 @@ fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InsertMarkerAdjustment {
+    ByInsertionType,
+    StrictAfter,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct InsertSideEffectPolicy {
+    update_state_fields: bool,
+    shift_begv: bool,
+    advance_point_at_insert: bool,
+    adjust_shared_markers: bool,
+    adjust_shared_text_props: bool,
+    overlay_before_markers: bool,
+    marker_adjustment: InsertMarkerAdjustment,
+}
+
+impl InsertSideEffectPolicy {
+    fn current_buffer(before_markers: bool, marker_adjustment: InsertMarkerAdjustment) -> Self {
+        Self {
+            update_state_fields: true,
+            shift_begv: false,
+            advance_point_at_insert: true,
+            adjust_shared_markers: true,
+            adjust_shared_text_props: true,
+            overlay_before_markers: before_markers,
+            marker_adjustment,
+        }
+    }
+
+    fn shared_buffer(
+        update_state_fields: bool,
+        overlay_before_markers: bool,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> Self {
+        Self {
+            update_state_fields,
+            shift_begv: true,
+            advance_point_at_insert: false,
+            adjust_shared_markers: false,
+            adjust_shared_text_props: false,
+            overlay_before_markers,
+            marker_adjustment,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DeleteSideEffectPolicy {
+    update_state_fields: bool,
+    shift_begv: bool,
+    adjust_shared_markers: bool,
+    adjust_shared_text_props: bool,
+}
+
+impl DeleteSideEffectPolicy {
+    fn current_buffer() -> Self {
+        Self {
+            update_state_fields: true,
+            shift_begv: false,
+            adjust_shared_markers: true,
+            adjust_shared_text_props: true,
+        }
+    }
+
+    fn shared_buffer(update_state_fields: bool) -> Self {
+        Self {
+            update_state_fields,
+            shift_begv: true,
+            adjust_shared_markers: false,
+            adjust_shared_text_props: false,
+        }
+    }
+}
+
 impl Buffer {
     fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
         let mut bytes = Vec::new();
@@ -110,21 +185,25 @@ impl Buffer {
     }
 
     fn insert_bytes_internal(&mut self, bytes: &[u8], char_len: usize, before_markers: bool) {
-        self.insert_bytes_internal_full(bytes, char_len, before_markers, false);
+        self.insert_bytes_internal_full(
+            bytes,
+            char_len,
+            before_markers,
+            InsertMarkerAdjustment::ByInsertionType,
+        );
     }
 
-    /// Same as `insert_bytes_internal` but, when `strict_after_markers` is
-    /// true, ignores `insertion_type` for markers exactly at the insertion
-    /// site. Used by the GNU-equivalent replace path so that markers
-    /// collapsed to the replacement start (by the prior delete) do not get
-    /// pushed past the inserted text — see GNU `adjust_markers_for_replace`
+    /// Same as `insert_bytes_internal`, but with explicit marker adjustment
+    /// policy. The replacement path uses [`InsertMarkerAdjustment::StrictAfter`]
+    /// so markers collapsed to the replacement start are not pushed past the
+    /// inserted text, matching GNU `adjust_markers_for_replace`
     /// (insdel.c:341).
     fn insert_bytes_internal_full(
         &mut self,
         bytes: &[u8],
         char_len: usize,
         before_markers: bool,
-        strict_after_markers: bool,
+        marker_adjustment: InsertMarkerAdjustment,
     ) {
         let insert_pos = self.pt_byte;
         let insert_char_pos = self.pt;
@@ -152,13 +231,7 @@ impl Buffer {
             .insert_measured_emacs_bytes(insertion.byte_pos(), bytes, insertion.extent());
         self.apply_byte_insert_side_effects(
             insertion,
-            true,
-            false,
-            true,
-            true,
-            true,
-            before_markers,
-            strict_after_markers,
+            InsertSideEffectPolicy::current_buffer(before_markers, marker_adjustment),
         );
         if before_markers {
             self.text
@@ -169,13 +242,7 @@ impl Buffer {
     fn apply_byte_insert_side_effects(
         &mut self,
         insertion: TextInsertion,
-        update_state_fields: bool,
-        shift_begv: bool,
-        advance_point_at_insert: bool,
-        adjust_shared_markers: bool,
-        adjust_shared_text_props: bool,
-        overlay_before_markers: bool,
-        strict_after_markers: bool,
+        policy: InsertSideEffectPolicy,
     ) {
         let insert_pos = insertion.byte_pos_usize();
         let insert_char_pos = insertion.char_pos_usize();
@@ -185,13 +252,14 @@ impl Buffer {
             return;
         }
 
-        if update_state_fields {
-            if self.pt_byte > insert_pos || (advance_point_at_insert && self.pt_byte == insert_pos)
+        if policy.update_state_fields {
+            if self.pt_byte > insert_pos
+                || (policy.advance_point_at_insert && self.pt_byte == insert_pos)
             {
                 self.pt_byte += byte_len;
                 self.pt += char_len;
             }
-            if shift_begv && self.begv_byte > insert_pos {
+            if policy.shift_begv && self.begv_byte > insert_pos {
                 self.begv_byte += byte_len;
                 self.begv += char_len;
             }
@@ -200,8 +268,8 @@ impl Buffer {
                 self.zv += char_len;
             }
         }
-        if adjust_shared_markers {
-            if strict_after_markers {
+        if policy.adjust_shared_markers {
+            if policy.marker_adjustment == InsertMarkerAdjustment::StrictAfter {
                 self.text.adjust_markers_for_insert_extent_strict_after(
                     insertion.byte_pos(),
                     insertion.extent(),
@@ -216,22 +284,19 @@ impl Buffer {
             insert_char_pos,
             "insert-side-effect char position drifted from the source edit site"
         );
-        if adjust_shared_text_props {
+        if policy.adjust_shared_text_props {
             self.text
                 .adjust_text_props_for_insert_at(insertion.char_pos(), insertion.extent().chars());
         }
         self.overlays
-            .adjust_for_insert(insert_pos, byte_len, overlay_before_markers);
+            .adjust_for_insert(insert_pos, byte_len, policy.overlay_before_markers);
         self.record_char_modification(char_len);
     }
 
     fn apply_byte_delete_side_effects(
         &mut self,
         range: TextEditRange,
-        update_state_fields: bool,
-        shift_begv: bool,
-        adjust_shared_markers: bool,
-        adjust_shared_text_props: bool,
+        policy: DeleteSideEffectPolicy,
     ) {
         if range.is_empty() {
             return;
@@ -242,7 +307,7 @@ impl Buffer {
         let byte_len = range.byte_len().get();
         let char_len = range.char_len().get();
 
-        if update_state_fields {
+        if policy.update_state_fields {
             if self.pt_byte >= end {
                 self.pt_byte -= byte_len;
                 self.pt -= char_len;
@@ -251,7 +316,7 @@ impl Buffer {
                 self.pt = start_char;
             }
 
-            if shift_begv {
+            if policy.shift_begv {
                 if self.begv_byte >= end {
                     self.begv_byte -= byte_len;
                     self.begv -= char_len;
@@ -270,11 +335,11 @@ impl Buffer {
             }
         }
 
-        if adjust_shared_markers {
+        if policy.adjust_shared_markers {
             self.text.adjust_markers_for_delete_range(range);
         }
 
-        if adjust_shared_text_props {
+        if policy.adjust_shared_text_props {
             self.text
                 .adjust_text_props_for_delete_range(range.char_range());
         }
@@ -393,7 +458,12 @@ impl Buffer {
     pub fn insert_lisp_string_for_replace(&mut self, text: &LispString) {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        self.insert_bytes_internal_full(text.as_bytes(), text.schars(), false, true);
+        self.insert_bytes_internal_full(
+            text.as_bytes(),
+            text.schars(),
+            false,
+            InsertMarkerAdjustment::StrictAfter,
+        );
         if text.has_intervals() {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
@@ -533,7 +603,7 @@ impl Buffer {
         let range =
             TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         self.text.delete_measured_range(range);
-        self.apply_byte_delete_side_effects(range, true, false, true, true);
+        self.apply_byte_delete_side_effects(range, DeleteSideEffectPolicy::current_buffer());
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
@@ -836,7 +906,7 @@ impl BufferManager {
             insertion,
             update_state_fields,
             overlay_before_markers,
-            false,
+            InsertMarkerAdjustment::ByInsertionType,
         );
     }
 
@@ -845,17 +915,15 @@ impl BufferManager {
         insertion: TextInsertion,
         update_state_fields: bool,
         overlay_before_markers: bool,
-        strict_after_markers: bool,
+        marker_adjustment: InsertMarkerAdjustment,
     ) {
         buf.apply_byte_insert_side_effects(
             insertion,
-            update_state_fields,
-            true,
-            false,
-            false,
-            false,
-            overlay_before_markers,
-            strict_after_markers,
+            InsertSideEffectPolicy::shared_buffer(
+                update_state_fields,
+                overlay_before_markers,
+                marker_adjustment,
+            ),
         );
     }
 
@@ -864,7 +932,10 @@ impl BufferManager {
         range: TextEditRange,
         update_state_fields: bool,
     ) {
-        buf.apply_byte_delete_side_effects(range, update_state_fields, true, false, false);
+        buf.apply_byte_delete_side_effects(
+            range,
+            DeleteSideEffectPolicy::shared_buffer(update_state_fields),
+        );
     }
 
     fn adjust_shared_replace_metadata(
@@ -967,7 +1038,7 @@ impl BufferManager {
         id: BufferId,
         text: &LispString,
     ) -> Option<()> {
-        self.insert_lisp_string_into_buffer_full(id, text, false)
+        self.insert_lisp_string_into_buffer_full(id, text, InsertMarkerAdjustment::ByInsertionType)
     }
 
     /// GNU-equivalent replace path: like `insert_lisp_string_into_buffer`
@@ -980,14 +1051,14 @@ impl BufferManager {
         id: BufferId,
         text: &LispString,
     ) -> Option<()> {
-        self.insert_lisp_string_into_buffer_full(id, text, true)
+        self.insert_lisp_string_into_buffer_full(id, text, InsertMarkerAdjustment::StrictAfter)
     }
 
     fn insert_lisp_string_into_buffer_full(
         &mut self,
         id: BufferId,
         text: &LispString,
-        strict_after_markers: bool,
+        marker_adjustment: InsertMarkerAdjustment,
     ) -> Option<()> {
         if text.is_empty() {
             return Some(());
@@ -1002,7 +1073,7 @@ impl BufferManager {
         let insert_char_pos = source.pt;
         let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
-        if strict_after_markers {
+        if marker_adjustment == InsertMarkerAdjustment::StrictAfter {
             self.buffers
                 .get_mut(&id)?
                 .insert_lisp_string_for_replace(text);
@@ -1022,7 +1093,7 @@ impl BufferManager {
                 insertion,
                 update_state_fields,
                 false,
-                strict_after_markers,
+                marker_adjustment,
             );
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
