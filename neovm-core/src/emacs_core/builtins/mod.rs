@@ -535,6 +535,7 @@ pub(super) use super::window_cmds;
 
 // --- Submodules ---
 mod arithmetic;
+mod buffer_text_backend;
 pub(crate) mod collections;
 mod cons_list;
 mod misc_pure;
@@ -542,6 +543,7 @@ mod strings;
 mod types;
 
 pub(crate) use arithmetic::*;
+pub(crate) use buffer_text_backend::*;
 pub(crate) use collections::*;
 pub use cons_list::lambda_params_to_value;
 pub use cons_list::lambda_to_closure_vector;
