@@ -4,6 +4,7 @@ mod emacs_bytes;
 mod kind;
 mod layout;
 mod metrics;
+mod snapshot;
 
 pub(in crate::buffer) use edit::TextExtentDelta;
 pub use edit::{
@@ -19,6 +20,7 @@ pub use layout::GapCompatState;
 #[cfg(test)]
 pub use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
+pub(in crate::buffer) use snapshot::BufferTextBytesSnapshot;
 
 #[inline]
 pub(crate) fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> usize {

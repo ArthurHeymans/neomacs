@@ -367,9 +367,9 @@ fn backend_dump_round_trips_across_implemented_kinds() {
         replace_char_range(&mut gap, 1, 3, "Ω");
         assert_backend_matches_gap(source_kind, &source, &gap);
 
-        let dump = source.dump_text();
+        let snapshot = source.snapshot();
         for target_kind in ImplementedBufferTextBackendKind::variants() {
-            let loaded = TextBackend::from_dump(dump.clone(), source.is_multibyte(), target_kind);
+            let loaded = TextBackend::from_snapshot(snapshot.clone(), target_kind);
             assert_backend_matches_gap(target_kind, &loaded, &gap);
         }
     }

@@ -12,7 +12,8 @@ use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositi
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
-    GapCompatState, TextEditRange, TextExtent, TextMetrics, TextReplacement,
+    BufferTextBytesSnapshot, GapCompatState, TextEditRange, TextExtent, TextMetrics,
+    TextReplacement,
 };
 use contract::PhysicalTextBackend;
 use gap::GapTextBackend;
@@ -98,6 +99,14 @@ impl TextBackend {
         multibyte: bool,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
+        Self::from_snapshot(BufferTextBytesSnapshot::new(text, multibyte), kind)
+    }
+
+    pub(in crate::buffer) fn from_snapshot(
+        snapshot: BufferTextBytesSnapshot,
+        kind: ImplementedBufferTextBackendKind,
+    ) -> Self {
+        let (text, multibyte) = snapshot.into_parts();
         match kind {
             ImplementedBufferTextBackendKind::GapBuffer => {
                 Self::Gap(GapTextBackend::from_dump(text, multibyte))
@@ -117,6 +126,19 @@ impl TextBackend {
         kind: ImplementedBufferTextBackendKind,
         gap_state: GapCompatState,
     ) -> Self {
+        Self::from_snapshot_with_gap_compat_state(
+            BufferTextBytesSnapshot::new(text, multibyte),
+            kind,
+            gap_state,
+        )
+    }
+
+    pub(in crate::buffer) fn from_snapshot_with_gap_compat_state(
+        snapshot: BufferTextBytesSnapshot,
+        kind: ImplementedBufferTextBackendKind,
+        gap_state: GapCompatState,
+    ) -> Self {
+        let (text, multibyte) = snapshot.into_parts();
         match kind {
             ImplementedBufferTextBackendKind::GapBuffer => Self::Gap(
                 GapTextBackend::from_dump_with_gap_compat_state(text, multibyte, gap_state),
@@ -253,6 +275,10 @@ impl TextBackend {
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {
         dispatch_backend_ref!(self, storage => PhysicalTextBackend::dump_text(storage))
+    }
+
+    pub(in crate::buffer) fn snapshot(&self) -> BufferTextBytesSnapshot {
+        BufferTextBytesSnapshot::new(self.dump_text(), self.is_multibyte())
     }
 }
 

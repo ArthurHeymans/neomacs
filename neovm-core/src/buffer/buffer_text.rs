@@ -21,8 +21,9 @@ use super::position::{
 };
 use super::text::backend::TextBackend;
 use super::text::{
-    BufferTextBackendKind, GapCompatState, ImplementedBufferTextBackendKind, TextEditRange,
-    TextExtent, TextInsertion, TextMetrics, TextReplacement,
+    BufferTextBackendKind, BufferTextBytesSnapshot, GapCompatState,
+    ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics,
+    TextReplacement,
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
@@ -461,10 +462,9 @@ impl BufferText {
             return;
         }
         let gap_compat = storage.gap_compat_state();
-        let text = storage.backend.dump_text();
-        let multibyte = storage.backend.is_multibyte();
+        let snapshot = storage.backend.snapshot();
         storage.backend =
-            TextBackend::from_dump_with_gap_compat_state(text, multibyte, kind, gap_compat);
+            TextBackend::from_snapshot_with_gap_compat_state(snapshot, kind, gap_compat);
         storage.virtual_gap = gap_compat;
         Self::finish_backend_shape_change(&mut storage);
     }
@@ -772,10 +772,17 @@ impl BufferText {
         self.storage.borrow().backend.dump_text()
     }
 
+    pub(in crate::buffer) fn dump_snapshot(&self) -> BufferTextBytesSnapshot {
+        self.storage.borrow().backend.snapshot()
+    }
+
     pub(crate) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::from_backend(TextBackend::from_dump(
-            text,
-            multibyte,
+        Self::from_snapshot(BufferTextBytesSnapshot::new(text, multibyte))
+    }
+
+    pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
+        Self::from_backend(TextBackend::from_snapshot(
+            snapshot,
             ImplementedBufferTextBackendKind::GapBuffer,
         ))
     }
@@ -785,7 +792,14 @@ impl BufferText {
         multibyte: bool,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        Self::from_backend(TextBackend::from_dump(text, multibyte, kind))
+        Self::from_snapshot_with_backend_kind(BufferTextBytesSnapshot::new(text, multibyte), kind)
+    }
+
+    pub(in crate::buffer) fn from_snapshot_with_backend_kind(
+        snapshot: BufferTextBytesSnapshot,
+        kind: ImplementedBufferTextBackendKind,
+    ) -> Self {
+        Self::from_backend(TextBackend::from_snapshot(snapshot, kind))
     }
 
     pub fn set_modification_state(
