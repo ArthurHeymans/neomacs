@@ -12,7 +12,7 @@
 //! T2. These regression tests target stable public entry points
 //! (builtins + buffer-manager helpers) that survive the refactor.
 
-use crate::buffer::{BufferId, BufferText};
+use crate::buffer::BufferId;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::value::Value;
 use crate::tagged::value::ValueKind;
@@ -22,7 +22,7 @@ fn ctx_with_buffer(text: &str) -> (Context, BufferId) {
     let id = ctx.buffer_manager_mut().create_buffer("t");
     {
         let buf = ctx.buffer_manager_mut().get_mut(id).expect("buffer");
-        buf.text = BufferText::from_str(text);
+        buf.insert(text);
         buf.widen();
         buf.goto_byte(0);
     }

@@ -1728,7 +1728,7 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(first, Some("alpha=1".len()));
     let first_md = md.as_ref().expect("match data for first search");
     let (s1, e1) = first_md.groups[1].unwrap();
-    assert_eq!(buf.text.text_range(s1, e1), "alpha");
+    assert_eq!(buf.text_range(s1, e1), "alpha");
 
     let second = re_search_forward(
         &mut buf,
@@ -1742,9 +1742,9 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(second, Some("alpha=1\nbeta=2".len()));
     let second_md = md.as_ref().expect("match data for second search");
     let (s1, e1) = second_md.groups[1].unwrap();
-    assert_eq!(buf.text.text_range(s1, e1), "beta");
+    assert_eq!(buf.text_range(s1, e1), "beta");
     let (s2, e2) = second_md.groups[2].unwrap();
-    assert_eq!(buf.text.text_range(s2, e2), "2");
+    assert_eq!(buf.text_range(s2, e2), "2");
 }
 
 #[test]
@@ -1815,7 +1815,7 @@ fn re_search_backward_log_line_loop_progresses() {
     let mut buf = make_test_buffer(
         "[09:01:00] INFO: Server started\n[09:02:15] INFO: Connection from 10.0.0.1\n[09:03:30] WARN: High memory usage detected",
     );
-    buf.goto_byte(buf.text.len());
+    buf.goto_byte(buf.total_bytes());
     let mut md = None;
     let pattern = "\\[\\([0-9:]+\\)\\] \\(INFO\\|WARN\\|ERROR\\): \\(.*\\)$";
     let mut positions = Vec::new();
@@ -1959,7 +1959,7 @@ fn replace_match_literal() {
     let _ = re_search_forward(&mut buf, "world", None, false, false, &mut md);
     let result = replace_match_buffer(&mut buf, "rust", false, true, 0, &md);
     assert!(result.is_ok());
-    let content = buf.text.text_range(0, buf.text.len());
+    let content = buf.text_range(0, buf.total_bytes());
     assert_eq!(content, "hello rust");
 }
 
@@ -1973,7 +1973,7 @@ fn replace_match_with_backref() {
     let _ = re_search_forward(&mut buf, "\\(hello\\)", None, false, false, &mut md);
     let result = replace_match_buffer(&mut buf, "\\1 there", false, false, 0, &md);
     assert!(result.is_ok());
-    let content = buf.text.text_range(0, buf.text.len());
+    let content = buf.text_range(0, buf.total_bytes());
     assert_eq!(content, "hello there world");
 }
 
@@ -2132,15 +2132,15 @@ fn search_forward_then_match_string() {
 
     // match-string 0 = "quick brown"
     let (s0, e0) = md.groups[0].unwrap();
-    assert_eq!(buf.text.text_range(s0, e0), "quick brown");
+    assert_eq!(buf.text_range(s0, e0), "quick brown");
 
     // match-string 1 = "quick"
     let (s1, e1) = md.groups[1].unwrap();
-    assert_eq!(buf.text.text_range(s1, e1), "quick");
+    assert_eq!(buf.text_range(s1, e1), "quick");
 
     // match-string 2 = "brown"
     let (s2, e2) = md.groups[2].unwrap();
-    assert_eq!(buf.text.text_range(s2, e2), "brown");
+    assert_eq!(buf.text_range(s2, e2), "brown");
 }
 
 #[test]

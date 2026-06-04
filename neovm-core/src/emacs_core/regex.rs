@@ -21,7 +21,7 @@
 //!   neomacs does not have yet; documented inline.
 //! - **#17** (gap-aware `re_match_2`) — perf, not correctness.
 //!   Each search currently materializes the buffer text via
-//!   `text_range(0, buf.text.len())` instead of walking across
+//!   `Buffer::text_range(0, Buffer::total_bytes())` instead of walking across
 //!   the gap boundary. GNU `regex-emacs.c:re_match_2` would save
 //!   a buffer-sized allocation per search. Audit Phase D Task 4.1.
 //! - **#18** (boyer_moore literal search) — perf, not correctness.

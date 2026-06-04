@@ -3580,14 +3580,12 @@ fn insert_file_contents_preserves_decoded_charset_text_property() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "一\n");
     assert_eq!(
-        buf.text
-            .text_props_get_property(0, Value::symbol("charset"))
+        buf.text_props_get_property(0, Value::symbol("charset"))
             .and_then(|value| value.as_symbol_name()),
         Some("chinese-gb2312")
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property("一".len(), Value::symbol("charset"))
+        buf.text_props_get_property("一".len(), Value::symbol("charset"))
             .and_then(|value| value.as_symbol_name()),
         Some("chinese-gb2312")
     );

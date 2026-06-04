@@ -1,20 +1,19 @@
 use super::*;
+use crate::buffer::CharPos0;
 use crate::buffer::buffer::{Buffer, BufferId};
-use crate::buffer::{BufferText, CharPos0};
 use crate::emacs_core::value::eq_value;
 
 /// Helper: create a buffer with given text, point at start, full accessible range.
 fn buf_with_text(text: &str) -> Buffer {
     let mut buf = Buffer::new(BufferId(99), Value::string("test-syntax"));
-    buf.text = BufferText::from_str(text);
+    buf.insert(text);
     buf.widen();
     buf.goto_byte(0);
     buf
 }
 
 fn char_pos_to_byte(buf: &Buffer, char_pos: usize) -> usize {
-    buf.text
-        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
         .get()
 }
 

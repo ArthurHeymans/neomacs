@@ -2211,6 +2211,10 @@ impl Buffer {
         )
     }
 
+    pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
+        self.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(pos), name)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -2231,6 +2235,10 @@ impl Buffer {
             ))
     }
 
+    pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
+        self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
     pub fn text_props_put_property_in_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
@@ -2239,6 +2247,20 @@ impl Buffer {
     ) -> bool {
         self.text.text_props_put_property_in_emacs_byte_range(
             self.clamped_emacs_byte_range(range),
+            name,
+            value,
+        )
+    }
+
+    pub fn text_props_put_property(
+        &mut self,
+        start: usize,
+        end: usize,
+        name: Value,
+        value: Value,
+    ) -> bool {
+        self.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
             name,
             value,
         )
@@ -2410,6 +2432,10 @@ impl Buffer {
             &bytes,
             self.get_multibyte(),
         )
+    }
+
+    pub fn text_range(&self, start: usize, end: usize) -> String {
+        self.buffer_substring_range(EmacsByteRange::from_usize(start, end))
     }
 
     /// Return the entire accessible portion of the buffer as a `String`.
@@ -2597,6 +2623,11 @@ impl Buffer {
 
     pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
         self.text.marker_chain_lookup(marker_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn marker_chain_len(&self) -> usize {
+        self.text.chain_walk_collect().len()
     }
 
     pub fn marker_value_by_id(&self, marker_id: u64) -> Option<Value> {

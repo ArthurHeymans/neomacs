@@ -9495,7 +9495,7 @@ fn save_excursion_unlinks_point_markers_after_unwind() {
     assert_eq!(format_eval_result(&result), "OK nil");
 
     let buffer = ev.buffers.get(buffer_id).expect("test buffer should exist");
-    assert_eq!(buffer.text.chain_walk_collect().len(), 0);
+    assert_eq!(buffer.marker_chain_len(), 0);
 }
 
 #[test]

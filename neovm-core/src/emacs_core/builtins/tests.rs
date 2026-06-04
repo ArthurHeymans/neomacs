@@ -2462,11 +2462,11 @@ fn insert_copies_string_text_properties_into_buffer() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "xy");
     assert_eq!(
-        buf.text.text_props_get_property(0, Value::symbol("face")),
+        buf.text_props_get_property(0, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        buf.text.text_props_get_property(1, Value::symbol("face")),
+        buf.text_props_get_property(1, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -2491,12 +2491,11 @@ fn insert_before_markers_copies_string_text_properties_into_buffer() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "xy");
     assert_eq!(
-        buf.text.text_props_get_property(0, Value::symbol("face")),
+        buf.text_props_get_property(0, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property(1, Value::symbol("help-echo")),
+        buf.text_props_get_property(1, Value::symbol("help-echo")),
         Some(Value::string("tip"))
     );
 }
@@ -2508,8 +2507,7 @@ fn insert_and_inherit_copies_previous_text_properties() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("ab");
-        buf.text
-            .text_props_put_property(1, 2, Value::symbol("face"), Value::symbol("bold"));
+        buf.text_props_put_property(1, 2, Value::symbol("face"), Value::symbol("bold"));
     }
 
     assert_eq!(
@@ -2520,7 +2518,7 @@ fn insert_and_inherit_copies_previous_text_properties() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "abX");
     assert_eq!(
-        buf.text.text_props_get_property(2, Value::symbol("face")),
+        buf.text_props_get_property(2, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -2532,8 +2530,7 @@ fn plain_insert_does_not_inherit_spanning_text_properties() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("ab");
-        buf.text
-            .text_props_put_property(0, 2, Value::symbol("foo"), Value::symbol("bar"));
+        buf.text_props_put_property(0, 2, Value::symbol("foo"), Value::symbol("bar"));
         buf.goto_char(1);
     }
 
@@ -2545,15 +2542,12 @@ fn plain_insert_does_not_inherit_spanning_text_properties() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "aXb");
     assert_eq!(
-        buf.text.text_props_get_property(0, Value::symbol("foo")),
+        buf.text_props_get_property(0, Value::symbol("foo")),
         Some(Value::symbol("bar"))
     );
+    assert_eq!(buf.text_props_get_property(1, Value::symbol("foo")), None);
     assert_eq!(
-        buf.text.text_props_get_property(1, Value::symbol("foo")),
-        None
-    );
-    assert_eq!(
-        buf.text.text_props_get_property(2, Value::symbol("foo")),
+        buf.text_props_get_property(2, Value::symbol("foo")),
         Some(Value::symbol("bar"))
     );
 }
@@ -2565,8 +2559,7 @@ fn insert_inherits_left_multibyte_text_property_at_char_boundary() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("é");
-        buf.text
-            .text_props_put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+        buf.text_props_put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
     }
 
     assert_eq!(
@@ -2577,7 +2570,7 @@ fn insert_inherits_left_multibyte_text_property_at_char_boundary() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "éX");
     assert_eq!(
-        buf.text.text_props_get_property(2, Value::symbol("face")),
+        buf.text_props_get_property(2, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -2589,8 +2582,7 @@ fn insert_char_nil_count_defaults_to_one_and_can_inherit_text_properties() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("ab");
-        buf.text
-            .text_props_put_property(1, 2, Value::symbol("face"), Value::symbol("bold"));
+        buf.text_props_put_property(1, 2, Value::symbol("face"), Value::symbol("bold"));
     }
 
     assert_eq!(
@@ -2605,7 +2597,7 @@ fn insert_char_nil_count_defaults_to_one_and_can_inherit_text_properties() {
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "abX");
     assert_eq!(
-        buf.text.text_props_get_property(2, Value::symbol("face")),
+        buf.text_props_get_property(2, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -2643,12 +2635,11 @@ fn insert_and_inherit_copies_string_properties_then_inherits_overlapping_names()
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "aX");
     assert_eq!(
-        buf.text.text_props_get_property(1, Value::symbol("face")),
+        buf.text_props_get_property(1, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property(1, Value::symbol("mouse-face")),
+        buf.text_props_get_property(1, Value::symbol("mouse-face")),
         Some(Value::symbol("highlight"))
     );
 }
@@ -3095,9 +3086,9 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
     {
         let second = eval
             .buffers
-            .get(second_id)
+            .get_mut(second_id)
             .expect("second buffer should exist");
-        second.text.convert_backend_kind(
+        second.convert_text_backend_kind(
             crate::buffer::BufferTextBackendKind::PieceTree
                 .implemented()
                 .expect("piece-tree backend should be implemented"),
@@ -3161,11 +3152,11 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
     assert_eq!(full_buffer_bytes(first), b"uvwxyz");
     assert_eq!(full_buffer_bytes(second), b"abcde");
     assert_eq!(
-        first.text.backend_kind(),
+        first.text_backend_kind(),
         crate::buffer::BufferTextBackendKind::PieceTree
     );
     assert_eq!(
-        second.text.backend_kind(),
+        second.text_backend_kind(),
         crate::buffer::BufferTextBackendKind::GapBuffer
     );
     assert_eq!(first.point_byte(), 5);
@@ -3645,8 +3636,7 @@ fn barf_bury_char_equal_cl_type_and_cancel_semantics() {
     }
 
     if let Some(buf) = eval.buffers.current_buffer_mut() {
-        buf.text
-            .text_props_put_property(1, 2, Value::symbol("inhibit-read-only"), Value::T);
+        buf.text_props_put_property(1, 2, Value::symbol("inhibit-read-only"), Value::T);
     }
     assert_eq!(
         builtin_barf_if_buffer_read_only(&mut eval, vec![Value::fixnum(2)]).unwrap(),
@@ -7837,7 +7827,7 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
         .expect("replace-match should honor restored buffer match positions");
 
     let buffer = eval.buffers.current_buffer().expect("current buffer");
-    assert_eq!(buffer.text.text_range(0, buffer.text.len()), "omega one");
+    assert_eq!(buffer.text_range(0, buffer.total_bytes()), "omega one");
 }
 
 #[test]
@@ -8823,7 +8813,7 @@ fn replace_match_buffer_updates_live_match_data_like_gnu() {
         .expect("replace-match should succeed");
 
     let buffer = eval.buffers.current_buffer().expect("scratch buffer");
-    assert_eq!(buffer.text.text_range(0, buffer.text.len()), "42-foo");
+    assert_eq!(buffer.text_range(0, buffer.total_bytes()), "42-foo");
 
     assert_eq!(
         builtin_match_beginning(&mut eval, vec![Value::fixnum(0)]).expect("match-beginning 0"),
@@ -10283,11 +10273,7 @@ fn gap_position_and_size_use_current_buffer_storage() {
         builtin_gap_size(&mut eval, vec![]).expect("gap-size after insert"),
     ]);
 
-    eval.buffers
-        .get(current)
-        .expect("scratch buffer")
-        .text
-        .try_convert_backend_kind(crate::buffer::BufferTextBackendKind::PieceTree)
+    builtin_neomacs_set_buffer_text_backend(&mut eval, vec![Value::symbol("piece-tree")])
         .expect("piece-tree backend should be implemented");
     eval.buffers
         .insert_into_buffer(current, "d")

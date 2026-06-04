@@ -373,8 +373,8 @@ fn test_primitive_undo_reinserts_string_text_properties() {
 
     let buf = eval.buffers.current_buffer().expect("scratch buffer");
     assert_eq!(buf.buffer_string(), "abc");
-    assert_eq!(buf.text.text_props_get_property(0, face), Some(bold));
-    assert_eq!(buf.text.text_props_get_property(2, face), Some(bold));
+    assert_eq!(buf.text_props_get_property(0, face), Some(bold));
+    assert_eq!(buf.text_props_get_property(2, face), Some(bold));
 }
 
 #[test]
@@ -472,16 +472,16 @@ fn test_undo_restores_property_when_range_start_was_unpropertied() {
     builtin_undo(&mut eval, vec![]).unwrap();
 
     let buffer = eval.buffers.current_buffer().expect("scratch buffer");
-    assert!(buffer.text.text_props_get_properties_ordered(1).is_empty());
+    assert!(buffer.text_props_get_properties_ordered(1).is_empty());
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(2),
+        buffer.text_props_get_properties_ordered(2),
         vec![(face, bold)]
     );
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(3),
+        buffer.text_props_get_properties_ordered(3),
         vec![(face, bold)]
     );
-    assert!(buffer.text.text_props_get_properties_ordered(4).is_empty());
+    assert!(buffer.text_props_get_properties_ordered(4).is_empty());
 }
 
 #[test]
@@ -522,22 +522,22 @@ fn test_set_text_properties_partial_interval_undo_matches_gnu() {
 
     let buffer = eval.buffers.current_buffer().expect("scratch buffer");
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(0),
+        buffer.text_props_get_properties_ordered(0),
         vec![(face, bold)]
     );
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(1),
+        buffer.text_props_get_properties_ordered(1),
         vec![(face, Value::NIL)]
     );
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(2),
+        buffer.text_props_get_properties_ordered(2),
         vec![(face, Value::NIL)]
     );
     assert_eq!(
-        buffer.text.text_props_get_properties_ordered(3),
+        buffer.text_props_get_properties_ordered(3),
         vec![(face, italic)]
     );
-    assert!(buffer.text.text_props_get_properties_ordered(4).is_empty());
+    assert!(buffer.text_props_get_properties_ordered(4).is_empty());
 }
 
 #[test]

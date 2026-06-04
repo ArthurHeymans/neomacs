@@ -215,7 +215,7 @@ fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
                 .buffers
                 .current_buffer_mut()
                 .expect("current buffer");
-            buf.text.insert_str(0, buffer_text);
+            buf.insert(buffer_text);
             buf.goto_byte(0);
         }
         let result = builtin_looking_at(&mut new_ctx, vec![pattern]);
@@ -480,7 +480,7 @@ fn set_match_data_reseat_detaches_buffer_markers() {
     assert_nil(saved.cons_car());
     assert_nil(saved.cons_cdr().cons_car());
     let buffer = eval.buffers.get(buffer_id).expect("test buffer");
-    assert_eq!(buffer.text.chain_walk_collect().len(), 0);
+    assert_eq!(buffer.marker_chain_len(), 0);
 }
 
 #[test]

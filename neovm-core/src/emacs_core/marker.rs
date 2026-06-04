@@ -661,8 +661,8 @@ fn register_marker_in_buffers(
     let existing_mid = marker_id_value(marker);
 
     // Remove old registration from all buffers (this also unchains the
-    // marker on the old buffer's intrusive chain — BufferText::remove_marker
-    // walks the chain and unlinks, clearing LispMarker.buffer/bytepos/charpos).
+    // marker on the old buffer's intrusive chain, clearing
+    // LispMarker.buffer/bytepos/charpos).
     if let Some(mid) = existing_mid {
         buffers.remove_marker(mid);
     }

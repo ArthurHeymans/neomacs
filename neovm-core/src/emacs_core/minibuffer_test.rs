@@ -966,31 +966,24 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
 
     assert_eq!(prompt_end, "Prompt: ".len());
     assert_eq!(
-        buf.text.text_props_get_property(0, Value::symbol("field")),
+        buf.text_props_get_property(0, Value::symbol("field")),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property(0, Value::symbol("front-sticky")),
+        buf.text_props_get_property(0, Value::symbol("front-sticky")),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property(0, Value::symbol("rear-nonsticky")),
+        buf.text_props_get_property(0, Value::symbol("rear-nonsticky")),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text
-            .text_props_get_property(0, Value::symbol("read-only")),
+        buf.text_props_get_property(0, Value::symbol("read-only")),
         Some(Value::T)
     );
+    assert_eq!(buf.text_props_get_property(0, Value::symbol("face")), None);
     assert_eq!(
-        buf.text.text_props_get_property(0, Value::symbol("face")),
-        None
-    );
-    assert_eq!(
-        buf.text
-            .text_props_get_property(prompt_end, Value::symbol("read-only")),
+        buf.text_props_get_property(prompt_end, Value::symbol("read-only")),
         None
     );
 }
