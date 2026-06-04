@@ -300,7 +300,7 @@ impl BufferText {
     }
 
     pub fn len(&self) -> usize {
-        self.storage.borrow().backend.len()
+        self.storage.borrow().metrics.emacs_bytes()
     }
 
     pub fn is_multibyte(&self) -> bool {
@@ -318,7 +318,7 @@ impl BufferText {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.storage.borrow().backend.is_empty()
+        self.storage.borrow().metrics.is_empty()
     }
 
     pub fn char_count(&self) -> usize {
@@ -1605,7 +1605,7 @@ impl BufferText {
         let target = CharPos0::new(target);
 
         if target.get() >= total_chars {
-            return storage.backend.len();
+            return total_bytes;
         }
 
         // Unibyte fast path: char == byte, no scan needed.
@@ -1835,6 +1835,7 @@ fn scan_forward(
 ) -> EmacsBytePos {
     let mut cp = anchor.char_pos.get();
     let mut bp = anchor.emacs_byte_pos.get();
+    let total_bytes = backend.metrics().emacs_bytes();
     while cp < target.get() {
         if !backend.is_multibyte() {
             bp += 1;
@@ -1842,7 +1843,7 @@ fn scan_forward(
             continue;
         }
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (backend.len() - bp).min(tmp.len());
+        let available = (total_bytes - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
             *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
         }
@@ -1902,6 +1903,7 @@ fn scan_forward_bytes(
 ) -> CharPos0 {
     let mut bp = anchor.emacs_byte_pos.get();
     let mut cp = anchor.char_pos.get();
+    let total_bytes = backend.metrics().emacs_bytes();
     while bp < target.get() {
         if !backend.is_multibyte() {
             bp += 1;
@@ -1909,7 +1911,7 @@ fn scan_forward_bytes(
             continue;
         }
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (backend.len() - bp).min(tmp.len());
+        let available = (total_bytes - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
             *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
         }

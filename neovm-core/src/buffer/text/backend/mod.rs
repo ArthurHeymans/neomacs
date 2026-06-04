@@ -134,22 +134,6 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn len(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.len(),
-            Self::PieceTree(piece_tree) => piece_tree.len(),
-            Self::Rope(rope) => rope.len(),
-        }
-    }
-
-    pub(in crate::buffer) fn is_empty(&self) -> bool {
-        match self {
-            Self::Gap(gap) => gap.is_empty(),
-            Self::PieceTree(piece_tree) => piece_tree.is_empty(),
-            Self::Rope(rope) => rope.is_empty(),
-        }
-    }
-
     pub(in crate::buffer) fn is_multibyte(&self) -> bool {
         match self {
             Self::Gap(gap) => gap.is_multibyte(),

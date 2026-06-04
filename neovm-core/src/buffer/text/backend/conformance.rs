@@ -29,8 +29,8 @@ fn assert_backend_matches_gap(
         "{kind:?} metrics diverged"
     );
     assert_eq!(
-        backend.is_empty(),
-        gap.is_empty(),
+        backend.metrics().is_empty(),
+        gap.metrics().is_empty(),
         "{kind:?} emptiness diverged"
     );
     assert_eq!(
@@ -38,7 +38,9 @@ fn assert_backend_matches_gap(
         gap.is_multibyte(),
         "{kind:?} multibyte flag diverged"
     );
-    assert_eq!(backend.len(), gap.len(), "{kind:?} byte length diverged");
+    let backend_len = backend.metrics().emacs_bytes();
+    let gap_len = gap.metrics().emacs_bytes();
+    assert_eq!(backend_len, gap_len, "{kind:?} byte length diverged");
     assert_eq!(
         backend.to_string(),
         gap.to_string(),
@@ -50,14 +52,14 @@ fn assert_backend_matches_gap(
         "{kind:?} dump bytes diverged"
     );
 
-    let full = EmacsByteRange::from_usize(0, backend.len());
+    let full = EmacsByteRange::from_usize(0, backend_len);
     assert_eq!(
         copied_range(backend, full),
         copied_range(gap, full),
         "{kind:?} full byte copy diverged"
     );
 
-    for byte_pos in 0..backend.len() {
+    for byte_pos in 0..backend_len {
         let pos = EmacsBytePos::new(byte_pos);
         assert_eq!(
             backend.byte_at_emacs_byte_pos(pos),
@@ -71,7 +73,7 @@ fn assert_backend_matches_gap(
         );
     }
     assert_eq!(
-        backend.emacs_byte_at_pos(EmacsBytePos::new(backend.len())),
+        backend.emacs_byte_at_pos(EmacsBytePos::new(backend_len)),
         None,
         "{kind:?} end byte lookup should be nil"
     );
@@ -456,15 +458,17 @@ proptest! {
             for (op, a, b, seed) in &ops {
                 match op {
                     0 => {
-                        let byte_pos = a % (backend.len() + 1);
+                        let backend_len = backend.metrics().emacs_bytes();
+                        let byte_pos = a % (backend_len + 1);
                         let bytes = sample_unibyte_insert(*seed);
                         insert_bytes(&mut backend, byte_pos, &bytes, bytes.len());
                         insert_bytes(&mut gap, byte_pos, &bytes, bytes.len());
                     }
                     1 => {
-                        if !backend.is_empty() {
-                            let byte_a = a % (backend.len() + 1);
-                            let byte_b = b % (backend.len() + 1);
+                        if !backend.metrics().is_empty() {
+                            let backend_len = backend.metrics().emacs_bytes();
+                            let byte_a = a % (backend_len + 1);
+                            let byte_b = b % (backend_len + 1);
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
                             delete_byte_range(&mut backend, start, end);
@@ -472,18 +476,20 @@ proptest! {
                         }
                     }
                     2 => {
-                        if !backend.is_empty() {
-                            let start = a % backend.len();
-                            let end = (start + 1 + (b % 4)).min(backend.len());
+                        if !backend.metrics().is_empty() {
+                            let backend_len = backend.metrics().emacs_bytes();
+                            let start = a % backend_len;
+                            let end = (start + 1 + (b % 4)).min(backend_len);
                             let replacement = vec![*seed; end - start];
                             replace_same_len(&mut backend, start, end, &replacement);
                             replace_same_len(&mut gap, start, end, &replacement);
                         }
                     }
                     _ => {
-                        if !backend.is_empty() {
-                            let byte_a = a % (backend.len() + 1);
-                            let byte_b = b % (backend.len() + 1);
+                        if !backend.metrics().is_empty() {
+                            let backend_len = backend.metrics().emacs_bytes();
+                            let byte_a = a % (backend_len + 1);
+                            let byte_b = b % (backend_len + 1);
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
                             let bytes = sample_unibyte_insert(*seed);
