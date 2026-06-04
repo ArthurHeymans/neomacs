@@ -13,7 +13,10 @@ use crate::buffer::edit_transaction::{
     transpose_position,
 };
 use crate::buffer::undo;
-use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion, TextReplacement};
+use crate::buffer::{
+    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
+    TextReplacement,
+};
 use crate::heap_types::LispString;
 
 #[derive(Clone, Debug)]
@@ -66,16 +69,17 @@ impl Buffer {
 
     fn insertion_at_point(&self, extent: TextExtent) -> TextInsertion {
         TextInsertion::new(
-            crate::buffer::EmacsBytePos::new(self.pt_byte),
-            crate::buffer::CharPos0::new(self.pt),
+            EmacsBytePos::new(self.pt_byte),
+            CharPos0::new(self.pt),
             extent,
         )
     }
 
     fn edit_range_at_byte(&self, byte_pos: usize) -> TextEditRange {
-        let char_pos = char_pos_for_emacs_byte(&self.text, byte_pos);
+        let byte_pos_typed = EmacsBytePos::new(byte_pos);
+        let char_pos = char_pos_for_emacs_byte(&self.text, byte_pos_typed);
         TextEditRange::new(
-            EmacsByteRange::from_usize(byte_pos, byte_pos),
+            EmacsByteRange::new(byte_pos_typed, byte_pos_typed),
             char_pos,
             char_pos,
         )
@@ -85,8 +89,8 @@ impl Buffer {
         if start >= end {
             return self.edit_range_at_byte(start);
         }
-        let start_char = char_pos_for_emacs_byte(&self.text, start);
-        let end_char = char_pos_for_emacs_byte(&self.text, end);
+        let start_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start));
+        let end_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(end));
         TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char)
     }
 
@@ -180,7 +184,7 @@ impl Buffer {
             }
         }
         debug_assert_eq!(
-            char_pos_for_emacs_byte(&self.text, insert_pos).get(),
+            char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(insert_pos)).get(),
             insert_char_pos,
             "insert-side-effect char position drifted from the source edit site"
         );
@@ -468,8 +472,8 @@ impl Buffer {
         if start >= end {
             return false;
         }
-        let changed_chars = char_pos_for_emacs_byte(&self.text, end).get()
-            - char_pos_for_emacs_byte(&self.text, start).get();
+        let changed_chars = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(end)).get()
+            - char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start)).get();
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
@@ -523,7 +527,7 @@ impl Buffer {
             self.undo_prepare_change(start, self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
-                let start_char = char_pos_for_emacs_byte(&self.text, start);
+                let start_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start));
                 let mut deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
                 let props = self.text.text_props_slice(start, end);
@@ -703,7 +707,7 @@ impl Buffer {
                 .remap_markers_through_byte_char(|old_byte, old_char| {
                     if old_byte > start1_byte && old_byte <= end2_byte {
                         (
-                            emacs_byte_for_char_pos(&self.text, old_char).get(),
+                            emacs_byte_for_char_pos(&self.text, CharPos0::new(old_char)).get(),
                             old_char,
                         )
                     } else {
@@ -1004,8 +1008,8 @@ impl BufferManager {
         let scope = self.shared_text_edit_scope(id)?;
         let changed_chars = {
             let source = self.buffers.get(&id)?;
-            char_pos_for_emacs_byte(&source.text, end).get()
-                - char_pos_for_emacs_byte(&source.text, start).get()
+            char_pos_for_emacs_byte(&source.text, EmacsBytePos::new(end)).get()
+                - char_pos_for_emacs_byte(&source.text, EmacsBytePos::new(start)).get()
         };
         let changed = self
             .buffers

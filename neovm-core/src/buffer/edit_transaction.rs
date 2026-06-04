@@ -32,16 +32,19 @@ pub(in crate::buffer) fn lisp_string_from_buffer_bytes(
 }
 
 #[inline]
-pub(in crate::buffer) fn char_pos_for_emacs_byte(text: &BufferText, byte_pos: usize) -> CharPos0 {
-    text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+pub(in crate::buffer) fn char_pos_for_emacs_byte(
+    text: &BufferText,
+    byte_pos: EmacsBytePos,
+) -> CharPos0 {
+    text.emacs_byte_pos_to_char_pos(byte_pos)
 }
 
 #[inline]
 pub(in crate::buffer) fn emacs_byte_for_char_pos(
     text: &BufferText,
-    char_pos: usize,
+    char_pos: CharPos0,
 ) -> EmacsBytePos {
-    text.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+    text.char_pos_to_emacs_byte_pos(char_pos)
 }
 
 #[inline]
