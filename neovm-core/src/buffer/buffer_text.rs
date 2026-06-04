@@ -19,9 +19,11 @@ use super::position::{
 };
 use super::text::backend::TextBackend;
 use super::text::{
-    BufferTextBackendKind, GapDebugLayout, ImplementedBufferTextBackendKind,
-    TextBackendDebugLayout, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
+    BufferTextBackendKind, ImplementedBufferTextBackendKind, TextEditRange, TextExtent,
+    TextMetrics, emacs_char_count_bytes,
 };
+#[cfg(test)]
+use super::text::{GapDebugLayout, TextBackendDebugLayout};
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
@@ -234,10 +236,12 @@ impl BufferText {
         self.storage.borrow().metrics
     }
 
+    #[cfg(test)]
     pub(crate) fn backend_debug_layout(&self) -> TextBackendDebugLayout {
         self.storage.borrow().backend.debug_layout()
     }
 
+    #[cfg(test)]
     pub(crate) fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
         self.storage.borrow().backend.debug_layout().gap()
     }

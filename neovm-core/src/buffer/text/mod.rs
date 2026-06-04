@@ -1,12 +1,14 @@
 pub(in crate::buffer) mod backend;
 mod edit;
 mod kind;
+#[cfg(test)]
 mod layout;
 mod metrics;
 
 pub use edit::{TextEditRange, TextExtent, TextInsertion};
 pub use kind::BufferTextBackendKind;
 pub(crate) use kind::ImplementedBufferTextBackendKind;
+#[cfg(test)]
 pub use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
 

@@ -4,7 +4,9 @@ use crate::buffer::gap_buffer::GapBuffer;
 use crate::buffer::position::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
-use crate::buffer::text::{GapDebugLayout, TextEditRange, TextExtent, TextMetrics};
+#[cfg(test)]
+use crate::buffer::text::GapDebugLayout;
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -76,6 +78,7 @@ impl GapTextBackend {
         self.gap.gap_size()
     }
 
+    #[cfg(test)]
     pub(in crate::buffer) fn debug_layout(&self) -> GapDebugLayout {
         GapDebugLayout {
             gpt: CharPos0::new(self.gpt()),

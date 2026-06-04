@@ -1,9 +1,9 @@
 use std::fmt;
 
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
-use crate::buffer::text::{
-    TextBackendDebugLayout, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
-};
+#[cfg(test)]
+use crate::buffer::text::TextBackendDebugLayout;
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PieceSource {
@@ -104,6 +104,7 @@ impl PieceTreeTextBackend {
         crate::buffer::BufferTextBackendKind::PieceTree
     }
 
+    #[cfg(test)]
     pub(in crate::buffer) fn debug_layout(&self) -> TextBackendDebugLayout {
         TextBackendDebugLayout::PieceTree(self.metrics())
     }

@@ -7,7 +7,9 @@ use super::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 use crate::buffer::position::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
-use crate::buffer::text::{TextBackendDebugLayout, TextEditRange, TextExtent, TextMetrics};
+#[cfg(test)]
+use crate::buffer::text::TextBackendDebugLayout;
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
 
@@ -81,6 +83,7 @@ impl TextBackend {
         }
     }
 
+    #[cfg(test)]
     pub(in crate::buffer) fn debug_layout(&self) -> TextBackendDebugLayout {
         match self {
             Self::Gap(gap) => TextBackendDebugLayout::Gap(gap.debug_layout()),
