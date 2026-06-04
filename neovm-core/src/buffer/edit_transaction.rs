@@ -5,7 +5,7 @@
 //! these types separate is the first step toward a central insert/delete/
 //! replace transaction boundary.
 
-use crate::buffer::{BufferText, CharPos0, EmacsBytePos};
+use crate::buffer::{BufferText, CharPos0, EmacsBytePos, TextEditRange, TextExtent};
 use crate::heap_types::LispString;
 
 #[inline]
@@ -108,6 +108,91 @@ pub(in crate::buffer) fn transpose_position(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct BufferEditState {
+    pub(in crate::buffer) pt_byte: usize,
+    pub(in crate::buffer) pt: usize,
+    pub(in crate::buffer) begv_byte: usize,
+    pub(in crate::buffer) begv: usize,
+    pub(in crate::buffer) zv_byte: usize,
+    pub(in crate::buffer) zv: usize,
+}
+
+impl BufferEditState {
+    pub(in crate::buffer) fn new(
+        pt_byte: usize,
+        pt: usize,
+        begv_byte: usize,
+        begv: usize,
+        zv_byte: usize,
+        zv: usize,
+    ) -> Self {
+        Self {
+            pt_byte,
+            pt,
+            begv_byte,
+            begv,
+            zv_byte,
+            zv,
+        }
+    }
+}
+
+pub(in crate::buffer) fn replace_state_after_edit(
+    mut state: BufferEditState,
+    old_range: TextEditRange,
+    new_extent: TextExtent,
+) -> BufferEditState {
+    let start = old_range.byte_start_usize();
+    let end = old_range.byte_end_usize();
+    let start_char = old_range.char_start_usize();
+    let end_char = old_range.char_end_usize();
+    let old_byte_len = old_range.byte_len().get();
+    let old_char_len = old_range.char_len().get();
+    let new_byte_len = new_extent.emacs_bytes().get();
+    let new_char_len = new_extent.chars().get();
+    let old_pt_byte = state.pt_byte;
+    let old_pt = state.pt;
+
+    if start < old_pt_byte || old_pt_byte == end {
+        let clamped = old_pt_byte.min(end);
+        state.pt_byte = old_pt_byte + start + new_byte_len - clamped;
+        let clamped_char = old_pt.min(end_char);
+        state.pt = old_pt + start_char + new_char_len - clamped_char;
+    } else if old_pt_byte > end {
+        state.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
+        state.pt = old_pt + new_char_len - old_char_len;
+    }
+
+    if state.begv_byte > end {
+        state.begv_byte = state.begv_byte + new_byte_len - old_byte_len;
+        state.begv = state.begv + new_char_len - old_char_len;
+    } else if state.begv_byte > start {
+        state.begv_byte = start;
+        state.begv = start_char;
+    }
+
+    if state.zv_byte >= end {
+        state.zv_byte = state.zv_byte + new_byte_len - old_byte_len;
+        state.zv = state.zv + new_char_len - old_char_len;
+    } else if state.zv_byte > start {
+        state.zv_byte = start + new_byte_len;
+        state.zv = start_char + new_char_len;
+    }
+
+    state
+}
+
+/// GNU `modiff` increments logarithmically with edit size, and
+/// `chars_modiff` is reset to the new `modiff` on each character change.
+pub(in crate::buffer) fn modification_tick_delta(changed_chars: usize) -> i64 {
+    if changed_chars == 0 {
+        1
+    } else {
+        changed_chars.ilog2() as i64 + 1
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) enum InsertMarkerAdjustment {
     ByInsertionType,
     StrictAfter,
@@ -182,5 +267,79 @@ impl DeleteSideEffectPolicy {
             adjust_shared_markers: false,
             adjust_shared_text_props: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state(
+        pt_byte: usize,
+        pt: usize,
+        begv_byte: usize,
+        begv: usize,
+        zv_byte: usize,
+        zv: usize,
+    ) -> BufferEditState {
+        BufferEditState::new(pt_byte, pt, begv_byte, begv, zv_byte, zv)
+    }
+
+    fn replace_state(old: BufferEditState) -> BufferEditState {
+        replace_state_after_edit(
+            old,
+            TextEditRange::from_usize(20, 36, 10, 18),
+            TextExtent::from_usize(3, 5),
+        )
+    }
+
+    #[test]
+    fn replace_state_maps_point_inside_deleted_range_to_replacement_end() {
+        assert_eq!(
+            replace_state(state(28, 14, 0, 0, 60, 42)),
+            state(25, 13, 0, 0, 49, 37)
+        );
+    }
+
+    #[test]
+    fn replace_state_maps_point_at_deleted_end_to_replacement_end() {
+        assert_eq!(
+            replace_state(state(36, 18, 0, 0, 60, 42)),
+            state(25, 13, 0, 0, 49, 37)
+        );
+    }
+
+    #[test]
+    fn replace_state_shifts_point_after_deleted_range_by_extent_delta() {
+        assert_eq!(
+            replace_state(state(44, 24, 0, 0, 60, 42)),
+            state(33, 19, 0, 0, 49, 37)
+        );
+    }
+
+    #[test]
+    fn replace_state_clamps_begv_inside_deleted_range_to_deleted_start() {
+        assert_eq!(
+            replace_state(state(0, 0, 28, 14, 60, 42)),
+            state(0, 0, 20, 10, 49, 37)
+        );
+    }
+
+    #[test]
+    fn replace_state_maps_zv_inside_deleted_range_to_replacement_end() {
+        assert_eq!(
+            replace_state(state(0, 0, 0, 0, 28, 14)),
+            state(0, 0, 0, 0, 25, 13)
+        );
+    }
+
+    #[test]
+    fn modification_tick_delta_is_logarithmic_and_never_zero() {
+        assert_eq!(modification_tick_delta(0), 1);
+        assert_eq!(modification_tick_delta(1), 1);
+        assert_eq!(modification_tick_delta(2), 2);
+        assert_eq!(modification_tick_delta(3), 2);
+        assert_eq!(modification_tick_delta(4), 3);
+        assert_eq!(modification_tick_delta(8), 4);
     }
 }

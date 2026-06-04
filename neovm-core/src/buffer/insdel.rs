@@ -6,15 +6,36 @@
 
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
-    DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
+    BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
     char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos,
-    emacs_char_count, lisp_string_from_buffer_bytes, transpose_position,
+    emacs_char_count, lisp_string_from_buffer_bytes, modification_tick_delta,
+    replace_state_after_edit, transpose_position,
 };
 use crate::buffer::undo;
 use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion};
 use crate::heap_types::LispString;
 
 impl Buffer {
+    fn edit_state(&self) -> BufferEditState {
+        BufferEditState::new(
+            self.pt_byte,
+            self.pt,
+            self.begv_byte,
+            self.begv,
+            self.zv_byte,
+            self.zv,
+        )
+    }
+
+    fn set_edit_state(&mut self, state: BufferEditState) {
+        self.pt_byte = state.pt_byte;
+        self.pt = state.pt;
+        self.begv_byte = state.begv_byte;
+        self.begv = state.begv;
+        self.zv_byte = state.zv_byte;
+        self.zv = state.zv;
+    }
+
     fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
         let mut bytes = Vec::new();
         self.text
@@ -202,19 +223,9 @@ impl Buffer {
         }
     }
 
-    fn modification_tick_delta(changed_chars: usize) -> i64 {
-        if changed_chars == 0 {
-            1
-        } else {
-            changed_chars.ilog2() as i64 + 1
-        }
-    }
-
-    /// GNU `modiff` increments logarithmically with edit size, and
-    /// `chars_modiff` is reset to the new `modiff` on each character change.
     fn record_char_modification(&mut self, changed_chars: usize) {
         self.text
-            .record_char_modification(Self::modification_tick_delta(changed_chars));
+            .record_char_modification(modification_tick_delta(changed_chars));
     }
 
     /// Prepare to record a buffer change: ensure the first-change sentinel
@@ -336,6 +347,7 @@ impl Buffer {
             TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
+        let old_state = self.edit_state();
         let old_pt_byte = self.pt_byte;
         let old_pt = self.pt;
         let deleted_text = self.buffer_region_lisp_string(start, end);
@@ -366,32 +378,7 @@ impl Buffer {
         self.text.delete_measured_range(old_range);
         self.text
             .insert_measured_emacs_bytes(old_range.byte_start(), new_bytes, new_extent);
-
-        if start < old_pt_byte || old_pt_byte == end {
-            let clamped = old_pt_byte.min(end);
-            self.pt_byte = old_pt_byte + start + new_byte_len - clamped;
-            let clamped_char = old_pt.min(end_char.get());
-            self.pt = old_pt + start_char.get() + new_char_len - clamped_char;
-        } else if old_pt_byte > end {
-            self.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
-            self.pt = old_pt + new_char_len - old_char_len;
-        }
-
-        if self.begv_byte > end {
-            self.begv_byte = self.begv_byte + new_byte_len - old_byte_len;
-            self.begv = self.begv + new_char_len - old_char_len;
-        } else if self.begv_byte > start {
-            self.begv_byte = start;
-            self.begv = start_char.get();
-        }
-
-        if self.zv_byte >= end {
-            self.zv_byte = self.zv_byte + new_byte_len - old_byte_len;
-            self.zv = self.zv + new_char_len - old_char_len;
-        } else if self.zv_byte > start {
-            self.zv_byte = start + new_byte_len;
-            self.zv = start_char.get() + new_char_len;
-        }
+        self.set_edit_state(replace_state_after_edit(old_state, old_range, new_extent));
 
         self.text
             .adjust_markers_for_replace_range(old_range, new_extent);
@@ -788,42 +775,17 @@ impl BufferManager {
         update_state_fields: bool,
     ) {
         let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
-        let start_char = old_range.char_start_usize();
-        let end_char = old_range.char_end_usize();
         let old_byte_len = old_range.byte_len().get();
         let old_char_len = old_range.char_len().get();
         let new_byte_len = new_extent.emacs_bytes().get();
         let new_char_len = new_extent.chars().get();
-        let old_pt_byte = buf.pt_byte;
-        let old_pt = buf.pt;
 
         if update_state_fields {
-            if start < old_pt_byte || old_pt_byte == end {
-                let clamped = old_pt_byte.min(end);
-                buf.pt_byte = old_pt_byte + start + new_byte_len - clamped;
-                let clamped_char = old_pt.min(end_char);
-                buf.pt = old_pt + start_char + new_char_len - clamped_char;
-            } else if old_pt_byte > end {
-                buf.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
-                buf.pt = old_pt + new_char_len - old_char_len;
-            }
-
-            if buf.begv_byte > end {
-                buf.begv_byte = buf.begv_byte + new_byte_len - old_byte_len;
-                buf.begv = buf.begv + new_char_len - old_char_len;
-            } else if buf.begv_byte > start {
-                buf.begv_byte = start;
-                buf.begv = start_char;
-            }
-
-            if buf.zv_byte >= end {
-                buf.zv_byte = buf.zv_byte + new_byte_len - old_byte_len;
-                buf.zv = buf.zv + new_char_len - old_char_len;
-            } else if buf.zv_byte > start {
-                buf.zv_byte = start + new_byte_len;
-                buf.zv = start_char + new_char_len;
-            }
+            buf.set_edit_state(replace_state_after_edit(
+                buf.edit_state(),
+                old_range,
+                new_extent,
+            ));
         }
 
         buf.overlays
