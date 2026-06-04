@@ -13,7 +13,7 @@ use crate::buffer::edit_transaction::{
 };
 use crate::buffer::undo;
 use crate::buffer::{
-    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
+    CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
     TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
@@ -84,6 +84,25 @@ impl Buffer {
             return self.edit_range_at_emacs_byte_pos(byte_range.start());
         }
         self.text.edit_range_for_emacs_byte_range(byte_range)
+    }
+
+    pub fn edit_range_for_char_range(&self, char_range: CharRange) -> TextEditRange {
+        if char_range.is_empty() {
+            let byte_pos = self.text.char_pos_to_emacs_byte_pos(char_range.start());
+            return TextEditRange::empty_at(byte_pos, char_range.start());
+        }
+        self.text.edit_range_for_char_range(char_range)
+    }
+
+    pub fn text_transposition_for_char_ranges(
+        &self,
+        first: CharRange,
+        second: CharRange,
+    ) -> TextTransposition {
+        TextTransposition::new(
+            self.edit_range_for_char_range(first),
+            self.edit_range_for_char_range(second),
+        )
     }
 
     fn insert_bytes_internal(
@@ -452,23 +471,23 @@ impl Buffer {
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
-    /// bytes in `to_bytes` in the byte range `[start, end)`.
+    /// bytes in `to_bytes` in the measured range.
     ///
     /// The replacement is performed in place, so callers must ensure the
     /// matched character's Emacs-byte length equals `to_bytes.len()`.
     pub fn subst_char_in_region(
         &mut self,
-        start: usize,
-        end: usize,
+        range: TextEditRange,
         from_code: u32,
         to_bytes: &[u8],
         noundo: bool,
     ) -> bool {
-        if start >= end {
+        if range.byte_range().is_empty() {
             return false;
         }
-        let range = self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         let changed_chars = range.char_len().get();
+        let start = range.byte_start_usize();
+        let end = range.byte_end_usize();
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
@@ -965,28 +984,21 @@ impl BufferManager {
     pub fn subst_char_in_buffer_region(
         &mut self,
         id: BufferId,
-        start: usize,
-        end: usize,
+        range: TextEditRange,
         from_code: u32,
         to_bytes: &[u8],
         noundo: bool,
     ) -> Option<bool> {
-        if start >= end {
+        if range.byte_range().is_empty() {
             return Some(false);
         }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let changed_chars = {
-            let source = self.buffers.get(&id)?;
-            source
-                .edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-                .char_len()
-                .get()
-        };
+        let changed_chars = range.char_len().get();
         let changed = self
             .buffers
             .get_mut(&id)?
-            .subst_char_in_region(start, end, from_code, to_bytes, noundo);
+            .subst_char_in_region(range, from_code, to_bytes, noundo);
         if !changed {
             return Some(false);
         }

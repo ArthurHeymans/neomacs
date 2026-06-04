@@ -445,6 +445,14 @@ Completed so far:
   typed ranges and anchors: `subst-char-in-region` now derives its character
   span from `TextEditRange`, and `transpose-regions` moves point, sibling
   point state, and marker coordinates through `TextTransposition::transpose_anchor`.
+- Added a typed character-range measurement boundary above storage:
+  `BufferText` and `Buffer` now construct `TextEditRange` and
+  `TextTransposition` from `CharRange`, so Lisp-facing edit code no longer
+  manually pairs character positions with byte positions for
+  `transpose-regions` and `subst-char-in-region`.
+- Threaded the measured `TextEditRange` through same-length substitution and
+  shared-buffer sibling updates so undo, hooks, and indirect-buffer side
+  effects use the same GNU-style `(char, byte)` descriptor as the text edit.
 
 Next work:
 

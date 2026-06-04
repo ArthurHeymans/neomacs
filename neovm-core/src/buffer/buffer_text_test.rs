@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use crate::buffer::text::{ImplementedBufferTextBackendKind, TextBackendDebugLayout};
 use crate::buffer::{
-    BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
-    TextMetrics,
+    BufferTextBackendKind, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange,
+    TextExtent, TextMetrics,
 };
 
 use super::BufferText;
@@ -178,6 +178,11 @@ fn edit_measurement_boundary_is_backend_neutral() {
             TextExtent::from_usize(3, end - start),
             "{kind:?} edit extent diverged"
         );
+        assert_eq!(
+            text.edit_range_for_char_range(CharRange::from_usize(1, 4)),
+            range,
+            "{kind:?} char range edit measurement diverged"
+        );
 
         let byte_pos = EmacsBytePos::new(start);
         let empty = text.edit_range_at_emacs_byte_pos(byte_pos);
@@ -185,6 +190,11 @@ fn edit_measurement_boundary_is_backend_neutral() {
             empty,
             TextEditRange::empty_at(byte_pos, CharPos0::new(1)),
             "{kind:?} empty edit range diverged"
+        );
+        assert_eq!(
+            text.edit_range_for_char_range(CharRange::from_usize(1, 1)),
+            empty,
+            "{kind:?} empty char range edit measurement diverged"
         );
 
         let extent = TextExtent::from_emacs_bytes("Ωx".as_bytes(), true);

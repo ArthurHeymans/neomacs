@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextTransposition};
+use crate::buffer::{CharPos0, CharRange, EmacsBytePos};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -3308,7 +3308,7 @@ pub(crate) fn builtin_transpose_regions(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (mut start1, mut end1, mut start2, mut end2) = {
+    let (mut first, mut second) = {
         let buf = eval
             .buffers
             .get(current_id)
@@ -3331,55 +3331,41 @@ pub(crate) fn builtin_transpose_regions(
             }
         }
         (
-            raw_start1.min(raw_end1) as usize - 1,
-            raw_start1.max(raw_end1) as usize - 1,
-            raw_start2.min(raw_end2) as usize - 1,
-            raw_start2.max(raw_end2) as usize - 1,
+            CharRange::from_usize(
+                raw_start1.min(raw_end1) as usize - 1,
+                raw_start1.max(raw_end1) as usize - 1,
+            ),
+            CharRange::from_usize(
+                raw_start2.min(raw_end2) as usize - 1,
+                raw_start2.max(raw_end2) as usize - 1,
+            ),
         )
     };
 
-    if start2 < end1 {
-        std::mem::swap(&mut start1, &mut start2);
-        std::mem::swap(&mut end1, &mut end2);
+    if second.start_usize() < first.end_usize() {
+        std::mem::swap(&mut first, &mut second);
     }
-    if start2 < end1 {
+    if second.start_usize() < first.end_usize() {
         return Err(signal(
             "error",
             vec![Value::string("Transposed regions overlap")],
         ));
     }
-    if (start1 == end1 || start2 == end2) && end1 == start2 {
+    if (first.is_empty() || second.is_empty()) && first.end_usize() == second.start_usize() {
         return Ok(Value::NIL);
     }
 
-    let (start1_byte, end1_byte, start2_byte, end2_byte) = {
+    let transposition = {
         let buf = eval
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start1))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end1))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start2))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end2))
-                .get(),
-        )
+        buf.text_transposition_for_char_ranges(first, second)
     };
-    let transposition = TextTransposition::new(
-        TextEditRange::new(
-            EmacsByteRange::from_usize(start1_byte, end1_byte),
-            CharPos0::new(start1),
-            CharPos0::new(end1),
-        ),
-        TextEditRange::new(
-            EmacsByteRange::from_usize(start2_byte, end2_byte),
-            CharPos0::new(start2),
-            CharPos0::new(end2),
-        ),
-    );
+    let changed_byte_span = transposition.byte_span();
+    let changed_start_byte = changed_byte_span.start_usize();
+    let changed_end_byte = changed_byte_span.end_usize();
+    let old_changed_chars = transposition.changed_chars().get();
 
     let read_only = eval.buffers.get(current_id).is_some_and(|buf| {
         crate::emacs_core::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
@@ -3394,17 +3380,21 @@ pub(crate) fn builtin_transpose_regions(
         &eval.obarray,
         &eval.buffers,
         current_id,
-        start1_byte,
-        end2_byte,
+        changed_start_byte,
+        changed_end_byte,
     )?;
 
-    crate::emacs_core::editfns::signal_before_change(eval, start1_byte, end2_byte)?;
+    crate::emacs_core::editfns::signal_before_change(eval, changed_start_byte, changed_end_byte)?;
     let leave_markers = args.get(4).is_some_and(|value| !value.is_nil());
-    let old_len = end2 - start1;
     let _ = eval
         .buffers
         .transpose_buffer_regions(current_id, transposition, leave_markers);
-    crate::emacs_core::editfns::signal_after_change(eval, start1_byte, end2_byte, old_len)?;
+    crate::emacs_core::editfns::signal_after_change(
+        eval,
+        changed_start_byte,
+        changed_end_byte,
+        old_changed_chars,
+    )?;
     Ok(Value::NIL)
 }
 

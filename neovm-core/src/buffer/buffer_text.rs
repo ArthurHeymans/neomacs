@@ -223,6 +223,14 @@ impl BufferText {
         TextEditRange::new(byte_range, char_range.start(), char_range.end())
     }
 
+    pub(crate) fn edit_range_for_char_range(&self, char_range: CharRange) -> TextEditRange {
+        let byte_range = EmacsByteRange::new(
+            self.char_pos_to_emacs_byte_pos(char_range.start()),
+            self.char_pos_to_emacs_byte_pos(char_range.end()),
+        );
+        TextEditRange::new(byte_range, char_range.start(), char_range.end())
+    }
+
     pub(crate) fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
         let char_pos = self.emacs_byte_pos_to_char_pos(byte_pos);
         TextEditRange::empty_at(byte_pos, char_pos)

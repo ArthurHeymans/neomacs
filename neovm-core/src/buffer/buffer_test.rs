@@ -1,6 +1,6 @@
 use super::*;
+use crate::buffer::CharRange;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
-use crate::buffer::{TextEditRange, TextTransposition};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
@@ -1113,33 +1113,6 @@ struct BackendEditSnapshot {
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
-fn transposition_for_char_ranges(
-    buf: &Buffer,
-    first: (usize, usize),
-    second: (usize, usize),
-) -> TextTransposition {
-    let (start1_char, end1_char) = first;
-    let (start2_char, end2_char) = second;
-    TextTransposition::new(
-        TextEditRange::new(
-            EmacsByteRange::from_usize(
-                byte_pos_for_char(buf, start1_char),
-                byte_pos_for_char(buf, end1_char),
-            ),
-            CharPos0::new(start1_char),
-            CharPos0::new(end1_char),
-        ),
-        TextEditRange::new(
-            EmacsByteRange::from_usize(
-                byte_pos_for_char(buf, start2_char),
-                byte_pos_for_char(buf, end2_char),
-            ),
-            CharPos0::new(start2_char),
-            CharPos0::new(end2_char),
-        ),
-    )
-}
-
 fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let mut buf = buf_with_text_backend("éaßbc", kind);
     assert_eq!(buf.text_backend_kind(), kind);
@@ -1201,7 +1174,10 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
     buf.set_mark_byte(byte_pos_for_char(&buf, 5));
     buf.goto_byte(byte_pos_for_char(&buf, 8));
 
-    let transposition = transposition_for_char_ranges(&buf, (0, 2), (4, 6));
+    let transposition = buf.text_transposition_for_char_ranges(
+        CharRange::from_usize(0, 2),
+        CharRange::from_usize(4, 6),
+    );
     buf.transpose_regions(transposition, false);
 
     let marker_position = buf

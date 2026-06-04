@@ -5,7 +5,8 @@ use super::*;
 // ===========================================================================
 
 use crate::buffer::{
-    Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -3321,8 +3322,8 @@ pub(crate) fn builtin_subst_char_in_region(
         ));
     }
 
-    let (byte_start, byte_end, needs_change) = {
-        let buf = &mut eval
+    let (range, needs_change) = {
+        let buf = eval
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -3337,17 +3338,14 @@ pub(crate) fn builtin_subst_char_in_region(
 
         let lo = start.min(end) as usize;
         let hi = start.max(end) as usize;
-        let start_char = lo.saturating_sub(1);
-        let end_char = hi.saturating_sub(1);
-        let byte_start = char_pos_to_buffer_byte(buf, start_char);
-        let byte_end = char_pos_to_buffer_byte(buf, end_char);
+        let range = buf.edit_range_for_char_range(CharRange::from_usize(
+            lo.saturating_sub(1),
+            hi.saturating_sub(1),
+        ));
         let needs_change = from_code != to_code
-            && byte_start < byte_end
-            && buf.emacs_byte_range_contains_char_code(
-                EmacsByteRange::from_usize(byte_start, byte_end),
-                from_code as u32,
-            );
-        (byte_start, byte_end, needs_change)
+            && !range.byte_range().is_empty()
+            && buf.emacs_byte_range_contains_char_code(range.byte_range(), from_code as u32);
+        (range, needs_change)
     };
     if !needs_change {
         return Ok(Value::NIL);
@@ -3364,12 +3362,13 @@ pub(crate) fn builtin_subst_char_in_region(
 
     // subst-char-in-region replaces characters of the same byte length,
     // so the region size does not change.
-    let region_len = super::editfns::current_buffer_byte_span_char_len(eval, byte_start, byte_end);
+    let byte_start = range.byte_start_usize();
+    let byte_end = range.byte_end_usize();
+    let region_len = range.char_len().get();
     super::editfns::signal_before_change(eval, byte_start, byte_end)?;
-    let _ = &mut eval.buffers.subst_char_in_buffer_region(
+    let _ = eval.buffers.subst_char_in_buffer_region(
         current_id,
-        byte_start,
-        byte_end,
+        range,
         from_code as u32,
         &to_bytes,
         noundo,
