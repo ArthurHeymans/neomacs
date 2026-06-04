@@ -11,12 +11,6 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use neovm_core::buffer::{Buffer, BufferId, BufferTextBackendKind, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::value::Value;
 
-const BACKENDS: [BufferTextBackendKind; 3] = [
-    BufferTextBackendKind::GapBuffer,
-    BufferTextBackendKind::PieceTree,
-    BufferTextBackendKind::Rope,
-];
-
 const EDITS_PER_ITER: usize = 512;
 const COPY_RANGES_PER_ITER: usize = 1024;
 const CONVERSIONS_PER_ITER: usize = 4096;
@@ -93,7 +87,7 @@ fn bench_construct_large(c: &mut Criterion) {
     let input = sample_text(16_384);
     let mut group = c.benchmark_group("buffer_text_backend/construct_large");
     group.throughput(Throughput::Bytes(input.len() as u64));
-    for kind in BACKENDS {
+    for kind in BufferTextBackendKind::variants() {
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
             b.iter(|| black_box(buffer_with_backend(black_box(input.as_str()), kind)));
         });
@@ -106,7 +100,7 @@ fn bench_scattered_edit_churn(c: &mut Criterion) {
     let inserts = ["x", "\u{03bb}", "\u{65e5}\u{672c}", "abc", "\u{1f642}"];
     let mut group = c.benchmark_group("buffer_text_backend/scattered_edit_churn");
     group.throughput(Throughput::Elements(EDITS_PER_ITER as u64));
-    for kind in BACKENDS {
+    for kind in BufferTextBackendKind::variants() {
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
@@ -143,7 +137,7 @@ fn bench_copy_ranges(c: &mut Criterion) {
     let input = sample_text(8_192);
     let mut group = c.benchmark_group("buffer_text_backend/copy_ranges");
     group.throughput(Throughput::Elements(COPY_RANGES_PER_ITER as u64));
-    for kind in BACKENDS {
+    for kind in BufferTextBackendKind::variants() {
         let buffer = buffer_with_backend(&input, kind);
         let ranges = byte_ranges_for_char_windows(&buffer, COPY_RANGES_PER_ITER, 96);
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {
@@ -173,7 +167,7 @@ fn bench_char_to_byte(c: &mut Criterion) {
     let input = sample_text(8_192);
     let mut group = c.benchmark_group("buffer_text_backend/char_to_byte");
     group.throughput(Throughput::Elements(CONVERSIONS_PER_ITER as u64));
-    for kind in BACKENDS {
+    for kind in BufferTextBackendKind::variants() {
         let buffer = buffer_with_backend(&input, kind);
         let positions = scattered_char_positions(&buffer, CONVERSIONS_PER_ITER);
         group.bench_function(BenchmarkId::from_parameter(kind.symbol_name()), |b| {

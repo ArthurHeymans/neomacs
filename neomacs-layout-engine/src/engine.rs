@@ -2862,9 +2862,9 @@ impl LayoutEngine {
 
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
-        let buffer_name = buffer.name.clone();
-        let accessible_end_lisp_char = buffer.accessible_end_char.saturating_add(1);
-        let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte.get();
+        let buffer_name = buffer.name().to_owned();
+        let accessible_end_lisp_char = buffer.accessible_end_char().saturating_add(1);
+        let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte_pos().get();
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         if let Some(effects) = params.cursor_effects.clone() {
@@ -3493,7 +3493,7 @@ impl LayoutEngine {
         let mut trailing_ws_row: usize = 0;
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
-        let has_overlays = !buffer.overlays.is_empty();
+        let has_overlays = !buffer.overlays().is_empty();
 
         // Face :extend tracking — extends face background to end of line
         let mut row_extend_bg: Option<(Color, u32)> = None; // (bg_color, face_id)
@@ -3872,7 +3872,7 @@ impl LayoutEngine {
                             let right_limit = content_x + avail_width;
                             for overlay_string in &after_strings {
                                 let ov_face = buffer
-                                    .overlays
+                                    .overlays()
                                     .overlay_get_named(
                                         overlay_string.overlay_id,
                                         Value::symbol("face"),
@@ -5773,7 +5773,7 @@ impl LayoutEngine {
                     let right_limit = content_x + avail_width;
                     for overlay_string in &before_strings {
                         let ov_face = buffer
-                            .overlays
+                            .overlays()
                             .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                             .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
@@ -5900,7 +5900,7 @@ impl LayoutEngine {
                     let right_limit = content_x + avail_width;
                     for overlay_string in &after_strings {
                         let ov_face = buffer
-                            .overlays
+                            .overlays()
                             .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                             .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
@@ -6004,7 +6004,7 @@ impl LayoutEngine {
             let right_limit = content_x + avail_width;
             for overlay_string in before_strings.iter().chain(after_strings.iter()) {
                 let ov_face = buffer
-                    .overlays
+                    .overlays()
                     .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
                     .and_then(|val| face_resolver.resolve_face_from_value(&val));
                 render_overlay_string(

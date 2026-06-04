@@ -106,14 +106,14 @@ pub(crate) trait LayoutBufferView {
 
 #[derive(Clone)]
 pub(crate) struct LayoutBufferSnapshot {
-    pub name: String,
+    name: String,
     text_snapshot: BufferTextSnapshot,
-    pub accessible_start_emacs_byte: EmacsBytePos,
-    pub accessible_end_emacs_byte: EmacsBytePos,
-    pub accessible_end_char: usize,
-    pub local_var_alist: Value,
-    pub slots: [Value; BUFFER_SLOT_COUNT],
-    pub overlays: OverlayList,
+    accessible_start_emacs_byte: EmacsBytePos,
+    accessible_end_emacs_byte: EmacsBytePos,
+    accessible_end_char: usize,
+    local_var_alist: Value,
+    slots: [Value; BUFFER_SLOT_COUNT],
+    overlays: OverlayList,
     default_values: Vec<(neovm_core::emacs_core::intern::SymId, Value)>,
 }
 
@@ -143,6 +143,22 @@ impl LayoutBufferSnapshot {
         self.default_values
             .iter()
             .find_map(|(sym_id, value)| (*sym_id == id).then_some(*value))
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn accessible_end_char(&self) -> usize {
+        self.accessible_end_char
+    }
+
+    pub(crate) fn accessible_end_emacs_byte_pos(&self) -> EmacsBytePos {
+        self.accessible_end_emacs_byte
+    }
+
+    pub(crate) fn overlays(&self) -> &OverlayList {
+        &self.overlays
     }
 }
 
