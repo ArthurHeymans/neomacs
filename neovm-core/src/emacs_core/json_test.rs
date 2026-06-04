@@ -263,6 +263,19 @@ fn serialize_alist_keeps_first_duplicate_key() {
 }
 
 #[test]
+fn serialize_bignum_emits_full_decimal() {
+    crate::test_utils::init_test_tracing();
+    // A bignum (integer beyond i64) serializes as its full decimal value,
+    // round-tripping json-parse-string of the same literal.
+    let big = Value::make_integer_from_str_or_zero("123456789012345678901234567890");
+    let result = builtin_json_serialize(vec![big]).unwrap();
+    assert_eq!(
+        result.as_utf8_str(),
+        Some("123456789012345678901234567890")
+    );
+}
+
+#[test]
 fn serialize_nested() {
     crate::test_utils::init_test_tracing();
     let inner = Value::vector(vec![Value::fixnum(1), Value::fixnum(2)]);

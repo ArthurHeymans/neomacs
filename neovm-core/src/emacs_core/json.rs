@@ -277,6 +277,15 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
 
         ValueKind::Fixnum(n) => Ok(n.to_string()),
 
+        // Bignums serialize as their full decimal expansion (GNU
+        // json_out_bignum), so large integers round-trip without loss.
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            let n = value
+                .as_bignum()
+                .expect("ValueKind::Veclike(Bignum) must carry a bignum payload");
+            Ok(n.to_string())
+        }
+
         ValueKind::Float => {
             let f = value.xfloat();
             if f.is_nan() || f.is_infinite() {
