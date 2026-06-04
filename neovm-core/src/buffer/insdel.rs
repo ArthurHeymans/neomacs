@@ -14,7 +14,7 @@ use crate::buffer::edit_transaction::{
 use crate::buffer::undo;
 use crate::buffer::{
     CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
-    TextReplacement, TextTransposition,
+    TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -467,15 +467,15 @@ impl Buffer {
         if start >= end {
             return false;
         }
-        let changed_chars = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(end)).get()
-            - char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start)).get();
+        let range = self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        let changed_chars = range.char_len().get();
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
         use crate::emacs_core::emacs_char;
-        let mut region_bytes = Vec::with_capacity(end - start);
+        let mut region_bytes = Vec::with_capacity(range.byte_len().get());
         self.text
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut region_bytes);
+            .copy_emacs_byte_range_to(range.byte_range(), &mut region_bytes);
         let mut replacement_bytes = Vec::with_capacity(region_bytes.len());
         let mut changed = false;
         if self.get_multibyte() {
@@ -522,7 +522,6 @@ impl Buffer {
             self.undo_prepare_change(start, self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
-                let start_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start));
                 let mut deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
                 let props = self.text.text_props_slice(start, end);
@@ -531,14 +530,14 @@ impl Buffer {
                 }
                 undo::undo_list_record_delete(
                     &mut ul,
-                    start_char.get(),
+                    range.char_start_usize(),
                     deleted,
                     self.pt,
                     self.undo_state.point_before_command_or_undo(),
                 );
                 undo::undo_list_record_insert(
                     &mut ul,
-                    start_char.get(),
+                    range.char_start_usize(),
                     changed_chars,
                     self.undo_state.point_before_command_or_undo(),
                 );
@@ -546,10 +545,8 @@ impl Buffer {
             }
         }
 
-        self.text.replace_same_len_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            &replacement_bytes,
-        );
+        self.text
+            .replace_same_len_emacs_byte_range(range.byte_range(), &replacement_bytes);
         self.apply_same_len_edit_side_effects(changed_chars, false);
         true
     }
@@ -681,12 +678,8 @@ impl Buffer {
         } else {
             self.set_text_properties_with_undo(start1_byte, end2_byte, Vec::new());
         }
-        let new_point_byte = transposition
-            .transpose_byte_pos(EmacsBytePos::new(self.pt_byte))
-            .get();
-        let new_point_char = transposition
-            .transpose_char_pos(CharPos0::new(self.pt))
-            .get();
+        let new_point =
+            transposition.transpose_anchor(TextPositionAnchor::from_usize(self.pt, self.pt_byte));
 
         self.text
             .replace_same_len_emacs_byte_range(byte_span, &replacement);
@@ -695,10 +688,11 @@ impl Buffer {
             self.text
                 .remap_markers_through_byte_char(|old_byte, old_char| {
                     if old_byte > start1_byte && old_byte <= end2_byte {
-                        (
-                            emacs_byte_for_char_pos(&self.text, CharPos0::new(old_char)).get(),
-                            old_char,
-                        )
+                        let refreshed = TextPositionAnchor::new(
+                            CharPos0::new(old_char),
+                            emacs_byte_for_char_pos(&self.text, CharPos0::new(old_char)),
+                        );
+                        (refreshed.emacs_byte_pos_usize(), refreshed.char_pos_usize())
                     } else {
                         (old_byte, old_char)
                     }
@@ -706,19 +700,14 @@ impl Buffer {
         } else {
             self.text
                 .remap_markers_through_byte_char(|old_byte, old_char| {
-                    (
-                        transposition
-                            .transpose_byte_pos(EmacsBytePos::new(old_byte))
-                            .get(),
-                        transposition
-                            .transpose_char_pos(CharPos0::new(old_char))
-                            .get(),
-                    )
+                    let moved = transposition
+                        .transpose_anchor(TextPositionAnchor::from_usize(old_char, old_byte));
+                    (moved.emacs_byte_pos_usize(), moved.char_pos_usize())
                 });
         }
 
-        self.pt_byte = new_point_byte;
-        self.pt = new_point_char;
+        self.pt_byte = new_point.emacs_byte_pos_usize();
+        self.pt = new_point.char_pos_usize();
         self.apply_same_len_edit_side_effects(transposition.changed_chars().get(), false);
     }
 }
@@ -989,8 +978,10 @@ impl BufferManager {
         let scope = self.shared_text_edit_scope(id)?;
         let changed_chars = {
             let source = self.buffers.get(&id)?;
-            char_pos_for_emacs_byte(&source.text, EmacsBytePos::new(end)).get()
-                - char_pos_for_emacs_byte(&source.text, EmacsBytePos::new(start)).get()
+            source
+                .edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+                .char_len()
+                .get()
         };
         let changed = self
             .buffers
@@ -1021,12 +1012,10 @@ impl BufferManager {
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {
-                sibling.pt_byte = transposition
-                    .transpose_byte_pos(EmacsBytePos::new(sibling.pt_byte))
-                    .get();
-                sibling.pt = transposition
-                    .transpose_char_pos(CharPos0::new(sibling.pt))
-                    .get();
+                let point = transposition
+                    .transpose_anchor(TextPositionAnchor::from_usize(sibling.pt, sibling.pt_byte));
+                sibling.pt_byte = point.emacs_byte_pos_usize();
+                sibling.pt = point.char_pos_usize();
             }
             Self::adjust_shared_same_len_edit_metadata(
                 sibling,

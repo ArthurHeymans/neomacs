@@ -335,6 +335,13 @@ impl TextTransposition {
             self.second.char_end_usize(),
         ))
     }
+
+    pub const fn transpose_anchor(self, anchor: TextPositionAnchor) -> TextPositionAnchor {
+        TextPositionAnchor::new(
+            self.transpose_char_pos(anchor.char_pos()),
+            self.transpose_byte_pos(anchor.emacs_byte_pos()),
+        )
+    }
 }
 
 impl TextEditRange {
@@ -566,6 +573,10 @@ mod tests {
         assert_eq!(
             transposition.transpose_char_pos(CharPos0::new(8)),
             CharPos0::new(1)
+        );
+        assert_eq!(
+            transposition.transpose_anchor(TextPositionAnchor::from_usize(8, 10)),
+            TextPositionAnchor::from_usize(1, 1)
         );
     }
 

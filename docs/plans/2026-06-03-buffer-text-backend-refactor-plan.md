@@ -441,6 +441,10 @@ Completed so far:
 - Added focused edit-transaction tests for equality-boundary behavior around
   insertion positions, deletion starts, replacement starts/ends, `BEGV`, and
   `ZV`.
+- Migrated same-length substitution and transposition side-effect paths toward
+  typed ranges and anchors: `subst-char-in-region` now derives its character
+  span from `TextEditRange`, and `transpose-regions` moves point, sibling
+  point state, and marker coordinates through `TextTransposition::transpose_anchor`.
 
 Next work:
 
