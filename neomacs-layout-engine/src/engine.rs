@@ -3057,23 +3057,22 @@ impl LayoutEngine {
                     let window_sym = Value::symbol("window");
                     let current_window_id = params.window_id as u64;
                     let accessible_end_byte = b.accessible_emacs_byte_region().end_usize();
-                    let overlay_lines: usize = b
-                        .overlays
+                    let overlays = b.overlays();
+                    let overlay_lines: usize = overlays
                         .overlays_in(0, b.total_bytes())
                         .iter()
-                        .filter(|ov| match b.overlays.overlay_get_named(**ov, window_sym) {
+                        .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
                             Some(prop) => prop
                                 .as_window_id()
                                 .is_none_or(|window_id| window_id == current_window_id),
                             None => true,
                         })
                         .map(|ov| {
-                            let before_lines = if b
-                                .overlays
+                            let before_lines = if overlays
                                 .overlay_start(*ov)
                                 .is_some_and(|start| start < accessible_end_byte)
                             {
-                                b.overlays
+                                overlays
                                     .overlay_get_named(*ov, Value::symbol("before-string"))
                                     .and_then(|v| v.as_lisp_string())
                                     .map(|s| {
@@ -3083,8 +3082,7 @@ impl LayoutEngine {
                             } else {
                                 0
                             };
-                            let after_lines = b
-                                .overlays
+                            let after_lines = overlays
                                 .overlay_get_named(*ov, Value::symbol("after-string"))
                                 .and_then(|v| v.as_lisp_string())
                                 .map(|s| s.as_bytes().iter().filter(|&&byte| byte == b'\n').count())

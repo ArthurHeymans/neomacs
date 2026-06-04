@@ -120,9 +120,9 @@ impl LayoutBufferSnapshot {
             accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
             accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
             accessible_end_char: buffer.point_max_char(),
-            local_var_alist: buffer.local_var_alist,
-            slots: buffer.slots,
-            overlays: buffer.overlays.clone(),
+            local_var_alist: buffer.local_var_alist_value(),
+            slots: buffer.slot_values_snapshot(),
+            overlays: buffer.overlays().clone(),
             default_values: Vec::new(),
         }
     }
@@ -235,7 +235,7 @@ impl LayoutBufferView for Buffer {
     }
 
     fn layout_overlays(&self) -> &OverlayList {
-        &self.overlays
+        self.overlays()
     }
 }
 
@@ -1178,11 +1178,11 @@ pub fn window_params_from_neovm(
         // windows, `Window::point` is the right source (it was snapshotted
         // from `buf->pt` the last time the window was deselected).
         //
-        // `buffer.pt` is already 0-based (matches the layout engine's
+        // Buffer point is already 0-based (matches the layout engine's
         // internal coordinate system); `Window::point` is GNU/Lisp 1-based
         // and gets normalized with the usual `-1`.
         point: if is_selected {
-            buffer.pt as i64
+            buffer.point_char() as i64
         } else {
             point.saturating_sub(1) as i64
         },

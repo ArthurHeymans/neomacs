@@ -1199,8 +1199,8 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(bob_overlay);
-        buf.overlays
+        buf.overlays_mut().insert_overlay(bob_overlay);
+        buf.overlays_mut()
             .overlay_put(
                 bob_overlay,
                 Value::symbol("before-string"),
@@ -1218,15 +1218,15 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(eob_overlay);
-        buf.overlays
+        buf.overlays_mut().insert_overlay(eob_overlay);
+        buf.overlays_mut()
             .overlay_put(
                 eob_overlay,
                 Value::symbol("before-string"),
                 Value::string("\ninit.el"),
             )
             .unwrap();
-        buf.overlays
+        buf.overlays_mut()
             .overlay_put(
                 eob_overlay,
                 Value::symbol("after-string"),
@@ -1284,12 +1284,12 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
                 front_advance: false,
                 rear_advance: false,
             });
-            buf.overlays.insert_overlay(overlay);
-            buf.overlays
+            buf.overlays_mut().insert_overlay(overlay);
+            buf.overlays_mut()
                 .overlay_put(overlay, Value::symbol("before-string"), Value::string(text))
                 .unwrap();
             if let Some(window_id) = window_id {
-                buf.overlays
+                buf.overlays_mut()
                     .overlay_put(
                         overlay,
                         Value::symbol("window"),

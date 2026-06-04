@@ -1647,7 +1647,7 @@ pub struct Buffer {
     /// the single source of truth for all Lisp-side per-buffer
     /// bindings that are not slot-backed (FORWARDED) and not the
     /// special buffer-undo-list (which has its own SharedUndoState).
-    pub local_var_alist: crate::emacs_core::value::Value,
+    pub(crate) local_var_alist: crate::emacs_core::value::Value,
     /// `BVAR(buffer, keymap)` — the buffer's local keymap
     /// (`buffer.h:385`). `Value::NIL` when no local keymap is set.
     pub keymap: crate::emacs_core::value::Value,
@@ -1667,7 +1667,7 @@ pub struct Buffer {
     /// Phase 8b will migrate the hardcoded fields ([`Self::file_name`],
     /// [`Self::auto_save_file_name`], [`Self::read_only`],
     /// [`Self::multibyte`]) into slots and remove the duplicates.
-    pub slots: [crate::emacs_core::value::Value; BUFFER_SLOT_COUNT],
+    pub(crate) slots: [crate::emacs_core::value::Value; BUFFER_SLOT_COUNT],
     /// Per-slot "is buffer-local in this buffer" bitmap. Bit `N` is
     /// set when this buffer has its own local value for the slot at
     /// offset `N`. Mirrors GNU `b->local_flags[]` (`buffer.h:646`,
@@ -1687,7 +1687,7 @@ pub struct Buffer {
     /// always-local arm.
     pub local_flags: u64,
     /// Overlays attached to the buffer.
-    pub overlays: OverlayList,
+    pub(crate) overlays: OverlayList,
     /// GNU `BUF_OVERLAY_MODIFF`: incremented when live overlay ranges or
     /// properties change so redisplay observes overlay-only UI updates.
     pub overlay_modified_tick: i64,
@@ -1850,6 +1850,22 @@ impl Buffer {
 
     pub fn id(&self) -> BufferId {
         self.id
+    }
+
+    pub fn local_var_alist_value(&self) -> Value {
+        self.local_var_alist
+    }
+
+    pub fn slot_values_snapshot(&self) -> [Value; BUFFER_SLOT_COUNT] {
+        self.slots
+    }
+
+    pub fn overlays(&self) -> &OverlayList {
+        &self.overlays
+    }
+
+    pub fn overlays_mut(&mut self) -> &mut OverlayList {
+        &mut self.overlays
     }
 
     pub fn last_name_value(&self) -> Value {

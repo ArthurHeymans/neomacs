@@ -4822,8 +4822,8 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(overlay);
-        let _ = buf.overlays.overlay_put(
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
             overlay,
             Value::symbol("after-string"),
             Value::string("A\nB"),
@@ -4925,8 +4925,8 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(overlay);
-        let _ = buf.overlays.overlay_put(
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
             overlay,
             Value::symbol("before-string"),
             Value::string("\ninit.el\nconfig.el"),
@@ -4987,7 +4987,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(overlay);
+        buf.overlays_mut().insert_overlay(overlay);
         let display_space = Value::string_with_text_properties(
             "config.el -rw",
             vec![StringTextPropertyRun {
@@ -5007,9 +5007,9 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
                 ]),
             }],
         );
-        let _ = buf
-            .overlays
-            .overlay_put(overlay, Value::symbol("before-string"), display_space);
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), display_space);
         buf.goto_byte(eob);
     }
 
@@ -5094,8 +5094,8 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
             front_advance: false,
             rear_advance: false,
         });
-        buf.overlays.insert_overlay(overlay);
-        let _ = buf.overlays.overlay_put(
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
             overlay,
             Value::symbol("before-string"),
             Value::string("\ninit.el\nconfig.el"),
