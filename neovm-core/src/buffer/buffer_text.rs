@@ -560,14 +560,6 @@ impl BufferText {
         Self::refresh_backend_metrics(&mut storage);
     }
 
-    pub fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
-        CharPos0::new(self.buf_bytepos_to_charpos(byte_pos.get()))
-    }
-
-    pub fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
-        EmacsBytePos::new(self.buf_charpos_to_bytepos(char_pos.get()))
-    }
-
     pub fn shared_clone(&self) -> Self {
         Self {
             storage: Rc::clone(&self.storage),
@@ -900,7 +892,7 @@ impl BufferText {
                 .text_props
                 .next_property_change(char_pos)
         };
-        next.map(|next| self.buf_charpos_to_bytepos(next))
+        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)).get())
     }
 
     pub fn text_props_previous_change(&self, pos: usize) -> Option<usize> {
@@ -913,7 +905,7 @@ impl BufferText {
                 .text_props
                 .previous_property_change(char_pos)
         };
-        prev.map(|prev| self.buf_charpos_to_bytepos(prev))
+        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)).get())
     }
 
     pub fn text_props_next_interval_boundary(&self, pos: usize) -> Option<usize> {
@@ -926,7 +918,7 @@ impl BufferText {
                 .text_props
                 .next_interval_boundary(char_pos)
         };
-        next.map(|next| self.buf_charpos_to_bytepos(next))
+        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)).get())
     }
 
     pub fn text_props_first_interval_pos_with_property_eq(
@@ -947,7 +939,7 @@ impl BufferText {
                 name,
                 value,
             )?;
-        Some(self.buf_charpos_to_bytepos(pos))
+        Some(self.char_pos_to_emacs_byte_pos(CharPos0::new(pos)).get())
     }
 
     pub fn text_props_previous_interval_boundary(&self, pos: usize) -> Option<usize> {
@@ -960,7 +952,7 @@ impl BufferText {
                 .text_props
                 .previous_interval_boundary(char_pos)
         };
-        prev.map(|prev| self.buf_charpos_to_bytepos(prev))
+        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)).get())
     }
 
     pub fn text_props_append_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
@@ -1597,20 +1589,19 @@ impl BufferText {
     /// Convert a character position to a logical Emacs byte offset using an
     /// anchor-bracketed cached search. Mirrors GNU `buf_charpos_to_bytepos`
     /// (`src/marker.c:167`).
-    pub fn buf_charpos_to_bytepos(&self, target: usize) -> usize {
+    pub fn char_pos_to_emacs_byte_pos(&self, target: CharPos0) -> EmacsBytePos {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
-        let target = CharPos0::new(target);
 
         if target.get() >= total_chars {
-            return total_bytes;
+            return metrics.emacs_byte_end();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
         if total_chars == total_bytes {
-            return target.get();
+            return EmacsBytePos::new(target.get());
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
@@ -1685,25 +1676,24 @@ impl BufferText {
             epoch: metrics,
             anchor: TextPositionAnchor::new(target, result),
         });
-        result.get()
+        result
     }
 
     /// Convert a logical Emacs byte position to a character position. Symmetric
     /// to `buf_charpos_to_bytepos` — shares the same anchor + cache machinery.
-    pub fn buf_bytepos_to_charpos(&self, target: usize) -> usize {
+    pub fn emacs_byte_pos_to_char_pos(&self, target: EmacsBytePos) -> CharPos0 {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
-        let target = EmacsBytePos::new(target);
 
         if target.get() >= total_bytes {
-            return total_chars;
+            return metrics.char_end();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
         if total_chars == total_bytes {
-            return target.get();
+            return CharPos0::new(target.get());
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
@@ -1775,7 +1765,18 @@ impl BufferText {
             epoch: metrics,
             anchor: TextPositionAnchor::new(result, target),
         });
-        result.get()
+        result
+    }
+
+    #[cfg(test)]
+    pub fn buf_charpos_to_bytepos(&self, target: usize) -> usize {
+        self.char_pos_to_emacs_byte_pos(CharPos0::new(target)).get()
+    }
+
+    #[cfg(test)]
+    pub fn buf_bytepos_to_charpos(&self, target: usize) -> usize {
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(target))
+            .get()
     }
 
     #[cfg(test)]

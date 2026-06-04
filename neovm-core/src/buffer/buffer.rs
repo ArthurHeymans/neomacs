@@ -3087,8 +3087,14 @@ fn buffer_text_property_undo_runs(
         return Vec::new();
     }
 
-    let char_start = buf.text.buf_bytepos_to_charpos(start);
-    let char_end = buf.text.buf_bytepos_to_charpos(end);
+    let char_start = buf
+        .text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
+        .get();
+    let char_end = buf
+        .text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
+        .get();
     if char_start >= char_end {
         return Vec::new();
     }
