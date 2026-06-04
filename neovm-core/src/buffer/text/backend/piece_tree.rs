@@ -411,11 +411,10 @@ impl PieceTreeTextBackend {
         let start_char = self.emacs_byte_pos_to_char_pos(range.start());
         let end_char = self.emacs_byte_pos_to_char_pos(range.end());
         self.delete_measured_range(TextEditRange::new(range, start_char, end_char));
-        let new_chars = emacs_char_count_bytes(replacement, self.multibyte);
         self.insert_measured_emacs_bytes(
             EmacsBytePos::new(start),
             replacement,
-            TextExtent::from_usize(new_chars, replacement.len()),
+            TextExtent::from_emacs_bytes(replacement, self.multibyte),
         );
     }
 

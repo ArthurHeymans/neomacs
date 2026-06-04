@@ -132,6 +132,10 @@ impl CharPos0 {
     pub const fn from_usize(pos: usize) -> Self {
         Self(pos)
     }
+
+    pub const fn add_len(self, len: CharLen) -> Self {
+        Self(self.0 + len.get())
+    }
 }
 
 impl EmacsBytePos {
@@ -156,6 +160,10 @@ impl EmacsBytePos {
     pub fn from_lisp(p: LispCharPos1, text: &super::BufferText) -> Self {
         text.char_pos_to_emacs_byte_pos(CharPos0::from_lisp(p))
     }
+
+    pub const fn add_len(self, len: EmacsByteLen) -> Self {
+        Self(self.0 + len.get())
+    }
 }
 
 impl CharLen {
@@ -177,6 +185,13 @@ impl CharLen {
 impl CharRange {
     pub const fn new(start: CharPos0, end: CharPos0) -> Self {
         Self { start, end }
+    }
+
+    pub const fn from_start_len(start: CharPos0, len: CharLen) -> Self {
+        Self {
+            start,
+            end: start.add_len(len),
+        }
     }
 
     pub const fn from_usize(start: usize, end: usize) -> Self {
@@ -230,6 +245,13 @@ impl EmacsByteLen {
 impl EmacsByteRange {
     pub const fn new(start: EmacsBytePos, end: EmacsBytePos) -> Self {
         Self { start, end }
+    }
+
+    pub const fn from_start_len(start: EmacsBytePos, len: EmacsByteLen) -> Self {
+        Self {
+            start,
+            end: start.add_len(len),
+        }
     }
 
     pub const fn from_usize(start: usize, end: usize) -> Self {

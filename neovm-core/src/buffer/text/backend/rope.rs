@@ -432,11 +432,10 @@ impl RopeTextBackend {
 
         let start_char = self.emacs_byte_pos_to_char_pos(range.start());
         let end_char = self.emacs_byte_pos_to_char_pos(range.end());
-        let new_chars = emacs_char_count_bytes(replacement, self.multibyte);
         self.replace_measured_range(
             TextReplacement::new(
                 TextEditRange::new(range, start_char, end_char),
-                TextExtent::from_usize(new_chars, replacement.len()),
+                TextExtent::from_emacs_bytes(replacement, self.multibyte),
             ),
             replacement,
         );

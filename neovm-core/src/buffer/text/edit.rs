@@ -61,6 +61,10 @@ impl TextExtent {
         }
     }
 
+    pub fn from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Self {
+        Self::from_usize(super::emacs_char_count_bytes(bytes, multibyte), bytes.len())
+    }
+
     pub const fn chars(self) -> CharLen {
         self.chars
     }
@@ -102,6 +106,14 @@ impl TextInsertion {
 
     pub const fn char_pos(self) -> CharPos0 {
         self.char_pos
+    }
+
+    pub const fn byte_end(self) -> EmacsBytePos {
+        self.byte_pos.add_len(self.extent.emacs_bytes())
+    }
+
+    pub const fn char_end(self) -> CharPos0 {
+        self.char_pos.add_len(self.extent.chars())
     }
 
     pub const fn extent(self) -> TextExtent {
@@ -170,6 +182,22 @@ impl TextEditRange {
             byte_range,
             char_start,
             char_end,
+        }
+    }
+
+    pub const fn empty_at(byte_pos: EmacsBytePos, char_pos: CharPos0) -> Self {
+        Self::new(EmacsByteRange::new(byte_pos, byte_pos), char_pos, char_pos)
+    }
+
+    pub const fn from_start_extent(
+        byte_start: EmacsBytePos,
+        char_start: CharPos0,
+        extent: TextExtent,
+    ) -> Self {
+        Self {
+            byte_range: EmacsByteRange::from_start_len(byte_start, extent.emacs_bytes()),
+            char_start,
+            char_end: char_start.add_len(extent.chars()),
         }
     }
 
@@ -246,6 +274,50 @@ impl TextEditRange {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_extent_measures_emacs_bytes_for_buffer_mode() {
+        let multibyte = TextExtent::from_emacs_bytes("aé🙂".as_bytes(), true);
+        assert_eq!(multibyte.chars().get(), 3);
+        assert_eq!(multibyte.emacs_bytes().get(), "aé🙂".len());
+
+        let unibyte = TextExtent::from_emacs_bytes(&[0xFF, b'a', 0x80], false);
+        assert_eq!(unibyte.chars().get(), 3);
+        assert_eq!(unibyte.emacs_bytes().get(), 3);
+    }
+
+    #[test]
+    fn text_insertion_reports_typed_end_positions() {
+        let insertion = TextInsertion::new(
+            EmacsBytePos::new(20),
+            CharPos0::new(10),
+            TextExtent::from_usize(3, 7),
+        );
+
+        assert_eq!(insertion.byte_end(), EmacsBytePos::new(27));
+        assert_eq!(insertion.char_end(), CharPos0::new(13));
+    }
+
+    #[test]
+    fn text_edit_range_can_be_built_from_start_and_extent() {
+        let range = TextEditRange::from_start_extent(
+            EmacsBytePos::new(20),
+            CharPos0::new(10),
+            TextExtent::from_usize(3, 7),
+        );
+
+        assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 27));
+        assert_eq!(range.char_range(), CharRange::from_usize(10, 13));
+    }
+
+    #[test]
+    fn empty_text_edit_range_keeps_coordinate_spaces_together() {
+        let range = TextEditRange::empty_at(EmacsBytePos::new(20), CharPos0::new(10));
+
+        assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 20));
+        assert_eq!(range.char_range(), CharRange::from_usize(10, 10));
+        assert!(range.is_empty());
+    }
 
     #[test]
     fn text_replacement_keeps_old_and_new_extents_together() {

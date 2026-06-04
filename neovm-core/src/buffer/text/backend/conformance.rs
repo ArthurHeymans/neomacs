@@ -2,7 +2,6 @@ use super::TextBackend;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::buffer::text::{
     ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextReplacement,
-    emacs_char_count_bytes,
 };
 use proptest::prelude::*;
 
@@ -167,7 +166,7 @@ fn chunked_range(backend: &TextBackend, range: EmacsByteRange) -> Vec<Vec<u8>> {
 }
 
 fn extent_for_bytes(bytes: &[u8], multibyte: bool) -> TextExtent {
-    TextExtent::from_usize(emacs_char_count_bytes(bytes, multibyte), bytes.len())
+    TextExtent::from_emacs_bytes(bytes, multibyte)
 }
 
 fn buffer_bytes_for_text(text: &str, multibyte: bool) -> Vec<u8> {

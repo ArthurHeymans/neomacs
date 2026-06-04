@@ -396,6 +396,11 @@ Completed so far:
 - Moved layout types into `buffer/text/layout.rs`.
 - Added typed position, range, length, extent, insertion, and edit range
   wrappers.
+- Moved insert/delete/replace measurement toward GNU's paired char/byte edit
+  shape: `BufferText` now constructs backend-neutral edit ranges and insertion
+  descriptors from Emacs byte positions, while `insdel.rs` carries measured
+  `TextExtent` values instead of recomputing raw lengths at each mutation
+  site.
 - Tightened private backend boundaries for byte ranges, position conversion,
   edit mutation, byte access, storage/Emacs byte conversion, and conversion
   anchors.

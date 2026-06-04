@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use crate::buffer::text::{ImplementedBufferTextBackendKind, TextBackendDebugLayout};
-use crate::buffer::{BufferTextBackendKind, EmacsByteRange, TextMetrics};
+use crate::buffer::{
+    BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
+    TextMetrics,
+};
 
 use super::BufferText;
 
@@ -106,6 +109,57 @@ fn public_backend_kind_helpers_select_and_convert_storage() {
         .expect("rope backend should be available");
     assert_eq!(empty.backend_kind(), BufferTextBackendKind::Rope);
     assert!(empty.is_empty());
+}
+
+#[test]
+fn edit_measurement_boundary_is_backend_neutral() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::implemented_variants() {
+        let text = BufferText::from_str_with_backend_kind("aé\n🙂z", implemented_kind(kind));
+        let start = text.buf_charpos_to_bytepos(1);
+        let end = text.buf_charpos_to_bytepos(4);
+
+        let range = text.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        assert_eq!(
+            range.byte_range(),
+            EmacsByteRange::from_usize(start, end),
+            "{kind:?} byte range changed while measuring edit range"
+        );
+        assert_eq!(
+            range.char_start(),
+            CharPos0::new(1),
+            "{kind:?} edit start char position diverged"
+        );
+        assert_eq!(
+            range.char_end(),
+            CharPos0::new(4),
+            "{kind:?} edit end char position diverged"
+        );
+        assert_eq!(
+            range.extent(),
+            TextExtent::from_usize(3, end - start),
+            "{kind:?} edit extent diverged"
+        );
+
+        let byte_pos = EmacsBytePos::new(start);
+        let empty = text.edit_range_at_emacs_byte_pos(byte_pos);
+        assert_eq!(
+            empty,
+            TextEditRange::empty_at(byte_pos, CharPos0::new(1)),
+            "{kind:?} empty edit range diverged"
+        );
+
+        let extent = TextExtent::from_emacs_bytes("Ωx".as_bytes(), true);
+        let insertion = text.insertion_at_emacs_byte_pos(byte_pos, extent);
+        assert_eq!(insertion.byte_pos(), byte_pos, "{kind:?}");
+        assert_eq!(insertion.char_pos(), CharPos0::new(1), "{kind:?}");
+        assert_eq!(
+            insertion.byte_end(),
+            EmacsBytePos::new(start + "Ωx".len()),
+            "{kind:?}"
+        );
+        assert_eq!(insertion.char_end(), CharPos0::new(3), "{kind:?}");
+    }
 }
 
 #[test]

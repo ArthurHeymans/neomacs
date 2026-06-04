@@ -400,8 +400,11 @@ impl GapBuffer {
         if bytes.is_empty() {
             return;
         }
-        let nchars = emacs_char_count_bytes(bytes, self.multibyte);
-        self.insert_emacs_bytes_both(pos, bytes, nchars);
+        self.insert_measured_emacs_bytes(
+            EmacsBytePos::new(pos),
+            bytes,
+            TextExtent::from_emacs_bytes(bytes, self.multibyte),
+        );
     }
 
     /// Insert raw Emacs bytes at logical byte position `pos`, given the

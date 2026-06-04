@@ -21,7 +21,7 @@ use super::position::{
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, ImplementedBufferTextBackendKind, TextEditRange, TextExtent,
-    TextMetrics, TextReplacement, emacs_char_count_bytes,
+    TextInsertion, TextMetrics, TextReplacement,
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
@@ -208,9 +208,30 @@ impl BufferText {
         )
     }
 
-    fn byte_range_to_char_range(&self, range: EmacsByteRange) -> CharRange {
+    pub(crate) fn byte_range_to_char_range(&self, range: EmacsByteRange) -> CharRange {
         let storage = self.storage.borrow();
         Self::byte_range_to_char_range_with_storage(&storage, range)
+    }
+
+    pub(crate) fn edit_range_for_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+    ) -> TextEditRange {
+        let char_range = self.byte_range_to_char_range(byte_range);
+        TextEditRange::new(byte_range, char_range.start(), char_range.end())
+    }
+
+    pub(crate) fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
+        let char_pos = self.emacs_byte_pos_to_char_pos(byte_pos);
+        TextEditRange::empty_at(byte_pos, char_pos)
+    }
+
+    pub(crate) fn insertion_at_emacs_byte_pos(
+        &self,
+        byte_pos: EmacsBytePos,
+        extent: TextExtent,
+    ) -> TextInsertion {
+        TextInsertion::new(byte_pos, self.emacs_byte_pos_to_char_pos(byte_pos), extent)
     }
 
     pub fn new() -> Self {
@@ -487,7 +508,7 @@ impl BufferText {
         let multibyte = self.is_multibyte();
         let bytes =
             crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
-        let extent = TextExtent::from_usize(emacs_char_count_bytes(&bytes, multibyte), bytes.len());
+        let extent = TextExtent::from_emacs_bytes(&bytes, multibyte);
         self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), &bytes, extent);
     }
 
@@ -497,7 +518,7 @@ impl BufferText {
             return;
         }
         let multibyte = self.is_multibyte();
-        let extent = TextExtent::from_usize(emacs_char_count_bytes(bytes, multibyte), bytes.len());
+        let extent = TextExtent::from_emacs_bytes(bytes, multibyte);
         self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), bytes, extent);
     }
 

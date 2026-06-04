@@ -8,9 +8,8 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
     char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode, delete_state_after_edit,
-    emacs_byte_for_char_pos, emacs_char_count, insert_state_after_edit,
-    lisp_string_from_buffer_bytes, modification_tick_delta, replace_state_after_edit,
-    transpose_position,
+    emacs_byte_for_char_pos, insert_state_after_edit, lisp_string_from_buffer_bytes,
+    modification_tick_delta, replace_state_after_edit, transpose_position,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -55,12 +54,13 @@ impl Buffer {
         self.zv = state.zv.get();
     }
 
-    fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
+    fn buffer_region_lisp_string(&self, range: EmacsByteRange) -> LispString {
         let mut bytes = Vec::new();
-        self.text
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
+        self.text.copy_emacs_byte_range_to(range, &mut bytes);
         let mut string = lisp_string_from_buffer_bytes(bytes, self.get_multibyte());
-        let props = self.text.text_props_slice(start, end);
+        let props = self
+            .text
+            .text_props_slice(range.start_usize(), range.end_usize());
         if !props.is_empty() {
             *string.intervals_mut() = props;
         }
@@ -75,34 +75,26 @@ impl Buffer {
         )
     }
 
-    fn edit_range_at_byte(&self, byte_pos: usize) -> TextEditRange {
-        let byte_pos_typed = EmacsBytePos::new(byte_pos);
-        let char_pos = char_pos_for_emacs_byte(&self.text, byte_pos_typed);
-        TextEditRange::new(
-            EmacsByteRange::new(byte_pos_typed, byte_pos_typed),
-            char_pos,
-            char_pos,
-        )
+    fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
+        self.text.edit_range_at_emacs_byte_pos(byte_pos)
     }
 
-    fn edit_range_for_byte_bounds(&self, start: usize, end: usize) -> TextEditRange {
-        if start >= end {
-            return self.edit_range_at_byte(start);
+    fn edit_range_for_emacs_byte_range(&self, byte_range: EmacsByteRange) -> TextEditRange {
+        if byte_range.is_empty() {
+            return self.edit_range_at_emacs_byte_pos(byte_range.start());
         }
-        let start_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(start));
-        let end_char = char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(end));
-        TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char)
+        self.text.edit_range_for_emacs_byte_range(byte_range)
     }
 
     fn insert_bytes_internal(
         &mut self,
         bytes: &[u8],
-        char_len: usize,
+        extent: TextExtent,
         before_markers: bool,
     ) -> TextInsertion {
         self.insert_bytes_internal_full(
             bytes,
-            char_len,
+            extent,
             before_markers,
             InsertMarkerAdjustment::ByInsertionType,
         )
@@ -116,13 +108,14 @@ impl Buffer {
     fn insert_bytes_internal_full(
         &mut self,
         bytes: &[u8],
-        char_len: usize,
+        extent: TextExtent,
         before_markers: bool,
         marker_adjustment: InsertMarkerAdjustment,
     ) -> TextInsertion {
-        let insertion = self.insertion_at_point(TextExtent::from_usize(char_len, bytes.len()));
+        let insertion = self.insertion_at_point(extent);
         let insert_pos = insertion.byte_pos_usize();
         let insert_char_pos = insertion.char_pos_usize();
+        let char_len = insertion.extent().chars().get();
         if bytes.is_empty() {
             return insertion;
         }
@@ -282,8 +275,8 @@ impl Buffer {
             text,
             self.get_multibyte(),
         );
-        let char_len = emacs_char_count(&bytes, self.get_multibyte());
-        self.insert_bytes_internal(&bytes, char_len, before_markers)
+        let extent = TextExtent::from_emacs_bytes(&bytes, self.get_multibyte());
+        self.insert_bytes_internal(&bytes, extent, before_markers)
     }
 
     pub fn insert(&mut self, text: &str) -> TextInsertion {
@@ -297,7 +290,8 @@ impl Buffer {
     pub fn insert_lisp_string(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        let insertion = self.insert_bytes_internal(text.as_bytes(), text.schars(), false);
+        let extent = TextExtent::from_usize(text.schars(), text.as_bytes().len());
+        let insertion = self.insert_bytes_internal(text.as_bytes(), extent, false);
         if text.has_intervals() {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
@@ -308,7 +302,8 @@ impl Buffer {
     pub fn insert_lisp_string_before_markers(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        let insertion = self.insert_bytes_internal(text.as_bytes(), text.schars(), true);
+        let extent = TextExtent::from_usize(text.schars(), text.as_bytes().len());
+        let insertion = self.insert_bytes_internal(text.as_bytes(), extent, true);
         if text.has_intervals() {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
@@ -324,9 +319,10 @@ impl Buffer {
     pub fn insert_lisp_string_for_replace(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
+        let extent = TextExtent::from_usize(text.schars(), text.as_bytes().len());
         let insertion = self.insert_bytes_internal_full(
             text.as_bytes(),
-            text.schars(),
+            extent,
             false,
             InsertMarkerAdjustment::StrictAfter,
         );
@@ -354,15 +350,12 @@ impl Buffer {
         if start == end {
             self.goto_byte(start);
             let insertion = self.insert_lisp_string(&text);
-            let old_range = TextEditRange::new(
-                EmacsByteRange::from_usize(insertion.byte_pos_usize(), insertion.byte_pos_usize()),
-                insertion.char_pos(),
-                insertion.char_pos(),
-            );
+            let old_range = TextEditRange::empty_at(insertion.byte_pos(), insertion.char_pos());
             return TextReplacement::new(old_range, insertion.extent());
         }
 
-        let old_range = self.edit_range_for_byte_bounds(start, end);
+        let old_range =
+            self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         let start_char = old_range.char_start();
         let end_char = old_range.char_end();
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
@@ -371,7 +364,7 @@ impl Buffer {
         let old_state = self.edit_state();
         let old_pt_byte = self.pt_byte;
         let old_pt = self.pt;
-        let deleted_text = self.buffer_region_lisp_string(start, end);
+        let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
         self.undo_prepare_change(start, old_pt_byte);
         let mut ul = self.get_undo_list();
@@ -410,7 +403,7 @@ impl Buffer {
             self.text.text_props_append_shifted(text.intervals(), start);
         } else if new_char_len > 0 {
             self.text.text_props_set_properties_in_emacs_byte_range(
-                EmacsByteRange::from_usize(start, start + new_byte_len),
+                EmacsByteRange::from_start_len(replacement.byte_start(), new_extent.emacs_bytes()),
                 Vec::new(),
             );
         }
@@ -427,11 +420,11 @@ impl Buffer {
         if start >= end {
             return TextEditRange::default();
         }
-        let range = self.edit_range_for_byte_bounds(start, end);
+        let range = self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         let start_char = range.char_start();
         let end_char = range.char_end();
         // Record undo: save the deleted text for restoration.
-        let deleted_text = self.buffer_region_lisp_string(start, end);
+        let deleted_text = self.buffer_region_lisp_string(range.byte_range());
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
         self.undo_prepare_change(start, self.pt_byte);
@@ -629,7 +622,8 @@ impl Buffer {
             &mut region2,
         );
 
-        let old_span = self.buffer_region_lisp_string(start1_byte, end2_byte);
+        let old_span =
+            self.buffer_region_lisp_string(EmacsByteRange::from_usize(start1_byte, end2_byte));
 
         let mut replacement = Vec::with_capacity(end2_byte - start1_byte);
         replacement.extend_from_slice(&region2);
@@ -662,14 +656,20 @@ impl Buffer {
                     record_change(
                         &mut undo_list,
                         start1_char,
-                        self.buffer_region_lisp_string(start1_byte, end1_byte),
+                        self.buffer_region_lisp_string(EmacsByteRange::from_usize(
+                            start1_byte,
+                            end1_byte,
+                        )),
                         self.pt,
                         self.undo_state.point_before_command_or_undo(),
                     );
                     record_change(
                         &mut undo_list,
                         start2_char,
-                        self.buffer_region_lisp_string(start2_byte, end2_byte),
+                        self.buffer_region_lisp_string(EmacsByteRange::from_usize(
+                            start2_byte,
+                            end2_byte,
+                        )),
                         self.pt,
                         self.undo_state.point_before_command_or_undo(),
                     );
