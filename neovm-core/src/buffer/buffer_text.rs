@@ -153,6 +153,12 @@ impl BufferText {
         ))
     }
 
+    pub fn try_new_with_backend_kind(
+        kind: BufferTextBackendKind,
+    ) -> Result<Self, BufferTextBackendKind> {
+        Ok(Self::new_with_backend_kind(kind.try_into()?))
+    }
+
     pub(crate) fn new_with_backend_kind(kind: ImplementedBufferTextBackendKind) -> Self {
         Self::from_backend(TextBackend::new(kind))
     }
@@ -164,6 +170,13 @@ impl BufferText {
         ))
     }
 
+    pub fn try_from_str_with_backend_kind(
+        text: &str,
+        kind: BufferTextBackendKind,
+    ) -> Result<Self, BufferTextBackendKind> {
+        Ok(Self::from_str_with_backend_kind(text, kind.try_into()?))
+    }
+
     pub(crate) fn from_str_with_backend_kind(
         text: &str,
         kind: ImplementedBufferTextBackendKind,
@@ -173,6 +186,16 @@ impl BufferText {
 
     pub fn from_lisp_string(text: &crate::heap_types::LispString) -> Self {
         Self::from_lisp_string_with_backend_kind(text, ImplementedBufferTextBackendKind::GapBuffer)
+    }
+
+    pub fn try_from_lisp_string_with_backend_kind(
+        text: &crate::heap_types::LispString,
+        kind: BufferTextBackendKind,
+    ) -> Result<Self, BufferTextBackendKind> {
+        Ok(Self::from_lisp_string_with_backend_kind(
+            text,
+            kind.try_into()?,
+        ))
     }
 
     pub(crate) fn from_lisp_string_with_backend_kind(
@@ -192,6 +215,14 @@ impl BufferText {
 
     pub(crate) fn implemented_backend_kind(&self) -> ImplementedBufferTextBackendKind {
         self.storage.borrow().backend.kind()
+    }
+
+    pub fn try_convert_backend_kind(
+        &self,
+        kind: BufferTextBackendKind,
+    ) -> Result<(), BufferTextBackendKind> {
+        self.convert_backend_kind(kind.try_into()?);
+        Ok(())
     }
 
     pub(crate) fn convert_backend_kind(&self, kind: ImplementedBufferTextBackendKind) {

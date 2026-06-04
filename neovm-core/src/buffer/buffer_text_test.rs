@@ -76,6 +76,26 @@ fn buffer_text_can_use_non_gap_backends() {
 }
 
 #[test]
+fn public_backend_kind_helpers_select_and_convert_storage() {
+    crate::test_utils::init_test_tracing();
+    let text = BufferText::try_from_str_with_backend_kind("abc", BufferTextBackendKind::Rope)
+        .expect("rope backend should be available");
+
+    assert_eq!(text.backend_kind(), BufferTextBackendKind::Rope);
+    assert_eq!(text.to_string(), "abc");
+
+    text.try_convert_backend_kind(BufferTextBackendKind::PieceTree)
+        .expect("piece-tree backend should be available");
+    assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
+    assert_eq!(text.to_string(), "abc");
+
+    let empty = BufferText::try_new_with_backend_kind(BufferTextBackendKind::Rope)
+        .expect("rope backend should be available");
+    assert_eq!(empty.backend_kind(), BufferTextBackendKind::Rope);
+    assert!(empty.is_empty());
+}
+
+#[test]
 fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     for kind in [

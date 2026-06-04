@@ -59,11 +59,16 @@ default = []
 sound = ["rodio"]
 
 [dev-dependencies]
+criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }
 proptest.workspace = true
 tree-sitter-json = "0.24"
 
 [build-dependencies]
 sha2.workspace = true
+
+[[bench]]
+name = "buffer_text_backends"
+harness = false
 
 [lints.rust]
 unused_imports = "allow"
