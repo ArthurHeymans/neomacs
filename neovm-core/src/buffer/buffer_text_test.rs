@@ -150,6 +150,35 @@ fn replace_lisp_string_preserves_non_gap_backend() {
 }
 
 #[test]
+fn same_size_replacement_invalidates_position_caches() {
+    crate::test_utils::init_test_tracing();
+    let left = "a".repeat(6001);
+    let right = "b".repeat(6001);
+    let original = format!("{left}€{right}");
+    let replacement = format!("€{left}{right}");
+    let target_char = 6001;
+
+    for kind in BufferTextBackendKind::implemented_variants() {
+        let mut text = BufferText::from_str_with_backend_kind(&original, implemented_kind(kind));
+
+        assert_eq!(text.buf_charpos_to_bytepos(target_char), target_char);
+        assert!(
+            text.anchor_cache_len() > 0,
+            "{kind:?} should cache the long char/byte walk before replacement"
+        );
+
+        text.replace_same_len_emacs_bytes(0, original.len(), replacement.as_bytes());
+
+        assert_eq!(
+            text.anchor_cache_len(),
+            0,
+            "{kind:?} should clear stale anchors after same-size replacement"
+        );
+        assert_eq!(text.buf_charpos_to_bytepos(target_char), target_char + 2);
+    }
+}
+
+#[test]
 fn from_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);

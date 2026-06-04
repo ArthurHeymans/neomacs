@@ -30,8 +30,8 @@ use super::text_props::{PropertyInterval, TextPropertyTable};
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
 /// buffer text has not changed since the entry was stored. Mirrors GNU
 /// `marker.c:202-203` but uses a (total_chars, total_bytes) epoch rather than
-/// `chars_modiff` so it works correctly even when called directly on
-/// `BufferText` without going through the `insdel.rs` tick-bumping path.
+/// `chars_modiff`; every `BufferText` content mutation clears the cache because
+/// same-size edits can still change character boundaries.
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
     /// Total text size when this entry was stored. Empty = invalid.
@@ -135,6 +135,11 @@ impl BufferText {
 
     fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
         storage.metrics = storage.backend.metrics();
+    }
+
+    fn finish_backend_content_mutation(storage: &mut BufferTextStorage) {
+        Self::refresh_backend_metrics(storage);
+        Self::invalidate_position_caches(storage);
     }
 
     fn virtual_gap_consume_bytes(storage: &mut BufferTextStorage, bytes: usize) {
@@ -295,8 +300,7 @@ impl BufferText {
         storage.backend = TextBackend::from_dump(text, multibyte, kind);
         storage.virtual_gap_pos = virtual_gap_pos;
         storage.virtual_gap_size = virtual_gap_size;
-        Self::refresh_backend_metrics(&mut storage);
-        Self::invalidate_position_caches(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     pub fn len(&self) -> usize {
@@ -313,8 +317,7 @@ impl BufferText {
             return;
         }
         storage.backend.set_multibyte(multibyte);
-        Self::refresh_backend_metrics(&mut storage);
-        Self::invalidate_position_caches(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -512,7 +515,7 @@ impl BufferText {
         storage
             .backend
             .insert_measured_emacs_bytes(pos, bytes, extent);
-        Self::refresh_backend_metrics(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     #[cfg(test)]
@@ -544,7 +547,7 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         Self::note_virtual_gap_delete(&mut storage, range);
         storage.backend.delete_measured_range(range);
-        Self::refresh_backend_metrics(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     pub(crate) fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
@@ -554,7 +557,7 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         Self::note_virtual_gap_replace(&mut storage, replacement);
         storage.backend.replace_measured_range(replacement, bytes);
-        Self::refresh_backend_metrics(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     #[cfg(test)]
@@ -574,7 +577,7 @@ impl BufferText {
         storage
             .backend
             .replace_same_len_emacs_byte_range(range, replacement);
-        Self::refresh_backend_metrics(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
     }
 
     pub fn shared_clone(&self) -> Self {
@@ -707,17 +710,13 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         let kind = storage.backend.kind();
         storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
-        Self::refresh_backend_metrics(&mut storage);
+        Self::finish_backend_content_mutation(&mut storage);
         storage.virtual_gap_pos = storage
             .backend
             .gap_compat_char_pos()
             .unwrap_or_else(|| CharPos0::new(storage.metrics.chars()));
         storage.virtual_gap_size = storage.backend.gap_compat_size().unwrap_or(GAP_BYTES_DFL);
         storage.text_props = text_props;
-        // Wholesale content replacement: invalidate position caches. If the new
-        // content happens to have the same (total_chars, total_bytes) as the old,
-        // a stale pos_cache entry could otherwise return a wrong bytepos.
-        Self::invalidate_position_caches(&mut storage);
     }
 
     /// Walk the intrusive marker chain and remap each marker's (bytepos,
