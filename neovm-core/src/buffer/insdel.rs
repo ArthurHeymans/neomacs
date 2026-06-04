@@ -12,7 +12,7 @@ use crate::buffer::edit_transaction::{
     replace_state_after_edit, transpose_position,
 };
 use crate::buffer::undo;
-use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion};
+use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion, TextReplacement};
 use crate::heap_types::LispString;
 
 impl Buffer {
@@ -341,11 +341,10 @@ impl Buffer {
 
         let start_char = char_pos_for_emacs_byte(&self.text, start);
         let end_char = char_pos_for_emacs_byte(&self.text, end);
-        let old_byte_len = end - start;
-        let old_char_len = end_char.get() - start_char.get();
         let old_range =
             TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
+        let replacement = TextReplacement::new(old_range, new_extent);
 
         let old_state = self.edit_state();
         let old_pt_byte = self.pt_byte;
@@ -378,7 +377,7 @@ impl Buffer {
         self.text.delete_measured_range(old_range);
         self.text
             .insert_measured_emacs_bytes(old_range.byte_start(), new_bytes, new_extent);
-        self.set_edit_state(replace_state_after_edit(old_state, old_range, new_extent));
+        self.set_edit_state(replace_state_after_edit(old_state, replacement));
 
         self.text
             .adjust_markers_for_replace_range(old_range, new_extent);
@@ -394,8 +393,8 @@ impl Buffer {
                 .text_props_set_properties(start, start + new_byte_len, Vec::new());
         }
         self.overlays
-            .adjust_for_replace(start, old_byte_len, new_byte_len);
-        self.record_char_modification(old_char_len.max(new_char_len));
+            .adjust_for_replace(start, replacement.old_byte_len().get(), new_byte_len);
+        self.record_char_modification(replacement.changed_chars_usize());
     }
 
     /// Delete the byte range `[start, end)`.
@@ -770,27 +769,21 @@ impl BufferManager {
 
     fn adjust_shared_replace_metadata(
         buf: &mut Buffer,
-        old_range: TextEditRange,
-        new_extent: TextExtent,
+        replacement: TextReplacement,
         update_state_fields: bool,
     ) {
+        let old_range = replacement.old_range();
         let start = old_range.byte_start_usize();
-        let old_byte_len = old_range.byte_len().get();
-        let old_char_len = old_range.char_len().get();
-        let new_byte_len = new_extent.emacs_bytes().get();
-        let new_char_len = new_extent.chars().get();
+        let old_byte_len = replacement.old_byte_len().get();
+        let new_byte_len = replacement.new_byte_len().get();
 
         if update_state_fields {
-            buf.set_edit_state(replace_state_after_edit(
-                buf.edit_state(),
-                old_range,
-                new_extent,
-            ));
+            buf.set_edit_state(replace_state_after_edit(buf.edit_state(), replacement));
         }
 
         buf.overlays
             .adjust_for_replace(start, old_byte_len, new_byte_len);
-        buf.record_char_modification(old_char_len.max(new_char_len));
+        buf.record_char_modification(replacement.changed_chars_usize());
     }
 
     fn adjust_shared_same_len_edit_metadata(
@@ -1022,6 +1015,7 @@ impl BufferManager {
         let old_range =
             TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
+        let replacement = TextReplacement::new(old_range, new_extent);
 
         self.buffers
             .get_mut(&id)?
@@ -1034,12 +1028,7 @@ impl BufferManager {
             let update_state_fields =
                 self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_replace_metadata(
-                sibling,
-                old_range,
-                new_extent,
-                update_state_fields,
-            );
+            Self::adjust_shared_replace_metadata(sibling, replacement, update_state_fields);
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())

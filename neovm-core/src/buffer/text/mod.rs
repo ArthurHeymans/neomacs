@@ -5,7 +5,7 @@ mod kind;
 mod layout;
 mod metrics;
 
-pub use edit::{TextEditRange, TextExtent, TextInsertion};
+pub use edit::{TextEditRange, TextExtent, TextInsertion, TextReplacement};
 pub use kind::BufferTextBackendKind;
 pub(crate) use kind::ImplementedBufferTextBackendKind;
 #[cfg(test)]

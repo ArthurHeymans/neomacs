@@ -20,7 +20,9 @@ pub use position::{
     EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1, StorageBytePos, TextPositionAnchor,
 };
 pub use shared::SharedUndoState;
-pub use text::{BufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics};
+pub use text::{
+    BufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics, TextReplacement,
+};
 pub use text_props::TextPropertyTable;
 pub use undo::{
     truncate_undo_list, undo_list_boundary, undo_list_contains_boundary,

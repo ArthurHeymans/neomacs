@@ -20,6 +20,18 @@ pub struct TextInsertion {
     extent: TextExtent,
 }
 
+/// Replacement range plus the logical size of the inserted text.
+///
+/// GNU `replace_range` keeps the deleted range and inserted size together
+/// while it updates the gap, markers, intervals, undo, and redisplay state.
+/// Carrying the same measured shape here prevents individual frontends or
+/// backend paths from re-deriving byte and character counts differently.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextReplacement {
+    old_range: TextEditRange,
+    new_extent: TextExtent,
+}
+
 /// Half-open edit range with both byte and character coordinates.
 ///
 /// GNU `del_range_both` carries `from`, `from_byte`, `to`, and `to_byte`.
@@ -105,6 +117,53 @@ impl TextInsertion {
     }
 }
 
+impl TextReplacement {
+    pub const fn new(old_range: TextEditRange, new_extent: TextExtent) -> Self {
+        Self {
+            old_range,
+            new_extent,
+        }
+    }
+
+    pub const fn old_range(self) -> TextEditRange {
+        self.old_range
+    }
+
+    pub const fn new_extent(self) -> TextExtent {
+        self.new_extent
+    }
+
+    pub const fn byte_start(self) -> EmacsBytePos {
+        self.old_range.byte_start()
+    }
+
+    pub const fn byte_start_usize(self) -> usize {
+        self.old_range.byte_start_usize()
+    }
+
+    pub const fn old_byte_len(self) -> EmacsByteLen {
+        self.old_range.byte_len()
+    }
+
+    pub const fn old_char_len(self) -> CharLen {
+        self.old_range.char_len()
+    }
+
+    pub const fn new_byte_len(self) -> EmacsByteLen {
+        self.new_extent.emacs_bytes()
+    }
+
+    pub const fn new_char_len(self) -> CharLen {
+        self.new_extent.chars()
+    }
+
+    pub const fn changed_chars_usize(self) -> usize {
+        let old = self.old_char_len().get();
+        let new = self.new_char_len().get();
+        if old > new { old } else { new }
+    }
+}
+
 impl TextEditRange {
     pub const fn new(byte_range: EmacsByteRange, char_start: CharPos0, char_end: CharPos0) -> Self {
         Self {
@@ -181,5 +240,35 @@ impl TextEditRange {
 
     pub const fn is_empty(self) -> bool {
         self.byte_range.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_replacement_keeps_old_and_new_extents_together() {
+        let replacement = TextReplacement::new(
+            TextEditRange::from_usize(20, 36, 10, 18),
+            TextExtent::from_usize(3, 5),
+        );
+
+        assert_eq!(replacement.byte_start_usize(), 20);
+        assert_eq!(replacement.old_byte_len().get(), 16);
+        assert_eq!(replacement.old_char_len().get(), 8);
+        assert_eq!(replacement.new_byte_len().get(), 5);
+        assert_eq!(replacement.new_char_len().get(), 3);
+        assert_eq!(replacement.changed_chars_usize(), 8);
+    }
+
+    #[test]
+    fn text_replacement_changed_chars_uses_inserted_extent_when_larger() {
+        let replacement = TextReplacement::new(
+            TextEditRange::from_usize(20, 24, 10, 12),
+            TextExtent::from_usize(5, 9),
+        );
+
+        assert_eq!(replacement.changed_chars_usize(), 5);
     }
 }

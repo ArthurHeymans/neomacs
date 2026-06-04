@@ -5,7 +5,7 @@
 //! these types separate is the first step toward a central insert/delete/
 //! replace transaction boundary.
 
-use crate::buffer::{BufferText, CharPos0, EmacsBytePos, TextEditRange, TextExtent};
+use crate::buffer::{BufferText, CharPos0, EmacsBytePos, TextReplacement};
 use crate::heap_types::LispString;
 
 #[inline]
@@ -139,17 +139,17 @@ impl BufferEditState {
 
 pub(in crate::buffer) fn replace_state_after_edit(
     mut state: BufferEditState,
-    old_range: TextEditRange,
-    new_extent: TextExtent,
+    replacement: TextReplacement,
 ) -> BufferEditState {
+    let old_range = replacement.old_range();
     let start = old_range.byte_start_usize();
     let end = old_range.byte_end_usize();
     let start_char = old_range.char_start_usize();
     let end_char = old_range.char_end_usize();
-    let old_byte_len = old_range.byte_len().get();
-    let old_char_len = old_range.char_len().get();
-    let new_byte_len = new_extent.emacs_bytes().get();
-    let new_char_len = new_extent.chars().get();
+    let old_byte_len = replacement.old_byte_len().get();
+    let old_char_len = replacement.old_char_len().get();
+    let new_byte_len = replacement.new_byte_len().get();
+    let new_char_len = replacement.new_char_len().get();
     let old_pt_byte = state.pt_byte;
     let old_pt = state.pt;
 
@@ -288,8 +288,10 @@ mod tests {
     fn replace_state(old: BufferEditState) -> BufferEditState {
         replace_state_after_edit(
             old,
-            TextEditRange::from_usize(20, 36, 10, 18),
-            TextExtent::from_usize(3, 5),
+            TextReplacement::new(
+                crate::buffer::TextEditRange::from_usize(20, 36, 10, 18),
+                crate::buffer::TextExtent::from_usize(3, 5),
+            ),
         )
     }
 
