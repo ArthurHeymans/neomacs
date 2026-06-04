@@ -30,6 +30,19 @@ fn implemented_text_backends() -> [BufferTextBackendKind; 2] {
     ]
 }
 
+fn manager_with_text_backend(kind: BufferTextBackendKind) -> BufferManager {
+    let implemented_kind = require_implemented_kind(kind);
+    let mut mgr = BufferManager::new();
+    mgr.set_default_text_backend_kind(implemented_kind);
+    if let Some(id) = mgr.current_buffer_id() {
+        mgr.get_mut(id)
+            .expect("scratch buffer")
+            .text
+            .convert_backend_kind(implemented_kind);
+    }
+    mgr
+}
+
 fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
     buf.text
         .text_props_intervals_snapshot()
@@ -124,28 +137,32 @@ fn buffer_id_equality() {
 #[test]
 fn create_indirect_buffer_shares_root_text_and_updates_siblings() {
     crate::test_utils::init_test_tracing();
-    let mut mgr = BufferManager::new();
-    let base_id = mgr.current_buffer_id().expect("scratch buffer");
+    for kind in implemented_text_backends() {
+        let mut mgr = manager_with_text_backend(kind);
+        let base_id = mgr.current_buffer_id().expect("scratch buffer");
 
-    let _ = mgr.insert_into_buffer(base_id, "abcd");
-    let indirect_id = mgr
-        .create_indirect_buffer(base_id, "*indirect*", false)
-        .expect("indirect buffer");
+        let _ = mgr.insert_into_buffer(base_id, "abcd");
+        let indirect_id = mgr
+            .create_indirect_buffer(base_id, "*indirect*", false)
+            .expect("indirect buffer");
 
-    let base = mgr.get(base_id).expect("base buffer");
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.base_buffer, Some(base_id));
-    assert!(base.text.shares_storage_with(&indirect.text));
-    assert_eq!(indirect.buffer_string(), "abcd");
+        let base = mgr.get(base_id).expect("base buffer");
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(base.text.backend_kind(), kind);
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.base_buffer, Some(base_id));
+        assert!(base.text.shares_storage_with(&indirect.text));
+        assert_eq!(indirect.buffer_string(), "abcd");
 
-    let _ = mgr.goto_buffer_byte(base_id, 0);
-    let _ = mgr.insert_into_buffer(base_id, "zz");
-    assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzabcd");
-    assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzabcd");
+        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.insert_into_buffer(base_id, "zz");
+        assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzabcd");
+        assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzabcd");
 
-    let _ = mgr.delete_buffer_region(indirect_id, 2, 4);
-    assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzcd");
-    assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzcd");
+        let _ = mgr.delete_buffer_region(indirect_id, 2, 4);
+        assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzcd");
+        assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzcd");
+    }
 }
 
 #[test]
@@ -269,32 +286,36 @@ fn from_dump_preserves_dumped_buffer_order() {
 #[test]
 fn indirect_buffers_preserve_narrowing_across_shared_edits() {
     crate::test_utils::init_test_tracing();
-    let mut mgr = BufferManager::new();
-    let base_id = mgr.current_buffer_id().expect("scratch buffer");
-    let _ = mgr.insert_into_buffer(base_id, "abcdef");
-    let indirect_id = mgr
-        .create_indirect_buffer(base_id, "*indirect-narrow*", false)
-        .expect("indirect buffer");
+    for kind in implemented_text_backends() {
+        let mut mgr = manager_with_text_backend(kind);
+        let base_id = mgr.current_buffer_id().expect("scratch buffer");
+        let _ = mgr.insert_into_buffer(base_id, "abcdef");
+        let indirect_id = mgr
+            .create_indirect_buffer(base_id, "*indirect-narrow*", false)
+            .expect("indirect buffer");
 
-    let _ = mgr.narrow_buffer_to_region(indirect_id, 2, 6);
-    let _ = mgr.goto_buffer_byte(indirect_id, 4);
+        let _ = mgr.narrow_buffer_to_region(indirect_id, 2, 6);
+        let _ = mgr.goto_buffer_byte(indirect_id, 4);
 
-    let _ = mgr.goto_buffer_byte(base_id, 0);
-    let _ = mgr.insert_into_buffer(base_id, "zz");
+        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.insert_into_buffer(base_id, "zz");
 
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.point_min(), 4);
-    assert_eq!(indirect.point_max(), 8);
-    assert_eq!(indirect.point(), 6);
-    assert_eq!(indirect.buffer_string(), "cdef");
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.point_min(), 4);
+        assert_eq!(indirect.point_max(), 8);
+        assert_eq!(indirect.point(), 6);
+        assert_eq!(indirect.buffer_string(), "cdef");
 
-    let _ = mgr.delete_buffer_region(base_id, 0, 2);
+        let _ = mgr.delete_buffer_region(base_id, 0, 2);
 
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.point_min(), 2);
-    assert_eq!(indirect.point_max(), 6);
-    assert_eq!(indirect.point(), 4);
-    assert_eq!(indirect.buffer_string(), "cdef");
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.point_min(), 2);
+        assert_eq!(indirect.point_max(), 6);
+        assert_eq!(indirect.point(), 4);
+        assert_eq!(indirect.buffer_string(), "cdef");
+    }
 }
 
 #[test]
@@ -351,43 +372,48 @@ fn cloned_indirect_buffers_do_not_share_base_mark_marker() {
 #[test]
 fn indirect_buffer_overlays_track_shared_edits() {
     crate::test_utils::init_test_tracing();
-    let mut mgr = BufferManager::new();
-    let base_id = mgr.current_buffer_id().expect("scratch buffer");
-    let _ = mgr.insert_into_buffer(base_id, "abcdef");
-    let indirect_id = mgr
-        .create_indirect_buffer(base_id, "*indirect-overlays*", false)
-        .expect("indirect buffer");
+    for kind in implemented_text_backends() {
+        let mut mgr = manager_with_text_backend(kind);
+        let base_id = mgr.current_buffer_id().expect("scratch buffer");
+        let _ = mgr.insert_into_buffer(base_id, "abcdef");
+        let indirect_id = mgr
+            .create_indirect_buffer(base_id, "*indirect-overlays*", false)
+            .expect("indirect buffer");
 
-    let overlay = Value::make_overlay(OverlayData {
-        serial: 0,
-        plist: Value::NIL,
-        buffer: Some(indirect_id),
-        start: 2,
-        end: 4,
-        front_advance: false,
-        rear_advance: false,
-    });
-    mgr.get_mut(indirect_id)
-        .expect("indirect buffer")
-        .overlays
-        .insert_overlay(overlay);
+        let overlay = Value::make_overlay(OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(indirect_id),
+            start: 2,
+            end: 4,
+            front_advance: false,
+            rear_advance: false,
+        });
+        mgr.get_mut(indirect_id)
+            .expect("indirect buffer")
+            .overlays
+            .insert_overlay(overlay);
 
-    let _ = mgr.goto_buffer_byte(base_id, 0);
-    let _ = mgr.insert_into_buffer(base_id, "zz");
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
-    assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.insert_into_buffer(base_id, "zz");
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
+        assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
 
-    let _ = mgr.goto_buffer_byte(base_id, 4);
-    let _ = mgr.insert_into_buffer_before_markers(base_id, "yy");
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.overlays.overlay_start(overlay), Some(6));
-    assert_eq!(indirect.overlays.overlay_end(overlay), Some(8));
+        let _ = mgr.goto_buffer_byte(base_id, 4);
+        let _ = mgr.insert_into_buffer_before_markers(base_id, "yy");
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.overlays.overlay_start(overlay), Some(6));
+        assert_eq!(indirect.overlays.overlay_end(overlay), Some(8));
 
-    let _ = mgr.delete_buffer_region(base_id, 0, 2);
-    let indirect = mgr.get(indirect_id).expect("indirect buffer");
-    assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
-    assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+        let _ = mgr.delete_buffer_region(base_id, 0, 2);
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
+        assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+    }
 }
 
 // -----------------------------------------------------------------------
