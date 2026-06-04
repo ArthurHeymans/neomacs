@@ -566,23 +566,25 @@ pub(crate) fn replace_buffer_region_lisp_string(
     end_byte: usize,
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
-    let range = eval
-        .buffers
-        .edit_range_for_buffer_emacs_byte_range(
-            buffer_id,
-            EmacsByteRange::from_usize(start_byte, end_byte),
-        )
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    let old_len = range.char_len().get();
-    let new_len = replacement.sbytes();
-    super::editfns::signal_before_change(eval, start_byte, end_byte)?;
-    replace_buffer_region_lisp_string_in_manager(&mut eval.buffers, buffer_id, range, replacement)?;
+    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+        &eval.buffers,
+        buffer_id,
+        EmacsByteRange::from_usize(start_byte, end_byte),
+        replacement,
+    )?;
+    super::editfns::signal_before_text_change(eval, change)?;
+    replace_buffer_region_lisp_string_in_manager(
+        &mut eval.buffers,
+        buffer_id,
+        change.old_range(),
+        replacement,
+    )?;
     // Don't inherit text properties from neighbors here.
     // GNU's replace path (del_range + insert_from_gap in decode_coding)
     // also skips adjust_intervals_for_insertion.  Property inheritance
     // belongs to insert-and-inherit (insert_pieces_in_state with
     // inherit=true), not general-purpose replace operations.
-    super::editfns::signal_after_change(eval, start_byte, start_byte + new_len, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(())
 }
 

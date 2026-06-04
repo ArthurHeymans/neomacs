@@ -21,7 +21,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteRange};
+use crate::buffer::{BufferManager, EmacsByteRange, TextExtent};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -1350,11 +1350,20 @@ pub(crate) fn builtin_json_insert(eval: &mut super::eval::Context, args: Vec<Val
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let insert_pos = eval.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
-    let json_len = json.len();
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let (insert_pos, target_multibyte) = eval
+        .buffers
+        .get(current_id)
+        .map(|b| (b.pt_byte, b.get_multibyte()))
+        .unwrap_or((0, true));
+    let change = super::editfns::text_change_for_replacement_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(insert_pos, insert_pos),
+        TextExtent::from_emacs_bytes(json.as_bytes(), target_multibyte),
+    )?;
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval.buffers.insert_into_buffer(current_id, &json);
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + json_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 

@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
+use crate::buffer::{EmacsByteRange, TextExtent};
 use crate::heap_types::LispString;
 use strum::EnumString;
 
@@ -1045,11 +1046,20 @@ pub(crate) fn builtin_insert_abbrev_table_description(
         // Insert empty table description
         let text = format!("(define-abbrev-table '{})\n", name);
         if let Some(current_id) = eval.buffers.current_buffer_id() {
-            let insert_pos = eval.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
-            let text_len = text.len();
-            super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+            let (insert_pos, target_multibyte) = eval
+                .buffers
+                .get(current_id)
+                .map(|b| (b.pt_byte, b.get_multibyte()))
+                .unwrap_or((0, true));
+            let change = super::editfns::text_change_for_replacement_in_manager(
+                &eval.buffers,
+                current_id,
+                EmacsByteRange::from_usize(insert_pos, insert_pos),
+                TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+            )?;
+            super::editfns::signal_before_text_change(eval, change)?;
             let _ = eval.buffers.insert_into_buffer(current_id, &text);
-            super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
+            super::editfns::signal_after_text_change(eval, change)?;
         }
         return Ok(Value::NIL);
     }
@@ -1110,11 +1120,20 @@ pub(crate) fn builtin_insert_abbrev_table_description(
 
     // Insert into current buffer
     if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let insert_pos = eval.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
-        let text_len = text.len();
-        super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+        let (insert_pos, target_multibyte) = eval
+            .buffers
+            .get(current_id)
+            .map(|b| (b.pt_byte, b.get_multibyte()))
+            .unwrap_or((0, true));
+        let change = super::editfns::text_change_for_replacement_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+        )?;
+        super::editfns::signal_before_text_change(eval, change)?;
         let _ = eval.buffers.insert_into_buffer(current_id, &text);
-        super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
+        super::editfns::signal_after_text_change(eval, change)?;
     }
     Ok(Value::NIL)
 }

@@ -44,6 +44,18 @@ pub struct TextReplacement {
     new_extent: TextExtent,
 }
 
+/// A measured text change for modification hooks and edit notifications.
+///
+/// GNU `signal_before_change` receives the old range, while
+/// `signal_after_change` receives the same start, the inserted end in the new
+/// buffer, and the old character length.  This type keeps those values tied to
+/// the measured edit instead of passing raw byte triples through callers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextChange {
+    old_range: TextEditRange,
+    new_extent: TextExtent,
+}
+
 /// Two non-overlapping edit ranges that will be transposed.
 ///
 /// GNU `transpose-regions` receives character positions from Lisp, computes
@@ -251,6 +263,88 @@ impl TextReplacement {
         let old = self.old_char_len().get();
         let new = self.new_char_len().get();
         if old > new { old } else { new }
+    }
+}
+
+impl TextChange {
+    pub const fn new(old_range: TextEditRange, new_extent: TextExtent) -> Self {
+        Self {
+            old_range,
+            new_extent,
+        }
+    }
+
+    pub const fn insertion(insertion: TextInsertion) -> Self {
+        Self::new(
+            TextEditRange::empty_at(insertion.byte_pos(), insertion.char_pos()),
+            insertion.extent(),
+        )
+    }
+
+    pub const fn deletion(range: TextEditRange) -> Self {
+        Self::new(range, TextExtent::ZERO)
+    }
+
+    pub const fn unchanged_extent(range: TextEditRange) -> Self {
+        Self::new(range, range.extent())
+    }
+
+    pub const fn replacement(replacement: TextReplacement) -> Self {
+        Self::new(replacement.old_range(), replacement.new_extent())
+    }
+
+    pub const fn old_range(self) -> TextEditRange {
+        self.old_range
+    }
+
+    pub const fn new_extent(self) -> TextExtent {
+        self.new_extent
+    }
+
+    pub const fn before_byte_range(self) -> EmacsByteRange {
+        self.old_range.byte_range()
+    }
+
+    pub const fn before_start_byte(self) -> EmacsBytePos {
+        self.old_range.byte_start()
+    }
+
+    pub const fn before_end_byte(self) -> EmacsBytePos {
+        self.old_range.byte_end()
+    }
+
+    pub const fn after_start_byte(self) -> EmacsBytePos {
+        self.old_range.byte_start()
+    }
+
+    pub const fn after_end_byte(self) -> EmacsBytePos {
+        self.old_range
+            .byte_start()
+            .add_len(self.new_extent.emacs_bytes())
+    }
+
+    pub const fn old_char_len(self) -> CharLen {
+        self.old_range.char_len()
+    }
+
+    pub const fn before_start_byte_usize(self) -> usize {
+        self.before_start_byte().get()
+    }
+
+    pub const fn before_end_byte_usize(self) -> usize {
+        self.before_end_byte().get()
+    }
+
+    pub const fn after_start_byte_usize(self) -> usize {
+        self.after_start_byte().get()
+    }
+
+    pub const fn after_end_byte_usize(self) -> usize {
+        self.after_end_byte().get()
+    }
+
+    pub const fn old_char_len_usize(self) -> usize {
+        self.old_char_len().get()
     }
 }
 
@@ -612,5 +706,36 @@ mod tests {
         );
 
         assert_eq!(replacement.changed_chars_usize(), 5);
+    }
+
+    #[test]
+    fn text_change_reports_before_and_after_hook_ranges() {
+        let replacement = TextReplacement::new(
+            TextEditRange::from_usize(20, 36, 10, 18),
+            TextExtent::from_usize(3, 5),
+        );
+        let change = TextChange::replacement(replacement);
+
+        assert_eq!(
+            change.before_byte_range(),
+            EmacsByteRange::from_usize(20, 36)
+        );
+        assert_eq!(change.after_start_byte(), EmacsBytePos::new(20));
+        assert_eq!(change.after_end_byte(), EmacsBytePos::new(25));
+        assert_eq!(change.old_char_len(), CharLen::new(8));
+    }
+
+    #[test]
+    fn text_change_unchanged_extent_keeps_after_range_equal() {
+        let range = TextEditRange::from_usize(20, 36, 10, 18);
+        let change = TextChange::unchanged_extent(range);
+
+        assert_eq!(
+            change.before_byte_range(),
+            EmacsByteRange::from_usize(20, 36)
+        );
+        assert_eq!(change.after_start_byte(), EmacsBytePos::new(20));
+        assert_eq!(change.after_end_byte(), EmacsBytePos::new(36));
+        assert_eq!(change.old_char_len(), CharLen::new(8));
     }
 }

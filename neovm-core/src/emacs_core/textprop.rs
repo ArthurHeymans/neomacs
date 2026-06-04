@@ -905,28 +905,26 @@ fn begin_buffer_text_property_change(
     buf_id: BufferId,
     byte_beg: usize,
     byte_end: usize,
-) -> Result<(Option<BufferId>, usize), Flow> {
+) -> Result<(Option<BufferId>, crate::buffer::TextChange), Flow> {
     let saved_current = eval.buffers.current_buffer_id();
     if saved_current != Some(buf_id) {
         eval.set_current_buffer_unrecorded(buf_id)?;
     }
-    let old_len = eval
-        .buffers
-        .get(buf_id)
-        .map(|buf| super::editfns::byte_span_char_len(buf, byte_beg, byte_end))
-        .unwrap_or_else(|| byte_end.abs_diff(byte_beg));
-    super::editfns::signal_before_change(eval, byte_beg, byte_end)?;
-    Ok((saved_current, old_len))
+    let change = super::editfns::text_change_for_unchanged_extent_in_manager(
+        &eval.buffers,
+        buf_id,
+        crate::buffer::EmacsByteRange::from_usize(byte_beg, byte_end),
+    )?;
+    super::editfns::signal_before_text_change(eval, change)?;
+    Ok((saved_current, change))
 }
 
 fn finish_buffer_text_property_change(
     eval: &mut super::eval::Context,
     saved_current: Option<BufferId>,
-    byte_beg: usize,
-    byte_end: usize,
-    old_len: usize,
+    change: crate::buffer::TextChange,
 ) -> Result<(), Flow> {
-    let result = super::editfns::signal_after_change(eval, byte_beg, byte_end, old_len);
+    let result = super::editfns::signal_after_text_change(eval, change);
     if let Some(saved) = saved_current {
         eval.restore_current_buffer_if_live(saved);
     }
@@ -1096,17 +1094,15 @@ pub(crate) fn builtin_put_text_property(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result = builtin_put_text_property_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }
@@ -1330,17 +1326,15 @@ pub(crate) fn builtin_add_text_properties(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result = builtin_add_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }
@@ -1481,17 +1475,15 @@ pub(crate) fn builtin_add_face_text_property(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result = builtin_add_face_text_property_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }
@@ -1618,17 +1610,15 @@ pub(crate) fn builtin_remove_text_properties(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result = builtin_remove_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }
@@ -1710,17 +1700,15 @@ pub(crate) fn builtin_set_text_properties(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result = builtin_set_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }
@@ -1797,18 +1785,16 @@ pub(crate) fn builtin_remove_list_of_text_properties(
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some((
-            byte_beg,
-            byte_end,
-            begin_buffer_text_property_change(eval, buf_id, byte_beg, byte_end)?,
-        ))
+        Some(begin_buffer_text_property_change(
+            eval, buf_id, byte_beg, byte_end,
+        )?)
     } else {
         None
     };
     let result =
         builtin_remove_list_of_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((byte_beg, byte_end, (saved_current, old_len))) = before {
-        finish_buffer_text_property_change(eval, saved_current, byte_beg, byte_end, old_len)?;
+    if let Some((saved_current, change)) = before {
+        finish_buffer_text_property_change(eval, saved_current, change)?;
     }
     Ok(result)
 }

@@ -6,7 +6,7 @@ use super::*;
 
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
-    LispCharPos1,
+    LispCharPos1, TextChange, TextExtent,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -1342,17 +1342,15 @@ pub(crate) fn builtin_replace_buffer_contents(
         current_id,
         EmacsByteRange::from_usize(0, old_len_bytes),
     )?;
-    let old_len = old_range.char_len().get();
-    super::editfns::signal_before_change(eval, 0, old_len_bytes)?;
+    let change = TextChange::new(
+        old_range,
+        TextExtent::from_usize(source_text.schars(), source_text.sbytes()),
+    );
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .replace_buffer_contents_lisp_string(current_id, &source_text);
-    let new_len = eval
-        .buffers
-        .get(current_id)
-        .map(|buf| buf.total_bytes())
-        .unwrap_or(0);
-    super::editfns::signal_after_change(eval, 0, new_len, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
 
     Ok(Value::T)
 }
@@ -1401,9 +1399,12 @@ pub(crate) fn builtin_replace_region_contents(
         current_id,
         EmacsByteRange::from_usize(lo, hi),
     )?;
-    let old_len = old_range.char_len().get();
     // Signal before the combined delete+insert operation.
-    super::editfns::signal_before_change(eval, lo, hi)?;
+    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
+    let source_pieces = collect_insert_pieces(&[source_value], target_multibyte)?;
+    let new_extent = insert_pieces_extent(&source_pieces);
+    let change = TextChange::new(old_range, new_extent);
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, old_range);
@@ -1411,9 +1412,6 @@ pub(crate) fn builtin_replace_region_contents(
     // The insert builtins already call signal hooks internally, but the
     // surrounding before/after pair covers the whole replace operation.
     // To avoid double-firing, we use insert_pieces_in_state directly.
-    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let source_pieces = collect_insert_pieces(&[source_value], target_multibyte)?;
-    let new_len: usize = source_pieces.iter().map(|p| p.text.sbytes()).sum();
     let inherit = args.get(5).is_some_and(|value| value.is_truthy());
     insert_pieces_in_state(
         &eval.obarray,
@@ -1423,7 +1421,7 @@ pub(crate) fn builtin_replace_region_contents(
         false,
         inherit,
     )?;
-    super::editfns::signal_after_change(eval, lo, lo + new_len, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
 
     Ok(Value::T)
 }
@@ -2645,6 +2643,27 @@ struct InsertPiece {
     text_props: Option<crate::buffer::text_props::TextPropertyTable>,
 }
 
+fn insert_pieces_extent(pieces: &[InsertPiece]) -> TextExtent {
+    TextExtent::from_usize(
+        pieces.iter().map(|piece| piece.text.schars()).sum(),
+        pieces.iter().map(|piece| piece.text.sbytes()).sum(),
+    )
+}
+
+fn current_empty_text_change_at_byte(
+    buffers: &BufferManager,
+    current_id: BufferId,
+    byte_pos: usize,
+    new_extent: TextExtent,
+) -> Result<TextChange, Flow> {
+    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        buffers,
+        current_id,
+        EmacsByteRange::from_usize(byte_pos, byte_pos),
+    )?;
+    Ok(TextChange::new(old_range, new_extent))
+}
+
 fn current_buffer_multibyte(buffers: &BufferManager) -> Result<bool, Flow> {
     let current_id = buffers
         .current_buffer_id()
@@ -2964,18 +2983,24 @@ pub(crate) fn apply_inherited_text_properties(
 pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let total_len: usize = pieces.iter().map(|p| p.text.sbytes()).sum();
-    if total_len == 0 {
+    let insert_extent = insert_pieces_extent(&pieces);
+    if insert_extent.is_empty() {
         return Ok(Value::NIL);
     }
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let insert_pos = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, false)?;
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + total_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -2985,18 +3010,24 @@ pub(crate) fn builtin_insert_before_markers(
 ) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let total_len: usize = pieces.iter().map(|p| p.text.sbytes()).sum();
-    if total_len == 0 {
+    let insert_extent = insert_pieces_extent(&pieces);
+    if insert_extent.is_empty() {
         return Ok(Value::NIL);
     }
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let insert_pos = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, false)?;
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + total_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -3006,18 +3037,24 @@ pub(crate) fn builtin_insert_and_inherit(
 ) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let total_len: usize = pieces.iter().map(|p| p.text.sbytes()).sum();
-    if total_len == 0 {
+    let insert_extent = insert_pieces_extent(&pieces);
+    if insert_extent.is_empty() {
         return Ok(Value::NIL);
     }
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let insert_pos = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, true)?;
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + total_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -3027,18 +3064,24 @@ pub(crate) fn builtin_insert_before_markers_and_inherit(
 ) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let total_len: usize = pieces.iter().map(|p| p.text.sbytes()).sum();
-    if total_len == 0 {
+    let insert_extent = insert_pieces_extent(&pieces);
+    if insert_extent.is_empty() {
         return Ok(Value::NIL);
     }
+    let current_id = eval
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let insert_pos = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, true)?;
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + total_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -3186,8 +3229,11 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
         .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    let text_len = to_insert.sbytes();
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
+    let text_len = text_extent.emacs_bytes().get();
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, text_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &to_insert);
@@ -3206,7 +3252,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
             insert_pos + text_len,
         );
     }
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -3261,8 +3307,11 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
         .get(current_id)
         .map(|buf| buf.pt_byte)
         .unwrap_or(0);
-    let text_len = to_insert.sbytes();
-    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
+    let text_len = text_extent.emacs_bytes().get();
+    let change =
+        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, text_extent)?;
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &to_insert);
@@ -3281,7 +3330,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
             insert_pos + text_len,
         );
     }
-    super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 
@@ -3374,10 +3423,8 @@ pub(crate) fn builtin_subst_char_in_region(
 
     // subst-char-in-region replaces characters of the same byte length,
     // so the region size does not change.
-    let byte_start = range.byte_start_usize();
-    let byte_end = range.byte_end_usize();
-    let region_len = range.char_len().get();
-    super::editfns::signal_before_change(eval, byte_start, byte_end)?;
+    let change = TextChange::new(range, range.extent());
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval.buffers.subst_char_in_buffer_region(
         current_id,
         range,
@@ -3385,7 +3432,7 @@ pub(crate) fn builtin_subst_char_in_region(
         &to_bytes,
         noundo,
     );
-    super::editfns::signal_after_change(eval, byte_start, byte_end, region_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 

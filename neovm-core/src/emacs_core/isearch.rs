@@ -1579,23 +1579,23 @@ fn replace_string_eval_impl(
             .buffers
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+        let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
             EmacsByteRange::from_usize(start, end),
+            &out_text,
         )?;
-        let old_len = old_range.char_len().get();
-        let new_len = storage_string_byte_len(&out);
-        let out_text = storage_string_to_lisp_string(&out, source_multibyte);
-        super::editfns::signal_before_change(eval, start, end)?;
+        let new_len = change.new_extent().emacs_bytes().get();
+        super::editfns::signal_before_text_change(eval, change)?;
         let _ = eval
             .buffers
-            .delete_buffer_measured_region(current_id, old_range);
+            .delete_buffer_measured_region(current_id, change.old_range());
         let _ = eval.buffers.goto_buffer_byte(current_id, start);
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &out_text);
-        super::editfns::signal_after_change(eval, start, start + new_len, old_len)?;
+        super::editfns::signal_after_text_change(eval, change)?;
         if backward {
             if let Some(first) = units.first() {
                 let _ = eval
@@ -1697,23 +1697,23 @@ fn replace_string_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
         EmacsByteRange::from_usize(start, end),
+        &out_text,
     )?;
-    let old_len = old_range.char_len().get();
-    let new_len = storage_string_byte_len(&out);
-    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
-    super::editfns::signal_before_change(eval, start, end)?;
+    let new_len = change.new_extent().emacs_bytes().get();
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
-        .delete_buffer_measured_region(current_id, old_range);
+        .delete_buffer_measured_region(current_id, change.old_range());
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
-    super::editfns::signal_after_change(eval, start, start + new_len, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
             let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);
@@ -1874,23 +1874,23 @@ fn replace_regexp_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
         EmacsByteRange::from_usize(start, end),
+        &out_text,
     )?;
-    let old_len = old_range.char_len().get();
-    let new_len = storage_string_byte_len(&out);
-    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
-    super::editfns::signal_before_change(eval, start, end)?;
+    let new_len = change.new_extent().emacs_bytes().get();
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
-        .delete_buffer_measured_region(current_id, old_range);
+        .delete_buffer_measured_region(current_id, change.old_range());
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
-    super::editfns::signal_after_change(eval, start, start + new_len, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
             let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);

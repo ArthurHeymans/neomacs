@@ -425,22 +425,21 @@ fn delete_extract_rectangle_eval(
         delete_extract_rectangle_from_text(&text, start_line, end_line, left_col, right_col);
 
     if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
             EmacsByteRange::from_usize(pmin, pmax),
+            &rewritten,
         )?;
-        let old_len = old_range.char_len().get();
-        super::editfns::signal_before_change(eval, pmin, pmax)?;
+        super::editfns::signal_before_text_change(eval, change)?;
         let _ = eval
             .buffers
-            .delete_buffer_measured_region(current_id, old_range);
+            .delete_buffer_measured_region(current_id, change.old_range());
         let _ = eval.buffers.goto_buffer_byte(current_id, pmin);
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &rewritten);
-        let new_end = pmin + rewritten.sbytes();
-        super::editfns::signal_after_change(eval, pmin, new_end, old_len)?;
+        super::editfns::signal_after_text_change(eval, change)?;
     }
 
     Ok(rectangle_strings_to_value(&extracted))

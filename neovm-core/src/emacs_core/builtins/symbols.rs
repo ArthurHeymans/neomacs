@@ -3365,7 +3365,6 @@ pub(crate) fn builtin_transpose_regions(
     let changed_byte_span = transposition.byte_span();
     let changed_start_byte = changed_byte_span.start_usize();
     let changed_end_byte = changed_byte_span.end_usize();
-    let old_changed_chars = transposition.changed_chars().get();
 
     let read_only = eval.buffers.get(current_id).is_some_and(|buf| {
         crate::emacs_core::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
@@ -3384,17 +3383,17 @@ pub(crate) fn builtin_transpose_regions(
         changed_end_byte,
     )?;
 
-    crate::emacs_core::editfns::signal_before_change(eval, changed_start_byte, changed_end_byte)?;
+    let change = crate::emacs_core::editfns::text_change_for_unchanged_extent_in_manager(
+        &eval.buffers,
+        current_id,
+        changed_byte_span,
+    )?;
+    crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
     let leave_markers = args.get(4).is_some_and(|value| !value.is_nil());
     let _ = eval
         .buffers
         .transpose_buffer_regions(current_id, transposition, leave_markers);
-    crate::emacs_core::editfns::signal_after_change(
-        eval,
-        changed_start_byte,
-        changed_end_byte,
-        old_changed_chars,
-    )?;
+    crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
 

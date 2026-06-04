@@ -1951,7 +1951,7 @@ pub(crate) fn builtin_replace_match(
                     let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
                     let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
                     let missing_subexp_error = super::regex::REPLACE_MATCH_SUBEXP_MISSING;
-                    let (oldstart, oldend, new_end, old_len) = {
+                    let change = {
                         let buf = eval.buffers.current_buffer().ok_or_else(|| {
                             signal("error", vec![Value::string("No current buffer")])
                         })?;
@@ -1974,18 +1974,19 @@ pub(crate) fn builtin_replace_match(
                                     signal("error", vec![Value::string(msg)])
                                 }
                             })?;
-                        let old_range =
-                            super::editfns::buffer_edit_range_for_byte_range_in_manager(
+                        let current_id = eval.buffers.current_buffer_id().ok_or_else(|| {
+                            signal("error", vec![Value::string("No current buffer")])
+                        })?;
+                        let change =
+                            super::editfns::text_change_for_lisp_string_replacement_in_manager(
                                 &eval.buffers,
-                                eval.buffers.current_buffer_id().ok_or_else(|| {
-                                    signal("error", vec![Value::string("No current buffer")])
-                                })?,
+                                current_id,
                                 EmacsByteRange::from_usize(oldstart, oldend),
+                                &replacement,
                             )?;
-                        let old_len = old_range.char_len().get();
-                        (oldstart, oldend, oldstart + replacement.sbytes(), old_len)
+                        change
                     };
-                    super::editfns::signal_before_change(eval, oldstart, oldend)?;
+                    super::editfns::signal_before_text_change(eval, change)?;
                     let result = builtin_replace_match_with_state_and_flags(
                         &eval.obarray,
                         &mut eval.buffers,
@@ -1993,7 +1994,7 @@ pub(crate) fn builtin_replace_match(
                         &args,
                         case_symbols_as_words,
                     )?;
-                    super::editfns::signal_after_change(eval, oldstart, new_end, old_len)?;
+                    super::editfns::signal_after_text_change(eval, change)?;
                     return Ok(result);
                 }
             }

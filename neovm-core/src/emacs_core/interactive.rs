@@ -35,7 +35,7 @@ use super::keymap::{
 use super::mode::{MajorMode, MinorMode};
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::EmacsBytePos;
+use crate::buffer::{EmacsBytePos, EmacsByteRange, TextExtent};
 use crate::emacs_core::SymId;
 
 // ---------------------------------------------------------------------------
@@ -3413,17 +3413,26 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         text.push(ch);
     }
     if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let insert_pos = eval.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
-        let text_len = text.len();
+        let (insert_pos, target_multibyte) = eval
+            .buffers
+            .get(current_id)
+            .map(|b| (b.pt_byte, b.get_multibyte()))
+            .unwrap_or((0, true));
         tracing::info!(
             "self-insert-command: inserting {:?} at pos {} in buffer {:?}",
             text,
             insert_pos,
             current_id
         );
-        super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+        let change = super::editfns::text_change_for_replacement_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+        )?;
+        super::editfns::signal_before_text_change(eval, change)?;
         let _ = eval.buffers.insert_into_buffer(current_id, &text);
-        super::editfns::signal_after_change(eval, insert_pos, insert_pos + text_len, 0)?;
+        super::editfns::signal_after_text_change(eval, change)?;
     } else {
         tracing::warn!("self-insert-command: no current buffer");
     }

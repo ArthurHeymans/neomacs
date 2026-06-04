@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, EmacsBytePos, EmacsByteRange, TextExtent};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -432,12 +432,12 @@ fn delete_horizontal_space_at_point(
         current_id,
         EmacsByteRange::from_usize(left, right),
     )?;
-    let old_len = delete_range.char_len().get();
-    super::editfns::signal_before_change(eval, left, right)?;
+    let change = crate::buffer::TextChange::deletion(delete_range);
+    super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, delete_range);
-    super::editfns::signal_after_change(eval, left, left, old_len)?;
+    super::editfns::signal_after_text_change(eval, change)?;
     Ok(())
 }
 
@@ -546,21 +546,27 @@ pub(crate) fn builtin_move_to_column(
         let pad = spaces_to_column(col_before_tab, target);
         let insert_pos = tab_byte;
         let pad_len = pad.len();
-        super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
+        let pad_change = super::editfns::text_change_for_replacement_in_manager(
+            &ctx.buffers,
+            current_id,
+            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            TextExtent::from_usize(pad_len, pad_len),
+        )?;
+        super::editfns::signal_before_text_change(ctx, pad_change)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
-        super::editfns::signal_after_change(ctx, insert_pos, insert_pos + pad_len, 0)?;
+        super::editfns::signal_after_text_change(ctx, pad_change)?;
         let tab_after_pad = insert_pos + pad_len;
         let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
             &ctx.buffers,
             current_id,
             EmacsByteRange::from_usize(tab_after_pad, tab_after_pad + 1),
         )?;
-        let old_len = delete_range.char_len().get();
-        super::editfns::signal_before_change(ctx, tab_after_pad, tab_after_pad + 1)?;
+        let delete_change = crate::buffer::TextChange::deletion(delete_range);
+        super::editfns::signal_before_text_change(ctx, delete_change)?;
         let _ = ctx
             .buffers
             .delete_buffer_measured_region(current_id, delete_range);
-        super::editfns::signal_after_change(ctx, tab_after_pad, tab_after_pad, old_len)?;
+        super::editfns::signal_after_text_change(ctx, delete_change)?;
         let goal_point = tab_after_pad;
         let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
         let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
@@ -578,9 +584,15 @@ pub(crate) fn builtin_move_to_column(
         let pad = indent_to_column_string(reached, target, tabw, use_tabs);
         let insert_pos = ctx.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
         let pad_len = pad.len();
-        super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
+        let change = super::editfns::text_change_for_replacement_in_manager(
+            &ctx.buffers,
+            current_id,
+            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            TextExtent::from_usize(pad_len, pad_len),
+        )?;
+        super::editfns::signal_before_text_change(ctx, change)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
-        super::editfns::signal_after_change(ctx, insert_pos, insert_pos + pad_len, 0)?;
+        super::editfns::signal_after_text_change(ctx, change)?;
         reached = target;
     }
 
@@ -655,7 +667,13 @@ pub(crate) fn builtin_indent_to(
     let insert_pos = ctx.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
     let indent_len = indent.len();
     if indent_len > 0 {
-        super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
+        let change = super::editfns::text_change_for_replacement_in_manager(
+            &ctx.buffers,
+            current_id,
+            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            TextExtent::from_usize(indent_len, indent_len),
+        )?;
+        super::editfns::signal_before_text_change(ctx, change)?;
         super::builtins::insert_string_value_in_current_buffer(
             &ctx.obarray,
             &[],
@@ -664,7 +682,7 @@ pub(crate) fn builtin_indent_to(
             false,
             true,
         )?;
-        super::editfns::signal_after_change(ctx, insert_pos, insert_pos + indent_len, 0)?;
+        super::editfns::signal_after_text_change(ctx, change)?;
     }
 
     Ok(Value::fixnum(mincol as i64))

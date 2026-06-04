@@ -13,8 +13,12 @@ use super::eval::OverlayModificationHook;
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange};
+use crate::buffer::{
+    Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, TextChange, TextEditRange,
+    TextExtent,
+};
 use crate::emacs_core::value::ValueKind;
+use crate::heap_types::LispString;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
 #[cfg(unix)]
@@ -148,6 +152,52 @@ pub(crate) fn buffer_edit_range_for_byte_range_in_manager(
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))
 }
 
+pub(crate) fn lisp_string_text_extent(text: &LispString) -> TextExtent {
+    TextExtent::from_usize(text.schars(), text.sbytes())
+}
+
+pub(crate) fn text_change_for_replacement_in_manager(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+    new_extent: TextExtent,
+) -> Result<TextChange, Flow> {
+    let old_range = buffer_edit_range_for_byte_range_in_manager(buffers, buffer_id, byte_range)?;
+    Ok(TextChange::new(old_range, new_extent))
+}
+
+pub(crate) fn text_change_for_lisp_string_replacement_in_manager(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+    replacement: &LispString,
+) -> Result<TextChange, Flow> {
+    text_change_for_replacement_in_manager(
+        buffers,
+        buffer_id,
+        byte_range,
+        lisp_string_text_extent(replacement),
+    )
+}
+
+pub(crate) fn text_change_for_deletion_in_manager(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+) -> Result<TextChange, Flow> {
+    let old_range = buffer_edit_range_for_byte_range_in_manager(buffers, buffer_id, byte_range)?;
+    Ok(TextChange::deletion(old_range))
+}
+
+pub(crate) fn text_change_for_unchanged_extent_in_manager(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+) -> Result<TextChange, Flow> {
+    let old_range = buffer_edit_range_for_byte_range_in_manager(buffers, buffer_id, byte_range)?;
+    Ok(TextChange::unchanged_extent(old_range))
+}
+
 // ---------------------------------------------------------------------------
 // Buffer modification hooks — GNU Emacs signal_before_change / signal_after_change
 // ---------------------------------------------------------------------------
@@ -275,6 +325,17 @@ pub(crate) fn signal_before_change(
     result
 }
 
+pub(crate) fn signal_before_text_change(
+    ctx: &mut crate::emacs_core::eval::Context,
+    change: TextChange,
+) -> Result<(), Flow> {
+    signal_before_change(
+        ctx,
+        change.before_start_byte_usize(),
+        change.before_end_byte_usize(),
+    )
+}
+
 /// GNU `signal_after_change(beg, end, old_len)` — run `after-change-functions`
 /// and overlay hooks after a buffer modification.
 ///
@@ -383,6 +444,18 @@ pub(crate) fn signal_after_change(
     })();
     ctx.unbind_to(specpdl_count);
     result
+}
+
+pub(crate) fn signal_after_text_change(
+    ctx: &mut crate::emacs_core::eval::Context,
+    change: TextChange,
+) -> Result<(), Flow> {
+    signal_after_change(
+        ctx,
+        change.after_start_byte_usize(),
+        change.after_end_byte_usize(),
+        change.old_char_len_usize(),
+    )
 }
 
 fn finish_treesit_after_buffer_change(
@@ -907,7 +980,6 @@ pub(crate) fn builtin_delete_char(
             current_id,
             EmacsByteRange::from_usize(start, end),
         )?;
-        let old_len = delete_range.char_len().get();
         crate::emacs_core::textprop::verify_text_read_only_in_state(
             &ctx.obarray,
             &ctx.buffers,
@@ -915,11 +987,12 @@ pub(crate) fn builtin_delete_char(
             start,
             end,
         )?;
-        signal_before_change(ctx, start, end)?;
+        let change = TextChange::deletion(delete_range);
+        signal_before_text_change(ctx, change)?;
         let _ = ctx
             .buffers
             .delete_buffer_measured_region(current_id, delete_range);
-        signal_after_change(ctx, start, start, old_len)?;
+        signal_after_text_change(ctx, change)?;
     }
     Ok(Value::NIL)
 }
@@ -964,12 +1037,12 @@ pub(crate) fn builtin_delete_region(
 
     let delete_range =
         buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
-    let old_len = delete_range.char_len().get();
-    signal_before_change(ctx, start_byte, end_byte)?;
+    let change = TextChange::deletion(delete_range);
+    signal_before_text_change(ctx, change)?;
     let _ = ctx
         .buffers
         .delete_buffer_measured_region(current_id, delete_range);
-    signal_after_change(ctx, start_byte, start_byte, old_len)?;
+    signal_after_text_change(ctx, change)?;
     Ok(Value::NIL)
 }
 
@@ -1015,12 +1088,12 @@ pub(crate) fn builtin_delete_and_extract_region(
 
     let delete_range =
         buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
-    let old_len = delete_range.char_len().get();
-    signal_before_change(ctx, start_byte, end_byte)?;
+    let change = TextChange::deletion(delete_range);
+    signal_before_text_change(ctx, change)?;
     let _ = ctx
         .buffers
         .delete_buffer_measured_region(current_id, delete_range);
-    signal_after_change(ctx, start_byte, start_byte, old_len)?;
+    signal_after_text_change(ctx, change)?;
     Ok(deleted)
 }
 
@@ -1043,13 +1116,13 @@ pub(crate) fn builtin_erase_buffer(
         current_id,
         EmacsByteRange::from_usize(0, buf_len),
     )?;
-    let old_len = delete_range.char_len().get();
+    let change = TextChange::deletion(delete_range);
     if buf_len > 0 {
-        signal_before_change(ctx, 0, buf_len)?;
+        signal_before_text_change(ctx, change)?;
     }
     erase_buffer_impl(&ctx.obarray, &[], &mut ctx.buffers, vec![])?;
     if buf_len > 0 {
-        signal_after_change(ctx, 0, 0, old_len)?;
+        signal_after_text_change(ctx, change)?;
     }
     Ok(Value::NIL)
 }
