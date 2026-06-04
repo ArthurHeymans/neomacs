@@ -340,32 +340,9 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
             Ok(format!("{{{}}}", parts.join(",")))
         }
 
-        // Alist: list of (KEY . VALUE) cons cells → JSON object.
-        ValueKind::Cons => {
-            let items = list_to_vec(value).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), *value])
-            })?;
-
-            let mut parts = Vec::with_capacity(items.len());
-            for item in &items {
-                match item.kind() {
-                    ValueKind::Cons => {
-                        let pair_car = item.cons_car();
-                        let pair_cdr = item.cons_cdr();
-                        let key_str = symbol_object_key(&pair_car)?;
-                        let val_json = serialize_to_json(&pair_cdr, opts, depth + 1)?;
-                        parts.push(format!("{}:{}", json_encode_string(&key_str), val_json));
-                    }
-                    _ => {
-                        return Err(signal(
-                            "wrong-type-argument",
-                            vec![Value::symbol("consp"), *item],
-                        ));
-                    }
-                }
-            }
-            Ok(format!("{{{}}}", parts.join(",")))
-        }
+        // Alist (list of (KEY . VALUE) conses) or plist (flat KEY VALUE …)
+        // → JSON object.
+        ValueKind::Cons => serialize_cons_object(value, opts, depth),
 
         ValueKind::Nil => Ok("{}".to_string()),
 
@@ -373,6 +350,90 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
             "wrong-type-argument",
             vec![Value::symbol("json-value-p"), *value],
         )),
+    }
+}
+
+/// Serialize an alist or plist as a JSON object, mirroring GNU
+/// `json_out_object_cons`.
+///
+/// The list is treated as an alist when its first element is a cons, and as
+/// a plist otherwise. Keys must be symbols (keywords are symbols whose name
+/// begins with `:`); for plists a single leading `:` is stripped from the
+/// emitted key. When a key repeats, the first value wins and later
+/// duplicates are dropped, matching GNU.
+fn serialize_cons_object(
+    value: &Value,
+    opts: &SerializeOpts,
+    depth: usize,
+) -> Result<String, Flow> {
+    let items = list_to_vec(value)
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *value]))?;
+    let is_alist = matches!(items.first().map(|v| v.kind()), Some(ValueKind::Cons));
+
+    let mut parts = Vec::with_capacity(items.len());
+    let mut seen: Vec<String> = Vec::new();
+
+    if is_alist {
+        for item in &items {
+            if !matches!(item.kind(), ValueKind::Cons) {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("consp"), *item],
+                ));
+            }
+            let key = item.cons_car();
+            let val = item.cons_cdr();
+            // Alist keys are emitted verbatim (no colon stripping).
+            let name = symbol_object_key(&key)?;
+            if push_unique(&mut seen, &name) {
+                let val_json = serialize_to_json(&val, opts, depth + 1)?;
+                parts.push(format!("{}:{}", json_encode_string(&name), val_json));
+            }
+        }
+    } else {
+        let mut i = 0;
+        while i < items.len() {
+            let name = symbol_object_key(&items[i])?;
+            // A plist must supply a value for every key.
+            let val = *items.get(i + 1).ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("consp"), Value::NIL],
+                )
+            })?;
+            i += 2;
+            // Dedup on the raw symbol name (symbol identity, like GNU's
+            // symset) but emit the colon-stripped form.
+            if push_unique(&mut seen, &name) {
+                let val_json = serialize_to_json(&val, opts, depth + 1)?;
+                parts.push(format!(
+                    "{}:{}",
+                    json_encode_string(strip_plist_colon(&name)),
+                    val_json
+                ));
+            }
+        }
+    }
+    Ok(format!("{{{}}}", parts.join(",")))
+}
+
+/// Record `name` as seen; return true if it was not already present
+/// (first-occurrence-wins semantics).
+fn push_unique(seen: &mut Vec<String>, name: &str) -> bool {
+    if seen.iter().any(|s| s == name) {
+        false
+    } else {
+        seen.push(name.to_owned());
+        true
+    }
+}
+
+/// Strip a single leading `:` from a plist key name, but only when more
+/// characters follow (mirrors GNU `str[0] == ':' && str[1]`).
+fn strip_plist_colon(name: &str) -> &str {
+    match name.strip_prefix(':') {
+        Some(rest) if !rest.is_empty() => rest,
+        _ => name,
     }
 }
 
@@ -772,15 +833,12 @@ impl<'a> JsonParser<'a> {
                                 if !(0xDC00..=0xDFFF).contains(&low) {
                                     return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                                 }
-                                let combined = 0x10000
-                                    + ((cp as u32 - 0xD800) << 10)
-                                    + (low as u32 - 0xDC00);
+                                let combined =
+                                    0x10000 + ((cp as u32 - 0xD800) << 10) + (low as u32 - 0xDC00);
                                 match char::from_u32(combined) {
                                     Some(c) => result.push(c),
                                     None => {
-                                        return Err(
-                                            self.signal_at_pos(JsonError::InvalidSurrogate)
-                                        );
+                                        return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                                     }
                                 }
                             } else if let Some(c) = char::from_u32(cp as u32) {

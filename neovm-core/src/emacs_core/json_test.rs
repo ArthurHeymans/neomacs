@@ -236,6 +236,33 @@ fn serialize_alist() {
 }
 
 #[test]
+fn serialize_plist_strips_keyword_colons() {
+    crate::test_utils::init_test_tracing();
+    // A plist (flat KEY VALUE …) serializes as an object; the leading colon
+    // of keyword keys is stripped, matching GNU.
+    let plist = Value::list(vec![
+        Value::keyword(":a"),
+        Value::fixnum(1),
+        Value::keyword(":b"),
+        Value::fixnum(2),
+    ]);
+    let result = builtin_json_serialize(vec![plist]).unwrap();
+    assert_eq!(result.as_utf8_str(), Some("{\"a\":1,\"b\":2}"));
+}
+
+#[test]
+fn serialize_alist_keeps_first_duplicate_key() {
+    crate::test_utils::init_test_tracing();
+    // When a key repeats, GNU keeps the first value and drops later ones.
+    let alist = Value::list(vec![
+        Value::cons(Value::symbol("a"), Value::fixnum(1)),
+        Value::cons(Value::symbol("a"), Value::fixnum(2)),
+    ]);
+    let result = builtin_json_serialize(vec![alist]).unwrap();
+    assert_eq!(result.as_utf8_str(), Some("{\"a\":1}"));
+}
+
+#[test]
 fn serialize_nested() {
     crate::test_utils::init_test_tracing();
     let inner = Value::vector(vec![Value::fixnum(1), Value::fixnum(2)]);
