@@ -131,6 +131,40 @@ fn registry_json_error_family() {
     assert!(reg.signal_matches_condition("json-parse-error", "json-error"));
     assert!(reg.signal_matches_condition("json-serialize-error", "json-error"));
     assert!(reg.signal_matches_condition("json-parse-error", "error"));
+
+    // Full GNU json.c hierarchy: every condition is a json-error and an error.
+    for cond in &[
+        "json-out-of-memory",
+        "json-object-too-deep",
+        "json-utf8-decode-error",
+        "json-invalid-surrogate-error",
+        "json-number-out-of-range-error",
+        "json-end-of-file",
+        "json-trailing-content",
+        "json-escape-sequence-error",
+    ] {
+        assert!(
+            reg.signal_matches_condition(cond, "json-error"),
+            "{cond} should match json-error"
+        );
+        assert!(
+            reg.signal_matches_condition(cond, "error"),
+            "{cond} should match error"
+        );
+    }
+
+    // These three are children of json-parse-error in GNU, not direct
+    // children of json-error.
+    for cond in &[
+        "json-end-of-file",
+        "json-trailing-content",
+        "json-escape-sequence-error",
+    ] {
+        assert!(
+            reg.signal_matches_condition(cond, "json-parse-error"),
+            "{cond} should match json-parse-error"
+        );
+    }
 }
 
 #[test]

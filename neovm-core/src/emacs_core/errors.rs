@@ -343,14 +343,67 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
         &["sqlite-error"],
     );
 
-    // --- json-error family ---
-    register_simple(obarray, "json-error", "JSON error", &["error"]);
+    // --- json-error family (mirrors GNU src/json.c `syms_of_json`) ---
+    // Parents must be registered before children so the transitive
+    // `error-conditions` closure can be built.
+    register_simple(obarray, "json-error", "generic JSON error", &["error"]);
+    register_simple(
+        obarray,
+        "json-out-of-memory",
+        "not enough memory for creating JSON object",
+        &["json-error"],
+    );
     register_simple(
         obarray,
         "json-parse-error",
-        "JSON parse error",
+        "could not parse JSON stream",
         &["json-error"],
     );
+    register_simple(
+        obarray,
+        "json-end-of-file",
+        "end of JSON stream",
+        &["json-parse-error"],
+    );
+    register_simple(
+        obarray,
+        "json-trailing-content",
+        "trailing content after JSON stream",
+        &["json-parse-error"],
+    );
+    register_simple(
+        obarray,
+        "json-object-too-deep",
+        "object cyclic or Lisp evaluation too deep",
+        &["json-error"],
+    );
+    register_simple(
+        obarray,
+        "json-utf8-decode-error",
+        "invalid utf-8 encoding",
+        &["json-error"],
+    );
+    register_simple(
+        obarray,
+        "json-invalid-surrogate-error",
+        "invalid surrogate pair",
+        &["json-error"],
+    );
+    register_simple(
+        obarray,
+        "json-number-out-of-range-error",
+        "number out of range",
+        &["json-error"],
+    );
+    register_simple(
+        obarray,
+        "json-escape-sequence-error",
+        "invalid escape sequence",
+        &["json-parse-error"],
+    );
+    // Neomacs extension: serialization-side failures (GNU signals a plain
+    // `error` for these). Kept as a `json-error` subtype so existing
+    // `condition-case` handlers on `json-error` still catch them.
     register_simple(
         obarray,
         "json-serialize-error",
@@ -867,12 +920,30 @@ impl ErrorRegistry {
         self.parents
             .insert(intern("dbus-error"), vec![intern("error")]);
 
-        // json-error family.
+        // json-error family (mirrors GNU src/json.c `syms_of_json`).
         self.parents
             .insert(intern("json-error"), vec![intern("error")]);
-        for name in &["json-parse-error", "json-serialize-error"] {
+        for name in &[
+            "json-out-of-memory",
+            "json-parse-error",
+            "json-object-too-deep",
+            "json-utf8-decode-error",
+            "json-invalid-surrogate-error",
+            "json-number-out-of-range-error",
+            // Neomacs extension (GNU uses a plain `error` here).
+            "json-serialize-error",
+        ] {
             self.parents
                 .insert(intern(name), vec![intern("json-error")]);
+        }
+        // These are children of json-parse-error in GNU, not json-error.
+        for name in &[
+            "json-end-of-file",
+            "json-trailing-content",
+            "json-escape-sequence-error",
+        ] {
+            self.parents
+                .insert(intern(name), vec![intern("json-parse-error")]);
         }
 
         // remote-file-error is a child of file-error.
