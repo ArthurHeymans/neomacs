@@ -2256,14 +2256,14 @@ impl<'a> Reader<'a> {
         }
 
         if !self.source_multibyte {
-            let byte = input.text.emacs_byte_at_pos(EmacsBytePos::new(pos))?;
+            let byte = input.emacs_byte_at_pos(EmacsBytePos::new(pos))?;
             return Some((byte as u32, 1));
         }
 
         let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
         let available = (self.limit - pos).min(tmp.len());
         for (idx, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = input.text.emacs_byte_at_pos(EmacsBytePos::new(pos + idx))?;
+            *slot = input.emacs_byte_at_pos(EmacsBytePos::new(pos + idx))?;
         }
         let (code, width) = emacs_char::string_char(&tmp[..available]);
         if pos + width > self.limit {
