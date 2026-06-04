@@ -773,15 +773,25 @@ impl BufferText {
         name: Value,
         value: Value,
     ) -> bool {
+        self.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+            value,
+        )
+    }
+
+    pub fn text_props_put_property_in_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+        name: Value,
+        value: Value,
+    ) -> bool {
         // GNU intervals are character-indexed; BufferText owns the conversion
         // from buffer byte offsets into interval positions.
         let (range, object_len) = {
             let storage = self.storage.borrow();
             (
-                Self::byte_range_to_char_range_with_storage(
-                    &storage,
-                    EmacsByteRange::from_usize(start, end),
-                ),
+                Self::byte_range_to_char_range_with_storage(&storage, byte_range),
                 storage.metrics.chars(),
             )
         };
@@ -932,7 +942,18 @@ impl BufferText {
     }
 
     pub fn text_props_remove_property(&self, start: usize, end: usize, name: Value) -> bool {
-        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+        self.text_props_remove_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+        )
+    }
+
+    pub fn text_props_remove_property_in_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+        name: Value,
+    ) -> bool {
+        let range = self.byte_range_to_char_range(byte_range);
         self.storage.borrow_mut().text_props.remove_property(
             range.start_usize(),
             range.end_usize(),
@@ -941,7 +962,11 @@ impl BufferText {
     }
 
     pub fn text_props_remove_all(&self, start: usize, end: usize) {
-        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+        self.text_props_remove_all_in_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+    }
+
+    pub fn text_props_remove_all_in_emacs_byte_range(&self, byte_range: EmacsByteRange) {
+        let range = self.byte_range_to_char_range(byte_range);
         self.storage
             .borrow_mut()
             .text_props
@@ -949,13 +974,21 @@ impl BufferText {
     }
 
     pub fn text_props_set_properties(&self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
+        self.text_props_set_properties_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            plist,
+        );
+    }
+
+    pub fn text_props_set_properties_in_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+        plist: Vec<(Value, Value)>,
+    ) {
         let (range, object_len) = {
             let storage = self.storage.borrow();
             (
-                Self::byte_range_to_char_range_with_storage(
-                    &storage,
-                    EmacsByteRange::from_usize(start, end),
-                ),
+                Self::byte_range_to_char_range_with_storage(&storage, byte_range),
                 storage.metrics.chars(),
             )
         };

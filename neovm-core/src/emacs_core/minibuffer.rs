@@ -330,12 +330,22 @@ pub(crate) fn install_minibuffer_buffer_text(
     buf.insert_lisp_string(prompt);
     let prompt_end = buf.total_bytes();
     if prompt_end > 0 {
-        buf.text
-            .text_props_put_property(0, prompt_end, Value::symbol("field"), Value::T);
-        buf.text
-            .text_props_put_property(0, prompt_end, Value::symbol("front-sticky"), Value::T);
-        buf.text
-            .text_props_put_property(0, prompt_end, Value::symbol("rear-nonsticky"), Value::T);
+        let prompt_range = EmacsByteRange::from_usize(0, prompt_end);
+        buf.text.text_props_put_property_in_emacs_byte_range(
+            prompt_range,
+            Value::symbol("field"),
+            Value::T,
+        );
+        buf.text.text_props_put_property_in_emacs_byte_range(
+            prompt_range,
+            Value::symbol("front-sticky"),
+            Value::T,
+        );
+        buf.text.text_props_put_property_in_emacs_byte_range(
+            prompt_range,
+            Value::symbol("rear-nonsticky"),
+            Value::T,
+        );
         apply_minibuffer_prompt_properties(buf, prompt_end, prompt_properties);
     }
 
@@ -358,6 +368,7 @@ fn apply_minibuffer_prompt_properties(
     prompt_end: usize,
     prompt_properties: Value,
 ) {
+    let prompt_range = EmacsByteRange::from_usize(0, prompt_end);
     let mut cursor = prompt_properties;
     while cursor.is_cons() {
         let key = cursor.cons_car();
@@ -367,7 +378,8 @@ fn apply_minibuffer_prompt_properties(
         }
         let value = cursor.cons_car();
         cursor = cursor.cons_cdr();
-        buf.text.text_props_put_property(0, prompt_end, key, value);
+        buf.text
+            .text_props_put_property_in_emacs_byte_range(prompt_range, key, value);
     }
 }
 

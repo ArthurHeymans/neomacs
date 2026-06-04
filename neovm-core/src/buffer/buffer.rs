@@ -3027,7 +3027,10 @@ impl Buffer {
     ) {
         let entries = text_properties_set_undo_entries(self, start, end, &plist);
         record_buffer_text_property_undo_entries(self, entries);
-        self.text.text_props_set_properties(start, end, plist);
+        self.text.text_props_set_properties_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            plist,
+        );
     }
 }
 
@@ -4172,7 +4175,11 @@ impl BufferManager {
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
-        Some(buf.text.text_props_put_property(start, end, name, value))
+        Some(buf.text.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+            value,
+        ))
     }
 
     pub fn append_buffer_text_properties(
@@ -4230,7 +4237,10 @@ impl BufferManager {
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
-        Some(buf.text.text_props_remove_property(start, end, name))
+        Some(buf.text.text_props_remove_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+        ))
     }
 
     pub fn clear_buffer_text_properties(
@@ -4254,7 +4264,10 @@ impl BufferManager {
         self.buffers
             .get_mut(&id)?
             .text
-            .text_props_set_properties(start, end, Vec::new());
+            .text_props_set_properties_in_emacs_byte_range(
+                EmacsByteRange::from_usize(start, end),
+                Vec::new(),
+            );
         Some(())
     }
 

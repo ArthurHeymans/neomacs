@@ -409,8 +409,10 @@ impl Buffer {
         if text.has_intervals() {
             self.text.text_props_append_shifted(text.intervals(), start);
         } else if new_char_len > 0 {
-            self.text
-                .text_props_set_properties(start, start + new_byte_len, Vec::new());
+            self.text.text_props_set_properties_in_emacs_byte_range(
+                EmacsByteRange::from_usize(start, start + new_byte_len),
+                Vec::new(),
+            );
         }
         self.overlays
             .adjust_for_replace(start, replacement.old_byte_len().get(), new_byte_len);
