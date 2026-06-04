@@ -1,5 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use strum::{EnumString, IntoStaticStr};
+use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 #[repr(u8)]
 #[derive(
@@ -10,6 +10,7 @@ use strum::{EnumString, IntoStaticStr};
     PartialEq,
     Eq,
     Hash,
+    EnumIter,
     EnumString,
     IntoPrimitive,
     IntoStaticStr,
@@ -32,6 +33,7 @@ pub enum BufferTextBackendKind {
     PartialEq,
     Eq,
     Hash,
+    EnumIter,
     EnumString,
     IntoPrimitive,
     IntoStaticStr,
@@ -46,6 +48,10 @@ pub(crate) enum ImplementedBufferTextBackendKind {
 }
 
 impl BufferTextBackendKind {
+    pub fn variants() -> impl Iterator<Item = Self> {
+        Self::iter()
+    }
+
     pub fn symbol_name(self) -> &'static str {
         self.into()
     }
@@ -64,6 +70,14 @@ impl BufferTextBackendKind {
 }
 
 impl ImplementedBufferTextBackendKind {
+    pub(crate) fn variants() -> impl Iterator<Item = Self> {
+        Self::iter()
+    }
+
+    pub(crate) fn non_gap_variants() -> impl Iterator<Item = Self> {
+        Self::iter().filter(|kind| *kind != Self::GapBuffer)
+    }
+
     pub(crate) fn symbol_name(self) -> &'static str {
         self.into()
     }

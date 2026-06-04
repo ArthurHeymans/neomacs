@@ -44,16 +44,16 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
 #[test]
 fn buffer_text_can_use_non_gap_backends() {
     crate::test_utils::init_test_tracing();
-    for (kind, layout) in [
-        (
-            BufferTextBackendKind::PieceTree,
-            TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6)),
-        ),
-        (
-            BufferTextBackendKind::Rope,
-            TextBackendDebugLayout::Rope(TextMetrics::new(5, 6)),
-        ),
-    ] {
+    for kind in
+        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
+    {
+        let layout = match kind {
+            BufferTextBackendKind::GapBuffer => unreachable!("filtered above"),
+            BufferTextBackendKind::PieceTree => {
+                TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6))
+            }
+            BufferTextBackendKind::Rope => TextBackendDebugLayout::Rope(TextMetrics::new(5, 6)),
+        };
         let mut text = BufferText::from_str_with_backend_kind("abécd", implemented_kind(kind));
 
         assert_eq!(text.backend_kind(), kind);
@@ -98,10 +98,9 @@ fn public_backend_kind_helpers_select_and_convert_storage() {
 #[test]
 fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
-    for kind in [
-        BufferTextBackendKind::PieceTree,
-        BufferTextBackendKind::Rope,
-    ] {
+    for kind in
+        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
+    {
         let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);
         let text = BufferText::from_lisp_string_with_backend_kind(&raw, implemented_kind(kind));
 
@@ -121,10 +120,9 @@ fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
 #[test]
 fn replace_lisp_string_preserves_non_gap_backend() {
     crate::test_utils::init_test_tracing();
-    for kind in [
-        BufferTextBackendKind::PieceTree,
-        BufferTextBackendKind::Rope,
-    ] {
+    for kind in
+        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
+    {
         let text = BufferText::from_str_with_backend_kind("abc", implemented_kind(kind));
         let replacement = crate::heap_types::LispString::from_utf8("日本");
 

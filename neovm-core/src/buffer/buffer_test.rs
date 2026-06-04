@@ -27,12 +27,8 @@ fn require_implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTex
         .expect("test backend should be implemented")
 }
 
-fn implemented_text_backends() -> [BufferTextBackendKind; 3] {
-    [
-        BufferTextBackendKind::GapBuffer,
-        BufferTextBackendKind::PieceTree,
-        BufferTextBackendKind::Rope,
-    ]
+fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
+    BufferTextBackendKind::variants().filter(|kind| kind.is_implemented())
 }
 
 fn manager_with_text_backend(kind: BufferTextBackendKind) -> BufferManager {

@@ -6,17 +6,6 @@ use crate::buffer::text::{
 };
 use proptest::prelude::*;
 
-const BACKENDS: [ImplementedBufferTextBackendKind; 3] = [
-    ImplementedBufferTextBackendKind::GapBuffer,
-    ImplementedBufferTextBackendKind::PieceTree,
-    ImplementedBufferTextBackendKind::Rope,
-];
-
-const NON_GAP_BACKENDS: [ImplementedBufferTextBackendKind; 2] = [
-    ImplementedBufferTextBackendKind::PieceTree,
-    ImplementedBufferTextBackendKind::Rope,
-];
-
 #[track_caller]
 fn assert_backend_matches_gap(
     kind: ImplementedBufferTextBackendKind,
@@ -290,7 +279,7 @@ fn replacement_bytes_for_len(len: usize, seed: u8) -> Option<Vec<u8>> {
 #[test]
 fn implemented_backends_match_gap_for_scripted_multibyte_edits() {
     crate::test_utils::init_test_tracing();
-    for kind in BACKENDS {
+    for kind in ImplementedBufferTextBackendKind::variants() {
         let mut backend = TextBackend::from_str("abécd日本\nΩ", kind);
         let mut gap =
             TextBackend::from_str("abécd日本\nΩ", ImplementedBufferTextBackendKind::GapBuffer);
@@ -329,7 +318,7 @@ fn implemented_backends_match_gap_for_scripted_multibyte_edits() {
 fn implemented_backends_match_gap_for_scripted_unibyte_edits() {
     crate::test_utils::init_test_tracing();
     let initial = vec![0xFF, b'A', 0x80, b'\n', b'Z'];
-    for kind in BACKENDS {
+    for kind in ImplementedBufferTextBackendKind::variants() {
         let mut backend = TextBackend::from_emacs_bytes(&initial, false, kind);
         let mut gap = TextBackend::from_emacs_bytes(
             &initial,
@@ -359,7 +348,7 @@ fn implemented_backends_match_gap_for_scripted_unibyte_edits() {
 #[test]
 fn backend_dump_round_trips_across_implemented_kinds() {
     crate::test_utils::init_test_tracing();
-    for source_kind in BACKENDS {
+    for source_kind in ImplementedBufferTextBackendKind::variants() {
         let mut source = TextBackend::from_str("αβ\n日本🙂", source_kind);
         let insert_pos = char_to_byte(&source, 2);
         insert_text(&mut source, insert_pos, "XY");
@@ -373,7 +362,7 @@ fn backend_dump_round_trips_across_implemented_kinds() {
         assert_backend_matches_gap(source_kind, &source, &gap);
 
         let dump = source.dump_text();
-        for target_kind in BACKENDS {
+        for target_kind in ImplementedBufferTextBackendKind::variants() {
             let loaded = TextBackend::from_dump(dump.clone(), source.is_multibyte(), target_kind);
             assert_backend_matches_gap(target_kind, &loaded, &gap);
         }
@@ -385,7 +374,7 @@ proptest! {
     fn non_gap_backends_match_gap_for_random_multibyte_edit_sequences(
         ops in prop::collection::vec((0u8..4, 0usize..200, 0usize..200, 0u8..32), 0..80)
     ) {
-        for kind in NON_GAP_BACKENDS {
+        for kind in ImplementedBufferTextBackendKind::non_gap_variants() {
             let mut backend = TextBackend::from_str("abécd日本", kind);
             let mut gap = TextBackend::from_str(
                 "abécd日本",
@@ -446,7 +435,7 @@ proptest! {
         ops in prop::collection::vec((0u8..4, 0usize..200, 0usize..200, any::<u8>()), 0..80)
     ) {
         let initial = vec![0xFF, b'A', 0x80, b'\n', b'Z'];
-        for kind in NON_GAP_BACKENDS {
+        for kind in ImplementedBufferTextBackendKind::non_gap_variants() {
             let mut backend = TextBackend::from_emacs_bytes(&initial, false, kind);
             let mut gap = TextBackend::from_emacs_bytes(
                 &initial,

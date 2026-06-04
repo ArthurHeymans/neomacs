@@ -1007,11 +1007,7 @@ fn rust_buffer_access_count_lines_is_text_backend_neutral() {
         .collect();
     let expected = text.bytes().filter(|byte| *byte == b'\n').count() as i64;
 
-    for kind in [
-        BufferTextBackendKind::GapBuffer,
-        BufferTextBackendKind::PieceTree,
-        BufferTextBackendKind::Rope,
-    ] {
+    for kind in BufferTextBackendKind::variants() {
         let mut buf = test_buffer_with_backend(100 + u64::from(u8::from(kind)), "*lines*", kind);
         set_buffer_text(&mut buf, &text);
         let snapshot = LayoutBufferSnapshot::from_buffer(&buf);
