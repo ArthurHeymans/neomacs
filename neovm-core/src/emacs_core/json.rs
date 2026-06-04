@@ -458,6 +458,8 @@ enum JsonError {
     EndOfFile,
     /// `json-trailing-content` — extra non-whitespace after the value.
     TrailingContent,
+    /// `json-object-too-deep` — nesting exceeded [`MAX_PARSE_DEPTH`].
+    ObjectTooDeep,
     /// `json-utf8-decode-error` — invalid UTF-8 in the input.
     Utf8Decode,
     /// `json-serialize-error` — neomacs serialization failure. GNU signals
@@ -471,6 +473,7 @@ impl JsonError {
             JsonError::Parse => "json-parse-error",
             JsonError::EndOfFile => "json-end-of-file",
             JsonError::TrailingContent => "json-trailing-content",
+            JsonError::ObjectTooDeep => "json-object-too-deep",
             JsonError::Utf8Decode => "json-utf8-decode-error",
             JsonError::Serialize => "json-serialize-error",
         }
@@ -505,8 +508,16 @@ struct JsonParser<'a> {
     input: &'a [u8],
     input_multibyte: bool,
     pos: usize,
+    /// Current object/array nesting depth, bounded by [`MAX_PARSE_DEPTH`].
+    depth: usize,
     opts: ParseOpts,
 }
+
+/// Maximum object/array nesting accepted while parsing, mirroring GNU
+/// `src/json.c` `json_parser.available_depth` (10000). Without this bound
+/// the recursive-descent parser would overflow the stack on adversarial
+/// input instead of signalling a catchable error.
+const MAX_PARSE_DEPTH: usize = 10000;
 
 impl<'a> JsonParser<'a> {
     fn new(input: &'a [u8], input_multibyte: bool, opts: ParseOpts) -> Self {
@@ -514,8 +525,41 @@ impl<'a> JsonParser<'a> {
             input,
             input_multibyte,
             pos: 0,
+            depth: 0,
             opts,
         }
+    }
+
+    /// Build a `(LINE nil POS)` signal at the current position, matching the
+    /// shape of GNU `json_signal_error`. LINE is the 1-based line number and
+    /// POS is the 0-based character offset of the cursor.
+    fn signal_at_pos(&self, kind: JsonError) -> Flow {
+        let byte = self.pos.min(self.input.len());
+        let line = self.input[..byte].iter().filter(|&&b| b == b'\n').count() as i64 + 1;
+        signal(
+            kind.symbol(),
+            vec![
+                Value::fixnum(line),
+                Value::NIL,
+                Value::fixnum(self.source_char_pos() as i64),
+            ],
+        )
+    }
+
+    /// Enter one level of object/array nesting, signalling
+    /// `json-object-too-deep` if the recursion limit is exceeded. Paired with
+    /// [`Self::leave_nesting`] on the success path; on the error path the
+    /// whole parse unwinds, so the counter need not be restored.
+    fn enter_nesting(&mut self) -> Result<(), Flow> {
+        self.depth += 1;
+        if self.depth > MAX_PARSE_DEPTH {
+            return Err(self.signal_at_pos(JsonError::ObjectTooDeep));
+        }
+        Ok(())
+    }
+
+    fn leave_nesting(&mut self) {
+        self.depth -= 1;
     }
 
     /// Current byte (or None if at end).
@@ -934,6 +978,7 @@ impl<'a> JsonParser<'a> {
     /// Parse a JSON array: `[` value { `,` value } `]`.
     fn parse_array(&mut self) -> Result<Value, Flow> {
         self.expect_byte(b'[')?;
+        self.enter_nesting()?;
         self.skip_ws();
         let mut items: Vec<Value> = Vec::new();
 
@@ -965,6 +1010,7 @@ impl<'a> JsonParser<'a> {
             }
         }
 
+        self.leave_nesting();
         match self.opts.array_type {
             ArrayType::Vector => Ok(Value::vector(items)),
             ArrayType::List => Ok(Value::list(items)),
@@ -974,13 +1020,16 @@ impl<'a> JsonParser<'a> {
     /// Parse a JSON object: `{` string `:` value { `,` string `:` value } `}`.
     fn parse_object(&mut self) -> Result<Value, Flow> {
         self.expect_byte(b'{')?;
+        self.enter_nesting()?;
         self.skip_ws();
 
-        match self.opts.object_type {
+        let result = match self.opts.object_type {
             ObjectType::HashTable => self.parse_object_hash_table(),
             ObjectType::Alist => self.parse_object_alist(),
             ObjectType::Plist => self.parse_object_plist(),
-        }
+        }?;
+        self.leave_nesting();
+        Ok(result)
     }
 
     fn parse_object_hash_table(&mut self) -> Result<Value, Flow> {
