@@ -12,7 +12,7 @@ use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
 use crate::buffer::EmacsBytePos;
-use crate::buffer::buffer::{Buffer, BufferId, BufferManager, InsertionType};
+use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
@@ -4661,7 +4661,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         Value::NIL
     };
 
-    Buffer {
+    Buffer::from_dump_parts(BufferDumpParts {
         id: BufferId(db.id.0),
         name,
         last_name,
@@ -4765,7 +4765,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         ),
         overlay_modified_tick: 1,
         undo_state: SharedUndoState::from_parts(undo_list, false, false),
-    }
+    })
 }
 
 pub(crate) fn load_buffer_manager(

@@ -1553,6 +1553,42 @@ pub struct OutermostRestrictionResetState {
     pub affected_buffers: Vec<BufferId>,
 }
 
+/// Complete buffer state reconstructed from a pdump image.
+///
+/// This is intentionally crate-private: pdump loading needs to restore the
+/// exact serialized state, but ordinary runtime code should construct buffers
+/// through [`Buffer::new`] and mutate text through the Buffer APIs.
+pub(crate) struct BufferDumpParts {
+    pub id: BufferId,
+    pub name: Value,
+    pub last_name: Value,
+    pub base_buffer: Option<BufferId>,
+    pub text: BufferText,
+    pub pt: usize,
+    pub pt_byte: usize,
+    pub mark_marker_id: Option<u64>,
+    pub mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
+    pub begv: usize,
+    pub begv_byte: usize,
+    pub zv: usize,
+    pub zv_byte: usize,
+    pub autosave_modified_tick: i64,
+    pub last_window_start: usize,
+    pub last_selected_window: Option<WindowId>,
+    pub inhibit_buffer_hooks: bool,
+    pub state_markers: Option<BufferStateMarkers>,
+    pub local_var_alist: Value,
+    pub keymap: Value,
+    pub modtime_sec: Option<i64>,
+    pub modtime_nsec: Option<i32>,
+    pub modtime_size: Option<i64>,
+    pub slots: [Value; BUFFER_SLOT_COUNT],
+    pub local_flags: u64,
+    pub overlays: OverlayList,
+    pub overlay_modified_tick: i64,
+    pub undo_state: SharedUndoState,
+}
+
 // ---------------------------------------------------------------------------
 // Buffer
 // ---------------------------------------------------------------------------
@@ -1570,7 +1606,7 @@ pub struct Buffer {
     /// Base buffer when this is an indirect buffer.
     pub base_buffer: Option<BufferId>,
     /// The underlying text storage.
-    pub(crate) text: BufferText,
+    text: BufferText,
     /// Point — the current cursor character position.
     pub pt: usize,
     /// Point — the current cursor byte position.
@@ -1762,6 +1798,40 @@ impl Buffer {
             overlays: OverlayList::new(),
             overlay_modified_tick: 1,
             undo_state: SharedUndoState::new(),
+        }
+    }
+
+    pub(crate) fn from_dump_parts(parts: BufferDumpParts) -> Self {
+        assert!(parts.name.is_string(), "buffer name must be a Lisp string");
+        Self {
+            id: parts.id,
+            name: parts.name,
+            last_name: parts.last_name,
+            base_buffer: parts.base_buffer,
+            text: parts.text,
+            pt: parts.pt,
+            pt_byte: parts.pt_byte,
+            mark_marker_id: parts.mark_marker_id,
+            mark_marker_ptr: parts.mark_marker_ptr,
+            begv: parts.begv,
+            begv_byte: parts.begv_byte,
+            zv: parts.zv,
+            zv_byte: parts.zv_byte,
+            autosave_modified_tick: parts.autosave_modified_tick,
+            last_window_start: parts.last_window_start,
+            last_selected_window: parts.last_selected_window,
+            inhibit_buffer_hooks: parts.inhibit_buffer_hooks,
+            state_markers: parts.state_markers,
+            local_var_alist: parts.local_var_alist,
+            keymap: parts.keymap,
+            modtime_sec: parts.modtime_sec,
+            modtime_nsec: parts.modtime_nsec,
+            modtime_size: parts.modtime_size,
+            slots: parts.slots,
+            local_flags: parts.local_flags,
+            overlays: parts.overlays,
+            overlay_modified_tick: parts.overlay_modified_tick,
+            undo_state: parts.undo_state,
         }
     }
 
