@@ -294,10 +294,13 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
                     vec![Value::string("Not a finite number")],
                 ));
             }
-            // ryu emits the shortest round-trippable decimal and always
-            // includes a fractional part or exponent (e.g. 1.0 → "1.0"), so
-            // the result is valid JSON without a special integer-valued case.
-            Ok(ryu::Buffer::new().format_finite(f).to_owned())
+            // Use neomacs's canonical float printer (the same dtoastr-based
+            // routine behind number-to-string / prin1) so json-serialize
+            // matches GNU's float_to_string byte-for-byte — e.g. 1e20 →
+            // "1e+20", 1e-5 → "1e-05" — and stays consistent with the rest
+            // of the runtime. The nan/inf cases are rejected above, so the
+            // finite path always yields valid JSON.
+            Ok(crate::emacs_core::print::format_float(f))
         }
 
         ValueKind::String => {

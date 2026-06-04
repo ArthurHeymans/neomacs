@@ -126,6 +126,37 @@ fn serialize_float_whole() {
 }
 
 #[test]
+fn serialize_float_matches_gnu_dtoastr() {
+    crate::test_utils::init_test_tracing();
+    // Ground-truth strings captured from GNU Emacs json-serialize. The float
+    // printer must match byte-for-byte, including GNU's e+NN exponent style
+    // and its fixed/scientific threshold (so 1e15 is scientific but 1e7 is
+    // not). This is also what neomacs number-to-string produces.
+    let cases: &[(f64, &str)] = &[
+        (3.125, "3.125"),
+        (0.5, "0.5"),
+        (100.0, "100.0"),
+        (-2.5, "-2.5"),
+        (1e7, "10000000.0"),
+        (1e15, "1e+15"),
+        (1e16, "1e+16"),
+        (1e20, "1e+20"),
+        (1e-4, "0.0001"),
+        (1e-5, "1e-05"),
+        (1e-7, "1e-07"),
+        (1234567890123456789.0, "1.2345678901234568e+18"),
+    ];
+    for &(input, expected) in cases {
+        let result = builtin_json_serialize(vec![Value::make_float(input)]).unwrap();
+        assert_eq!(
+            result.as_utf8_str(),
+            Some(expected),
+            "json-serialize of {input:?} should match GNU"
+        );
+    }
+}
+
+#[test]
 fn serialize_nan_errors() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_serialize(vec![Value::make_float(f64::NAN)]);

@@ -105,9 +105,8 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 # algorithms. This avoids C library compilation issues on Windows CI.
 malachite = "0.9"
 
-# Fast integer/float to-decimal formatting (used by the JSON serializer).
+# Fast integer to-decimal formatting (used by the JSON serializer).
 itoa = "1.0"
-ryu = "1.0"
 
 # GPU / windowing
 winit = "0.30"
