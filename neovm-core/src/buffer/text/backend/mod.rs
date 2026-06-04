@@ -133,7 +133,10 @@ impl TextBackend {
     }
 
     pub(in crate::buffer) fn real_gap_compat_state(&self) -> Option<GapCompatState> {
-        dispatch_backend_ref!(self, storage => PhysicalTextBackend::real_gap_compat_state(storage))
+        match self {
+            Self::Gap(storage) => Some(storage.real_gap_compat_state()),
+            Self::PieceTree(_) | Self::Rope(_) => None,
+        }
     }
 
     pub(in crate::buffer) fn is_multibyte(&self) -> bool {

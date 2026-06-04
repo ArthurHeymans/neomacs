@@ -3,9 +3,7 @@ use std::fmt;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionHint};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
-use crate::buffer::text::{
-    GapCompatState, TextEditRange, TextExtent, TextMetrics, TextReplacement,
-};
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
 
 use super::gap::GapTextBackend;
 use super::piece_tree::PieceTreeTextBackend;
@@ -16,7 +14,6 @@ macro_rules! impl_physical_text_backend {
         $backend:ty,
         debug_layout = $debug_layout:expr
         $(, storage_position_hint = $storage_position_hint:expr)?
-        $(, real_gap_compat_state = $real_gap_compat_state:expr)?
     ) => {
         impl PhysicalTextBackend for $backend {
             fn metrics(&self) -> TextMetrics {
@@ -31,12 +28,6 @@ macro_rules! impl_physical_text_backend {
             $(
                 fn storage_position_hint(&self) -> TextPositionHint {
                     ($storage_position_hint)(self)
-                }
-            )?
-
-            $(
-                fn real_gap_compat_state(&self) -> Option<GapCompatState> {
-                    ($real_gap_compat_state)(self)
                 }
             )?
 
@@ -148,10 +139,6 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
         TextPositionHint::none()
     }
 
-    fn real_gap_compat_state(&self) -> Option<GapCompatState> {
-        None
-    }
-
     fn is_multibyte(&self) -> bool;
     fn set_multibyte(&mut self, multibyte: bool);
     fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8;
@@ -182,9 +169,7 @@ impl_physical_text_backend!(
         GapTextBackend::debug_layout(backend)
     ),
     storage_position_hint =
-        |backend: &GapTextBackend| GapTextBackend::storage_position_hint(backend),
-    real_gap_compat_state =
-        |backend: &GapTextBackend| Some(GapTextBackend::real_gap_compat_state(backend))
+        |backend: &GapTextBackend| GapTextBackend::storage_position_hint(backend)
 );
 
 impl_physical_text_backend!(
