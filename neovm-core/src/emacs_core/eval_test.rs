@@ -9036,6 +9036,27 @@ fn after_change_functions_receive_character_old_len() {
 }
 
 #[test]
+fn subst_char_in_region_reports_gnu_first_to_last_changed_after_range() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (erase-buffer)
+           (insert \"xaaxb\")
+           (let ((events nil))
+             (setq before-change-functions
+                   (list (lambda (beg end)
+                           (setq events (cons (list 'before beg end) events)))))
+             (setq after-change-functions
+                   (list (lambda (beg end old-len)
+                           (setq events
+                                 (cons (list 'after beg end old-len) events)))))
+             (subst-char-in-region 1 6 ?a ?b)
+             (list (buffer-string) (nreverse events))))",
+    );
+    assert_eq!(result, r#"OK ("xbbxb" ((before 2 6) (after 2 4 2)))"#);
+}
+
+#[test]
 fn text_property_modification_hooks_run_before_text_delete() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

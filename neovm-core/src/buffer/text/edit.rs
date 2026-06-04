@@ -54,6 +54,9 @@ pub struct TextReplacement {
 pub struct TextChange {
     old_range: TextEditRange,
     new_extent: TextExtent,
+    after_start_byte: EmacsBytePos,
+    after_new_extent: TextExtent,
+    after_old_char_len: CharLen,
 }
 
 /// Two non-overlapping edit ranges that will be transposed.
@@ -271,6 +274,9 @@ impl TextChange {
         Self {
             old_range,
             new_extent,
+            after_start_byte: old_range.byte_start(),
+            after_new_extent: new_extent,
+            after_old_char_len: old_range.char_len(),
         }
     }
 
@@ -287,6 +293,23 @@ impl TextChange {
 
     pub const fn unchanged_extent(range: TextEditRange) -> Self {
         Self::new(range, range.extent())
+    }
+
+    /// GNU `subst-char-in-region` runs `before-change-functions` over
+    /// `[first-changed, original-end)`, but reports `after-change-functions`
+    /// over `[first-changed, last-changed)`.  Keep that two-span shape explicit
+    /// instead of widening the after-change notification.
+    pub const fn unchanged_extent_with_after_range(
+        before_range: TextEditRange,
+        after_range: TextEditRange,
+    ) -> Self {
+        Self {
+            old_range: before_range,
+            new_extent: before_range.extent(),
+            after_start_byte: after_range.byte_start(),
+            after_new_extent: after_range.extent(),
+            after_old_char_len: after_range.char_len(),
+        }
     }
 
     pub const fn replacement(replacement: TextReplacement) -> Self {
@@ -314,17 +337,16 @@ impl TextChange {
     }
 
     pub const fn after_start_byte(self) -> EmacsBytePos {
-        self.old_range.byte_start()
+        self.after_start_byte
     }
 
     pub const fn after_end_byte(self) -> EmacsBytePos {
-        self.old_range
-            .byte_start()
-            .add_len(self.new_extent.emacs_bytes())
+        self.after_start_byte
+            .add_len(self.after_new_extent.emacs_bytes())
     }
 
     pub const fn old_char_len(self) -> CharLen {
-        self.old_range.char_len()
+        self.after_old_char_len
     }
 
     pub const fn before_start_byte_usize(self) -> usize {
@@ -609,6 +631,19 @@ mod tests {
 
         assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 27));
         assert_eq!(range.char_range(), CharRange::from_usize(10, 13));
+    }
+
+    #[test]
+    fn text_change_can_keep_distinct_before_and_after_ranges() {
+        let before_range = TextEditRange::from_usize(10, 20, 5, 15);
+        let after_range = TextEditRange::from_usize(10, 14, 5, 9);
+        let change = TextChange::unchanged_extent_with_after_range(before_range, after_range);
+
+        assert_eq!(change.before_start_byte(), EmacsBytePos::new(10));
+        assert_eq!(change.before_end_byte(), EmacsBytePos::new(20));
+        assert_eq!(change.after_start_byte(), EmacsBytePos::new(10));
+        assert_eq!(change.after_end_byte(), EmacsBytePos::new(14));
+        assert_eq!(change.old_char_len(), CharLen::new(4));
     }
 
     #[test]

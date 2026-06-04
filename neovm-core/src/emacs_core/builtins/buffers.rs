@@ -6,7 +6,7 @@ use super::*;
 
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
-    LispCharPos1, TextChange, TextExtent,
+    LispCharPos1, TextChange, TextEditRange, TextExtent,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -3383,7 +3383,7 @@ pub(crate) fn builtin_subst_char_in_region(
         ));
     }
 
-    let (range, needs_change) = {
+    let (range, changed_range) = {
         let buf = eval
             .buffers
             .get(current_id)
@@ -3403,14 +3403,16 @@ pub(crate) fn builtin_subst_char_in_region(
             lo.saturating_sub(1),
             hi.saturating_sub(1),
         ));
-        let needs_change = from_code != to_code
-            && !range.byte_range().is_empty()
-            && buf.emacs_byte_range_contains_char_code(range.byte_range(), from_code as u32);
-        (range, needs_change)
+        let changed_range = if from_code != to_code {
+            buf.subst_char_changed_range(range, from_code as u32)
+        } else {
+            None
+        };
+        (range, changed_range)
     };
-    if !needs_change {
+    let Some(changed_range) = changed_range else {
         return Ok(Value::NIL);
-    }
+    };
 
     if eval.buffers.get(current_id).is_some_and(|buf| {
         super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
@@ -3422,8 +3424,15 @@ pub(crate) fn builtin_subst_char_in_region(
     }
 
     // subst-char-in-region replaces characters of the same byte length,
-    // so the region size does not change.
-    let change = TextChange::new(range, range.extent());
+    // so changed bytes keep their old extent.  GNU calls modify_text from the
+    // first changed character through the original END, but after-change only
+    // reports through the last changed character.
+    let before_range = TextEditRange::new(
+        EmacsByteRange::new(changed_range.byte_start(), range.byte_end()),
+        changed_range.char_start(),
+        range.char_end(),
+    );
+    let change = TextChange::unchanged_extent_with_after_range(before_range, changed_range);
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval.buffers.subst_char_in_buffer_region(
         current_id,
