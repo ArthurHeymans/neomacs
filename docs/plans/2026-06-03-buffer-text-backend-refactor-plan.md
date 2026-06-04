@@ -460,6 +460,11 @@ Completed so far:
   replacement, indentation cleanup, line filtering, and rectangle deletion so
   `signal_after_change` and the actual mutation consume the same
   `TextEditRange`.
+- Added measured byte-range and character-range delete entry points on
+  `BufferManager`, then migrated undo replay, `call-process-region` deletion,
+  file replacement, auto-coding work-buffer cleanup, and whole-buffer
+  replacement paths so callers choose the coordinate system at the boundary and
+  the edit core receives one paired GNU-style `TextEditRange`.
 - Added backend matrix coverage proving the measured manager edit entry points
   preserve raw-wrapper behavior for text, point/mark, marker relocation, text
   properties, and undo records.

@@ -4248,20 +4248,20 @@ fn replace_accessible_portion_in_current_buffer(
     text: &LispString,
     text_props: Option<&TextPropertyTable>,
 ) -> Result<(), Flow> {
-    let (start, end, old_point) = {
+    let (delete_range, start, old_point) = {
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let accessible = buf.accessible_emacs_byte_region();
         (
+            accessible.range(),
             accessible.start_usize(),
-            accessible.end_usize(),
             buf.point_byte(),
         )
     };
-    if start < end {
+    if !delete_range.is_empty() {
         buffers
-            .delete_buffer_region(current_id, start, end)
+            .delete_buffer_emacs_byte_range(current_id, delete_range)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     }
     buffers
@@ -4663,14 +4663,16 @@ fn decide_auto_coding_for_insert_file_contents(
     };
 
     eval.set_current_buffer_unrecorded(work_buffer)?;
-    let old_len = eval
+    let old_range = eval
         .buffers
         .get(work_buffer)
-        .map(|buf| buf.total_bytes())
-        .unwrap_or(0);
-    eval.buffers
-        .delete_buffer_region(work_buffer, 0, old_len)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        .map(|buf| EmacsByteRange::from_usize(0, buf.total_bytes()))
+        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+    if !old_range.is_empty() {
+        eval.buffers
+            .delete_buffer_emacs_byte_range(work_buffer, old_range)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    }
     eval.buffers
         .set_buffer_multibyte_flag(work_buffer, false)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -4724,13 +4726,15 @@ fn restore_empty_buffer_after_auto_coding_probe(
     if let Some(buf) = eval.buffers.get_mut(buffer_id) {
         buf.set_undo_list(Value::T);
     }
-    let len = eval
+    let delete_range = eval
         .buffers
         .get(buffer_id)
-        .map(|buf| buf.total_bytes())
-        .unwrap_or(0);
-    if len > 0 {
-        let _ = eval.buffers.delete_buffer_region(buffer_id, 0, len);
+        .map(|buf| EmacsByteRange::from_usize(0, buf.total_bytes()))
+        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+    if !delete_range.is_empty() {
+        let _ = eval
+            .buffers
+            .delete_buffer_emacs_byte_range(buffer_id, delete_range);
     }
     let _ = eval
         .buffers

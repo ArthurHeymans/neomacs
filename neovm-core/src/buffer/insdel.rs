@@ -762,6 +762,16 @@ impl BufferManager {
             .map(|buf| buf.edit_range_for_emacs_byte_range(byte_range))
     }
 
+    pub fn edit_range_for_buffer_char_range(
+        &self,
+        id: BufferId,
+        char_range: CharRange,
+    ) -> Option<TextEditRange> {
+        self.buffers
+            .get(&id)
+            .map(|buf| buf.edit_range_for_char_range(char_range))
+    }
+
     fn shared_text_edit_scope(&self, edited_id: BufferId) -> Option<SharedTextEditScope> {
         let root_id = self.shared_text_root_id(edited_id)?;
         Some(SharedTextEditScope {
@@ -973,8 +983,26 @@ impl BufferManager {
         if start >= end {
             return Some(());
         }
-        let range = self
-            .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))?;
+        self.delete_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))
+    }
+
+    pub fn delete_buffer_emacs_byte_range(
+        &mut self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+    ) -> Option<()> {
+        if byte_range.is_empty() {
+            return Some(());
+        }
+        let range = self.edit_range_for_buffer_emacs_byte_range(id, byte_range)?;
+        self.delete_buffer_measured_region(id, range)
+    }
+
+    pub fn delete_buffer_char_range(&mut self, id: BufferId, char_range: CharRange) -> Option<()> {
+        if char_range.is_empty() {
+            return Some(());
+        }
+        let range = self.edit_range_for_buffer_char_range(id, char_range)?;
         self.delete_buffer_measured_region(id, range)
     }
 

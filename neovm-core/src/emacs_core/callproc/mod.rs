@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferManager, EmacsByteRange};
 use crate::heap_types::LispString;
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
@@ -673,18 +673,14 @@ fn builtin_call_process_region_impl(
                 let len = buf.total_bytes();
                 (
                     encode_call_process_region_buffer_text(buf.full_text_string()),
-                    (0usize, len),
+                    EmacsByteRange::from_usize(0, len),
                 )
             };
             if delete {
                 let current_id = buffers
                     .current_buffer_id()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.delete_buffer_region(
-                    current_id,
-                    maybe_delete_range.0,
-                    maybe_delete_range.1,
-                );
+                let _ = buffers.delete_buffer_emacs_byte_range(current_id, maybe_delete_range);
             }
             text
         }
@@ -704,19 +700,16 @@ fn builtin_call_process_region_impl(
         _ => {
             let start = super::process::expect_int_or_marker(&args[0])?;
             let end = super::process::expect_int_or_marker(&args[1])?;
-            let (text, region_beg, region_end) = {
+            let (text, region) = {
                 let buf = buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 let region = super::process::checked_region_bytes(buf, start, end)?;
-                let region_beg = region.start_usize();
-                let region_end = region.end_usize();
                 (
                     encode_call_process_region_buffer_text(
                         buf.storage_text_emacs_byte_range(region),
                     ),
-                    region_beg,
-                    region_end,
+                    region,
                 )
             };
 
@@ -724,7 +717,7 @@ fn builtin_call_process_region_impl(
                 let current_id = buffers
                     .current_buffer_id()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.delete_buffer_region(current_id, region_beg, region_end);
+                let _ = buffers.delete_buffer_emacs_byte_range(current_id, region);
             }
 
             text

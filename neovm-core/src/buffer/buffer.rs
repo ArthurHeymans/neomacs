@@ -4631,9 +4631,12 @@ impl BufferManager {
     }
 
     pub fn replace_buffer_contents(&mut self, id: BufferId, text: &str) -> Option<()> {
-        let len = self.buffers.get(&id)?.total_bytes();
-        if len > 0 {
-            self.delete_buffer_region(id, 0, len)?;
+        let delete_range = {
+            let buf = self.buffers.get(&id)?;
+            EmacsByteRange::from_usize(0, buf.total_bytes())
+        };
+        if !delete_range.is_empty() {
+            self.delete_buffer_emacs_byte_range(id, delete_range)?;
         }
         {
             let buf = self.buffers.get_mut(&id)?;
@@ -4657,9 +4660,12 @@ impl BufferManager {
             text.is_multibyte(),
             "replace_buffer_contents_lisp_string expects text already converted to target buffer representation",
         );
-        let len = self.buffers.get(&id)?.total_bytes();
-        if len > 0 {
-            self.delete_buffer_region(id, 0, len)?;
+        let delete_range = {
+            let buf = self.buffers.get(&id)?;
+            EmacsByteRange::from_usize(0, buf.total_bytes())
+        };
+        if !delete_range.is_empty() {
+            self.delete_buffer_emacs_byte_range(id, delete_range)?;
         }
         {
             let buf = self.buffers.get_mut(&id)?;
@@ -5224,17 +5230,17 @@ impl BufferManager {
                             // Insert record: (BEG . END) — to undo, delete [beg, end)
                             let beg1 = LispCharPos1::new(beg1);
                             let end1 = LispCharPos1::new(end1);
-                            let (beg, end) = {
+                            let range = {
                                 let buffer = self.buffers.get(&id)?;
                                 if !undo_lisp_range_is_visible(buffer, beg1, end1) {
                                     return None;
                                 }
-                                (
-                                    undo_char_pos1_to_byte_clamped(buffer, beg1).get(),
-                                    undo_char_pos1_to_byte_clamped(buffer, end1).get(),
-                                )
+                                buffer.edit_range_for_char_range(CharRange::new(
+                                    undo_char_pos1_to_char0(beg1),
+                                    undo_char_pos1_to_char0(end1),
+                                ))
                             };
-                            self.delete_buffer_region(id, beg, end)?;
+                            self.delete_buffer_measured_region(id, range)?;
                         }
                         (ValueKind::String, ValueKind::Fixnum(pos1)) => {
                             // Delete record: (TEXT . POS) — to undo, re-insert text

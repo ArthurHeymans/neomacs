@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{Buffer, CharPos0};
+use crate::buffer::{Buffer, CharPos0, CharRange};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -249,12 +249,17 @@ fn primitive_undo_inner(
             match (car.kind(), cdr.kind()) {
                 // (BEG . END) both integers — undo an insertion by deleting.
                 (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
-                    if let Some(buf) = ctx.buffers.get(buf_id) {
+                    let delete_range = if let Some(buf) = ctx.buffers.get(buf_id) {
                         ensure_undo_lisp_range_is_visible(buf, beg1, end1)?;
-                        let clamped_beg = char_pos1_to_byte_clamped(buf, beg1);
-                        let clamped_end = char_pos1_to_byte_clamped(buf, end1);
-                        ctx.buffers
-                            .delete_buffer_region(buf_id, clamped_beg, clamped_end);
+                        Some(buf.edit_range_for_char_range(CharRange::from_usize(
+                            char_pos1_to_char0(beg1),
+                            char_pos1_to_char0(end1),
+                        )))
+                    } else {
+                        None
+                    };
+                    if let Some(range) = delete_range {
+                        let _ = ctx.buffers.delete_buffer_measured_region(buf_id, range);
                     }
                 }
                 // (TEXT . POS) string + int — undo a deletion by re-inserting.
@@ -355,24 +360,31 @@ fn primitive_undo_inner(
                 // (nil . LEN) — undo a yank: delete LEN chars before point.
                 (ValueKind::Nil, ValueKind::Fixnum(len1)) => {
                     let len = len1.max(0) as usize;
-                    if let Some(buf) = ctx.buffers.get(buf_id) {
+                    let delete_range = if let Some(buf) = ctx.buffers.get(buf_id) {
                         if buf.pt >= len {
                             let del_start_char = buf.pt - len;
                             let del_end_char = buf.pt;
-                            let del_start = buf
-                                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(del_start_char))
-                                .get();
-                            let del_end = buf
-                                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(del_end_char))
-                                .get();
                             let accessible = buf.accessible_char_region();
                             if accessible.contains_boundary_usize(del_start_char)
                                 && accessible.contains_boundary_usize(del_end_char)
                             {
-                                ctx.buffers.goto_buffer_byte(buf_id, del_start);
-                                ctx.buffers.delete_buffer_region(buf_id, del_start, del_end);
+                                Some(buf.edit_range_for_char_range(CharRange::from_usize(
+                                    del_start_char,
+                                    del_end_char,
+                                )))
+                            } else {
+                                None
                             }
+                        } else {
+                            None
                         }
+                    } else {
+                        None
+                    };
+                    if let Some(range) = delete_range {
+                        ctx.buffers
+                            .goto_buffer_byte(buf_id, range.byte_start_usize());
+                        let _ = ctx.buffers.delete_buffer_measured_region(buf_id, range);
                     }
                 }
                 // (nil PROP VAL BEG . END) — restore text property.
