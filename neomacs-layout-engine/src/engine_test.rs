@@ -705,6 +705,21 @@ fn glyphless_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutT
     )
 }
 
+fn composition_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "e\u{0301} a\u{0300}\u{0301} 中\u{0300}\nplain\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-composition",
+        text,
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            let cjk_byte = text.find('中').expect("CJK base char");
+            buffer.goto_byte(cjk_byte);
+        },
+    )
+}
+
 fn wrapped_retry_backend_layout_trace(kind: BufferTextBackendKind) -> (BackendLayoutTrace, usize) {
     let logical_lines = (0..24)
         .map(|line| format!("line-{line:02} abcdefghijklmno\n"))
@@ -1026,6 +1041,19 @@ fn trace_text_face_ids(trace: &BackendLayoutTrace) -> Vec<u32> {
         .iter()
         .filter(|row| row.role == GlyphRowRole::Text)
         .flat_map(|row| row.glyph_areas[1].iter().map(|glyph| glyph.face_id))
+        .collect()
+}
+
+fn trace_composite_texts(trace: &BackendLayoutTrace) -> Vec<String> {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyph_areas[1].iter())
+        .filter_map(|glyph| match &glyph.kind {
+            GlyphKindTrace::Composite(text) => Some(text.clone()),
+            _ => None,
+        })
         .collect()
 }
 
@@ -1530,6 +1558,41 @@ fn implemented_text_backends_match_glyphless_display_geometry() {
 
     for kind in implemented_text_backends() {
         let trace = glyphless_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_composite_glyph_output() {
+    let baseline = composition_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let composites = trace_composite_texts(&baseline);
+    assert!(
+        composites.contains(&"e\u{0301}".to_string()),
+        "baseline should merge Latin base plus acute mark into a composite glyph, composites={composites:?}"
+    );
+    assert!(
+        composites.contains(&"a\u{0300}\u{0301}".to_string()),
+        "baseline should keep multiple combining marks on one composite glyph, composites={composites:?}"
+    );
+    assert!(
+        composites.contains(&"中\u{0300}".to_string()),
+        "baseline should compose combining marks on multibyte base chars, composites={composites:?}"
+    );
+    assert!(
+        baseline.points.iter().any(|point| point.buffer_pos == 1),
+        "baseline should publish display geometry for the first composite base char, trace={baseline:?}"
+    );
+    assert!(
+        baseline
+            .hit
+            .as_ref()
+            .is_some_and(|hit| !hit.rows.is_empty()),
+        "baseline should publish hit rows for composite output, hit={:?}",
+        baseline.hit
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = composition_backend_layout_trace(kind);
         assert_eq!(trace, baseline, "{kind:?}");
     }
 }
