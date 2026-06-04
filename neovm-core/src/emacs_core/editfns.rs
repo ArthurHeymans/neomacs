@@ -13,7 +13,7 @@ use super::eval::OverlayModificationHook;
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange};
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
@@ -135,20 +135,17 @@ fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flo
 
 pub(crate) fn byte_span_char_len(buf: &crate::buffer::Buffer, beg: usize, end: usize) -> usize {
     let range = EmacsByteRange::from_usize(beg.min(end), beg.max(end));
-    let start = buf.emacs_byte_pos_to_char_pos_clamped(range.start());
-    let end = buf.emacs_byte_pos_to_char_pos_clamped(range.end());
-    end.get().saturating_sub(start.get())
+    buf.edit_range_for_emacs_byte_range(range).char_len().get()
 }
 
-pub(crate) fn current_buffer_byte_span_char_len(
-    ctx: &crate::emacs_core::eval::Context,
-    beg: usize,
-    end: usize,
-) -> usize {
-    ctx.buffers
-        .current_buffer()
-        .map(|buf| byte_span_char_len(buf, beg, end))
-        .unwrap_or_else(|| end.abs_diff(beg))
+pub(crate) fn buffer_edit_range_for_byte_range_in_manager(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+) -> Result<TextEditRange, Flow> {
+    buffers
+        .edit_range_for_buffer_emacs_byte_range(buffer_id, byte_range)
+        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))
 }
 
 // ---------------------------------------------------------------------------
@@ -905,7 +902,12 @@ pub(crate) fn builtin_delete_char(
         }) else {
             return Ok(Value::NIL);
         };
-        let old_len = current_buffer_byte_span_char_len(ctx, start, end);
+        let delete_range = buffer_edit_range_for_byte_range_in_manager(
+            &ctx.buffers,
+            current_id,
+            EmacsByteRange::from_usize(start, end),
+        )?;
+        let old_len = delete_range.char_len().get();
         crate::emacs_core::textprop::verify_text_read_only_in_state(
             &ctx.obarray,
             &ctx.buffers,
@@ -914,7 +916,9 @@ pub(crate) fn builtin_delete_char(
             end,
         )?;
         signal_before_change(ctx, start, end)?;
-        let _ = ctx.buffers.delete_buffer_region(current_id, start, end);
+        let _ = ctx
+            .buffers
+            .delete_buffer_measured_region(current_id, delete_range);
         signal_after_change(ctx, start, start, old_len)?;
     }
     Ok(Value::NIL)
@@ -958,11 +962,13 @@ pub(crate) fn builtin_delete_region(
         end_byte,
     )?;
 
-    let old_len = current_buffer_byte_span_char_len(ctx, start_byte, end_byte);
+    let delete_range =
+        buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
+    let old_len = delete_range.char_len().get();
     signal_before_change(ctx, start_byte, end_byte)?;
     let _ = ctx
         .buffers
-        .delete_buffer_region(current_id, start_byte, end_byte);
+        .delete_buffer_measured_region(current_id, delete_range);
     signal_after_change(ctx, start_byte, start_byte, old_len)?;
     Ok(Value::NIL)
 }
@@ -1007,11 +1013,13 @@ pub(crate) fn builtin_delete_and_extract_region(
         end_byte,
     )?;
 
-    let old_len = current_buffer_byte_span_char_len(ctx, start_byte, end_byte);
+    let delete_range =
+        buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
+    let old_len = delete_range.char_len().get();
     signal_before_change(ctx, start_byte, end_byte)?;
     let _ = ctx
         .buffers
-        .delete_buffer_region(current_id, start_byte, end_byte);
+        .delete_buffer_measured_region(current_id, delete_range);
     signal_after_change(ctx, start_byte, start_byte, old_len)?;
     Ok(deleted)
 }
@@ -1030,7 +1038,12 @@ pub(crate) fn builtin_erase_buffer(
         .get(current_id)
         .map(|buf| buf.total_bytes())
         .unwrap_or(0);
-    let old_len = current_buffer_byte_span_char_len(ctx, 0, buf_len);
+    let delete_range = buffer_edit_range_for_byte_range_in_manager(
+        &ctx.buffers,
+        current_id,
+        EmacsByteRange::from_usize(0, buf_len),
+    )?;
+    let old_len = delete_range.char_len().get();
     if buf_len > 0 {
         signal_before_change(ctx, 0, buf_len)?;
     }
@@ -1071,7 +1084,12 @@ pub(crate) fn erase_buffer_impl(
         buf.total_bytes()
     };
     if len > 0 {
-        let _ = buffers.delete_buffer_region(current_id, 0, len);
+        let delete_range = buffer_edit_range_for_byte_range_in_manager(
+            buffers,
+            current_id,
+            EmacsByteRange::from_usize(0, len),
+        )?;
+        let _ = buffers.delete_buffer_measured_region(current_id, delete_range);
     }
     if let Some(buf) = buffers.get_mut(current_id) {
         buf.goto_byte(0);

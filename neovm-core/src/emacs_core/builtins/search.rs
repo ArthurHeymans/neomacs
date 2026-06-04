@@ -1860,12 +1860,17 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         (replacement.0, replacement.1, replacement.2, case_action)
     };
     let replacement_len = replacement.sbytes();
+    let old_range = buffers
+        .edit_range_for_buffer_emacs_byte_range(
+            current_id,
+            EmacsByteRange::from_usize(oldstart, oldend),
+        )
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     super::super::fns::replace_buffer_region_lisp_string_in_manager(
         buffers,
         current_id,
-        oldstart,
-        oldend,
+        old_range,
         &replacement,
     )?;
     let newend = oldstart + replacement_len;
@@ -1969,9 +1974,15 @@ pub(crate) fn builtin_replace_match(
                                     signal("error", vec![Value::string(msg)])
                                 }
                             })?;
-                        let old_len = super::editfns::current_buffer_byte_span_char_len(
-                            eval, oldstart, oldend,
-                        );
+                        let old_range =
+                            super::editfns::buffer_edit_range_for_byte_range_in_manager(
+                                &eval.buffers,
+                                eval.buffers.current_buffer_id().ok_or_else(|| {
+                                    signal("error", vec![Value::string("No current buffer")])
+                                })?,
+                                EmacsByteRange::from_usize(oldstart, oldend),
+                            )?;
+                        let old_len = old_range.char_len().get();
                         (oldstart, oldend, oldstart + replacement.sbytes(), old_len)
                     };
                     super::editfns::signal_before_change(eval, oldstart, oldend)?;

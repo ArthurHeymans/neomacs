@@ -79,7 +79,7 @@ impl Buffer {
         self.text.edit_range_at_emacs_byte_pos(byte_pos)
     }
 
-    fn edit_range_for_emacs_byte_range(&self, byte_range: EmacsByteRange) -> TextEditRange {
+    pub fn edit_range_for_emacs_byte_range(&self, byte_range: EmacsByteRange) -> TextEditRange {
         if byte_range.is_empty() {
             return self.edit_range_at_emacs_byte_pos(byte_range.start());
         }
@@ -361,20 +361,31 @@ impl Buffer {
         if start > end {
             return TextReplacement::default();
         }
+        let old_range =
+            self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        self.replace_measured_region_lisp_string(old_range, text)
+    }
+
+    pub fn replace_measured_region_lisp_string(
+        &mut self,
+        old_range: TextEditRange,
+        text: &LispString,
+    ) -> TextReplacement {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let new_bytes = text.as_bytes();
         let new_byte_len = new_bytes.len();
         let new_char_len = text.schars();
+        let start = old_range.byte_start_usize();
+        let end = old_range.byte_end_usize();
 
-        if start == end {
+        if old_range.is_empty() {
             self.goto_byte(start);
             let insertion = self.insert_lisp_string(&text);
-            let old_range = TextEditRange::empty_at(insertion.byte_pos(), insertion.char_pos());
+            debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
+            debug_assert_eq!(old_range.char_start(), insertion.char_pos());
             return TextReplacement::new(old_range, insertion.extent());
         }
 
-        let old_range =
-            self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         let start_char = old_range.char_start();
         let end_char = old_range.char_end();
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
@@ -440,13 +451,20 @@ impl Buffer {
             return TextEditRange::default();
         }
         let range = self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        self.delete_measured_region(range)
+    }
+
+    pub fn delete_measured_region(&mut self, range: TextEditRange) -> TextEditRange {
+        if range.is_empty() {
+            return TextEditRange::default();
+        }
         let start_char = range.char_start();
         let end_char = range.char_end();
         // Record undo: save the deleted text for restoration.
         let deleted_text = self.buffer_region_lisp_string(range.byte_range());
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(start, self.pt_byte);
+        self.undo_prepare_change(range.byte_start_usize(), self.pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             for (marker, adjustment) in self
@@ -734,6 +752,16 @@ impl Buffer {
 /// Structural text mutation entry points for buffers and indirect-buffer
 /// siblings. This is the closest Rust ownership boundary to GNU `insdel.c`.
 impl BufferManager {
+    pub fn edit_range_for_buffer_emacs_byte_range(
+        &self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+    ) -> Option<TextEditRange> {
+        self.buffers
+            .get(&id)
+            .map(|buf| buf.edit_range_for_emacs_byte_range(byte_range))
+    }
+
     fn shared_text_edit_scope(&self, edited_id: BufferId) -> Option<SharedTextEditScope> {
         let root_id = self.shared_text_root_id(edited_id)?;
         Some(SharedTextEditScope {
@@ -945,9 +973,22 @@ impl BufferManager {
         if start >= end {
             return Some(());
         }
+        let range = self
+            .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))?;
+        self.delete_buffer_measured_region(id, range)
+    }
+
+    pub fn delete_buffer_measured_region(
+        &mut self,
+        id: BufferId,
+        range: TextEditRange,
+    ) -> Option<()> {
+        if range.is_empty() {
+            return Some(());
+        }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let range = self.buffers.get_mut(&id)?.delete_region(start, end);
+        let range = self.buffers.get_mut(&id)?.delete_measured_region(range);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_delete_metadata(sibling, range, update_state_fields);
@@ -964,9 +1005,19 @@ impl BufferManager {
         if start > end {
             return None;
         }
+        let range = self
+            .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))?;
+        self.replace_buffer_measured_region_lisp_string(id, range, text)
+    }
 
-        if start == end {
-            self.goto_buffer_byte(id, start)?;
+    pub fn replace_buffer_measured_region_lisp_string(
+        &mut self,
+        id: BufferId,
+        range: TextEditRange,
+        text: &LispString,
+    ) -> Option<()> {
+        if range.is_empty() {
+            self.goto_buffer_byte(id, range.byte_start_usize())?;
             return self.insert_lisp_string_into_buffer(id, text);
         }
 
@@ -974,7 +1025,7 @@ impl BufferManager {
         let replacement = self
             .buffers
             .get_mut(&id)?
-            .replace_region_lisp_string(start, end, text);
+            .replace_measured_region_lisp_string(range, text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_replace_metadata(sibling, replacement, update_state_fields);

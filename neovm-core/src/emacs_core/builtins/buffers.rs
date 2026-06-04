@@ -1337,7 +1337,12 @@ pub(crate) fn builtin_replace_buffer_contents(
         .get(current_id)
         .map(|buf| buf.total_bytes())
         .unwrap_or(0);
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, 0, old_len_bytes);
+    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(0, old_len_bytes),
+    )?;
+    let old_len = old_range.char_len().get();
     super::editfns::signal_before_change(eval, 0, old_len_bytes)?;
     let _ = eval
         .buffers
@@ -1391,10 +1396,17 @@ pub(crate) fn builtin_replace_region_contents(
         };
         (byte_range.start_usize(), byte_range.end_usize())
     };
+    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(lo, hi),
+    )?;
+    let old_len = old_range.char_len().get();
     // Signal before the combined delete+insert operation.
     super::editfns::signal_before_change(eval, lo, hi)?;
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, lo, hi);
-    let _ = eval.buffers.delete_buffer_region(current_id, lo, hi);
+    let _ = eval
+        .buffers
+        .delete_buffer_measured_region(current_id, old_range);
     let _ = eval.buffers.goto_buffer_byte(current_id, lo);
     // The insert builtins already call signal hooks internally, but the
     // surrounding before/after pair covers the whole replace operation.

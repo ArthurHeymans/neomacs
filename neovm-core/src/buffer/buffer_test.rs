@@ -1450,6 +1450,101 @@ fn implemented_text_backends_match_undo_recording_and_execution() {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+struct ManagerEditEntrypointSnapshot {
+    buffer_string: String,
+    point_byte: usize,
+    point_char: usize,
+    mark_byte: Option<usize>,
+    mark_char: Option<usize>,
+    marker_position: Option<(usize, usize)>,
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    undo: Vec<UndoEntrySnapshot>,
+}
+
+fn run_manager_edit_entrypoint_script(
+    kind: BufferTextBackendKind,
+    measured_entrypoints: bool,
+) -> ManagerEditEntrypointSnapshot {
+    let mut mgr = manager_with_text_backend(kind);
+    let id = mgr.current_buffer_id().expect("scratch buffer");
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+
+    {
+        let buf = mgr.get_mut(id).expect("scratch buffer");
+        buf.insert("aébc日本z");
+        buf.widen();
+        buf.goto_byte(0);
+        buf.set_mark_byte(byte_pos_for_char(buf, 5));
+        let prop_start = byte_pos_for_char(buf, 1);
+        let prop_end = byte_pos_for_char(buf, 6);
+        let marker_pos = byte_pos_for_char(buf, 4);
+        assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
+        register_marker_for_test(buf, 99, marker_pos, InsertionType::After);
+        buf.set_undo_list(Value::NIL);
+    }
+
+    let delete_start = buffer_byte_pos_for_char(&mgr, id, 2);
+    let delete_end = buffer_byte_pos_for_char(&mgr, id, 4);
+    if measured_entrypoints {
+        let delete_range = mgr
+            .edit_range_for_buffer_emacs_byte_range(
+                id,
+                EmacsByteRange::from_usize(delete_start, delete_end),
+            )
+            .expect("measure delete range");
+        mgr.delete_buffer_measured_region(id, delete_range)
+            .expect("delete measured range");
+    } else {
+        mgr.delete_buffer_region(id, delete_start, delete_end)
+            .expect("delete raw range");
+    }
+
+    let replace_start = buffer_byte_pos_for_char(&mgr, id, 1);
+    let replace_end = buffer_byte_pos_for_char(&mgr, id, 3);
+    let replacement = LispString::from_utf8("λq");
+    if measured_entrypoints {
+        let replace_range = mgr
+            .edit_range_for_buffer_emacs_byte_range(
+                id,
+                EmacsByteRange::from_usize(replace_start, replace_end),
+            )
+            .expect("measure replace range");
+        mgr.replace_buffer_measured_region_lisp_string(id, replace_range, &replacement)
+            .expect("replace measured range");
+    } else {
+        mgr.replace_buffer_region_lisp_string(id, replace_start, replace_end, &replacement)
+            .expect("replace raw range");
+    }
+
+    let buf = mgr.get(id).expect("scratch buffer");
+    ManagerEditEntrypointSnapshot {
+        buffer_string: buf.buffer_string(),
+        point_byte: buf.point_byte(),
+        point_char: buf.point_char(),
+        mark_byte: buf.mark(),
+        mark_char: buf.mark_char(),
+        marker_position: buf
+            .marker_chain_lookup(99)
+            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        text_properties: buffer_text_property_snapshot(buf),
+        undo: undo_list_snapshot(buf.get_undo_list()),
+    }
+}
+
+#[test]
+fn measured_manager_edit_entrypoints_match_raw_wrappers() {
+    crate::test_utils::init_test_tracing();
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            run_manager_edit_entrypoint_script(kind, true),
+            run_manager_edit_entrypoint_script(kind, false),
+            "{kind:?} measured edit entrypoints diverged from raw wrappers"
+        );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 struct BackendMigrationSnapshot {
     backend_kind: BufferTextBackendKind,
     buffer_string: String,

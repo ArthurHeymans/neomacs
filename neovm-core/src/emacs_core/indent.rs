@@ -427,9 +427,16 @@ fn delete_horizontal_space_at_point(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, left, right);
+    let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(left, right),
+    )?;
+    let old_len = delete_range.char_len().get();
     super::editfns::signal_before_change(eval, left, right)?;
-    let _ = eval.buffers.delete_buffer_region(current_id, left, right);
+    let _ = eval
+        .buffers
+        .delete_buffer_measured_region(current_id, delete_range);
     super::editfns::signal_after_change(eval, left, left, old_len)?;
     Ok(())
 }
@@ -543,11 +550,17 @@ pub(crate) fn builtin_move_to_column(
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
         super::editfns::signal_after_change(ctx, insert_pos, insert_pos + pad_len, 0)?;
         let tab_after_pad = insert_pos + pad_len;
+        let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+            &ctx.buffers,
+            current_id,
+            EmacsByteRange::from_usize(tab_after_pad, tab_after_pad + 1),
+        )?;
+        let old_len = delete_range.char_len().get();
         super::editfns::signal_before_change(ctx, tab_after_pad, tab_after_pad + 1)?;
         let _ = ctx
             .buffers
-            .delete_buffer_region(current_id, tab_after_pad, tab_after_pad + 1);
-        super::editfns::signal_after_change(ctx, tab_after_pad, tab_after_pad, 1)?;
+            .delete_buffer_measured_region(current_id, delete_range);
+        super::editfns::signal_after_change(ctx, tab_after_pad, tab_after_pad, old_len)?;
         let goal_point = tab_after_pad;
         let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
         let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;

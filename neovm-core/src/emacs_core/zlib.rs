@@ -6,10 +6,7 @@
 
 use std::io::Read;
 
-use super::editfns::{
-    buffer_read_only_active_in_state, current_buffer_byte_span_char_len, signal_after_change,
-    signal_before_change,
-};
+use super::editfns::{buffer_read_only_active_in_state, signal_after_change, signal_before_change};
 use super::error::{EvalResult, Flow, signal};
 use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
@@ -113,14 +110,17 @@ pub(crate) fn builtin_zlib_decompress_region(
     match decompressed {
         Some((data, remaining)) if remaining == 0 => {
             let replacement = LispString::from_emacs_bytes(data);
-            let old_len = current_buffer_byte_span_char_len(ctx, from_byte, to_byte);
+            let edit_range = ctx
+                .buffers
+                .edit_range_for_buffer_emacs_byte_range(buffer_id, byte_range)
+                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+            let old_len = edit_range.char_len().get();
             let new_len = replacement.sbytes();
             signal_before_change(ctx, from_byte, to_byte)?;
             replace_buffer_region_lisp_string_in_manager(
                 &mut ctx.buffers,
                 buffer_id,
-                from_byte,
-                to_byte,
+                edit_range,
                 &replacement,
             )?;
             signal_after_change(ctx, from_byte, from_byte + new_len, old_len)?;
@@ -128,14 +128,17 @@ pub(crate) fn builtin_zlib_decompress_region(
         }
         Some((data, remaining)) if allow_partial => {
             let replacement = LispString::from_emacs_bytes(data);
-            let old_len = current_buffer_byte_span_char_len(ctx, from_byte, to_byte);
+            let edit_range = ctx
+                .buffers
+                .edit_range_for_buffer_emacs_byte_range(buffer_id, byte_range)
+                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+            let old_len = edit_range.char_len().get();
             let new_len = replacement.sbytes();
             signal_before_change(ctx, from_byte, to_byte)?;
             replace_buffer_region_lisp_string_in_manager(
                 &mut ctx.buffers,
                 buffer_id,
-                from_byte,
-                to_byte,
+                edit_range,
                 &replacement,
             )?;
             signal_after_change(ctx, from_byte, from_byte + new_len, old_len)?;

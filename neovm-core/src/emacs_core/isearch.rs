@@ -1579,11 +1579,18 @@ fn replace_string_eval_impl(
             .buffers
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let old_len = super::editfns::current_buffer_byte_span_char_len(eval, start, end);
+        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(start, end),
+        )?;
+        let old_len = old_range.char_len().get();
         let new_len = storage_string_byte_len(&out);
         let out_text = storage_string_to_lisp_string(&out, source_multibyte);
         super::editfns::signal_before_change(eval, start, end)?;
-        let _ = eval.buffers.delete_buffer_region(current_id, start, end);
+        let _ = eval
+            .buffers
+            .delete_buffer_measured_region(current_id, old_range);
         let _ = eval.buffers.goto_buffer_byte(current_id, start);
         let _ = eval
             .buffers
@@ -1690,11 +1697,18 @@ fn replace_string_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, start, end);
+    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(start, end),
+    )?;
+    let old_len = old_range.char_len().get();
     let new_len = storage_string_byte_len(&out);
     let out_text = storage_string_to_lisp_string(&out, source_multibyte);
     super::editfns::signal_before_change(eval, start, end)?;
-    let _ = eval.buffers.delete_buffer_region(current_id, start, end);
+    let _ = eval
+        .buffers
+        .delete_buffer_measured_region(current_id, old_range);
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
     let _ = eval
         .buffers
@@ -1860,11 +1874,18 @@ fn replace_regexp_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, start, end);
+    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(start, end),
+    )?;
+    let old_len = old_range.char_len().get();
     let new_len = storage_string_byte_len(&out);
     let out_text = storage_string_to_lisp_string(&out, source_multibyte);
     super::editfns::signal_before_change(eval, start, end)?;
-    let _ = eval.buffers.delete_buffer_region(current_id, start, end);
+    let _ = eval
+        .buffers
+        .delete_buffer_measured_region(current_id, old_range);
     let _ = eval.buffers.goto_buffer_byte(current_id, start);
     let _ = eval
         .buffers
@@ -2000,13 +2021,27 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
         let region_start = delete_ranges.last().map(|(s, _)| *s).unwrap_or(start);
         let region_end = delete_ranges.first().map(|(_, e)| *e).unwrap_or(start);
         let total_deleted: usize = delete_ranges.iter().map(|(s, e)| e - s).sum();
-        let old_len =
-            super::editfns::current_buffer_byte_span_char_len(eval, region_start, region_end);
+        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(region_start.min(region_end), region_start.max(region_end)),
+        )?;
+        let old_len = old_range.char_len().get();
+        let measured_delete_ranges = delete_ranges
+            .iter()
+            .map(|(del_start, del_end)| {
+                super::editfns::buffer_edit_range_for_byte_range_in_manager(
+                    &eval.buffers,
+                    current_id,
+                    EmacsByteRange::from_usize(*del_start, *del_end),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         super::editfns::signal_before_change(eval, region_start, region_end)?;
-        for (del_start, del_end) in delete_ranges.into_iter().rev() {
+        for delete_range in measured_delete_ranges.into_iter().rev() {
             let _ = eval
                 .buffers
-                .delete_buffer_region(current_id, del_start, del_end);
+                .delete_buffer_measured_region(current_id, delete_range);
         }
         super::editfns::signal_after_change(
             eval,
@@ -2083,13 +2118,27 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
         let region_start = delete_ranges.first().map(|(s, _)| *s).unwrap_or(start);
         let region_end = delete_ranges.last().map(|(_, e)| *e).unwrap_or(start);
         let total_deleted: usize = delete_ranges.iter().map(|(s, e)| e - s).sum();
-        let old_len =
-            super::editfns::current_buffer_byte_span_char_len(eval, region_start, region_end);
+        let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(region_start, region_end),
+        )?;
+        let old_len = old_range.char_len().get();
+        let measured_delete_ranges = delete_ranges
+            .iter()
+            .map(|(del_start, del_end)| {
+                super::editfns::buffer_edit_range_for_byte_range_in_manager(
+                    &eval.buffers,
+                    current_id,
+                    EmacsByteRange::from_usize(*del_start, *del_end),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         super::editfns::signal_before_change(eval, region_start, region_end)?;
-        for (del_start, del_end) in delete_ranges.into_iter().rev() {
+        for delete_range in measured_delete_ranges.into_iter().rev() {
             let _ = eval
                 .buffers
-                .delete_buffer_region(current_id, del_start, del_end);
+                .delete_buffer_measured_region(current_id, delete_range);
         }
         super::editfns::signal_after_change(
             eval,

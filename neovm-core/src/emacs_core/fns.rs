@@ -10,7 +10,7 @@ use super::intern::resolve_sym;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteRange};
+use crate::buffer::{BufferManager, EmacsByteRange, TextEditRange};
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use std::borrow::Cow;
@@ -546,12 +546,12 @@ pub(crate) fn read_buffer_region_bytes_in_manager(
 pub(crate) fn replace_buffer_region_lisp_string_in_manager(
     buffers: &mut BufferManager,
     buffer_id: crate::buffer::BufferId,
-    start_byte: usize,
-    end_byte: usize,
+    range: TextEditRange,
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
+    let start_byte = range.byte_start_usize();
     buffers
-        .replace_buffer_region_lisp_string(buffer_id, start_byte, end_byte, replacement)
+        .replace_buffer_measured_region_lisp_string(buffer_id, range, replacement)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     buffers
         .append_buffer_text_properties(buffer_id, replacement.intervals(), start_byte)
@@ -566,16 +566,17 @@ pub(crate) fn replace_buffer_region_lisp_string(
     end_byte: usize,
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
-    let old_len = super::editfns::current_buffer_byte_span_char_len(eval, start_byte, end_byte);
+    let range = eval
+        .buffers
+        .edit_range_for_buffer_emacs_byte_range(
+            buffer_id,
+            EmacsByteRange::from_usize(start_byte, end_byte),
+        )
+        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+    let old_len = range.char_len().get();
     let new_len = replacement.sbytes();
     super::editfns::signal_before_change(eval, start_byte, end_byte)?;
-    replace_buffer_region_lisp_string_in_manager(
-        &mut eval.buffers,
-        buffer_id,
-        start_byte,
-        end_byte,
-        replacement,
-    )?;
+    replace_buffer_region_lisp_string_in_manager(&mut eval.buffers, buffer_id, range, replacement)?;
     // Don't inherit text properties from neighbors here.
     // GNU's replace path (del_range + insert_from_gap in decode_coding)
     // also skips adjust_intervals_for_insertion.  Property inheritance

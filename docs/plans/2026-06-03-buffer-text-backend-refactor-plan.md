@@ -453,6 +453,16 @@ Completed so far:
 - Threaded the measured `TextEditRange` through same-length substitution and
   shared-buffer sibling updates so undo, hooks, and indirect-buffer side
   effects use the same GNU-style `(char, byte)` descriptor as the text edit.
+- Added measured delete/replace entry points on `Buffer` and `BufferManager`,
+  then migrated delete/replace hook accounting in delete-region,
+  delete-and-extract-region, base64 region replacement, zlib replacement,
+  replace-buffer-contents, replace-region-contents, replace-match/search
+  replacement, indentation cleanup, line filtering, and rectangle deletion so
+  `signal_after_change` and the actual mutation consume the same
+  `TextEditRange`.
+- Added backend matrix coverage proving the measured manager edit entry points
+  preserve raw-wrapper behavior for text, point/mark, marker relocation, text
+  properties, and undo records.
 
 Next work:
 
