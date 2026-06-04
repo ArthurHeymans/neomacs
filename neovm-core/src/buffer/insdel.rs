@@ -16,6 +16,21 @@ use crate::buffer::undo;
 use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion, TextReplacement};
 use crate::heap_types::LispString;
 
+#[derive(Clone, Debug)]
+struct SharedTextEditScope {
+    edited_id: BufferId,
+    buffer_ids: Vec<BufferId>,
+}
+
+impl SharedTextEditScope {
+    fn siblings(&self) -> impl Iterator<Item = BufferId> + '_ {
+        self.buffer_ids
+            .iter()
+            .copied()
+            .filter(|buffer_id| *buffer_id != self.edited_id)
+    }
+}
+
 impl Buffer {
     fn edit_state(&self) -> BufferEditState {
         BufferEditState::from_usize(
@@ -687,6 +702,37 @@ impl Buffer {
 /// Structural text mutation entry points for buffers and indirect-buffer
 /// siblings. This is the closest Rust ownership boundary to GNU `insdel.c`.
 impl BufferManager {
+    fn shared_text_edit_scope(&self, edited_id: BufferId) -> Option<SharedTextEditScope> {
+        let root_id = self.shared_text_root_id(edited_id)?;
+        Some(SharedTextEditScope {
+            edited_id,
+            buffer_ids: self.buffers_sharing_root_ids(root_id),
+        })
+    }
+
+    fn shared_sibling_updates_state_fields(&self, sibling_id: BufferId) -> bool {
+        self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id)
+    }
+
+    fn apply_shared_text_edit_to_siblings<F>(
+        &mut self,
+        scope: SharedTextEditScope,
+        mut apply: F,
+    ) -> Option<()>
+    where
+        F: FnMut(&mut Buffer, bool),
+    {
+        for sibling_id in scope.siblings() {
+            let update_state_fields = self.shared_sibling_updates_state_fields(sibling_id);
+            {
+                let sibling = self.buffers.get_mut(&sibling_id)?;
+                apply(sibling, update_state_fields);
+            }
+            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+        }
+        Some(())
+    }
+
     fn adjust_shared_insert_metadata(
         buf: &mut Buffer,
         insertion: TextInsertion,
@@ -772,8 +818,7 @@ impl BufferManager {
         if text.is_empty() {
             return Some(());
         }
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
@@ -781,17 +826,9 @@ impl BufferManager {
         let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert(text);
         let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, false);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn insert_lisp_string_into_buffer(
@@ -827,8 +864,7 @@ impl BufferManager {
         let byte_len = text.sbytes();
         let char_len = text.schars();
 
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
@@ -842,13 +878,7 @@ impl BufferManager {
             self.buffers.get_mut(&id)?.insert_lisp_string(text);
         }
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata_full(
                 sibling,
                 insertion,
@@ -856,17 +886,14 @@ impl BufferManager {
                 false,
                 marker_adjustment,
             );
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn insert_into_buffer_before_markers(&mut self, id: BufferId, text: &str) -> Option<()> {
         if text.is_empty() {
             return Some(());
         }
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
@@ -874,17 +901,9 @@ impl BufferManager {
         let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert_before_markers(text);
         let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, true);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn insert_lisp_string_into_buffer_before_markers(
@@ -897,8 +916,7 @@ impl BufferManager {
         }
         let byte_len = text.sbytes();
         let char_len = text.schars();
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
@@ -908,17 +926,9 @@ impl BufferManager {
             .get_mut(&id)?
             .insert_lisp_string_before_markers(text);
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, true);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn delete_buffer_region(&mut self, id: BufferId, start: usize, end: usize) -> Option<()> {
@@ -926,8 +936,7 @@ impl BufferManager {
             return Some(());
         }
 
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let start_char = char_pos_for_emacs_byte(&source.text, start);
         let end_char = char_pos_for_emacs_byte(&source.text, end);
@@ -935,17 +944,9 @@ impl BufferManager {
             TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         self.buffers.get_mut(&id)?.delete_region(start, end);
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_delete_metadata(sibling, range, update_state_fields);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn replace_buffer_region_lisp_string(
@@ -970,8 +971,7 @@ impl BufferManager {
         };
         let new_byte_len = converted.sbytes();
         let new_char_len = converted.schars();
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let source = self.buffers.get(&id)?;
         let start_char = char_pos_for_emacs_byte(&source.text, start);
         let end_char = char_pos_for_emacs_byte(&source.text, end);
@@ -984,17 +984,9 @@ impl BufferManager {
             .get_mut(&id)?
             .replace_region_lisp_string(start, end, &converted);
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_replace_metadata(sibling, replacement, update_state_fields);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 
     pub fn subst_char_in_buffer_region(
@@ -1010,8 +1002,7 @@ impl BufferManager {
             return Some(false);
         }
 
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
         let changed_chars = {
             let source = self.buffers.get(&id)?;
             char_pos_for_emacs_byte(&source.text, end).get()
@@ -1025,10 +1016,7 @@ impl BufferManager {
             return Some(false);
         }
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
+        for sibling_id in scope.siblings() {
             let sibling = self.buffers.get_mut(&sibling_id)?;
             Self::adjust_shared_same_len_edit_metadata(sibling, changed_chars, false);
         }
@@ -1049,8 +1037,7 @@ impl BufferManager {
         end2_byte: usize,
         leave_markers: bool,
     ) -> Option<()> {
-        let root_id = self.shared_text_root_id(id)?;
-        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let scope = self.shared_text_edit_scope(id)?;
 
         self.buffers.get_mut(&id)?.transpose_regions(
             start1_char,
@@ -1064,13 +1051,7 @@ impl BufferManager {
             leave_markers,
         );
 
-        for sibling_id in shared_ids {
-            if sibling_id == id {
-                continue;
-            }
-            let update_state_fields =
-                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
-            let sibling = self.buffers.get_mut(&sibling_id)?;
+        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {
                 sibling.pt_byte = transpose_position(
                     sibling.pt_byte,
@@ -1083,8 +1064,6 @@ impl BufferManager {
                     transpose_position(sibling.pt, start1_char, end1_char, start2_char, end2_char);
             }
             Self::adjust_shared_same_len_edit_metadata(sibling, end2_char - start1_char, false);
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
-        }
-        Some(())
+        })
     }
 }
