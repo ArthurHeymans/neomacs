@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::BufferTextBackendKind;
 use crate::buffer::buffer::BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM;
 use crate::emacs_core::Context;
 use crate::emacs_core::intern::intern;
@@ -11,6 +12,37 @@ fn interactive_context() -> Context {
     let mut eval = Context::new();
     eval.set_variable("noninteractive", Value::NIL);
     eval
+}
+
+fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
+    BufferTextBackendKind::implemented_variants()
+}
+
+fn convert_current_buffer_text_backend(eval: &mut Context, kind: BufferTextBackendKind) {
+    let implemented_kind = kind.implemented().expect("test backend is implemented");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .get_mut(buffer_id)
+        .expect("current buffer")
+        .convert_text_backend_kind(implemented_kind);
+}
+
+fn fragment_current_buffer(eval: &mut Context, text: &str) {
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let buffer = eval.buffers.get_mut(buffer_id).expect("current buffer");
+    buffer.insert(text);
+
+    let first_fragment = text.find('\n').unwrap_or(text.len()).min(text.len());
+    buffer.goto_byte(first_fragment);
+    buffer.insert("tmp");
+    buffer.delete_region(first_fragment, first_fragment + "tmp".len());
+
+    let second_fragment = text.len().saturating_sub(1);
+    buffer.goto_byte(second_fragment);
+    buffer.insert("xx");
+    buffer.delete_region(second_fragment, second_fragment + "xx".len());
+
+    assert_eq!(buffer.buffer_string(), text);
 }
 
 #[test]
@@ -882,6 +914,40 @@ fn test_format_mode_line_column_c_and_big_c_specs_match_gnu() {
     assert_eq!(rendered, Value::string("3|4"));
 }
 
+fn format_mode_line_position_backend_trace(kind: BufferTextBackendKind) -> String {
+    let mut eval = interactive_context();
+    convert_current_buffer_text_backend(&mut eval, kind);
+    fragment_current_buffer(&mut eval, "αβ\ncdé\nlast");
+    {
+        let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+        let buffer = eval.buffers.get_mut(buffer_id).expect("current buffer");
+        buffer.goto_byte("αβ\ncd".len());
+        assert_eq!(buffer.text_backend_kind(), kind);
+    }
+
+    let rendered = builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%l|%c|%C|%i")])
+        .expect("format-mode-line position specs");
+    rendered
+        .as_utf8_str()
+        .expect("position mode-line should be UTF-8")
+        .to_owned()
+}
+
+#[test]
+fn implemented_text_backends_match_format_mode_line_position_specs() {
+    crate::test_utils::init_test_tracing();
+    let baseline = format_mode_line_position_backend_trace(BufferTextBackendKind::GapBuffer);
+    assert_eq!(baseline, "2|2|3|14");
+
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            format_mode_line_position_backend_trace(kind),
+            baseline,
+            "{kind:?}"
+        );
+    }
+}
+
 #[test]
 fn test_format_mode_line_major_mode_name_spec_matches_gnu() {
     crate::test_utils::init_test_tracing();
@@ -1507,6 +1573,47 @@ fn test_window_text_pixel_size_matches_gnu_trailing_line_semantics() {
         Value::fixnum(3),
         "TO=t trims trailing blank lines before adding the mode line"
     );
+}
+
+fn window_text_pixel_size_backend_trace(kind: BufferTextBackendKind) -> (i64, i64) {
+    let mut eval = interactive_context();
+    convert_current_buffer_text_backend(&mut eval, kind);
+    fragment_current_buffer(&mut eval, "αx\nb\tc\nlast\n\n");
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-backend-pixels", 80, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 2.0;
+        frame.char_height = 3.0;
+        frame.font_pixel_size = 3.0;
+        frame.set_window_system(None);
+    }
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
+
+    let size = builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
+        .expect("window-text-pixel-size");
+    assert!(size.is_cons(), "expected cons, got {:?}", size.kind());
+    (
+        size.cons_car().as_int().expect("pixel width integer"),
+        size.cons_cdr().as_int().expect("pixel height integer"),
+    )
+}
+
+#[test]
+fn implemented_text_backends_match_window_text_pixel_size_metrics() {
+    crate::test_utils::init_test_tracing();
+    let baseline = window_text_pixel_size_backend_trace(BufferTextBackendKind::GapBuffer);
+    assert_eq!(baseline, (18, 12));
+
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            window_text_pixel_size_backend_trace(kind),
+            baseline,
+            "{kind:?}"
+        );
+    }
 }
 
 #[test]
