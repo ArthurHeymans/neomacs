@@ -402,7 +402,8 @@ fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Op
     let accessible = buf.accessible_emacs_byte_region();
     let text_next = buf
         .text
-        .text_props_next_change(byte_pos)
+        .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get)
         .filter(|next| *next <= accessible.end_usize());
     let overlay_next = buf
         .overlays
@@ -419,7 +420,8 @@ fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -
     let accessible = buf.accessible_emacs_byte_region();
     let text_prev = buf
         .text
-        .text_props_previous_change(byte_pos)
+        .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get)
         .filter(|prev| *prev >= accessible.start_usize());
     let overlay_prev = buf
         .overlays

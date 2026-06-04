@@ -798,7 +798,15 @@ impl BufferText {
     }
 
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
-        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(pos), name)
+    }
+
+    pub fn text_props_get_property_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<Value> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::new(pos, pos));
         self.storage
             .borrow()
             .text_props
@@ -806,7 +814,14 @@ impl BufferText {
     }
 
     pub fn text_props_get_properties(&self, pos: usize) -> HashMap<Value, Value> {
-        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub fn text_props_get_properties_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> HashMap<Value, Value> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::new(pos, pos));
         self.storage
             .borrow()
             .text_props
@@ -814,7 +829,14 @@ impl BufferText {
     }
 
     pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
-        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub fn text_props_get_properties_ordered_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Vec<(Value, Value)> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::new(pos, pos));
         self.storage
             .borrow()
             .text_props
@@ -822,7 +844,14 @@ impl BufferText {
     }
 
     pub fn text_props_get_properties_plist_value(&self, pos: usize) -> Value {
-        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.text_props_get_properties_plist_value_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub fn text_props_get_properties_plist_value_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Value {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::new(pos, pos));
         self.storage
             .borrow()
             .text_props
@@ -904,8 +933,16 @@ impl BufferText {
     }
 
     pub fn text_props_next_change(&self, pos: usize) -> Option<usize> {
+        self.text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(pos))
+            .map(EmacsBytePos::get)
+    }
+
+    pub fn text_props_next_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
         let char_pos = self
-            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
             .start_usize();
         let next = {
             self.storage
@@ -913,12 +950,20 @@ impl BufferText {
                 .text_props
                 .next_property_change(char_pos)
         };
-        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)).get())
+        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)))
     }
 
     pub fn text_props_previous_change(&self, pos: usize) -> Option<usize> {
+        self.text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(pos))
+            .map(EmacsBytePos::get)
+    }
+
+    pub fn text_props_previous_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
         let char_pos = self
-            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
             .start_usize();
         let prev = {
             self.storage
@@ -926,7 +971,7 @@ impl BufferText {
                 .text_props
                 .previous_property_change(char_pos)
         };
-        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)).get())
+        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)))
     }
 
     pub fn text_props_next_interval_boundary(&self, pos: usize) -> Option<usize> {

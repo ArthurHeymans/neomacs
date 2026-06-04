@@ -1595,11 +1595,11 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// `next_visible_pos` is the next char position where visibility might change.
     /// If no change is found, returns `buffer.zv` as the next boundary.
     pub fn check_invisible(&self, charpos: i64) -> (InvisibleStatus, i64) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         let text_invis = self
             .buffer
             .layout_text()
-            .text_props_get_property(bytepos, Value::symbol("invisible"));
+            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
         let mut status = InvisibleStatus::VISIBLE;
         let spec = self
             .buffer
@@ -1609,7 +1609,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             status = invisible_prop_status(Some(value), spec);
         }
         if !status.hidden {
-            let mut overlay_ids = self.buffer.layout_overlays().overlays_at(bytepos);
+            let mut overlay_ids = self.buffer.layout_overlays().overlays_at(bytepos.get());
             self.buffer
                 .layout_overlays()
                 .sort_overlay_ids_by_priority_desc(&mut overlay_ids);
@@ -1629,13 +1629,13 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let next_text_change = self
             .buffer
             .layout_text()
-            .text_props_next_change(bytepos)
-            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(next)))
+            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char());
         let next_overlay_change = self
             .buffer
             .layout_overlays()
-            .next_boundary_after(bytepos)
+            .next_boundary_after(bytepos.get())
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(next)))
             .unwrap_or(self.buffer.layout_point_max_char());
         let next_change = next_text_change.min(next_overlay_change);
@@ -1648,17 +1648,17 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Returns the display property value if present, along with the
     /// next position where display properties change.
     pub fn check_display_prop(&self, charpos: i64) -> (Option<Value>, i64) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         let display = self
             .buffer
             .layout_text()
-            .text_props_get_property(bytepos, Value::symbol("display"));
+            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("display"));
 
         let next_change = self
             .buffer
             .layout_text()
-            .text_props_next_change(bytepos)
-            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(next)))
+            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char());
 
         (display, next_change as i64)
@@ -1668,11 +1668,11 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     ///
     /// Returns extra line spacing in pixels (0.0 if no property).
     pub fn check_line_spacing(&self, charpos: i64, base_height: f32) -> f32 {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         match self
             .buffer
             .layout_text()
-            .text_props_get_property(bytepos, Value::symbol("line-spacing"))
+            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("line-spacing"))
         {
             Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,
             Some(v) if v.is_float() => {
@@ -1780,20 +1780,20 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Test-only helper for direct property-table regression coverage.
     #[cfg(test)]
     pub fn next_property_change(&self, charpos: i64) -> i64 {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         self.buffer
             .layout_text()
-            .text_props_next_change(bytepos)
-            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(next)))
+            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char()) as i64
     }
 
     /// Get a specific text property at a position.
     pub fn get_property(&self, charpos: i64, name: Value) -> Option<Value> {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         self.buffer
             .layout_text()
-            .text_props_get_property(bytepos, name)
+            .text_props_get_property_at_emacs_byte_pos(bytepos, name)
     }
 
     /// Get a text property at `charpos` as a string.
@@ -2482,7 +2482,7 @@ impl FaceResolver {
         charpos: usize,
         next_check: &mut usize,
     ) -> ResolvedFace {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, charpos).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, charpos);
         let mut min_next = buffer.layout_point_max_char();
         let mut resolved = self.resolve_buffer_default_face(buffer);
         let mut remap_stack = Vec::new();
@@ -2494,10 +2494,10 @@ impl FaceResolver {
         // the initial scratch message.
         let face_prop = buffer
             .layout_text()
-            .text_props_get_property(bytepos, Value::symbol("face"));
+            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("face"));
         let font_lock_face_prop = buffer
             .layout_text()
-            .text_props_get_property(bytepos, Value::symbol("font-lock-face"));
+            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
 
         // 1. Text face property, with font-lock-face fallback.
         if let Some(val) = face_prop.or(font_lock_face_prop) {
@@ -2508,22 +2508,22 @@ impl FaceResolver {
             }
         }
         // Update next_check from text property boundaries
-        if let Some(nc) = buffer.layout_text().text_props_next_change(bytepos) {
-            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(
-                buffer,
-                EmacsBytePos::new(nc),
-            ));
+        if let Some(nc) = buffer
+            .layout_text()
+            .text_props_next_change_after_emacs_byte_pos(bytepos)
+        {
+            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nc));
         }
 
         // 2. Overlay faces (sorted by priority, lowest first)
-        let overlay_ids = buffer.layout_overlays().overlays_at(bytepos);
+        let overlay_ids = buffer.layout_overlays().overlays_at(bytepos.get());
         if !overlay_ids.is_empty() {
             let mut overlay_faces: Vec<(i64, Value)> = Vec::new();
             for oid in &overlay_ids {
                 let oid = *oid;
                 // Update next_check from overlay boundaries
                 if let Some(end) = buffer.layout_overlays().overlay_end(oid) {
-                    if end > bytepos {
+                    if end > bytepos.get() {
                         min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(
                             buffer,
                             EmacsBytePos::new(end),
@@ -2561,7 +2561,7 @@ impl FaceResolver {
 
         // Also consider overlay boundaries so next_check doesn't skip past
         // positions where an overlay starts or ends.
-        if let Some(nb) = buffer.layout_overlays().next_boundary_after(bytepos) {
+        if let Some(nb) = buffer.layout_overlays().next_boundary_after(bytepos.get()) {
             min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(
                 buffer,
                 EmacsBytePos::new(nb),

@@ -24,7 +24,7 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager};
+use crate::buffer::{Buffer, BufferManager, EmacsBytePos};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
@@ -1630,22 +1630,22 @@ fn apply_face_layers_with_remapping(
 fn resolved_face_at_buffer_byte(
     eval: &super::eval::Context,
     buffer: &Buffer,
-    bytepos: usize,
+    bytepos: EmacsBytePos,
 ) -> RuntimeFace {
     let mut layers = Vec::new();
 
     let face_prop = buffer
         .text
-        .text_props_get_property(bytepos, Value::symbol("face"));
+        .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("face"));
     let font_lock_face_prop = buffer
         .text
-        .text_props_get_property(bytepos, Value::symbol("font-lock-face"));
+        .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
     if let Some(value) = face_prop.or(font_lock_face_prop) {
         layers.extend(resolve_face_layers_from_value(&value));
     }
 
     let mut overlay_layers = Vec::new();
-    for overlay_id in buffer.overlays.overlays_at(bytepos) {
+    for overlay_id in buffer.overlays.overlays_at(bytepos.get()) {
         let priority = buffer
             .overlays
             .overlay_get_named(overlay_id, Value::symbol("priority"))
@@ -2076,7 +2076,7 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
     }
 
     let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(pos);
-    let face = resolved_face_at_buffer_byte(eval, buffer, bytepos.get());
+    let face = resolved_face_at_buffer_byte(eval, buffer, bytepos);
     let character = buffer.text.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
         signal(
             "args-out-of-range",
