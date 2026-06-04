@@ -7,97 +7,12 @@
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
+    char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos,
+    emacs_char_count, lisp_string_from_buffer_bytes, transpose_position,
 };
 use crate::buffer::undo;
-use crate::buffer::{
-    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
-};
+use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion};
 use crate::heap_types::LispString;
-
-#[inline]
-fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
-    if multibyte {
-        crate::emacs_core::emacs_char::chars_in_multibyte(bytes)
-    } else {
-        bytes.len()
-    }
-}
-
-#[inline]
-fn lisp_string_from_buffer_bytes(bytes: Vec<u8>, multibyte: bool) -> LispString {
-    if multibyte {
-        LispString::from_emacs_bytes(bytes)
-    } else {
-        LispString::from_unibyte(bytes)
-    }
-}
-
-#[inline]
-fn char_pos_for_emacs_byte(text: &super::BufferText, byte_pos: usize) -> CharPos0 {
-    text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-}
-
-#[inline]
-fn emacs_byte_for_char_pos(text: &super::BufferText, char_pos: usize) -> EmacsBytePos {
-    text.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-}
-
-#[inline]
-fn encode_char_code_for_buffer_bytes(code: u32, multibyte: bool) -> Vec<u8> {
-    if multibyte {
-        let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        buf[..len].to_vec()
-    } else {
-        assert!(
-            code <= 0xFF,
-            "unibyte insertion produced non-byte character code {code:#X}"
-        );
-        vec![code as u8]
-    }
-}
-
-fn convert_lisp_string_for_buffer_mode(text: &LispString, target_multibyte: bool) -> LispString {
-    if text.is_multibyte() == target_multibyte {
-        return text.clone();
-    }
-
-    if !target_multibyte {
-        // GNU: insert_from_gap for unibyte buffers sets nchars=nbytes,
-        // storing each byte of the multibyte internal representation as
-        // a separate character.  Do NOT mask character codes with 0xFF
-        // — that would truncate non-ASCII chars (e.g., decode-coding-region
-        // of BIG5 data would lose the decoded characters).
-        return lisp_string_from_buffer_bytes(text.as_bytes().to_vec(), false);
-    }
-
-    let mut codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
-    for code in &mut codes {
-        if *code > 0x7F {
-            *code = crate::emacs_core::emacs_char::unibyte_to_char(*code as u8);
-        }
-    }
-
-    let mut bytes = Vec::new();
-    for code in codes {
-        bytes.extend_from_slice(&encode_char_code_for_buffer_bytes(code, target_multibyte));
-    }
-    lisp_string_from_buffer_bytes(bytes, target_multibyte)
-}
-
-#[inline]
-fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end2: usize) -> usize {
-    if pos < start1 || pos >= end2 {
-        pos
-    } else if pos < end1 {
-        pos + (end2 - end1)
-    } else if pos < start2 {
-        let diff = (end2 - start2) as isize - (end1 - start1) as isize;
-        (pos as isize + diff) as usize
-    } else {
-        pos - (start2 - start1)
-    }
-}
 
 impl Buffer {
     fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
