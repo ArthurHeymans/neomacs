@@ -959,6 +959,96 @@ fn implemented_text_backends_match_edit_marker_and_property_side_effects() {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct BackendMigrationSnapshot {
+    backend_kind: BufferTextBackendKind,
+    buffer_string: String,
+    char_to_byte_4: usize,
+    byte_to_char_at_char_4: usize,
+    marker_position: Option<(usize, usize)>,
+    overlay_range: (Option<usize>, Option<usize>),
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+}
+
+fn run_backend_migration_script(
+    initial_kind: BufferTextBackendKind,
+    target_kind: BufferTextBackendKind,
+    convert: bool,
+) -> BackendMigrationSnapshot {
+    let mut buf = buf_with_text_backend("aébc日本z", initial_kind);
+
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let prop_start = buf.text.buf_charpos_to_bytepos(1);
+    let prop_end = buf.text.buf_charpos_to_bytepos(5);
+    assert!(
+        buf.text
+            .text_props_put_property(prop_start, prop_end, face, bold)
+    );
+    register_marker_for_test(&mut buf, 77, 4, InsertionType::After);
+    let overlay = Value::make_overlay(OverlayData {
+        serial: 0,
+        plist: Value::NIL,
+        buffer: Some(buf.id),
+        start: 3,
+        end: 8,
+        front_advance: false,
+        rear_advance: true,
+    });
+    buf.overlays.insert_overlay(overlay);
+
+    let cached_byte = buf.text.buf_charpos_to_bytepos(4);
+    assert_eq!(buf.text.buf_bytepos_to_charpos(cached_byte), 4);
+
+    if convert {
+        buf.text
+            .convert_backend_kind(require_implemented_kind(target_kind));
+    }
+    assert_eq!(buf.text.backend_kind(), target_kind);
+    assert_eq!(buf.text.buf_charpos_to_bytepos(4), cached_byte);
+    assert_eq!(buf.text.buf_bytepos_to_charpos(cached_byte), 4);
+
+    let insert_pos = buf.text.buf_charpos_to_bytepos(2);
+    buf.goto_byte(insert_pos);
+    buf.insert("Ω");
+
+    let delete_start = buf.text.buf_charpos_to_bytepos(5);
+    let delete_end = buf.text.buf_charpos_to_bytepos(6);
+    buf.delete_region(delete_start, delete_end);
+
+    let char_to_byte_4 = buf.text.buf_charpos_to_bytepos(4);
+    BackendMigrationSnapshot {
+        backend_kind: buf.text.backend_kind(),
+        buffer_string: buf.buffer_string(),
+        char_to_byte_4,
+        byte_to_char_at_char_4: buf.text.buf_bytepos_to_charpos(char_to_byte_4),
+        marker_position: buf
+            .text
+            .marker_chain_lookup(77)
+            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        overlay_range: (
+            buf.overlays.overlay_start(overlay),
+            buf.overlays.overlay_end(overlay),
+        ),
+        text_properties: buffer_text_property_snapshot(&buf),
+    }
+}
+
+#[test]
+fn buffer_text_backend_migration_preserves_side_data_and_post_edit_semantics() {
+    crate::test_utils::init_test_tracing();
+    for target in implemented_text_backends() {
+        let baseline = run_backend_migration_script(target, target, false);
+        for source in implemented_text_backends() {
+            assert_eq!(
+                run_backend_migration_script(source, target, true),
+                baseline,
+                "{source:?} -> {target:?} backend migration diverged from direct target backend"
+            );
+        }
+    }
+}
+
 // -----------------------------------------------------------------------
 // Buffer-local variables
 // -----------------------------------------------------------------------
