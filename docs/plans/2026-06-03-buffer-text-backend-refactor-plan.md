@@ -430,6 +430,9 @@ Completed so far:
   `BufferText` now stores virtual gap state as a typed `GapCompatState`, while
   char/byte conversion uses typed `TextPositionBounds` to keep GNU
   `marker.c`-style below/above anchor pairs together.
+- Added a private `PhysicalTextBackend` contract so gap-buffer, piece-tree, and
+  rope must implement the same storage-only surface while `TextBackend` remains
+  an enum with static, exhaustive dispatch.
 
 Next work:
 
