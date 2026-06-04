@@ -111,22 +111,22 @@ pub(in crate::buffer) fn transpose_position(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct BufferEditState {
-    pub(in crate::buffer) pt_byte: usize,
-    pub(in crate::buffer) pt: usize,
-    pub(in crate::buffer) begv_byte: usize,
-    pub(in crate::buffer) begv: usize,
-    pub(in crate::buffer) zv_byte: usize,
-    pub(in crate::buffer) zv: usize,
+    pub(in crate::buffer) pt_byte: EmacsBytePos,
+    pub(in crate::buffer) pt: CharPos0,
+    pub(in crate::buffer) begv_byte: EmacsBytePos,
+    pub(in crate::buffer) begv: CharPos0,
+    pub(in crate::buffer) zv_byte: EmacsBytePos,
+    pub(in crate::buffer) zv: CharPos0,
 }
 
 impl BufferEditState {
     pub(in crate::buffer) fn new(
-        pt_byte: usize,
-        pt: usize,
-        begv_byte: usize,
-        begv: usize,
-        zv_byte: usize,
-        zv: usize,
+        pt_byte: EmacsBytePos,
+        pt: CharPos0,
+        begv_byte: EmacsBytePos,
+        begv: CharPos0,
+        zv_byte: EmacsBytePos,
+        zv: CharPos0,
     ) -> Self {
         Self {
             pt_byte,
@@ -136,6 +136,24 @@ impl BufferEditState {
             zv_byte,
             zv,
         }
+    }
+
+    pub(in crate::buffer) fn from_usize(
+        pt_byte: usize,
+        pt: usize,
+        begv_byte: usize,
+        begv: usize,
+        zv_byte: usize,
+        zv: usize,
+    ) -> Self {
+        Self::new(
+            EmacsBytePos::new(pt_byte),
+            CharPos0::new(pt),
+            EmacsBytePos::new(begv_byte),
+            CharPos0::new(begv),
+            EmacsBytePos::new(zv_byte),
+            CharPos0::new(zv),
+        )
     }
 }
 
@@ -152,33 +170,33 @@ pub(in crate::buffer) fn replace_state_after_edit(
     let old_char_len = replacement.old_char_len().get();
     let new_byte_len = replacement.new_byte_len().get();
     let new_char_len = replacement.new_char_len().get();
-    let old_pt_byte = state.pt_byte;
-    let old_pt = state.pt;
+    let old_pt_byte = state.pt_byte.get();
+    let old_pt = state.pt.get();
 
     if start < old_pt_byte || old_pt_byte == end {
         let clamped = old_pt_byte.min(end);
-        state.pt_byte = old_pt_byte + start + new_byte_len - clamped;
+        state.pt_byte = EmacsBytePos::new(old_pt_byte + start + new_byte_len - clamped);
         let clamped_char = old_pt.min(end_char);
-        state.pt = old_pt + start_char + new_char_len - clamped_char;
+        state.pt = CharPos0::new(old_pt + start_char + new_char_len - clamped_char);
     } else if old_pt_byte > end {
-        state.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
-        state.pt = old_pt + new_char_len - old_char_len;
+        state.pt_byte = EmacsBytePos::new(old_pt_byte + new_byte_len - old_byte_len);
+        state.pt = CharPos0::new(old_pt + new_char_len - old_char_len);
     }
 
-    if state.begv_byte > end {
-        state.begv_byte = state.begv_byte + new_byte_len - old_byte_len;
-        state.begv = state.begv + new_char_len - old_char_len;
-    } else if state.begv_byte > start {
-        state.begv_byte = start;
-        state.begv = start_char;
+    if state.begv_byte.get() > end {
+        state.begv_byte = EmacsBytePos::new(state.begv_byte.get() + new_byte_len - old_byte_len);
+        state.begv = CharPos0::new(state.begv.get() + new_char_len - old_char_len);
+    } else if state.begv_byte.get() > start {
+        state.begv_byte = EmacsBytePos::new(start);
+        state.begv = CharPos0::new(start_char);
     }
 
-    if state.zv_byte >= end {
-        state.zv_byte = state.zv_byte + new_byte_len - old_byte_len;
-        state.zv = state.zv + new_char_len - old_char_len;
-    } else if state.zv_byte > start {
-        state.zv_byte = start + new_byte_len;
-        state.zv = start_char + new_char_len;
+    if state.zv_byte.get() >= end {
+        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() + new_byte_len - old_byte_len);
+        state.zv = CharPos0::new(state.zv.get() + new_char_len - old_char_len);
+    } else if state.zv_byte.get() > start {
+        state.zv_byte = EmacsBytePos::new(start + new_byte_len);
+        state.zv = CharPos0::new(start_char + new_char_len);
     }
 
     state
@@ -196,18 +214,19 @@ pub(in crate::buffer) fn insert_state_after_edit(
     let insert_pos = insertion.byte_pos_usize();
     let byte_len = insertion.extent().emacs_bytes().get();
     let char_len = insertion.extent().chars().get();
-    if state.pt_byte > insert_pos || (policy.advance_point_at_insert && state.pt_byte == insert_pos)
+    if state.pt_byte.get() > insert_pos
+        || (policy.advance_point_at_insert && state.pt_byte.get() == insert_pos)
     {
-        state.pt_byte += byte_len;
-        state.pt += char_len;
+        state.pt_byte = EmacsBytePos::new(state.pt_byte.get() + byte_len);
+        state.pt = CharPos0::new(state.pt.get() + char_len);
     }
-    if policy.shift_begv && state.begv_byte > insert_pos {
-        state.begv_byte += byte_len;
-        state.begv += char_len;
+    if policy.shift_begv && state.begv_byte.get() > insert_pos {
+        state.begv_byte = EmacsBytePos::new(state.begv_byte.get() + byte_len);
+        state.begv = CharPos0::new(state.begv.get() + char_len);
     }
-    if state.zv_byte >= insert_pos {
-        state.zv_byte += byte_len;
-        state.zv += char_len;
+    if state.zv_byte.get() >= insert_pos {
+        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() + byte_len);
+        state.zv = CharPos0::new(state.zv.get() + char_len);
     }
 
     state
@@ -228,30 +247,30 @@ pub(in crate::buffer) fn delete_state_after_edit(
     let byte_len = range.byte_len().get();
     let char_len = range.char_len().get();
 
-    if state.pt_byte >= end {
-        state.pt_byte -= byte_len;
-        state.pt -= char_len;
-    } else if state.pt_byte > start {
-        state.pt_byte = start;
-        state.pt = start_char;
+    if state.pt_byte.get() >= end {
+        state.pt_byte = EmacsBytePos::new(state.pt_byte.get() - byte_len);
+        state.pt = CharPos0::new(state.pt.get() - char_len);
+    } else if state.pt_byte.get() > start {
+        state.pt_byte = EmacsBytePos::new(start);
+        state.pt = CharPos0::new(start_char);
     }
 
     if policy.shift_begv {
-        if state.begv_byte >= end {
-            state.begv_byte -= byte_len;
-            state.begv -= char_len;
-        } else if state.begv_byte > start {
-            state.begv_byte = start;
-            state.begv = start_char;
+        if state.begv_byte.get() >= end {
+            state.begv_byte = EmacsBytePos::new(state.begv_byte.get() - byte_len);
+            state.begv = CharPos0::new(state.begv.get() - char_len);
+        } else if state.begv_byte.get() > start {
+            state.begv_byte = EmacsBytePos::new(start);
+            state.begv = CharPos0::new(start_char);
         }
     }
 
-    if state.zv_byte >= end {
-        state.zv_byte -= byte_len;
-        state.zv -= char_len;
-    } else if state.zv_byte > start {
-        state.zv_byte = start;
-        state.zv = start_char;
+    if state.zv_byte.get() >= end {
+        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() - byte_len);
+        state.zv = CharPos0::new(state.zv.get() - char_len);
+    } else if state.zv_byte.get() > start {
+        state.zv_byte = EmacsBytePos::new(start);
+        state.zv = CharPos0::new(start_char);
     }
 
     state
@@ -357,7 +376,7 @@ mod tests {
         zv_byte: usize,
         zv: usize,
     ) -> BufferEditState {
-        BufferEditState::new(pt_byte, pt, begv_byte, begv, zv_byte, zv)
+        BufferEditState::from_usize(pt_byte, pt, begv_byte, begv, zv_byte, zv)
     }
 
     fn replace_state(old: BufferEditState) -> BufferEditState {

@@ -18,7 +18,7 @@ use crate::heap_types::LispString;
 
 impl Buffer {
     fn edit_state(&self) -> BufferEditState {
-        BufferEditState::new(
+        BufferEditState::from_usize(
             self.pt_byte,
             self.pt,
             self.begv_byte,
@@ -29,12 +29,12 @@ impl Buffer {
     }
 
     fn set_edit_state(&mut self, state: BufferEditState) {
-        self.pt_byte = state.pt_byte;
-        self.pt = state.pt;
-        self.begv_byte = state.begv_byte;
-        self.begv = state.begv;
-        self.zv_byte = state.zv_byte;
-        self.zv = state.zv;
+        self.pt_byte = state.pt_byte.get();
+        self.pt = state.pt.get();
+        self.begv_byte = state.begv_byte.get();
+        self.begv = state.begv.get();
+        self.zv_byte = state.zv_byte.get();
+        self.zv = state.zv.get();
     }
 
     fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
