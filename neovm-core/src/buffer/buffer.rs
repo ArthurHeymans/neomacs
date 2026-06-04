@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use super::buffer_text::BufferText;
 use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
-    EmacsByteRange, LispCharPos1, StorageBytePos,
+    EmacsByteRange, LispCharPos1,
 };
 use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
@@ -2089,18 +2089,6 @@ impl Buffer {
         let start = range.start_usize().min(total);
         let end = range.end_usize().max(start).min(total);
         EmacsByteRange::from_usize(start, end)
-    }
-
-    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(&self, pos: EmacsBytePos) -> StorageBytePos {
-        self.text
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
-    }
-
-    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(&self, pos: StorageBytePos) -> EmacsBytePos {
-        self.text
-            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(pos.get().min(self.text.len())))
     }
 
     pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
