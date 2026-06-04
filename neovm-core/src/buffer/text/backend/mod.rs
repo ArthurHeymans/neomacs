@@ -1,5 +1,6 @@
 mod gap;
 mod piece_tree;
+mod rope;
 
 use std::fmt;
 
@@ -12,6 +13,7 @@ use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
 use gap::GapTextBackend;
 use piece_tree::PieceTreeTextBackend;
+use rope::RopeTextBackend;
 
 /// Physical storage for buffer text.
 ///
@@ -23,6 +25,7 @@ use piece_tree::PieceTreeTextBackend;
 pub(in crate::buffer) enum TextBackend {
     Gap(GapTextBackend),
     PieceTree(PieceTreeTextBackend),
+    Rope(RopeTextBackend),
 }
 
 impl TextBackend {
@@ -32,6 +35,7 @@ impl TextBackend {
             ImplementedBufferTextBackendKind::PieceTree => {
                 Self::PieceTree(PieceTreeTextBackend::new())
             }
+            ImplementedBufferTextBackendKind::Rope => Self::Rope(RopeTextBackend::new()),
         }
     }
 
@@ -43,6 +47,7 @@ impl TextBackend {
             ImplementedBufferTextBackendKind::PieceTree => {
                 Self::PieceTree(PieceTreeTextBackend::from_str(text))
             }
+            ImplementedBufferTextBackendKind::Rope => Self::Rope(RopeTextBackend::from_str(text)),
         }
     }
 
@@ -57,6 +62,9 @@ impl TextBackend {
             }
             ImplementedBufferTextBackendKind::PieceTree => {
                 Self::PieceTree(PieceTreeTextBackend::from_emacs_bytes(bytes, multibyte))
+            }
+            ImplementedBufferTextBackendKind::Rope => {
+                Self::Rope(RopeTextBackend::from_emacs_bytes(bytes, multibyte))
             }
         }
     }
@@ -73,6 +81,9 @@ impl TextBackend {
             ImplementedBufferTextBackendKind::PieceTree => {
                 Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
             }
+            ImplementedBufferTextBackendKind::Rope => {
+                Self::Rope(RopeTextBackend::from_dump(text, multibyte))
+            }
         }
     }
 
@@ -80,6 +91,7 @@ impl TextBackend {
         match self {
             Self::Gap(_) => ImplementedBufferTextBackendKind::GapBuffer,
             Self::PieceTree(_) => ImplementedBufferTextBackendKind::PieceTree,
+            Self::Rope(_) => ImplementedBufferTextBackendKind::Rope,
         }
     }
 
@@ -88,6 +100,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => TextBackendDebugLayout::Gap(gap.debug_layout()),
             Self::PieceTree(piece_tree) => piece_tree.debug_layout(),
+            Self::Rope(rope) => rope.debug_layout(),
         }
     }
 
@@ -95,6 +108,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.metrics(),
             Self::PieceTree(piece_tree) => piece_tree.metrics(),
+            Self::Rope(rope) => rope.metrics(),
         }
     }
 
@@ -102,6 +116,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => Some(gap.position_conversion_hint()),
             Self::PieceTree(_) => None,
+            Self::Rope(_) => None,
         }
     }
 
@@ -109,6 +124,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.len(),
             Self::PieceTree(piece_tree) => piece_tree.len(),
+            Self::Rope(rope) => rope.len(),
         }
     }
 
@@ -116,6 +132,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.is_empty(),
             Self::PieceTree(piece_tree) => piece_tree.is_empty(),
+            Self::Rope(rope) => rope.is_empty(),
         }
     }
 
@@ -123,6 +140,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.is_multibyte(),
             Self::PieceTree(piece_tree) => piece_tree.is_multibyte(),
+            Self::Rope(rope) => rope.is_multibyte(),
         }
     }
 
@@ -130,6 +148,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.set_multibyte(multibyte),
             Self::PieceTree(piece_tree) => piece_tree.set_multibyte(multibyte),
+            Self::Rope(rope) => rope.set_multibyte(multibyte),
         }
     }
 
@@ -137,6 +156,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.byte_at_emacs_byte_pos(pos),
             Self::PieceTree(piece_tree) => piece_tree.byte_at_emacs_byte_pos(pos),
+            Self::Rope(rope) => rope.byte_at_emacs_byte_pos(pos),
         }
     }
 
@@ -144,6 +164,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.emacs_byte_at_pos(pos),
             Self::PieceTree(piece_tree) => piece_tree.emacs_byte_at_pos(pos),
+            Self::Rope(rope) => rope.emacs_byte_at_pos(pos),
         }
     }
 
@@ -151,6 +172,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.char_at_emacs_byte_pos(pos),
             Self::PieceTree(piece_tree) => piece_tree.char_at_emacs_byte_pos(pos),
+            Self::Rope(rope) => rope.char_at_emacs_byte_pos(pos),
         }
     }
 
@@ -158,6 +180,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.char_code_at_emacs_byte_pos(pos),
             Self::PieceTree(piece_tree) => piece_tree.char_code_at_emacs_byte_pos(pos),
+            Self::Rope(rope) => rope.char_code_at_emacs_byte_pos(pos),
         }
     }
 
@@ -165,6 +188,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.emacs_byte_pos_to_char_pos(byte_pos),
             Self::PieceTree(piece_tree) => piece_tree.emacs_byte_pos_to_char_pos(byte_pos),
+            Self::Rope(rope) => rope.emacs_byte_pos_to_char_pos(byte_pos),
         }
     }
 
@@ -172,6 +196,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.char_pos_to_emacs_byte_pos(char_pos),
             Self::PieceTree(piece_tree) => piece_tree.char_pos_to_emacs_byte_pos(char_pos),
+            Self::Rope(rope) => rope.char_pos_to_emacs_byte_pos(char_pos),
         }
     }
 
@@ -182,6 +207,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.char_pos_to_storage_byte_pos(char_pos),
             Self::PieceTree(piece_tree) => piece_tree.char_pos_to_storage_byte_pos(char_pos),
+            Self::Rope(rope) => rope.char_pos_to_storage_byte_pos(char_pos),
         }
     }
 
@@ -192,6 +218,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.storage_byte_pos_to_emacs_byte_pos(byte_pos),
             Self::PieceTree(piece_tree) => piece_tree.storage_byte_pos_to_emacs_byte_pos(byte_pos),
+            Self::Rope(rope) => rope.storage_byte_pos_to_emacs_byte_pos(byte_pos),
         }
     }
 
@@ -202,6 +229,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.emacs_byte_pos_to_storage_byte_pos(byte_pos),
             Self::PieceTree(piece_tree) => piece_tree.emacs_byte_pos_to_storage_byte_pos(byte_pos),
+            Self::Rope(rope) => rope.emacs_byte_pos_to_storage_byte_pos(byte_pos),
         }
     }
 
@@ -209,6 +237,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.text_emacs_byte_range(range),
             Self::PieceTree(piece_tree) => piece_tree.text_emacs_byte_range(range),
+            Self::Rope(rope) => rope.text_emacs_byte_range(range),
         }
     }
 
@@ -220,6 +249,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.copy_emacs_byte_range_to(range, out),
             Self::PieceTree(piece_tree) => piece_tree.copy_emacs_byte_range_to(range, out),
+            Self::Rope(rope) => rope.copy_emacs_byte_range_to(range, out),
         }
     }
 
@@ -231,6 +261,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.for_each_emacs_byte_range_chunk(range, f),
             Self::PieceTree(piece_tree) => piece_tree.for_each_emacs_byte_range_chunk(range, f),
+            Self::Rope(rope) => rope.for_each_emacs_byte_range_chunk(range, f),
         }
     }
 
@@ -238,6 +269,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.has_contiguous_emacs_byte_range(range),
             Self::PieceTree(piece_tree) => piece_tree.has_contiguous_emacs_byte_range(range),
+            Self::Rope(rope) => rope.has_contiguous_emacs_byte_range(range),
         }
     }
 
@@ -249,6 +281,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.with_contiguous_emacs_byte_range(range, f),
             Self::PieceTree(piece_tree) => piece_tree.with_contiguous_emacs_byte_range(range, f),
+            Self::Rope(rope) => rope.with_contiguous_emacs_byte_range(range, f),
         }
     }
 
@@ -263,6 +296,7 @@ impl TextBackend {
             Self::PieceTree(piece_tree) => {
                 piece_tree.insert_measured_emacs_bytes(pos, bytes, extent)
             }
+            Self::Rope(rope) => rope.insert_measured_emacs_bytes(pos, bytes, extent),
         }
     }
 
@@ -270,6 +304,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.delete_measured_range(range),
             Self::PieceTree(piece_tree) => piece_tree.delete_measured_range(range),
+            Self::Rope(rope) => rope.delete_measured_range(range),
         }
     }
 
@@ -281,6 +316,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.replace_measured_range(replacement, bytes),
             Self::PieceTree(piece_tree) => piece_tree.replace_measured_range(replacement, bytes),
+            Self::Rope(rope) => rope.replace_measured_range(replacement, bytes),
         }
     }
 
@@ -294,6 +330,7 @@ impl TextBackend {
             Self::PieceTree(piece_tree) => {
                 piece_tree.replace_same_len_emacs_byte_range(range, replacement)
             }
+            Self::Rope(rope) => rope.replace_same_len_emacs_byte_range(range, replacement),
         }
     }
 
@@ -301,6 +338,7 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.dump_text(),
             Self::PieceTree(piece_tree) => piece_tree.dump_text(),
+            Self::Rope(rope) => rope.dump_text(),
         }
     }
 }
@@ -310,6 +348,7 @@ impl fmt::Display for TextBackend {
         match self {
             Self::Gap(gap) => gap.fmt(f),
             Self::PieceTree(piece_tree) => piece_tree.fmt(f),
+            Self::Rope(rope) => rope.fmt(f),
         }
     }
 }

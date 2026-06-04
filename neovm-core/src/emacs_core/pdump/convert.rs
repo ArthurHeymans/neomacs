@@ -2766,6 +2766,7 @@ fn dump_buffer_text_backend_kind(
     match kind {
         ImplementedBufferTextBackendKind::GapBuffer => DumpBufferTextBackendKind::GapBuffer,
         ImplementedBufferTextBackendKind::PieceTree => DumpBufferTextBackendKind::PieceTree,
+        ImplementedBufferTextBackendKind::Rope => DumpBufferTextBackendKind::Rope,
     }
 }
 
@@ -2775,6 +2776,7 @@ fn load_buffer_text_backend_kind(
     match kind {
         DumpBufferTextBackendKind::GapBuffer => ImplementedBufferTextBackendKind::GapBuffer,
         DumpBufferTextBackendKind::PieceTree => ImplementedBufferTextBackendKind::PieceTree,
+        DumpBufferTextBackendKind::Rope => ImplementedBufferTextBackendKind::Rope,
     }
 }
 

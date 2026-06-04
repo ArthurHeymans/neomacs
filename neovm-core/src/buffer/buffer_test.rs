@@ -23,10 +23,11 @@ fn require_implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTex
         .expect("test backend should be implemented")
 }
 
-fn implemented_text_backends() -> [BufferTextBackendKind; 2] {
+fn implemented_text_backends() -> [BufferTextBackendKind; 3] {
     [
         BufferTextBackendKind::GapBuffer,
         BufferTextBackendKind::PieceTree,
+        BufferTextBackendKind::Rope,
     ]
 }
 

@@ -38,79 +38,88 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
         Ok(BufferTextBackendKind::PieceTree)
     );
     assert!(BufferTextBackendKind::PieceTree.is_implemented());
-    assert!(!BufferTextBackendKind::Rope.is_implemented());
+    assert!(BufferTextBackendKind::Rope.is_implemented());
 }
 
 #[test]
-fn buffer_text_can_use_piece_tree_backend() {
+fn buffer_text_can_use_non_gap_backends() {
     crate::test_utils::init_test_tracing();
-    let mut text = BufferText::from_str_with_backend_kind(
-        "abécd",
-        implemented_kind(BufferTextBackendKind::PieceTree),
-    );
+    for (kind, layout) in [
+        (
+            BufferTextBackendKind::PieceTree,
+            TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6)),
+        ),
+        (
+            BufferTextBackendKind::Rope,
+            TextBackendDebugLayout::Rope(TextMetrics::new(5, 6)),
+        ),
+    ] {
+        let mut text = BufferText::from_str_with_backend_kind("abécd", implemented_kind(kind));
 
-    assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
-    assert_eq!(
-        text.backend_debug_layout(),
-        TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6))
-    );
-    assert!(text.gap_debug_layout().is_none());
+        assert_eq!(text.backend_kind(), kind);
+        assert_eq!(text.backend_debug_layout(), layout);
+        assert!(text.gap_debug_layout().is_none());
 
-    let insert_pos = text.buf_charpos_to_bytepos(2);
-    text.insert_str(insert_pos, "XY");
-    assert_eq!(text.to_string(), "abXYécd");
+        let insert_pos = text.buf_charpos_to_bytepos(2);
+        text.insert_str(insert_pos, "XY");
+        assert_eq!(text.to_string(), "abXYécd");
 
-    let delete_start = text.buf_charpos_to_bytepos(1);
-    let delete_end = text.buf_charpos_to_bytepos(4);
-    text.delete_range(delete_start, delete_end);
-    assert_eq!(text.to_string(), "aécd");
-    assert_eq!(
-        text.backend_debug_layout(),
-        TextBackendDebugLayout::PieceTree(TextMetrics::new(4, 5))
-    );
+        let delete_start = text.buf_charpos_to_bytepos(1);
+        let delete_end = text.buf_charpos_to_bytepos(4);
+        text.delete_range(delete_start, delete_end);
+        assert_eq!(text.to_string(), "aécd");
+        assert_eq!(
+            text.backend_debug_layout().metrics(),
+            TextMetrics::new(4, 5)
+        );
+    }
 }
 
 #[test]
-fn piece_tree_lisp_string_preserves_unibyte_raw_bytes() {
+fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
-    let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);
-    let text = BufferText::from_lisp_string_with_backend_kind(
-        &raw,
-        implemented_kind(BufferTextBackendKind::PieceTree),
-    );
+    for kind in [
+        BufferTextBackendKind::PieceTree,
+        BufferTextBackendKind::Rope,
+    ] {
+        let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);
+        let text = BufferText::from_lisp_string_with_backend_kind(&raw, implemented_kind(kind));
 
-    assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
-    assert!(!text.is_multibyte());
-    assert_eq!(text.char_count(), 3);
+        assert_eq!(text.backend_kind(), kind);
+        assert!(!text.is_multibyte());
+        assert_eq!(text.char_count(), 3);
 
-    let mut bytes = Vec::new();
-    text.copy_emacs_byte_range_to(
-        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
-        &mut bytes,
-    );
-    assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
+        let mut bytes = Vec::new();
+        text.copy_emacs_byte_range_to(
+            EmacsByteRange::from_usize(0, text.emacs_byte_len()),
+            &mut bytes,
+        );
+        assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
+    }
 }
 
 #[test]
-fn replace_lisp_string_preserves_piece_tree_backend() {
+fn replace_lisp_string_preserves_non_gap_backend() {
     crate::test_utils::init_test_tracing();
-    let text = BufferText::from_str_with_backend_kind(
-        "abc",
-        implemented_kind(BufferTextBackendKind::PieceTree),
-    );
-    let replacement = crate::heap_types::LispString::from_utf8("日本");
+    for kind in [
+        BufferTextBackendKind::PieceTree,
+        BufferTextBackendKind::Rope,
+    ] {
+        let text = BufferText::from_str_with_backend_kind("abc", implemented_kind(kind));
+        let replacement = crate::heap_types::LispString::from_utf8("日本");
 
-    text.replace_lisp_string(
-        &replacement,
-        crate::buffer::text_props::TextPropertyTable::new(),
-    );
+        text.replace_lisp_string(
+            &replacement,
+            crate::buffer::text_props::TextPropertyTable::new(),
+        );
 
-    assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
-    assert_eq!(text.to_string(), "日本");
-    assert_eq!(
-        text.backend_debug_layout(),
-        TextBackendDebugLayout::PieceTree(TextMetrics::new(2, 6))
-    );
+        assert_eq!(text.backend_kind(), kind);
+        assert_eq!(text.to_string(), "日本");
+        assert_eq!(
+            text.backend_debug_layout().metrics(),
+            TextMetrics::new(2, 6)
+        );
+    }
 }
 
 #[test]

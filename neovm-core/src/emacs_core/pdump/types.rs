@@ -546,6 +546,7 @@ pub enum DumpBufferTextBackendKind {
     #[default]
     GapBuffer = 0,
     PieceTree = 1,
+    Rope = 2,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

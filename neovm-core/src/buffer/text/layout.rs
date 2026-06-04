@@ -14,6 +14,7 @@ pub struct GapDebugLayout {
 pub enum TextBackendDebugLayout {
     Gap(GapDebugLayout),
     PieceTree(TextMetrics),
+    Rope(TextMetrics),
 }
 
 impl TextBackendDebugLayout {
@@ -21,13 +22,14 @@ impl TextBackendDebugLayout {
         match self {
             Self::Gap(layout) => TextMetrics::from_positions(layout.z, layout.z_byte),
             Self::PieceTree(metrics) => metrics,
+            Self::Rope(metrics) => metrics,
         }
     }
 
     pub fn gap(self) -> Option<GapDebugLayout> {
         match self {
             Self::Gap(layout) => Some(layout),
-            Self::PieceTree(_) => None,
+            Self::PieceTree(_) | Self::Rope(_) => None,
         }
     }
 }

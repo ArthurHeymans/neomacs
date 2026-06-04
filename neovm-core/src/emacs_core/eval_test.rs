@@ -554,7 +554,7 @@ fn neomacs_set_cursor_blink_forwards_to_display_host() {
 }
 
 #[test]
-fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_piece_tree() {
+fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_non_gap_backends() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         eval_one(
@@ -566,9 +566,14 @@ fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_piece
                  (save-current-buffer
                    (set-buffer (get-buffer-create "piece-backend"))
                    (insert "abc")
+                   (list (neomacs-buffer-text-backend) (buffer-string)))
+                 (neomacs-set-default-buffer-text-backend 'rope)
+                 (save-current-buffer
+                   (set-buffer (get-buffer-create "rope-backend"))
+                   (insert "xyz")
                    (list (neomacs-buffer-text-backend) (buffer-string))))"#
         ),
-        r#"OK (gap-buffer gap-buffer piece-tree gap-buffer (piece-tree "abc"))"#
+        r#"OK (gap-buffer gap-buffer piece-tree gap-buffer (piece-tree "abc") rope (rope "xyz"))"#
     );
 }
 
@@ -608,7 +613,7 @@ fn neomacs_set_buffer_text_backend_converts_current_shared_text_storage() {
 }
 
 #[test]
-fn neomacs_buffer_text_backend_rejects_non_symbol_unknown_and_unimplemented_kinds() {
+fn neomacs_buffer_text_backend_rejects_non_symbol_and_unknown_kinds() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         eval_one(
@@ -619,12 +624,10 @@ fn neomacs_buffer_text_backend_rejects_non_symbol_unknown_and_unimplemented_kind
                  (condition-case err
                      (neomacs-set-default-buffer-text-backend 'missing-backend)
                    (error (car err)))
-                 (condition-case err
-                     (neomacs-set-default-buffer-text-backend 'rope)
-                   (error (car err)))
+                 (neomacs-set-default-buffer-text-backend 'rope)
                  (neomacs-default-buffer-text-backend))"#
         ),
-        "OK (wrong-type-argument error error gap-buffer)"
+        "OK (wrong-type-argument error rope rope)"
     );
 }
 

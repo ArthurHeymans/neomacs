@@ -1,11 +1,15 @@
 pub(in crate::buffer) mod backend;
 mod edit;
+mod emacs_bytes;
 mod kind;
 #[cfg(test)]
 mod layout;
 mod metrics;
 
 pub use edit::{TextEditRange, TextExtent, TextInsertion, TextReplacement};
+pub(in crate::buffer) use emacs_bytes::{
+    emacs_byte_to_char_in_slice, emacs_char_to_byte_in_slice, is_emacs_char_boundary,
+};
 pub use kind::BufferTextBackendKind;
 pub(crate) use kind::ImplementedBufferTextBackendKind;
 #[cfg(test)]

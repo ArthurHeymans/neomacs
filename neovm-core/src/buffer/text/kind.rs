@@ -42,6 +42,7 @@ pub(crate) enum ImplementedBufferTextBackendKind {
     #[default]
     GapBuffer = 0,
     PieceTree = 1,
+    Rope = 2,
 }
 
 impl BufferTextBackendKind {
@@ -57,7 +58,7 @@ impl BufferTextBackendKind {
         match self {
             Self::GapBuffer => Some(ImplementedBufferTextBackendKind::GapBuffer),
             Self::PieceTree => Some(ImplementedBufferTextBackendKind::PieceTree),
-            Self::Rope => None,
+            Self::Rope => Some(ImplementedBufferTextBackendKind::Rope),
         }
     }
 }
@@ -85,6 +86,7 @@ impl From<ImplementedBufferTextBackendKind> for BufferTextBackendKind {
         match kind {
             ImplementedBufferTextBackendKind::GapBuffer => Self::GapBuffer,
             ImplementedBufferTextBackendKind::PieceTree => Self::PieceTree,
+            ImplementedBufferTextBackendKind::Rope => Self::Rope,
         }
     }
 }
