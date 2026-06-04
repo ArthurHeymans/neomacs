@@ -8,7 +8,7 @@ fn emit_text_span_advances_live_output_before_row_finish() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("output-emitter-span", 320, 120, buf_id);
@@ -48,7 +48,7 @@ fn emit_synthetic_text_span_advances_live_output_without_display_points() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("output-emitter-synthetic", 320, 120, buf_id);

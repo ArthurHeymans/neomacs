@@ -1155,7 +1155,7 @@ pub fn window_params_from_neovm(
 
     Some(WindowParams {
         window_id: win_id.0 as i64,
-        buffer_id: buffer.id.0,
+        buffer_id: buffer.id().0,
         bounds: display_bounds,
         text_bounds,
         selected: is_selected,

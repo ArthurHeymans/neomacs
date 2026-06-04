@@ -279,7 +279,7 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -383,7 +383,7 @@ fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) 
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-minibuffer-echo-lines", 640, 160, buf_id);
@@ -454,7 +454,7 @@ fn layout_frame_rust_publishes_increasing_display_positions() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcd\n");
@@ -511,7 +511,7 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a好好b\n");
@@ -590,7 +590,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a好好b ");
@@ -750,7 +750,7 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("iW ");
@@ -836,7 +836,7 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "first line\nsecond line\nthird line\n";
     let newline_byte = text.find('\n').expect("newline");
     {
@@ -895,7 +895,7 @@ fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("alpha\nbeta\n");
@@ -947,7 +947,7 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("iW ");
@@ -1056,7 +1056,7 @@ fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abc");
@@ -1116,7 +1116,7 @@ fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("plain text row\n");
@@ -1158,7 +1158,7 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "abc hidden xyz";
     let hidden_byte_start = text.find("hidden").expect("hidden start");
     let hidden_byte_end = hidden_byte_start + "hidden".len();
@@ -1224,7 +1224,7 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdef");
@@ -1280,7 +1280,7 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "abcXYZdef";
     let repl_byte_start = text.find("XYZ").expect("replacement start");
     let repl_byte_end = repl_byte_start + "XYZ".len();
@@ -1344,7 +1344,7 @@ fn layout_frame_rust_records_display_point_for_display_replacement_slot() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "abcXYZdef";
     let repl_byte_start = text.find("XYZ").expect("replacement start");
     let repl_byte_end = repl_byte_start + "XYZ".len();
@@ -1395,7 +1395,7 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("dir:");
@@ -1459,7 +1459,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "aXb";
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
@@ -1524,7 +1524,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aVb");
@@ -1586,7 +1586,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aWb");
@@ -1642,7 +1642,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let xwidget = Value::make_xwidget(
         Value::symbol("webkit"),
         Value::string("Title"),
@@ -1694,7 +1694,7 @@ fn layout_frame_rust_captures_cursor_inside_hscroll_skipped_text_without_rescan(
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
@@ -1747,7 +1747,7 @@ fn assert_layout_frame_rust_tab_cursor_width(x_stretch_cursor: bool, cursor_type
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a\tb");
@@ -1838,7 +1838,7 @@ fn layout_frame_rust_emits_buffer_tab_as_stretch_glyph() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a\tb");
@@ -1894,7 +1894,7 @@ fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
     {
         let buf = eval
@@ -1965,7 +1965,7 @@ fn layout_frame_rust_display_space_align_keeps_suffix_text_in_split_windows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let right_buf_id = eval
         .buffer_manager_mut()
         .create_buffer("*right-display-space*");
@@ -2053,7 +2053,7 @@ fn layout_frame_rust_tty_display_space_align_stays_one_cell_high() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = concat!(
         "   m \tShow help for current major and minor modes and their commands\n",
         "   b \tShow all key bindings\n",
@@ -2141,7 +2141,7 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
     let frame_id =
         eval.frame_manager_mut()
@@ -2224,7 +2224,7 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
     let frame_id =
         eval.frame_manager_mut()
@@ -2293,7 +2293,7 @@ fn layout_frame_rust_bottom_divider_does_not_separate_root_from_minibuffer() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-minibuffer-divider", 800, 160, buf_id);
@@ -2331,7 +2331,7 @@ fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "a b";
     let space_byte_start = text.find(' ').expect("space start");
     let space_byte_end = space_byte_start + 1;
@@ -2494,7 +2494,7 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "a b";
     let space_byte_start = text.find(' ').expect("space start");
     let space_byte_end = space_byte_start + 1;
@@ -2580,7 +2580,7 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "a b";
     let space_byte_start = text.find(' ').expect("space start");
     let space_byte_end = space_byte_start + 1;
@@ -2647,7 +2647,7 @@ fn layout_frame_rust_records_display_point_for_display_space_slot() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "a b";
     let space_byte_start = text.find(' ').expect("space start");
     let space_byte_end = space_byte_start + 1;
@@ -2722,7 +2722,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
 
     let prefix = "  h=0.9 w=normal:                     ";
     let sample = "a好好b  ABCXYZ 0123456789  -> <= >=";
@@ -2855,7 +2855,7 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
 
     let truncated_prefix = format!("{}\n", "好".repeat(20));
     let sample = "a好好b";
@@ -3000,7 +3000,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let sample = "a好好b  ABCXYZ 0123456789  -> <= >=";
     let mut targets = Vec::new();
     let weights = [
@@ -3221,7 +3221,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let sample = "a好好b  ABCXYZ 0123456789  -> <= >=";
     let mut targets = Vec::new();
     let weights = [
@@ -3477,7 +3477,7 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aaaa bbbb cccc dddd\n");
@@ -3543,7 +3543,7 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let mut text = String::new();
     for line in 0..32 {
         text.push_str(&format!("line-{line:02} abcdefghijklmnop\n"));
@@ -3614,7 +3614,7 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let lines = (0..40)
         .map(|line| format!("line-{line:02}\n"))
         .collect::<Vec<_>>();
@@ -3806,7 +3806,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdefghijklmnopqrstuvwxyz\n");
@@ -3903,7 +3903,7 @@ fn next_window_start_for_point_line_continuation_ignores_newline_terminated_rows
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("needle target\nfiller line 06\n");
@@ -3941,7 +3941,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
@@ -4109,7 +4109,7 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let logical_lines = (0..24)
         .map(|line| format!("line-{line:02} abcdefghijklmno\n"))
         .collect::<Vec<_>>();
@@ -4197,7 +4197,7 @@ fn layout_frame_rust_converges_visibility_for_point_line_tail_clipping() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let prefix = (0..2)
         .map(|line| format!("p{line:02}\n"))
         .collect::<Vec<_>>()
@@ -4258,7 +4258,7 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = "LEFT WINDOW\nLine 2\nLine 3\n";
     let point = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
@@ -4323,7 +4323,7 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = ";; This buffer is for text that is not saved, and for Lisp evaluation.\n\
 ;; To create a file, visit it with \u{2018}C-x C-f\u{2019} and enter text in its buffer.\n\n";
     let point = {
@@ -4390,7 +4390,7 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let text = (0..80)
         .map(|line| format!("Line {line:02}\n"))
         .collect::<String>();
@@ -4482,7 +4482,7 @@ fn layout_frame_rust_honors_window_mode_line_format_none() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4545,7 +4545,7 @@ fn layout_frame_rust_uses_window_mode_line_format_override() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4608,7 +4608,7 @@ fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4649,7 +4649,7 @@ fn layout_frame_rust_renders_header_line_text_for_non_nil_header_line_format() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4693,7 +4693,7 @@ fn layout_frame_rust_uses_full_window_row_space_for_header_text_and_mode_line() 
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4751,7 +4751,7 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
@@ -4809,7 +4809,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
@@ -4911,7 +4911,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
@@ -4974,7 +4974,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let eob = buf.point_max_byte();
@@ -5076,7 +5076,7 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     let minibuf_id = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
     {
         let buf = eval
@@ -5164,7 +5164,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
-        .id;
+        .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");

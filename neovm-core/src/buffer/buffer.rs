@@ -1597,7 +1597,7 @@ pub(crate) struct BufferDumpParts {
 #[derive(Clone)]
 pub struct Buffer {
     /// Unique identifier.
-    pub id: BufferId,
+    pub(crate) id: BufferId,
     /// Buffer name (e.g. `"*scratch*"`). Mirrors GNU `struct buffer.name_`.
     pub name: Value,
     /// Buffer name before the last rename, or before death after kill.
@@ -1846,6 +1846,10 @@ impl Buffer {
 
     pub fn name_value(&self) -> Value {
         self.name
+    }
+
+    pub fn id(&self) -> BufferId {
+        self.id
     }
 
     pub fn last_name_value(&self) -> Value {

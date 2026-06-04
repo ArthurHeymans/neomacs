@@ -354,7 +354,7 @@ fn build_tab_bar_display(
     let saved_buffer = evaluator
         .buffer_manager()
         .current_buffer()
-        .map(|buffer| buffer.id);
+        .map(|buffer| buffer.id());
 
     evaluator
         .eval_form(Value::list(vec![
