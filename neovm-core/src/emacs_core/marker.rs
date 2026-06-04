@@ -684,8 +684,8 @@ fn register_marker_in_buffers(
         // `existing_mid` matched a chain entry we just removed), the
         // chain_splice_at_head precondition would fire; belt-and-braces
         // unlink from this buffer first.
-        if let (Some(ptr), Some(buf)) = (marker_ptr, buffers.get(buf_id)) {
-            buf.text.chain_unlink(ptr);
+        if let Some(ptr) = marker_ptr {
+            let _ = buffers.unlink_marker_ptr(buf_id, ptr);
         }
         if let (Some(ptr), Some(byte_pos)) = (
             marker_ptr,
@@ -800,18 +800,7 @@ fn find_marker_value_in_chain(
     buffer_id: BufferId,
     marker_id: u64,
 ) -> Option<Value> {
-    let buf = buffers.get(buffer_id)?;
-    let ptr = buf.text.chain_find_by_id(marker_id);
-    if ptr.is_null() {
-        // Marker was removed from chain (e.g., by kill-buffer). Clear the stale id.
-        None
-    } else {
-        unsafe {
-            Some(Value::from_veclike_ptr(
-                ptr as *const crate::tagged::header::VecLikeHeader,
-            ))
-        }
-    }
+    buffers.marker_value(buffer_id, marker_id)
 }
 
 // ---------------------------------------------------------------------------

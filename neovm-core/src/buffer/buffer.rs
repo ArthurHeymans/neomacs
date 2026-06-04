@@ -2579,6 +2579,44 @@ impl Buffer {
         self.text.remove_marker(marker_id);
     }
 
+    pub fn has_marker(&self, marker_id: u64) -> bool {
+        self.text.has_marker(marker_id)
+    }
+
+    pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
+        self.text.marker_chain_lookup(marker_id)
+    }
+
+    pub fn marker_value_by_id(&self, marker_id: u64) -> Option<Value> {
+        let ptr = self.text.chain_find_by_id(marker_id);
+        if ptr.is_null() {
+            None
+        } else {
+            // SAFETY: `ptr` was found by walking this buffer's live marker
+            // chain. The returned Value is only a Lisp handle to that live
+            // MarkerObj; callers do not retain the raw pointer.
+            unsafe {
+                Some(Value::from_veclike_ptr(
+                    ptr as *const crate::tagged::header::VecLikeHeader,
+                ))
+            }
+        }
+    }
+
+    pub fn unlink_marker_ptr(&self, ptr: *mut crate::tagged::header::MarkerObj) {
+        self.text.chain_unlink(ptr);
+    }
+
+    pub fn move_marker_to_position(
+        &self,
+        marker_id: u64,
+        bytepos: EmacsBytePos,
+        charpos: CharPos0,
+    ) {
+        self.text
+            .move_marker_to_position(marker_id, bytepos, charpos);
+    }
+
     pub fn update_marker_insertion_type(&mut self, marker_id: u64, insertion_type: InsertionType) {
         self.text
             .update_marker_insertion_type(marker_id, insertion_type);
@@ -4138,7 +4176,7 @@ impl BufferManager {
             let buf = self.buffers.get(&buffer_id)?;
             // T7: read byte_pos / insertion_type directly from the chain
             // node instead of the deleted Vec<MarkerEntry>.
-            let (bytepos, _charpos, ins_type) = buf.text.marker_chain_lookup(marker_id)?;
+            let (bytepos, _charpos, ins_type) = buf.marker_chain_lookup(marker_id)?;
             (bytepos, ins_type)
         };
         let (marker_id, _marker_ptr) = self.create_marker(buffer_id, pos, insertion_type);
@@ -5122,7 +5160,7 @@ impl BufferManager {
         // T7: walk the chain rather than the deleted Vec<MarkerEntry>.
         self.buffers
             .get(&buffer_id)
-            .and_then(|buf| buf.text.marker_chain_lookup(marker_id))
+            .and_then(|buf| buf.marker_chain_lookup(marker_id))
             .map(|(bytepos, _charpos, _ins)| bytepos)
     }
 
@@ -5130,8 +5168,36 @@ impl BufferManager {
     pub fn marker_char_position(&self, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
         self.buffers
             .get(&buffer_id)
-            .and_then(|buf| buf.text.marker_chain_lookup(marker_id))
+            .and_then(|buf| buf.marker_chain_lookup(marker_id))
             .map(|(_bytepos, charpos, _ins)| charpos)
+    }
+
+    pub fn marker_value(&self, buffer_id: BufferId, marker_id: u64) -> Option<Value> {
+        self.buffers
+            .get(&buffer_id)
+            .and_then(|buf| buf.marker_value_by_id(marker_id))
+    }
+
+    pub fn unlink_marker_ptr(
+        &self,
+        buffer_id: BufferId,
+        ptr: *mut crate::tagged::header::MarkerObj,
+    ) -> Option<()> {
+        self.buffers.get(&buffer_id)?.unlink_marker_ptr(ptr);
+        Some(())
+    }
+
+    pub fn move_marker_to_position(
+        &mut self,
+        buffer_id: BufferId,
+        marker_id: u64,
+        bytepos: EmacsBytePos,
+        charpos: CharPos0,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&buffer_id)?
+            .move_marker_to_position(marker_id, bytepos, charpos);
+        Some(())
     }
 
     /// Phase 10D: write the global default for a `BUFFER_OBJFWD`
@@ -5170,7 +5236,7 @@ impl BufferManager {
         for buf in self.buffers.values_mut() {
             // T7: chain presence check replaces the deleted Vec-based
             // `marker_entry().is_some()`.
-            if buf.text.has_marker(marker_id) {
+            if buf.has_marker(marker_id) {
                 buf.update_marker_insertion_type(marker_id, ins_type);
                 return;
             }

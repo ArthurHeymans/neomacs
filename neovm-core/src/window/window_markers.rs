@@ -97,21 +97,14 @@ pub fn unchain_window_markers(bm: &mut BufferManager, window: &mut Window) {
         return;
     };
 
-    let buf_id = *buffer_id;
     if let Some(mid) = start_marker_id.take() {
-        if let Some(buf) = bm.get(buf_id) {
-            buf.text.remove_marker(mid);
-        }
+        bm.remove_marker(mid);
     }
     if let Some(mid) = point_marker_id.take() {
-        if let Some(buf) = bm.get(buf_id) {
-            buf.text.remove_marker(mid);
-        }
+        bm.remove_marker(mid);
     }
     if let Some(mid) = old_point_marker_id.take() {
-        if let Some(buf) = bm.get(buf_id) {
-            buf.text.remove_marker(mid);
-        }
+        bm.remove_marker(mid);
     }
 }
 
@@ -123,10 +116,7 @@ fn move_marker(
 ) {
     let Some(mid) = marker_id else { return };
     let position = lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
-    if let Some(buf) = bm.get(buffer_id) {
-        buf.text
-            .move_marker_to_position(mid, position.emacs_byte_pos, position.char_pos);
-    }
+    let _ = bm.move_marker_to_position(buffer_id, mid, position.emacs_byte_pos, position.char_pos);
 }
 
 pub fn set_window_start_with_marker(
