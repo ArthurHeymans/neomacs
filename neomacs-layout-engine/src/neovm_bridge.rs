@@ -88,9 +88,15 @@ pub(crate) trait LayoutBufferView {
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_char(&self) -> usize;
     fn layout_total_emacs_byte_len(&self) -> usize;
+    fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos;
+    fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0;
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>);
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8>;
-    fn layout_text(&self) -> &BufferText;
+    fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value>;
+    fn layout_next_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos>;
     fn layout_overlays(&self) -> &OverlayList;
 }
 
@@ -202,6 +208,14 @@ impl LayoutBufferView for Buffer {
         self.total_bytes()
     }
 
+    fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
+        self.char_pos_to_emacs_byte_pos_clamped(charpos)
+    }
+
+    fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
+        self.emacs_byte_pos_to_char_pos_clamped(bytepos)
+    }
+
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.copy_emacs_byte_range_to(range, out);
     }
@@ -210,8 +224,15 @@ impl LayoutBufferView for Buffer {
         self.emacs_byte_at_pos(pos)
     }
 
-    fn layout_text(&self) -> &BufferText {
-        &self.text
+    fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value> {
+        self.text_props_get_property_at_emacs_byte_pos(pos, name)
+    }
+
+    fn layout_next_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text_props_next_change_after_emacs_byte_pos(pos)
     }
 
     fn layout_overlays(&self) -> &OverlayList {
@@ -246,6 +267,17 @@ impl LayoutBufferView for LayoutBufferSnapshot {
         self.text.emacs_byte_len()
     }
 
+    fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
+        self.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(charpos.get().min(self.accessible_end_char)))
+    }
+
+    fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
+        self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+            bytepos.get().min(self.accessible_end_emacs_byte.get()),
+        ))
+    }
+
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.text.copy_emacs_byte_range_to(range, out);
     }
@@ -254,8 +286,16 @@ impl LayoutBufferView for LayoutBufferSnapshot {
         self.text.emacs_byte_at_pos(pos)
     }
 
-    fn layout_text(&self) -> &BufferText {
-        &self.text
+    fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value> {
+        self.text
+            .text_props_get_property_at_emacs_byte_pos(pos, name)
+    }
+
+    fn layout_next_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text.text_props_next_change_after_emacs_byte_pos(pos)
     }
 
     fn layout_overlays(&self) -> &OverlayList {
@@ -1512,9 +1552,9 @@ fn buffer_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
     buffer: &B,
     charpos: usize,
 ) -> EmacsBytePos {
-    buffer
-        .layout_text()
-        .char_pos_to_emacs_byte_pos(CharPos0::new(charpos.min(buffer.layout_point_max_char())))
+    buffer.layout_char_pos_to_emacs_byte_pos(CharPos0::new(
+        charpos.min(buffer.layout_point_max_char()),
+    ))
 }
 
 fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
@@ -1522,8 +1562,7 @@ fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
     bytepos: EmacsBytePos,
 ) -> usize {
     buffer
-        .layout_text()
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+        .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
             bytepos
                 .get()
                 .min(buffer.layout_point_max_emacs_byte_pos().get()),
@@ -1619,8 +1658,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         let text_invis = self
             .buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
+            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
         let mut status = InvisibleStatus::VISIBLE;
         let spec = self
             .buffer
@@ -1649,8 +1687,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         // Find the next position where the invisible property changes
         let next_text_change = self
             .buffer
-            .layout_text()
-            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char());
         let next_overlay_change = self
@@ -1672,13 +1709,11 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         let display = self
             .buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("display"));
+            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"));
 
         let next_change = self
             .buffer
-            .layout_text()
-            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char());
 
@@ -1692,8 +1727,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         match self
             .buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("line-spacing"))
+            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("line-spacing"))
         {
             Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,
             Some(v) if v.is_float() => {
@@ -1803,8 +1837,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     pub fn next_property_change(&self, charpos: i64) -> i64 {
         let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         self.buffer
-            .layout_text()
-            .text_props_next_change_after_emacs_byte_pos(bytepos)
+            .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char()) as i64
     }
@@ -1813,8 +1846,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     pub fn get_property(&self, charpos: i64, name: Value) -> Option<Value> {
         let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         self.buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, name)
+            .layout_text_prop_at_emacs_byte_pos(bytepos, name)
     }
 
     /// Get a text property at `charpos` as a string.
@@ -2513,12 +2545,9 @@ impl FaceResolver {
         // but an explicit `face` property wins.  This matters for
         // font-locking comments that cover propertized help key strings in
         // the initial scratch message.
-        let face_prop = buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("face"));
-        let font_lock_face_prop = buffer
-            .layout_text()
-            .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
+        let face_prop = buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"));
+        let font_lock_face_prop =
+            buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
 
         // 1. Text face property, with font-lock-face fallback.
         if let Some(val) = face_prop.or(font_lock_face_prop) {
@@ -2529,10 +2558,7 @@ impl FaceResolver {
             }
         }
         // Update next_check from text property boundaries
-        if let Some(nc) = buffer
-            .layout_text()
-            .text_props_next_change_after_emacs_byte_pos(bytepos)
-        {
+        if let Some(nc) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(bytepos) {
             min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nc));
         }
 

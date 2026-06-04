@@ -1994,6 +1994,13 @@ impl Buffer {
             .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos.get().min(self.total_chars())))
     }
 
+    /// Convert an Emacs byte position to a 0-based character position,
+    /// clamping to the buffer text length.
+    pub fn emacs_byte_pos_to_char_pos_clamped(&self, byte_pos: EmacsBytePos) -> CharPos0 {
+        self.text
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos.get().min(self.total_bytes())))
+    }
+
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the full buffer.
     pub fn lisp_pos_to_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
@@ -2099,6 +2106,27 @@ impl Buffer {
     pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         self.text
             .emacs_byte_at_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
+    }
+
+    pub fn text_props_get_property_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<Value> {
+        self.text.text_props_get_property_at_emacs_byte_pos(
+            EmacsBytePos::new(pos.get().min(self.total_bytes())),
+            name,
+        )
+    }
+
+    pub fn text_props_next_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
     }
 
     pub(crate) fn storage_text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
