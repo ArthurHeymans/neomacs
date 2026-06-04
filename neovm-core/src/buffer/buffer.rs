@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use super::buffer_text::BufferText;
 use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
-    EmacsByteRange, StorageBytePos,
+    EmacsByteRange, LispCharPos1, StorageBytePos,
 };
 use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
@@ -3279,26 +3279,28 @@ pub struct UndoExecutionResult {
     pub skipped_apply: bool,
 }
 
-fn undo_char_pos1_to_char0(pos1: i64) -> usize {
-    (pos1 - 1).max(0) as usize
+fn undo_char_pos1_to_char0(pos1: LispCharPos1) -> CharPos0 {
+    pos1.to_char_pos()
 }
 
-fn undo_char_pos1_to_byte_clamped(buf: &Buffer, pos1: i64) -> usize {
-    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(undo_char_pos1_to_char0(pos1)))
-        .get()
+fn undo_char_pos1_to_byte_clamped(buf: &Buffer, pos1: LispCharPos1) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(undo_char_pos1_to_char0(pos1))
 }
 
-fn undo_lisp_char_position_is_visible(buf: &Buffer, pos1: i64) -> bool {
+fn undo_lisp_char_position_is_visible(buf: &Buffer, pos1: LispCharPos1) -> bool {
     let accessible = buf.accessible_char_region();
     let point_min = accessible.start_usize() as i64 + 1;
     let point_max = accessible.end_usize() as i64 + 1;
+    let pos1 = pos1.as_i64();
     point_min <= pos1 && pos1 <= point_max
 }
 
-fn undo_lisp_range_is_visible(buf: &Buffer, beg1: i64, end1: i64) -> bool {
+fn undo_lisp_range_is_visible(buf: &Buffer, beg1: LispCharPos1, end1: LispCharPos1) -> bool {
     let accessible = buf.accessible_char_region();
     let point_min = accessible.start_usize() as i64 + 1;
     let point_max = accessible.end_usize() as i64 + 1;
+    let beg1 = beg1.as_i64();
+    let end1 = end1.as_i64();
     beg1 >= point_min && end1 <= point_max
 }
 
@@ -4700,10 +4702,11 @@ impl BufferManager {
             for entry in group {
                 if let Some(pt1) = entry.as_fixnum() {
                     // Cursor position (1-indexed)
+                    let pt1 = LispCharPos1::new(pt1);
                     let byte_pos = self
                         .buffers
                         .get(&id)
-                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1))?;
+                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1).get())?;
                     self.goto_buffer_byte(id, byte_pos)?;
                 } else if entry.is_cons() {
                     let car = entry.cons_car();
@@ -4711,14 +4714,16 @@ impl BufferManager {
                     match (car.kind(), cdr.kind()) {
                         (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
                             // Insert record: (BEG . END) — to undo, delete [beg, end)
+                            let beg1 = LispCharPos1::new(beg1);
+                            let end1 = LispCharPos1::new(end1);
                             let (beg, end) = {
                                 let buffer = self.buffers.get(&id)?;
                                 if !undo_lisp_range_is_visible(buffer, beg1, end1) {
                                     return None;
                                 }
                                 (
-                                    undo_char_pos1_to_byte_clamped(buffer, beg1),
-                                    undo_char_pos1_to_byte_clamped(buffer, end1),
+                                    undo_char_pos1_to_byte_clamped(buffer, beg1).get(),
+                                    undo_char_pos1_to_byte_clamped(buffer, end1).get(),
                                 )
                             };
                             self.delete_buffer_region(id, beg, end)?;
@@ -4728,13 +4733,13 @@ impl BufferManager {
                             let text = car
                                 .as_runtime_string_owned()
                                 .expect("ValueKind::String must carry LispString payload");
-                            let apos1 = pos1.abs();
+                            let apos1 = LispCharPos1::new(pos1.abs());
                             let byte_pos = {
                                 let buffer = self.buffers.get(&id)?;
                                 if !undo_lisp_char_position_is_visible(buffer, apos1) {
                                     return None;
                                 }
-                                undo_char_pos1_to_byte_clamped(buffer, apos1)
+                                undo_char_pos1_to_byte_clamped(buffer, apos1).get()
                             };
                             self.goto_buffer_byte(id, byte_pos)?;
                             self.insert_into_buffer(id, &text)?;
@@ -4755,14 +4760,16 @@ impl BufferManager {
                                     let beg = rest2.cons_car().as_fixnum();
                                     let end = rest2.cons_cdr().as_fixnum();
                                     if let (Some(beg1), Some(end1)) = (beg, end) {
+                                        let beg1 = LispCharPos1::new(beg1);
+                                        let end1 = LispCharPos1::new(end1);
                                         let (beg, end) = {
                                             let buf = self.buffers.get(&id)?;
                                             if !undo_lisp_range_is_visible(buf, beg1, end1) {
                                                 return None;
                                             }
                                             (
-                                                undo_char_pos1_to_byte_clamped(buf, beg1),
-                                                undo_char_pos1_to_byte_clamped(buf, end1),
+                                                undo_char_pos1_to_byte_clamped(buf, beg1).get(),
+                                                undo_char_pos1_to_byte_clamped(buf, end1).get(),
                                             )
                                         };
                                         let _ = self
