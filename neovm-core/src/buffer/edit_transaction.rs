@@ -406,6 +406,40 @@ impl MeasuredInsertEdit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct MeasuredDeleteEdit {
+    range: TextEditRange,
+}
+
+impl MeasuredDeleteEdit {
+    pub(in crate::buffer) const fn new(range: TextEditRange) -> Self {
+        Self { range }
+    }
+
+    pub(in crate::buffer) const fn range(self) -> TextEditRange {
+        self.range
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct MeasuredReplaceEdit {
+    replacement: TextReplacement,
+}
+
+impl MeasuredReplaceEdit {
+    pub(in crate::buffer) const fn new(replacement: TextReplacement) -> Self {
+        Self { replacement }
+    }
+
+    pub(in crate::buffer) const fn replacement(self) -> TextReplacement {
+        self.replacement
+    }
+
+    pub(in crate::buffer) const fn old_range(self) -> TextEditRange {
+        self.replacement.old_range()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) update_state_fields: bool,
     pub(in crate::buffer) shift_begv: bool,
@@ -458,6 +492,31 @@ impl DeleteSideEffectPolicy {
         Self {
             update_state_fields,
             shift_begv: true,
+            adjust_shared_markers: false,
+            adjust_shared_text_props: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct ReplaceSideEffectPolicy {
+    pub(in crate::buffer) update_state_fields: bool,
+    pub(in crate::buffer) adjust_shared_markers: bool,
+    pub(in crate::buffer) adjust_shared_text_props: bool,
+}
+
+impl ReplaceSideEffectPolicy {
+    pub(in crate::buffer) fn current_buffer() -> Self {
+        Self {
+            update_state_fields: true,
+            adjust_shared_markers: true,
+            adjust_shared_text_props: true,
+        }
+    }
+
+    pub(in crate::buffer) fn shared_buffer(update_state_fields: bool) -> Self {
+        Self {
+            update_state_fields,
             adjust_shared_markers: false,
             adjust_shared_text_props: false,
         }

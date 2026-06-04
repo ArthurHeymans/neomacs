@@ -7,10 +7,10 @@
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
-    InsertSideEffectPolicy, MeasuredInsertEdit, char_pos_for_emacs_byte,
-    convert_lisp_string_for_buffer_mode, delete_state_after_edit, emacs_byte_for_char_pos,
-    insert_state_after_edit, lisp_string_from_buffer_bytes, modification_tick_delta,
-    replace_state_after_edit,
+    InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
+    ReplaceSideEffectPolicy, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
+    delete_state_after_edit, emacs_byte_for_char_pos, insert_state_after_edit,
+    lisp_string_from_buffer_bytes, modification_tick_delta, replace_state_after_edit,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -219,9 +219,10 @@ impl Buffer {
 
     fn apply_byte_delete_side_effects(
         &mut self,
-        range: TextEditRange,
+        edit: MeasuredDeleteEdit,
         policy: DeleteSideEffectPolicy,
     ) {
+        let range = edit.range();
         if range.is_empty() {
             return;
         }
@@ -254,6 +255,40 @@ impl Buffer {
         if preserve_modified_state && old_state.is_nil() {
             self.text.set_save_modified_tick(self.text.modified_tick());
         }
+    }
+
+    fn apply_replace_side_effects(
+        &mut self,
+        edit: MeasuredReplaceEdit,
+        policy: ReplaceSideEffectPolicy,
+    ) {
+        let replacement = edit.replacement();
+        if replacement.old_range().is_empty() && replacement.new_extent().is_empty() {
+            return;
+        }
+
+        let old_range = replacement.old_range();
+        let start = old_range.byte_start_usize();
+        let old_byte_len = replacement.old_byte_len().get();
+        let new_byte_len = replacement.new_byte_len().get();
+
+        if policy.update_state_fields {
+            self.set_edit_state(replace_state_after_edit(self.edit_state(), replacement));
+        }
+        if policy.adjust_shared_markers {
+            self.text
+                .adjust_markers_for_replace_range(old_range, replacement.new_extent());
+        }
+        if policy.adjust_shared_text_props {
+            self.text.adjust_text_props_for_replace_at(
+                old_range.char_start(),
+                old_range.char_len(),
+                replacement.new_extent().chars(),
+            );
+        }
+        self.overlays
+            .adjust_for_replace(start, old_byte_len, new_byte_len);
+        self.record_char_modification(replacement.changed_chars_usize());
     }
 
     fn record_char_modification(&mut self, changed_chars: usize) {
@@ -408,7 +443,6 @@ impl Buffer {
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
         let replacement = TextReplacement::new(old_range, new_extent);
 
-        let old_state = self.edit_state();
         let old_pt_byte = self.pt_byte;
         let old_pt = self.pt;
         let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
@@ -437,14 +471,9 @@ impl Buffer {
         }
 
         self.text.replace_measured_range(replacement, new_bytes);
-        self.set_edit_state(replace_state_after_edit(old_state, replacement));
-
-        self.text
-            .adjust_markers_for_replace_range(old_range, new_extent);
-        self.text.adjust_text_props_for_replace_at(
-            old_range.char_start(),
-            old_range.char_len(),
-            new_extent.chars(),
+        self.apply_replace_side_effects(
+            MeasuredReplaceEdit::new(replacement),
+            ReplaceSideEffectPolicy::current_buffer(),
         );
         if text.has_intervals() {
             self.text.text_props_append_shifted(text.intervals(), start);
@@ -454,9 +483,6 @@ impl Buffer {
                 Vec::new(),
             );
         }
-        self.overlays
-            .adjust_for_replace(start, replacement.old_byte_len().get(), new_byte_len);
-        self.record_char_modification(replacement.changed_chars_usize());
         replacement
     }
 
@@ -501,7 +527,10 @@ impl Buffer {
         }
 
         self.text.delete_measured_range(range);
-        self.apply_byte_delete_side_effects(range, DeleteSideEffectPolicy::current_buffer());
+        self.apply_byte_delete_side_effects(
+            MeasuredDeleteEdit::new(range),
+            DeleteSideEffectPolicy::current_buffer(),
+        );
         range
     }
 
@@ -847,7 +876,7 @@ impl BufferManager {
         update_state_fields: bool,
     ) {
         buf.apply_byte_delete_side_effects(
-            range,
+            MeasuredDeleteEdit::new(range),
             DeleteSideEffectPolicy::shared_buffer(update_state_fields),
         );
     }
@@ -857,18 +886,10 @@ impl BufferManager {
         replacement: TextReplacement,
         update_state_fields: bool,
     ) {
-        let old_range = replacement.old_range();
-        let start = old_range.byte_start_usize();
-        let old_byte_len = replacement.old_byte_len().get();
-        let new_byte_len = replacement.new_byte_len().get();
-
-        if update_state_fields {
-            buf.set_edit_state(replace_state_after_edit(buf.edit_state(), replacement));
-        }
-
-        buf.overlays
-            .adjust_for_replace(start, old_byte_len, new_byte_len);
-        buf.record_char_modification(replacement.changed_chars_usize());
+        buf.apply_replace_side_effects(
+            MeasuredReplaceEdit::new(replacement),
+            ReplaceSideEffectPolicy::shared_buffer(update_state_fields),
+        );
     }
 
     fn adjust_shared_same_len_edit_metadata(
