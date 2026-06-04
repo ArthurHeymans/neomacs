@@ -294,15 +294,10 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
                     vec![Value::string("Not a finite number")],
                 ));
             }
-            // JSON numbers must not have trailing dot, use full representation.
-            if f.fract() == 0.0 && f.abs() < (i64::MAX as f64) {
-                // Emit as integer-looking float (e.g. 1.0 → 1.0, not 1)
-                // Actually JSON allows both; Emacs json-serialize emits "1.0"
-                // for float 1.0.  We follow that convention.
-                Ok(format!("{:.1}", f))
-            } else {
-                Ok(format!("{}", f))
-            }
+            // ryu emits the shortest round-trippable decimal and always
+            // includes a fractional part or exponent (e.g. 1.0 → "1.0"), so
+            // the result is valid JSON without a special integer-valued case.
+            Ok(ryu::Buffer::new().format_finite(f).to_owned())
         }
 
         ValueKind::String => {

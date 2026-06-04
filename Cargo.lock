@@ -3056,6 +3056,7 @@ dependencies = [
  "rustc-hash 2.1.2",
  "rustls",
  "rustls-pki-types",
+ "ryu",
  "serde",
  "sha1",
  "sha2",

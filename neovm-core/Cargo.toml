@@ -44,6 +44,7 @@ rustls-pki-types.workspace = true
 parking_lot.workspace = true
 malachite.workspace = true
 itoa.workspace = true
+ryu.workspace = true
 unicode_names2.workspace = true
 encoding_rs.workspace = true
 flate2.workspace = true
