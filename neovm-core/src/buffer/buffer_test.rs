@@ -14,8 +14,11 @@ fn buf_with_text_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
     let implemented_kind = require_implemented_kind(kind);
     let mut buf =
         Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
-    buf.text = BufferText::from_str_with_backend_kind(text, implemented_kind);
+    buf.insert(text);
     buf.widen();
+    buf.goto_byte(0);
+    buf.set_undo_list(Value::NIL);
+    buf.set_modified(false);
     buf
 }
 
@@ -39,15 +42,13 @@ fn manager_with_text_backend(kind: BufferTextBackendKind) -> BufferManager {
     if let Some(id) = mgr.current_buffer_id() {
         mgr.get_mut(id)
             .expect("scratch buffer")
-            .text
-            .convert_backend_kind(implemented_kind);
+            .convert_text_backend_kind(implemented_kind);
     }
     mgr
 }
 
 fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
-    buf.text
-        .text_props_intervals_snapshot()
+    buf.text_props_intervals_snapshot_for_test()
         .into_iter()
         .map(|interval| {
             let properties = interval
@@ -59,6 +60,16 @@ fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value,
             (interval.start, interval.end, properties)
         })
         .collect()
+}
+
+fn byte_pos_for_char(buf: &Buffer, char_pos: usize) -> usize {
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+        .get()
+}
+
+fn char_pos_for_byte(buf: &Buffer, byte_pos: usize) -> usize {
+    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
+        .get()
 }
 
 /// Test helper: allocate a scratch `MarkerObj` via the tagged heap and
@@ -151,10 +162,10 @@ fn create_indirect_buffer_shares_root_text_and_updates_siblings() {
 
         let base = mgr.get(base_id).expect("base buffer");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(base.text.backend_kind(), kind);
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(base.text_backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.base_buffer, Some(base_id));
-        assert!(base.text.shares_storage_with(&indirect.text));
+        assert!(base.shares_text_storage_with(indirect));
         assert_eq!(indirect.buffer_string(), "abcd");
 
         let _ = mgr.goto_buffer_byte(base_id, 0);
@@ -182,12 +193,9 @@ fn create_indirect_buffer_flattens_double_indirection() {
 
     assert_eq!(mgr.get(first_id).unwrap().base_buffer, Some(base_id));
     assert_eq!(mgr.get(second_id).unwrap().base_buffer, Some(base_id));
-    assert!(
-        mgr.get(base_id)
-            .unwrap()
-            .text
-            .shares_storage_with(&mgr.get(second_id).unwrap().text)
-    );
+    let base = mgr.get(base_id).expect("base buffer");
+    let second = mgr.get(second_id).expect("second indirect buffer");
+    assert!(base.shares_text_storage_with(second));
 }
 
 #[test]
@@ -232,13 +240,11 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
     let mut dumped = mgr.dump_buffers().clone();
     let independent_indirect = dumped.get(&indirect_id).expect("indirect buffer").clone();
     let indirect = dumped.get_mut(&indirect_id).expect("indirect buffer");
-    indirect.text = BufferText::from_dump(
-        independent_indirect.text.dump_text(),
+    indirect.replace_text_from_dump_for_test(
+        independent_indirect.dump_text_bytes(),
         independent_indirect.get_multibyte(),
     );
-    indirect
-        .text
-        .text_props_replace(independent_indirect.text.text_props_snapshot());
+    indirect.replace_text_props_for_test(independent_indirect.text_props_snapshot());
     indirect.undo_state =
         SharedUndoState::from_parts(independent_indirect.get_undo_list(), false, false);
 
@@ -254,12 +260,10 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
 
     let base = restored.get(base_id).expect("base buffer");
     let indirect = restored.get(indirect_id).expect("indirect buffer");
-    assert!(base.text.shares_storage_with(&indirect.text));
+    assert!(base.shares_text_storage_with(indirect));
     assert!(base.undo_state.shares_with(&indirect.undo_state));
     assert_eq!(
-        indirect
-            .text
-            .text_props_get_property(1, Value::symbol("face")),
+        indirect.text_props_get_property(1, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -304,7 +308,7 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
         let _ = mgr.insert_into_buffer(base_id, "zz");
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.point_min(), 4);
         assert_eq!(indirect.point_max(), 8);
         assert_eq!(indirect.point(), 6);
@@ -313,7 +317,7 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
         let _ = mgr.delete_buffer_region(base_id, 0, 2);
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.point_min(), 2);
         assert_eq!(indirect.point_max(), 6);
         assert_eq!(indirect.point(), 4);
@@ -400,20 +404,20 @@ fn indirect_buffer_overlays_track_shared_edits() {
         let _ = mgr.goto_buffer_byte(base_id, 0);
         let _ = mgr.insert_into_buffer(base_id, "zz");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
 
         let _ = mgr.goto_buffer_byte(base_id, 4);
         let _ = mgr.insert_into_buffer_before_markers(base_id, "yy");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(6));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(8));
 
         let _ = mgr.delete_buffer_region(base_id, 0, 2);
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
-        assert_eq!(indirect.text.backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
     }
@@ -433,7 +437,7 @@ struct BufferSwapPayloadSnapshot {
 
 fn buffer_swap_payload_snapshot(buf: &Buffer) -> BufferSwapPayloadSnapshot {
     BufferSwapPayloadSnapshot {
-        backend_kind: buf.text.backend_kind(),
+        backend_kind: buf.text_backend_kind(),
         buffer_string: buf.buffer_string(),
         point_byte: buf.point_byte(),
         point_min_byte: buf.point_min_byte(),
@@ -445,10 +449,7 @@ fn buffer_swap_payload_snapshot(buf: &Buffer) -> BufferSwapPayloadSnapshot {
 }
 
 fn buffer_byte_pos_for_char(mgr: &BufferManager, id: BufferId, char_pos: usize) -> usize {
-    mgr.get(id)
-        .expect("buffer")
-        .text
-        .buf_charpos_to_bytepos(char_pos)
+    byte_pos_for_char(mgr.get(id).expect("buffer"), char_pos)
 }
 
 #[test]
@@ -463,16 +464,12 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             let mut mgr = BufferManager::new();
             let left_id = mgr.current_buffer_id().expect("scratch buffer");
             let right_id = mgr.create_buffer("*swap-right*");
-            mgr.get(left_id)
+            mgr.get_mut(left_id)
                 .expect("left buffer")
-                .text
-                .try_convert_backend_kind(left_kind)
-                .expect("left backend should convert");
-            mgr.get(right_id)
+                .convert_text_backend_kind(require_implemented_kind(left_kind));
+            mgr.get_mut(right_id)
                 .expect("right buffer")
-                .text
-                .try_convert_backend_kind(right_kind)
-                .expect("right backend should convert");
+                .convert_text_backend_kind(require_implemented_kind(right_kind));
 
             mgr.insert_into_buffer(left_id, "aébc日本")
                 .expect("left insert");
@@ -605,23 +602,17 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             assert_eq!(right_marker.as_marker_data().unwrap().buffer, Some(left_id));
             assert_eq!(left_marker.as_marker_data().unwrap().buffer, Some(right_id));
             assert_eq!(
-                left_after
-                    .text
-                    .marker_chain_lookup(502)
-                    .map(|(b, c, _)| (b, c)),
+                left_after.marker_chain_lookup(502).map(|(b, c, _)| (b, c)),
                 Some((
                     right_marker_pos,
-                    left_after.text.buf_bytepos_to_charpos(right_marker_pos)
+                    char_pos_for_byte(left_after, right_marker_pos)
                 ))
             );
             assert_eq!(
-                right_after
-                    .text
-                    .marker_chain_lookup(501)
-                    .map(|(b, c, _)| (b, c)),
+                right_after.marker_chain_lookup(501).map(|(b, c, _)| (b, c)),
                 Some((
                     left_marker_pos,
-                    right_after.text.buf_bytepos_to_charpos(left_marker_pos)
+                    char_pos_for_byte(right_after, left_marker_pos)
                 ))
             );
         }
@@ -884,7 +875,7 @@ fn delete_region_moves_marker_at_end_to_start() {
     let mut buf = buf_with_text("0123456789ABCDEF");
     register_marker_for_test(&mut buf, 1, 12, InsertionType::Before);
     buf.delete_region(5, 12);
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 5);
     assert_eq!(char_pos, 5);
 }
@@ -1044,7 +1035,7 @@ fn marker_tracks_insertion_after() {
     buf.goto_char(1);
     buf.insert("XY");
     // Marker was at 1 with After => advances to 3.
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 3);
     assert_eq!(char_pos, 3);
 }
@@ -1057,7 +1048,7 @@ fn marker_stays_on_insertion_before() {
     buf.goto_char(1);
     buf.insert("XY");
     // Marker was at 1 with Before => stays at 1.
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 1);
     assert_eq!(char_pos, 1);
 }
@@ -1069,7 +1060,7 @@ fn marker_adjusts_on_deletion() {
     register_marker_for_test(&mut buf, 1, 4, InsertionType::After);
     buf.delete_region(1, 3);
     // Marker was at 4 (past deleted range [1,3)), shifts by 2 => 2.
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 2);
 }
@@ -1081,7 +1072,7 @@ fn marker_inside_deleted_range_collapses() {
     register_marker_for_test(&mut buf, 1, 2, InsertionType::After);
     buf.delete_region(1, 5);
     // Marker at 2 inside [1,5) => collapses to 1.
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 1);
     assert_eq!(char_pos, 1);
 }
@@ -1093,12 +1084,12 @@ fn marker_char_pos_tracks_multibyte_edits() {
     register_marker_for_test(&mut buf, 1, 'é'.len_utf8(), InsertionType::After);
     buf.goto_byte('é'.len_utf8());
     buf.insert("ß");
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 4);
     assert_eq!(char_pos, 2);
 
     buf.delete_region(2, 4);
-    let (byte_pos, char_pos, _ins) = buf.text.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 1);
 }
@@ -1116,28 +1107,27 @@ struct BackendEditSnapshot {
 
 fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let mut buf = buf_with_text_backend("éaßbc", kind);
-    assert_eq!(buf.text.backend_kind(), kind);
+    assert_eq!(buf.text_backend_kind(), kind);
 
     let face = Value::symbol("face");
     let bold = Value::symbol("bold");
-    assert!(buf.text.text_props_put_property(2, 6, face, bold));
+    assert!(buf.text_props_put_property(2, 6, face, bold));
     register_marker_for_test(&mut buf, 42, 3, InsertionType::After);
     buf.set_mark_byte(2);
 
     buf.goto_byte(3);
     buf.insert("日本");
 
-    let delete_start = buf.text.buf_charpos_to_bytepos(2);
-    let delete_end = buf.text.buf_charpos_to_bytepos(4);
+    let delete_start = byte_pos_for_char(&buf, 2);
+    let delete_end = byte_pos_for_char(&buf, 4);
     buf.delete_region(delete_start, delete_end);
 
-    let replace_start = buf.text.buf_charpos_to_bytepos(1);
-    let replace_end = buf.text.buf_charpos_to_bytepos(3);
+    let replace_start = byte_pos_for_char(&buf, 1);
+    let replace_end = byte_pos_for_char(&buf, 3);
     let replacement = LispString::from_utf8("Ωx");
     buf.replace_region_lisp_string(replace_start, replace_end, &replacement);
 
     let marker_position = buf
-        .text
         .marker_chain_lookup(42)
         .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
 
@@ -1314,74 +1304,42 @@ struct BackendUndoSnapshot {
 fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
     let mut mgr = manager_with_text_backend(kind);
     let id = mgr.current_buffer_id().expect("scratch buffer");
-    let implemented_kind = require_implemented_kind(kind);
     let face = Value::symbol("face");
     let bold = Value::symbol("bold");
     let italic = Value::symbol("italic");
 
     {
         let buf = mgr.get_mut(id).expect("scratch buffer");
-        buf.text = BufferText::from_str_with_backend_kind("aébc日本z", implemented_kind);
+        buf.insert("aébc日本z");
         buf.widen();
         buf.goto_byte(0);
-        buf.set_mark_byte(buf.text.buf_charpos_to_bytepos(2));
-        let prop_start = buf.text.buf_charpos_to_bytepos(1);
-        let prop_end = buf.text.buf_charpos_to_bytepos(5);
-        assert!(
-            buf.text
-                .text_props_put_property(prop_start, prop_end, face, bold)
-        );
-        let marker_pos = buf.text.buf_charpos_to_bytepos(4);
+        buf.set_mark_byte(byte_pos_for_char(&buf, 2));
+        let prop_start = byte_pos_for_char(&buf, 1);
+        let prop_end = byte_pos_for_char(&buf, 5);
+        assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
+        let marker_pos = byte_pos_for_char(&buf, 4);
         register_marker_for_test(buf, 88, marker_pos, InsertionType::After);
         buf.set_undo_list(Value::NIL);
     }
 
     mgr.record_undo_point_before_command(id)
         .expect("record point before command");
-    let insert_pos = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(2);
+    let insert_pos = buffer_byte_pos_for_char(&mgr, id, 2);
     mgr.goto_buffer_byte(id, insert_pos).expect("goto insert");
     mgr.insert_into_buffer(id, "Ω").expect("insert text");
 
-    let prop_start = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(1);
-    let prop_end = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(6);
+    let prop_start = buffer_byte_pos_for_char(&mgr, id, 1);
+    let prop_end = buffer_byte_pos_for_char(&mgr, id, 6);
     mgr.put_buffer_text_property(id, prop_start, prop_end, face, italic)
         .expect("put text property");
 
-    let delete_start = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(4);
-    let delete_end = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(6);
+    let delete_start = buffer_byte_pos_for_char(&mgr, id, 4);
+    let delete_end = buffer_byte_pos_for_char(&mgr, id, 6);
     mgr.delete_buffer_region(id, delete_start, delete_end)
         .expect("delete region");
 
-    let replace_start = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(1);
-    let replace_end = mgr
-        .get(id)
-        .expect("scratch buffer")
-        .text
-        .buf_charpos_to_bytepos(3);
+    let replace_start = buffer_byte_pos_for_char(&mgr, id, 1);
+    let replace_end = buffer_byte_pos_for_char(&mgr, id, 3);
     mgr.replace_buffer_region_lisp_string(
         id,
         replace_start,
@@ -1394,10 +1352,9 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
     let undo_result = mgr.undo_buffer(id, 1).expect("undo result");
     let buf = mgr.get(id).expect("scratch buffer");
     let marker_position = buf
-        .text
         .marker_chain_lookup(88)
         .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
-    assert_eq!(buf.text.backend_kind(), kind);
+    assert_eq!(buf.text_backend_kind(), kind);
 
     BackendUndoSnapshot {
         undo_before,
@@ -1446,12 +1403,9 @@ fn run_backend_migration_script(
 
     let face = Value::symbol("face");
     let bold = Value::symbol("bold");
-    let prop_start = buf.text.buf_charpos_to_bytepos(1);
-    let prop_end = buf.text.buf_charpos_to_bytepos(5);
-    assert!(
-        buf.text
-            .text_props_put_property(prop_start, prop_end, face, bold)
-    );
+    let prop_start = byte_pos_for_char(&buf, 1);
+    let prop_end = byte_pos_for_char(&buf, 5);
+    assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
     register_marker_for_test(&mut buf, 77, 4, InsertionType::After);
     let overlay = Value::make_overlay(OverlayData {
         serial: 0,
@@ -1464,33 +1418,31 @@ fn run_backend_migration_script(
     });
     buf.overlays.insert_overlay(overlay);
 
-    let cached_byte = buf.text.buf_charpos_to_bytepos(4);
-    assert_eq!(buf.text.buf_bytepos_to_charpos(cached_byte), 4);
+    let cached_byte = byte_pos_for_char(&buf, 4);
+    assert_eq!(char_pos_for_byte(&buf, cached_byte), 4);
 
     if convert {
-        buf.text
-            .convert_backend_kind(require_implemented_kind(target_kind));
+        buf.convert_text_backend_kind(require_implemented_kind(target_kind));
     }
-    assert_eq!(buf.text.backend_kind(), target_kind);
-    assert_eq!(buf.text.buf_charpos_to_bytepos(4), cached_byte);
-    assert_eq!(buf.text.buf_bytepos_to_charpos(cached_byte), 4);
+    assert_eq!(buf.text_backend_kind(), target_kind);
+    assert_eq!(byte_pos_for_char(&buf, 4), cached_byte);
+    assert_eq!(char_pos_for_byte(&buf, cached_byte), 4);
 
-    let insert_pos = buf.text.buf_charpos_to_bytepos(2);
+    let insert_pos = byte_pos_for_char(&buf, 2);
     buf.goto_byte(insert_pos);
     buf.insert("Ω");
 
-    let delete_start = buf.text.buf_charpos_to_bytepos(5);
-    let delete_end = buf.text.buf_charpos_to_bytepos(6);
+    let delete_start = byte_pos_for_char(&buf, 5);
+    let delete_end = byte_pos_for_char(&buf, 6);
     buf.delete_region(delete_start, delete_end);
 
-    let char_to_byte_4 = buf.text.buf_charpos_to_bytepos(4);
+    let char_to_byte_4 = byte_pos_for_char(&buf, 4);
     BackendMigrationSnapshot {
-        backend_kind: buf.text.backend_kind(),
+        backend_kind: buf.text_backend_kind(),
         buffer_string: buf.buffer_string(),
         char_to_byte_4,
-        byte_to_char_at_char_4: buf.text.buf_bytepos_to_charpos(char_to_byte_4),
+        byte_to_char_at_char_4: char_pos_for_byte(&buf, char_to_byte_4),
         marker_position: buf
-            .text
             .marker_chain_lookup(77)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         overlay_range: (
@@ -1947,8 +1899,7 @@ fn manager_create_and_query_marker() {
     let mut mgr = BufferManager::new();
     let id = mgr.create_buffer("m");
     // Insert some text so there is room for a marker.
-    mgr.get_mut(id).unwrap().text = BufferText::from_str("abcdef");
-    mgr.get_mut(id).unwrap().widen();
+    mgr.insert_into_buffer(id, "abcdef").expect("insert text");
 
     let (mid, _) = mgr.create_marker(id, 3, InsertionType::After);
     assert_eq!(mgr.marker_position(id, mid), Some(3));
@@ -2169,23 +2120,7 @@ fn state_markers_survive_gc_without_lisp_references() {
             .buffers
             .get(indirect_id)
             .expect("indirect buffer present");
-        let head_slot: *const *mut crate::tagged::header::MarkerObj =
-            buffer.text.markers_head_slot_raw() as *const _;
-        let mut contains = [false; 3];
-        let mut curr = *head_slot;
-        while !curr.is_null() {
-            if curr == pt_ptr {
-                contains[0] = true;
-            }
-            if curr == begv_ptr {
-                contains[1] = true;
-            }
-            if curr == zv_ptr {
-                contains[2] = true;
-            }
-            curr = (*curr).data.next_marker;
-        }
-        contains
+        buffer.marker_chain_contains_raw_for_test([pt_ptr, begv_ptr, zv_ptr])
     };
     assert!(
         chain_contains_before.iter().all(|&b| b),
@@ -2237,25 +2172,7 @@ fn state_markers_survive_gc_without_lisp_references() {
             .buffers
             .get(indirect_id)
             .expect("indirect buffer present");
-        let head_slot: *const *mut crate::tagged::header::MarkerObj =
-            buffer.text.markers_head_slot_raw() as *const _;
-        let mut contains = [false; 3];
-        let mut curr = *head_slot;
-        let mut guard = 0usize;
-        while !curr.is_null() && guard < 4096 {
-            if curr == pt_ptr {
-                contains[0] = true;
-            }
-            if curr == begv_ptr {
-                contains[1] = true;
-            }
-            if curr == zv_ptr {
-                contains[2] = true;
-            }
-            curr = (*curr).data.next_marker;
-            guard += 1;
-        }
-        contains
+        buffer.marker_chain_contains_raw_for_test([pt_ptr, begv_ptr, zv_ptr])
     };
     assert!(
         chain_contains_after.iter().all(|&b| b),

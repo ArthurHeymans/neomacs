@@ -2024,6 +2024,16 @@ impl Buffer {
         self.text.backend_kind()
     }
 
+    #[cfg(test)]
+    pub(crate) fn shares_text_storage_with(&self, other: &Self) -> bool {
+        self.text.shares_storage_with(&other.text)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_text_from_dump_for_test(&mut self, text: Vec<u8>, multibyte: bool) {
+        self.text = BufferText::from_dump(text, multibyte);
+    }
+
     pub(crate) fn dump_text_backend_kind(&self) -> ImplementedBufferTextBackendKind {
         self.text.implemented_backend_kind()
     }
@@ -2308,6 +2318,18 @@ impl Buffer {
 
     pub fn text_props_snapshot(&self) -> TextPropertyTable {
         self.text.text_props_snapshot()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn text_props_intervals_snapshot_for_test(
+        &self,
+    ) -> Vec<super::text_props::PropertyInterval> {
+        self.text.text_props_intervals_snapshot()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_text_props_for_test(&mut self, props: TextPropertyTable) {
+        self.text.text_props_replace(props);
     }
 
     pub fn text_props_slice_emacs_byte_range(&self, range: EmacsByteRange) -> TextPropertyTable {
@@ -2628,6 +2650,27 @@ impl Buffer {
     #[cfg(test)]
     pub(crate) fn marker_chain_len(&self) -> usize {
         self.text.chain_walk_collect().len()
+    }
+
+    #[cfg(test)]
+    pub(crate) unsafe fn marker_chain_contains_raw_for_test(
+        &self,
+        targets: [*mut crate::tagged::header::MarkerObj; 3],
+    ) -> [bool; 3] {
+        let head_slot = unsafe { self.text.markers_head_slot_raw() };
+        let mut contains = [false; 3];
+        let mut curr = unsafe { *head_slot };
+        let mut guard = 0usize;
+        while !curr.is_null() && guard < 4096 {
+            for (index, target) in targets.iter().enumerate() {
+                if curr == *target {
+                    contains[index] = true;
+                }
+            }
+            curr = unsafe { (*curr).data.next_marker };
+            guard += 1;
+        }
+        contains
     }
 
     pub fn marker_value_by_id(&self, marker_id: u64) -> Option<Value> {
