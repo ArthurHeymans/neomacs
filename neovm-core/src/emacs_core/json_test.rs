@@ -470,6 +470,36 @@ fn parse_rejects_malformed_escape_sequences() {
 }
 
 #[test]
+fn parse_large_integer_becomes_bignum_not_float() {
+    crate::test_utils::init_test_tracing();
+    // 10^20 exceeds i64; GNU keeps full precision as a bignum rather than
+    // degrading to a lossy float.
+    let result = builtin_json_parse_string(vec![Value::string("100000000000000000000")]).unwrap();
+    assert!(
+        matches!(result.kind(), ValueKind::Veclike(VecLikeType::Bignum)),
+        "expected a bignum, got {:?}",
+        result.kind()
+    );
+    assert_eq!(
+        result.as_bignum().map(|n| n.to_string()),
+        Some("100000000000000000000".to_string())
+    );
+}
+
+#[test]
+fn parse_out_of_range_float_signals_number_out_of_range() {
+    crate::test_utils::init_test_tracing();
+    // 1e999 overflows the double range; GNU signals
+    // json-number-out-of-range-error instead of returning an infinite float.
+    match builtin_json_parse_string(vec![Value::string("1e999")]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "json-number-out-of-range-error");
+        }
+        other => panic!("expected json-number-out-of-range-error, got {other:?}"),
+    }
+}
+
+#[test]
 fn parse_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("null")]);
@@ -891,14 +921,20 @@ fn encode_backspace_formfeed() {
 }
 
 #[test]
-fn parse_large_number_as_float() {
+fn parse_large_integer_keeps_bignum_precision() {
     crate::test_utils::init_test_tracing();
-    // Number too large for i64.
+    // Integer too large for i64 must become a bignum, not a lossy float
+    // (matching GNU, which never degrades integer precision).
     let val = builtin_json_parse_string(vec![Value::string("99999999999999999999")]).unwrap();
-    match val.kind() {
-        ValueKind::Float => {} // OK — fell back to f64
-        _ => panic!("expected float for large number, got {:?}", val),
-    }
+    assert!(
+        matches!(val.kind(), ValueKind::Veclike(VecLikeType::Bignum)),
+        "expected bignum for large integer, got {:?}",
+        val.kind()
+    );
+    assert_eq!(
+        val.as_bignum().map(|n| n.to_string()),
+        Some("99999999999999999999".to_string())
+    );
 }
 
 #[test]

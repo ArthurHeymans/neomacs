@@ -466,6 +466,8 @@ enum JsonError {
     InvalidSurrogate,
     /// `json-escape-sequence-error` — malformed `\` escape in a string.
     EscapeSequence,
+    /// `json-number-out-of-range-error` — numeric literal outside range.
+    NumberOutOfRange,
     /// `json-serialize-error` — neomacs serialization failure. GNU signals
     /// a plain `error` here; neomacs keeps a dedicated `json-error` subtype.
     Serialize,
@@ -481,6 +483,7 @@ impl JsonError {
             JsonError::Utf8Decode => "json-utf8-decode-error",
             JsonError::InvalidSurrogate => "json-invalid-surrogate-error",
             JsonError::EscapeSequence => "json-escape-sequence-error",
+            JsonError::NumberOutOfRange => "json-number-out-of-range-error",
             JsonError::Serialize => "json-serialize-error",
         }
     }
@@ -956,26 +959,24 @@ impl<'a> JsonParser<'a> {
         let num_str = std::str::from_utf8(&self.input[start..self.pos]).unwrap_or("0");
 
         if is_float {
-            let f: f64 = num_str.parse().map_err(|_| {
-                signal(
-                    JsonError::Parse.symbol(),
-                    vec![Value::string(format!("Invalid float: {}", num_str))],
-                )
-            })?;
+            let f: f64 = num_str
+                .parse()
+                .map_err(|_| self.signal_at_pos(JsonError::Parse))?;
+            if f.is_infinite() {
+                // JSON has no infinity literal, so an infinite result means
+                // the magnitude overflowed the double range. GNU signals
+                // json-number-out-of-range-error here rather than returning
+                // an infinite float.
+                return Err(self.signal_at_pos(JsonError::NumberOutOfRange));
+            }
             Ok(Value::make_float(f))
         } else {
-            // Try parsing as i64 first; fall back to f64 for very large numbers.
+            // Integers that fit i64 stay fixnums (or promote to bignum at the
+            // fixnum boundary via make_int); larger literals become bignums,
+            // matching GNU which never loses integer precision.
             match num_str.parse::<i64>() {
-                Ok(n) => Ok(Value::fixnum(n)),
-                Err(_) => {
-                    let f: f64 = num_str.parse().map_err(|_| {
-                        signal(
-                            JsonError::Parse.symbol(),
-                            vec![Value::string(format!("Invalid number: {}", num_str))],
-                        )
-                    })?;
-                    Ok(Value::make_float(f)) // TODO(tagged): remove next_float_id()
-                }
+                Ok(n) => Ok(Value::make_int(n)),
+                Err(_) => Ok(Value::make_integer_from_str_or_zero(num_str)),
             }
         }
     }
