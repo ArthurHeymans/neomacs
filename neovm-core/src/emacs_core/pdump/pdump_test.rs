@@ -42,37 +42,43 @@ fn test_pdump_round_trip_basic() {
 #[test]
 fn pdump_round_trip_preserves_buffer_text_backend_kind() {
     crate::test_utils::init_test_tracing();
-    let mut eval = Context::new();
-    let setup = eval.eval_str(
-        r#"(progn
-             (neomacs-set-default-buffer-text-backend 'rope)
-             (save-current-buffer
-               (set-buffer (get-buffer-create "rope-dump"))
-               (insert "éabc")
-               (list (neomacs-buffer-text-backend) (buffer-string))))"#,
-    );
-    assert_eq!(format_eval_result(&setup), r#"OK (rope "éabc")"#);
+    for backend in ["piece-tree", "rope"] {
+        let mut eval = Context::new();
+        let buffer_name = format!("{backend}-dump");
+        let setup = eval.eval_str(&format!(
+            r#"(progn
+                 (neomacs-set-default-buffer-text-backend '{backend})
+                 (save-current-buffer
+                   (set-buffer (get-buffer-create "{buffer_name}"))
+                   (insert "éabc")
+                   (list (neomacs-buffer-text-backend) (buffer-string))))"#
+        ));
+        assert_eq!(
+            format_eval_result(&setup),
+            format!(r#"OK ({backend} "éabc")"#)
+        );
 
-    let dir = tempfile::tempdir().unwrap();
-    let dump_path = dir.path().join("rope-text-backend.pdump");
-    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+        let dir = tempfile::tempdir().unwrap();
+        let dump_path = dir.path().join(format!("{backend}-text-backend.pdump"));
+        dump_to_file(&eval, &dump_path).expect("dump should succeed");
 
-    let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
-    let restored = loaded.eval_str(
-        r#"(list
-             (neomacs-default-buffer-text-backend)
-             (save-current-buffer
-               (set-buffer (get-buffer "rope-dump"))
-               (list (neomacs-buffer-text-backend) (buffer-string)))
-             (save-current-buffer
-               (set-buffer (get-buffer-create "rope-after-load"))
-               (insert "z")
-               (list (neomacs-buffer-text-backend) (buffer-string))))"#,
-    );
-    assert_eq!(
-        format_eval_result(&restored),
-        r#"OK (rope (rope "éabc") (rope "z"))"#
-    );
+        let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
+        let restored = loaded.eval_str(&format!(
+            r#"(list
+                 (neomacs-default-buffer-text-backend)
+                 (save-current-buffer
+                   (set-buffer (get-buffer "{buffer_name}"))
+                   (list (neomacs-buffer-text-backend) (buffer-string)))
+                 (save-current-buffer
+                   (set-buffer (get-buffer-create "{backend}-after-load"))
+                   (insert "z")
+                   (list (neomacs-buffer-text-backend) (buffer-string))))"#
+        ));
+        assert_eq!(
+            format_eval_result(&restored),
+            format!(r#"OK ({backend} ({backend} "éabc") ({backend} "z"))"#)
+        );
+    }
 }
 
 #[test]
