@@ -4242,81 +4242,316 @@ fn current_buffer_id_or_error(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))
 }
 
-fn replace_accessible_portion_in_current_buffer(
+fn emacs_char_boundary(bytes: &[u8], byte_pos: usize, multibyte: bool) -> bool {
+    if byte_pos > bytes.len() {
+        return false;
+    }
+    if !multibyte || byte_pos == 0 || byte_pos == bytes.len() {
+        return true;
+    }
+    crate::emacs_core::emacs_char::char_head_p(bytes[byte_pos])
+}
+
+fn previous_emacs_char_boundary(bytes: &[u8], mut byte_pos: usize, multibyte: bool) -> usize {
+    byte_pos = byte_pos.min(bytes.len());
+    while byte_pos > 0 && !emacs_char_boundary(bytes, byte_pos, multibyte) {
+        byte_pos -= 1;
+    }
+    byte_pos
+}
+
+fn common_replacement_prefix_bytes(
+    old_bytes: &[u8],
+    old_multibyte: bool,
+    new_bytes: &[u8],
+    new_multibyte: bool,
+) -> usize {
+    let mut prefix = 0usize;
+    let limit = old_bytes.len().min(new_bytes.len());
+    while prefix < limit && old_bytes[prefix] == new_bytes[prefix] {
+        prefix += 1;
+    }
+    let old_prefix = previous_emacs_char_boundary(old_bytes, prefix, old_multibyte);
+    let new_prefix = previous_emacs_char_boundary(new_bytes, prefix, new_multibyte);
+    old_prefix.min(new_prefix)
+}
+
+fn common_replacement_suffix_bytes(
+    old_bytes: &[u8],
+    old_multibyte: bool,
+    new_bytes: &[u8],
+    new_multibyte: bool,
+    prefix: usize,
+) -> usize {
+    let old_tail_limit = old_bytes.len().saturating_sub(prefix);
+    let new_tail_limit = new_bytes.len().saturating_sub(prefix);
+    let mut suffix = 0usize;
+    let limit = old_tail_limit.min(new_tail_limit);
+    while suffix < limit
+        && old_bytes[old_bytes.len() - suffix - 1] == new_bytes[new_bytes.len() - suffix - 1]
+    {
+        suffix += 1;
+    }
+    while suffix > 0
+        && (!emacs_char_boundary(old_bytes, old_bytes.len() - suffix, old_multibyte)
+            || !emacs_char_boundary(new_bytes, new_bytes.len() - suffix, new_multibyte))
+    {
+        suffix -= 1;
+    }
+    suffix
+}
+
+fn char_count_for_lisp_string_byte_prefix(text: &LispString, byte_pos: usize) -> usize {
+    if text.is_multibyte() {
+        crate::emacs_core::emacs_char::byte_to_char_pos(text.as_bytes(), byte_pos)
+    } else {
+        byte_pos
+    }
+}
+
+fn restore_point_after_file_replace(
     buffers: &mut crate::buffer::BufferManager,
     current_id: crate::buffer::BufferId,
-    text: &LispString,
-    text_props: Option<&TextPropertyTable>,
+    saved_point_char: usize,
+    same_at_start_char: usize,
+    same_at_end_char: usize,
+    inserted_chars: usize,
 ) -> Result<(), Flow> {
-    let (delete_range, start, old_point) = {
-        let buf = buffers
-            .get(current_id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let accessible = buf.accessible_emacs_byte_region();
-        (
-            accessible.range(),
-            accessible.start_usize(),
-            buf.point_byte(),
-        )
-    };
-    if !delete_range.is_empty() {
-        buffers
-            .delete_buffer_emacs_byte_range(current_id, delete_range)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    }
-    buffers
-        .goto_buffer_byte(current_id, start)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    if !text.is_empty() {
-        buffers
-            .insert_lisp_string_into_buffer(current_id, text)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        if let Some(table) = text_props {
-            buffers
-                .append_buffer_text_properties(current_id, table, start)
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let new_point_char = if saved_point_char <= same_at_start_char {
+        saved_point_char
+    } else if saved_point_char <= same_at_end_char {
+        let old_size = same_at_end_char.saturating_sub(same_at_start_char);
+        if old_size == 0 {
+            same_at_start_char
+        } else {
+            same_at_start_char
+                + ((inserted_chars as f64 / old_size as f64)
+                    * (saved_point_char - same_at_start_char) as f64) as usize
         }
-    }
-    let replacement_end = start + text.sbytes();
-    let restored_point = if old_point <= start {
-        old_point
     } else {
-        replacement_end.min(start + (old_point - start))
+        saved_point_char
+            .saturating_add(inserted_chars)
+            .saturating_sub(same_at_end_char.saturating_sub(same_at_start_char))
     };
-    buffers
-        .goto_buffer_byte(current_id, restored_point)
+    let point_byte = buffers
+        .get(current_id)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
+        .char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(new_point_char))
+        .get();
+    if let Some(buf) = buffers.get_mut(current_id) {
+        buf.pt = new_point_char.min(buf.total_chars());
+        buf.pt_byte = point_byte.min(buf.total_bytes());
+        Ok(())
+    } else {
+        Err(signal("error", vec![Value::string("No current buffer")]))
+    }
+}
+
+fn lisp_string_text_properties(text: &LispString) -> Option<&TextPropertyTable> {
+    let table = text.intervals();
+    if table.is_empty() { None } else { Some(table) }
+}
+
+fn signal_and_delete_file_replace_region(
+    eval: &mut Context,
+    current_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+    signal_hooks: bool,
+) -> Result<(), Flow> {
+    if byte_range.is_empty() {
+        return Ok(());
+    }
+    let change =
+        super::editfns::text_change_for_deletion_in_manager(&eval.buffers, current_id, byte_range)?;
+    if signal_hooks {
+        super::editfns::signal_before_text_change(eval, change)?;
+    }
+    eval.buffers
+        .delete_buffer_measured_region(current_id, change.old_range())
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    if signal_hooks {
+        super::editfns::signal_after_text_change(eval, change)?;
+    }
     Ok(())
 }
 
+fn signal_and_insert_file_replace_text(
+    eval: &mut Context,
+    current_id: crate::buffer::BufferId,
+    byte_pos: usize,
+    text: &LispString,
+    signal_hooks: bool,
+) -> Result<(), Flow> {
+    if text.is_empty() {
+        return Ok(());
+    }
+    eval.buffers
+        .goto_buffer_byte(current_id, byte_pos)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+        &eval.buffers,
+        current_id,
+        EmacsByteRange::from_usize(byte_pos, byte_pos),
+        text,
+    )?;
+    if signal_hooks {
+        super::editfns::signal_before_text_change(eval, change)?;
+    }
+    eval.buffers
+        .insert_lisp_string_into_buffer_for_replace(current_id, text)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    if let Some(table) = lisp_string_text_properties(text) {
+        eval.buffers
+            .append_buffer_text_properties(current_id, table, byte_pos)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    }
+    if signal_hooks {
+        super::editfns::signal_after_text_change(eval, change)?;
+    }
+    Ok(())
+}
+
+fn replace_accessible_portion_for_insert_file_contents(
+    eval: &mut Context,
+    current_id: crate::buffer::BufferId,
+    text: &LispString,
+    signal_hooks: bool,
+) -> Result<(), Flow> {
+    let (
+        accessible_start,
+        accessible_end,
+        accessible_start_char,
+        accessible_end_char,
+        old_point_char,
+        old_multibyte,
+        old_text,
+    ) = {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let accessible = buf.accessible_emacs_byte_region();
+        let range = accessible.range();
+        let edit_range = buf.edit_range_for_emacs_byte_range(range);
+        (
+            accessible.start_usize(),
+            accessible.end_usize(),
+            edit_range.char_start().get(),
+            edit_range.char_end().get(),
+            buf.pt,
+            buf.get_multibyte(),
+            buf.buffer_substring_lisp_string_range(range),
+        )
+    };
+    let old_bytes = old_text.as_bytes();
+    let new_bytes = text.as_bytes();
+    let prefix =
+        common_replacement_prefix_bytes(old_bytes, old_multibyte, new_bytes, text.is_multibyte());
+    let suffix = common_replacement_suffix_bytes(
+        old_bytes,
+        old_multibyte,
+        new_bytes,
+        text.is_multibyte(),
+        prefix,
+    );
+
+    if prefix == old_bytes.len() && prefix == new_bytes.len() {
+        restore_point_after_file_replace(
+            &mut eval.buffers,
+            current_id,
+            old_point_char,
+            accessible_start_char + char_count_for_lisp_string_byte_prefix(&old_text, prefix),
+            accessible_end_char - char_count_for_lisp_string_byte_prefix(&old_text, suffix),
+            text.schars(),
+        )?;
+        return Ok(());
+    }
+
+    let delete_start = accessible_start + prefix;
+    let delete_end = accessible_end - suffix;
+    let insert_start = prefix;
+    let insert_end = new_bytes.len() - suffix;
+    let insert_text = text.slice(insert_start, insert_end).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Invalid replacement text slice")],
+        )
+    })?;
+    let same_at_start_char =
+        accessible_start_char + char_count_for_lisp_string_byte_prefix(&old_text, prefix);
+    let same_at_end_char =
+        accessible_end_char - char_count_for_lisp_string_byte_prefix(&old_text, suffix);
+    let inserted_chars = insert_text.schars();
+
+    signal_and_delete_file_replace_region(
+        eval,
+        current_id,
+        EmacsByteRange::from_usize(delete_start, delete_end),
+        signal_hooks,
+    )?;
+    signal_and_insert_file_replace_text(
+        eval,
+        current_id,
+        delete_start,
+        &insert_text,
+        signal_hooks,
+    )?;
+    restore_point_after_file_replace(
+        &mut eval.buffers,
+        current_id,
+        old_point_char,
+        same_at_start_char,
+        same_at_end_char,
+        inserted_chars,
+    )
+}
+
 fn insert_file_contents_into_current_buffer_in_state(
-    buffers: &mut crate::buffer::BufferManager,
+    eval: &mut Context,
     current_id: crate::buffer::BufferId,
     contents: &LispString,
-    text_props: Option<&TextPropertyTable>,
     replace_requested: bool,
+    signal_hooks: bool,
 ) -> Result<(), Flow> {
     if replace_requested {
-        replace_accessible_portion_in_current_buffer(buffers, current_id, contents, text_props)
+        replace_accessible_portion_for_insert_file_contents(
+            eval,
+            current_id,
+            contents,
+            signal_hooks,
+        )
     } else {
         // GNU Emacs: insert-file-contents inserts text at point but does NOT
         // advance point past the inserted text (unlike regular `insert`).
         // It calls TEMP_SET_PT_BOTH(BEG, BEG_BYTE) to keep point at the
         // beginning of the inserted region.
-        let pt_before = buffers
+        let pt_before = eval
+            .buffers
             .get(current_id)
             .map(|b| (b.pt_byte, b.pt))
             .unwrap_or((0, 0));
-        buffers
+        let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+            &eval.buffers,
+            current_id,
+            EmacsByteRange::from_usize(pt_before.0, pt_before.0),
+            contents,
+        )?;
+        if signal_hooks && !contents.is_empty() {
+            super::editfns::signal_before_text_change(eval, change)?;
+        }
+        eval.buffers
             .insert_lisp_string_into_buffer(current_id, contents)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        if let Some(table) = text_props {
-            buffers
+        if let Some(table) = lisp_string_text_properties(contents) {
+            eval.buffers
                 .append_buffer_text_properties(current_id, table, pt_before.0)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         }
+        if signal_hooks && !contents.is_empty() {
+            super::editfns::signal_after_text_change(eval, change)?;
+        }
         // Restore point to before the insertion (matching GNU).
-        if let Some(buf) = buffers.get_mut(current_id) {
+        if let Some(buf) = eval.buffers.get_mut(current_id) {
             buf.pt_byte = pt_before.0;
             buf.pt = pt_before.1;
         }
@@ -4848,28 +5083,10 @@ pub(crate) fn builtin_insert_file_contents(
     let visit = args.get(1).is_some_and(|v| v.is_truthy());
     let replace_requested = args.get(4).is_some_and(|v| !v.is_nil());
 
-    // Snapshot buffer state before the file read for modification hooks.
-    let pre_state = eval.buffers.current_buffer().map(|buf| {
-        if replace_requested {
-            let accessible = buf.accessible_emacs_byte_region();
-            let start = accessible.start_usize();
-            let end = accessible.end_usize();
-            (
-                start,
-                end,
-                super::editfns::byte_span_char_len(buf, start, end),
-            )
-        } else {
-            (buf.pt_byte, buf.pt_byte, 0)
-        }
-    });
     let empty_undo_list_p = eval
         .buffers
         .current_buffer()
         .is_some_and(|buf| visit && buf.get_undo_list().is_nil() && buf.is_text_empty());
-    if let Some((beg, end, _old_len)) = pre_state {
-        super::editfns::signal_before_change(eval, beg, end)?;
-    }
 
     let current_id = current_buffer_id_or_error(&eval.buffers)?;
     {
@@ -4996,12 +5213,13 @@ pub(crate) fn builtin_insert_file_contents(
     )?;
     let decoded_char_count = contents.char_count();
 
+    let signal_change_hooks = !visit || replace_requested;
     insert_file_contents_into_current_buffer_in_state(
-        &mut eval.buffers,
+        eval,
         current_id,
         contents.text(),
-        contents.text_properties(),
         replace_requested,
+        signal_change_hooks,
     )?;
 
     // GNU `insert-file-contents' sets `last-coding-system-used' before
@@ -5046,21 +5264,6 @@ pub(crate) fn builtin_insert_file_contents(
         Value::heap_string(resolved),
         Value::fixnum(inserted_char_count),
     ]);
-    // Fire after-change hooks.
-    if let Some((beg, _old_end, old_len)) = pre_state {
-        let new_end = eval
-            .buffers
-            .current_buffer()
-            .map(|buf| {
-                if replace_requested {
-                    buf.accessible_emacs_byte_region().end_usize()
-                } else {
-                    buf.pt_byte
-                }
-            })
-            .unwrap_or(beg);
-        super::editfns::signal_after_change(eval, beg, new_end, old_len)?;
-    }
 
     Ok(value)
 }

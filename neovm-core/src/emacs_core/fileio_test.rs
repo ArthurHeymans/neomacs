@@ -3290,6 +3290,51 @@ fn test_insert_file_contents_and_write_region() {
 }
 
 #[test]
+fn insert_file_contents_non_visit_change_hooks_match_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join("neovm_eval_insert_file_contents_change_hooks");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let path = dir.join("insert.txt");
+    let path_str = path.to_string_lossy().to_string();
+    fs::write(&path, "abc").unwrap();
+
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"
+(progn
+  (erase-buffer)
+  (insert "xx")
+  (goto-char 2)
+  (setq neomacs-ifc-events nil)
+  (setq before-change-functions
+        (list (lambda (beg end)
+                (setq neomacs-ifc-events
+                      (cons (list 'before beg end) neomacs-ifc-events)))))
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq neomacs-ifc-events
+                      (cons (list 'after beg end old-len) neomacs-ifc-events))))))
+"#,
+    )
+    .expect("hook setup should evaluate");
+
+    builtin_insert_file_contents(&mut eval, vec![Value::string(&path_str)])
+        .expect("insert-file-contents should succeed");
+
+    let rendered = format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) (point) (nreverse neomacs-ifc-events))
+"#,
+    ));
+    assert_eq!(rendered, "OK (\"xabcx\" 2 ((before 2 2) (after 2 5 0)))");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_insert_file_contents_visit_sets_file_name_and_clears_modified() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
@@ -3321,6 +3366,105 @@ fn test_insert_file_contents_visit_sets_file_name_and_clears_modified() {
     );
     assert!(!buf.is_modified());
     assert!(buf.get_undo_list().is_nil());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn insert_file_contents_visit_does_not_signal_change_hooks_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join("neovm_eval_insert_file_contents_visit_hooks");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let path = dir.join("visit-hooks.txt");
+    let path_str = path.to_string_lossy().to_string();
+    fs::write(&path, "abc").unwrap();
+
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"
+(progn
+  (setq neomacs-ifc-events nil)
+  (setq before-change-functions
+        (list (lambda (beg end)
+                (setq neomacs-ifc-events
+                      (cons (list 'before beg end) neomacs-ifc-events)))))
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq neomacs-ifc-events
+                      (cons (list 'after beg end old-len) neomacs-ifc-events))))))
+"#,
+    )
+    .expect("hook setup should evaluate");
+
+    builtin_insert_file_contents(&mut eval, vec![Value::string(&path_str), Value::T])
+        .expect("visited insert-file-contents should succeed");
+
+    let rendered = format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) (point) neomacs-ifc-events)
+"#,
+    ));
+    assert_eq!(rendered, "OK (\"abc\" 1 nil)");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn insert_file_contents_replace_preserves_matching_ends_and_hooks_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join("neovm_eval_insert_file_contents_replace_hooks");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let path = dir.join("replace.txt");
+    let path_str = path.to_string_lossy().to_string();
+    fs::write(&path, "abXYZe").unwrap();
+
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"
+(progn
+  (erase-buffer)
+  (insert "abcde")
+  (goto-char 4)
+  (setq neomacs-ifc-events nil)
+  (setq before-change-functions
+        (list (lambda (beg end)
+                (setq neomacs-ifc-events
+                      (cons (list 'before beg end) neomacs-ifc-events)))))
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq neomacs-ifc-events
+                      (cons (list 'after beg end old-len) neomacs-ifc-events))))))
+"#,
+    )
+    .expect("hook setup should evaluate");
+
+    builtin_insert_file_contents(
+        &mut eval,
+        vec![
+            Value::string(&path_str),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("replace insert-file-contents should succeed");
+
+    let rendered = format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) (point) (nreverse neomacs-ifc-events))
+"#,
+    ));
+    assert_eq!(
+        rendered,
+        "OK (\"abXYZe\" 4 ((before 3 5) (after 3 3 2) (before 3 3) (after 3 6 0)))"
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
