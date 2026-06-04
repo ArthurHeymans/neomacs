@@ -1608,9 +1608,9 @@ pub struct Buffer {
     /// The underlying text storage.
     text: BufferText,
     /// Point — the current cursor character position.
-    pub pt: usize,
+    pub(crate) pt: usize,
     /// Point — the current cursor byte position.
-    pub pt_byte: usize,
+    pub(crate) pt_byte: usize,
     /// GNU `BVAR(buf, mark)` — a real Lisp_Marker.  This IS the mark;
     /// there are no separate mark position fields (matching GNU's design).
     /// The marker tracks its own position through the chain; read it via
@@ -1620,13 +1620,13 @@ pub struct Buffer {
     /// and GC root tracing (mirrors BufferStateMarkers pointers).
     pub mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
     /// Beginning of accessible (narrowed) portion (char pos, inclusive).
-    pub begv: usize,
+    pub(crate) begv: usize,
     /// Beginning of accessible (narrowed) portion (byte pos, inclusive).
-    pub begv_byte: usize,
+    pub(crate) begv_byte: usize,
     /// End of accessible (narrowed) portion (char pos, exclusive).
-    pub zv: usize,
+    pub(crate) zv: usize,
     /// End of accessible (narrowed) portion (byte pos, exclusive).
-    pub zv_byte: usize,
+    pub(crate) zv_byte: usize,
     /// GNU `BUF_AUTOSAVE_MODIFF`: recent auto-save state is
     /// `save_modiff < autosave_modified_tick`.
     pub autosave_modified_tick: i64,

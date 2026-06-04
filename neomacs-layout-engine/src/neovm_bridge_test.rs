@@ -901,8 +901,7 @@ fn test_rust_buffer_access_copy_text() {
     // Insert some text
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "Hello, world!");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
@@ -922,8 +921,7 @@ fn test_rust_buffer_access_charpos_to_bytepos() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*test-pos*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "abc");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
@@ -966,8 +964,7 @@ fn test_rust_buffer_access_lisp_charpos_to_bytepos() {
         .create_buffer("*test-lisp-pos*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "abc");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
@@ -986,8 +983,7 @@ fn test_rust_buffer_access_count_lines() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*test-lines*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "line1\nline2\nline3");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
@@ -1008,8 +1004,7 @@ fn test_text_prop_check_invisible() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*invis*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "visible hidden visible");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         // Mark "hidden" (positions 8..14) as invisible
         buf.put_text_property(8, 14, Value::symbol("invisible"), Value::T);
     }
@@ -1039,8 +1034,7 @@ fn text_prop_invisible_respects_buffer_invisibility_spec() {
         .create_buffer("*dired-invis*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "details filename");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.set_buffer_local(
             "buffer-invisibility-spec",
             Value::list(vec![
@@ -1073,8 +1067,7 @@ fn text_prop_invisible_matches_members_of_property_list() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*invis-list*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "folded");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.set_buffer_local(
             "buffer-invisibility-spec",
             Value::list(vec![Value::cons(Value::symbol("outline"), Value::T)]),
@@ -1139,8 +1132,7 @@ fn test_text_prop_check_display() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*display*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "abcdef");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         // Set a display property on positions 2..4
         buf.put_text_property(2, 4, Value::symbol("display"), Value::fixnum(42));
     }
@@ -1164,8 +1156,7 @@ fn test_text_prop_line_spacing() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "line1\nline2");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         // Set line-spacing on "line2" area
         buf.put_text_property(6, 11, Value::symbol("line-spacing"), Value::fixnum(4));
     }
@@ -1332,8 +1323,7 @@ fn test_text_prop_next_change() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*next*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "aabbcc");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.put_text_property(2, 4, Value::symbol("face"), Value::T);
     }
 
@@ -1355,8 +1345,7 @@ fn test_text_prop_get_property() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*prop*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "test");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.put_text_property(0, 4, Value::symbol("face"), Value::fixnum(5));
     }
 
@@ -1376,8 +1365,7 @@ fn test_text_prop_access_multibyte_positions_use_byte_offsets() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*utf8-prop*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
         set_buffer_text(buf, "a好b");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.put_text_property(4, 5, Value::symbol("face"), Value::fixnum(9));
     }
 
@@ -1440,8 +1428,7 @@ fn test_face_resolver_with_text_property() {
     // Create a buffer and set "face" text property to bold.
     let mut buf = test_buffer(1, "*test*");
     set_buffer_text(&mut buf, "hello world");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     // Set "face" to the symbol "bold" on positions 0..5.
     buf.put_text_property(0, 5, Value::symbol("face"), Value::symbol("bold"));
 
@@ -1486,8 +1473,7 @@ fn face_resolver_underline_styles_use_gnu_codes() {
     for (name, _, code) in styles {
         let mut buf = test_buffer(u64::from(code), "*underline*");
         set_buffer_text(&mut buf, "x");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol(name));
 
         let mut next_check = buf.point_max_char();
@@ -1521,8 +1507,7 @@ fn face_resolver_box_styles_use_gnu_codes() {
     for (name, _, code) in styles {
         let mut buf = test_buffer(u64::from(code), "*box*");
         set_buffer_text(&mut buf, "x");
-        buf.zv_byte = buf.total_bytes();
-        buf.zv = buf.total_chars();
+        buf.widen();
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol(name));
 
         let mut next_check = buf.point_max_char();
@@ -1539,8 +1524,7 @@ fn test_face_resolver_with_font_lock_face() {
 
     let mut buf = test_buffer(2, "*fontlock*");
     set_buffer_text(&mut buf, "defun myfunction");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     // Set "font-lock-face" to "font-lock-keyword-face" on "defun".
     buf.put_text_property(
         0,
@@ -1565,8 +1549,7 @@ fn test_face_resolver_face_property_precedes_font_lock_face() {
 
     let mut buf = test_buffer(20, "*scratch*");
     set_buffer_text(&mut buf, "C-x C-f");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.put_text_property(0, 7, Value::symbol("face"), Value::symbol("bold"));
     buf.put_text_property(
         0,
@@ -1590,8 +1573,7 @@ fn test_face_resolver_next_check() {
 
     let mut buf = test_buffer(3, "*nextcheck*");
     set_buffer_text(&mut buf, "aabbccdd");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     // Face property on [2, 4)
     buf.put_text_property(2, 4, Value::symbol("face"), Value::symbol("bold"));
     // Another property on [4, 6)
@@ -1705,8 +1687,7 @@ fn test_face_resolver_face_ref_list_respects_gnu_precedence() {
 
     let mut buf = test_buffer(51, "*face-ref-list*");
     set_buffer_text(&mut buf, "x");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.put_text_property(
         0,
         1,
@@ -1727,8 +1708,7 @@ fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
 
     let mut buf = test_buffer(52, "*default-remap*");
     set_buffer_text(&mut buf, "plain");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.set_buffer_local(
         "face-remapping-alist",
         Value::list(vec![Value::list(vec![
@@ -1751,8 +1731,7 @@ fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
 
     let mut buf = test_buffer(53, "*named-remap*");
     set_buffer_text(&mut buf, "bold");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.set_buffer_local(
         "face-remapping-alist",
         Value::list(vec![Value::list(vec![
@@ -1784,8 +1763,7 @@ fn test_face_resolver_inverse_video() {
 
     let mut buf = test_buffer(6, "*inverse*");
     set_buffer_text(&mut buf, "inverted");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.put_text_property(0, 8, Value::symbol("face"), Value::symbol("inverse-test"));
 
     let mut nc = buf.point_max_char();
@@ -1826,8 +1804,7 @@ fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
 
     let mut buf = test_buffer(7, "*utf8*");
     set_buffer_text(&mut buf, "a好b");
-    buf.zv_byte = buf.total_bytes();
-    buf.zv = buf.total_chars();
+    buf.widen();
     buf.put_text_property(4, 5, Value::symbol("face"), Value::symbol("bold"));
 
     let mut next_check = buf.point_max_char();
