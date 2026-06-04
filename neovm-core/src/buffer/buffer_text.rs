@@ -797,6 +797,7 @@ impl BufferText {
             )
     }
 
+    #[cfg(test)]
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
         self.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(pos), name)
     }
@@ -813,6 +814,7 @@ impl BufferText {
             .get_property(pos.start_usize(), name)
     }
 
+    #[cfg(test)]
     pub fn text_props_get_properties(&self, pos: usize) -> HashMap<Value, Value> {
         self.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -828,6 +830,7 @@ impl BufferText {
             .get_properties(pos.start_usize())
     }
 
+    #[cfg(test)]
     pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
         self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -843,6 +846,7 @@ impl BufferText {
             .get_properties_ordered(pos.start_usize())
     }
 
+    #[cfg(test)]
     pub fn text_props_get_properties_plist_value(&self, pos: usize) -> Value {
         self.text_props_get_properties_plist_value_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -858,6 +862,7 @@ impl BufferText {
             .get_properties_plist_value(pos.start_usize())
     }
 
+    #[cfg(test)]
     pub fn text_props_range_has_all_properties(
         &self,
         start: usize,
@@ -883,6 +888,7 @@ impl BufferText {
         )
     }
 
+    #[cfg(test)]
     pub fn text_props_range_has_any_property_named(
         &self,
         start: usize,
@@ -907,6 +913,7 @@ impl BufferText {
             .range_has_any_property_named(range.start_usize(), range.end_usize(), names)
     }
 
+    #[cfg(test)]
     pub fn text_props_range_has_any_interval(&self, start: usize, end: usize) -> bool {
         self.text_props_range_has_any_interval_in_emacs_byte_range(EmacsByteRange::from_usize(
             start, end,
@@ -963,6 +970,7 @@ impl BufferText {
             );
     }
 
+    #[cfg(test)]
     pub fn text_props_next_change(&self, pos: usize) -> Option<usize> {
         self.text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(pos))
             .map(EmacsBytePos::get)
@@ -984,6 +992,7 @@ impl BufferText {
         next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)))
     }
 
+    #[cfg(test)]
     pub fn text_props_previous_change(&self, pos: usize) -> Option<usize> {
         self.text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(pos))
             .map(EmacsBytePos::get)
@@ -1005,6 +1014,7 @@ impl BufferText {
         prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)))
     }
 
+    #[cfg(test)]
     pub fn text_props_next_interval_boundary(&self, pos: usize) -> Option<usize> {
         self.text_props_next_interval_boundary_after_emacs_byte_pos(EmacsBytePos::new(pos))
             .map(EmacsBytePos::get)
@@ -1047,6 +1057,7 @@ impl BufferText {
         Some(self.char_pos_to_emacs_byte_pos(CharPos0::new(pos)).get())
     }
 
+    #[cfg(test)]
     pub fn text_props_previous_interval_boundary(&self, pos: usize) -> Option<usize> {
         self.text_props_previous_interval_boundary_before_emacs_byte_pos(EmacsBytePos::new(pos))
             .map(EmacsBytePos::get)
@@ -1115,6 +1126,7 @@ impl BufferText {
         self.storage.borrow().text_props.object_interval_runs(len)
     }
 
+    #[cfg(test)]
     pub(crate) fn text_props_try_for_each_interval_in_range<E>(
         &self,
         start: usize,
