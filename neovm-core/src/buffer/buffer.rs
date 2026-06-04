@@ -2137,8 +2137,13 @@ impl Buffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn replace_text_from_dump_for_test(&mut self, text: Vec<u8>, multibyte: bool) {
-        self.text = BufferText::from_dump(text, multibyte);
+    pub(crate) fn replace_text_from_dump_for_test(
+        &mut self,
+        text: Vec<u8>,
+        multibyte: bool,
+        kind: ImplementedBufferTextBackendKind,
+    ) {
+        self.text = BufferText::from_dump_with_backend_kind(text, multibyte, kind);
     }
 
     pub(crate) fn dump_text_backend_kind(&self) -> ImplementedBufferTextBackendKind {

@@ -223,45 +223,56 @@ fn indirect_buffers_keep_undo_state_in_sync() {
 #[test]
 fn from_dump_restores_indirect_buffer_shared_text_state() {
     crate::test_utils::init_test_tracing();
-    let mut mgr = BufferManager::new();
-    let base_id = mgr.current_buffer_id().expect("scratch buffer");
-    let _ = mgr.insert_into_buffer(base_id, "abcdef");
-    let indirect_id = mgr
-        .create_indirect_buffer(base_id, "*indirect-restored*", false)
-        .expect("indirect buffer");
-    let _ =
-        mgr.put_buffer_text_property(base_id, 1, 4, Value::symbol("face"), Value::symbol("bold"));
-    let _ = mgr.insert_into_buffer(base_id, "z");
+    for kind in implemented_text_backends() {
+        let implemented_kind = require_implemented_kind(kind);
+        let mut mgr = manager_with_text_backend(kind);
+        let base_id = mgr.current_buffer_id().expect("scratch buffer");
+        let _ = mgr.insert_into_buffer(base_id, "abcdef");
+        let indirect_id = mgr
+            .create_indirect_buffer(base_id, "*indirect-restored*", false)
+            .expect("indirect buffer");
+        let _ = mgr.put_buffer_text_property(
+            base_id,
+            1,
+            4,
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        );
+        let _ = mgr.insert_into_buffer(base_id, "z");
 
-    let mut dumped = mgr.dump_buffers().clone();
-    let independent_indirect = dumped.get(&indirect_id).expect("indirect buffer").clone();
-    let indirect = dumped.get_mut(&indirect_id).expect("indirect buffer");
-    indirect.replace_text_from_dump_for_test(
-        independent_indirect.dump_text_bytes(),
-        independent_indirect.get_multibyte(),
-    );
-    indirect.replace_text_props_for_test(independent_indirect.text_props_snapshot());
-    indirect.undo_state =
-        SharedUndoState::from_parts(independent_indirect.get_undo_list(), false, false);
+        let mut dumped = mgr.dump_buffers().clone();
+        let independent_indirect = dumped.get(&indirect_id).expect("indirect buffer").clone();
+        let indirect = dumped.get_mut(&indirect_id).expect("indirect buffer");
+        indirect.replace_text_from_dump_for_test(
+            independent_indirect.dump_text_bytes(),
+            independent_indirect.get_multibyte(),
+            independent_indirect.dump_text_backend_kind(),
+        );
+        indirect.replace_text_props_for_test(independent_indirect.text_props_snapshot());
+        indirect.undo_state =
+            SharedUndoState::from_parts(independent_indirect.get_undo_list(), false, false);
 
-    let restored = BufferManager::from_dump(
-        dumped,
-        mgr.dump_current(),
-        mgr.dump_next_id(),
-        mgr.dump_next_marker_id(),
-        None,
-        None,
-        require_implemented_kind(BufferTextBackendKind::GapBuffer),
-    );
+        let restored = BufferManager::from_dump(
+            dumped,
+            mgr.dump_current(),
+            mgr.dump_next_id(),
+            mgr.dump_next_marker_id(),
+            None,
+            None,
+            implemented_kind,
+        );
 
-    let base = restored.get(base_id).expect("base buffer");
-    let indirect = restored.get(indirect_id).expect("indirect buffer");
-    assert!(base.shares_text_storage_with(indirect));
-    assert!(base.undo_state.shares_with(&indirect.undo_state));
-    assert_eq!(
-        indirect.text_props_get_property(1, Value::symbol("face")),
-        Some(Value::symbol("bold"))
-    );
+        let base = restored.get(base_id).expect("base buffer");
+        let indirect = restored.get(indirect_id).expect("indirect buffer");
+        assert_eq!(base.text_backend_kind(), kind);
+        assert_eq!(indirect.text_backend_kind(), kind);
+        assert!(base.shares_text_storage_with(indirect));
+        assert!(base.undo_state.shares_with(&indirect.undo_state));
+        assert_eq!(
+            indirect.text_props_get_property(1, Value::symbol("face")),
+            Some(Value::symbol("bold"))
+        );
+    }
 }
 
 #[test]
