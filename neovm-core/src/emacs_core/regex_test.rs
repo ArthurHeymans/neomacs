@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{Buffer, BufferId};
+use crate::buffer::{Buffer, BufferId, BufferTextBackendKind};
 use crate::emacs_core::value::Value;
 use crate::heap_types::LispString;
 
@@ -1480,12 +1480,289 @@ fn string_match_emacs_alternation() {
 // -----------------------------------------------------------------------
 
 fn make_test_buffer(text: &str) -> Buffer {
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    make_test_buffer_with_backend(text, BufferTextBackendKind::GapBuffer)
+}
+
+fn make_test_buffer_with_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
+    let implemented_kind = kind.implemented().expect("test backend is implemented");
+    let mut buf =
+        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
     buf.insert(text);
     // Reset point to beginning
     buf.goto_byte(0);
     // zv was updated by insert
     buf
+}
+
+fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
+    BufferTextBackendKind::implemented_variants()
+}
+
+fn make_fragmented_search_buffer(kind: BufferTextBackendKind) -> Buffer {
+    let mut buf = make_test_buffer_with_backend("α foo\nBeta 123\nγ foo42\nomega", kind);
+
+    let first_fragment = "α ".len();
+    buf.goto_byte(first_fragment);
+    buf.insert("tmp");
+    buf.delete_region(first_fragment, first_fragment + "tmp".len());
+
+    let second_fragment = "α foo\nBeta ".len();
+    buf.goto_byte(second_fragment);
+    buf.insert("xx");
+    buf.delete_region(second_fragment, second_fragment + "xx".len());
+
+    buf.goto_byte(0);
+    assert_eq!(buf.buffer_string(), "α foo\nBeta 123\nγ foo42\nomega");
+    assert_eq!(buf.text_backend_kind(), kind);
+    buf
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MatchDataSnapshot {
+    groups: Vec<Option<(usize, usize)>>,
+    searched_buffer: Option<BufferId>,
+    searched_string_is_some: bool,
+    buffer_positions_are_bytes: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BufferSearchSnapshot<T> {
+    result: Result<T, String>,
+    pt_byte: usize,
+    pt: usize,
+    full_bytes: Vec<u8>,
+    multibyte: bool,
+    match_data: Option<MatchDataSnapshot>,
+}
+
+fn match_data_snapshot(match_data: &Option<MatchData>) -> Option<MatchDataSnapshot> {
+    match_data.as_ref().map(|data| MatchDataSnapshot {
+        groups: data.groups.clone(),
+        searched_buffer: data.searched_buffer,
+        searched_string_is_some: data.searched_string.is_some(),
+        buffer_positions_are_bytes: data.buffer_positions_are_bytes,
+    })
+}
+
+fn buffer_search_snapshot<T>(
+    result: Result<T, String>,
+    buf: &Buffer,
+    match_data: &Option<MatchData>,
+) -> BufferSearchSnapshot<T> {
+    let mut full_bytes = Vec::new();
+    buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut full_bytes);
+    BufferSearchSnapshot {
+        result,
+        pt_byte: buf.pt_byte,
+        pt: buf.pt,
+        full_bytes,
+        multibyte: buf.get_multibyte(),
+        match_data: match_data_snapshot(match_data),
+    }
+}
+
+fn literal_search_backend_trace(
+    kind: BufferTextBackendKind,
+) -> Vec<BufferSearchSnapshot<Option<usize>>> {
+    let mut buf = make_fragmented_search_buffer(kind);
+    let mut snapshots = Vec::new();
+
+    let mut md = None;
+    let result = search_forward(&mut buf, "foo", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte(buf.total_bytes());
+    let result = search_backward(&mut buf, "foo", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte(0);
+    let result = search_forward(&mut buf, "beta", None, false, true, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    let narrow_start = "α foo\n".len();
+    let narrow_end = "α foo\nBeta 123".len();
+    buf.narrow_to_byte_region(narrow_start, narrow_end);
+    buf.goto_byte(narrow_start);
+    let result = search_forward(&mut buf, "foo", None, true, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte(narrow_start);
+    let result = search_forward(&mut buf, "Beta", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    snapshots
+}
+
+fn regex_search_backend_trace(
+    kind: BufferTextBackendKind,
+) -> Vec<BufferSearchSnapshot<Option<usize>>> {
+    let mut buf = make_fragmented_search_buffer(kind);
+    let mut snapshots = Vec::new();
+
+    let mut md = None;
+    let result = re_search_forward(
+        &mut buf,
+        "\\([^ \n]+\\) \\([0-9]+\\)",
+        None,
+        false,
+        false,
+        &mut md,
+    );
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte(buf.total_bytes());
+    let result = re_search_backward(
+        &mut buf,
+        "\\(foo\\)\\([0-9]+\\)",
+        None,
+        false,
+        false,
+        &mut md,
+    );
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    let narrow_start = "α foo\n".len();
+    let narrow_end = "α foo\nBeta 123".len();
+    buf.narrow_to_byte_region(narrow_start, narrow_end);
+    buf.goto_byte(narrow_start);
+    let result = re_search_forward(
+        &mut buf,
+        "^\\([^ ]+\\) \\([0-9]+\\)$",
+        None,
+        false,
+        false,
+        &mut md,
+    );
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    snapshots
+}
+
+fn looking_at_backend_trace(kind: BufferTextBackendKind) -> Vec<BufferSearchSnapshot<bool>> {
+    let mut buf = make_fragmented_search_buffer(kind);
+    let mut snapshots = Vec::new();
+
+    let mut md = None;
+    let gamma_line = "α foo\nBeta 123\n".len();
+    buf.goto_byte(gamma_line);
+    let result = looking_at(&buf, "\\(.\\) foo\\([0-9]+\\)", false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte("α ".len());
+    let result = looking_at(&buf, "foo", false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    snapshots
+}
+
+fn replace_match_backend_trace(kind: BufferTextBackendKind) -> BufferSearchSnapshot<()> {
+    let mut buf = make_fragmented_search_buffer(kind);
+    let mut md = None;
+    let result = re_search_forward(
+        &mut buf,
+        "\\(foo\\)\\([0-9]+\\)",
+        None,
+        false,
+        false,
+        &mut md,
+    );
+    assert!(
+        result.is_ok(),
+        "setup search failed for {kind:?}: {result:?}"
+    );
+
+    let result = replace_match_buffer(&mut buf, "\\1-\\2", false, false, 0, &md);
+    buffer_search_snapshot(result.map(|_| ()), &buf, &md)
+}
+
+fn make_unibyte_search_buffer(kind: BufferTextBackendKind) -> Buffer {
+    let implemented_kind = kind.implemented().expect("test backend is implemented");
+    let mut buf =
+        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("raw"), implemented_kind);
+    buf.set_multibyte_value(false);
+    buf.insert_lisp_string(&LispString::from_unibyte(vec![0xFF, b'a', b'b', 0x80]));
+    buf.goto_byte(0);
+    assert_eq!(buf.text_backend_kind(), kind);
+    buf
+}
+
+fn unibyte_search_backend_trace(
+    kind: BufferTextBackendKind,
+) -> Vec<BufferSearchSnapshot<Option<usize>>> {
+    let mut buf = make_unibyte_search_buffer(kind);
+    let mut snapshots = Vec::new();
+
+    let mut md = None;
+    let result = re_search_forward(&mut buf, ".", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    let result = search_forward(&mut buf, "a", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    md = None;
+    buf.goto_byte(buf.total_bytes());
+    let result = search_backward(&mut buf, "b", None, false, false, &mut md);
+    snapshots.push(buffer_search_snapshot(result, &buf, &md));
+
+    snapshots
+}
+
+#[test]
+fn implemented_text_backends_match_literal_search_semantics() {
+    crate::test_utils::init_test_tracing();
+    let baseline = literal_search_backend_trace(BufferTextBackendKind::GapBuffer);
+
+    for kind in implemented_text_backends() {
+        assert_eq!(literal_search_backend_trace(kind), baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_regex_search_semantics() {
+    crate::test_utils::init_test_tracing();
+    let baseline = regex_search_backend_trace(BufferTextBackendKind::GapBuffer);
+
+    for kind in implemented_text_backends() {
+        assert_eq!(regex_search_backend_trace(kind), baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_looking_at_semantics() {
+    crate::test_utils::init_test_tracing();
+    let baseline = looking_at_backend_trace(BufferTextBackendKind::GapBuffer);
+
+    for kind in implemented_text_backends() {
+        assert_eq!(looking_at_backend_trace(kind), baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_replace_match_after_regex_search() {
+    crate::test_utils::init_test_tracing();
+    let baseline = replace_match_backend_trace(BufferTextBackendKind::GapBuffer);
+
+    for kind in implemented_text_backends() {
+        assert_eq!(replace_match_backend_trace(kind), baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_unibyte_search_semantics() {
+    crate::test_utils::init_test_tracing();
+    let baseline = unibyte_search_backend_trace(BufferTextBackendKind::GapBuffer);
+
+    for kind in implemented_text_backends() {
+        assert_eq!(unibyte_search_backend_trace(kind), baseline, "{kind:?}");
+    }
 }
 
 #[test]
