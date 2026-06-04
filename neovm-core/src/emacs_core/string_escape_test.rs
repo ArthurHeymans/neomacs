@@ -113,6 +113,7 @@ fn unibyte_storage_string_round_trips_emacs_mule_bytes() {
     crate::test_utils::init_test_tracing();
     let encoded =
         bytes_to_unibyte_storage_string(&[0x06, b'"', b'\\', b'\n', 0x7F, 0x80, 0xA9, 0xFF]);
+    assert!(storage_string_contains_unibyte_bytes(&encoded));
     assert_eq!(
         format_lisp_string_bytes_default(&encoded),
         vec![
@@ -126,6 +127,18 @@ fn unibyte_storage_string_round_trips_emacs_mule_bytes() {
     );
     assert_eq!(storage_char_len(&encoded), 8);
     assert_eq!(storage_byte_len(&encoded), 8);
+}
+
+#[test]
+fn multibyte_storage_sentinels_do_not_look_unibyte() {
+    crate::test_utils::init_test_tracing();
+    let raw_byte = encode_nonunicode_char_for_storage(0x3FFF80).expect("raw byte sentinel");
+    let extended = encode_nonunicode_char_for_storage(0x110000).expect("extended sentinel");
+
+    assert!(!storage_string_contains_unibyte_bytes("ascii"));
+    assert!(!storage_string_contains_unibyte_bytes("é"));
+    assert!(!storage_string_contains_unibyte_bytes(&raw_byte));
+    assert!(!storage_string_contains_unibyte_bytes(&extended));
 }
 
 #[test]

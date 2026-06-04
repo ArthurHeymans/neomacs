@@ -310,6 +310,17 @@ fn storage_has_special_units(s: &str) -> bool {
     })
 }
 
+pub(crate) fn storage_string_contains_unibyte_bytes(s: &str) -> bool {
+    if s.is_ascii() {
+        return false;
+    }
+    if !s.as_bytes().contains(&0xEE) {
+        return false;
+    }
+    s.chars()
+        .any(|ch| (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&(ch as u32)))
+}
+
 /// Encode raw byte values as a unibyte storage string.
 ///
 /// This keeps byte-oriented Elisp semantics for operations like `aref`,

@@ -105,12 +105,8 @@ impl GapBuffer {
 
     /// Create a gap buffer pre-loaded with the contents of `s`.
     pub fn from_str(s: &str) -> Self {
-        let multibyte = !s.chars().any(|ch| {
-            let code = ch as u32;
-            (0xE300..=0xE3FF).contains(&code)
-        });
-        let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(s, multibyte);
-        Self::from_emacs_bytes(&bytes, multibyte)
+        let decoded = super::text::storage_string_to_emacs_buffer_bytes(s);
+        Self::from_emacs_bytes(decoded.bytes(), decoded.multibyte())
     }
 
     // -----------------------------------------------------------------------

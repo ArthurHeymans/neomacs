@@ -90,13 +90,8 @@ impl RopeTextBackend {
     }
 
     pub(in crate::buffer) fn from_str(text: &str) -> Self {
-        let multibyte = !text.chars().any(|ch| {
-            let code = ch as u32;
-            (0xE300..=0xE3FF).contains(&code)
-        });
-        let bytes =
-            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
-        Self::from_emacs_bytes(&bytes, multibyte)
+        let decoded = crate::buffer::text::storage_string_to_emacs_buffer_bytes(text);
+        Self::from_emacs_bytes(decoded.bytes(), decoded.multibyte())
     }
 
     pub(in crate::buffer) fn from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Self {
