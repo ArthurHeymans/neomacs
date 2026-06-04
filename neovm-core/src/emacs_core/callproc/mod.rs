@@ -670,9 +670,9 @@ fn builtin_call_process_region_impl(
                 let buf = buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let len = buf.text.emacs_byte_len();
+                let len = buf.total_bytes();
                 (
-                    encode_call_process_region_buffer_text(buf.text.full_text_string()),
+                    encode_call_process_region_buffer_text(buf.full_text_string()),
                     (0usize, len),
                 )
             };

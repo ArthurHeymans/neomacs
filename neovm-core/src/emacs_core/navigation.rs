@@ -172,7 +172,7 @@ fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> EmacsBytePos {
 
 /// Convert a 0-based byte position to a 1-based Emacs char position.
 fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
-    byte_pos.to_lisp(&buf.text).as_i64()
+    buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
 fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
@@ -382,12 +382,7 @@ fn lookup_buffer_char_property(
     byte_pos: usize,
     prop: Value,
 ) -> Value {
-    if byte_pos
-        >= buf
-            .text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(buf.text.char_count()))
-            .get()
-    {
+    if byte_pos >= buf.total_bytes() {
         return Value::NIL;
     }
     if let Some((value, _overlay)) =
@@ -401,7 +396,6 @@ fn lookup_buffer_char_property(
 fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
     let accessible = buf.accessible_emacs_byte_region();
     let text_next = buf
-        .text
         .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
         .map(EmacsBytePos::get)
         .filter(|next| *next <= accessible.end_usize());
@@ -822,8 +816,7 @@ pub(crate) fn builtin_beginning_of_line(
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
-        buf.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(zero_based))
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
             .get()
     };
     let old_byte = {
@@ -859,8 +852,7 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
-        buf.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(zero_based))
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
             .get()
     };
     let adjusted = adjust_for_intangible(eval, target_byte, 1);
@@ -903,8 +895,7 @@ pub(crate) fn builtin_forward_char(
             cur_char,
             begv_char,
             zv_char,
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(clamped_char))
                 .get(),
         )
     };

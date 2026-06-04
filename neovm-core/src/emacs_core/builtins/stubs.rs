@@ -906,7 +906,7 @@ pub(crate) fn builtin_neomacs_buffer_text_backend(
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(buffer_text_backend_kind_value(buffer.text.backend_kind()))
+    Ok(buffer_text_backend_kind_value(buffer.text_backend_kind()))
 }
 
 pub(crate) fn builtin_neomacs_default_buffer_text_backend(
@@ -939,7 +939,7 @@ pub(crate) fn builtin_neomacs_set_buffer_text_backend(
         .buffers
         .current_buffer_mut()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    buffer.text.convert_backend_kind(kind);
+    buffer.convert_text_backend_kind(kind);
     Ok(buffer_text_backend_kind_value(kind.public_kind()))
 }
 
@@ -1758,7 +1758,7 @@ pub(crate) fn builtin_gap_position(
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(Value::fixnum(buffer.text.gap_position_lisp()))
+    Ok(Value::fixnum(buffer.gap_position_lisp()))
 }
 
 pub(crate) fn builtin_gap_size(
@@ -1770,7 +1770,6 @@ pub(crate) fn builtin_gap_size(
         ctx.buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-            .text
             .gap_size_lisp() as i64,
     ))
 }

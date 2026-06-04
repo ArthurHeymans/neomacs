@@ -2539,7 +2539,7 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
         return Ok(Value::T);
     }
 
-    let char_count = buffer.text.char_count() as i64;
+    let char_count = buffer.total_chars() as i64;
     if !(1..=char_count + 1).contains(&start) || !(1..=char_count + 1).contains(&end) || start > end
     {
         return Err(signal("args-out-of-range", vec![args[0], args[1]]));

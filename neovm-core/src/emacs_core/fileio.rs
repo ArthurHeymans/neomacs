@@ -4666,7 +4666,7 @@ fn decide_auto_coding_for_insert_file_contents(
     let old_len = eval
         .buffers
         .get(work_buffer)
-        .map(|buf| buf.text.emacs_byte_len())
+        .map(|buf| buf.total_bytes())
         .unwrap_or(0);
     eval.buffers
         .delete_buffer_region(work_buffer, 0, old_len)
@@ -4862,7 +4862,7 @@ pub(crate) fn builtin_insert_file_contents(
     let empty_undo_list_p = eval
         .buffers
         .current_buffer()
-        .is_some_and(|buf| visit && buf.get_undo_list().is_nil() && buf.text.is_empty());
+        .is_some_and(|buf| visit && buf.get_undo_list().is_nil() && buf.is_text_empty());
     if let Some((beg, end, _old_len)) = pre_state {
         super::editfns::signal_before_change(eval, beg, end)?;
     }
@@ -4889,7 +4889,7 @@ pub(crate) fn builtin_insert_file_contents(
                 )],
             ));
         }
-        if visit && !replace_requested && !buf.text.is_empty() {
+        if visit && !replace_requested && !buf.is_text_empty() {
             return Err(signal(
                 "error",
                 vec![Value::string(

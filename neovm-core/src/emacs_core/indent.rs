@@ -150,12 +150,12 @@ fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
     let pt = accessible.clamp_usize(point);
 
     let mut bol = pt;
-    while bol > begv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
+    while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
         bol -= 1;
     }
 
     let mut eol = pt;
-    while eol < zv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(eol)) != Some(b'\n') {
+    while eol < zv && buf.emacs_byte_at_pos(EmacsBytePos::new(eol)) != Some(b'\n') {
         eol += 1;
     }
 

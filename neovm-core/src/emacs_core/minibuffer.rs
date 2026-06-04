@@ -331,17 +331,17 @@ pub(crate) fn install_minibuffer_buffer_text(
     let prompt_end = buf.total_bytes();
     if prompt_end > 0 {
         let prompt_range = EmacsByteRange::from_usize(0, prompt_end);
-        buf.text.text_props_put_property_in_emacs_byte_range(
+        buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
             Value::symbol("field"),
             Value::T,
         );
-        buf.text.text_props_put_property_in_emacs_byte_range(
+        buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
             Value::symbol("front-sticky"),
             Value::T,
         );
-        buf.text.text_props_put_property_in_emacs_byte_range(
+        buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
             Value::symbol("rear-nonsticky"),
             Value::T,
@@ -378,8 +378,7 @@ fn apply_minibuffer_prompt_properties(
         }
         let value = cursor.cons_car();
         cursor = cursor.cons_cdr();
-        buf.text
-            .text_props_put_property_in_emacs_byte_range(prompt_range, key, value);
+        buf.text_props_put_property_in_emacs_byte_range(prompt_range, key, value);
     }
 }
 

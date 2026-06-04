@@ -3020,8 +3020,8 @@ pub(crate) fn builtin_move_to_window_line(
 
     // Walk from window-start forward, counting newlines, to find the
     // character position at the start of `target_line`.
-    let text = buf.text.full_text_string();
-    let char_count = buf.text.char_count();
+    let text = buf.full_text_string();
+    let char_count = buf.total_chars();
     let start_char = ws.saturating_sub(1); // window_start is 1-based
     let mut lines_seen: usize = 0;
     let mut target_char_pos = start_char; // fallback: stay at window-start
@@ -3536,7 +3536,7 @@ fn resolve_live_window_display_context(
         };
     let body_height = (body_bottom - body_top).max(1);
     let body_lines = ((body_height + char_height - 1) / char_height).max(1);
-    let chars = buffer.text.full_text_string().chars().collect::<Vec<_>>();
+    let chars = buffer.full_text_string().chars().collect::<Vec<_>>();
     let window_point = if frame.selected_window == wid {
         buffer.point_char().saturating_add(1)
     } else {

@@ -135,8 +135,8 @@ fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flo
 
 pub(crate) fn byte_span_char_len(buf: &crate::buffer::Buffer, beg: usize, end: usize) -> usize {
     let range = EmacsByteRange::from_usize(beg.min(end), beg.max(end));
-    let start = buf.text.emacs_byte_pos_to_char_pos(range.start());
-    let end = buf.text.emacs_byte_pos_to_char_pos(range.end());
+    let start = buf.emacs_byte_pos_to_char_pos_clamped(range.start());
+    let end = buf.emacs_byte_pos_to_char_pos_clamped(range.end());
     end.get().saturating_sub(start.get())
 }
 
@@ -246,8 +246,12 @@ pub(crate) fn signal_before_change(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(());
         };
-        let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
-        let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
+        let beg_char = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
+            .as_i64();
+        let end_char = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .as_i64();
         (beg_char, end_char)
     };
 
@@ -314,14 +318,14 @@ pub(crate) fn signal_after_change(
         }
 
         if let Some(buf) = ctx.buffers.get(current_id) {
-            let beg_char = buf.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(beg));
-            let end_char = buf.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(end));
+            let beg_char = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(beg));
+            let end_char = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(end));
             let beg_char = beg_char.get() as i64;
             let end_char = end_char.get() as i64;
             let charpos = beg_char + 1; // 1-based, like GNU's PT/charpos.
             let lenins = end_char - beg_char;
             let lendel = old_len as i64;
-            let z = buf.text.char_count() as i64 + 1; // 1-based Z.
+            let z = buf.total_chars() as i64 + 1; // 1-based Z.
             let beg_field = charpos - 1; // charpos - BEG
             let end_field = z - (charpos - lendel + lenins);
             let change = lenins - lendel;
@@ -343,8 +347,12 @@ pub(crate) fn signal_after_change(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(());
         };
-        let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
-        let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
+        let beg_char = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
+            .as_i64();
+        let end_char = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .as_i64();
         (beg_char, end_char, old_len as i64)
     };
 
@@ -504,7 +512,7 @@ pub(crate) fn execute_combined_after_change(
                 return Ok(());
             }
         };
-        let z = buf.text.char_count() as i64 + 1;
+        let z = buf.total_chars() as i64 + 1;
         let init = z - 1;
         let mut beg = init;
         let mut end = init;
@@ -535,11 +543,9 @@ pub(crate) fn execute_combined_after_change(
         let beg_char_zero = (begpos - 1).max(0) as usize;
         let end_char_zero = (endpos - 1).max(0) as usize;
         (
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(beg_char_zero))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(beg_char_zero))
                 .get(),
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(end_char_zero))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char_zero))
                 .get(),
         )
     };
@@ -1022,7 +1028,7 @@ pub(crate) fn builtin_erase_buffer(
     let buf_len = ctx
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.emacs_byte_len())
+        .map(|buf| buf.total_bytes())
         .unwrap_or(0);
     let old_len = current_buffer_byte_span_char_len(ctx, 0, buf_len);
     if buf_len > 0 {
@@ -1047,7 +1053,7 @@ pub(crate) fn erase_buffer_impl(
     };
 
     let should_signal_read_only = buffers.get(current_id).is_some_and(|buf| {
-        !buf.text.is_empty() && buffer_read_only_active_in_state(obarray, dynamic, buf)
+        !buf.is_text_empty() && buffer_read_only_active_in_state(obarray, dynamic, buf)
     });
     if should_signal_read_only {
         return Err(signal(
@@ -1062,7 +1068,7 @@ pub(crate) fn erase_buffer_impl(
             return Ok(Value::NIL);
         };
         buf.widen();
-        buf.text.emacs_byte_len()
+        buf.total_bytes()
     };
     if len > 0 {
         let _ = buffers.delete_buffer_region(current_id, 0, len);

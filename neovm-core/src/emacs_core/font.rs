@@ -1634,12 +1634,10 @@ fn resolved_face_at_buffer_byte(
 ) -> RuntimeFace {
     let mut layers = Vec::new();
 
-    let face_prop = buffer
-        .text
-        .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("face"));
-    let font_lock_face_prop = buffer
-        .text
-        .text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
+    let face_prop =
+        buffer.text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("face"));
+    let font_lock_face_prop =
+        buffer.text_props_get_property_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
     if let Some(value) = face_prop.or(font_lock_face_prop) {
         layers.extend(resolve_face_layers_from_value(&value));
     }
@@ -2077,7 +2075,7 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
 
     let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(pos);
     let face = resolved_face_at_buffer_byte(eval, buffer, bytepos);
-    let character = buffer.text.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
+    let character = buffer.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
         signal(
             "args-out-of-range",
             vec![args[0], Value::fixnum(beg), Value::fixnum(end)],

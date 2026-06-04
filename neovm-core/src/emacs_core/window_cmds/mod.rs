@@ -307,7 +307,7 @@ fn clamped_window_position_in_state(
     };
     let buffer_end = buffers
         .get(*buffer_id)
-        .map(|buf| buf.text.char_count().saturating_add(1))
+        .map(|buf| buf.total_chars().saturating_add(1))
         .unwrap_or(requested);
     Some(requested.min(buffer_end.max(1)))
 }
@@ -2029,8 +2029,8 @@ fn estimated_window_end_from_body_lines(
     let Some(buf) = buffers.get(buffer_id) else {
         return window_start;
     };
-    let buffer_end = buf.text.char_count().saturating_add(1);
-    let text = buf.text.full_text_string();
+    let buffer_end = buf.total_chars().saturating_add(1);
+    let text = buf.full_text_string();
     let start_char = window_start.saturating_sub(1);
     let mut char_pos = start_char;
     let mut lines_seen = 0usize;
@@ -5431,7 +5431,7 @@ fn scroll_by_lines_in_state(
     let Some(buf) = buffers.get(buffer_id) else {
         return Ok(Value::NIL);
     };
-    let text = buf.text.full_text_string();
+    let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let pt = buf
         .lisp_pos_to_emacs_byte_pos(window_point)
@@ -5475,7 +5475,9 @@ fn scroll_by_lines_in_state(
         }
     }
 
-    let point_lisp = EmacsBytePos::new(pos).to_lisp(&buf.text).as_i64() as usize;
+    let point_lisp = buf
+        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos))
+        .as_i64() as usize;
     let _ = buffers.goto_buffer_byte(buffer_id, pos);
     if let Some(window) = frames
         .get_mut(fid)
@@ -5550,7 +5552,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let Some(buf) = buffers.get(buffer_id) else {
             return Ok(Value::NIL);
         };
-        let text = buf.text.full_text_string();
+        let text = buf.full_text_string();
         let accessible = buf.accessible_emacs_byte_region();
         let pt = buf
             .lisp_pos_to_emacs_byte_pos(window_point)
@@ -5576,7 +5578,9 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         }
 
         // Set window-start.
-        let pos_lisp = EmacsBytePos::new(pos).to_lisp(&buf.text).as_i64();
+        let pos_lisp = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos))
+            .as_i64();
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
         {
             if let Some(window) = frames
@@ -8573,7 +8577,7 @@ pub(crate) fn builtin_fit_window_to_buffer(
     };
 
     // Count lines in the buffer.
-    let text = buf.text.full_text_string();
+    let text = buf.full_text_string();
     let buf_lines = text.chars().filter(|&c| c == '\n').count() + 1;
 
     // Parse optional height limits.

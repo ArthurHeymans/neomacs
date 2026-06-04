@@ -1961,6 +1961,30 @@ impl Buffer {
         self.text.emacs_byte_len()
     }
 
+    pub fn is_text_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    pub fn full_text_string(&self) -> String {
+        self.text.full_text_string()
+    }
+
+    pub fn text_backend_kind(&self) -> BufferTextBackendKind {
+        self.text.backend_kind()
+    }
+
+    pub(crate) fn convert_text_backend_kind(&mut self, kind: ImplementedBufferTextBackendKind) {
+        self.text.convert_backend_kind(kind);
+    }
+
+    pub fn gap_position_lisp(&self) -> i64 {
+        self.text.gap_position_lisp()
+    }
+
+    pub fn gap_size_lisp(&self) -> usize {
+        self.text.gap_size_lisp()
+    }
+
     /// Full buffer range in Emacs bytes, ignoring narrowing.
     pub fn full_emacs_byte_range(&self) -> EmacsByteRange {
         EmacsByteRange::from_usize(0, self.total_bytes())
@@ -1999,6 +2023,10 @@ impl Buffer {
     pub fn emacs_byte_pos_to_char_pos_clamped(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         self.text
             .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos.get().min(self.total_bytes())))
+    }
+
+    pub fn emacs_byte_pos_to_lisp_char_pos(&self, byte_pos: EmacsBytePos) -> LispCharPos1 {
+        self.emacs_byte_pos_to_char_pos_clamped(byte_pos).to_lisp()
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
@@ -2108,6 +2136,11 @@ impl Buffer {
             .emacs_byte_at_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
     }
 
+    pub fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.text
+            .char_at_emacs_byte_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
+    }
+
     pub fn text_props_get_property_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -2119,6 +2152,55 @@ impl Buffer {
         )
     }
 
+    pub fn text_props_get_properties_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> HashMap<Value, Value> {
+        self.text
+            .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
+    pub fn text_props_get_properties_ordered_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Vec<(Value, Value)> {
+        self.text
+            .text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
+    pub fn text_props_put_property_in_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        name: Value,
+        value: Value,
+    ) -> bool {
+        self.text.text_props_put_property_in_emacs_byte_range(
+            self.clamped_emacs_byte_range(range),
+            name,
+            value,
+        )
+    }
+
+    pub fn text_props_remove_property_in_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        name: Value,
+    ) -> bool {
+        self.text.text_props_remove_property_in_emacs_byte_range(
+            self.clamped_emacs_byte_range(range),
+            name,
+        )
+    }
+
+    pub fn text_props_remove_all_in_emacs_byte_range(&mut self, range: EmacsByteRange) {
+        self.text
+            .text_props_remove_all_in_emacs_byte_range(self.clamped_emacs_byte_range(range));
+    }
+
     pub fn text_props_next_change_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -2127,6 +2209,55 @@ impl Buffer {
             .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(
                 pos.get().min(self.total_bytes()),
             ))
+    }
+
+    pub fn text_props_previous_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
+    pub fn text_props_is_empty(&self) -> bool {
+        self.text.text_props_is_empty()
+    }
+
+    pub fn text_props_slice_emacs_byte_range(&self, range: EmacsByteRange) -> TextPropertyTable {
+        let clamped = self.clamped_emacs_byte_range(range);
+        self.text
+            .text_props_slice(clamped.start_usize(), clamped.end_usize())
+    }
+
+    pub fn emacs_byte_range_contains_char_code(&self, range: EmacsByteRange, code: u32) -> bool {
+        self.text
+            .emacs_byte_range_contains_char_code(self.clamped_emacs_byte_range(range), code)
+    }
+
+    pub fn text_props_range_has_any_property_named_in_emacs_byte_range(
+        &self,
+        range: EmacsByteRange,
+        names: &[Value],
+    ) -> bool {
+        self.text
+            .text_props_range_has_any_property_named_in_emacs_byte_range(
+                self.clamped_emacs_byte_range(range),
+                names,
+            )
+    }
+
+    pub(crate) fn text_props_try_for_each_interval_in_emacs_byte_range<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.text
+            .text_props_try_for_each_interval_in_emacs_byte_range(
+                self.clamped_emacs_byte_range(range),
+                f,
+            )
     }
 
     pub(crate) fn storage_text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
@@ -4213,7 +4344,7 @@ impl BufferManager {
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
-        Some(buf.text.text_props_put_property_in_emacs_byte_range(
+        Some(buf.text_props_put_property_in_emacs_byte_range(
             EmacsByteRange::from_usize(start, end),
             name,
             value,
@@ -4275,7 +4406,7 @@ impl BufferManager {
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
-        Some(buf.text.text_props_remove_property_in_emacs_byte_range(
+        Some(buf.text_props_remove_property_in_emacs_byte_range(
             EmacsByteRange::from_usize(start, end),
             name,
         ))

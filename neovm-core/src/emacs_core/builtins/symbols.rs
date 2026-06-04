@@ -2024,7 +2024,7 @@ pub(crate) fn builtin_vertical_motion(
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
         let mut bol = pt;
-        while bol > begv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
+        while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
             bol -= 1;
         }
         let _ = eval.buffers.goto_buffer_byte(current_id, bol);
@@ -2062,7 +2062,7 @@ pub(crate) fn builtin_vertical_motion(
             && eval
                 .buffers
                 .get(current_id)
-                .and_then(|buf| buf.text.emacs_byte_at_pos(EmacsBytePos::new(pos - 1)))
+                .and_then(|buf| buf.emacs_byte_at_pos(EmacsBytePos::new(pos - 1)))
                 != Some(b'\n')
         {
             pos -= 1;
@@ -3359,17 +3359,13 @@ pub(crate) fn builtin_transpose_regions(
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(start1))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start1))
                 .get(),
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(end1))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end1))
                 .get(),
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(start2))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start2))
                 .get(),
-            buf.text
-                .char_pos_to_emacs_byte_pos(CharPos0::new(end2))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end2))
                 .get(),
         )
     };

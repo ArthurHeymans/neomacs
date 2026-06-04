@@ -23,12 +23,12 @@ fn read_inhibit_changing_match_data(eval: &super::eval::Context) -> bool {
 }
 
 fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
-    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
+    buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(byte_pos))
+        .as_i64()
 }
 
 fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
-    buf.text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
         .get()
 }
 

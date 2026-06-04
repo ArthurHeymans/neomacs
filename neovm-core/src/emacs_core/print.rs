@@ -1484,11 +1484,11 @@ fn format_overlay_handle(
 
     Some(format!(
         "#<overlay from {} to {} in {}>",
-        EmacsBytePos::new(overlay.start)
-            .to_lisp(&buffer.text)
+        buffer
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.start))
             .as_i64(),
-        EmacsBytePos::new(overlay.end)
-            .to_lisp(&buffer.text)
+        buffer
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.end))
             .as_i64(),
         buffer.name_runtime_string_owned()
     ))

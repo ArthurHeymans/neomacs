@@ -117,12 +117,11 @@ fn sync_current_buffer_to_selected_window(eval: &mut super::eval::Context) {
 }
 
 fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
-    byte_pos.to_lisp(&buf.text).as_i64()
+    buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
 fn char_pos_to_buffer_byte(buf: &crate::buffer::Buffer, char_pos: usize) -> usize {
-    buf.text
-        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
         .get()
 }
 
@@ -157,11 +156,9 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     let start_char = if s > 0 { s as usize - 1 } else { 0 };
     let end_char = if e > 0 { e as usize - 1 } else { 0 };
     Ok((
-        buf.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(start_char))
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start_char))
             .get(),
-        buf.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(end_char))
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char))
             .get(),
     ))
 }
@@ -1337,7 +1334,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     let old_len_bytes = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.emacs_byte_len())
+        .map(|buf| buf.total_bytes())
         .unwrap_or(0);
     let old_len = super::editfns::current_buffer_byte_span_char_len(eval, 0, old_len_bytes);
     super::editfns::signal_before_change(eval, 0, old_len_bytes)?;
@@ -1347,7 +1344,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     let new_len = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.text.emacs_byte_len())
+        .map(|buf| buf.total_bytes())
         .unwrap_or(0);
     super::editfns::signal_after_change(eval, 0, new_len, old_len)?;
 
@@ -1929,7 +1926,7 @@ pub(crate) fn builtin_compute_motion(
             Value::NIL,
         ]));
     };
-    let text = buf.text.full_text_string();
+    let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
         .map(|info| buf.slots[info.offset])
@@ -1942,7 +1939,7 @@ pub(crate) fn builtin_compute_motion(
         .unwrap_or(8);
 
     // Convert 1-based char positions to byte offsets.
-    let max_chars = buf.text.char_count();
+    let max_chars = buf.total_chars();
     let from_byte = char_pos_to_buffer_byte(buf, ((from - 1).max(0) as usize).min(max_chars));
     let to_byte = char_pos_to_buffer_byte(buf, ((to - 1).max(0) as usize).min(max_chars));
 
@@ -2810,8 +2807,9 @@ pub(crate) fn buffer_slice_value_range(
     buf.copy_emacs_byte_range_to(byte_range, &mut bytes);
     let string = lisp_string_from_buffer_bytes(bytes, buf.get_multibyte());
     let value = Value::heap_string(string);
-    if !buf.text.text_props_is_empty() {
-        let sliced = buf.text.text_props_slice(start_byte, end_byte);
+    if !buf.text_props_is_empty() {
+        let sliced =
+            buf.text_props_slice_emacs_byte_range(EmacsByteRange::from_usize(start_byte, end_byte));
         if !sliced.is_empty() {
             set_string_text_properties_table_for_value(value, sliced);
         }
@@ -3341,7 +3339,7 @@ pub(crate) fn builtin_subst_char_in_region(
         let byte_end = char_pos_to_buffer_byte(buf, end_char);
         let needs_change = from_code != to_code
             && byte_start < byte_end
-            && buf.text.emacs_byte_range_contains_char_code(
+            && buf.emacs_byte_range_contains_char_code(
                 EmacsByteRange::from_usize(byte_start, byte_end),
                 from_code as u32,
             );
@@ -3491,12 +3489,12 @@ pub(crate) fn builtin_buffer_size(eval: &mut super::eval::Context, args: Vec<Val
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        return Ok(Value::fixnum(buf.text.char_count() as i64));
+        return Ok(Value::fixnum(buf.total_chars() as i64));
     }
 
     let id = expect_buffer_id(&args[0])?;
     if let Some(buf) = eval.buffers.get(id) {
-        Ok(Value::fixnum(buf.text.char_count() as i64))
+        Ok(Value::fixnum(buf.total_chars() as i64))
     } else {
         Ok(Value::fixnum(0))
     }
@@ -4018,17 +4016,16 @@ pub(crate) fn builtin_byte_to_position(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let byte_len = buf.text.emacs_byte_len();
+    let byte_len = buf.total_bytes();
     let byte_pos0 = (byte_pos - 1) as usize;
     if byte_pos0 > byte_len {
         return Ok(Value::NIL);
     }
 
     let mut boundary = byte_pos0;
-    if buf.text.is_multibyte() && boundary < byte_len {
+    if buf.get_multibyte() && boundary < byte_len {
         while boundary > 0
             && buf
-                .text
                 .emacs_byte_at_pos(EmacsBytePos::new(boundary))
                 .is_some_and(|byte| (byte & 0xC0) == 0x80)
         {
@@ -4054,7 +4051,7 @@ pub(crate) fn builtin_position_bytes(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let max_char_pos = buf.text.char_count() as i64 + 1;
+    let max_char_pos = buf.total_chars() as i64 + 1;
     if pos <= 0 || pos > max_char_pos {
         return Ok(Value::NIL);
     }
@@ -4129,7 +4126,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
     };
 
-    if byte_pos >= buf.text.emacs_byte_len() {
+    if byte_pos >= buf.total_bytes() {
         return Ok(Value::fixnum(0));
     }
 

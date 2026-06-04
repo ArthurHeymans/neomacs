@@ -230,14 +230,12 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
     };
 
     let ref_byte = if byte_pos > 0 { byte_pos - 1 } else { 0 };
-    let current_props = buf
-        .text
-        .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(ref_byte));
+    let current_props =
+        buf.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(ref_byte));
     let mut cursor = byte_pos;
 
     loop {
         match buf
-            .text
             .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(cursor))
             .map(EmacsBytePos::get)
         {
@@ -249,12 +247,12 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                 }
 
                 let check = if prev > 0 { prev - 1 } else { 0 };
-                let new_props = buf
-                    .text
-                    .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(check));
+                let new_props =
+                    buf.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(check));
                 if new_props != current_props {
                     return Ok(Value::fixnum(
-                        EmacsBytePos::new(prev).to_lisp(&buf.text).as_i64(),
+                        buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(prev))
+                            .as_i64(),
                     ));
                 }
 
@@ -348,7 +346,6 @@ fn next_char_property_change_for_buffer(
     }
 
     if let Some(next) = buf
-        .text
         .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
         .map(EmacsBytePos::get)
     {
@@ -846,8 +843,7 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     insert_len: usize,
 ) -> Vec<(Value, Value)> {
     let insert_start_char = buf
-        .text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(insert_start))
+        .emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(insert_start))
         .get();
     let left_props = if insert_start_char > buf.point_min_char() {
         // GNU intervals are indexed by character positions (`PT`), not raw
@@ -855,24 +851,18 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
         // the left neighbor; `insert_start - 1` can land inside an Emacs
         // multibyte/non-Unicode storage sequence.
         let left_byte = buf
-            .text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(insert_start_char.saturating_sub(1)));
-        buf.text
-            .text_props_get_properties_ordered_at_emacs_byte_pos(left_byte)
+            .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(insert_start_char.saturating_sub(1)));
+        buf.text_props_get_properties_ordered_at_emacs_byte_pos(left_byte)
     } else {
         Vec::new()
     };
     let right_pos = insert_start.saturating_add(insert_len);
     let right_char = buf
-        .text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(right_pos))
+        .emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(right_pos))
         .get();
     let right_props = if right_char < buf.point_max_char() {
-        let right_byte = buf
-            .text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(right_char));
-        buf.text
-            .text_props_get_properties_ordered_at_emacs_byte_pos(right_byte)
+        let right_byte = buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(right_char));
+        buf.text_props_get_properties_ordered_at_emacs_byte_pos(right_byte)
     } else {
         Vec::new()
     };
@@ -1121,7 +1111,6 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
     }
     let prop_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(pos);
     if buf
-        .text
         .text_props_get_property_at_emacs_byte_pos(prop_byte, Value::symbol("inhibit-read-only"))
         .is_some_and(|value| value.is_truthy())
     {

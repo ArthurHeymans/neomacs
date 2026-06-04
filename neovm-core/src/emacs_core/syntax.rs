@@ -17,21 +17,21 @@ use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRang
 
 #[inline]
 fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: usize) -> usize {
-    buf.text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
         .get()
 }
 
 #[inline]
 fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
-    buf.text
-        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
         .get()
 }
 
 #[inline]
 fn buffer_byte_to_lisp_pos(buf: &Buffer, byte_pos: usize) -> i64 {
-    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
+    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
+        .to_lisp()
+        .as_i64()
 }
 
 #[inline]
@@ -1960,7 +1960,7 @@ fn effective_syntax_entry_for_char_at_byte(
     honor_properties: bool,
 ) -> SyntaxEntry {
     if honor_properties
-        && let Some(prop) = buf.text.text_props_get_property_at_emacs_byte_pos(
+        && let Some(prop) = buf.text_props_get_property_at_emacs_byte_pos(
             EmacsBytePos::new(byte_pos),
             Value::symbol("syntax-table"),
         )
@@ -2375,7 +2375,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let char_index = pos as usize - 1;
-    let byte_index = buffer_char_to_byte_pos(buf, char_index.min(buf.text.char_count()));
+    let byte_index = buffer_char_to_byte_pos(buf, char_index.min(buf.total_chars()));
     let Some(ch) = buf.char_after(byte_index) else {
         return Ok(Value::NIL);
     };
@@ -3505,7 +3505,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let table = SyntaxTable::for_buffer(buf);
 
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
-    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.text.char_count()));
+    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.total_chars()));
 
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(buf, new_byte))),

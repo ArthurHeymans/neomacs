@@ -57,7 +57,7 @@ pub(crate) fn init_textprop_vars(
 
 #[inline]
 fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: usize) -> EmacsBytePos {
-    buf.text.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
 }
 
 #[inline]
@@ -67,7 +67,7 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
 
 #[inline]
 fn buffer_end_emacs_byte_pos(buf: &Buffer) -> EmacsBytePos {
-    buffer_char_to_emacs_byte_pos(buf, buf.text.char_count())
+    buffer_char_to_emacs_byte_pos(buf, buf.total_chars())
 }
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
@@ -315,7 +315,7 @@ fn lookup_buffer_text_property_at_char_pos(
         obarray,
         buffers,
         |name| {
-            buf.text.text_props_get_property_at_emacs_byte_pos(
+            buf.text_props_get_property_at_emacs_byte_pos(
                 buffer_char_to_emacs_byte_pos(buf, char_pos),
                 name,
             )
@@ -352,7 +352,7 @@ pub(crate) fn lookup_buffer_text_property_at_emacs_byte_pos(
         obarray,
         buffers,
         buf,
-        buf.text.emacs_byte_pos_to_char_pos(byte_pos).get(),
+        buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get(),
         prop,
     )
 }
@@ -386,7 +386,7 @@ fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsByte
 }
 
 fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
-    let max = buf.text.char_count() as i64 + 1;
+    let max = buf.total_chars() as i64 + 1;
     let clipped = pos.clamp(1, max);
     elisp_pos_to_byte(buf, clipped)
 }
@@ -399,7 +399,7 @@ fn elisp_range_to_byte_clipped_full(
     if beg > end {
         std::mem::swap(&mut beg, &mut end);
     }
-    let max = buf.text.char_count() as i64 + 1;
+    let max = buf.total_chars() as i64 + 1;
     let clipped_beg = beg.clamp(1, max);
     let clipped_end = end.clamp(clipped_beg, max);
     EmacsByteRange::new(
@@ -533,7 +533,8 @@ fn validate_buffer_property_emacs_byte_range(
 
 /// Convert a 0-based byte position to a 1-based Elisp char position.
 pub(crate) fn byte_to_elisp_pos(buf: &crate::buffer::buffer::Buffer, byte_pos: usize) -> i64 {
-    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
+    buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(byte_pos))
+        .as_i64()
 }
 
 /// Resolve the optional OBJECT argument to a buffer id.
@@ -800,37 +801,35 @@ pub(crate) fn verify_text_read_only_in_state(
     }
     let read_only_sym = Value::symbol("read-only");
     let inhibit_sym = Value::symbol("inhibit-read-only");
-    buf.text
-        .text_props_try_for_each_interval_in_emacs_byte_range(
-            EmacsByteRange::from_usize(byte_start, byte_end),
-            |_, _, plist| {
-                let read_only = lookup_char_property_from_direct(
-                    obarray,
-                    buffers,
-                    |name| plist_slice_get_value(plist, name),
-                    read_only_sym,
-                    true,
-                );
-                if read_only.is_nil() {
-                    return Ok::<(), Flow>(());
-                }
-                // INTERVAL_EXPRESSLY_WRITABLE_P (intervals.h:217).
-                let express_inhibit =
-                    plist_slice_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
-                if !express_inhibit.is_nil() {
-                    return Ok(());
-                }
-                if inhibit.is_cons() && value_in_list(read_only, inhibit) {
-                    return Ok(());
-                }
-                let args = if read_only.is_string() {
-                    vec![read_only]
-                } else {
-                    vec![]
-                };
-                Err(signal("text-read-only", args))
-            },
-        )?;
+    buf.text_props_try_for_each_interval_in_emacs_byte_range(
+        EmacsByteRange::from_usize(byte_start, byte_end),
+        |_, _, plist| {
+            let read_only = lookup_char_property_from_direct(
+                obarray,
+                buffers,
+                |name| plist_slice_get_value(plist, name),
+                read_only_sym,
+                true,
+            );
+            if read_only.is_nil() {
+                return Ok::<(), Flow>(());
+            }
+            // INTERVAL_EXPRESSLY_WRITABLE_P (intervals.h:217).
+            let express_inhibit = plist_slice_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
+            if !express_inhibit.is_nil() {
+                return Ok(());
+            }
+            if inhibit.is_cons() && value_in_list(read_only, inhibit) {
+                return Ok(());
+            }
+            let args = if read_only.is_string() {
+                vec![read_only]
+            } else {
+                vec![]
+            };
+            Err(signal("text-read-only", args))
+        },
+    )?;
     Ok(())
 }
 
@@ -995,8 +994,12 @@ pub(crate) fn prepare_interval_modification_for_change(
         };
         let start = byte_start.min(byte_end);
         let end = byte_start.max(byte_end);
-        let lisp_start = EmacsBytePos::new(start).to_lisp(&buf.text).as_i64();
-        let lisp_end = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
+        let lisp_start = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start))
+            .as_i64();
+        let lisp_end = buf
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .as_i64();
         let mod_sym = Value::symbol("modification-hooks");
         let mut prev: Option<Value> = None;
         let mut hooks = Vec::new();
@@ -1622,12 +1625,11 @@ pub(crate) fn builtin_remove_text_properties(
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
             let buf = eval.buffers.get(buf_id)?;
-            buf.text
-                .text_props_range_has_any_property_named_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                    &names_for_probe,
-                )
-                .then_some((buf_id, byte_beg, byte_end))
+            buf.text_props_range_has_any_property_named_in_emacs_byte_range(
+                EmacsByteRange::from_usize(byte_beg, byte_end),
+                &names_for_probe,
+            )
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1804,12 +1806,11 @@ pub(crate) fn builtin_remove_list_of_text_properties(
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
             let buf = eval.buffers.get(buf_id)?;
-            buf.text
-                .text_props_range_has_any_property_named_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                    &names_for_probe,
-                )
-                .then_some((buf_id, byte_beg, byte_end))
+            buf.text_props_range_has_any_property_named_in_emacs_byte_range(
+                EmacsByteRange::from_usize(byte_beg, byte_end),
+                &names_for_probe,
+            )
+            .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
         Some((
@@ -1877,14 +1878,13 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
                 break;
             };
             if buf
-                .text
                 .text_props_get_property_at_emacs_byte_pos(cursor, name)
                 .is_some()
             {
                 changed = true;
                 break;
             }
-            match buf.text.text_props_next_change_after_emacs_byte_pos(cursor) {
+            match buf.text_props_next_change_after_emacs_byte_pos(cursor) {
                 Some(next) if next > cursor && next < byte_end_pos => cursor = next,
                 _ => break,
             }
@@ -2368,7 +2368,7 @@ pub(crate) fn builtin_text_property_any_in_state(
     let byte_beg = byte_range.start();
     let byte_end = byte_range.end();
 
-    if buf.text.text_props_is_empty() {
+    if buf.text_props_is_empty() {
         return Ok(if val.is_nil() {
             if byte_beg < byte_end {
                 Value::fixnum(byte_to_elisp_pos(buf, byte_beg.get()))
@@ -2483,7 +2483,7 @@ pub(crate) fn builtin_text_property_not_all_in_state(
     let byte_beg = byte_range.start();
     let byte_end = byte_range.end();
 
-    if buf.text.text_props_is_empty() {
+    if buf.text_props_is_empty() {
         return Ok(if val.is_nil() {
             Value::NIL
         } else if byte_beg < byte_end {
@@ -2503,7 +2503,7 @@ pub(crate) fn builtin_text_property_not_all_in_state(
             return Ok(Value::fixnum(byte_to_elisp_pos(buf, cursor.get())));
         }
 
-        match buf.text.text_props_next_change_after_emacs_byte_pos(cursor) {
+        match buf.text_props_next_change_after_emacs_byte_pos(cursor) {
             Some(next) if next > cursor && next < byte_end => cursor = next,
             _ => break,
         }

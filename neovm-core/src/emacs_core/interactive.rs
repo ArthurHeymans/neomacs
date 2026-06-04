@@ -1491,8 +1491,12 @@ fn interactive_region_args_in_buffers(
     let beg = pt.min(mark);
     let end = pt.max(mark);
     // Region-taking builtins use Emacs-style 1-based character positions.
-    let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
-    let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
+    let beg_char = buf
+        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
+        .as_i64();
+    let end_char = buf
+        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+        .as_i64();
     Ok(vec![Value::fixnum(beg_char), Value::fixnum(end_char)])
 }
 
