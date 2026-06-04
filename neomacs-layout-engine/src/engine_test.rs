@@ -675,6 +675,36 @@ fn bidi_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace 
     )
 }
 
+fn selective_display_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "head\rhidden tail\nshown\n  hidden by indent\nshown2\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-selective-display",
+        text,
+        360,
+        180,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("selective-display", Value::fixnum(1));
+            buffer.goto_byte(2);
+        },
+    )
+}
+
+fn glyphless_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "a\u{0080}b\u{FEFF}c\u{FFFC}d\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-glyphless",
+        text,
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            let c1_byte = text.find('\u{0080}').expect("C1 control");
+            buffer.goto_byte(c1_byte);
+        },
+    )
+}
+
 fn wrapped_retry_backend_layout_trace(kind: BufferTextBackendKind) -> (BackendLayoutTrace, usize) {
     let logical_lines = (0..24)
         .map(|line| format!("line-{line:02} abcdefghijklmno\n"))
@@ -847,6 +877,117 @@ fn edit_redisplay_backend_layout_trace(
     (before, after)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FontificationBackendTrace {
+    before_layout: BackendLayoutTrace,
+    before_props: String,
+    after_layout: BackendLayoutTrace,
+    after_props: String,
+}
+
+fn printed_eval_result(eval: &mut Context, form: &str) -> String {
+    eval.eval_str(form)
+        .unwrap_or_else(|err| panic!("eval {form}: {err}"))
+        .as_runtime_string_owned()
+        .unwrap_or_else(|| panic!("eval {form} did not return a string"))
+}
+
+fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> FontificationBackendTrace {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, kind);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "alpha beta gamma\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_byte(0);
+        assert_eq!(buffer.text_backend_kind(), kind);
+    }
+
+    eval.eval_str(
+        r#"
+        (setq neomacs-test-fontify-face 'font-lock-keyword-face)
+        (setq redisplay-fontify-calls nil)
+        (setq fontification-functions
+              (list (lambda (start)
+                      (setq redisplay-fontify-calls
+                            (cons start redisplay-fontify-calls))
+                      (let ((end (min (point-max) (+ start 80))))
+                        (put-text-property start end 'fontified t)
+                        (put-text-property start end 'font-lock-face
+                                           neomacs-test-fontify-face)))))
+        "#,
+    )
+    .unwrap_or_else(|err| panic!("install redisplay fontification hook: {err}"));
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-backend-fontification-edit",
+        360,
+        140,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = 1;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let before_layout = selected_window_layout_trace(&eval, &engine, frame_id);
+    let before_props = printed_eval_result(
+        &mut eval,
+        "(prin1-to-string (list redisplay-fontify-calls (get-text-property 1 'fontified) (get-text-property 1 'font-lock-face)))",
+    );
+
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let start = buffer.buffer_string().find("beta").expect("beta");
+        let end = start + "beta".len();
+        buffer.delete_region(start, end);
+        buffer.goto_byte(start);
+        buffer.insert("BETA");
+        buffer.goto_byte(0);
+        assert_eq!(buffer.buffer_string(), "alpha BETA gamma\n");
+    }
+
+    eval.eval_str(
+        r#"
+        (setq neomacs-test-fontify-face 'font-lock-warning-face)
+        (setq redisplay-fontify-calls nil)
+        (remove-text-properties (point-min) (point-max)
+                                '(fontified nil font-lock-face nil))
+        "#,
+    )
+    .unwrap_or_else(|err| panic!("clear fontification state after edit: {err}"));
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let after_layout = selected_window_layout_trace(&eval, &engine, frame_id);
+    let after_props = printed_eval_result(
+        &mut eval,
+        "(prin1-to-string (list redisplay-fontify-calls (get-text-property 1 'fontified) (get-text-property 1 'font-lock-face)))",
+    );
+
+    FontificationBackendTrace {
+        before_layout,
+        before_props,
+        after_layout,
+        after_props,
+    }
+}
+
 fn glyph_trace_text(glyph: &GlyphTrace) -> String {
     match &glyph.kind {
         GlyphKindTrace::Char(ch) => ch.to_string(),
@@ -877,6 +1018,15 @@ fn trace_text_rows(trace: &BackendLayoutTrace) -> Vec<String> {
 
 fn trace_mode_line_text(trace: &BackendLayoutTrace) -> String {
     trace_rows_for_role(trace, GlyphRowRole::ModeLine).join("")
+}
+
+fn trace_text_face_ids(trace: &BackendLayoutTrace) -> Vec<u32> {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyph_areas[1].iter().map(|glyph| glyph.face_id))
+        .collect()
 }
 
 fn trace_has_nonzero_bidi_level(trace: &BackendLayoutTrace) -> bool {
@@ -1320,6 +1470,71 @@ fn implemented_text_backends_match_layout_frame_bidi_row_output() {
 }
 
 #[test]
+fn implemented_text_backends_match_selective_display_output() {
+    let baseline = selective_display_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter().any(|row| row.contains("head")),
+        "baseline should render text before carriage-return selective display marker, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("shown")),
+        "baseline should render visible line after selective display marker, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("shown2")),
+        "baseline should resume rendering after an indented hidden block, rows={rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .all(|row| !row.contains("hidden tail") && !row.contains("hidden by indent")),
+        "baseline should not render selective-display hidden text, rows={rows:?}"
+    );
+    assert!(
+        baseline.hit.as_ref().is_some_and(|hit| hit.rows.len() >= 2),
+        "baseline should publish hit rows across selective-display output, hit={:?}",
+        baseline.hit
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = selective_display_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_glyphless_display_geometry() {
+    let baseline = glyphless_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter().any(|row| row.contains("abcd")),
+        "baseline should keep surrounding text around glyphless source chars, rows={rows:?}"
+    );
+    let text_row = baseline
+        .output_rows
+        .iter()
+        .find(|row| row.row == 0)
+        .expect("baseline text output row");
+    assert!(
+        text_row.end_col > 4,
+        "baseline should account for glyphless replacement columns, row={text_row:?}"
+    );
+    assert!(
+        baseline.points.iter().any(|point| point.buffer_pos == 2),
+        "baseline should publish a display point for the C1 glyphless source char, trace={baseline:?}"
+    );
+    assert!(
+        baseline.points.iter().any(|point| point.buffer_pos == 6),
+        "baseline should publish a display point for the object-replacement source char, trace={baseline:?}"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = glyphless_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
 fn implemented_text_backends_match_wrapped_redisplay_retry_output() {
     let (baseline, target_pos) =
         wrapped_retry_backend_layout_trace(BufferTextBackendKind::GapBuffer);
@@ -1481,6 +1696,44 @@ fn implemented_text_backends_match_edit_redisplay_cache_invalidation() {
         let (before, after) = edit_redisplay_backend_layout_trace(kind);
         assert_eq!(before, baseline_before, "{kind:?} before");
         assert_eq!(after, baseline_after, "{kind:?} after");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_redisplay_fontification_after_edit() {
+    let baseline = fontification_edit_backend_trace(BufferTextBackendKind::GapBuffer);
+    let before_rows = trace_text_rows(&baseline.before_layout);
+    let after_rows = trace_text_rows(&baseline.after_layout);
+    assert!(
+        before_rows
+            .iter()
+            .any(|row| row.contains("alpha beta gamma")),
+        "baseline before fontification edit should render original text, rows={before_rows:?}"
+    );
+    assert!(
+        after_rows
+            .iter()
+            .any(|row| row.contains("alpha BETA gamma")),
+        "baseline after fontification edit should render edited text, rows={after_rows:?}"
+    );
+    assert!(
+        baseline.before_props.contains("font-lock-keyword-face"),
+        "baseline should apply the initial font-lock face from redisplay fontification, props={}",
+        baseline.before_props
+    );
+    assert!(
+        baseline.after_props.contains("font-lock-warning-face"),
+        "baseline should re-enter redisplay fontification after edit, props={}",
+        baseline.after_props
+    );
+    assert!(
+        !trace_text_face_ids(&baseline.before_layout).is_empty(),
+        "baseline should emit text glyphs with face ids"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = fontification_edit_backend_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
     }
 }
 

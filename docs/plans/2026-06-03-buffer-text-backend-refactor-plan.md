@@ -409,8 +409,10 @@ Completed so far:
   glyph rows/display points/physical cursor output, display-property
   replacement, invisible text, multiline overlay strings, bidi rows, wrapped
   redisplay retry scrolling, point-line tail retry output, hscroll cursor
-  output, hit-test rows, same-engine edit redisplay cache invalidation, pdump
-  backend preservation, and `(gap-position)` / `(gap-size)` compatibility.
+  output, hit-test rows, same-engine edit redisplay cache invalidation,
+  selective display, glyphless display geometry, redisplay fontification after
+  edits, pdump backend preservation, and `(gap-position)` / `(gap-size)`
+  compatibility.
 - Added virtual gap compatibility state for non-gap backends.
 - Switched position conversion caches to an explicit `BufferText` content epoch
   and invalidated them after every backend content mutation, including same-size
@@ -421,9 +423,8 @@ Next work:
 - Continue migrating semantic layers above `TextBackend` to typed positions.
 - Continue making insert/delete/replace transaction order explicit and fully
   typed in `edit_transaction.rs`.
-- Expand backend matrix coverage for remaining display-adjacent semantics:
-  selective display, composition/glyphless output, and font-lock/refontification
-  after edits.
+- Expand backend matrix coverage for remaining display-adjacent composition
+  semantics.
 
 ## Success Criteria
 
