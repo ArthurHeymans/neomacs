@@ -464,6 +464,8 @@ enum JsonError {
     Utf8Decode,
     /// `json-invalid-surrogate-error` — malformed UTF-16 surrogate pair.
     InvalidSurrogate,
+    /// `json-escape-sequence-error` — malformed `\` escape in a string.
+    EscapeSequence,
     /// `json-serialize-error` — neomacs serialization failure. GNU signals
     /// a plain `error` here; neomacs keeps a dedicated `json-error` subtype.
     Serialize,
@@ -478,6 +480,7 @@ impl JsonError {
             JsonError::ObjectTooDeep => "json-object-too-deep",
             JsonError::Utf8Decode => "json-utf8-decode-error",
             JsonError::InvalidSurrogate => "json-invalid-surrogate-error",
+            JsonError::EscapeSequence => "json-escape-sequence-error",
             JsonError::Serialize => "json-serialize-error",
         }
     }
@@ -785,14 +788,8 @@ impl<'a> JsonParser<'a> {
                                 return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                             }
                         }
-                        Some(b) => {
-                            return Err(signal(
-                                JsonError::Parse.symbol(),
-                                vec![Value::string(format!(
-                                    "Invalid escape '\\{}' at position {}",
-                                    b as char, self.pos
-                                ))],
-                            ));
+                        Some(_) => {
+                            return Err(self.signal_at_pos(JsonError::EscapeSequence));
                         }
                         None => {
                             return Err(signal(
@@ -864,13 +861,7 @@ impl<'a> JsonParser<'a> {
                     value = value * 16 + digit;
                 }
                 _ => {
-                    return Err(signal(
-                        JsonError::Parse.symbol(),
-                        vec![Value::string(format!(
-                            "Invalid unicode escape at position {}",
-                            self.pos
-                        ))],
-                    ));
+                    return Err(self.signal_at_pos(JsonError::EscapeSequence));
                 }
             }
         }

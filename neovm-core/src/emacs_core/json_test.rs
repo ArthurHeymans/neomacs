@@ -451,6 +451,25 @@ fn parse_rejects_malformed_surrogates() {
 }
 
 #[test]
+fn parse_rejects_malformed_escape_sequences() {
+    crate::test_utils::init_test_tracing();
+    // An unknown escape (\x) and a \u with non-hex digits are both
+    // json-escape-sequence-error in GNU, not the generic json-parse-error.
+    for input in [r#""\x""#, r#""\uZZZZ""#] {
+        match builtin_json_parse_string(vec![Value::string(input)]) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(
+                    sig.symbol_name(),
+                    "json-escape-sequence-error",
+                    "input {input:?}"
+                );
+            }
+            other => panic!("expected json-escape-sequence-error for {input:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn parse_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("null")]);
