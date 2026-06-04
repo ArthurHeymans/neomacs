@@ -256,7 +256,7 @@ fn value_matches(a: &Value, b: &Value) -> bool {
 fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Result<String, Flow> {
     if depth > 512 {
         return Err(signal(
-            "json-serialize-error",
+            JsonError::Serialize.symbol(),
             vec![Value::string("Nesting too deep")],
         ));
     }
@@ -281,7 +281,7 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
             let f = value.xfloat();
             if f.is_nan() || f.is_infinite() {
                 return Err(signal(
-                    "json-serialize-error",
+                    JsonError::Serialize.symbol(),
                     vec![Value::string("Not a finite number")],
                 ));
             }
@@ -394,7 +394,7 @@ fn hash_key_to_string(key: &HashKey) -> Result<String, Flow> {
         HashKey::Nil => Ok("nil".to_string()),
         HashKey::True => Ok("t".to_string()),
         _ => Err(signal(
-            "json-serialize-error",
+            JsonError::Serialize.symbol(),
             vec![Value::string(
                 "Hash table key cannot be converted to JSON object key",
             )],
@@ -441,12 +441,49 @@ fn json_encode_string(s: &str) -> String {
 }
 
 // ===========================================================================
+// JSON error conditions
+// ===========================================================================
+
+/// The JSON error conditions, mirroring GNU `src/json.c` `syms_of_json`.
+///
+/// Keeping every condition symbol in one exhaustive enum (rather than as
+/// scattered string literals) makes the error domain explicit, prevents
+/// typos, and lets the compiler check that each signalling site names a
+/// real condition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum JsonError {
+    /// `json-parse-error` — generic parse failure.
+    Parse,
+    /// `json-end-of-file` — input ended in the middle of a value.
+    EndOfFile,
+    /// `json-trailing-content` — extra non-whitespace after the value.
+    TrailingContent,
+    /// `json-utf8-decode-error` — invalid UTF-8 in the input.
+    Utf8Decode,
+    /// `json-serialize-error` — neomacs serialization failure. GNU signals
+    /// a plain `error` here; neomacs keeps a dedicated `json-error` subtype.
+    Serialize,
+}
+
+impl JsonError {
+    fn symbol(self) -> &'static str {
+        match self {
+            JsonError::Parse => "json-parse-error",
+            JsonError::EndOfFile => "json-end-of-file",
+            JsonError::TrailingContent => "json-trailing-content",
+            JsonError::Utf8Decode => "json-utf8-decode-error",
+            JsonError::Serialize => "json-serialize-error",
+        }
+    }
+}
+
+// ===========================================================================
 // JSON Parser (JSON string → Lisp value)
 // ===========================================================================
 
 fn json_utf8_decode_error(start: usize, end: usize) -> Flow {
     signal(
-        "json-utf8-decode-error",
+        JsonError::Utf8Decode.symbol(),
         vec![
             Value::fixnum(start as i64),
             Value::NIL,
@@ -519,14 +556,14 @@ impl<'a> JsonParser<'a> {
                 Ok(())
             }
             Some(b) => Err(signal(
-                "json-parse-error",
+                JsonError::Parse.symbol(),
                 vec![Value::string(format!(
                     "Expected '{}', got '{}' at position {}",
                     expected as char, b as char, self.pos
                 ))],
             )),
             None => Err(signal(
-                "json-parse-error",
+                JsonError::Parse.symbol(),
                 vec![Value::string(format!(
                     "Unexpected end of input, expected '{}'",
                     expected as char
@@ -540,7 +577,7 @@ impl<'a> JsonParser<'a> {
         self.skip_ws();
         match self.peek() {
             None => Err(signal(
-                "json-parse-error",
+                JsonError::Parse.symbol(),
                 vec![Value::string("Unexpected end of input")],
             )),
             Some(b'"') => self.parse_string(),
@@ -551,7 +588,7 @@ impl<'a> JsonParser<'a> {
             Some(b'n') => self.parse_null(),
             Some(b) if b == b'-' || b.is_ascii_digit() => self.parse_number(),
             Some(b) => Err(signal(
-                "json-parse-error",
+                JsonError::Parse.symbol(),
                 vec![Value::string(format!(
                     "Unexpected character '{}' at position {}",
                     b as char, self.pos
@@ -585,7 +622,7 @@ impl<'a> JsonParser<'a> {
                 Some(b) if b == expected => self.advance(),
                 _ => {
                     return Err(signal(
-                        "json-parse-error",
+                        JsonError::Parse.symbol(),
                         vec![Value::string(format!(
                             "Expected '{}' at position {}",
                             std::str::from_utf8(literal).unwrap_or("?"),
@@ -612,7 +649,7 @@ impl<'a> JsonParser<'a> {
             match self.peek() {
                 None => {
                     return Err(signal(
-                        "json-end-of-file",
+                        JsonError::EndOfFile.symbol(),
                         vec![
                             Value::fixnum(1),
                             Value::NIL,
@@ -697,7 +734,7 @@ impl<'a> JsonParser<'a> {
                         }
                         Some(b) => {
                             return Err(signal(
-                                "json-parse-error",
+                                JsonError::Parse.symbol(),
                                 vec![Value::string(format!(
                                     "Invalid escape '\\{}' at position {}",
                                     b as char, self.pos
@@ -706,7 +743,7 @@ impl<'a> JsonParser<'a> {
                         }
                         None => {
                             return Err(signal(
-                                "json-end-of-file",
+                                JsonError::EndOfFile.symbol(),
                                 vec![
                                     Value::fixnum(1),
                                     Value::NIL,
@@ -770,7 +807,7 @@ impl<'a> JsonParser<'a> {
                 }
                 _ => {
                     return Err(signal(
-                        "json-parse-error",
+                        JsonError::Parse.symbol(),
                         vec![Value::string(format!(
                             "Invalid unicode escape at position {}",
                             self.pos
@@ -809,7 +846,7 @@ impl<'a> JsonParser<'a> {
             }
             _ => {
                 return Err(signal(
-                    "json-parse-error",
+                    JsonError::Parse.symbol(),
                     vec![Value::string(format!(
                         "Invalid number at position {}",
                         self.pos
@@ -832,7 +869,7 @@ impl<'a> JsonParser<'a> {
             }
             if self.pos == frac_start {
                 return Err(signal(
-                    "json-parse-error",
+                    JsonError::Parse.symbol(),
                     vec![Value::string(format!(
                         "Expected digit after decimal point at position {}",
                         self.pos
@@ -858,7 +895,7 @@ impl<'a> JsonParser<'a> {
             }
             if self.pos == exp_start {
                 return Err(signal(
-                    "json-parse-error",
+                    JsonError::Parse.symbol(),
                     vec![Value::string(format!(
                         "Expected digit in exponent at position {}",
                         self.pos
@@ -872,7 +909,7 @@ impl<'a> JsonParser<'a> {
         if is_float {
             let f: f64 = num_str.parse().map_err(|_| {
                 signal(
-                    "json-parse-error",
+                    JsonError::Parse.symbol(),
                     vec![Value::string(format!("Invalid float: {}", num_str))],
                 )
             })?;
@@ -884,7 +921,7 @@ impl<'a> JsonParser<'a> {
                 Err(_) => {
                     let f: f64 = num_str.parse().map_err(|_| {
                         signal(
-                            "json-parse-error",
+                            JsonError::Parse.symbol(),
                             vec![Value::string(format!("Invalid number: {}", num_str))],
                         )
                     })?;
@@ -917,7 +954,7 @@ impl<'a> JsonParser<'a> {
                     }
                     _ => {
                         return Err(signal(
-                            "json-parse-error",
+                            JsonError::Parse.symbol(),
                             vec![Value::string(format!(
                                 "Expected ',' or ']' at position {}",
                                 self.pos
@@ -984,7 +1021,7 @@ impl<'a> JsonParser<'a> {
                 }
                 _ => {
                     return Err(signal(
-                        "json-parse-error",
+                        JsonError::Parse.symbol(),
                         vec![Value::string(format!(
                             "Expected ',' or '}}' at position {}",
                             self.pos
@@ -1024,7 +1061,7 @@ impl<'a> JsonParser<'a> {
                 }
                 _ => {
                     return Err(signal(
-                        "json-parse-error",
+                        JsonError::Parse.symbol(),
                         vec![Value::string(format!(
                             "Expected ',' or '}}' at position {}",
                             self.pos
@@ -1066,7 +1103,7 @@ impl<'a> JsonParser<'a> {
                 }
                 _ => {
                     return Err(signal(
-                        "json-parse-error",
+                        JsonError::Parse.symbol(),
                         vec![Value::string(format!(
                             "Expected ',' or '}}' at position {}",
                             self.pos
@@ -1122,7 +1159,7 @@ pub(crate) fn builtin_json_parse_string(args: Vec<Value>) -> EvalResult {
     if parser.pos >= parser.input.len() {
         let p = json_source_char_pos(&input, parser.pos) as i64;
         return Err(signal(
-            "json-end-of-file",
+            JsonError::EndOfFile.symbol(),
             vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
         ));
     }
@@ -1133,7 +1170,7 @@ pub(crate) fn builtin_json_parse_string(args: Vec<Value>) -> EvalResult {
     if parser.pos < parser.input.len() {
         let p = json_source_char_pos(&input, parser.pos) as i64 + 1;
         return Err(signal(
-            "json-trailing-content",
+            JsonError::TrailingContent.symbol(),
             vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
         ));
     }
@@ -1169,7 +1206,7 @@ pub(crate) fn builtin_json_parse_buffer(
     if parser.pos >= parser.input.len() {
         let p = json_source_char_pos(&input, parser.pos) as i64;
         return Err(signal(
-            "json-end-of-file",
+            JsonError::EndOfFile.symbol(),
             vec![Value::fixnum(1), Value::NIL, Value::fixnum(p)],
         ));
     }
