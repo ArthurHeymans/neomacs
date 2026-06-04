@@ -1,6 +1,6 @@
 use super::*;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
-use neovm_core::buffer::BufferManager;
+use neovm_core::buffer::{Buffer, BufferManager, BufferText};
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId};
 
@@ -8,8 +8,12 @@ fn eval_lisp(eval: &mut neovm_core::emacs_core::Context, source: &str) -> Value 
     eval.eval_str(source).expect("evaluate form")
 }
 
-fn test_buffer(id: u64, name: &str) -> neovm_core::buffer::Buffer {
-    neovm_core::buffer::Buffer::new(neovm_core::buffer::BufferId(id), Value::string(name))
+fn test_buffer(id: u64, name: &str) -> Buffer {
+    Buffer::new(neovm_core::buffer::BufferId(id), Value::string(name))
+}
+
+fn set_buffer_text(buf: &mut Buffer, text: &str) {
+    buf.text = BufferText::from_str(text);
 }
 
 /// Create a minimal Context-like test fixture (FrameManager + BufferManager)
@@ -880,7 +884,7 @@ fn test_rust_buffer_access_copy_text() {
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*test-copy*");
     // Insert some text
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "Hello, world!");
+        set_buffer_text(buf, "Hello, world!");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
     }
@@ -901,7 +905,7 @@ fn test_rust_buffer_access_charpos_to_bytepos() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*test-pos*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "abc");
+        set_buffer_text(buf, "abc");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
     }
@@ -945,7 +949,7 @@ fn test_rust_buffer_access_lisp_charpos_to_bytepos() {
         .buffer_manager_mut()
         .create_buffer("*test-lisp-pos*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "abc");
+        set_buffer_text(buf, "abc");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
     }
@@ -965,7 +969,7 @@ fn test_rust_buffer_access_count_lines() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*test-lines*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "line1\nline2\nline3");
+        set_buffer_text(buf, "line1\nline2\nline3");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
     }
@@ -987,7 +991,7 @@ fn test_text_prop_check_invisible() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*invis*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "visible hidden visible");
+        set_buffer_text(buf, "visible hidden visible");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         // Mark "hidden" (positions 8..14) as invisible
@@ -1019,7 +1023,7 @@ fn text_prop_invisible_respects_buffer_invisibility_spec() {
         .buffer_manager_mut()
         .create_buffer("*dired-invis*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "details filename");
+        set_buffer_text(buf, "details filename");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.set_buffer_local(
@@ -1054,7 +1058,7 @@ fn text_prop_invisible_matches_members_of_property_list() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*invis-list*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "folded");
+        set_buffer_text(buf, "folded");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.set_buffer_local(
@@ -1120,7 +1124,7 @@ fn test_text_prop_check_display() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*display*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "abcdef");
+        set_buffer_text(buf, "abcdef");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         // Set a display property on positions 2..4
@@ -1146,7 +1150,7 @@ fn test_text_prop_line_spacing() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "line1\nline2");
+        set_buffer_text(buf, "line1\nline2");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         // Set line-spacing on "line2" area
@@ -1315,7 +1319,7 @@ fn test_text_prop_next_change() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*next*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "aabbcc");
+        set_buffer_text(buf, "aabbcc");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.text
@@ -1339,7 +1343,7 @@ fn test_text_prop_get_property() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*prop*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "test");
+        set_buffer_text(buf, "test");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.text
@@ -1361,7 +1365,7 @@ fn test_text_prop_access_multibyte_positions_use_byte_offsets() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*utf8-prop*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        buf.text.insert_str(0, "a好b");
+        set_buffer_text(buf, "a好b");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.text
@@ -1426,7 +1430,7 @@ fn test_face_resolver_with_text_property() {
 
     // Create a buffer and set "face" text property to bold.
     let mut buf = test_buffer(1, "*test*");
-    buf.text.insert_str(0, "hello world");
+    set_buffer_text(&mut buf, "hello world");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     // Set "face" to the symbol "bold" on positions 0..5.
@@ -1473,7 +1477,7 @@ fn face_resolver_underline_styles_use_gnu_codes() {
 
     for (name, _, code) in styles {
         let mut buf = test_buffer(u64::from(code), "*underline*");
-        buf.text.insert_str(0, "x");
+        set_buffer_text(&mut buf, "x");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.text
@@ -1509,7 +1513,7 @@ fn face_resolver_box_styles_use_gnu_codes() {
 
     for (name, _, code) in styles {
         let mut buf = test_buffer(u64::from(code), "*box*");
-        buf.text.insert_str(0, "x");
+        set_buffer_text(&mut buf, "x");
         buf.zv_byte = buf.text.len();
         buf.zv = buf.text.char_count();
         buf.text
@@ -1528,7 +1532,7 @@ fn test_face_resolver_with_font_lock_face() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(2, "*fontlock*");
-    buf.text.insert_str(0, "defun myfunction");
+    set_buffer_text(&mut buf, "defun myfunction");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     // Set "font-lock-face" to "font-lock-keyword-face" on "defun".
@@ -1554,7 +1558,7 @@ fn test_face_resolver_face_property_precedes_font_lock_face() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(20, "*scratch*");
-    buf.text.insert_str(0, "C-x C-f");
+    set_buffer_text(&mut buf, "C-x C-f");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.text
@@ -1580,7 +1584,7 @@ fn test_face_resolver_next_check() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(3, "*nextcheck*");
-    buf.text.insert_str(0, "aabbccdd");
+    set_buffer_text(&mut buf, "aabbccdd");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     // Face property on [2, 4)
@@ -1697,7 +1701,7 @@ fn test_face_resolver_face_ref_list_respects_gnu_precedence() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(51, "*face-ref-list*");
-    buf.text.insert_str(0, "x");
+    set_buffer_text(&mut buf, "x");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.text.text_props_put_property(
@@ -1719,7 +1723,7 @@ fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(52, "*default-remap*");
-    buf.text.insert_str(0, "plain");
+    set_buffer_text(&mut buf, "plain");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.set_buffer_local(
@@ -1743,7 +1747,7 @@ fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(53, "*named-remap*");
-    buf.text.insert_str(0, "bold");
+    set_buffer_text(&mut buf, "bold");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.set_buffer_local(
@@ -1777,7 +1781,7 @@ fn test_face_resolver_inverse_video() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(6, "*inverse*");
-    buf.text.insert_str(0, "inverted");
+    set_buffer_text(&mut buf, "inverted");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.text
@@ -1820,7 +1824,7 @@ fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
 
     let mut buf = test_buffer(7, "*utf8*");
-    buf.text.insert_str(0, "a好b");
+    set_buffer_text(&mut buf, "a好b");
     buf.zv_byte = buf.text.len();
     buf.zv = buf.text.char_count();
     buf.text

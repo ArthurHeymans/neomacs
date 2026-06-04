@@ -373,11 +373,12 @@ impl BufferText {
         self.storage.borrow().save_modified_tick
     }
 
+    #[cfg(test)]
     pub fn byte_at(&self, pos: usize) -> u8 {
         self.byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
-    pub(crate) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
+    pub fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
         self.storage.borrow().backend.byte_at_emacs_byte_pos(pos)
     }
 
@@ -385,7 +386,7 @@ impl BufferText {
         self.emacs_byte_at_pos(EmacsBytePos::new(pos))
     }
 
-    pub(crate) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+    pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         self.storage.borrow().backend.emacs_byte_at_pos(pos)
     }
 
@@ -408,6 +409,7 @@ impl BufferText {
             .char_code_at_emacs_byte_pos(pos)
     }
 
+    #[cfg(test)]
     pub fn text_range(&self, start: usize, end: usize) -> String {
         self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
     }
@@ -416,11 +418,12 @@ impl BufferText {
         self.storage.borrow().backend.text_emacs_byte_range(range)
     }
 
+    #[cfg(test)]
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
         self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
-    pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+    pub fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.storage
             .borrow()
             .backend

@@ -4,7 +4,7 @@
 //! the Rust Context's state, replacing C FFI data sources.
 
 use neovm_core::buffer::{
-    Buffer, CharPos0, EmacsBytePos,
+    Buffer, CharPos0, EmacsBytePos, EmacsByteRange,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     buffer_text::BufferText,
     overlay::OverlayList,
@@ -1366,7 +1366,8 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 
     /// Copy buffer text bytes in the range `[byte_from, byte_to)` into `out`.
     ///
-    /// Uses the efficient `copy_bytes_to` method on the gap buffer.
+    /// Uses backend-neutral Emacs byte ranges so layout is independent of
+    /// the concrete buffer storage.
     pub fn copy_text(&self, byte_from: i64, byte_to: i64, out: &mut Vec<u8>) {
         let from = (byte_from as usize).min(self.buffer.layout_text().len());
         let to = (byte_to as usize).min(self.buffer.layout_text().len());
@@ -1374,7 +1375,9 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
             out.clear();
             return;
         }
-        self.buffer.layout_text().copy_bytes_to(from, to, out);
+        self.buffer
+            .layout_text()
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(from, to), out);
     }
 
     /// Count the number of newlines in `[byte_from, byte_to)`.
@@ -1389,7 +1392,12 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
         // Count newlines by iterating byte by byte
         let mut count: i64 = 0;
         for pos in from..to {
-            if self.buffer.layout_text().byte_at(pos) == b'\n' {
+            if self
+                .buffer
+                .layout_text()
+                .byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
+                == b'\n'
+            {
                 count += 1;
             }
         }
@@ -1405,7 +1413,9 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
         }
         let pos = byte_pos as usize;
         if pos < self.buffer.layout_text().len() {
-            Some(self.buffer.layout_text().byte_at(pos))
+            self.buffer
+                .layout_text()
+                .emacs_byte_at_pos(EmacsBytePos::new(pos))
         } else {
             None
         }
