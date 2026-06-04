@@ -426,6 +426,10 @@ Completed so far:
 - Switched position conversion caches to an explicit `BufferText` content epoch
   and invalidated them after every backend content mutation, including same-size
   replacements where `(chars, bytes)` does not change.
+- Split the GNU gap compatibility surface from backend conversion anchors:
+  `BufferText` now stores virtual gap state as a typed `GapCompatState`, while
+  char/byte conversion uses typed `TextPositionBounds` to keep GNU
+  `marker.c`-style below/above anchor pairs together.
 
 Next work:
 

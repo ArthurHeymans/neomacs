@@ -4,7 +4,9 @@ use crate::buffer::gap_buffer::GapBuffer;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 #[cfg(test)]
 use crate::buffer::text::GapDebugLayout;
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
+use crate::buffer::text::{
+    GapCompatState, TextEditRange, TextExtent, TextMetrics, TextReplacement,
+};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -91,11 +93,15 @@ impl GapTextBackend {
         TextMetrics::new(self.char_count(), self.len())
     }
 
-    pub(in crate::buffer) fn position_conversion_hint(&self) -> TextPositionAnchor {
+    pub(in crate::buffer) fn storage_conversion_anchor(&self) -> TextPositionAnchor {
         TextPositionAnchor::new(
             CharPos0::new(self.gpt()),
             EmacsBytePos::new(self.gpt_byte()),
         )
+    }
+
+    pub(in crate::buffer) fn real_gap_compat_state(&self) -> GapCompatState {
+        GapCompatState::new(CharPos0::new(self.gpt()), self.gap_size())
     }
 
     pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {

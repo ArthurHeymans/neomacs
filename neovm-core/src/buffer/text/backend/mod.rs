@@ -10,7 +10,9 @@ use super::ImplementedBufferTextBackendKind;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
+use crate::buffer::text::{
+    GapCompatState, TextEditRange, TextExtent, TextMetrics, TextReplacement,
+};
 use gap::GapTextBackend;
 use piece_tree::PieceTreeTextBackend;
 use rope::RopeTextBackend;
@@ -112,24 +114,17 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn position_conversion_hint(&self) -> Option<TextPositionAnchor> {
+    pub(in crate::buffer) fn storage_conversion_anchor(&self) -> Option<TextPositionAnchor> {
         match self {
-            Self::Gap(gap) => Some(gap.position_conversion_hint()),
+            Self::Gap(gap) => Some(gap.storage_conversion_anchor()),
             Self::PieceTree(_) => None,
             Self::Rope(_) => None,
         }
     }
 
-    pub(in crate::buffer) fn gap_compat_char_pos(&self) -> Option<CharPos0> {
+    pub(in crate::buffer) fn real_gap_compat_state(&self) -> Option<GapCompatState> {
         match self {
-            Self::Gap(gap) => Some(CharPos0::new(gap.gpt())),
-            Self::PieceTree(_) | Self::Rope(_) => None,
-        }
-    }
-
-    pub(in crate::buffer) fn gap_compat_size(&self) -> Option<usize> {
-        match self {
-            Self::Gap(gap) => Some(gap.gap_size()),
+            Self::Gap(gap) => Some(gap.real_gap_compat_state()),
             Self::PieceTree(_) | Self::Rope(_) => None,
         }
     }

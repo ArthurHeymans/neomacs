@@ -112,6 +112,44 @@ fn public_backend_kind_helpers_select_and_convert_storage() {
 }
 
 #[test]
+fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
+    crate::test_utils::init_test_tracing();
+    let non_gap = BufferTextBackendKind::non_gap_implemented_variants().collect::<Vec<_>>();
+    assert!(
+        non_gap.len() >= 2,
+        "test expects at least two non-gap backends"
+    );
+
+    for &kind in &non_gap {
+        let mut text = BufferText::from_str("abc");
+        let initial_gap_position = text.gap_position_lisp();
+        let initial_gap_size = text.gap_size_lisp();
+        assert_eq!(initial_gap_position, 4);
+
+        text.try_convert_backend_kind(kind)
+            .expect("backend should be implemented");
+        assert_eq!(text.backend_kind(), kind);
+        assert_eq!(text.gap_position_lisp(), initial_gap_position);
+        assert_eq!(text.gap_size_lisp(), initial_gap_size);
+
+        text.insert_str(text.emacs_byte_len(), "d");
+        assert_eq!(text.gap_position_lisp(), initial_gap_position + 1);
+        assert_eq!(text.gap_size_lisp(), initial_gap_size - 1);
+
+        let other = non_gap
+            .iter()
+            .copied()
+            .find(|candidate| *candidate != kind)
+            .expect("second non-gap backend should exist");
+        text.try_convert_backend_kind(other)
+            .expect("second backend should be implemented");
+        assert_eq!(text.backend_kind(), other);
+        assert_eq!(text.gap_position_lisp(), initial_gap_position + 1);
+        assert_eq!(text.gap_size_lisp(), initial_gap_size - 1);
+    }
+}
+
+#[test]
 fn edit_measurement_boundary_is_backend_neutral() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::implemented_variants() {

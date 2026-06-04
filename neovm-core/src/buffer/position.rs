@@ -75,6 +75,18 @@ pub struct TextPositionAnchor {
     emacs_byte_pos: EmacsBytePos,
 }
 
+/// Bracketing anchors used for char<->byte conversion.
+///
+/// GNU Emacs' `marker.c` conversion code keeps the nearest known `(char,
+/// byte)` pair below and above the target, considering point, gap, narrowing,
+/// the last conversion, and markers.  This type keeps that paired state
+/// explicit so callers cannot update one coordinate without the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextPositionBounds {
+    below: TextPositionAnchor,
+    above: TextPositionAnchor,
+}
+
 impl TextPositionAnchor {
     pub const fn new(char_pos: CharPos0, emacs_byte_pos: EmacsBytePos) -> Self {
         Self {
@@ -104,6 +116,99 @@ impl TextPositionAnchor {
 
     pub const fn emacs_byte_pos_usize(self) -> usize {
         self.emacs_byte_pos.get()
+    }
+}
+
+impl TextPositionBounds {
+    pub const fn new(above: TextPositionAnchor) -> Self {
+        Self {
+            below: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
+            above,
+        }
+    }
+
+    pub const fn below(self) -> TextPositionAnchor {
+        self.below
+    }
+
+    pub const fn above(self) -> TextPositionAnchor {
+        self.above
+    }
+
+    pub fn consider_char_anchor(&mut self, target: CharPos0, anchor: TextPositionAnchor) {
+        if anchor.char_pos() <= target && anchor.char_pos() > self.below.char_pos() {
+            self.below = anchor;
+        }
+        if anchor.char_pos() >= target && anchor.char_pos() < self.above.char_pos() {
+            self.above = anchor;
+        }
+    }
+
+    pub fn consider_byte_anchor(&mut self, target: EmacsBytePos, anchor: TextPositionAnchor) {
+        if anchor.emacs_byte_pos() <= target
+            && anchor.emacs_byte_pos() > self.below.emacs_byte_pos()
+        {
+            self.below = anchor;
+        }
+        if anchor.emacs_byte_pos() >= target
+            && anchor.emacs_byte_pos() < self.above.emacs_byte_pos()
+        {
+            self.above = anchor;
+        }
+    }
+
+    pub fn char_below_distance(self, target: CharPos0) -> usize {
+        target.get().saturating_sub(self.below.char_pos_usize())
+    }
+
+    pub fn char_above_distance(self, target: CharPos0) -> usize {
+        self.above.char_pos_usize().saturating_sub(target.get())
+    }
+
+    pub fn byte_below_distance(self, target: EmacsBytePos) -> usize {
+        target
+            .get()
+            .saturating_sub(self.below.emacs_byte_pos_usize())
+    }
+
+    pub fn byte_above_distance(self, target: EmacsBytePos) -> usize {
+        self.above
+            .emacs_byte_pos_usize()
+            .saturating_sub(target.get())
+    }
+
+    pub fn char_target_is_near(self, target: CharPos0, distance: usize) -> bool {
+        self.char_above_distance(target) < distance || self.char_below_distance(target) < distance
+    }
+
+    pub fn byte_target_is_near(self, target: EmacsBytePos, distance: usize) -> bool {
+        self.byte_above_distance(target) < distance || self.byte_below_distance(target) < distance
+    }
+
+    pub fn nearest_char_anchor(self, target: CharPos0) -> TextPositionAnchor {
+        if self.char_below_distance(target) <= self.char_above_distance(target) {
+            self.below
+        } else {
+            self.above
+        }
+    }
+
+    pub fn nearest_byte_anchor(self, target: EmacsBytePos) -> TextPositionAnchor {
+        if self.byte_below_distance(target) <= self.byte_above_distance(target) {
+            self.below
+        } else {
+            self.above
+        }
+    }
+
+    pub fn min_char_walk(self, target: CharPos0) -> usize {
+        self.char_below_distance(target)
+            .min(self.char_above_distance(target))
+    }
+
+    pub fn min_byte_walk(self, target: EmacsBytePos) -> usize {
+        self.byte_below_distance(target)
+            .min(self.byte_above_distance(target))
     }
 }
 
@@ -448,6 +553,46 @@ impl From<usize> for EmacsByteLen {
 impl From<EmacsByteLen> for usize {
     fn from(len: EmacsByteLen) -> Self {
         len.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_position_bounds_keep_char_and_byte_anchor_pairs_together() {
+        let mut bounds = TextPositionBounds::new(TextPositionAnchor::from_usize(20, 40));
+
+        bounds.consider_char_anchor(CharPos0::new(10), TextPositionAnchor::from_usize(5, 7));
+        bounds.consider_char_anchor(CharPos0::new(10), TextPositionAnchor::from_usize(15, 27));
+        bounds.consider_char_anchor(CharPos0::new(10), TextPositionAnchor::from_usize(12, 24));
+
+        assert_eq!(bounds.below(), TextPositionAnchor::from_usize(5, 7));
+        assert_eq!(bounds.above(), TextPositionAnchor::from_usize(12, 24));
+        assert_eq!(
+            bounds.nearest_char_anchor(CharPos0::new(10)),
+            TextPositionAnchor::from_usize(12, 24)
+        );
+
+        let mut byte_bounds = TextPositionBounds::new(TextPositionAnchor::from_usize(20, 40));
+        byte_bounds.consider_byte_anchor(
+            EmacsBytePos::new(30),
+            TextPositionAnchor::from_usize(11, 29),
+        );
+        byte_bounds.consider_byte_anchor(
+            EmacsBytePos::new(30),
+            TextPositionAnchor::from_usize(13, 33),
+        );
+
+        assert_eq!(byte_bounds.below(), TextPositionAnchor::from_usize(11, 29));
+        assert_eq!(byte_bounds.above(), TextPositionAnchor::from_usize(13, 33));
+        assert_eq!(byte_bounds.byte_below_distance(EmacsBytePos::new(30)), 1);
+        assert_eq!(byte_bounds.byte_above_distance(EmacsBytePos::new(30)), 3);
+        assert_eq!(
+            byte_bounds.nearest_byte_anchor(EmacsBytePos::new(30)),
+            TextPositionAnchor::from_usize(11, 29)
+        );
     }
 }
 

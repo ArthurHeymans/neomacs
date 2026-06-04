@@ -17,11 +17,12 @@ use super::buffer::{BufferId, InsertionType};
 use super::gap_buffer::{GAP_BYTES_DFL, GAP_BYTES_MIN};
 use super::position::{
     CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    TextPositionBounds,
 };
 use super::text::backend::TextBackend;
 use super::text::{
-    BufferTextBackendKind, ImplementedBufferTextBackendKind, TextEditRange, TextExtent,
-    TextInsertion, TextMetrics, TextReplacement,
+    BufferTextBackendKind, GapCompatState, ImplementedBufferTextBackendKind, TextEditRange,
+    TextExtent, TextInsertion, TextMetrics, TextReplacement,
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
@@ -49,8 +50,7 @@ struct BufferTextStorage {
     metrics: TextMetrics,
     backend: TextBackend,
     content_epoch: u64,
-    virtual_gap_pos: CharPos0,
-    virtual_gap_size: usize,
+    virtual_gap: GapCompatState,
     modified_tick: i64,
     chars_modified_tick: i64,
     save_modified_tick: i64,
@@ -74,8 +74,7 @@ impl Clone for BufferTextStorage {
             metrics: self.metrics,
             backend: self.backend.clone(),
             content_epoch: self.content_epoch,
-            virtual_gap_pos: self.virtual_gap_pos,
-            virtual_gap_size: self.virtual_gap_size,
+            virtual_gap: self.virtual_gap,
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
             save_modified_tick: self.save_modified_tick,
@@ -113,17 +112,15 @@ impl Default for BufferText {
 impl BufferText {
     fn from_backend(backend: TextBackend) -> Self {
         let metrics = backend.metrics();
-        let virtual_gap_pos = backend
-            .gap_compat_char_pos()
-            .unwrap_or_else(|| CharPos0::new(metrics.chars()));
-        let virtual_gap_size = backend.gap_compat_size().unwrap_or(GAP_BYTES_MIN);
+        let virtual_gap = backend
+            .real_gap_compat_state()
+            .unwrap_or_else(|| GapCompatState::new(CharPos0::new(metrics.chars()), GAP_BYTES_MIN));
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
                 metrics,
                 backend,
                 content_epoch: 1,
-                virtual_gap_pos,
-                virtual_gap_size,
+                virtual_gap,
                 modified_tick: 1,
                 chars_modified_tick: 1,
                 save_modified_tick: 1,
@@ -152,11 +149,12 @@ impl BufferText {
     }
 
     fn virtual_gap_consume_bytes(storage: &mut BufferTextStorage, bytes: usize) {
-        if storage.virtual_gap_size < bytes {
-            let need = bytes - storage.virtual_gap_size;
-            storage.virtual_gap_size += need.saturating_add(GAP_BYTES_DFL);
+        let mut size = storage.virtual_gap.size();
+        if size < bytes {
+            let need = bytes - size;
+            size += need.saturating_add(GAP_BYTES_DFL);
         }
-        storage.virtual_gap_size = storage.virtual_gap_size.saturating_sub(bytes);
+        storage.virtual_gap = storage.virtual_gap.with_size(size.saturating_sub(bytes));
     }
 
     fn note_virtual_gap_insert(
@@ -164,31 +162,35 @@ impl BufferText {
         pos: EmacsBytePos,
         extent: TextExtent,
     ) {
-        if storage.backend.gap_compat_char_pos().is_some() {
+        if storage.backend.real_gap_compat_state().is_some() {
             return;
         }
         let start_char = storage.backend.emacs_byte_pos_to_char_pos(pos);
-        storage.virtual_gap_pos = CharPos0::new(start_char.get() + extent.chars().get());
+        storage.virtual_gap = storage
+            .virtual_gap
+            .with_pos(CharPos0::new(start_char.get() + extent.chars().get()));
         Self::virtual_gap_consume_bytes(storage, extent.emacs_bytes().get());
     }
 
     fn note_virtual_gap_delete(storage: &mut BufferTextStorage, range: TextEditRange) {
-        if storage.backend.gap_compat_char_pos().is_some() {
+        if storage.backend.real_gap_compat_state().is_some() {
             return;
         }
-        storage.virtual_gap_pos = range.char_start();
-        storage.virtual_gap_size += range.byte_len().get();
+        storage.virtual_gap = GapCompatState::new(
+            range.char_start(),
+            storage.virtual_gap.size() + range.byte_len().get(),
+        );
     }
 
     fn note_virtual_gap_replace(storage: &mut BufferTextStorage, replacement: TextReplacement) {
-        if storage.backend.gap_compat_char_pos().is_some() {
+        if storage.backend.real_gap_compat_state().is_some() {
             return;
         }
         let char_start = replacement.old_range().char_start();
-        storage.virtual_gap_pos = char_start;
-        storage.virtual_gap_size += replacement.old_range().byte_len().get();
-        storage.virtual_gap_pos =
-            CharPos0::new(char_start.get() + replacement.new_extent().chars().get());
+        storage.virtual_gap = GapCompatState::new(
+            CharPos0::new(char_start.get() + replacement.new_extent().chars().get()),
+            storage.virtual_gap.size() + replacement.old_range().byte_len().get(),
+        );
         Self::virtual_gap_consume_bytes(storage, replacement.new_extent().emacs_bytes().get());
     }
 
@@ -317,19 +319,14 @@ impl BufferText {
         if storage.backend.kind() == kind {
             return;
         }
-        let virtual_gap_pos = storage
+        let virtual_gap = storage
             .backend
-            .gap_compat_char_pos()
-            .unwrap_or(storage.virtual_gap_pos);
-        let virtual_gap_size = storage
-            .backend
-            .gap_compat_size()
-            .unwrap_or(storage.virtual_gap_size);
+            .real_gap_compat_state()
+            .unwrap_or(storage.virtual_gap);
         let text = storage.backend.dump_text();
         let multibyte = storage.backend.is_multibyte();
         storage.backend = TextBackend::from_dump(text, multibyte, kind);
-        storage.virtual_gap_pos = virtual_gap_pos;
-        storage.virtual_gap_size = virtual_gap_size;
+        storage.virtual_gap = virtual_gap;
         Self::finish_backend_shape_change(&mut storage);
     }
 
@@ -370,18 +367,18 @@ impl BufferText {
         let storage = self.storage.borrow();
         storage
             .backend
-            .gap_compat_char_pos()
-            .unwrap_or(storage.virtual_gap_pos)
-            .to_lisp()
-            .as_i64()
+            .real_gap_compat_state()
+            .unwrap_or(storage.virtual_gap)
+            .lisp_position()
     }
 
     pub(crate) fn gap_size_lisp(&self) -> usize {
         let storage = self.storage.borrow();
         storage
             .backend
-            .gap_compat_size()
-            .unwrap_or(storage.virtual_gap_size)
+            .real_gap_compat_state()
+            .unwrap_or(storage.virtual_gap)
+            .size()
     }
 
     #[cfg(test)]
@@ -741,11 +738,9 @@ impl BufferText {
         let kind = storage.backend.kind();
         storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
         Self::finish_backend_content_mutation(&mut storage);
-        storage.virtual_gap_pos = storage
-            .backend
-            .gap_compat_char_pos()
-            .unwrap_or_else(|| CharPos0::new(storage.metrics.chars()));
-        storage.virtual_gap_size = storage.backend.gap_compat_size().unwrap_or(GAP_BYTES_DFL);
+        storage.virtual_gap = storage.backend.real_gap_compat_state().unwrap_or_else(|| {
+            GapCompatState::new(CharPos0::new(storage.metrics.chars()), GAP_BYTES_DFL)
+        });
         storage.text_props = text_props;
     }
 
@@ -1814,20 +1809,22 @@ impl BufferText {
             storage.anchor_cache_key.set(content_epoch);
         }
 
-        let mut best_below = TextPositionAnchor::default();
-        let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
+        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
+            metrics.char_end(),
+            metrics.emacs_byte_end(),
+        ));
 
-        if let Some(anchor) = storage.backend.position_conversion_hint() {
-            consider_char_anchor(target, anchor, &mut best_below, &mut best_above);
+        if let Some(anchor) = storage.backend.storage_conversion_anchor() {
+            bounds.consider_char_anchor(target, anchor);
         }
 
         let cached = storage.pos_cache.get();
         if cached.is_valid_for(content_epoch) {
-            consider_char_anchor(target, cached.anchor, &mut best_below, &mut best_above);
+            bounds.consider_char_anchor(target, cached.anchor);
         }
 
         for &anchor in storage.anchor_cache.borrow().iter() {
-            consider_char_anchor(target, anchor, &mut best_below, &mut best_above);
+            bounds.consider_char_anchor(target, anchor);
         }
 
         let mut distance: usize = POSITION_DISTANCE_BASE;
@@ -1842,15 +1839,11 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                consider_char_anchor(
+                bounds.consider_char_anchor(
                     target,
                     TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                    &mut best_below,
-                    &mut best_above,
                 );
-                if best_above.char_pos_usize().saturating_sub(target.get()) < distance
-                    || target.get().saturating_sub(best_below.char_pos_usize()) < distance
-                {
+                if bounds.char_target_is_near(target, distance) {
                     break;
                 }
                 distance = distance.saturating_add(POSITION_DISTANCE_INCR);
@@ -1858,17 +1851,16 @@ impl BufferText {
             }
         }
 
-        let walked_below = target.get().saturating_sub(best_below.char_pos_usize());
-        let walked_above = best_above.char_pos_usize().saturating_sub(target.get());
-        let result = if walked_below <= walked_above {
-            scan_forward(&storage.backend, best_below, target)
+        let nearest_anchor = bounds.nearest_char_anchor(target);
+        let result = if nearest_anchor.char_pos() <= target {
+            scan_forward(&storage.backend, nearest_anchor, target)
         } else {
-            scan_backward(&storage.backend, best_above, target)
+            scan_backward(&storage.backend, nearest_anchor, target)
         };
 
         // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
         // walked more than POSITION_ANCHOR_STRIDE positions.
-        let walked = walked_below.min(walked_above);
+        let walked = bounds.min_char_walk(target);
         if walked > POSITION_ANCHOR_STRIDE {
             storage
                 .anchor_cache
@@ -1907,20 +1899,22 @@ impl BufferText {
             storage.anchor_cache_key.set(content_epoch);
         }
 
-        let mut best_below = TextPositionAnchor::default();
-        let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
+        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
+            metrics.char_end(),
+            metrics.emacs_byte_end(),
+        ));
 
-        if let Some(anchor) = storage.backend.position_conversion_hint() {
-            consider_byte_anchor(target, anchor, &mut best_below, &mut best_above);
+        if let Some(anchor) = storage.backend.storage_conversion_anchor() {
+            bounds.consider_byte_anchor(target, anchor);
         }
 
         let cached = storage.pos_cache.get();
         if cached.is_valid_for(content_epoch) {
-            consider_byte_anchor(target, cached.anchor, &mut best_below, &mut best_above);
+            bounds.consider_byte_anchor(target, cached.anchor);
         }
 
         for &anchor in storage.anchor_cache.borrow().iter() {
-            consider_byte_anchor(target, anchor, &mut best_below, &mut best_above);
+            bounds.consider_byte_anchor(target, anchor);
         }
 
         let mut distance: usize = POSITION_DISTANCE_BASE;
@@ -1930,21 +1924,11 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                consider_byte_anchor(
+                bounds.consider_byte_anchor(
                     target,
                     TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                    &mut best_below,
-                    &mut best_above,
                 );
-                if best_above
-                    .emacs_byte_pos_usize()
-                    .saturating_sub(target.get())
-                    < distance
-                    || target
-                        .get()
-                        .saturating_sub(best_below.emacs_byte_pos_usize())
-                        < distance
-                {
+                if bounds.byte_target_is_near(target, distance) {
                     break;
                 }
                 distance = distance.saturating_add(POSITION_DISTANCE_INCR);
@@ -1952,23 +1936,18 @@ impl BufferText {
             }
         }
 
-        let walked_below = target
-            .get()
-            .saturating_sub(best_below.emacs_byte_pos_usize());
-        let walked_above = best_above
-            .emacs_byte_pos_usize()
-            .saturating_sub(target.get());
-        let result = if walked_below <= walked_above {
-            scan_forward_bytes(&storage.backend, best_below, target)
+        let nearest_anchor = bounds.nearest_byte_anchor(target);
+        let result = if nearest_anchor.emacs_byte_pos() <= target {
+            scan_forward_bytes(&storage.backend, nearest_anchor, target)
         } else {
-            scan_backward_bytes(&storage.backend, best_above, target)
+            scan_backward_bytes(&storage.backend, nearest_anchor, target)
         };
 
         // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
         // walked more than POSITION_ANCHOR_STRIDE positions.
         // Store as (charpos, bytepos) like the char→byte direction to keep
         // anchor_cache entries in one canonical order.
-        let walked = walked_below.min(walked_above);
+        let walked = bounds.min_byte_walk(target);
         if walked > POSITION_ANCHOR_STRIDE {
             storage
                 .anchor_cache
@@ -2027,21 +2006,6 @@ const POSITION_DISTANCE_INCR: usize = 50;
 /// Mirrors GNU `marker.c:238-241` (5000-char threshold).
 const POSITION_ANCHOR_STRIDE: usize = 5000;
 
-/// Update `(best_below, best_above)` in place by character position.
-fn consider_char_anchor(
-    target: CharPos0,
-    anchor: TextPositionAnchor,
-    best_below: &mut TextPositionAnchor,
-    best_above: &mut TextPositionAnchor,
-) {
-    if anchor.char_pos() <= target && anchor.char_pos() > best_below.char_pos() {
-        *best_below = anchor;
-    }
-    if anchor.char_pos() >= target && anchor.char_pos() < best_above.char_pos() {
-        *best_above = anchor;
-    }
-}
-
 /// Walk forward from `anchor` to reach `target` chars.
 /// Returns the byte position.
 fn scan_forward(
@@ -2093,21 +2057,6 @@ fn scan_backward(
         cp -= 1;
     }
     EmacsBytePos::new(bp)
-}
-
-/// Update `(best_below, best_above)` in place by byte position.
-fn consider_byte_anchor(
-    target: EmacsBytePos,
-    anchor: TextPositionAnchor,
-    best_below: &mut TextPositionAnchor,
-    best_above: &mut TextPositionAnchor,
-) {
-    if anchor.emacs_byte_pos() <= target && anchor.emacs_byte_pos() > best_below.emacs_byte_pos() {
-        *best_below = anchor;
-    }
-    if anchor.emacs_byte_pos() >= target && anchor.emacs_byte_pos() < best_above.emacs_byte_pos() {
-        *best_above = anchor;
-    }
 }
 
 /// Walk forward from `anchor` to reach `target` bytepos.

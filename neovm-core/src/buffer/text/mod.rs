@@ -2,7 +2,6 @@ pub(in crate::buffer) mod backend;
 mod edit;
 mod emacs_bytes;
 mod kind;
-#[cfg(test)]
 mod layout;
 mod metrics;
 
@@ -13,6 +12,7 @@ pub(in crate::buffer) use emacs_bytes::{
 };
 pub use kind::BufferTextBackendKind;
 pub(crate) use kind::ImplementedBufferTextBackendKind;
+pub use layout::GapCompatState;
 #[cfg(test)]
 pub use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
