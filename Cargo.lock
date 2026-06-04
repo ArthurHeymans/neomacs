@@ -3036,6 +3036,7 @@ dependencies = [
  "flate2",
  "fs4",
  "hostname",
+ "itoa",
  "libc",
  "libloading 0.9.0",
  "malachite",

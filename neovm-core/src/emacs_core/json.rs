@@ -275,7 +275,7 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
         // t → true (checked after false sentinel, which is usually :false not t)
         ValueKind::T => Ok("true".to_string()),
 
-        ValueKind::Fixnum(n) => Ok(n.to_string()),
+        ValueKind::Fixnum(n) => Ok(itoa::Buffer::new().format(n).to_owned()),
 
         // Bignums serialize as their full decimal expansion (GNU
         // json_out_bignum), so large integers round-trip without loss.
