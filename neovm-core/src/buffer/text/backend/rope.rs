@@ -359,7 +359,8 @@ impl RopeTextBackend {
         let insertion = self.tree_for_bytes(bytes);
         let root = self.root.take();
         let (left, right) = self.split_at_byte(root, pos);
-        self.root = Self::merge(Self::merge(left, insertion), right);
+        let merged = self.merge_adjacent(left, insertion);
+        self.root = self.merge_adjacent(merged, right);
     }
 
     pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
@@ -388,7 +389,7 @@ impl RopeTextBackend {
         let root = self.root.take();
         let (left, rest) = self.split_at_byte(root, start);
         let (_deleted, right) = self.split_at_byte(rest, end - start);
-        self.root = Self::merge(left, right);
+        self.root = self.merge_adjacent(left, right);
     }
 
     pub(in crate::buffer) fn replace_measured_range(
@@ -428,7 +429,8 @@ impl RopeTextBackend {
         let (left, rest) = self.split_at_byte(root, start);
         let (_deleted, right) = self.split_at_byte(rest, end - start);
         let inserted = self.tree_for_bytes(bytes);
-        self.root = Self::merge(Self::merge(left, inserted), right);
+        let merged = self.merge_adjacent(left, inserted);
+        self.root = self.merge_adjacent(merged, right);
     }
 
     pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
@@ -493,7 +495,8 @@ impl RopeTextBackend {
         while !rest.is_empty() {
             let take = split_leaf_len(rest, self.multibyte);
             let chunk = RopeChunk::new(rest[..take].to_vec(), self.multibyte);
-            tree = Self::merge(tree, Some(RopeNode::new(chunk, self.next_priority())));
+            let node = Some(RopeNode::new(chunk, self.next_priority()));
+            tree = self.merge_adjacent(tree, node);
             rest = &rest[take..];
         }
         tree
@@ -553,15 +556,38 @@ impl RopeTextBackend {
         }
 
         let (left_chunk, right_chunk) = node.chunk.split_at(local, self.multibyte);
-        let left_tree = Self::merge(
-            node.left.take(),
-            Some(RopeNode::new(left_chunk, self.next_priority())),
-        );
-        let right_tree = Self::merge(
-            Some(RopeNode::new(right_chunk, self.next_priority())),
-            node.right.take(),
-        );
+        let left_node = Some(RopeNode::new(left_chunk, self.next_priority()));
+        let right_node = Some(RopeNode::new(right_chunk, self.next_priority()));
+        let left_tree = self.merge_adjacent(node.left.take(), left_node);
+        let right_tree = self.merge_adjacent(right_node, node.right.take());
         (left_tree, right_tree)
+    }
+
+    fn merge_adjacent(
+        &mut self,
+        left: Option<Box<RopeNode>>,
+        right: Option<Box<RopeNode>>,
+    ) -> Option<Box<RopeNode>> {
+        match (left, right) {
+            (None, right) => right,
+            (left, None) => left,
+            (Some(left), Some(right)) => {
+                if rightmost_chunk_len(&left) + leftmost_chunk_len(&right) <= MAX_LEAF_BYTES {
+                    let (left, left_chunk) = pop_rightmost(Some(left));
+                    let (right_chunk, right) = pop_leftmost(Some(right));
+                    let mut bytes = left_chunk.bytes;
+                    bytes.extend_from_slice(&right_chunk.bytes);
+                    let combined = Some(RopeNode::new(
+                        RopeChunk::new(bytes, self.multibyte),
+                        self.next_priority(),
+                    ));
+                    let merged_left = self.merge_adjacent(left, combined);
+                    return self.merge_adjacent(merged_left, right);
+                }
+
+                Self::merge(Some(left), Some(right))
+            }
+        }
     }
 
     fn merge(left: Option<Box<RopeNode>>, right: Option<Box<RopeNode>>) -> Option<Box<RopeNode>> {
@@ -699,6 +725,19 @@ impl RopeTextBackend {
 
         None
     }
+
+    #[cfg(test)]
+    fn debug_chunk_lengths(&self) -> Vec<usize> {
+        let mut lengths = Vec::new();
+        collect_chunk_lengths(&self.root, &mut lengths);
+        lengths
+    }
+
+    #[cfg(test)]
+    fn assert_invariants(&self) {
+        let metrics = assert_node_invariants(&self.root, self.multibyte);
+        assert_eq!(metrics, self.metrics());
+    }
 }
 
 impl fmt::Display for RopeTextBackend {
@@ -719,6 +758,101 @@ impl fmt::Debug for RopeTextBackend {
 
 fn node_metrics(node: &Option<Box<RopeNode>>) -> TextMetrics {
     node.as_ref().map(|node| node.metrics).unwrap_or_default()
+}
+
+fn leftmost_chunk_len(node: &RopeNode) -> usize {
+    if node.left.is_some() {
+        return leftmost_chunk_len(node.left.as_ref().expect("left child"));
+    }
+    node.chunk.len()
+}
+
+fn rightmost_chunk_len(node: &RopeNode) -> usize {
+    if node.right.is_some() {
+        return rightmost_chunk_len(node.right.as_ref().expect("right child"));
+    }
+    node.chunk.len()
+}
+
+fn pop_leftmost(mut tree: Option<Box<RopeNode>>) -> (RopeChunk, Option<Box<RopeNode>>) {
+    let mut node = tree.take().expect("pop_leftmost requires a non-empty tree");
+    if node.left.is_none() {
+        let right = node.right.take();
+        return (node.chunk, right);
+    }
+
+    let (chunk, left) = pop_leftmost(node.left.take());
+    node.left = left;
+    node.refresh();
+    (chunk, Some(node))
+}
+
+fn pop_rightmost(mut tree: Option<Box<RopeNode>>) -> (Option<Box<RopeNode>>, RopeChunk) {
+    let mut node = tree
+        .take()
+        .expect("pop_rightmost requires a non-empty tree");
+    if node.right.is_none() {
+        let left = node.left.take();
+        return (left, node.chunk);
+    }
+
+    let (right, chunk) = pop_rightmost(node.right.take());
+    node.right = right;
+    node.refresh();
+    (Some(node), chunk)
+}
+
+#[cfg(test)]
+fn collect_chunk_lengths(node: &Option<Box<RopeNode>>, out: &mut Vec<usize>) {
+    let Some(node) = node.as_ref() else {
+        return;
+    };
+    collect_chunk_lengths(&node.left, out);
+    out.push(node.chunk.len());
+    collect_chunk_lengths(&node.right, out);
+}
+
+#[cfg(test)]
+fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> TextMetrics {
+    let Some(node) = node.as_ref() else {
+        return TextMetrics::ZERO;
+    };
+
+    assert!(!node.chunk.bytes.is_empty(), "rope leaf must not be empty");
+    assert!(
+        node.chunk.len() <= MAX_LEAF_BYTES,
+        "rope leaf length {} exceeds max {MAX_LEAF_BYTES}",
+        node.chunk.len()
+    );
+    assert_eq!(
+        node.chunk.chars,
+        emacs_char_count_bytes(&node.chunk.bytes, multibyte),
+        "rope leaf cached char count diverged"
+    );
+    if let Some(left) = node.left.as_ref() {
+        assert!(
+            node.priority >= left.priority,
+            "rope treap priority invariant failed on left child"
+        );
+    }
+    if let Some(right) = node.right.as_ref() {
+        assert!(
+            node.priority >= right.priority,
+            "rope treap priority invariant failed on right child"
+        );
+    }
+
+    let left = assert_node_invariants(&node.left, multibyte);
+    let right = assert_node_invariants(&node.right, multibyte);
+    let expected = TextMetrics::new(
+        left.chars() + node.chunk.chars + right.chars(),
+        left.emacs_bytes() + node.chunk.len() + right.emacs_bytes(),
+    );
+    assert_eq!(
+        node.metrics, expected,
+        "rope cached subtree metrics diverged"
+    );
+    expected
 }
 
 fn split_leaf_len(bytes: &[u8], multibyte: bool) -> usize {
@@ -751,6 +885,7 @@ mod tests {
     use proptest::prelude::*;
 
     fn assert_matches_gap(rope: &RopeTextBackend, gap: &GapBuffer) {
+        rope.assert_invariants();
         assert_eq!(rope.len(), gap.len());
         assert_eq!(rope.metrics().chars(), gap.char_count());
         assert_eq!(rope.to_string(), gap.to_string());
@@ -910,6 +1045,7 @@ mod tests {
     fn rope_large_initial_text_uses_multiple_chunks_and_preserves_text() {
         let text = "a".repeat(MAX_LEAF_BYTES * 2 + 17);
         let backend = RopeTextBackend::from_str(&text);
+        backend.assert_invariants();
         let mut chunks = Vec::new();
         backend
             .for_each_emacs_byte_range_chunk(
@@ -925,6 +1061,18 @@ mod tests {
             "large rope text should be represented by multiple chunks"
         );
         assert_eq!(backend.to_string(), text);
+    }
+
+    #[test]
+    fn rope_coalesces_adjacent_small_chunks_after_edits() {
+        let mut backend = RopeTextBackend::from_str("abcdef");
+        insert_rope_str(&mut backend, 3, "XY");
+        assert_eq!(backend.debug_chunk_lengths(), vec![8]);
+
+        delete_rope_range_both(&mut backend, 3, 5, 2);
+        assert_eq!(backend.to_string(), "abcdef");
+        assert_eq!(backend.debug_chunk_lengths(), vec![6]);
+        backend.assert_invariants();
     }
 
     #[test]
