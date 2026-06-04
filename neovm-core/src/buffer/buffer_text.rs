@@ -190,6 +190,10 @@ impl BufferText {
         self.storage.borrow().backend.kind().public_kind()
     }
 
+    pub(crate) fn implemented_backend_kind(&self) -> ImplementedBufferTextBackendKind {
+        self.storage.borrow().backend.kind()
+    }
+
     pub(crate) fn convert_backend_kind(&self, kind: ImplementedBufferTextBackendKind) {
         let mut storage = self.storage.borrow_mut();
         if storage.backend.kind() == kind {

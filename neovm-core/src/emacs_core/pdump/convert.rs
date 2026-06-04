@@ -11,13 +11,13 @@ use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
+use crate::buffer::EmacsBytePos;
 use crate::buffer::buffer::{Buffer, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
-use crate::buffer::{BufferTextBackendKind, EmacsBytePos};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -2760,18 +2760,22 @@ fn dump_overlay_list(encoder: &mut DumpEncoder, ol: &OverlayList) -> DumpOverlay
 // dump_undo_record and dump_undo_list removed — undo state is now a
 // buffer-local Lisp Value serialized through the properties map.
 
-fn dump_buffer_text_backend_kind(kind: BufferTextBackendKind) -> DumpBufferTextBackendKind {
-    DumpBufferTextBackendKind::try_from(u8::from(kind))
-        .unwrap_or_else(|_| panic!("{} text backend is not implemented", kind.symbol_name()))
+fn dump_buffer_text_backend_kind(
+    kind: ImplementedBufferTextBackendKind,
+) -> DumpBufferTextBackendKind {
+    match kind {
+        ImplementedBufferTextBackendKind::GapBuffer => DumpBufferTextBackendKind::GapBuffer,
+        ImplementedBufferTextBackendKind::PieceTree => DumpBufferTextBackendKind::PieceTree,
+    }
 }
 
 fn load_buffer_text_backend_kind(
     kind: DumpBufferTextBackendKind,
 ) -> ImplementedBufferTextBackendKind {
-    let kind = BufferTextBackendKind::try_from(u8::from(kind))
-        .expect("pdump buffer text backend tag should be a runtime backend kind");
-    kind.implemented()
-        .expect("pdump buffer text backend tag should be implemented")
+    match kind {
+        DumpBufferTextBackendKind::GapBuffer => ImplementedBufferTextBackendKind::GapBuffer,
+        DumpBufferTextBackendKind::PieceTree => ImplementedBufferTextBackendKind::PieceTree,
+    }
 }
 
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
@@ -2784,7 +2788,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         last_name: None,
         base_buffer: buf.base_buffer.map(|id| DumpBufferId(id.0)),
         text: DumpGapBuffer {
-            backend_kind: dump_buffer_text_backend_kind(buf.text.backend_kind()),
+            backend_kind: dump_buffer_text_backend_kind(buf.text.implemented_backend_kind()),
             text: buf.text.dump_text(),
         },
         pt: buf.pt_byte,
@@ -2909,7 +2913,9 @@ pub(crate) fn dump_buffer_manager(
             .iter()
             .map(|value| encoder.dump_value(value))
             .collect(),
-        default_text_backend_kind: dump_buffer_text_backend_kind(bm.default_text_backend_kind()),
+        default_text_backend_kind: dump_buffer_text_backend_kind(
+            bm.implemented_default_text_backend_kind(),
+        ),
     }
 }
 

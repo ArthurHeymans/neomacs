@@ -3361,6 +3361,10 @@ impl BufferManager {
         self.default_text_backend_kind.public_kind()
     }
 
+    pub(crate) fn implemented_default_text_backend_kind(&self) -> ImplementedBufferTextBackendKind {
+        self.default_text_backend_kind
+    }
+
     pub(crate) fn set_default_text_backend_kind(&mut self, kind: ImplementedBufferTextBackendKind) {
         self.default_text_backend_kind = kind;
     }
