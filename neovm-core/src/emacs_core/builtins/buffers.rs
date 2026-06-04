@@ -3341,9 +3341,10 @@ pub(crate) fn builtin_subst_char_in_region(
         let byte_end = char_pos_to_buffer_byte(buf, end_char);
         let needs_change = from_code != to_code
             && byte_start < byte_end
-            && buf
-                .text
-                .range_contains_char_code(byte_start, byte_end, from_code as u32);
+            && buf.text.emacs_byte_range_contains_char_code(
+                EmacsByteRange::from_usize(byte_start, byte_end),
+                from_code as u32,
+            );
         (byte_start, byte_end, needs_change)
     };
     if !needs_change {
@@ -4028,7 +4029,7 @@ pub(crate) fn builtin_byte_to_position(
         while boundary > 0
             && buf
                 .text
-                .emacs_byte_at(boundary)
+                .emacs_byte_at_pos(EmacsBytePos::new(boundary))
                 .is_some_and(|byte| (byte & 0xC0) == 0x80)
         {
             boundary -= 1;

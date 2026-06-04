@@ -2075,9 +2075,9 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
         return Ok(Value::NIL);
     }
 
-    let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(pos).get();
-    let face = resolved_face_at_buffer_byte(eval, buffer, bytepos);
-    let character = buffer.text.char_at(bytepos).ok_or_else(|| {
+    let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(pos);
+    let face = resolved_face_at_buffer_byte(eval, buffer, bytepos.get());
+    let character = buffer.text.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
         signal(
             "args-out-of-range",
             vec![args[0], Value::fixnum(beg), Value::fixnum(end)],

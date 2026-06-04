@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::CharPos0;
+use crate::buffer::{CharPos0, EmacsBytePos};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -2024,7 +2024,7 @@ pub(crate) fn builtin_vertical_motion(
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
         let mut bol = pt;
-        while bol > begv && buf.text.emacs_byte_at(bol - 1) != Some(b'\n') {
+        while bol > begv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
             bol -= 1;
         }
         let _ = eval.buffers.goto_buffer_byte(current_id, bol);
@@ -2062,7 +2062,7 @@ pub(crate) fn builtin_vertical_motion(
             && eval
                 .buffers
                 .get(current_id)
-                .and_then(|buf| buf.text.emacs_byte_at(pos - 1))
+                .and_then(|buf| buf.text.emacs_byte_at_pos(EmacsBytePos::new(pos - 1)))
                 != Some(b'\n')
         {
             pos -= 1;

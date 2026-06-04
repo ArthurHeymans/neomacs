@@ -382,6 +382,7 @@ impl BufferText {
         self.storage.borrow().backend.byte_at_emacs_byte_pos(pos)
     }
 
+    #[cfg(test)]
     pub fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
         self.emacs_byte_at_pos(EmacsBytePos::new(pos))
     }
@@ -390,6 +391,7 @@ impl BufferText {
         self.storage.borrow().backend.emacs_byte_at_pos(pos)
     }
 
+    #[cfg(test)]
     pub fn char_at(&self, pos: usize) -> Option<char> {
         self.char_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -398,6 +400,7 @@ impl BufferText {
         self.storage.borrow().backend.char_at_emacs_byte_pos(pos)
     }
 
+    #[cfg(test)]
     pub fn char_code_at(&self, pos: usize) -> Option<u32> {
         self.char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -629,19 +632,28 @@ impl BufferText {
         storage.chars_modified_tick = storage.modified_tick;
     }
 
+    #[cfg(test)]
     pub fn range_contains_char_code(&self, start: usize, end: usize, code: u32) -> bool {
-        if start >= end {
+        self.emacs_byte_range_contains_char_code(EmacsByteRange::from_usize(start, end), code)
+    }
+
+    pub(crate) fn emacs_byte_range_contains_char_code(
+        &self,
+        range: EmacsByteRange,
+        code: u32,
+    ) -> bool {
+        if range.is_empty() {
             return false;
         }
         // Walk buffer bytes directly, avoiding the storage-form conversion
         // previously done through text_range(). For multibyte buffers each
         // Emacs char is decoded via emacs_char::string_char; for unibyte
         // buffers each byte is one "character" in the range 0..=0xFF.
-        let mut bytes = Vec::with_capacity(end - start);
+        let mut bytes = Vec::with_capacity(range.len().get());
         self.storage
             .borrow()
             .backend
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
+            .copy_emacs_byte_range_to(range, &mut bytes);
         if self.is_multibyte() {
             let mut pos = 0;
             while pos < bytes.len() {

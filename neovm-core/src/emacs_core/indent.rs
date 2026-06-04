@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -150,12 +150,12 @@ fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
     let pt = accessible.clamp_usize(point);
 
     let mut bol = pt;
-    while bol > begv && buf.text.emacs_byte_at(bol - 1) != Some(b'\n') {
+    while bol > begv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
         bol -= 1;
     }
 
     let mut eol = pt;
-    while eol < zv && buf.text.emacs_byte_at(eol) != Some(b'\n') {
+    while eol < zv && buf.text.emacs_byte_at_pos(EmacsBytePos::new(eol)) != Some(b'\n') {
         eol += 1;
     }
 
@@ -188,7 +188,7 @@ fn buffer_char_display_width(buf: &Buffer, byte_pos: usize, code: u32) -> usize 
     if !buf.get_multibyte() {
         return buf
             .text
-            .emacs_byte_at(byte_pos)
+            .emacs_byte_at_pos(EmacsBytePos::new(byte_pos))
             .map(raw_unibyte_display_width)
             .unwrap_or(1);
     }
