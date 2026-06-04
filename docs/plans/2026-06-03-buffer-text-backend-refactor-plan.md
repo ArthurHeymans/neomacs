@@ -407,7 +407,9 @@ Completed so far:
   display-facing mode-line position specs, `window-text-pixel-size`,
   layout-buffer snapshot bytes/positions/properties, full layout-engine
   glyph rows/display points/physical cursor output, display-property
-  replacement, invisible text, multiline overlay strings, bidi rows, pdump
+  replacement, invisible text, multiline overlay strings, bidi rows, wrapped
+  redisplay retry scrolling, point-line tail retry output, hscroll cursor
+  output, hit-test rows, same-engine edit redisplay cache invalidation, pdump
   backend preservation, and `(gap-position)` / `(gap-size)` compatibility.
 - Added virtual gap compatibility state for non-gap backends.
 - Switched position conversion caches to an explicit `BufferText` content epoch
@@ -417,10 +419,11 @@ Completed so far:
 Next work:
 
 - Continue migrating semantic layers above `TextBackend` to typed positions.
-- Expand backend matrix coverage for redisplay cache invalidation, scrolling,
-  line wrapping, and hit-testing in full layout-engine frame output.
 - Continue making insert/delete/replace transaction order explicit and fully
   typed in `edit_transaction.rs`.
+- Expand backend matrix coverage for remaining display-adjacent semantics:
+  selective display, composition/glyphless output, and font-lock/refontification
+  after edits.
 
 ## Success Criteria
 

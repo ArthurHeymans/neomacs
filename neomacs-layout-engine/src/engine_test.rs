@@ -399,12 +399,58 @@ impl RowTrace {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct HitRowTrace {
+    y_start_bits: u32,
+    y_end_bits: u32,
+    charpos_start: i64,
+    charpos_end: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WindowHitTrace {
+    content_x_bits: u32,
+    char_w_bits: u32,
+    rows: Vec<HitRowTrace>,
+    first_col_hits: Vec<i64>,
+}
+
+impl WindowHitTrace {
+    fn from_window(window: &crate::hit_test::WindowHitData) -> Self {
+        Self {
+            content_x_bits: window.content_x.to_bits(),
+            char_w_bits: window.char_w.to_bits(),
+            rows: window
+                .rows
+                .iter()
+                .map(|row| HitRowTrace {
+                    y_start_bits: row.y_start.to_bits(),
+                    y_end_bits: row.y_end.to_bits(),
+                    charpos_start: row.charpos_start,
+                    charpos_end: row.charpos_end,
+                })
+                .collect(),
+            first_col_hits: window
+                .rows
+                .iter()
+                .map(|row| {
+                    let y = (row.y_start + row.y_end) / 2.0;
+                    crate::hit_test::hit_test_window_charpos(window.window_id, window.content_x, y)
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BackendLayoutTrace {
     matrix_rows: Vec<RowTrace>,
     points: Vec<DisplayPointSnapshot>,
     output_rows: Vec<DisplayRowSnapshot>,
     phys_cursor: Option<WindowCursorSnapshot>,
     visible_span: Option<(usize, usize)>,
+    window_start: usize,
+    window_point: usize,
+    hit: Option<WindowHitTrace>,
 }
 
 fn selected_window_layout_trace(
@@ -426,6 +472,25 @@ fn selected_window_layout_trace(
     let display_snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
+    let (window_start, window_point) =
+        match frame.find_window(selected_window).expect("selected window") {
+            neovm_core::window::Window::Leaf {
+                window_start,
+                point,
+                ..
+            } => (*window_start, *point),
+            other => panic!("expected leaf window, got {other:?}"),
+        };
+    let hit = unsafe {
+        (&*std::ptr::addr_of!(crate::hit_test::FRAME_HIT_DATA))
+            .as_ref()
+            .and_then(|windows| {
+                windows
+                    .iter()
+                    .find(|window| window.window_id == selected_window.0 as i64)
+            })
+            .map(WindowHitTrace::from_window)
+    };
 
     BackendLayoutTrace {
         matrix_rows: window_entry
@@ -439,16 +504,20 @@ fn selected_window_layout_trace(
         output_rows: display_snapshot.rows.clone(),
         phys_cursor: display_snapshot.phys_cursor.clone(),
         visible_span: display_snapshot.visible_buffer_span(),
+        window_start,
+        window_point,
+        hit,
     }
 }
 
-fn backend_layout_trace_with_buffer_setup(
+fn backend_layout_trace_with_buffer_and_window_setup(
     kind: BufferTextBackendKind,
     frame_name: &str,
     text: &str,
     frame_width: u32,
     frame_height: u32,
     setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+    setup_window: impl FnOnce(&mut neovm_core::window::Window),
 ) -> BackendLayoutTrace {
     let mut eval = Context::new();
     convert_current_buffer_text_backend(&mut eval, kind);
@@ -480,11 +549,31 @@ fn backend_layout_trace_with_buffer_setup(
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
             *window_start = 1;
         }
+        setup_window(window);
     }
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
     selected_window_layout_trace(&eval, &engine, frame_id)
+}
+
+fn backend_layout_trace_with_buffer_setup(
+    kind: BufferTextBackendKind,
+    frame_name: &str,
+    text: &str,
+    frame_width: u32,
+    frame_height: u32,
+    setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+) -> BackendLayoutTrace {
+    backend_layout_trace_with_buffer_and_window_setup(
+        kind,
+        frame_name,
+        text,
+        frame_width,
+        frame_height,
+        setup,
+        |_| {},
+    )
 }
 
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
@@ -586,24 +675,208 @@ fn bidi_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace 
     )
 }
 
-fn trace_text_rows(trace: &BackendLayoutTrace) -> Vec<String> {
+fn wrapped_retry_backend_layout_trace(kind: BufferTextBackendKind) -> (BackendLayoutTrace, usize) {
+    let logical_lines = (0..24)
+        .map(|line| format!("line-{line:02} abcdefghijklmno\n"))
+        .collect::<Vec<_>>();
+    let text = logical_lines.join("");
+    let target_pos = logical_lines
+        .iter()
+        .take(18)
+        .map(|line| line.chars().count())
+        .sum::<usize>()
+        + 1;
+
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        kind,
+        "layout-backend-wrap-retry",
+        &text,
+        80,
+        192,
+        |buffer, _buf_id, _text| {
+            buffer.goto_byte(target_pos - 1);
+            buffer.set_buffer_local("word-wrap", Value::T);
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { point, .. } = window {
+                *point = target_pos;
+            }
+        },
+    );
+    (trace, target_pos)
+}
+
+fn point_line_tail_backend_layout_trace(
+    kind: BufferTextBackendKind,
+) -> (BackendLayoutTrace, usize, usize) {
+    let prefix = (0..2)
+        .map(|line| format!("p{line:02}\n"))
+        .collect::<Vec<_>>()
+        .join("");
+    let target_line = "abcdefghijklmno\n";
+    let text = format!("{prefix}{target_line}");
+    let point = prefix.chars().count() + 1;
+    let later_pos = point + 10;
+
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        kind,
+        "layout-backend-point-line-tail",
+        &text,
+        80,
+        256,
+        |buffer, _buf_id, _text| {
+            buffer.goto_byte(point - 1);
+            buffer.set_buffer_local("word-wrap", Value::T);
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf {
+                point: window_point,
+                ..
+            } = window
+            {
+                *window_point = point;
+            }
+        },
+    );
+    (trace, point, later_pos)
+}
+
+fn mode_line_geometry_backend_layout_trace(
+    kind: BufferTextBackendKind,
+) -> (BackendLayoutTrace, usize) {
+    let text = (0..80)
+        .map(|line| format!("Line {line:02}\n"))
+        .collect::<String>();
+    let point = text.chars().count() + 1;
+
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        kind,
+        "layout-backend-mode-line-geometry",
+        &text,
+        640,
+        96,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("mode-line-format", Value::string("%o|%p|%P"));
+            buffer.goto_byte(point - 1);
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf {
+                point: window_point,
+                ..
+            } = window
+            {
+                *window_point = point;
+            }
+        },
+    );
+    (trace, point)
+}
+
+fn hscroll_cursor_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    backend_layout_trace_with_buffer_and_window_setup(
+        kind,
+        "layout-backend-hscroll-cursor",
+        "abcdef\n",
+        160,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.goto_byte(1);
+            buffer.set_buffer_local("truncate-lines", Value::T);
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { point, hscroll, .. } = window {
+                *point = 2;
+                *hscroll = 3;
+            }
+        },
+    )
+}
+
+fn edit_redisplay_backend_layout_trace(
+    kind: BufferTextBackendKind,
+) -> (BackendLayoutTrace, BackendLayoutTrace) {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, kind);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "alpha beta gamma\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_byte(0);
+        assert_eq!(buffer.text_backend_kind(), kind);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-backend-edit-redisplay", 360, 140, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = 1;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let before = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let start = buffer.buffer_string().find("beta").expect("beta");
+        let end = start + "beta".len();
+        buffer.delete_region(start, end);
+        buffer.goto_byte(start);
+        buffer.insert("BETA");
+        buffer.goto_byte(0);
+        assert_eq!(buffer.buffer_string(), "alpha BETA gamma\n");
+    }
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let after = selected_window_layout_trace(&eval, &engine, frame_id);
+    (before, after)
+}
+
+fn glyph_trace_text(glyph: &GlyphTrace) -> String {
+    match &glyph.kind {
+        GlyphKindTrace::Char(ch) => ch.to_string(),
+        GlyphKindTrace::Composite(text) => text.clone(),
+        GlyphKindTrace::Stretch(width) => " ".repeat(usize::from(*width)),
+        GlyphKindTrace::Image(_) | GlyphKindTrace::Glyphless(_) => String::new(),
+    }
+}
+
+fn trace_rows_for_role(trace: &BackendLayoutTrace, role: GlyphRowRole) -> Vec<String> {
     trace
         .matrix_rows
         .iter()
-        .filter(|row| row.role == GlyphRowRole::Text)
+        .filter(|row| row.role == role)
         .map(|row| {
             row.glyph_areas[1]
                 .iter()
-                .map(|glyph| match &glyph.kind {
-                    GlyphKindTrace::Char(ch) => ch.to_string(),
-                    GlyphKindTrace::Composite(text) => text.clone(),
-                    GlyphKindTrace::Stretch(width) => " ".repeat(usize::from(*width)),
-                    GlyphKindTrace::Image(_) | GlyphKindTrace::Glyphless(_) => String::new(),
-                })
+                .map(glyph_trace_text)
                 .collect::<Vec<_>>()
                 .join("")
         })
         .collect()
+}
+
+fn trace_text_rows(trace: &BackendLayoutTrace) -> Vec<String> {
+    trace_rows_for_role(trace, GlyphRowRole::Text)
+}
+
+fn trace_mode_line_text(trace: &BackendLayoutTrace) -> String {
+    trace_rows_for_role(trace, GlyphRowRole::ModeLine).join("")
 }
 
 fn trace_has_nonzero_bidi_level(trace: &BackendLayoutTrace) -> bool {
@@ -1043,6 +1316,171 @@ fn implemented_text_backends_match_layout_frame_bidi_row_output() {
     for kind in implemented_text_backends() {
         let trace = bidi_backend_layout_trace(kind);
         assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_wrapped_redisplay_retry_output() {
+    let (baseline, target_pos) =
+        wrapped_retry_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    assert!(
+        baseline
+            .points
+            .iter()
+            .any(|point| point.buffer_pos == target_pos),
+        "baseline should converge wrapped redisplay on target point {target_pos}, trace={baseline:?}"
+    );
+    assert!(
+        baseline.window_start > 1,
+        "baseline should advance window-start after wrapped redisplay retry, trace={baseline:?}"
+    );
+    assert!(
+        baseline.output_rows.iter().any(|row| row.row > 0),
+        "baseline should publish wrapped visual rows, rows={:?}",
+        baseline.output_rows
+    );
+    assert!(
+        baseline
+            .hit
+            .as_ref()
+            .is_some_and(|hit| hit.rows.len() >= 2 && hit.first_col_hits.len() == hit.rows.len()),
+        "baseline should publish hit rows for wrapped visual output, hit={:?}",
+        baseline.hit
+    );
+
+    for kind in implemented_text_backends() {
+        let (trace, backend_target_pos) = wrapped_retry_backend_layout_trace(kind);
+        assert_eq!(backend_target_pos, target_pos, "{kind:?}");
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_point_line_tail_retry_output() {
+    let (baseline, point, later_pos) =
+        point_line_tail_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    assert!(
+        baseline.points.iter().any(|item| item.buffer_pos == point),
+        "baseline should publish geometry for point {point}, trace={baseline:?}"
+    );
+    assert!(
+        baseline
+            .points
+            .iter()
+            .any(|item| item.buffer_pos == later_pos),
+        "baseline should publish later positions from the point line after retry, later_pos={later_pos}, trace={baseline:?}"
+    );
+    assert!(
+        baseline
+            .hit
+            .as_ref()
+            .is_some_and(|hit| !hit.rows.is_empty()),
+        "baseline should publish hit rows for point-line retry output, hit={:?}",
+        baseline.hit
+    );
+
+    for kind in implemented_text_backends() {
+        let (trace, backend_point, backend_later_pos) = point_line_tail_backend_layout_trace(kind);
+        assert_eq!(backend_point, point, "{kind:?}");
+        assert_eq!(backend_later_pos, later_pos, "{kind:?}");
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_mode_line_geometry_after_redisplay_retry() {
+    let (baseline, point) =
+        mode_line_geometry_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let mode_line = trace_mode_line_text(&baseline);
+    assert!(
+        baseline.window_start > 1,
+        "baseline should advance window-start for EOB redisplay retry, trace={baseline:?}"
+    );
+    assert_eq!(
+        baseline.window_point, point,
+        "baseline should preserve the selected-window EOB point after retry"
+    );
+    assert!(
+        mode_line.contains('|') && !mode_line.contains("%o"),
+        "baseline should render expanded mode-line geometry, mode_line={mode_line:?}"
+    );
+
+    for kind in implemented_text_backends() {
+        let (trace, backend_point) = mode_line_geometry_backend_layout_trace(kind);
+        assert_eq!(backend_point, point, "{kind:?}");
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
+    let baseline = hscroll_cursor_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let cursor = baseline.phys_cursor.as_ref().expect("baseline cursor");
+    assert_eq!(cursor.x, 0);
+    assert_eq!(cursor.row, 0);
+    assert_eq!(cursor.col, 0);
+    let text_rows = trace_text_rows(&baseline);
+    assert!(
+        text_rows.iter().any(|row| row.contains("def")),
+        "baseline should render the hscrolled visible suffix, rows={text_rows:?}"
+    );
+    assert!(
+        text_rows.iter().all(|row| !row.contains("abc")),
+        "baseline should not render hscrolled-away prefix text, rows={text_rows:?}"
+    );
+    assert_eq!(
+        baseline.visible_span,
+        Some((4, 7)),
+        "baseline should publish the visible hscrolled buffer span"
+    );
+    assert!(
+        baseline
+            .hit
+            .as_ref()
+            .is_some_and(|hit| !hit.rows.is_empty()),
+        "baseline should publish hit rows for hscroll output, hit={:?}",
+        baseline.hit
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = hscroll_cursor_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_edit_redisplay_cache_invalidation() {
+    let (baseline_before, baseline_after) =
+        edit_redisplay_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let before_rows = trace_text_rows(&baseline_before);
+    let after_rows = trace_text_rows(&baseline_after);
+    assert!(
+        before_rows
+            .iter()
+            .any(|row| row.contains("alpha beta gamma")),
+        "baseline before edit should render original text, rows={before_rows:?}"
+    );
+    assert!(
+        after_rows
+            .iter()
+            .any(|row| row.contains("alpha BETA gamma")),
+        "baseline after edit should render replacement text, rows={after_rows:?}"
+    );
+    assert!(
+        after_rows
+            .iter()
+            .all(|row| !row.contains("alpha beta gamma")),
+        "baseline after edit should not reuse stale glyph text, rows={after_rows:?}"
+    );
+    assert_ne!(
+        baseline_before, baseline_after,
+        "same-engine redisplay after edit should update the trace"
+    );
+
+    for kind in implemented_text_backends() {
+        let (before, after) = edit_redisplay_backend_layout_trace(kind);
+        assert_eq!(before, baseline_before, "{kind:?} before");
+        assert_eq!(after, baseline_after, "{kind:?} after");
     }
 }
 
