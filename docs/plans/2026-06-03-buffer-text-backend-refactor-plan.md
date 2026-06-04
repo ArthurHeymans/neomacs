@@ -468,6 +468,15 @@ Completed so far:
 - Added backend matrix coverage proving the measured manager edit entry points
   preserve raw-wrapper behavior for text, point/mark, marker relocation, text
   properties, and undo records.
+- Added typed insert marker placement and a measured `MeasuredInsertEdit`
+  descriptor so GNU's insert point, character length, byte length, marker
+  placement, and replacement marker adjustment move together through current
+  and indirect-buffer side effects.  `InsertSideEffectPolicy` now describes
+  only the buffer-state scope, not the edit itself.
+- Unified Lisp-string insertion paths behind one conversion/measurement helper
+  and added backend matrix coverage for shared insert policy side effects,
+  including normal insert, insert-before-markers, replacement insert,
+  indirect-buffer point/mark state, overlays, markers, and text properties.
 
 Next work:
 

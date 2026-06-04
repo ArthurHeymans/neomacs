@@ -333,6 +333,78 @@ pub(in crate::buffer) enum InsertMarkerAdjustment {
     StrictAfter,
 }
 
+/// GNU insert marker placement mode.
+///
+/// GNU passes this as a `before_markers` boolean to `insert_1_both` and
+/// `adjust_markers_for_insert`.  Keeping it as an enum at the Rust edit
+/// boundary prevents callers from mixing up the marker-placement decision with
+/// unrelated boolean side-effect toggles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum InsertMarkerPlacement {
+    AfterMarkers,
+    BeforeMarkers,
+}
+
+impl InsertMarkerPlacement {
+    pub(in crate::buffer) const fn before_markers(self) -> bool {
+        matches!(self, Self::BeforeMarkers)
+    }
+}
+
+/// A fully measured GNU-style insert operation.
+///
+/// GNU `insert_1_both` receives the insertion point plus both `nchars` and
+/// `nbytes` before touching the gap.  Marker placement is part of the edit
+/// operation, not part of a later buffer-state policy, so keep it attached to
+/// the measured insertion as it flows through current and indirect buffers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct MeasuredInsertEdit {
+    insertion: TextInsertion,
+    marker_placement: InsertMarkerPlacement,
+    marker_adjustment: InsertMarkerAdjustment,
+}
+
+impl MeasuredInsertEdit {
+    pub(in crate::buffer) const fn new(
+        insertion: TextInsertion,
+        marker_placement: InsertMarkerPlacement,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> Self {
+        Self {
+            insertion,
+            marker_placement,
+            marker_adjustment,
+        }
+    }
+
+    pub(in crate::buffer) const fn by_insertion_type(
+        insertion: TextInsertion,
+        marker_placement: InsertMarkerPlacement,
+    ) -> Self {
+        Self::new(
+            insertion,
+            marker_placement,
+            InsertMarkerAdjustment::ByInsertionType,
+        )
+    }
+
+    pub(in crate::buffer) const fn insertion(self) -> TextInsertion {
+        self.insertion
+    }
+
+    pub(in crate::buffer) const fn marker_placement(self) -> InsertMarkerPlacement {
+        self.marker_placement
+    }
+
+    pub(in crate::buffer) const fn marker_adjustment(self) -> InsertMarkerAdjustment {
+        self.marker_adjustment
+    }
+
+    pub(in crate::buffer) const fn before_markers(self) -> bool {
+        self.marker_placement.before_markers()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) update_state_fields: bool,
@@ -340,39 +412,26 @@ pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) advance_point_at_insert: bool,
     pub(in crate::buffer) adjust_shared_markers: bool,
     pub(in crate::buffer) adjust_shared_text_props: bool,
-    pub(in crate::buffer) overlay_before_markers: bool,
-    pub(in crate::buffer) marker_adjustment: InsertMarkerAdjustment,
 }
 
 impl InsertSideEffectPolicy {
-    pub(in crate::buffer) fn current_buffer(
-        before_markers: bool,
-        marker_adjustment: InsertMarkerAdjustment,
-    ) -> Self {
+    pub(in crate::buffer) fn current_buffer() -> Self {
         Self {
             update_state_fields: true,
             shift_begv: false,
             advance_point_at_insert: true,
             adjust_shared_markers: true,
             adjust_shared_text_props: true,
-            overlay_before_markers: before_markers,
-            marker_adjustment,
         }
     }
 
-    pub(in crate::buffer) fn shared_buffer(
-        update_state_fields: bool,
-        overlay_before_markers: bool,
-        marker_adjustment: InsertMarkerAdjustment,
-    ) -> Self {
+    pub(in crate::buffer) fn shared_buffer(update_state_fields: bool) -> Self {
         Self {
             update_state_fields,
             shift_begv: true,
             advance_point_at_insert: false,
             adjust_shared_markers: false,
             adjust_shared_text_props: false,
-            overlay_before_markers,
-            marker_adjustment,
         }
     }
 }
@@ -444,10 +503,7 @@ mod tests {
             insert_state_after_edit(
                 state(20, 10, 0, 0, 60, 42),
                 insertion(),
-                InsertSideEffectPolicy::current_buffer(
-                    false,
-                    InsertMarkerAdjustment::ByInsertionType
-                ),
+                InsertSideEffectPolicy::current_buffer(),
             ),
             state(25, 13, 0, 0, 65, 45)
         );
@@ -459,11 +515,7 @@ mod tests {
             insert_state_after_edit(
                 state(20, 10, 28, 14, 60, 42),
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(
-                    true,
-                    false,
-                    InsertMarkerAdjustment::ByInsertionType,
-                ),
+                InsertSideEffectPolicy::shared_buffer(true),
             ),
             state(20, 10, 33, 17, 65, 45)
         );
@@ -475,11 +527,7 @@ mod tests {
             insert_state_after_edit(
                 state(0, 0, 0, 0, 20, 10),
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(
-                    true,
-                    false,
-                    InsertMarkerAdjustment::ByInsertionType,
-                ),
+                InsertSideEffectPolicy::shared_buffer(true),
             ),
             state(0, 0, 0, 0, 25, 13)
         );
@@ -529,11 +577,7 @@ mod tests {
             insert_state_after_edit(
                 original,
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(
-                    false,
-                    false,
-                    InsertMarkerAdjustment::ByInsertionType,
-                ),
+                InsertSideEffectPolicy::shared_buffer(false),
             ),
             original
         );

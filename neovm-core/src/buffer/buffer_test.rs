@@ -1545,6 +1545,130 @@ fn measured_manager_edit_entrypoints_match_raw_wrappers() {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+struct SharedInsertPolicySnapshot {
+    base_string: String,
+    indirect_string: String,
+    base_point: (usize, usize),
+    indirect_point: (usize, usize),
+    base_mark: (Option<usize>, Option<usize>),
+    indirect_mark: (Option<usize>, Option<usize>),
+    marker_after_position: Option<(usize, usize)>,
+    marker_before_position: Option<(usize, usize)>,
+    indirect_overlay_range: (Option<usize>, Option<usize>),
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+}
+
+fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertPolicySnapshot {
+    let mut mgr = manager_with_text_backend(kind);
+    let base_id = mgr.current_buffer_id().expect("scratch buffer");
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let insert = LispString::from_utf8("Ω");
+    let before_markers_insert = LispString::from_utf8("λ");
+    let replacement = LispString::from_utf8("qr");
+
+    mgr.insert_into_buffer(base_id, "aébc日本z")
+        .expect("initial insert");
+    let indirect_id = mgr
+        .create_indirect_buffer(base_id, "*shared-insert-policy*", false)
+        .expect("indirect buffer");
+
+    let prop_start = buffer_byte_pos_for_char(&mgr, base_id, 1);
+    let prop_end = buffer_byte_pos_for_char(&mgr, base_id, 6);
+    mgr.put_buffer_text_property(base_id, prop_start, prop_end, face, bold)
+        .expect("text property");
+
+    let insert_pos = buffer_byte_pos_for_char(&mgr, base_id, 2);
+    register_marker_for_test(
+        mgr.get_mut(base_id).expect("base buffer"),
+        701,
+        insert_pos,
+        InsertionType::After,
+    );
+    register_marker_for_test(
+        mgr.get_mut(indirect_id).expect("indirect buffer"),
+        702,
+        insert_pos,
+        InsertionType::Before,
+    );
+
+    let overlay_end = buffer_byte_pos_for_char(&mgr, indirect_id, 5);
+    let indirect_overlay = Value::make_overlay(OverlayData {
+        serial: 0,
+        plist: Value::NIL,
+        buffer: Some(indirect_id),
+        start: insert_pos,
+        end: overlay_end,
+        front_advance: false,
+        rear_advance: true,
+    });
+    mgr.get_mut(indirect_id)
+        .expect("indirect buffer")
+        .overlays
+        .insert_overlay(indirect_overlay);
+
+    mgr.set_buffer_mark(base_id, buffer_byte_pos_for_char(&mgr, base_id, 5))
+        .expect("base mark");
+    mgr.set_buffer_mark(indirect_id, buffer_byte_pos_for_char(&mgr, indirect_id, 4))
+        .expect("indirect mark");
+    mgr.goto_buffer_byte(indirect_id, buffer_byte_pos_for_char(&mgr, indirect_id, 3))
+        .expect("indirect point");
+
+    mgr.goto_buffer_byte(base_id, insert_pos)
+        .expect("base insert point");
+    mgr.insert_lisp_string_into_buffer(base_id, &insert)
+        .expect("normal insert");
+
+    let before_markers_pos = buffer_byte_pos_for_char(&mgr, base_id, 3);
+    mgr.goto_buffer_byte(base_id, before_markers_pos)
+        .expect("before-markers insert point");
+    mgr.insert_lisp_string_into_buffer_before_markers(base_id, &before_markers_insert)
+        .expect("before-markers insert");
+
+    let replace_start = buffer_byte_pos_for_char(&mgr, indirect_id, 1);
+    let replace_end = buffer_byte_pos_for_char(&mgr, indirect_id, 3);
+    mgr.replace_buffer_region_lisp_string(indirect_id, replace_start, replace_end, &replacement)
+        .expect("replace through indirect buffer");
+
+    let base = mgr.get(base_id).expect("base buffer");
+    let indirect = mgr.get(indirect_id).expect("indirect buffer");
+    assert_eq!(base.text_backend_kind(), kind);
+    assert_eq!(indirect.text_backend_kind(), kind);
+    SharedInsertPolicySnapshot {
+        base_string: base.buffer_string(),
+        indirect_string: indirect.buffer_string(),
+        base_point: (base.point_byte(), base.point_char()),
+        indirect_point: (indirect.point_byte(), indirect.point_char()),
+        base_mark: (base.mark(), base.mark_char()),
+        indirect_mark: (indirect.mark(), indirect.mark_char()),
+        marker_after_position: base
+            .marker_chain_lookup(701)
+            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        marker_before_position: indirect
+            .marker_chain_lookup(702)
+            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        indirect_overlay_range: (
+            indirect.overlays.overlay_start(indirect_overlay),
+            indirect.overlays.overlay_end(indirect_overlay),
+        ),
+        text_properties: buffer_text_property_snapshot(base),
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_shared_insert_policy_side_effects() {
+    crate::test_utils::init_test_tracing();
+    let baseline = run_shared_insert_policy_script(BufferTextBackendKind::GapBuffer);
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            run_shared_insert_policy_script(kind),
+            baseline,
+            "{kind:?} shared insert side effects diverged from gap buffer"
+        );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 struct BackendMigrationSnapshot {
     backend_kind: BufferTextBackendKind,
     buffer_string: String,
