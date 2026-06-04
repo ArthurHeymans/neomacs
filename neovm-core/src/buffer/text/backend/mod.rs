@@ -3,7 +3,7 @@ mod piece;
 
 use std::fmt;
 
-use super::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
+use super::ImplementedBufferTextBackendKind;
 use crate::buffer::position::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
@@ -76,10 +76,10 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn kind(&self) -> BufferTextBackendKind {
+    pub(in crate::buffer) fn kind(&self) -> ImplementedBufferTextBackendKind {
         match self {
-            Self::Gap(_) => BufferTextBackendKind::GapBuffer,
-            Self::PieceTree(piece_tree) => piece_tree.kind(),
+            Self::Gap(_) => ImplementedBufferTextBackendKind::GapBuffer,
+            Self::PieceTree(_) => ImplementedBufferTextBackendKind::PieceTree,
         }
     }
 

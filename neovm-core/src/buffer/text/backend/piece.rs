@@ -100,10 +100,6 @@ impl PieceTreeTextBackend {
         Self::from_emacs_bytes(&text, multibyte)
     }
 
-    pub(in crate::buffer) fn kind(&self) -> crate::buffer::BufferTextBackendKind {
-        crate::buffer::BufferTextBackendKind::PieceTree
-    }
-
     #[cfg(test)]
     pub(in crate::buffer) fn debug_layout(&self) -> TextBackendDebugLayout {
         TextBackendDebugLayout::PieceTree(self.metrics())
@@ -920,10 +916,6 @@ mod tests {
     #[test]
     fn piece_tree_reports_metrics_and_layout() {
         let backend = PieceTreeTextBackend::from_str("éz");
-        assert_eq!(
-            backend.kind(),
-            crate::buffer::BufferTextBackendKind::PieceTree
-        );
         assert_eq!(
             backend.debug_layout(),
             TextBackendDebugLayout::PieceTree(TextMetrics::new(2, 3))

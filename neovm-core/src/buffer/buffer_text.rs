@@ -187,12 +187,12 @@ impl BufferText {
     }
 
     pub fn backend_kind(&self) -> BufferTextBackendKind {
-        self.storage.borrow().backend.kind()
+        self.storage.borrow().backend.kind().public_kind()
     }
 
     pub(crate) fn convert_backend_kind(&self, kind: ImplementedBufferTextBackendKind) {
         let mut storage = self.storage.borrow_mut();
-        if storage.backend.kind() == kind.public_kind() {
+        if storage.backend.kind() == kind {
             return;
         }
         let text = storage.backend.dump_text();
@@ -587,11 +587,7 @@ impl BufferText {
         text_props: TextPropertyTable,
     ) {
         let mut storage = self.storage.borrow_mut();
-        let kind = storage
-            .backend
-            .kind()
-            .implemented()
-            .expect("active buffer text backend is implemented");
+        let kind = storage.backend.kind();
         storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
         Self::refresh_backend_metrics(&mut storage);
         storage.text_props = text_props;
