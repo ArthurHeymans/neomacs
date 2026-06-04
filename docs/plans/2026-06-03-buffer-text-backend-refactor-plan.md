@@ -15,7 +15,7 @@ allowing Neomacs to use better physical storage for different workloads:
 
 - `gap-buffer` for default GNU-like behavior and compatibility.
 - `piece-tree` for large files and edit-heavy workloads.
-- `rope` later, only after the backend contract is clean.
+- `rope` as another physical backend behind the same semantic layer.
 
 The target design is:
 
@@ -206,7 +206,7 @@ pub struct GapDebugLayout {
 pub enum TextBackendDebugLayout {
     Gap(GapDebugLayout),
     PieceTree(TextMetrics),
-    // Add Rope(TextMetrics) only when a real Rope backend lands.
+    Rope(TextMetrics),
 }
 ```
 
@@ -308,8 +308,8 @@ GNU exposes physical gap state:
 
 For `gap-buffer`, Neomacs should return the real gap state.
 
-For `piece-tree` and future `rope`, Neomacs needs explicit compatibility
-semantics because GNU has no non-gap backend. Recommended policy:
+For `piece-tree` and `rope`, Neomacs needs explicit compatibility semantics
+because GNU has no non-gap backend. Recommended policy:
 
 - Maintain virtual gap compatibility state in `BufferText`, not in the backend.
 - Update the virtual gap anchor after edits.
@@ -333,25 +333,21 @@ Before piece-tree becomes a serious option beyond experiments:
 
 Piece-tree must pass the same semantic test matrix as gap-buffer.
 
-## Phase 9: Rope Later
+## Phase 9: Rope Backend
 
-Do not add a serious rope backend until:
+Rope should stay behind the same private `TextBackend` enum contract:
 
-- typed positions are in place,
-- layout is backend-neutral,
-- edit transactions are centralized,
-- backend matrix tests exist,
-- piece-tree passes broad semantic coverage.
-
-When added, rope should be another `TextBackend` variant, not a second semantic
-path.
+- no marker, overlay, undo, hook, narrowing, or point logic in rope code;
+- no Lisp-visible behavior differences from gap-buffer;
+- no separate semantic path for rope-specific editing;
+- the same backend matrix tests must cover gap-buffer, piece-tree, and rope.
 
 ## Phase 10: Test Strategy
 
 Add backend matrix tests for both unit tests and oracle-style tests:
 
 ```elisp
-(gap-buffer piece-tree)
+(gap-buffer piece-tree rope)
 ```
 
 Coverage areas:
@@ -388,7 +384,8 @@ Recommended implementation order:
    indirect buffers.
 8. Harden piece-tree conversion and chunk iteration.
 9. Add virtual gap compatibility state for non-gap backends.
-10. Only after these are stable, add a real rope backend.
+10. Keep rope on the same backend contract and broaden matrix tests whenever
+    new semantic behavior is touched.
 
 ## Progress
 
@@ -403,14 +400,22 @@ Completed so far:
   edit mutation, byte access, storage/Emacs byte conversion, and conversion
   anchors.
 - Centralized Emacs-byte character counting for buffer text storage.
+- Added `piece-tree` and `rope` as implemented backend kinds behind the private
+  `TextBackend` enum.
+- Added backend matrix coverage for markers, text properties, overlays, undo,
+  narrowing, indirect buffers, `buffer-swap-text`, pdump backend preservation,
+  and `(gap-position)` / `(gap-size)` compatibility.
+- Added virtual gap compatibility state for non-gap backends.
+- Switched position conversion caches to an explicit `BufferText` content epoch
+  and invalidated them after every backend content mutation, including same-size
+  replacements where `(chars, bytes)` does not change.
 
 Next work:
 
 - Continue migrating semantic layers above `TextBackend` to typed positions.
-- Add backend matrix tests for markers, text properties, undo, narrowing, and
-  indirect buffers.
-- Move insert/delete/replace semantic ordering into an explicit transaction
-  module once the boundary is fully typed.
+- Expand backend matrix coverage for search/regex and display cursor position.
+- Continue making insert/delete/replace transaction order explicit and fully
+  typed in `edit_transaction.rs`.
 
 ## Success Criteria
 
@@ -421,7 +426,7 @@ The refactor is successful when:
 - display/search/edit/undo paths do not call gap-specific layout APIs;
 - backend implementations contain no marker, overlay, undo, hook, or buffer
   local logic;
-- gap-buffer and piece-tree pass the same semantic matrix;
+- gap-buffer, piece-tree, and rope pass the same semantic matrix;
 - GNU oracle tests pass with the default gap backend;
-- piece-tree can be enabled for targeted tests without changing Lisp-visible
-  behavior.
+- non-gap backends can be enabled for targeted tests without changing
+  Lisp-visible behavior.

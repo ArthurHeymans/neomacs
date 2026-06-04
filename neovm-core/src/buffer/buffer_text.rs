@@ -29,25 +29,26 @@ use super::text_props::{PropertyInterval, TextPropertyTable};
 
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
 /// buffer text has not changed since the entry was stored. Mirrors GNU
-/// `marker.c:202-203` but uses a (total_chars, total_bytes) epoch rather than
-/// `chars_modiff`; every `BufferText` content mutation clears the cache because
-/// same-size edits can still change character boundaries.
+/// `marker.c:202-203` but uses a `BufferText` content epoch rather than
+/// `chars_modiff`, so direct `BufferText` tests and non-buffer callers get the
+/// same invalidation semantics as full `insdel.rs` edits.
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
-    /// Total text size when this entry was stored. Empty = invalid.
-    epoch: TextMetrics,
+    /// BufferText content epoch when this entry was stored. Zero = invalid.
+    epoch: u64,
     anchor: TextPositionAnchor,
 }
 
 impl PositionCache {
-    fn is_valid_for(self, metrics: TextMetrics) -> bool {
-        self.epoch == metrics && !self.epoch.is_empty()
+    fn is_valid_for(self, content_epoch: u64) -> bool {
+        self.epoch != 0 && self.epoch == content_epoch
     }
 }
 
 struct BufferTextStorage {
     metrics: TextMetrics,
     backend: TextBackend,
+    content_epoch: u64,
     virtual_gap_pos: CharPos0,
     virtual_gap_size: usize,
     modified_tick: i64,
@@ -60,11 +61,11 @@ struct BufferTextStorage {
     /// Interior-mutable last-query cache for char↔byte conversion.
     pos_cache: Cell<PositionCache>,
     /// Internal (non-Lisp-visible) anchor positions populated on long scans.
-    /// Invalidated wholesale when `(total_chars, total_bytes)` advances.
+    /// Invalidated wholesale when the content epoch advances.
     anchor_cache: RefCell<Vec<TextPositionAnchor>>,
-    /// Text size at which the anchor_cache is valid.
+    /// Content epoch at which the anchor_cache is valid.
     /// Mismatch triggers a wholesale clear on next read.
-    anchor_cache_key: Cell<TextMetrics>,
+    anchor_cache_key: Cell<u64>,
 }
 
 impl Clone for BufferTextStorage {
@@ -72,6 +73,7 @@ impl Clone for BufferTextStorage {
         Self {
             metrics: self.metrics,
             backend: self.backend.clone(),
+            content_epoch: self.content_epoch,
             virtual_gap_pos: self.virtual_gap_pos,
             virtual_gap_size: self.virtual_gap_size,
             modified_tick: self.modified_tick,
@@ -119,6 +121,7 @@ impl BufferText {
             storage: Rc::new(RefCell::new(BufferTextStorage {
                 metrics,
                 backend,
+                content_epoch: 1,
                 virtual_gap_pos,
                 virtual_gap_size,
                 modified_tick: 1,
@@ -128,7 +131,7 @@ impl BufferText {
                 markers_head: std::ptr::null_mut(),
                 pos_cache: Cell::new(PositionCache::default()),
                 anchor_cache: RefCell::new(Vec::new()),
-                anchor_cache_key: Cell::new(TextMetrics::ZERO),
+                anchor_cache_key: Cell::new(0),
             })),
         }
     }
@@ -138,6 +141,12 @@ impl BufferText {
     }
 
     fn finish_backend_content_mutation(storage: &mut BufferTextStorage) {
+        Self::refresh_backend_metrics(storage);
+        storage.content_epoch = storage.content_epoch.wrapping_add(1).max(1);
+        Self::invalidate_position_caches(storage);
+    }
+
+    fn finish_backend_shape_change(storage: &mut BufferTextStorage) {
         Self::refresh_backend_metrics(storage);
         Self::invalidate_position_caches(storage);
     }
@@ -186,7 +195,7 @@ impl BufferText {
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {
         storage.pos_cache.set(PositionCache::default());
         storage.anchor_cache.borrow_mut().clear();
-        storage.anchor_cache_key.set(TextMetrics::ZERO);
+        storage.anchor_cache_key.set(0);
     }
 
     fn byte_range_to_char_range_with_storage(
@@ -300,7 +309,7 @@ impl BufferText {
         storage.backend = TextBackend::from_dump(text, multibyte, kind);
         storage.virtual_gap_pos = virtual_gap_pos;
         storage.virtual_gap_size = virtual_gap_size;
-        Self::finish_backend_content_mutation(&mut storage);
+        Self::finish_backend_shape_change(&mut storage);
     }
 
     pub fn len(&self) -> usize {
@@ -1765,6 +1774,7 @@ impl BufferText {
     pub fn char_pos_to_emacs_byte_pos(&self, target: CharPos0) -> EmacsBytePos {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
+        let content_epoch = storage.content_epoch;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
 
@@ -1778,9 +1788,9 @@ impl BufferText {
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
-        if storage.anchor_cache_key.get() != metrics {
+        if storage.anchor_cache_key.get() != content_epoch {
             storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(metrics);
+            storage.anchor_cache_key.set(content_epoch);
         }
 
         let mut best_below = TextPositionAnchor::default();
@@ -1791,7 +1801,7 @@ impl BufferText {
         }
 
         let cached = storage.pos_cache.get();
-        if cached.is_valid_for(metrics) {
+        if cached.is_valid_for(content_epoch) {
             consider_char_anchor(target, cached.anchor, &mut best_below, &mut best_above);
         }
 
@@ -1846,7 +1856,7 @@ impl BufferText {
         }
 
         storage.pos_cache.set(PositionCache {
-            epoch: metrics,
+            epoch: content_epoch,
             anchor: TextPositionAnchor::new(target, result),
         });
         result
@@ -1857,6 +1867,7 @@ impl BufferText {
     pub fn emacs_byte_pos_to_char_pos(&self, target: EmacsBytePos) -> CharPos0 {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
+        let content_epoch = storage.content_epoch;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
 
@@ -1870,9 +1881,9 @@ impl BufferText {
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
-        if storage.anchor_cache_key.get() != metrics {
+        if storage.anchor_cache_key.get() != content_epoch {
             storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(metrics);
+            storage.anchor_cache_key.set(content_epoch);
         }
 
         let mut best_below = TextPositionAnchor::default();
@@ -1883,7 +1894,7 @@ impl BufferText {
         }
 
         let cached = storage.pos_cache.get();
-        if cached.is_valid_for(metrics) {
+        if cached.is_valid_for(content_epoch) {
             consider_byte_anchor(target, cached.anchor, &mut best_below, &mut best_above);
         }
 
@@ -1945,7 +1956,7 @@ impl BufferText {
         }
 
         storage.pos_cache.set(PositionCache {
-            epoch: metrics,
+            epoch: content_epoch,
             anchor: TextPositionAnchor::new(result, target),
         });
         result
