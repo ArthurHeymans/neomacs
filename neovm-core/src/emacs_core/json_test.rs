@@ -418,6 +418,19 @@ fn parse_rejects_excessive_nesting_without_stack_overflow() {
 }
 
 #[test]
+fn parse_rejects_unescaped_control_char_in_string() {
+    crate::test_utils::init_test_tracing();
+    // A literal newline (0x0A) inside the quotes is not valid JSON; it must
+    // be written as the escape \n. GNU signals json-parse-error here.
+    match builtin_json_parse_string(vec![Value::string("\"a\nb\"")]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "json-parse-error");
+        }
+        other => panic!("expected json-parse-error signal, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("null")]);

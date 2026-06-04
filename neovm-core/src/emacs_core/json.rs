@@ -798,7 +798,12 @@ impl<'a> JsonParser<'a> {
                     }
                 }
                 Some(b) => {
-                    if b < 0x80 {
+                    if b < 0x20 {
+                        // Unescaped control characters are not valid inside a
+                        // JSON string (GNU marks 0x00-0x1F as non-plain in
+                        // `json_plain_char` and signals a parse error).
+                        return Err(self.signal_at_pos(JsonError::Parse));
+                    } else if b < 0x80 {
                         self.advance();
                         result.push(b as char);
                     } else {
