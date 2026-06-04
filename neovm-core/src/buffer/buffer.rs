@@ -2193,10 +2193,8 @@ impl Buffer {
         if pos >= self.total_bytes() {
             return None;
         }
-        let storage_pos = self
-            .text
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos));
-        self.text.char_code_at(storage_pos.get())
+        self.text
+            .char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     /// Character immediately before Emacs byte position `pos`, or `None`.
@@ -2220,47 +2218,8 @@ impl Buffer {
             .text
             .char_pos_to_emacs_byte_pos(CharPos0::new(prior_char - 1))
             .get();
-        let storage_pos = self
-            .text
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(prior_byte));
-        self.text.char_code_at(storage_pos.get())
-    }
-
-    /// Storage-byte width of the character starting at Emacs byte position `pos`.
-    pub fn char_after_storage_len(&self, pos: usize) -> Option<usize> {
-        if pos >= self.total_bytes() {
-            return None;
-        }
-        let storage_pos = self
-            .text
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
-            .get();
-        let char_idx = self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
-        let next_storage_pos = self
-            .text
-            .char_pos_to_storage_byte_pos(CharPos0::new(char_idx.get() + 1))
-            .get();
-        Some(next_storage_pos - storage_pos)
-    }
-
-    /// Storage-byte width of the character ending at Emacs byte position `pos`.
-    pub fn char_before_storage_len(&self, pos: usize) -> Option<usize> {
-        if pos == 0 || pos > self.total_bytes() {
-            return None;
-        }
-        let prior_char = self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
-        if prior_char.get() == 0 {
-            return None;
-        }
-        let prior_byte = self
-            .text
-            .char_pos_to_storage_byte_pos(CharPos0::new(prior_char.get() - 1))
-            .get();
-        let storage_pos = self
-            .text
-            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
-            .get();
-        Some(storage_pos - prior_byte)
+        self.text
+            .char_code_at_emacs_byte_pos(EmacsBytePos::new(prior_byte))
     }
 
     /// Emacs-byte width of the character starting at `pos`.

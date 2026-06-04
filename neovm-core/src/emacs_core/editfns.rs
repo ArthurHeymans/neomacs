@@ -870,7 +870,7 @@ pub(crate) fn builtin_delete_char(
                     if end >= accessible.end_usize() {
                         return Err(signal("end-of-buffer", vec![]));
                     }
-                    match buf.char_after_storage_len(end) {
+                    match buf.char_after_emacs_len(end) {
                         Some(char_len) => end += char_len,
                         None => {
                             return Err(signal("end-of-buffer", vec![]));
@@ -885,7 +885,7 @@ pub(crate) fn builtin_delete_char(
                     if start <= accessible.start_usize() {
                         return Err(signal("beginning-of-buffer", vec![]));
                     }
-                    match buf.char_before_storage_len(start) {
+                    match buf.char_before_emacs_len(start) {
                         Some(char_len) => start -= char_len,
                         None => {
                             return Err(signal("beginning-of-buffer", vec![]));
