@@ -1,6 +1,8 @@
 use super::*;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
-use neovm_core::buffer::{Buffer, BufferId, BufferManager, BufferTextBackendKind, EmacsByteRange};
+use neovm_core::buffer::{
+    Buffer, BufferId, BufferManager, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
+};
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId};
 
@@ -1020,6 +1022,132 @@ fn rust_buffer_access_count_lines_is_text_backend_neutral() {
         );
         assert_eq!(access.count_lines(1, 36), 0, "{kind:?}");
         assert_eq!(access.count_lines(1, 38), 1, "{kind:?}");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LayoutSnapshotBackendTrace {
+    copied_all: Vec<u8>,
+    iterated_middle: Vec<u8>,
+    byte_at_positions: Vec<Option<u8>>,
+    char_to_byte: Vec<usize>,
+    byte_to_char: Vec<usize>,
+    face_at_positions: Vec<Option<String>>,
+    next_prop_changes: Vec<Option<usize>>,
+    line_counts: Vec<i64>,
+}
+
+fn fragmented_snapshot_backend_trace(kind: BufferTextBackendKind) -> LayoutSnapshotBackendTrace {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let text = "abé\n日本\tΩ\n";
+    let mut buf = test_buffer_with_backend(200 + u64::from(u8::from(kind)), "*snapshot*", kind);
+    set_buffer_text(&mut buf, text);
+
+    for marker in ["é", "日本", "Ω"] {
+        let pos = text.find(marker).expect("marker");
+        buf.goto_byte(pos);
+        buf.insert("tmp");
+        buf.delete_region(pos, pos + "tmp".len());
+    }
+    assert_eq!(buf.buffer_string(), text);
+
+    let face_start = text.find("日本").expect("face start");
+    let face_end = face_start + "日本".len();
+    assert!(buf.put_text_property(
+        face_start,
+        face_end,
+        Value::symbol("face"),
+        Value::symbol("bold")
+    ));
+
+    let snapshot = LayoutBufferSnapshot::from_buffer(&buf);
+    let access = RustBufferAccess::new(&snapshot);
+    let byte_len = text.len();
+    let byte_boundaries: Vec<usize> = text
+        .char_indices()
+        .map(|(idx, _)| idx)
+        .chain(std::iter::once(byte_len))
+        .collect();
+    let mut copied_all = Vec::new();
+    snapshot
+        .layout_copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, byte_len), &mut copied_all);
+
+    let mut iterated_middle = Vec::new();
+    snapshot
+        .layout_try_for_each_emacs_byte_range_chunk(
+            EmacsByteRange::from_usize(2, byte_len.saturating_sub(1)),
+            |chunk| {
+                iterated_middle.extend_from_slice(chunk);
+                Ok::<(), std::convert::Infallible>(())
+            },
+        )
+        .expect("infallible chunk walk");
+
+    let face = Value::symbol("face");
+    LayoutSnapshotBackendTrace {
+        copied_all,
+        iterated_middle,
+        byte_at_positions: (0..=byte_len + 1)
+            .map(|pos| snapshot.layout_emacs_byte_at_pos(EmacsBytePos::new(pos)))
+            .collect(),
+        char_to_byte: (0..=text.chars().count() + 1)
+            .map(|charpos| {
+                snapshot
+                    .layout_char_pos_to_emacs_byte_pos(CharPos0::new(charpos))
+                    .get()
+            })
+            .collect(),
+        byte_to_char: byte_boundaries
+            .iter()
+            .copied()
+            .map(|pos| {
+                snapshot
+                    .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
+                    .get()
+            })
+            .collect(),
+        face_at_positions: byte_boundaries
+            .iter()
+            .copied()
+            .map(|pos| {
+                snapshot
+                    .layout_text_prop_at_emacs_byte_pos(EmacsBytePos::new(pos), face)
+                    .and_then(|value| value.as_symbol_name().map(str::to_owned))
+            })
+            .collect(),
+        next_prop_changes: byte_boundaries
+            .iter()
+            .copied()
+            .map(|pos| {
+                snapshot
+                    .layout_next_text_prop_change_after_emacs_byte_pos(EmacsBytePos::new(pos))
+                    .map(|byte_pos| byte_pos.get())
+            })
+            .collect(),
+        line_counts: vec![
+            access.count_lines(0, byte_len as i64),
+            access.count_lines(0, text.find('\n').expect("newline") as i64),
+            access.count_lines(0, (text.find('\n').expect("newline") + 1) as i64),
+            access.count_lines(2, byte_len.saturating_sub(1) as i64),
+        ],
+    }
+}
+
+#[test]
+fn layout_buffer_snapshot_is_text_backend_neutral_for_positions_bytes_and_properties() {
+    let baseline = fragmented_snapshot_backend_trace(BufferTextBackendKind::GapBuffer);
+    assert_eq!(baseline.copied_all, "abé\n日本\tΩ\n".as_bytes());
+    assert!(
+        baseline
+            .face_at_positions
+            .iter()
+            .any(|value| value.as_deref() == Some("bold")),
+        "baseline should preserve text properties, got {baseline:?}"
+    );
+
+    for kind in BufferTextBackendKind::implemented_variants() {
+        let trace = fragmented_snapshot_backend_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
     }
 }
 

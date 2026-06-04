@@ -2,8 +2,8 @@ use super::*;
 use crate::neovm_bridge::RustBufferAccess;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::GlyphType;
-use neovm_core::buffer::EmacsByteRange;
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
+use neovm_core::buffer::{BufferTextBackendKind, EmacsByteRange};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -14,7 +14,7 @@ use neovm_core::emacs_core::load::{
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::heap_types::LispString;
-use neovm_core::window::DisplayRowSnapshot;
+use neovm_core::window::{DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot};
 use std::sync::{Arc, Mutex};
 
 trait BufferTextPropertyTestExt {
@@ -271,6 +271,222 @@ fn enabled_window_row_texts_expanding_stretches(
                 .collect()
         })
         .collect()
+}
+
+fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
+    BufferTextBackendKind::implemented_variants()
+}
+
+fn convert_current_buffer_text_backend(eval: &mut Context, kind: BufferTextBackendKind) {
+    let form = format!("(neomacs-set-buffer-text-backend '{})", kind.symbol_name());
+    let result = eval
+        .eval_str(&form)
+        .unwrap_or_else(|err| panic!("convert buffer text backend with {form}: {err}"));
+    assert_eq!(result.as_symbol_name(), Some(kind.symbol_name()));
+}
+
+fn insert_fragmented_current_buffer_text(eval: &mut Context, text: &str) {
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = eval
+        .buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("current buffer");
+    buffer.insert(text);
+
+    for marker in ["\n", "日本", "Ω"] {
+        if let Some(pos) = text.find(marker) {
+            buffer.goto_byte(pos);
+            buffer.insert("tmp");
+            buffer.delete_region(pos, pos + "tmp".len());
+        }
+    }
+
+    assert_eq!(buffer.buffer_string(), text);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GlyphKindTrace {
+    Char(char),
+    Composite(String),
+    Stretch(u16),
+    Image(i32),
+    Glyphless(char),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GlyphTrace {
+    kind: GlyphKindTrace,
+    face_id: u32,
+    charpos: usize,
+    bidi_level: u8,
+    wide: bool,
+    padding: bool,
+    pixel_width_bits: u32,
+    pixel_height_bits: u32,
+    pixel_ascent_bits: u32,
+}
+
+impl GlyphTrace {
+    fn from_glyph(glyph: &Glyph) -> Self {
+        let kind = match &glyph.glyph_type {
+            GlyphType::Char { ch } => GlyphKindTrace::Char(*ch),
+            GlyphType::Composite { text } => GlyphKindTrace::Composite(text.to_string()),
+            GlyphType::Stretch { width_cols } => GlyphKindTrace::Stretch(*width_cols),
+            GlyphType::Image { image_id } => GlyphKindTrace::Image(*image_id),
+            GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
+        };
+        Self {
+            kind,
+            face_id: glyph.face_id,
+            charpos: glyph.charpos,
+            bidi_level: glyph.bidi_level,
+            wide: glyph.wide,
+            padding: glyph.padding,
+            pixel_width_bits: glyph.pixel_width.to_bits(),
+            pixel_height_bits: glyph.pixel_height.to_bits(),
+            pixel_ascent_bits: glyph.pixel_ascent.to_bits(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RowTrace {
+    role: GlyphRowRole,
+    enabled: bool,
+    cursor_col: Option<u16>,
+    cursor_type: Option<String>,
+    truncated_left: bool,
+    continued: bool,
+    displays_text: bool,
+    ends_at_zv: bool,
+    mode_line: bool,
+    pixel_y_bits: u32,
+    height_px_bits: u32,
+    ascent_px_bits: u32,
+    start_charpos: usize,
+    end_charpos: usize,
+    glyph_areas: [Vec<GlyphTrace>; 3],
+}
+
+impl RowTrace {
+    fn from_row(row: &GlyphRow) -> Self {
+        Self {
+            role: row.role,
+            enabled: row.enabled,
+            cursor_col: row.cursor_col,
+            cursor_type: row.cursor_type.map(|cursor| format!("{cursor:?}")),
+            truncated_left: row.truncated_left,
+            continued: row.continued,
+            displays_text: row.displays_text,
+            ends_at_zv: row.ends_at_zv,
+            mode_line: row.mode_line,
+            pixel_y_bits: row.pixel_y.to_bits(),
+            height_px_bits: row.height_px.to_bits(),
+            ascent_px_bits: row.ascent_px.to_bits(),
+            start_charpos: row.start_charpos,
+            end_charpos: row.end_charpos,
+            glyph_areas: [
+                row.glyphs[0].iter().map(GlyphTrace::from_glyph).collect(),
+                row.glyphs[1].iter().map(GlyphTrace::from_glyph).collect(),
+                row.glyphs[2].iter().map(GlyphTrace::from_glyph).collect(),
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BackendLayoutTrace {
+    matrix_rows: Vec<RowTrace>,
+    points: Vec<DisplayPointSnapshot>,
+    output_rows: Vec<DisplayRowSnapshot>,
+    phys_cursor: Option<WindowCursorSnapshot>,
+    visible_span: Option<(usize, usize)>,
+}
+
+fn selected_window_layout_trace(
+    eval: &Context,
+    engine: &LayoutEngine,
+    frame_id: neovm_core::window::FrameId,
+) -> BackendLayoutTrace {
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let selected_window = frame.selected_window;
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let window_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let display_snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+
+    BackendLayoutTrace {
+        matrix_rows: window_entry
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| row.enabled)
+            .map(RowTrace::from_row)
+            .collect(),
+        points: display_snapshot.points.clone(),
+        output_rows: display_snapshot.rows.clone(),
+        phys_cursor: display_snapshot.phys_cursor.clone(),
+        visible_span: display_snapshot.visible_buffer_span(),
+    }
+}
+
+fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, kind);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "abé\tz\n日本x\nlast Ω line\n";
+    {
+        insert_fragmented_current_buffer_text(&mut eval, text);
+        let omega_byte = text.find('Ω').expect("omega");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        assert_eq!(buffer.text_backend_kind(), kind);
+        buffer.goto_byte(omega_byte);
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-backend-parity", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = 1;
+            *point = 1;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    selected_window_layout_trace(&eval, &engine, frame_id)
 }
 
 fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
@@ -581,6 +797,37 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
         b.width > 0,
         "expected positive width for b, got {b:?}; points={all_points:?}"
     );
+}
+
+#[test]
+fn implemented_text_backends_match_layout_frame_rows_points_and_cursor() {
+    let baseline = backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    assert!(
+        baseline
+            .matrix_rows
+            .iter()
+            .any(|row| row.role == GlyphRowRole::Text
+                && row.glyph_areas[1]
+                    .iter()
+                    .any(|glyph| glyph.kind == GlyphKindTrace::Char('Ω'))),
+        "baseline should render omega row, got {baseline:?}"
+    );
+    assert!(
+        baseline
+            .matrix_rows
+            .iter()
+            .any(|row| !row.glyph_areas[0].is_empty()),
+        "baseline should exercise left-margin line-number glyphs, got {baseline:?}"
+    );
+    assert!(
+        baseline.phys_cursor.is_some(),
+        "baseline should publish physical cursor geometry"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
 }
 
 #[test]
