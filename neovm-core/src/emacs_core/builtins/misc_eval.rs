@@ -230,11 +230,17 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
     };
 
     let ref_byte = if byte_pos > 0 { byte_pos - 1 } else { 0 };
-    let current_props = buf.text.text_props_get_properties(ref_byte);
+    let current_props = buf
+        .text
+        .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(ref_byte));
     let mut cursor = byte_pos;
 
     loop {
-        match buf.text.text_props_previous_change(cursor) {
+        match buf
+            .text
+            .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(cursor))
+            .map(EmacsBytePos::get)
+        {
             Some(prev) => {
                 if let (Some(lim), Some(lv)) = (limit_pos, limit_val) {
                     if textprop::byte_to_elisp_pos(buf, prev) <= lim {
@@ -243,7 +249,9 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                 }
 
                 let check = if prev > 0 { prev - 1 } else { 0 };
-                let new_props = buf.text.text_props_get_properties(check);
+                let new_props = buf
+                    .text
+                    .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(check));
                 if new_props != current_props {
                     return Ok(Value::fixnum(
                         EmacsBytePos::new(prev).to_lisp(&buf.text).as_i64(),
@@ -339,7 +347,11 @@ fn next_char_property_change_for_buffer(
         temp = limit;
     }
 
-    if let Some(next) = buf.text.text_props_next_change(byte_pos) {
+    if let Some(next) = buf
+        .text
+        .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get)
+    {
         let next_pos = textprop::byte_to_elisp_pos(buf, next);
         if next < accessible.end_usize() && next_pos < temp {
             return Ok(next_pos);
@@ -362,7 +374,11 @@ fn previous_char_property_change_for_buffer(
         temp = limit;
     }
 
-    if let Some(prev) = buf.text.text_props_previous_change(byte_pos) {
+    if let Some(prev) = buf
+        .text
+        .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get)
+    {
         let prev_pos = textprop::byte_to_elisp_pos(buf, prev);
         if prev > accessible.start_usize() && prev_pos > temp {
             return Ok(prev_pos);
@@ -840,9 +856,9 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
         // multibyte/non-Unicode storage sequence.
         let left_byte = buf
             .text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(insert_start_char.saturating_sub(1)))
-            .get();
-        buf.text.text_props_get_properties_ordered(left_byte)
+            .char_pos_to_emacs_byte_pos(CharPos0::new(insert_start_char.saturating_sub(1)));
+        buf.text
+            .text_props_get_properties_ordered_at_emacs_byte_pos(left_byte)
     } else {
         Vec::new()
     };
@@ -854,9 +870,9 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     let right_props = if right_char < buf.point_max_char() {
         let right_byte = buf
             .text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(right_char))
-            .get();
-        buf.text.text_props_get_properties_ordered(right_byte)
+            .char_pos_to_emacs_byte_pos(CharPos0::new(right_char));
+        buf.text
+            .text_props_get_properties_ordered_at_emacs_byte_pos(right_byte)
     } else {
         Vec::new()
     };
@@ -1103,10 +1119,10 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
             vec![Value::fixnum(pos), Value::fixnum(pos)],
         ));
     }
-    let prop_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get();
+    let prop_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(pos);
     if buf
         .text
-        .text_props_get_property(prop_byte, Value::symbol("inhibit-read-only"))
+        .text_props_get_property_at_emacs_byte_pos(prop_byte, Value::symbol("inhibit-read-only"))
         .is_some_and(|value| value.is_truthy())
     {
         return Ok(Value::NIL);
