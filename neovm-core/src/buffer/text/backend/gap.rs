@@ -6,7 +6,7 @@ use crate::buffer::position::{
 };
 #[cfg(test)]
 use crate::buffer::text::GapDebugLayout;
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -188,6 +188,14 @@ impl GapTextBackend {
 
     pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
         self.gap.delete_measured_range(range);
+    }
+
+    pub(in crate::buffer) fn replace_measured_range(
+        &mut self,
+        replacement: TextReplacement,
+        bytes: &[u8],
+    ) {
+        self.gap.replace_measured_range(replacement, bytes);
     }
 
     pub(in crate::buffer) fn replace_same_len_emacs_byte_range(

@@ -15,6 +15,7 @@ use std::fmt;
 use crate::buffer::text::emacs_char_count_bytes;
 use crate::buffer::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextEditRange, TextExtent,
+    TextReplacement,
 };
 
 /// Default extra gap bytes to pre-allocate on any growth.
@@ -574,6 +575,24 @@ impl GapBuffer {
         self.gap_end += deleted_bytes;
         self.total_chars -= nchars;
         self.total_bytes -= deleted_bytes;
+    }
+
+    pub(crate) fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
+        let old_range = replacement.old_range();
+        if old_range.is_empty() {
+            self.insert_measured_emacs_bytes(
+                replacement.byte_start(),
+                bytes,
+                replacement.new_extent(),
+            );
+            return;
+        }
+        if bytes.is_empty() {
+            self.delete_measured_range(old_range);
+            return;
+        }
+        self.delete_measured_range(old_range);
+        self.insert_measured_emacs_bytes(replacement.byte_start(), bytes, replacement.new_extent());
     }
 
     /// Overwrite the logical byte range `[start, end)` with raw Emacs bytes.

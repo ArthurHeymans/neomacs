@@ -3,7 +3,9 @@ use std::fmt;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes};
+use crate::buffer::text::{
+    TextEditRange, TextExtent, TextMetrics, TextReplacement, emacs_char_count_bytes,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PieceSource {
@@ -384,6 +386,28 @@ impl PieceTreeTextBackend {
         let (left, rest) = self.split_at_byte(root, start);
         let (_deleted, right) = self.split_at_byte(rest, end - start);
         self.root = Self::merge(left, right);
+    }
+
+    pub(in crate::buffer) fn replace_measured_range(
+        &mut self,
+        replacement: TextReplacement,
+        bytes: &[u8],
+    ) {
+        let old_range = replacement.old_range();
+        if old_range.is_empty() {
+            self.insert_measured_emacs_bytes(
+                replacement.byte_start(),
+                bytes,
+                replacement.new_extent(),
+            );
+            return;
+        }
+        if bytes.is_empty() {
+            self.delete_measured_range(old_range);
+            return;
+        }
+        self.delete_measured_range(old_range);
+        self.insert_measured_emacs_bytes(replacement.byte_start(), bytes, replacement.new_extent());
     }
 
     pub(in crate::buffer) fn replace_same_len_emacs_byte_range(

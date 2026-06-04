@@ -392,9 +392,7 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        self.text.delete_measured_range(old_range);
-        self.text
-            .insert_measured_emacs_bytes(old_range.byte_start(), new_bytes, new_extent);
+        self.text.replace_measured_range(replacement, new_bytes);
         self.set_edit_state(replace_state_after_edit(old_state, replacement));
 
         self.text

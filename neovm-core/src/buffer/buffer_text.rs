@@ -20,7 +20,7 @@ use super::position::{
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, ImplementedBufferTextBackendKind, TextEditRange, TextExtent,
-    TextMetrics, emacs_char_count_bytes,
+    TextMetrics, TextReplacement, emacs_char_count_bytes,
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
@@ -415,6 +415,15 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.delete_measured_range(range);
+        Self::refresh_backend_metrics(&mut storage);
+    }
+
+    pub(crate) fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
+        if replacement.old_range().is_empty() && bytes.is_empty() {
+            return;
+        }
+        let mut storage = self.storage.borrow_mut();
+        storage.backend.replace_measured_range(replacement, bytes);
         Self::refresh_backend_metrics(&mut storage);
     }
 

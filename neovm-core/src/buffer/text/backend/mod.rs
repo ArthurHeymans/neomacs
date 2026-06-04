@@ -9,7 +9,7 @@ use crate::buffer::position::{
 };
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
 use gap::GapTextBackend;
 use piece_tree::PieceTreeTextBackend;
 
@@ -270,6 +270,17 @@ impl TextBackend {
         match self {
             Self::Gap(gap) => gap.delete_measured_range(range),
             Self::PieceTree(piece_tree) => piece_tree.delete_measured_range(range),
+        }
+    }
+
+    pub(in crate::buffer) fn replace_measured_range(
+        &mut self,
+        replacement: TextReplacement,
+        bytes: &[u8],
+    ) {
+        match self {
+            Self::Gap(gap) => gap.replace_measured_range(replacement, bytes),
+            Self::PieceTree(piece_tree) => piece_tree.replace_measured_range(replacement, bytes),
         }
     }
 
