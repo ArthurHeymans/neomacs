@@ -9057,6 +9057,42 @@ fn subst_char_in_region_reports_gnu_first_to_last_changed_after_range() {
 }
 
 #[test]
+fn subst_char_in_region_uses_gnu_first_change_span_for_modified_ticks() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (erase-buffer)
+           (insert \"zzzaa\")
+           (set-buffer-modified-p nil)
+           (let ((modified (buffer-modified-tick))
+                 (chars-modified (buffer-chars-modified-tick)))
+             (subst-char-in-region 1 6 ?a ?b)
+             (list (buffer-string)
+                   (- (buffer-modified-tick) modified)
+                   (- (buffer-chars-modified-tick) chars-modified)
+                   (buffer-modified-p))))",
+    );
+    assert_eq!(result, r#"OK ("zzzbb" 2 2 t)"#);
+}
+
+#[test]
+fn subst_char_in_region_records_per_character_undo_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (erase-buffer)
+           (insert \"zzzaa\")
+           (setq buffer-undo-list nil)
+           (subst-char-in-region 1 6 ?a ?b)
+           (list (buffer-string) buffer-undo-list))",
+    );
+    assert_eq!(
+        result,
+        r#"OK ("zzzbb" ((5 . 6) ("a" . -5) (4 . 5) ("a" . 4)))"#
+    );
+}
+
+#[test]
 fn text_property_modification_hooks_run_before_text_delete() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

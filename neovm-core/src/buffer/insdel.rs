@@ -8,8 +8,9 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    ReplaceSideEffectPolicy, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
-    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, char_pos_for_emacs_byte,
+    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
+    modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -234,11 +235,14 @@ impl Buffer {
 
     fn apply_same_len_edit_side_effects(
         &mut self,
-        changed_chars: usize,
+        edit: MeasuredSameLenEdit,
         preserve_modified_state: bool,
     ) {
+        if edit.is_empty() {
+            return;
+        }
         let old_state = self.modified_state_value();
-        self.record_char_modification(changed_chars);
+        self.record_char_modification(edit.changed_chars_usize());
         if preserve_modified_state && old_state.is_nil() {
             self.text.set_save_modified_tick(self.text.modified_tick());
         }
@@ -527,16 +531,16 @@ impl Buffer {
     pub fn subst_char_in_region(
         &mut self,
         range: TextEditRange,
+        modified_range: TextEditRange,
         from_code: u32,
         to_bytes: &[u8],
         noundo: bool,
     ) -> bool {
-        if range.byte_range().is_empty() {
+        let edit = MeasuredSameLenEdit::new(range, modified_range);
+        if edit.is_empty() {
             return false;
         }
-        let changed_chars = range.char_len().get();
         let start = range.byte_start_usize();
-        let end = range.byte_end_usize();
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
@@ -545,9 +549,10 @@ impl Buffer {
         self.text
             .copy_emacs_byte_range_to(range.byte_range(), &mut region_bytes);
         let mut replacement_bytes = Vec::with_capacity(region_bytes.len());
-        let mut changed = false;
+        let mut changed_ranges = Vec::new();
         if self.get_multibyte() {
             let mut pos = 0;
+            let mut char_offset = 0;
             while pos < region_bytes.len() {
                 let (code, len) = emacs_char::string_char(&region_bytes[pos..]);
                 let clen = len.max(1);
@@ -560,11 +565,18 @@ impl Buffer {
                         to_bytes.len()
                     );
                     replacement_bytes.extend_from_slice(to_bytes);
-                    changed = true;
+                    let char_pos = range.char_start_usize() + char_offset;
+                    changed_ranges.push(TextEditRange::from_usize(
+                        start + pos,
+                        start + pos + clen,
+                        char_pos,
+                        char_pos + 1,
+                    ));
                 } else {
                     replacement_bytes.extend_from_slice(&region_bytes[pos..pos + clen]);
                 }
                 pos += clen;
+                char_offset += 1;
             }
         } else {
             // Unibyte: each byte is one character. Replacement must be a
@@ -573,42 +585,57 @@ impl Buffer {
                 return false;
             }
             let from_byte = from_code as u8;
-            for &b in &region_bytes {
+            for (index, &b) in region_bytes.iter().enumerate() {
                 if b == from_byte {
                     replacement_bytes.push(to_bytes[0]);
-                    changed = true;
+                    let char_pos = range.char_start_usize() + index;
+                    changed_ranges.push(TextEditRange::from_usize(
+                        start + index,
+                        start + index + 1,
+                        char_pos,
+                        char_pos + 1,
+                    ));
                 } else {
                     replacement_bytes.push(b);
                 }
             }
         }
-        if !changed {
+        if changed_ranges.is_empty() {
             return false;
         }
 
         if !noundo {
-            self.undo_prepare_change(start, self.pt_byte);
+            self.undo_prepare_change(modified_range.byte_start_usize(), self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
-                let mut deleted =
-                    lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
-                let props = self.text.text_props_slice(start, end);
-                if !props.is_empty() {
-                    *deleted.intervals_mut() = props;
+                for changed_range in changed_ranges.iter().copied() {
+                    let mut deleted = lisp_string_from_buffer_bytes(
+                        region_bytes[changed_range.byte_start_usize() - start
+                            ..changed_range.byte_end_usize() - start]
+                            .to_vec(),
+                        self.get_multibyte(),
+                    );
+                    let props = self.text.text_props_slice(
+                        changed_range.byte_start_usize(),
+                        changed_range.byte_end_usize(),
+                    );
+                    if !props.is_empty() {
+                        *deleted.intervals_mut() = props;
+                    }
+                    undo::undo_list_record_delete(
+                        &mut ul,
+                        changed_range.char_start_usize(),
+                        deleted,
+                        self.pt,
+                        self.undo_state.point_before_command_or_undo(),
+                    );
+                    undo::undo_list_record_insert(
+                        &mut ul,
+                        changed_range.char_start_usize(),
+                        changed_range.char_len().get(),
+                        self.undo_state.point_before_command_or_undo(),
+                    );
                 }
-                undo::undo_list_record_delete(
-                    &mut ul,
-                    range.char_start_usize(),
-                    deleted,
-                    self.pt,
-                    self.undo_state.point_before_command_or_undo(),
-                );
-                undo::undo_list_record_insert(
-                    &mut ul,
-                    range.char_start_usize(),
-                    changed_chars,
-                    self.undo_state.point_before_command_or_undo(),
-                );
                 self.set_undo_list(ul);
             }
         }
@@ -620,7 +647,7 @@ impl Buffer {
             ),
             &replacement_bytes,
         );
-        self.apply_same_len_edit_side_effects(changed_chars, false);
+        self.apply_same_len_edit_side_effects(edit, false);
         true
     }
 
@@ -853,7 +880,12 @@ impl Buffer {
 
         self.pt_byte = new_point.emacs_byte_pos_usize();
         self.pt = new_point.char_pos_usize();
-        self.apply_same_len_edit_side_effects(transposition.changed_chars().get(), false);
+        let edit = MeasuredSameLenEdit::covering(TextEditRange::new(
+            byte_span,
+            transposition.char_span().start(),
+            transposition.char_span().end(),
+        ));
+        self.apply_same_len_edit_side_effects(edit, false);
     }
 }
 
@@ -946,10 +978,10 @@ impl BufferManager {
 
     fn adjust_shared_same_len_edit_metadata(
         buf: &mut Buffer,
-        changed_chars: usize,
+        edit: MeasuredSameLenEdit,
         preserve_modified_state: bool,
     ) {
-        buf.apply_same_len_edit_side_effects(changed_chars, preserve_modified_state);
+        buf.apply_same_len_edit_side_effects(edit, preserve_modified_state);
     }
 
     fn refresh_shared_buffer_state_cache(
@@ -1150,6 +1182,7 @@ impl BufferManager {
         &mut self,
         id: BufferId,
         range: TextEditRange,
+        modified_range: TextEditRange,
         from_code: u32,
         to_bytes: &[u8],
         noundo: bool,
@@ -1159,18 +1192,21 @@ impl BufferManager {
         }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let changed_chars = range.char_len().get();
-        let changed = self
-            .buffers
-            .get_mut(&id)?
-            .subst_char_in_region(range, from_code, to_bytes, noundo);
+        let edit = MeasuredSameLenEdit::new(range, modified_range);
+        let changed = self.buffers.get_mut(&id)?.subst_char_in_region(
+            range,
+            modified_range,
+            from_code,
+            to_bytes,
+            noundo,
+        );
         if !changed {
             return Some(false);
         }
 
         for sibling_id in scope.siblings() {
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_same_len_edit_metadata(sibling, changed_chars, false);
+            Self::adjust_shared_same_len_edit_metadata(sibling, edit, false);
         }
         Some(true)
     }
@@ -1186,6 +1222,11 @@ impl BufferManager {
         self.buffers
             .get_mut(&id)?
             .transpose_regions(transposition, leave_markers);
+        let edit = MeasuredSameLenEdit::covering(TextEditRange::new(
+            transposition.byte_span(),
+            transposition.char_span().start(),
+            transposition.char_span().end(),
+        ));
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {
@@ -1194,11 +1235,7 @@ impl BufferManager {
                 sibling.pt_byte = point.emacs_byte_pos_usize();
                 sibling.pt = point.char_pos_usize();
             }
-            Self::adjust_shared_same_len_edit_metadata(
-                sibling,
-                transposition.changed_chars().get(),
-                false,
-            );
+            Self::adjust_shared_same_len_edit_metadata(sibling, edit, false);
         })
     }
 }

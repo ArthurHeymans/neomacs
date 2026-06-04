@@ -559,6 +559,52 @@ impl MeasuredReplaceEdit {
     }
 }
 
+/// A same-byte-length text edit whose storage mutation span can differ from
+/// the GNU-visible modified span.
+///
+/// GNU `subst-char-in-region` is the important case: it rewrites bytes across
+/// the requested storage range, but `modify_text` starts at the first changed
+/// character and runs through the original end.  `transpose-regions` uses the
+/// same range for both.  Keeping both ranges typed avoids leaking raw
+/// `changed_chars` counters through the edit pipeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct MeasuredSameLenEdit {
+    storage_range: TextEditRange,
+    modified_range: TextEditRange,
+}
+
+impl MeasuredSameLenEdit {
+    pub(in crate::buffer) const fn new(
+        storage_range: TextEditRange,
+        modified_range: TextEditRange,
+    ) -> Self {
+        Self {
+            storage_range,
+            modified_range,
+        }
+    }
+
+    pub(in crate::buffer) const fn covering(range: TextEditRange) -> Self {
+        Self::new(range, range)
+    }
+
+    pub(in crate::buffer) const fn storage_range(self) -> TextEditRange {
+        self.storage_range
+    }
+
+    pub(in crate::buffer) const fn modified_range(self) -> TextEditRange {
+        self.modified_range
+    }
+
+    pub(in crate::buffer) const fn is_empty(self) -> bool {
+        self.storage_range.is_empty() || self.modified_range.is_empty()
+    }
+
+    pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
+        self.modified_range.char_len().get()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) update_state_fields: bool,
@@ -665,6 +711,13 @@ mod tests {
                 TextEditRange::from_usize(20, 36, 10, 18),
                 crate::buffer::TextExtent::from_usize(3, 5),
             ),
+        )
+    }
+
+    fn same_len_edit() -> MeasuredSameLenEdit {
+        MeasuredSameLenEdit::new(
+            TextEditRange::from_usize(0, 10, 0, 10),
+            TextEditRange::from_usize(3, 10, 3, 10),
         )
     }
 
@@ -834,5 +887,20 @@ mod tests {
         assert_eq!(modification_tick_delta(3), 2);
         assert_eq!(modification_tick_delta(4), 3);
         assert_eq!(modification_tick_delta(8), 4);
+    }
+
+    #[test]
+    fn same_len_edit_keeps_storage_and_modified_ranges_separate() {
+        let edit = same_len_edit();
+
+        assert_eq!(
+            edit.storage_range(),
+            TextEditRange::from_usize(0, 10, 0, 10)
+        );
+        assert_eq!(
+            edit.modified_range(),
+            TextEditRange::from_usize(3, 10, 3, 10)
+        );
+        assert_eq!(edit.changed_chars_usize(), 7);
     }
 }

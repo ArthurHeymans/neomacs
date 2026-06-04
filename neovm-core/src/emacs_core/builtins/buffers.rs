@@ -3437,6 +3437,7 @@ pub(crate) fn builtin_subst_char_in_region(
     let _ = eval.buffers.subst_char_in_buffer_region(
         current_id,
         range,
+        before_range,
         from_code as u32,
         &to_bytes,
         noundo,
