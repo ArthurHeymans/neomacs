@@ -401,6 +401,10 @@ Completed so far:
   descriptors from Emacs byte positions, while `insdel.rs` carries measured
   `TextExtent` values instead of recomputing raw lengths at each mutation
   site.
+- Introduced a typed `TextTransposition` descriptor for GNU
+  `transpose-regions` so the Lisp-facing character ranges and computed Emacs
+  byte ranges move together through the builtin, current-buffer edit path, and
+  shared-buffer sibling updates.
 - Tightened private backend boundaries for byte ranges, position conversion,
   edit mutation, byte access, storage/Emacs byte conversion, and conversion
   anchors.

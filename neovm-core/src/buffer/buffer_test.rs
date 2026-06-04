@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
+use crate::buffer::{TextEditRange, TextTransposition};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
@@ -1112,6 +1113,33 @@ struct BackendEditSnapshot {
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
+fn transposition_for_char_ranges(
+    buf: &Buffer,
+    first: (usize, usize),
+    second: (usize, usize),
+) -> TextTransposition {
+    let (start1_char, end1_char) = first;
+    let (start2_char, end2_char) = second;
+    TextTransposition::new(
+        TextEditRange::new(
+            EmacsByteRange::from_usize(
+                byte_pos_for_char(buf, start1_char),
+                byte_pos_for_char(buf, end1_char),
+            ),
+            CharPos0::new(start1_char),
+            CharPos0::new(end1_char),
+        ),
+        TextEditRange::new(
+            EmacsByteRange::from_usize(
+                byte_pos_for_char(buf, start2_char),
+                byte_pos_for_char(buf, end2_char),
+            ),
+            CharPos0::new(start2_char),
+            CharPos0::new(end2_char),
+        ),
+    )
+}
+
 fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let mut buf = buf_with_text_backend("éaßbc", kind);
     assert_eq!(buf.text_backend_kind(), kind);
@@ -1149,6 +1177,48 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     }
 }
 
+fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
+    let mut buf = buf_with_text_backend("αβ--日本--Ωx", kind);
+    assert_eq!(buf.text_backend_kind(), kind);
+
+    let face = Value::symbol("face");
+    let first_face = Value::symbol("first");
+    let second_face = Value::symbol("second");
+    assert!(buf.text_props_put_property(
+        byte_pos_for_char(&buf, 0),
+        byte_pos_for_char(&buf, 2),
+        face,
+        first_face,
+    ));
+    assert!(buf.text_props_put_property(
+        byte_pos_for_char(&buf, 4),
+        byte_pos_for_char(&buf, 6),
+        face,
+        second_face,
+    ));
+    let marker_byte = byte_pos_for_char(&buf, 1);
+    register_marker_for_test(&mut buf, 42, marker_byte, InsertionType::Before);
+    buf.set_mark_byte(byte_pos_for_char(&buf, 5));
+    buf.goto_byte(byte_pos_for_char(&buf, 8));
+
+    let transposition = transposition_for_char_ranges(&buf, (0, 2), (4, 6));
+    buf.transpose_regions(transposition, false);
+
+    let marker_position = buf
+        .marker_chain_lookup(42)
+        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+
+    BackendEditSnapshot {
+        buffer_string: buf.buffer_string(),
+        point_byte: buf.point_byte(),
+        point_char: buf.point_char(),
+        mark_byte: buf.mark(),
+        mark_char: buf.mark_char(),
+        marker_position,
+        text_properties: buffer_text_property_snapshot(&buf),
+    }
+}
+
 #[test]
 fn implemented_text_backends_match_edit_marker_and_property_side_effects() {
     crate::test_utils::init_test_tracing();
@@ -1158,6 +1228,19 @@ fn implemented_text_backends_match_edit_marker_and_property_side_effects() {
             run_backend_edit_script(kind),
             baseline,
             "{kind:?} edit side effects diverged from gap buffer"
+        );
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_transpose_side_effects() {
+    crate::test_utils::init_test_tracing();
+    let baseline = run_backend_transpose_script(BufferTextBackendKind::GapBuffer);
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            run_backend_transpose_script(kind),
+            baseline,
+            "{kind:?} transpose side effects diverged from gap buffer"
         );
     }
 }

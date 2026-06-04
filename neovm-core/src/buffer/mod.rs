@@ -22,6 +22,7 @@ pub use position::{
 pub use shared::SharedUndoState;
 pub use text::{
     BufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics, TextReplacement,
+    TextTransposition,
 };
 pub use text_props::TextPropertyTable;
 pub use undo::{

@@ -92,26 +92,6 @@ pub(in crate::buffer) fn convert_lisp_string_for_buffer_mode(
     lisp_string_from_buffer_bytes(bytes, target_multibyte)
 }
 
-#[inline]
-pub(in crate::buffer) fn transpose_position(
-    pos: usize,
-    start1: usize,
-    end1: usize,
-    start2: usize,
-    end2: usize,
-) -> usize {
-    if pos < start1 || pos >= end2 {
-        pos
-    } else if pos < end1 {
-        pos + (end2 - end1)
-    } else if pos < start2 {
-        let diff = (end2 - start2) as isize - (end1 - start1) as isize;
-        (pos as isize + diff) as usize
-    } else {
-        pos - (start2 - start1)
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct BufferEditState {
     pub(in crate::buffer) pt_byte: EmacsBytePos,

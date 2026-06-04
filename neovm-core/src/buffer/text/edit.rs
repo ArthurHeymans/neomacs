@@ -32,6 +32,19 @@ pub struct TextReplacement {
     new_extent: TextExtent,
 }
 
+/// Two non-overlapping edit ranges that will be transposed.
+///
+/// GNU `transpose-regions` receives character positions from Lisp, computes
+/// byte positions, and then keeps both coordinate spaces through the rest of
+/// the operation. This type makes that paired range shape explicit so marker,
+/// property, undo, and byte-storage movement cannot accidentally use different
+/// region boundaries.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextTransposition {
+    first: TextEditRange,
+    second: TextEditRange,
+}
+
 /// Half-open edit range with both byte and character coordinates.
 ///
 /// GNU `del_range_both` carries `from`, `from_byte`, `to`, and `to_byte`.
@@ -176,6 +189,89 @@ impl TextReplacement {
     }
 }
 
+impl TextTransposition {
+    pub const fn new(first: TextEditRange, second: TextEditRange) -> Self {
+        Self { first, second }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub const fn from_usize(
+        start1_byte: usize,
+        end1_byte: usize,
+        start1_char: usize,
+        end1_char: usize,
+        start2_byte: usize,
+        end2_byte: usize,
+        start2_char: usize,
+        end2_char: usize,
+    ) -> Self {
+        Self {
+            first: TextEditRange::from_usize(start1_byte, end1_byte, start1_char, end1_char),
+            second: TextEditRange::from_usize(start2_byte, end2_byte, start2_char, end2_char),
+        }
+    }
+
+    pub const fn first(self) -> TextEditRange {
+        self.first
+    }
+
+    pub const fn second(self) -> TextEditRange {
+        self.second
+    }
+
+    pub const fn byte_span(self) -> EmacsByteRange {
+        EmacsByteRange::new(self.first.byte_start(), self.second.byte_end())
+    }
+
+    pub const fn char_span(self) -> CharRange {
+        CharRange::new(self.first.char_start(), self.second.char_end())
+    }
+
+    pub const fn middle_byte_range(self) -> EmacsByteRange {
+        EmacsByteRange::new(self.first.byte_end(), self.second.byte_start())
+    }
+
+    pub const fn first_char_len(self) -> CharLen {
+        self.first.char_len()
+    }
+
+    pub const fn second_char_len(self) -> CharLen {
+        self.second.char_len()
+    }
+
+    pub const fn changed_chars(self) -> CharLen {
+        self.char_span().len()
+    }
+
+    pub const fn same_char_len(self) -> bool {
+        self.first_char_len().get() == self.second_char_len().get()
+    }
+
+    pub const fn adjacent(self) -> bool {
+        self.first.byte_end().get() == self.second.byte_start().get()
+    }
+
+    pub const fn transpose_byte_pos(self, pos: EmacsBytePos) -> EmacsBytePos {
+        EmacsBytePos::new(transpose_half_open_position(
+            pos.get(),
+            self.first.byte_start_usize(),
+            self.first.byte_end_usize(),
+            self.second.byte_start_usize(),
+            self.second.byte_end_usize(),
+        ))
+    }
+
+    pub const fn transpose_char_pos(self, pos: CharPos0) -> CharPos0 {
+        CharPos0::new(transpose_half_open_position(
+            pos.get(),
+            self.first.char_start_usize(),
+            self.first.char_end_usize(),
+            self.second.char_start_usize(),
+            self.second.char_end_usize(),
+        ))
+    }
+}
+
 impl TextEditRange {
     pub const fn new(byte_range: EmacsByteRange, char_start: CharPos0, char_end: CharPos0) -> Self {
         Self {
@@ -271,6 +367,25 @@ impl TextEditRange {
     }
 }
 
+const fn transpose_half_open_position(
+    pos: usize,
+    start1: usize,
+    end1: usize,
+    start2: usize,
+    end2: usize,
+) -> usize {
+    if pos < start1 || pos >= end2 {
+        pos
+    } else if pos < end1 {
+        pos + (end2 - end1)
+    } else if pos < start2 {
+        let diff = (end2 - start2) as isize - (end1 - start1) as isize;
+        (pos as isize + diff) as usize
+    } else {
+        pos - (start2 - start1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +423,65 @@ mod tests {
 
         assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 27));
         assert_eq!(range.char_range(), CharRange::from_usize(10, 13));
+    }
+
+    #[test]
+    fn text_transposition_keeps_byte_and_char_ranges_together() {
+        let transposition = TextTransposition::from_usize(0, 3, 0, 2, 8, 13, 6, 9);
+
+        assert_eq!(
+            transposition.first().byte_range(),
+            EmacsByteRange::from_usize(0, 3)
+        );
+        assert_eq!(
+            transposition.first().char_range(),
+            CharRange::from_usize(0, 2)
+        );
+        assert_eq!(
+            transposition.second().byte_range(),
+            EmacsByteRange::from_usize(8, 13)
+        );
+        assert_eq!(
+            transposition.second().char_range(),
+            CharRange::from_usize(6, 9)
+        );
+        assert_eq!(transposition.byte_span(), EmacsByteRange::from_usize(0, 13));
+        assert_eq!(transposition.char_span(), CharRange::from_usize(0, 9));
+        assert_eq!(
+            transposition.middle_byte_range(),
+            EmacsByteRange::from_usize(3, 8)
+        );
+        assert_eq!(transposition.changed_chars(), CharLen::new(9));
+    }
+
+    #[test]
+    fn text_transposition_moves_byte_and_char_positions_separately() {
+        let transposition = TextTransposition::from_usize(0, 4, 0, 2, 9, 12, 7, 9);
+
+        assert_eq!(
+            transposition.transpose_byte_pos(EmacsBytePos::new(1)),
+            EmacsBytePos::new(9)
+        );
+        assert_eq!(
+            transposition.transpose_byte_pos(EmacsBytePos::new(6)),
+            EmacsBytePos::new(5)
+        );
+        assert_eq!(
+            transposition.transpose_byte_pos(EmacsBytePos::new(10)),
+            EmacsBytePos::new(1)
+        );
+        assert_eq!(
+            transposition.transpose_char_pos(CharPos0::new(1)),
+            CharPos0::new(8)
+        );
+        assert_eq!(
+            transposition.transpose_char_pos(CharPos0::new(5)),
+            CharPos0::new(5)
+        );
+        assert_eq!(
+            transposition.transpose_char_pos(CharPos0::new(8)),
+            CharPos0::new(1)
+        );
     }
 
     #[test]
