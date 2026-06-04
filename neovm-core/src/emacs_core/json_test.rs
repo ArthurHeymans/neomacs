@@ -269,10 +269,7 @@ fn serialize_bignum_emits_full_decimal() {
     // round-tripping json-parse-string of the same literal.
     let big = Value::make_integer_from_str_or_zero("123456789012345678901234567890");
     let result = builtin_json_serialize(vec![big]).unwrap();
-    assert_eq!(
-        result.as_utf8_str(),
-        Some("123456789012345678901234567890")
-    );
+    assert_eq!(result.as_utf8_str(), Some("123456789012345678901234567890"));
 }
 
 #[test]
