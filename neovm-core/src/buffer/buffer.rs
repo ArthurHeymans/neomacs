@@ -1479,6 +1479,14 @@ impl BufferTextSnapshot {
         self.text.copy_emacs_byte_range_to(range, out);
     }
 
+    pub fn try_for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.text.for_each_emacs_byte_range_chunk(range, f)
+    }
+
     pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         self.text.emacs_byte_at_pos(pos)
     }
@@ -2556,7 +2564,7 @@ impl Buffer {
             .text_emacs_byte_range(self.clamped_emacs_byte_range(range))
     }
 
-    pub(crate) fn for_each_emacs_byte_range_chunk<E>(
+    pub fn try_for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
         f: impl FnMut(&[u8]) -> Result<(), E>,

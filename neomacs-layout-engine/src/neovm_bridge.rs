@@ -90,6 +90,11 @@ pub(crate) trait LayoutBufferView {
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos;
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0;
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>);
+    fn layout_try_for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E>;
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8>;
     fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value>;
     fn layout_next_text_prop_change_after_emacs_byte_pos(
@@ -219,6 +224,14 @@ impl LayoutBufferView for Buffer {
         self.copy_emacs_byte_range_to(range, out);
     }
 
+    fn layout_try_for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.try_for_each_emacs_byte_range_chunk(range, f)
+    }
+
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         self.emacs_byte_at_pos(pos)
     }
@@ -280,6 +293,15 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.text_snapshot.copy_emacs_byte_range_to(range, out);
+    }
+
+    fn layout_try_for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.text_snapshot
+            .try_for_each_emacs_byte_range_chunk(range, f)
     }
 
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
@@ -1444,13 +1466,16 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
         if from >= to {
             return 0;
         }
-        // Count newlines by iterating byte by byte
         let mut count: i64 = 0;
-        for pos in from..to {
-            if self.buffer.layout_emacs_byte_at_pos(EmacsBytePos::new(pos)) == Some(b'\n') {
-                count += 1;
-            }
-        }
+        self.buffer
+            .layout_try_for_each_emacs_byte_range_chunk(
+                EmacsByteRange::from_usize(from, to),
+                |chunk| {
+                    count += chunk.iter().filter(|byte| **byte == b'\n').count() as i64;
+                    Ok::<(), std::convert::Infallible>(())
+                },
+            )
+            .expect("newline counting is infallible");
         count
     }
 
