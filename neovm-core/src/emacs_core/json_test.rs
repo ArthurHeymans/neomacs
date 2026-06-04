@@ -431,6 +431,26 @@ fn parse_rejects_unescaped_control_char_in_string() {
 }
 
 #[test]
+fn parse_rejects_malformed_surrogates() {
+    crate::test_utils::init_test_tracing();
+    // High surrogate with no following low surrogate, high surrogate
+    // followed by a non-low escape, and a lone low surrogate are all
+    // json-invalid-surrogate-error in GNU (not silent U+FFFD).
+    for input in [r#""\uD800""#, r#""\uD800A""#, r#""\uDC00""#] {
+        match builtin_json_parse_string(vec![Value::string(input)]) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(
+                    sig.symbol_name(),
+                    "json-invalid-surrogate-error",
+                    "input {input:?}"
+                );
+            }
+            other => panic!("expected json-invalid-surrogate-error for {input:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn parse_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("null")]);

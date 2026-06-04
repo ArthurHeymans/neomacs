@@ -462,6 +462,8 @@ enum JsonError {
     ObjectTooDeep,
     /// `json-utf8-decode-error` — invalid UTF-8 in the input.
     Utf8Decode,
+    /// `json-invalid-surrogate-error` — malformed UTF-16 surrogate pair.
+    InvalidSurrogate,
     /// `json-serialize-error` — neomacs serialization failure. GNU signals
     /// a plain `error` here; neomacs keeps a dedicated `json-error` subtype.
     Serialize,
@@ -475,6 +477,7 @@ impl JsonError {
             JsonError::TrailingContent => "json-trailing-content",
             JsonError::ObjectTooDeep => "json-object-too-deep",
             JsonError::Utf8Decode => "json-utf8-decode-error",
+            JsonError::InvalidSurrogate => "json-invalid-surrogate-error",
             JsonError::Serialize => "json-serialize-error",
         }
     }
@@ -743,37 +746,43 @@ impl<'a> JsonParser<'a> {
                         Some(b'u') => {
                             self.advance();
                             let cp = self.parse_unicode_escape()?;
-                            // Handle UTF-16 surrogate pairs.
+                            // Handle UTF-16 surrogate pairs. A malformed pair
+                            // (high surrogate without a following low
+                            // surrogate, or a lone low surrogate) is a
+                            // json-invalid-surrogate-error in GNU rather than a
+                            // silent U+FFFD substitution.
                             if (0xD800..=0xDBFF).contains(&cp) {
-                                // High surrogate — expect \uXXXX low surrogate.
-                                if self.peek() == Some(b'\\') {
-                                    self.advance();
-                                    if self.peek() == Some(b'u') {
-                                        self.advance();
-                                        let low = self.parse_unicode_escape()?;
-                                        if (0xDC00..=0xDFFF).contains(&low) {
-                                            let combined = 0x10000
-                                                + ((cp as u32 - 0xD800) << 10)
-                                                + (low as u32 - 0xDC00);
-                                            if let Some(c) = char::from_u32(combined) {
-                                                result.push(c);
-                                            } else {
-                                                result.push(char::REPLACEMENT_CHARACTER);
-                                            }
-                                        } else {
-                                            result.push(char::REPLACEMENT_CHARACTER);
-                                            result.push(char::REPLACEMENT_CHARACTER);
-                                        }
-                                    } else {
-                                        result.push(char::REPLACEMENT_CHARACTER);
+                                // High surrogate — must be followed by a
+                                // \uXXXX low surrogate.
+                                if self.peek() != Some(b'\\') {
+                                    return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
+                                }
+                                self.advance();
+                                if self.peek() != Some(b'u') {
+                                    return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
+                                }
+                                self.advance();
+                                let low = self.parse_unicode_escape()?;
+                                if !(0xDC00..=0xDFFF).contains(&low) {
+                                    return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
+                                }
+                                let combined = 0x10000
+                                    + ((cp as u32 - 0xD800) << 10)
+                                    + (low as u32 - 0xDC00);
+                                match char::from_u32(combined) {
+                                    Some(c) => result.push(c),
+                                    None => {
+                                        return Err(
+                                            self.signal_at_pos(JsonError::InvalidSurrogate)
+                                        );
                                     }
-                                } else {
-                                    result.push(char::REPLACEMENT_CHARACTER);
                                 }
                             } else if let Some(c) = char::from_u32(cp as u32) {
                                 result.push(c);
                             } else {
-                                result.push(char::REPLACEMENT_CHARACTER);
+                                // cp is a lone low surrogate (0xDC00..=0xDFFF):
+                                // the only u16 range char::from_u32 rejects.
+                                return Err(self.signal_at_pos(JsonError::InvalidSurrogate));
                             }
                         }
                         Some(b) => {
