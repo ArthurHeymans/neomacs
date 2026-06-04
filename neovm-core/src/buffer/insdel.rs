@@ -72,6 +72,24 @@ impl Buffer {
         )
     }
 
+    fn edit_range_at_byte(&self, byte_pos: usize) -> TextEditRange {
+        let char_pos = char_pos_for_emacs_byte(&self.text, byte_pos);
+        TextEditRange::new(
+            EmacsByteRange::from_usize(byte_pos, byte_pos),
+            char_pos,
+            char_pos,
+        )
+    }
+
+    fn edit_range_for_byte_bounds(&self, start: usize, end: usize) -> TextEditRange {
+        if start >= end {
+            return self.edit_range_at_byte(start);
+        }
+        let start_char = char_pos_for_emacs_byte(&self.text, start);
+        let end_char = char_pos_for_emacs_byte(&self.text, end);
+        TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char)
+    }
+
     fn insert_bytes_internal(
         &mut self,
         bytes: &[u8],
@@ -315,9 +333,14 @@ impl Buffer {
         insertion
     }
 
-    pub fn replace_region_lisp_string(&mut self, start: usize, end: usize, text: &LispString) {
+    pub fn replace_region_lisp_string(
+        &mut self,
+        start: usize,
+        end: usize,
+        text: &LispString,
+    ) -> TextReplacement {
         if start > end {
-            return;
+            return TextReplacement::default();
         }
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let new_bytes = text.as_bytes();
@@ -326,14 +349,18 @@ impl Buffer {
 
         if start == end {
             self.goto_byte(start);
-            self.insert_lisp_string(&text);
-            return;
+            let insertion = self.insert_lisp_string(&text);
+            let old_range = TextEditRange::new(
+                EmacsByteRange::from_usize(insertion.byte_pos_usize(), insertion.byte_pos_usize()),
+                insertion.char_pos(),
+                insertion.char_pos(),
+            );
+            return TextReplacement::new(old_range, insertion.extent());
         }
 
-        let start_char = char_pos_for_emacs_byte(&self.text, start);
-        let end_char = char_pos_for_emacs_byte(&self.text, end);
-        let old_range =
-            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
+        let old_range = self.edit_range_for_byte_bounds(start, end);
+        let start_char = old_range.char_start();
+        let end_char = old_range.char_end();
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
         let replacement = TextReplacement::new(old_range, new_extent);
 
@@ -386,17 +413,19 @@ impl Buffer {
         self.overlays
             .adjust_for_replace(start, replacement.old_byte_len().get(), new_byte_len);
         self.record_char_modification(replacement.changed_chars_usize());
+        replacement
     }
 
     /// Delete the byte range `[start, end)`.
     ///
     /// Adjusts point, mark, markers, and the narrowing boundary.
-    pub fn delete_region(&mut self, start: usize, end: usize) {
+    pub fn delete_region(&mut self, start: usize, end: usize) -> TextEditRange {
         if start >= end {
-            return;
+            return TextEditRange::default();
         }
-        let start_char = char_pos_for_emacs_byte(&self.text, start);
-        let end_char = char_pos_for_emacs_byte(&self.text, end);
+        let range = self.edit_range_for_byte_bounds(start, end);
+        let start_char = range.char_start();
+        let end_char = range.char_end();
         // Record undo: save the deleted text for restoration.
         let deleted_text = self.buffer_region_lisp_string(start, end);
         // GNU `record_delete` always calls `record_point`, and that path
@@ -420,10 +449,9 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        let range =
-            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         self.text.delete_measured_range(range);
         self.apply_byte_delete_side_effects(range, DeleteSideEffectPolicy::current_buffer());
+        range
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
@@ -928,12 +956,7 @@ impl BufferManager {
         }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let start_char = char_pos_for_emacs_byte(&source.text, start);
-        let end_char = char_pos_for_emacs_byte(&source.text, end);
-        let range =
-            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
-        self.buffers.get_mut(&id)?.delete_region(start, end);
+        let range = self.buffers.get_mut(&id)?.delete_region(start, end);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_delete_metadata(sibling, range, update_state_fields);
@@ -956,24 +979,11 @@ impl BufferManager {
             return self.insert_lisp_string_into_buffer(id, text);
         }
 
-        let converted = {
-            let source = self.buffers.get(&id)?;
-            convert_lisp_string_for_buffer_mode(text, source.get_multibyte())
-        };
-        let new_byte_len = converted.sbytes();
-        let new_char_len = converted.schars();
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let start_char = char_pos_for_emacs_byte(&source.text, start);
-        let end_char = char_pos_for_emacs_byte(&source.text, end);
-        let old_range =
-            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
-        let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
-        let replacement = TextReplacement::new(old_range, new_extent);
-
-        self.buffers
+        let replacement = self
+            .buffers
             .get_mut(&id)?
-            .replace_region_lisp_string(start, end, &converted);
+            .replace_region_lisp_string(start, end, text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_replace_metadata(sibling, replacement, update_state_fields);
