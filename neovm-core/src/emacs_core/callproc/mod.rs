@@ -712,7 +712,9 @@ fn builtin_call_process_region_impl(
                 let region_beg = region.start_usize();
                 let region_end = region.end_usize();
                 (
-                    encode_call_process_region_buffer_text(buf.text.text_emacs_byte_range(region)),
+                    encode_call_process_region_buffer_text(
+                        buf.storage_text_emacs_byte_range(region),
+                    ),
                     region_beg,
                     region_end,
                 )

@@ -2096,6 +2096,11 @@ impl Buffer {
             .copy_emacs_byte_range_to(self.clamped_emacs_byte_range(range), out);
     }
 
+    pub(crate) fn storage_text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
+        self.text
+            .text_emacs_byte_range(self.clamped_emacs_byte_range(range))
+    }
+
     pub(crate) fn for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
