@@ -3101,35 +3101,36 @@ fn buffer_text_property_undo_runs(
 
     let mut runs = Vec::new();
     let mut cursor = char_start;
-    let _ = buf.text.text_props_try_for_each_interval_in_range(
-        start,
-        end,
-        |interval_start, interval_end, plist| {
-            let clipped_start = interval_start.max(char_start);
-            let clipped_end = interval_end.min(char_end);
-            if clipped_start >= clipped_end {
-                return Ok::<(), ()>(());
-            }
-            if cursor < clipped_start {
+    let _ = buf
+        .text
+        .text_props_try_for_each_interval_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            |interval_start, interval_end, plist| {
+                let clipped_start = interval_start.max(char_start);
+                let clipped_end = interval_end.min(char_end);
+                if clipped_start >= clipped_end {
+                    return Ok::<(), ()>(());
+                }
+                if cursor < clipped_start {
+                    runs.push(TextPropertyUndoRun {
+                        char_start: cursor,
+                        char_end: clipped_start,
+                        source_start: cursor,
+                        source_end: clipped_start,
+                        plist: Vec::new(),
+                    });
+                }
                 runs.push(TextPropertyUndoRun {
-                    char_start: cursor,
-                    char_end: clipped_start,
-                    source_start: cursor,
-                    source_end: clipped_start,
-                    plist: Vec::new(),
+                    char_start: clipped_start,
+                    char_end: clipped_end,
+                    source_start: interval_start,
+                    source_end: interval_end,
+                    plist: plist.to_vec(),
                 });
-            }
-            runs.push(TextPropertyUndoRun {
-                char_start: clipped_start,
-                char_end: clipped_end,
-                source_start: interval_start,
-                source_end: interval_end,
-                plist: plist.to_vec(),
-            });
-            cursor = clipped_end;
-            Ok(())
-        },
-    );
+                cursor = clipped_end;
+                Ok(())
+            },
+        );
     if cursor < char_end {
         runs.push(TextPropertyUndoRun {
             char_start: cursor,
