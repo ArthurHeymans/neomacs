@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
+use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
 // -----------------------------------------------------------------------
@@ -955,6 +956,267 @@ fn implemented_text_backends_match_edit_marker_and_property_side_effects() {
             run_backend_edit_script(kind),
             baseline,
             "{kind:?} edit side effects diverged from gap buffer"
+        );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum UndoEntrySnapshot {
+    Boundary,
+    Point(i64),
+    Insert {
+        beg1: i64,
+        end1: i64,
+    },
+    Delete {
+        text: String,
+        pos1: i64,
+    },
+    FirstChange(i64),
+    PropertyChange {
+        prop: String,
+        old_value: String,
+        beg1: i64,
+        end1: i64,
+    },
+    MarkerAdjustment {
+        marker_id: Option<u64>,
+        adjustment: i64,
+    },
+    Other(String),
+    ImproperTail(String),
+}
+
+fn undo_value_label(value: Value) -> String {
+    if value.is_nil() {
+        return "nil".to_owned();
+    }
+    if value.is_t() {
+        return "t".to_owned();
+    }
+    if let Some(name) = value.as_symbol_name() {
+        return format!("symbol:{name}");
+    }
+    if let Some(n) = value.as_fixnum() {
+        return format!("fixnum:{n}");
+    }
+    if value.is_string() {
+        return format!(
+            "string:{}",
+            value
+                .as_runtime_string_owned()
+                .expect("string value should have string payload")
+        );
+    }
+    if value.is_marker() {
+        return format!(
+            "marker:{:?}",
+            value
+                .as_marker_data()
+                .expect("marker value should have marker payload")
+                .marker_id
+        );
+    }
+    format!("{:?}", value.kind())
+}
+
+fn undo_entry_snapshot(entry: Value) -> UndoEntrySnapshot {
+    match entry.kind() {
+        ValueKind::Nil => UndoEntrySnapshot::Boundary,
+        ValueKind::Fixnum(point) => UndoEntrySnapshot::Point(point),
+        ValueKind::Cons => {
+            let car = entry.cons_car();
+            let cdr = entry.cons_cdr();
+            match (car.kind(), cdr.kind()) {
+                (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
+                    UndoEntrySnapshot::Insert { beg1, end1 }
+                }
+                (ValueKind::String, ValueKind::Fixnum(pos1)) => UndoEntrySnapshot::Delete {
+                    text: car
+                        .as_runtime_string_owned()
+                        .expect("delete undo text should be a string"),
+                    pos1,
+                },
+                (ValueKind::T, ValueKind::Fixnum(modtime)) => {
+                    UndoEntrySnapshot::FirstChange(modtime)
+                }
+                (_, ValueKind::Fixnum(adjustment)) if car.is_marker() => {
+                    UndoEntrySnapshot::MarkerAdjustment {
+                        marker_id: car
+                            .as_marker_data()
+                            .expect("marker value should have marker payload")
+                            .marker_id,
+                        adjustment,
+                    }
+                }
+                (ValueKind::Nil, _) if cdr.is_cons() => {
+                    let prop = cdr.cons_car();
+                    let rest1 = cdr.cons_cdr();
+                    if rest1.is_cons() {
+                        let old_value = rest1.cons_car();
+                        let rest2 = rest1.cons_cdr();
+                        if rest2.is_cons()
+                            && let (Some(beg1), Some(end1)) =
+                                (rest2.cons_car().as_fixnum(), rest2.cons_cdr().as_fixnum())
+                        {
+                            return UndoEntrySnapshot::PropertyChange {
+                                prop: undo_value_label(prop),
+                                old_value: undo_value_label(old_value),
+                                beg1,
+                                end1,
+                            };
+                        }
+                    }
+                    UndoEntrySnapshot::Other("malformed-property-change".to_owned())
+                }
+                _ => UndoEntrySnapshot::Other(format!(
+                    "cons:{}:{}",
+                    undo_value_label(car),
+                    undo_value_label(cdr)
+                )),
+            }
+        }
+        _ => UndoEntrySnapshot::Other(undo_value_label(entry)),
+    }
+}
+
+fn undo_list_snapshot(mut list: Value) -> Vec<UndoEntrySnapshot> {
+    let mut entries = Vec::new();
+    while list.is_cons() {
+        entries.push(undo_entry_snapshot(list.cons_car()));
+        list = list.cons_cdr();
+    }
+    if !list.is_nil() {
+        entries.push(UndoEntrySnapshot::ImproperTail(undo_value_label(list)));
+    }
+    entries
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BackendUndoSnapshot {
+    undo_before: Vec<UndoEntrySnapshot>,
+    undo_result: UndoExecutionResult,
+    undo_after: Vec<UndoEntrySnapshot>,
+    buffer_string: String,
+    point_byte: usize,
+    point_char: usize,
+    mark_byte: Option<usize>,
+    mark_char: Option<usize>,
+    marker_position: Option<(usize, usize)>,
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+}
+
+fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
+    let mut mgr = manager_with_text_backend(kind);
+    let id = mgr.current_buffer_id().expect("scratch buffer");
+    let implemented_kind = require_implemented_kind(kind);
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+
+    {
+        let buf = mgr.get_mut(id).expect("scratch buffer");
+        buf.text = BufferText::from_str_with_backend_kind("aébc日本z", implemented_kind);
+        buf.widen();
+        buf.goto_byte(0);
+        buf.set_mark_byte(buf.text.buf_charpos_to_bytepos(2));
+        let prop_start = buf.text.buf_charpos_to_bytepos(1);
+        let prop_end = buf.text.buf_charpos_to_bytepos(5);
+        assert!(
+            buf.text
+                .text_props_put_property(prop_start, prop_end, face, bold)
+        );
+        let marker_pos = buf.text.buf_charpos_to_bytepos(4);
+        register_marker_for_test(buf, 88, marker_pos, InsertionType::After);
+        buf.set_undo_list(Value::NIL);
+    }
+
+    mgr.record_undo_point_before_command(id)
+        .expect("record point before command");
+    let insert_pos = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(2);
+    mgr.goto_buffer_byte(id, insert_pos).expect("goto insert");
+    mgr.insert_into_buffer(id, "Ω").expect("insert text");
+
+    let prop_start = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(1);
+    let prop_end = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(6);
+    mgr.put_buffer_text_property(id, prop_start, prop_end, face, italic)
+        .expect("put text property");
+
+    let delete_start = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(4);
+    let delete_end = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(6);
+    mgr.delete_buffer_region(id, delete_start, delete_end)
+        .expect("delete region");
+
+    let replace_start = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(1);
+    let replace_end = mgr
+        .get(id)
+        .expect("scratch buffer")
+        .text
+        .buf_charpos_to_bytepos(3);
+    mgr.replace_buffer_region_lisp_string(
+        id,
+        replace_start,
+        replace_end,
+        &LispString::from_utf8("qλ"),
+    )
+    .expect("replace region");
+
+    let undo_before = undo_list_snapshot(mgr.get(id).expect("scratch buffer").get_undo_list());
+    let undo_result = mgr.undo_buffer(id, 1).expect("undo result");
+    let buf = mgr.get(id).expect("scratch buffer");
+    let marker_position = buf
+        .text
+        .marker_chain_lookup(88)
+        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    assert_eq!(buf.text.backend_kind(), kind);
+
+    BackendUndoSnapshot {
+        undo_before,
+        undo_result,
+        undo_after: undo_list_snapshot(buf.get_undo_list()),
+        buffer_string: buf.buffer_string(),
+        point_byte: buf.point_byte(),
+        point_char: buf.point_char(),
+        mark_byte: buf.mark(),
+        mark_char: buf.mark_char(),
+        marker_position,
+        text_properties: buffer_text_property_snapshot(buf),
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_undo_recording_and_execution() {
+    crate::test_utils::init_test_tracing();
+    let baseline = run_backend_undo_script(BufferTextBackendKind::GapBuffer);
+    for kind in implemented_text_backends() {
+        assert_eq!(
+            run_backend_undo_script(kind),
+            baseline,
+            "{kind:?} undo semantics diverged from gap buffer"
         );
     }
 }

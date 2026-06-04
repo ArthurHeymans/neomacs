@@ -3279,6 +3279,29 @@ pub struct UndoExecutionResult {
     pub skipped_apply: bool,
 }
 
+fn undo_char_pos1_to_char0(pos1: i64) -> usize {
+    (pos1 - 1).max(0) as usize
+}
+
+fn undo_char_pos1_to_byte_clamped(buf: &Buffer, pos1: i64) -> usize {
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(undo_char_pos1_to_char0(pos1)))
+        .get()
+}
+
+fn undo_lisp_char_position_is_visible(buf: &Buffer, pos1: i64) -> bool {
+    let accessible = buf.accessible_char_region();
+    let point_min = accessible.start_usize() as i64 + 1;
+    let point_max = accessible.end_usize() as i64 + 1;
+    point_min <= pos1 && pos1 <= point_max
+}
+
+fn undo_lisp_range_is_visible(buf: &Buffer, beg1: i64, end1: i64) -> bool {
+    let accessible = buf.accessible_char_region();
+    let point_min = accessible.start_usize() as i64 + 1;
+    let point_max = accessible.end_usize() as i64 + 1;
+    beg1 >= point_min && end1 <= point_max
+}
+
 impl BufferManager {
     /// Create a new `BufferManager` pre-populated with a `*scratch*` buffer.
     pub fn new() -> Self {
@@ -4677,38 +4700,47 @@ impl BufferManager {
             for entry in group {
                 if let Some(pt1) = entry.as_fixnum() {
                     // Cursor position (1-indexed)
-                    let pos = (pt1 - 1).max(0) as usize;
-                    let clamped = self
+                    let byte_pos = self
                         .buffers
                         .get(&id)
-                        .map(|buffer| pos.min(buffer.total_bytes()))?;
-                    self.goto_buffer_byte(id, clamped)?;
+                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1))?;
+                    self.goto_buffer_byte(id, byte_pos)?;
                 } else if entry.is_cons() {
                     let car = entry.cons_car();
                     let cdr = entry.cons_cdr();
                     match (car.kind(), cdr.kind()) {
                         (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
                             // Insert record: (BEG . END) — to undo, delete [beg, end)
-                            let beg = (beg1 - 1).max(0) as usize;
-                            let end = (end1 - 1).max(0) as usize;
-                            let clamped_end = self
-                                .buffers
-                                .get(&id)
-                                .map(|buffer| end.min(buffer.total_bytes()))?;
-                            self.delete_buffer_region(id, beg.min(clamped_end), clamped_end)?;
+                            let (beg, end) = {
+                                let buffer = self.buffers.get(&id)?;
+                                if !undo_lisp_range_is_visible(buffer, beg1, end1) {
+                                    return None;
+                                }
+                                (
+                                    undo_char_pos1_to_byte_clamped(buffer, beg1),
+                                    undo_char_pos1_to_byte_clamped(buffer, end1),
+                                )
+                            };
+                            self.delete_buffer_region(id, beg, end)?;
                         }
                         (ValueKind::String, ValueKind::Fixnum(pos1)) => {
                             // Delete record: (TEXT . POS) — to undo, re-insert text
                             let text = car
                                 .as_runtime_string_owned()
                                 .expect("ValueKind::String must carry LispString payload");
-                            let pos = (pos1.abs() - 1).max(0) as usize;
-                            let clamped = self
-                                .buffers
-                                .get(&id)
-                                .map(|buffer| pos.min(buffer.total_bytes()))?;
-                            self.goto_buffer_byte(id, clamped)?;
+                            let apos1 = pos1.abs();
+                            let byte_pos = {
+                                let buffer = self.buffers.get(&id)?;
+                                if !undo_lisp_char_position_is_visible(buffer, apos1) {
+                                    return None;
+                                }
+                                undo_char_pos1_to_byte_clamped(buffer, apos1)
+                            };
+                            self.goto_buffer_byte(id, byte_pos)?;
                             self.insert_into_buffer(id, &text)?;
+                            if pos1 > 0 {
+                                self.goto_buffer_byte(id, byte_pos)?;
+                            }
                         }
                         (ValueKind::T, ValueKind::Fixnum(_)) => {
                             // First-change sentinel (t . MODTIME) — skip
@@ -4723,12 +4755,16 @@ impl BufferManager {
                                     let beg = rest2.cons_car().as_fixnum();
                                     let end = rest2.cons_cdr().as_fixnum();
                                     if let (Some(beg1), Some(end1)) = (beg, end) {
-                                        let beg = (beg1 - 1).max(0) as usize;
-                                        let end = (end1 - 1).max(0) as usize;
-                                        let buf = self.buffers.get(&id)?;
-                                        if beg < buf.begv_byte || end > buf.zv_byte {
-                                            continue;
-                                        }
+                                        let (beg, end) = {
+                                            let buf = self.buffers.get(&id)?;
+                                            if !undo_lisp_range_is_visible(buf, beg1, end1) {
+                                                return None;
+                                            }
+                                            (
+                                                undo_char_pos1_to_byte_clamped(buf, beg1),
+                                                undo_char_pos1_to_byte_clamped(buf, end1),
+                                            )
+                                        };
                                         let _ = self
                                             .put_buffer_text_property(id, beg, end, prop, value);
                                     }
