@@ -1,9 +1,7 @@
 use std::fmt;
 
 use crate::buffer::gap_buffer::GapBuffer;
-use crate::buffer::position::{
-    CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
-};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 #[cfg(test)]
 use crate::buffer::text::GapDebugLayout;
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
@@ -122,27 +120,6 @@ impl GapTextBackend {
 
     pub(in crate::buffer) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         self.gap.char_pos_to_emacs_byte_pos(char_pos)
-    }
-
-    pub(in crate::buffer) fn char_pos_to_storage_byte_pos(
-        &self,
-        char_pos: CharPos0,
-    ) -> StorageBytePos {
-        self.gap.char_pos_to_storage_byte_pos(char_pos)
-    }
-
-    pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
-        &self,
-        byte_pos: StorageBytePos,
-    ) -> EmacsBytePos {
-        self.gap.storage_byte_pos_to_emacs_byte_pos(byte_pos)
-    }
-
-    pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
-        &self,
-        byte_pos: EmacsBytePos,
-    ) -> StorageBytePos {
-        self.gap.emacs_byte_pos_to_storage_byte_pos(byte_pos)
     }
 
     pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {

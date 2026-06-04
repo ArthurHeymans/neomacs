@@ -16,7 +16,7 @@ use crate::gc_trace::GcTrace;
 use super::buffer::{BufferId, InsertionType};
 use super::gap_buffer::{GAP_BYTES_DFL, GAP_BYTES_MIN};
 use super::position::{
-    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
+    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
 };
 use super::text::backend::TextBackend;
 use super::text::{
@@ -566,33 +566,6 @@ impl BufferText {
 
     pub fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         EmacsBytePos::new(self.buf_charpos_to_bytepos(char_pos.get()))
-    }
-
-    pub(crate) fn char_pos_to_storage_byte_pos(&self, char_pos: CharPos0) -> StorageBytePos {
-        self.storage
-            .borrow()
-            .backend
-            .char_pos_to_storage_byte_pos(char_pos)
-    }
-
-    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
-        &self,
-        byte_pos: StorageBytePos,
-    ) -> EmacsBytePos {
-        self.storage
-            .borrow()
-            .backend
-            .storage_byte_pos_to_emacs_byte_pos(byte_pos)
-    }
-
-    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(
-        &self,
-        byte_pos: EmacsBytePos,
-    ) -> StorageBytePos {
-        self.storage
-            .borrow()
-            .backend
-            .emacs_byte_pos_to_storage_byte_pos(byte_pos)
     }
 
     pub fn shared_clone(&self) -> Self {

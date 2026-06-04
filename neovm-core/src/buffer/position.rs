@@ -32,11 +32,6 @@ pub struct CharRange {
     end: CharPos0,
 }
 
-/// 0-based physical storage byte position.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct StorageBytePos(usize);
-
 /// 1-based Lisp character position (first character = 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -213,18 +208,6 @@ impl EmacsByteLen {
 
     pub const fn is_empty(self) -> bool {
         self.0 == 0
-    }
-}
-
-impl StorageBytePos {
-    pub const ZERO: Self = Self(0);
-
-    pub const fn new(pos: usize) -> Self {
-        Self(pos)
-    }
-
-    pub const fn get(self) -> usize {
-        self.0
     }
 }
 

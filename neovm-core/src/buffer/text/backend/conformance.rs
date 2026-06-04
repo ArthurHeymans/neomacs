@@ -1,5 +1,5 @@
 use super::TextBackend;
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::buffer::text::{
     ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextReplacement,
     emacs_char_count_bytes,
@@ -91,7 +91,6 @@ fn assert_backend_matches_gap(
             "{kind:?} byte_to_char(char boundary {char_pos}) did not round trip"
         );
 
-        assert_storage_round_trip(kind, backend, backend_byte);
         char_boundaries.push(backend_byte.get());
 
         if char_pos < backend.metrics().chars() {
@@ -130,39 +129,6 @@ fn assert_backend_matches_gap(
                 );
             }
         }
-    }
-}
-
-#[track_caller]
-fn assert_storage_round_trip(
-    kind: ImplementedBufferTextBackendKind,
-    backend: &TextBackend,
-    byte_pos: EmacsBytePos,
-) {
-    let storage_pos = backend.emacs_byte_pos_to_storage_byte_pos(byte_pos);
-    assert_eq!(
-        backend.storage_byte_pos_to_emacs_byte_pos(storage_pos),
-        byte_pos,
-        "{kind:?} emacs-byte/storage-byte round trip diverged at {}",
-        byte_pos.get()
-    );
-
-    let char_pos = backend.emacs_byte_pos_to_char_pos(byte_pos);
-    let storage_from_char = backend.char_pos_to_storage_byte_pos(char_pos);
-    assert_eq!(
-        backend.storage_byte_pos_to_emacs_byte_pos(storage_from_char),
-        byte_pos,
-        "{kind:?} char/storage-byte round trip diverged at char {}",
-        char_pos.get()
-    );
-
-    if !backend.is_multibyte() {
-        let direct_storage = StorageBytePos::new(byte_pos.get());
-        assert_eq!(
-            backend.storage_byte_pos_to_emacs_byte_pos(direct_storage),
-            byte_pos,
-            "{kind:?} unibyte storage byte should match Emacs byte"
-        );
     }
 }
 

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
@@ -197,31 +197,6 @@ impl PieceTreeTextBackend {
             return EmacsBytePos::new(metrics.emacs_bytes());
         }
         EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
-    }
-
-    pub(in crate::buffer) fn char_pos_to_storage_byte_pos(
-        &self,
-        char_pos: CharPos0,
-    ) -> StorageBytePos {
-        StorageBytePos::new(
-            self.char_pos_to_emacs_byte_pos(char_pos)
-                .get()
-                .min(self.len()),
-        )
-    }
-
-    pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
-        &self,
-        byte_pos: StorageBytePos,
-    ) -> EmacsBytePos {
-        EmacsBytePos::new(byte_pos.get().min(self.len()))
-    }
-
-    pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
-        &self,
-        byte_pos: EmacsBytePos,
-    ) -> StorageBytePos {
-        StorageBytePos::new(byte_pos.get().min(self.len()))
     }
 
     pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {

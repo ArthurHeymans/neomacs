@@ -687,8 +687,7 @@ fn copy_emacs_bytes_to_unibyte_storage_sentinels() {
         0xFF, b'\n', 0x80, b'A',
     ]);
     let mut gb = GapBuffer::from_str(&storage);
-    let gap_pos = gb.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(2));
-    gb.move_gap_to(gap_pos.get());
+    gb.move_gap_to(2);
 
     let mut out = Vec::new();
     gb.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, 4), &mut out);

@@ -16,8 +16,7 @@ use crate::buffer::text::{
     emacs_byte_to_char_in_slice, emacs_char_count_bytes, emacs_char_to_byte_in_slice,
 };
 use crate::buffer::{
-    CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextEditRange, TextExtent,
-    TextReplacement,
+    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextReplacement,
 };
 
 /// Default extra gap bytes to pre-allocate on any growth.
@@ -240,20 +239,6 @@ impl GapBuffer {
             *slot = self.byte_at(pos + i);
         }
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..available]).0)
-    }
-
-    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
-        &self,
-        byte_pos: StorageBytePos,
-    ) -> EmacsBytePos {
-        EmacsBytePos::new(byte_pos.get().min(self.len()))
-    }
-
-    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(
-        &self,
-        byte_pos: EmacsBytePos,
-    ) -> StorageBytePos {
-        StorageBytePos::new(byte_pos.get().min(self.total_bytes))
     }
 
     // -----------------------------------------------------------------------
@@ -820,14 +805,6 @@ impl GapBuffer {
             self.total_chars
         );
         EmacsBytePos::new(self.len())
-    }
-
-    pub(crate) fn char_pos_to_storage_byte_pos(&self, char_pos: CharPos0) -> StorageBytePos {
-        StorageBytePos::new(
-            self.char_pos_to_emacs_byte_pos(char_pos)
-                .get()
-                .min(self.len()),
-        )
     }
 
     // -----------------------------------------------------------------------

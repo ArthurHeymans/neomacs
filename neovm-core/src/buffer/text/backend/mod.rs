@@ -7,9 +7,7 @@ mod rope;
 use std::fmt;
 
 use super::ImplementedBufferTextBackendKind;
-use crate::buffer::position::{
-    CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
-};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
@@ -213,39 +211,6 @@ impl TextBackend {
             Self::Gap(gap) => gap.char_pos_to_emacs_byte_pos(char_pos),
             Self::PieceTree(piece_tree) => piece_tree.char_pos_to_emacs_byte_pos(char_pos),
             Self::Rope(rope) => rope.char_pos_to_emacs_byte_pos(char_pos),
-        }
-    }
-
-    pub(in crate::buffer) fn char_pos_to_storage_byte_pos(
-        &self,
-        char_pos: CharPos0,
-    ) -> StorageBytePos {
-        match self {
-            Self::Gap(gap) => gap.char_pos_to_storage_byte_pos(char_pos),
-            Self::PieceTree(piece_tree) => piece_tree.char_pos_to_storage_byte_pos(char_pos),
-            Self::Rope(rope) => rope.char_pos_to_storage_byte_pos(char_pos),
-        }
-    }
-
-    pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
-        &self,
-        byte_pos: StorageBytePos,
-    ) -> EmacsBytePos {
-        match self {
-            Self::Gap(gap) => gap.storage_byte_pos_to_emacs_byte_pos(byte_pos),
-            Self::PieceTree(piece_tree) => piece_tree.storage_byte_pos_to_emacs_byte_pos(byte_pos),
-            Self::Rope(rope) => rope.storage_byte_pos_to_emacs_byte_pos(byte_pos),
-        }
-    }
-
-    pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
-        &self,
-        byte_pos: EmacsBytePos,
-    ) -> StorageBytePos {
-        match self {
-            Self::Gap(gap) => gap.emacs_byte_pos_to_storage_byte_pos(byte_pos),
-            Self::PieceTree(piece_tree) => piece_tree.emacs_byte_pos_to_storage_byte_pos(byte_pos),
-            Self::Rope(rope) => rope.emacs_byte_pos_to_storage_byte_pos(byte_pos),
         }
     }
 

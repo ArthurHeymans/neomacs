@@ -150,9 +150,6 @@ pub struct LispCharPos1(pub i64);
 pub struct EmacsBytePos(pub usize);
 
 #[repr(transparent)]
-pub struct StorageBytePos(pub usize);
-
-#[repr(transparent)]
 pub struct DisplayColumn(pub usize);
 ```
 
@@ -162,6 +159,8 @@ Rules:
 - Internal character positions use `CharPos0`.
 - Text backend byte APIs use `EmacsBytePos` unless explicitly dealing with
   storage bytes.
+- Physical storage coordinates are backend-private implementation details and
+  must not appear in the generic `BufferText`/`TextBackend` contract.
 - Rendering/display code uses display-specific coordinates.
 - Raw `usize` is allowed only inside tight local algorithms after conversion at
   the boundary.
