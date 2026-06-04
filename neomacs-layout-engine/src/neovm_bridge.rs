@@ -87,6 +87,9 @@ pub(crate) trait LayoutBufferView {
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_char(&self) -> usize;
+    fn layout_total_emacs_byte_len(&self) -> usize;
+    fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>);
+    fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8>;
     fn layout_text(&self) -> &BufferText;
     fn layout_overlays(&self) -> &OverlayList;
 }
@@ -195,6 +198,18 @@ impl LayoutBufferView for Buffer {
         self.point_max_char()
     }
 
+    fn layout_total_emacs_byte_len(&self) -> usize {
+        self.total_bytes()
+    }
+
+    fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+        self.copy_emacs_byte_range_to(range, out);
+    }
+
+    fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.emacs_byte_at_pos(pos)
+    }
+
     fn layout_text(&self) -> &BufferText {
         &self.text
     }
@@ -225,6 +240,18 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 
     fn layout_point_max_char(&self) -> usize {
         self.accessible_end_char
+    }
+
+    fn layout_total_emacs_byte_len(&self) -> usize {
+        self.text.emacs_byte_len()
+    }
+
+    fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+        self.text.copy_emacs_byte_range_to(range, out);
+    }
+
+    fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.text.emacs_byte_at_pos(pos)
     }
 
     fn layout_text(&self) -> &BufferText {
@@ -1369,35 +1396,31 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// Uses backend-neutral Emacs byte ranges so layout is independent of
     /// the concrete buffer storage.
     pub fn copy_text(&self, byte_from: i64, byte_to: i64, out: &mut Vec<u8>) {
-        let from = (byte_from as usize).min(self.buffer.layout_text().len());
-        let to = (byte_to as usize).min(self.buffer.layout_text().len());
+        let text_len = self.buffer.layout_total_emacs_byte_len();
+        let from = (byte_from as usize).min(text_len);
+        let to = (byte_to as usize).min(text_len);
         if from >= to {
             out.clear();
             return;
         }
         self.buffer
-            .layout_text()
-            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(from, to), out);
+            .layout_copy_emacs_byte_range_to(EmacsByteRange::from_usize(from, to), out);
     }
 
     /// Count the number of newlines in `[byte_from, byte_to)`.
     ///
     /// Used for line number display.
     pub fn count_lines(&self, byte_from: i64, byte_to: i64) -> i64 {
-        let from = (byte_from as usize).min(self.buffer.layout_text().len());
-        let to = (byte_to as usize).min(self.buffer.layout_text().len());
+        let text_len = self.buffer.layout_total_emacs_byte_len();
+        let from = (byte_from as usize).min(text_len);
+        let to = (byte_to as usize).min(text_len);
         if from >= to {
             return 0;
         }
         // Count newlines by iterating byte by byte
         let mut count: i64 = 0;
         for pos in from..to {
-            if self
-                .buffer
-                .layout_text()
-                .byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
-                == b'\n'
-            {
+            if self.buffer.layout_emacs_byte_at_pos(EmacsBytePos::new(pos)) == Some(b'\n') {
                 count += 1;
             }
         }
@@ -1412,10 +1435,8 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
             return None;
         }
         let pos = byte_pos as usize;
-        if pos < self.buffer.layout_text().len() {
-            self.buffer
-                .layout_text()
-                .emacs_byte_at_pos(EmacsBytePos::new(pos))
+        if pos < self.buffer.layout_total_emacs_byte_len() {
+            self.buffer.layout_emacs_byte_at_pos(EmacsBytePos::new(pos))
         } else {
             None
         }

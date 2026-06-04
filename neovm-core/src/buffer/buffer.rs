@@ -2091,9 +2091,14 @@ impl Buffer {
         EmacsByteRange::from_usize(start, end)
     }
 
-    pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+    pub fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.text
             .copy_emacs_byte_range_to(self.clamped_emacs_byte_range(range), out);
+    }
+
+    pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.text
+            .emacs_byte_at_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
     }
 
     pub(crate) fn storage_text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
