@@ -5,7 +5,9 @@
 //! these types separate is the first step toward a central insert/delete/
 //! replace transaction boundary.
 
-use crate::buffer::{BufferText, CharPos0, EmacsBytePos, TextReplacement};
+use crate::buffer::{
+    BufferText, CharPos0, EmacsBytePos, TextEditRange, TextInsertion, TextReplacement,
+};
 use crate::heap_types::LispString;
 
 #[inline]
@@ -182,6 +184,79 @@ pub(in crate::buffer) fn replace_state_after_edit(
     state
 }
 
+pub(in crate::buffer) fn insert_state_after_edit(
+    mut state: BufferEditState,
+    insertion: TextInsertion,
+    policy: InsertSideEffectPolicy,
+) -> BufferEditState {
+    if !policy.update_state_fields {
+        return state;
+    }
+
+    let insert_pos = insertion.byte_pos_usize();
+    let byte_len = insertion.extent().emacs_bytes().get();
+    let char_len = insertion.extent().chars().get();
+    if state.pt_byte > insert_pos || (policy.advance_point_at_insert && state.pt_byte == insert_pos)
+    {
+        state.pt_byte += byte_len;
+        state.pt += char_len;
+    }
+    if policy.shift_begv && state.begv_byte > insert_pos {
+        state.begv_byte += byte_len;
+        state.begv += char_len;
+    }
+    if state.zv_byte >= insert_pos {
+        state.zv_byte += byte_len;
+        state.zv += char_len;
+    }
+
+    state
+}
+
+pub(in crate::buffer) fn delete_state_after_edit(
+    mut state: BufferEditState,
+    range: TextEditRange,
+    policy: DeleteSideEffectPolicy,
+) -> BufferEditState {
+    if !policy.update_state_fields {
+        return state;
+    }
+
+    let start = range.byte_start_usize();
+    let end = range.byte_end_usize();
+    let start_char = range.char_start_usize();
+    let byte_len = range.byte_len().get();
+    let char_len = range.char_len().get();
+
+    if state.pt_byte >= end {
+        state.pt_byte -= byte_len;
+        state.pt -= char_len;
+    } else if state.pt_byte > start {
+        state.pt_byte = start;
+        state.pt = start_char;
+    }
+
+    if policy.shift_begv {
+        if state.begv_byte >= end {
+            state.begv_byte -= byte_len;
+            state.begv -= char_len;
+        } else if state.begv_byte > start {
+            state.begv_byte = start;
+            state.begv = start_char;
+        }
+    }
+
+    if state.zv_byte >= end {
+        state.zv_byte -= byte_len;
+        state.zv -= char_len;
+    } else if state.zv_byte > start {
+        state.zv_byte = start;
+        state.zv = start_char;
+    }
+
+    state
+}
+
 /// GNU `modiff` increments logarithmically with edit size, and
 /// `chars_modiff` is reset to the new `modiff` on each character change.
 pub(in crate::buffer) fn modification_tick_delta(changed_chars: usize) -> i64 {
@@ -289,10 +364,99 @@ mod tests {
         replace_state_after_edit(
             old,
             TextReplacement::new(
-                crate::buffer::TextEditRange::from_usize(20, 36, 10, 18),
+                TextEditRange::from_usize(20, 36, 10, 18),
                 crate::buffer::TextExtent::from_usize(3, 5),
             ),
         )
+    }
+
+    fn insertion() -> TextInsertion {
+        TextInsertion::from_usize(20, 10, 3, 5)
+    }
+
+    fn deleted_range() -> TextEditRange {
+        TextEditRange::from_usize(20, 36, 10, 18)
+    }
+
+    #[test]
+    fn insert_state_current_buffer_advances_point_at_insert_and_zv() {
+        assert_eq!(
+            insert_state_after_edit(
+                state(20, 10, 0, 0, 60, 42),
+                insertion(),
+                InsertSideEffectPolicy::current_buffer(
+                    false,
+                    InsertMarkerAdjustment::ByInsertionType
+                ),
+            ),
+            state(25, 13, 0, 0, 65, 45)
+        );
+    }
+
+    #[test]
+    fn insert_state_shared_buffer_keeps_point_at_insert_and_shifts_begv_after_insert() {
+        assert_eq!(
+            insert_state_after_edit(
+                state(20, 10, 28, 14, 60, 42),
+                insertion(),
+                InsertSideEffectPolicy::shared_buffer(
+                    true,
+                    false,
+                    InsertMarkerAdjustment::ByInsertionType,
+                ),
+            ),
+            state(20, 10, 33, 17, 65, 45)
+        );
+    }
+
+    #[test]
+    fn delete_state_current_buffer_maps_point_inside_range_to_deleted_start() {
+        assert_eq!(
+            delete_state_after_edit(
+                state(28, 14, 0, 0, 60, 42),
+                deleted_range(),
+                DeleteSideEffectPolicy::current_buffer(),
+            ),
+            state(20, 10, 0, 0, 44, 34)
+        );
+    }
+
+    #[test]
+    fn delete_state_shared_buffer_shifts_point_begv_and_zv() {
+        assert_eq!(
+            delete_state_after_edit(
+                state(44, 24, 28, 14, 60, 42),
+                deleted_range(),
+                DeleteSideEffectPolicy::shared_buffer(true),
+            ),
+            state(28, 16, 20, 10, 44, 34)
+        );
+    }
+
+    #[test]
+    fn insert_and_delete_state_skip_update_when_policy_disables_state_fields() {
+        let original = state(44, 24, 28, 14, 60, 42);
+
+        assert_eq!(
+            insert_state_after_edit(
+                original,
+                insertion(),
+                InsertSideEffectPolicy::shared_buffer(
+                    false,
+                    false,
+                    InsertMarkerAdjustment::ByInsertionType,
+                ),
+            ),
+            original
+        );
+        assert_eq!(
+            delete_state_after_edit(
+                original,
+                deleted_range(),
+                DeleteSideEffectPolicy::shared_buffer(false),
+            ),
+            original
+        );
     }
 
     #[test]

@@ -7,9 +7,10 @@
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertSideEffectPolicy,
-    char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos,
-    emacs_char_count, lisp_string_from_buffer_bytes, modification_tick_delta,
-    replace_state_after_edit, transpose_position,
+    char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode, delete_state_after_edit,
+    emacs_byte_for_char_pos, emacs_char_count, insert_state_after_edit,
+    lisp_string_from_buffer_bytes, modification_tick_delta, replace_state_after_edit,
+    transpose_position,
 };
 use crate::buffer::undo;
 use crate::buffer::{EmacsByteRange, TextEditRange, TextExtent, TextInsertion, TextReplacement};
@@ -116,22 +117,11 @@ impl Buffer {
             return;
         }
 
-        if policy.update_state_fields {
-            if self.pt_byte > insert_pos
-                || (policy.advance_point_at_insert && self.pt_byte == insert_pos)
-            {
-                self.pt_byte += byte_len;
-                self.pt += char_len;
-            }
-            if policy.shift_begv && self.begv_byte > insert_pos {
-                self.begv_byte += byte_len;
-                self.begv += char_len;
-            }
-            if self.zv_byte >= insert_pos {
-                self.zv_byte += byte_len;
-                self.zv += char_len;
-            }
-        }
+        self.set_edit_state(insert_state_after_edit(
+            self.edit_state(),
+            insertion,
+            policy,
+        ));
         if policy.adjust_shared_markers {
             if policy.marker_adjustment == InsertMarkerAdjustment::StrictAfter {
                 self.text.adjust_markers_for_insert_extent_strict_after(
@@ -167,37 +157,10 @@ impl Buffer {
         }
         let start = range.byte_start_usize();
         let end = range.byte_end_usize();
-        let start_char = range.char_start_usize();
         let byte_len = range.byte_len().get();
         let char_len = range.char_len().get();
 
-        if policy.update_state_fields {
-            if self.pt_byte >= end {
-                self.pt_byte -= byte_len;
-                self.pt -= char_len;
-            } else if self.pt_byte > start {
-                self.pt_byte = start;
-                self.pt = start_char;
-            }
-
-            if policy.shift_begv {
-                if self.begv_byte >= end {
-                    self.begv_byte -= byte_len;
-                    self.begv -= char_len;
-                } else if self.begv_byte > start {
-                    self.begv_byte = start;
-                    self.begv = start_char;
-                }
-            }
-
-            if self.zv_byte >= end {
-                self.zv_byte -= byte_len;
-                self.zv -= char_len;
-            } else if self.zv_byte > start {
-                self.zv_byte = start;
-                self.zv = start_char;
-            }
-        }
+        self.set_edit_state(delete_state_after_edit(self.edit_state(), range, policy));
 
         if policy.adjust_shared_markers {
             self.text.adjust_markers_for_delete_range(range);
