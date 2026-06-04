@@ -550,7 +550,7 @@ pub enum DumpBufferTextBackendKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DumpGapBuffer {
+pub struct DumpBufferText {
     pub backend_kind: DumpBufferTextBackendKind,
     pub text: Vec<u8>,
 }
@@ -650,7 +650,7 @@ pub struct DumpBuffer {
     #[serde(default)]
     pub last_name: Option<String>,
     pub base_buffer: Option<DumpBufferId>,
-    pub text: DumpGapBuffer,
+    pub text: DumpBufferText,
     pub pt: usize,
     #[serde(default)]
     pub pt_char: Option<usize>,

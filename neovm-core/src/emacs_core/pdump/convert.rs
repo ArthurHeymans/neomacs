@@ -2789,7 +2789,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         last_name_lisp: buf.last_name_value().as_lisp_string().map(dump_lisp_string),
         last_name: None,
         base_buffer: buf.base_buffer.map(|id| DumpBufferId(id.0)),
-        text: DumpGapBuffer {
+        text: DumpBufferText {
             backend_kind: dump_buffer_text_backend_kind(buf.text.implemented_backend_kind()),
             text: buf.text.dump_text(),
         },
