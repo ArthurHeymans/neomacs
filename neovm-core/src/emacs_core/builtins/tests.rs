@@ -3071,122 +3071,121 @@ fn full_buffer_bytes(buffer: &crate::buffer::Buffer) -> Vec<u8> {
 #[test]
 fn buffer_swap_text_swaps_owned_backend_and_state() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
-    let first_id = eval.buffers.create_buffer("*swap-state-a*");
-    let second_id = eval.buffers.create_buffer("*swap-state-b*");
+    for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut eval = super::super::eval::Context::new();
+        let first_id = eval.buffers.create_buffer("*swap-state-a*");
+        let second_id = eval.buffers.create_buffer("*swap-state-b*");
 
-    eval.buffers
-        .insert_into_buffer(first_id, "abcde")
-        .expect("first insert should succeed");
-    eval.buffers
-        .insert_into_buffer(second_id, "uvwxyz")
-        .expect("second insert should succeed");
+        eval.buffers
+            .insert_into_buffer(first_id, "abcde")
+            .expect("first insert should succeed");
+        eval.buffers
+            .insert_into_buffer(second_id, "uvwxyz")
+            .expect("second insert should succeed");
 
-    {
-        let second = eval
-            .buffers
-            .get_mut(second_id)
-            .expect("second buffer should exist");
-        second.convert_text_backend_kind(
-            crate::buffer::BufferTextBackendKind::PieceTree
-                .implemented()
-                .expect("piece-tree backend should be implemented"),
+        {
+            let second = eval
+                .buffers
+                .get_mut(second_id)
+                .expect("second buffer should exist");
+            second.convert_text_backend_kind(
+                backend_kind
+                    .implemented()
+                    .expect("test backend should be implemented"),
+            );
+        }
+
+        eval.buffers
+            .narrow_buffer_to_region(first_id, 1, 4)
+            .expect("first narrow should succeed");
+        eval.buffers
+            .goto_buffer_byte(first_id, 2)
+            .expect("first point should move");
+        eval.buffers
+            .goto_buffer_byte(second_id, 5)
+            .expect("second point should move");
+        eval.buffers
+            .set_buffer_mark(first_id, 3)
+            .expect("first mark should set");
+        eval.buffers
+            .set_buffer_mark(second_id, 1)
+            .expect("second mark should set");
+
+        {
+            let first = eval
+                .buffers
+                .get_mut(first_id)
+                .expect("first buffer should exist");
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::T;
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
+            first.set_undo_list(Value::symbol("first-undo"));
+        }
+        {
+            let second = eval
+                .buffers
+                .get_mut(second_id)
+                .expect("second buffer should exist");
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::NIL;
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(4);
+            second.set_undo_list(Value::symbol("second-undo"));
+        }
+
+        eval.buffers.set_current(second_id);
+        let overlay = builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(4)])
+            .expect("overlay creation should succeed");
+
+        eval.buffers.set_current(first_id);
+        assert_eq!(
+            builtin_buffer_swap_text(&mut eval, vec![Value::make_buffer(second_id)]).unwrap(),
+            Value::NIL
         );
-    }
 
-    eval.buffers
-        .narrow_buffer_to_region(first_id, 1, 4)
-        .expect("first narrow should succeed");
-    eval.buffers
-        .goto_buffer_byte(first_id, 2)
-        .expect("first point should move");
-    eval.buffers
-        .goto_buffer_byte(second_id, 5)
-        .expect("second point should move");
-    eval.buffers
-        .set_buffer_mark(first_id, 3)
-        .expect("first mark should set");
-    eval.buffers
-        .set_buffer_mark(second_id, 1)
-        .expect("second mark should set");
-
-    {
         let first = eval
             .buffers
-            .get_mut(first_id)
+            .get(first_id)
             .expect("first buffer should exist");
-        first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::T;
-        first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
-        first.set_undo_list(Value::symbol("first-undo"));
-    }
-    {
         let second = eval
             .buffers
-            .get_mut(second_id)
+            .get(second_id)
             .expect("second buffer should exist");
-        second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::NIL;
-        second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(4);
-        second.set_undo_list(Value::symbol("second-undo"));
+
+        assert_eq!(full_buffer_bytes(first), b"uvwxyz");
+        assert_eq!(full_buffer_bytes(second), b"abcde");
+        assert_eq!(first.text_backend_kind(), backend_kind);
+        assert_eq!(
+            second.text_backend_kind(),
+            crate::buffer::BufferTextBackendKind::GapBuffer
+        );
+        assert_eq!(first.point_byte(), 5);
+        assert_eq!(first.point_min_byte(), 0);
+        assert_eq!(first.point_max_byte(), 6);
+        assert_eq!(first.mark_byte(), Some(1));
+        assert_eq!(second.point_byte(), 2);
+        assert_eq!(second.point_min_byte(), 1);
+        assert_eq!(second.point_max_byte(), 4);
+        assert_eq!(second.mark_byte(), Some(3));
+        assert_eq!(
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+            Value::NIL
+        );
+        assert_eq!(
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+            Value::T
+        );
+        assert_eq!(
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+            Value::NIL
+        );
+        assert_eq!(
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+            Value::NIL
+        );
+        assert_eq!(first.get_undo_list(), Value::symbol("second-undo"));
+        assert_eq!(second.get_undo_list(), Value::symbol("first-undo"));
+        assert_eq!(overlay.as_overlay_data().unwrap().buffer, Some(first_id));
+        assert_eq!(first.overlays.len(), 1);
+        assert!(second.overlays.is_empty());
     }
-
-    eval.buffers.set_current(second_id);
-    let overlay = builtin_make_overlay(&mut eval, vec![Value::fixnum(2), Value::fixnum(4)])
-        .expect("overlay creation should succeed");
-
-    eval.buffers.set_current(first_id);
-    assert_eq!(
-        builtin_buffer_swap_text(&mut eval, vec![Value::make_buffer(second_id)]).unwrap(),
-        Value::NIL
-    );
-
-    let first = eval
-        .buffers
-        .get(first_id)
-        .expect("first buffer should exist");
-    let second = eval
-        .buffers
-        .get(second_id)
-        .expect("second buffer should exist");
-
-    assert_eq!(full_buffer_bytes(first), b"uvwxyz");
-    assert_eq!(full_buffer_bytes(second), b"abcde");
-    assert_eq!(
-        first.text_backend_kind(),
-        crate::buffer::BufferTextBackendKind::PieceTree
-    );
-    assert_eq!(
-        second.text_backend_kind(),
-        crate::buffer::BufferTextBackendKind::GapBuffer
-    );
-    assert_eq!(first.point_byte(), 5);
-    assert_eq!(first.point_min_byte(), 0);
-    assert_eq!(first.point_max_byte(), 6);
-    assert_eq!(first.mark_byte(), Some(1));
-    assert_eq!(second.point_byte(), 2);
-    assert_eq!(second.point_min_byte(), 1);
-    assert_eq!(second.point_max_byte(), 4);
-    assert_eq!(second.mark_byte(), Some(3));
-    assert_eq!(
-        first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
-        Value::NIL
-    );
-    assert_eq!(
-        second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
-        Value::T
-    );
-    assert_eq!(
-        first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
-        Value::NIL
-    );
-    assert_eq!(
-        second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
-        Value::NIL
-    );
-    assert_eq!(first.get_undo_list(), Value::symbol("second-undo"));
-    assert_eq!(second.get_undo_list(), Value::symbol("first-undo"));
-    assert_eq!(overlay.as_overlay_data().unwrap().buffer, Some(first_id));
-    assert_eq!(first.overlays.len(), 1);
-    assert!(second.overlays.is_empty());
 }
 
 #[test]
@@ -10258,48 +10257,53 @@ fn gap_position_and_size_use_current_buffer_storage() {
     assert!(dispatch_builtin_pure("gap-position", vec![]).is_none());
     assert!(dispatch_builtin_pure("gap-size", vec![]).is_none());
 
-    let mut eval = super::super::eval::Context::new();
-    let current = eval
-        .buffers
-        .current_buffer_id()
-        .expect("scratch buffer should exist");
-    let initial = Value::list(vec![
-        builtin_gap_position(&mut eval, vec![]).expect("gap-position"),
-        builtin_gap_size(&mut eval, vec![]).expect("gap-size"),
-    ]);
+    for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut eval = super::super::eval::Context::new();
+        let current = eval
+            .buffers
+            .current_buffer_id()
+            .expect("scratch buffer should exist");
+        let initial = Value::list(vec![
+            builtin_gap_position(&mut eval, vec![]).expect("gap-position"),
+            builtin_gap_size(&mut eval, vec![]).expect("gap-size"),
+        ]);
 
-    eval.buffers
-        .insert_into_buffer(current, "abc")
-        .expect("insert should succeed");
-    let after_gap_insert = Value::list(vec![
-        builtin_gap_position(&mut eval, vec![]).expect("gap-position after insert"),
-        builtin_gap_size(&mut eval, vec![]).expect("gap-size after insert"),
-    ]);
+        eval.buffers
+            .insert_into_buffer(current, "abc")
+            .expect("insert should succeed");
+        let after_gap_insert = Value::list(vec![
+            builtin_gap_position(&mut eval, vec![]).expect("gap-position after insert"),
+            builtin_gap_size(&mut eval, vec![]).expect("gap-size after insert"),
+        ]);
 
-    builtin_neomacs_set_buffer_text_backend(&mut eval, vec![Value::symbol("piece-tree")])
-        .expect("piece-tree backend should be implemented");
-    eval.buffers
-        .insert_into_buffer(current, "d")
-        .expect("non-gap insert should succeed");
-    let after_piece_tree_insert = Value::list(vec![
-        builtin_neomacs_buffer_text_backend(&mut eval, vec![]).expect("backend"),
-        builtin_gap_position(&mut eval, vec![]).expect("gap-position after backend conversion"),
-        builtin_gap_size(&mut eval, vec![]).expect("gap-size after backend conversion"),
-    ]);
+        builtin_neomacs_set_buffer_text_backend(
+            &mut eval,
+            vec![Value::symbol(backend_kind.symbol_name())],
+        )
+        .expect("non-gap backend should be implemented");
+        eval.buffers
+            .insert_into_buffer(current, "d")
+            .expect("non-gap insert should succeed");
+        let after_non_gap_insert = Value::list(vec![
+            builtin_neomacs_buffer_text_backend(&mut eval, vec![]).expect("backend"),
+            builtin_gap_position(&mut eval, vec![]).expect("gap-position after backend conversion"),
+            builtin_gap_size(&mut eval, vec![]).expect("gap-size after backend conversion"),
+        ]);
 
-    let result = Value::list(vec![initial, after_gap_insert, after_piece_tree_insert]);
-    assert_eq!(
-        result,
-        Value::list(vec![
-            Value::list(vec![Value::fixnum(1), Value::fixnum(20)]),
-            Value::list(vec![Value::fixnum(4), Value::fixnum(17)]),
+        let result = Value::list(vec![initial, after_gap_insert, after_non_gap_insert]);
+        assert_eq!(
+            result,
             Value::list(vec![
-                Value::symbol("piece-tree"),
-                Value::fixnum(5),
-                Value::fixnum(16),
-            ]),
-        ])
-    );
+                Value::list(vec![Value::fixnum(1), Value::fixnum(20)]),
+                Value::list(vec![Value::fixnum(4), Value::fixnum(17)]),
+                Value::list(vec![
+                    Value::symbol(backend_kind.symbol_name()),
+                    Value::fixnum(5),
+                    Value::fixnum(16),
+                ]),
+            ])
+        );
+    }
 }
 
 #[test]

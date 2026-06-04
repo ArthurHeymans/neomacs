@@ -556,60 +556,63 @@ fn neomacs_set_cursor_blink_forwards_to_display_host() {
 #[test]
 fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_non_gap_backends() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(
-        eval_one(
-            r#"(list
-                 (neomacs-default-buffer-text-backend)
-                 (neomacs-buffer-text-backend)
-                 (neomacs-set-default-buffer-text-backend 'piece-tree)
-                 (neomacs-buffer-text-backend)
-                 (save-current-buffer
-                   (set-buffer (get-buffer-create "piece-backend"))
-                   (insert "abc")
-                   (list (neomacs-buffer-text-backend) (buffer-string)))
-                 (neomacs-set-default-buffer-text-backend 'rope)
-                 (save-current-buffer
-                   (set-buffer (get-buffer-create "rope-backend"))
-                   (insert "xyz")
-                   (list (neomacs-buffer-text-backend) (buffer-string))))"#
-        ),
-        r#"OK (gap-buffer gap-buffer piece-tree gap-buffer (piece-tree "abc") rope (rope "xyz"))"#
-    );
+    for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {
+        let backend = backend_kind.symbol_name();
+        assert_eq!(
+            eval_one(&format!(
+                r#"(list
+                     (neomacs-default-buffer-text-backend)
+                     (neomacs-buffer-text-backend)
+                     (neomacs-set-default-buffer-text-backend '{backend})
+                     (neomacs-buffer-text-backend)
+                     (save-current-buffer
+                       (set-buffer (get-buffer-create "{backend}-backend"))
+                       (insert "abc")
+                       (list (neomacs-buffer-text-backend) (buffer-string))))"#
+            )),
+            format!(r#"OK (gap-buffer gap-buffer {backend} gap-buffer ({backend} "abc"))"#)
+        );
+    }
 }
 
 #[test]
 fn neomacs_set_buffer_text_backend_converts_current_shared_text_storage() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(
-        eval_one(
-            r#"(save-current-buffer
-                 (let ((base (get-buffer-create "convert-base")))
-                   (set-buffer base)
-                   (erase-buffer)
-                   (insert "abécd")
-                   (put-text-property 2 4 'face 'bold)
-                   (let ((m (copy-marker 4))
-                         (ind (make-indirect-buffer base "convert-ind" t)))
-                     (list
-                      (neomacs-buffer-text-backend)
-                      (neomacs-set-buffer-text-backend 'piece-tree)
-                      (neomacs-buffer-text-backend)
-                      (save-current-buffer
-                        (set-buffer ind)
-                        (neomacs-buffer-text-backend))
-                      (buffer-string)
-                      (save-current-buffer
-                        (set-buffer ind)
-                        (buffer-string))
-                      (get-text-property 3 'face)
-                      (marker-position m)
-                      (neomacs-set-buffer-text-backend 'gap-buffer)
-                      (save-current-buffer
-                        (set-buffer ind)
-                        (neomacs-buffer-text-backend))))))"#
-        ),
-        r#"OK (gap-buffer piece-tree piece-tree piece-tree #("abécd" 1 3 (face bold)) #("abécd" 1 3 (face bold)) bold 4 gap-buffer gap-buffer)"#
-    );
+    for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {
+        let backend = backend_kind.symbol_name();
+        assert_eq!(
+            eval_one(&format!(
+                r#"(save-current-buffer
+                     (let ((base (get-buffer-create "convert-base-{backend}")))
+                       (set-buffer base)
+                       (erase-buffer)
+                       (insert "abécd")
+                       (put-text-property 2 4 'face 'bold)
+                       (let ((m (copy-marker 4))
+                             (ind (make-indirect-buffer base "convert-ind-{backend}" t)))
+                         (list
+                          (neomacs-buffer-text-backend)
+                          (neomacs-set-buffer-text-backend '{backend})
+                          (neomacs-buffer-text-backend)
+                          (save-current-buffer
+                            (set-buffer ind)
+                            (neomacs-buffer-text-backend))
+                          (buffer-string)
+                          (save-current-buffer
+                            (set-buffer ind)
+                            (buffer-string))
+                          (get-text-property 3 'face)
+                          (marker-position m)
+                          (neomacs-set-buffer-text-backend 'gap-buffer)
+                          (save-current-buffer
+                            (set-buffer ind)
+                            (neomacs-buffer-text-backend))))))"#
+            )),
+            format!(
+                r#"OK (gap-buffer {backend} {backend} {backend} #("abécd" 1 3 (face bold)) #("abécd" 1 3 (face bold)) bold 4 gap-buffer gap-buffer)"#
+            )
+        );
+    }
 }
 
 #[test]

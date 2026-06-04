@@ -37,6 +37,21 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
         BufferTextBackendKind::from_str("piece-tree"),
         Ok(BufferTextBackendKind::PieceTree)
     );
+    assert_eq!(
+        BufferTextBackendKind::implemented_variants().collect::<Vec<_>>(),
+        vec![
+            BufferTextBackendKind::GapBuffer,
+            BufferTextBackendKind::PieceTree,
+            BufferTextBackendKind::Rope,
+        ]
+    );
+    assert_eq!(
+        BufferTextBackendKind::non_gap_implemented_variants().collect::<Vec<_>>(),
+        vec![
+            BufferTextBackendKind::PieceTree,
+            BufferTextBackendKind::Rope,
+        ]
+    );
     assert!(BufferTextBackendKind::PieceTree.is_implemented());
     assert!(BufferTextBackendKind::Rope.is_implemented());
 }
@@ -44,9 +59,7 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
 #[test]
 fn buffer_text_can_use_non_gap_backends() {
     crate::test_utils::init_test_tracing();
-    for kind in
-        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
-    {
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
         let layout = match kind {
             BufferTextBackendKind::GapBuffer => unreachable!("filtered above"),
             BufferTextBackendKind::PieceTree => {
@@ -98,9 +111,7 @@ fn public_backend_kind_helpers_select_and_convert_storage() {
 #[test]
 fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
-    for kind in
-        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
-    {
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
         let raw = crate::heap_types::LispString::from_unibyte(vec![0xFF, b'A', 0x80]);
         let text = BufferText::from_lisp_string_with_backend_kind(&raw, implemented_kind(kind));
 
@@ -120,9 +131,7 @@ fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
 #[test]
 fn replace_lisp_string_preserves_non_gap_backend() {
     crate::test_utils::init_test_tracing();
-    for kind in
-        BufferTextBackendKind::variants().filter(|kind| *kind != BufferTextBackendKind::GapBuffer)
-    {
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
         let text = BufferText::from_str_with_backend_kind("abc", implemented_kind(kind));
         let replacement = crate::heap_types::LispString::from_utf8("日本");
 

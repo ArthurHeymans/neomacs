@@ -15,18 +15,15 @@ fn value_to_buffer_text_backend_kind(
             ))],
         )
     })?;
-    if !kind.is_implemented() {
-        return Err(signal(
+    kind.implemented().ok_or_else(|| {
+        signal(
             "error",
             vec![Value::string(format!(
                 "Unimplemented buffer text backend: {}",
                 kind.symbol_name()
             ))],
-        ));
-    }
-    Ok(kind
-        .implemented()
-        .expect("implemented buffer text backend checked above"))
+        )
+    })
 }
 
 fn buffer_text_backend_kind_value(kind: BufferTextBackendKind) -> Value {

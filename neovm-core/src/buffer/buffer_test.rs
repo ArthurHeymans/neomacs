@@ -28,7 +28,7 @@ fn require_implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTex
 }
 
 fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
-    BufferTextBackendKind::variants().filter(|kind| kind.is_implemented())
+    BufferTextBackendKind::implemented_variants()
 }
 
 fn manager_with_text_backend(kind: BufferTextBackendKind) -> BufferManager {

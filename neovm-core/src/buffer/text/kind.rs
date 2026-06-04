@@ -52,8 +52,20 @@ impl BufferTextBackendKind {
         Self::iter()
     }
 
+    pub fn implemented_variants() -> impl Iterator<Item = Self> {
+        Self::variants().filter(|kind| kind.is_implemented())
+    }
+
+    pub fn non_gap_implemented_variants() -> impl Iterator<Item = Self> {
+        Self::implemented_variants().filter(|kind| !kind.is_gap_buffer())
+    }
+
     pub fn symbol_name(self) -> &'static str {
         self.into()
+    }
+
+    pub const fn is_gap_buffer(self) -> bool {
+        matches!(self, Self::GapBuffer)
     }
 
     pub fn is_implemented(self) -> bool {
@@ -75,11 +87,15 @@ impl ImplementedBufferTextBackendKind {
     }
 
     pub(crate) fn non_gap_variants() -> impl Iterator<Item = Self> {
-        Self::iter().filter(|kind| *kind != Self::GapBuffer)
+        Self::iter().filter(|kind| !kind.is_gap_buffer())
     }
 
     pub(crate) fn symbol_name(self) -> &'static str {
         self.into()
+    }
+
+    pub(crate) const fn is_gap_buffer(self) -> bool {
+        matches!(self, Self::GapBuffer)
     }
 
     pub(crate) fn public_kind(self) -> BufferTextBackendKind {

@@ -42,7 +42,8 @@ fn test_pdump_round_trip_basic() {
 #[test]
 fn pdump_round_trip_preserves_buffer_text_backend_kind() {
     crate::test_utils::init_test_tracing();
-    for backend in ["piece-tree", "rope"] {
+    for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {
+        let backend = backend_kind.symbol_name();
         let mut eval = Context::new();
         let buffer_name = format!("{backend}-dump");
         let setup = eval.eval_str(&format!(
