@@ -475,6 +475,14 @@ impl Buffer {
         replacement
     }
 
+    fn replace_measured_region_lisp_string_edit(
+        &mut self,
+        old_range: TextEditRange,
+        text: &LispString,
+    ) -> MeasuredReplaceEdit {
+        MeasuredReplaceEdit::new(self.replace_measured_region_lisp_string(old_range, text))
+    }
+
     /// Delete the byte range `[start, end)`.
     ///
     /// Adjusts point, mark, markers, and the narrowing boundary.
@@ -521,6 +529,10 @@ impl Buffer {
             DeleteSideEffectPolicy::current_buffer(),
         );
         range
+    }
+
+    fn delete_measured_region_edit(&mut self, range: TextEditRange) -> MeasuredDeleteEdit {
+        MeasuredDeleteEdit::new(self.delete_measured_region(range))
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
@@ -1132,8 +1144,10 @@ impl BufferManager {
         }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let range = self.buffers.get_mut(&id)?.delete_measured_region(range);
-        let edit = MeasuredDeleteEdit::new(range);
+        let edit = self
+            .buffers
+            .get_mut(&id)?
+            .delete_measured_region_edit(range);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_delete_metadata(sibling, edit, update_state_fields);
@@ -1167,11 +1181,10 @@ impl BufferManager {
         }
 
         let scope = self.shared_text_edit_scope(id)?;
-        let replacement = self
+        let edit = self
             .buffers
             .get_mut(&id)?
-            .replace_measured_region_lisp_string(range, text);
-        let edit = MeasuredReplaceEdit::new(replacement);
+            .replace_measured_region_lisp_string_edit(range, text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_replace_metadata(sibling, edit, update_state_fields);
