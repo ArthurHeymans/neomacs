@@ -613,8 +613,13 @@ impl Buffer {
             }
         }
 
-        self.text
-            .replace_same_len_emacs_byte_range(range.byte_range(), &replacement_bytes);
+        self.text.replace_same_len_measured_range(
+            TextReplacement::new(
+                range,
+                TextExtent::from_emacs_bytes(&replacement_bytes, self.get_multibyte()),
+            ),
+            &replacement_bytes,
+        );
         self.apply_same_len_edit_side_effects(changed_chars, false);
         true
     }
@@ -749,8 +754,17 @@ impl Buffer {
         let new_point =
             transposition.transpose_anchor(TextPositionAnchor::from_usize(self.pt, self.pt_byte));
 
-        self.text
-            .replace_same_len_emacs_byte_range(byte_span, &replacement);
+        self.text.replace_same_len_measured_range(
+            TextReplacement::new(
+                TextEditRange::new(
+                    byte_span,
+                    transposition.char_span().start(),
+                    transposition.char_span().end(),
+                ),
+                TextExtent::from_emacs_bytes(&replacement, self.get_multibyte()),
+            ),
+            &replacement,
+        );
         self.text.text_props_replace(replacement_props);
         if leave_markers {
             self.text

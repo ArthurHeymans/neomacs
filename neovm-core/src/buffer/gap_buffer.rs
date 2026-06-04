@@ -583,16 +583,25 @@ impl GapBuffer {
 
     /// Overwrite the logical byte range `[start, end)` with raw Emacs bytes.
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
-        self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+        let range = EmacsByteRange::from_usize(start, end);
+        let start_char = self.emacs_byte_pos_to_char_pos(range.start());
+        let end_char = self.emacs_byte_pos_to_char_pos(range.end());
+        self.replace_same_len_measured_range(
+            TextReplacement::new(
+                TextEditRange::new(range, start_char, end_char),
+                TextExtent::from_emacs_bytes(replacement, self.multibyte),
+            ),
+            replacement,
+        );
     }
 
-    pub(crate) fn replace_same_len_emacs_byte_range(
+    pub(crate) fn replace_same_len_measured_range(
         &mut self,
-        range: EmacsByteRange,
-        replacement: &[u8],
+        replacement: TextReplacement,
+        bytes: &[u8],
     ) {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = replacement.old_range().byte_start_usize();
+        let end = replacement.old_range().byte_end_usize();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"
@@ -603,11 +612,18 @@ impl GapBuffer {
             self.len()
         );
         assert_eq!(
-            replacement.len(),
+            bytes.len(),
             end - start,
             "replace_same_len_range: replacement Emacs-byte length ({}) must match replaced length ({})",
-            replacement.len(),
+            bytes.len(),
             end - start
+        );
+        assert_eq!(
+            replacement.new_byte_len().get(),
+            bytes.len(),
+            "replace_same_len_range: measured new byte length ({}) mismatches replacement bytes ({})",
+            replacement.new_byte_len().get(),
+            bytes.len()
         );
         if start == end {
             return;
@@ -621,21 +637,62 @@ impl GapBuffer {
             "replace_same_len_range: end ({end}) is not on an Emacs character boundary"
         );
 
-        self.move_gap_to(end);
-        let old_chars = emacs_char_count_bytes(&self.buf[start..end], self.multibyte);
-        let new_chars = emacs_char_count_bytes(replacement, self.multibyte);
-        let old_bytes = end - start;
-        let new_bytes = replacement.len();
-        self.buf[start..end].copy_from_slice(replacement);
+        let before_gap_len = if start < self.gap_start_bytes {
+            end.min(self.gap_start_bytes) - start
+        } else {
+            0
+        };
+        let after_gap_len = if end > self.gap_start_bytes {
+            end - start.max(self.gap_start_bytes)
+        } else {
+            0
+        };
+        let gap = self.gap_size();
+        let old_before_chars = if before_gap_len == 0 {
+            0
+        } else {
+            emacs_char_count_bytes(&self.buf[start..start + before_gap_len], self.multibyte)
+        };
+        let old_after_chars = if after_gap_len == 0 {
+            0
+        } else {
+            let phys_start = start.max(self.gap_start_bytes) + gap;
+            emacs_char_count_bytes(
+                &self.buf[phys_start..phys_start + after_gap_len],
+                self.multibyte,
+            )
+        };
+        debug_assert_eq!(
+            replacement.new_char_len().get(),
+            emacs_char_count_bytes(bytes, self.multibyte),
+            "replace_same_len_range: measured new char count mismatches replacement bytes"
+        );
+        debug_assert_eq!(
+            replacement.old_char_len().get(),
+            old_before_chars + old_after_chars,
+            "replace_same_len_range: measured old char count mismatches storage"
+        );
+
+        if before_gap_len != 0 {
+            self.buf[start..start + before_gap_len].copy_from_slice(&bytes[..before_gap_len]);
+        }
+        if after_gap_len != 0 {
+            let src_start = before_gap_len;
+            let phys_start = start.max(self.gap_start_bytes) + gap;
+            self.buf[phys_start..phys_start + after_gap_len]
+                .copy_from_slice(&bytes[src_start..src_start + after_gap_len]);
+        }
+
+        let old_chars = replacement.old_char_len().get();
+        let new_chars = replacement.new_char_len().get();
+        let new_before_chars = emacs_char_count_bytes(&bytes[..before_gap_len], self.multibyte);
+        if old_before_chars != new_before_chars {
+            let delta = new_before_chars as isize - old_before_chars as isize;
+            self.gap_start_chars = self.gap_start_chars.saturating_add_signed(delta);
+        }
         if old_chars != new_chars {
             let delta = new_chars as isize - old_chars as isize;
-            self.gap_start_chars = self.gap_start_chars.saturating_add_signed(delta);
             self.total_chars = self.total_chars.saturating_add_signed(delta);
-        }
-        if old_bytes != new_bytes {
-            let delta = new_bytes as isize - old_bytes as isize;
-            self.gap_start_bytes = self.gap_start_bytes.saturating_add_signed(delta);
-            self.total_bytes = self.total_bytes.saturating_add_signed(delta);
         }
     }
 

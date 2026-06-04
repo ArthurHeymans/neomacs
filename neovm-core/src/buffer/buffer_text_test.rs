@@ -150,6 +150,28 @@ fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
 }
 
 #[test]
+fn non_gap_same_len_replace_preserves_virtual_gap_byte_position() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut text = BufferText::from_str("éxq");
+        text.try_convert_backend_kind(kind)
+            .expect("backend should be implemented");
+        let initial_gap_size = text.gap_size_lisp();
+        assert_eq!(text.gap_position_lisp(), 4);
+
+        text.replace_same_len_emacs_bytes(0, "éx".len(), "€".as_bytes());
+
+        assert_eq!(text.to_string(), "€q");
+        assert_eq!(
+            text.gap_position_lisp(),
+            3,
+            "{kind:?} should keep the virtual gap at the same byte position"
+        );
+        assert_eq!(text.gap_size_lisp(), initial_gap_size);
+    }
+}
+
+#[test]
 fn edit_measurement_boundary_is_backend_neutral() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::implemented_variants() {

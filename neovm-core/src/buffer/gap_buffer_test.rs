@@ -164,6 +164,55 @@ fn delete_then_insert() {
 }
 
 // -----------------------------------------------------------------------
+// replace_same_len_emacs_bytes
+// -----------------------------------------------------------------------
+
+#[test]
+fn replace_same_len_preserves_gap_position_before_and_after_gap() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = GapBuffer::from_str("abécd日本");
+    let gap_byte = char_to_byte(&buf, 3);
+    buf.move_gap_to(gap_byte);
+    let gap = (buf.gpt(), buf.gpt_byte());
+
+    let before_start = char_to_byte(&buf, 2);
+    let before_end = char_to_byte(&buf, 3);
+    buf.replace_same_len_emacs_bytes(before_start, before_end, "ß".as_bytes());
+
+    assert_eq!(buf.to_string(), "abßcd日本");
+    assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
+    assert_eq!(buf.char_count(), 7);
+    assert_eq!(buf.emacs_byte_len(), "abßcd日本".len());
+
+    let after_start = char_to_byte(&buf, 5);
+    let after_end = char_to_byte(&buf, 6);
+    buf.replace_same_len_emacs_bytes(after_start, after_end, "界".as_bytes());
+
+    assert_eq!(buf.to_string(), "abßcd界本");
+    assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
+    assert_eq!(buf.char_count(), 7);
+    assert_eq!(buf.emacs_byte_len(), "abßcd界本".len());
+}
+
+#[test]
+fn replace_same_len_preserves_gap_position_when_range_straddles_gap() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = GapBuffer::from_str("abécd日本");
+    let gap_byte = char_to_byte(&buf, 3);
+    buf.move_gap_to(gap_byte);
+    let gap = (buf.gpt(), buf.gpt_byte());
+
+    let start = char_to_byte(&buf, 2);
+    let end = char_to_byte(&buf, 4);
+    buf.replace_same_len_emacs_bytes(start, end, "ßx".as_bytes());
+
+    assert_eq!(buf.to_string(), "abßxd日本");
+    assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
+    assert_eq!(buf.char_count(), 7);
+    assert_eq!(buf.emacs_byte_len(), "abßxd日本".len());
+}
+
+// -----------------------------------------------------------------------
 // byte_at / char_at
 // -----------------------------------------------------------------------
 

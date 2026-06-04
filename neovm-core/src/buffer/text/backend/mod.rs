@@ -221,12 +221,12 @@ impl TextBackend {
         dispatch_backend_mut!(self, storage => PhysicalTextBackend::replace_measured_range(storage, replacement, bytes));
     }
 
-    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
+    pub(in crate::buffer) fn replace_same_len_measured_range(
         &mut self,
-        range: EmacsByteRange,
-        replacement: &[u8],
+        replacement: TextReplacement,
+        bytes: &[u8],
     ) {
-        dispatch_backend_mut!(self, storage => PhysicalTextBackend::replace_same_len_emacs_byte_range(storage, range, replacement));
+        dispatch_backend_mut!(self, storage => PhysicalTextBackend::replace_same_len_measured_range(storage, replacement, bytes));
     }
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {

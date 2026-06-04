@@ -183,13 +183,12 @@ impl GapTextBackend {
         self.gap.replace_measured_range(replacement, bytes);
     }
 
-    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
+    pub(in crate::buffer) fn replace_same_len_measured_range(
         &mut self,
-        range: EmacsByteRange,
-        replacement: &[u8],
+        replacement: TextReplacement,
+        bytes: &[u8],
     ) {
-        self.gap
-            .replace_same_len_emacs_byte_range(range, replacement);
+        self.gap.replace_same_len_measured_range(replacement, bytes);
     }
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {

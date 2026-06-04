@@ -403,13 +403,14 @@ impl RopeTextBackend {
         self.root = self.merge_adjacent(merged, right);
     }
 
-    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
+    pub(in crate::buffer) fn replace_same_len_measured_range(
         &mut self,
-        range: EmacsByteRange,
-        replacement: &[u8],
+        replacement: TextReplacement,
+        bytes: &[u8],
     ) {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let old_range = replacement.old_range();
+        let start = old_range.byte_start_usize();
+        let end = old_range.byte_end_usize();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"
@@ -420,25 +421,41 @@ impl RopeTextBackend {
             self.len()
         );
         assert_eq!(
-            replacement.len(),
+            bytes.len(),
             end - start,
             "replace_same_len_range: replacement Emacs-byte length ({}) must match replaced length ({})",
-            replacement.len(),
+            bytes.len(),
             end - start
+        );
+        assert_eq!(
+            replacement.new_byte_len().get(),
+            bytes.len(),
+            "replace_same_len_range: measured new byte length ({}) mismatches replacement bytes ({})",
+            replacement.new_byte_len().get(),
+            bytes.len()
         );
         if start == end {
             return;
         }
 
-        let start_char = self.emacs_byte_pos_to_char_pos(range.start());
-        let end_char = self.emacs_byte_pos_to_char_pos(range.end());
-        self.replace_measured_range(
-            TextReplacement::new(
-                TextEditRange::new(range, start_char, end_char),
-                TextExtent::from_emacs_bytes(replacement, self.multibyte),
-            ),
-            replacement,
+        debug_assert_eq!(
+            old_range.char_start(),
+            self.emacs_byte_pos_to_char_pos(old_range.byte_start()),
+            "replace_same_len_range: measured start char mismatches storage"
         );
+        debug_assert_eq!(
+            old_range.char_end(),
+            self.emacs_byte_pos_to_char_pos(old_range.byte_end()),
+            "replace_same_len_range: measured end char mismatches storage"
+        );
+        debug_assert_eq!(
+            replacement.new_char_len().get(),
+            TextExtent::from_emacs_bytes(bytes, self.multibyte)
+                .chars()
+                .get(),
+            "replace_same_len_range: measured new char count mismatches replacement bytes"
+        );
+        self.replace_measured_range(replacement, bytes);
     }
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {
@@ -959,7 +976,19 @@ mod tests {
         end: usize,
         replacement: &[u8],
     ) {
-        rope.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+        let range = EmacsByteRange::from_usize(start, end);
+        let edit_range = TextEditRange::new(
+            range,
+            rope.emacs_byte_pos_to_char_pos(range.start()),
+            rope.emacs_byte_pos_to_char_pos(range.end()),
+        );
+        rope.replace_same_len_measured_range(
+            TextReplacement::new(
+                edit_range,
+                TextExtent::from_emacs_bytes(replacement, rope.multibyte),
+            ),
+            replacement,
+        );
     }
 
     fn sample_insert(seed: u8) -> &'static str {

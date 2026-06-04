@@ -45,7 +45,7 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
     fn insert_measured_emacs_bytes(&mut self, pos: EmacsBytePos, bytes: &[u8], extent: TextExtent);
     fn delete_measured_range(&mut self, range: TextEditRange);
     fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]);
-    fn replace_same_len_emacs_byte_range(&mut self, range: EmacsByteRange, replacement: &[u8]);
+    fn replace_same_len_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]);
     fn dump_text(&self) -> Vec<u8>;
 }
 
@@ -137,8 +137,8 @@ impl PhysicalTextBackend for GapTextBackend {
         GapTextBackend::replace_measured_range(self, replacement, bytes);
     }
 
-    fn replace_same_len_emacs_byte_range(&mut self, range: EmacsByteRange, replacement: &[u8]) {
-        GapTextBackend::replace_same_len_emacs_byte_range(self, range, replacement);
+    fn replace_same_len_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
+        GapTextBackend::replace_same_len_measured_range(self, replacement, bytes);
     }
 
     fn dump_text(&self) -> Vec<u8> {
@@ -226,8 +226,8 @@ impl PhysicalTextBackend for PieceTreeTextBackend {
         PieceTreeTextBackend::replace_measured_range(self, replacement, bytes);
     }
 
-    fn replace_same_len_emacs_byte_range(&mut self, range: EmacsByteRange, replacement: &[u8]) {
-        PieceTreeTextBackend::replace_same_len_emacs_byte_range(self, range, replacement);
+    fn replace_same_len_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
+        PieceTreeTextBackend::replace_same_len_measured_range(self, replacement, bytes);
     }
 
     fn dump_text(&self) -> Vec<u8> {
@@ -315,8 +315,8 @@ impl PhysicalTextBackend for RopeTextBackend {
         RopeTextBackend::replace_measured_range(self, replacement, bytes);
     }
 
-    fn replace_same_len_emacs_byte_range(&mut self, range: EmacsByteRange, replacement: &[u8]) {
-        RopeTextBackend::replace_same_len_emacs_byte_range(self, range, replacement);
+    fn replace_same_len_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
+        RopeTextBackend::replace_same_len_measured_range(self, replacement, bytes);
     }
 
     fn dump_text(&self) -> Vec<u8> {

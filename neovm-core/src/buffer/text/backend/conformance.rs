@@ -225,7 +225,14 @@ fn replace_byte_range(backend: &mut TextBackend, start: usize, end: usize, bytes
 
 fn replace_same_len(backend: &mut TextBackend, start: usize, end: usize, bytes: &[u8]) {
     assert_eq!(end - start, bytes.len());
-    backend.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), bytes);
+    let byte_range = EmacsByteRange::from_usize(start, end);
+    let old_range = TextEditRange::new(
+        byte_range,
+        backend.emacs_byte_pos_to_char_pos(byte_range.start()),
+        backend.emacs_byte_pos_to_char_pos(byte_range.end()),
+    );
+    let new_extent = TextExtent::from_emacs_bytes(bytes, backend.is_multibyte());
+    backend.replace_same_len_measured_range(TextReplacement::new(old_range, new_extent), bytes);
 }
 
 fn char_to_byte(backend: &TextBackend, char_pos: usize) -> usize {

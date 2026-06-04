@@ -194,6 +194,49 @@ impl BufferText {
         Self::virtual_gap_consume_bytes(storage, replacement.new_extent().emacs_bytes().get());
     }
 
+    fn note_virtual_gap_same_len_replace(
+        storage: &mut BufferTextStorage,
+        replacement: TextReplacement,
+        bytes: &[u8],
+    ) {
+        if storage.backend.real_gap_compat_state().is_some() {
+            return;
+        }
+        let old_range = replacement.old_range();
+        let gap_byte = storage
+            .backend
+            .char_pos_to_emacs_byte_pos(storage.virtual_gap.pos())
+            .get();
+        let start = old_range.byte_start_usize();
+        let end = old_range.byte_end_usize();
+        let before_gap_len = if start < gap_byte {
+            end.min(gap_byte) - start
+        } else {
+            0
+        };
+        if before_gap_len == 0 {
+            return;
+        }
+
+        let split_char = if before_gap_len == old_range.byte_len().get() {
+            old_range.char_end()
+        } else {
+            storage
+                .backend
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start + before_gap_len))
+        };
+        let old_before_chars = split_char.get() - old_range.char_start().get();
+        let new_before_chars =
+            TextExtent::from_emacs_bytes(&bytes[..before_gap_len], storage.backend.is_multibyte())
+                .chars()
+                .get();
+        if old_before_chars != new_before_chars {
+            let delta = new_before_chars as isize - old_before_chars as isize;
+            let pos = storage.virtual_gap.pos().get().saturating_add_signed(delta);
+            storage.virtual_gap = storage.virtual_gap.with_pos(CharPos0::new(pos));
+        }
+    }
+
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {
         storage.pos_cache.set(PositionCache::default());
         storage.anchor_cache.borrow_mut().clear();
@@ -595,6 +638,27 @@ impl BufferText {
         Self::finish_backend_content_mutation(&mut storage);
     }
 
+    pub(crate) fn replace_same_len_measured_range(
+        &mut self,
+        replacement: TextReplacement,
+        bytes: &[u8],
+    ) {
+        if replacement.old_range().is_empty() {
+            return;
+        }
+        assert_eq!(
+            replacement.old_byte_len(),
+            replacement.new_byte_len(),
+            "replace_same_len_range: measured old and new byte lengths must match"
+        );
+        let mut storage = self.storage.borrow_mut();
+        Self::note_virtual_gap_same_len_replace(&mut storage, replacement, bytes);
+        storage
+            .backend
+            .replace_same_len_measured_range(replacement, bytes);
+        Self::finish_backend_content_mutation(&mut storage);
+    }
+
     #[cfg(test)]
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
         self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
@@ -608,11 +672,12 @@ impl BufferText {
         if range.is_empty() {
             return;
         }
-        let mut storage = self.storage.borrow_mut();
-        storage
-            .backend
-            .replace_same_len_emacs_byte_range(range, replacement);
-        Self::finish_backend_content_mutation(&mut storage);
+        let edit_range = self.edit_range_for_emacs_byte_range(range);
+        let new_extent = TextExtent::from_emacs_bytes(replacement, self.is_multibyte());
+        self.replace_same_len_measured_range(
+            TextReplacement::new(edit_range, new_extent),
+            replacement,
+        );
     }
 
     pub fn shared_clone(&self) -> Self {
