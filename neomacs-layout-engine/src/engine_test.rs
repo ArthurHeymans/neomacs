@@ -3,6 +3,7 @@ use crate::neovm_bridge::RustBufferAccess;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
+use neovm_core::buffer::EmacsByteRange;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -15,6 +16,20 @@ use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::DisplayRowSnapshot;
 use std::sync::{Arc, Mutex};
+
+trait BufferTextPropertyTestExt {
+    fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool;
+}
+
+impl BufferTextPropertyTestExt for neovm_core::buffer::Buffer {
+    fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
+        self.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            name,
+            value,
+        )
+    }
+}
 
 #[test]
 fn echo_area_display_rows_include_wrapped_long_lines_like_gnu() {
@@ -587,8 +602,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
             Value::keyword("weight"),
             Value::symbol("extra-bold"),
         ]);
-        buf.text
-            .text_props_put_property(0, buf.text.len(), Value::symbol("face"), plist);
+        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
         buf.goto_byte(0);
     }
     let frame_id = eval
@@ -746,8 +760,7 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
             Value::keyword("weight"),
             Value::symbol("regular"),
         ]);
-        buf.text
-            .text_props_put_property(0, buf.text.len(), Value::symbol("face"), plist);
+        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
         buf.goto_byte(0);
     }
 
@@ -944,8 +957,7 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
             Value::keyword("weight"),
             Value::symbol("regular"),
         ]);
-        buf.text
-            .text_props_put_property(0, buf.text.len(), Value::symbol("face"), plist);
+        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
         let visual_cursor = Value::list(vec![
             Value::keyword(":position"),
             Value::fixnum(1),
@@ -1157,7 +1169,7 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_byte(point_pos - 1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             hidden_byte_start,
             hidden_byte_end,
             Value::symbol("invisible"),
@@ -1277,7 +1289,7 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_byte(point_pos - 1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             repl_byte_start,
             repl_byte_end,
             Value::symbol("display"),
@@ -1339,7 +1351,7 @@ fn layout_frame_rust_records_display_point_for_display_replacement_slot() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             repl_byte_start,
             repl_byte_end,
             Value::symbol("display"),
@@ -1387,7 +1399,7 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("dir:");
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             3,
             4,
             Value::symbol("display"),
@@ -1453,7 +1465,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             1,
             2,
             Value::symbol("display"),
@@ -1517,7 +1529,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aVb");
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             1,
             2,
             Value::symbol("display"),
@@ -1579,7 +1591,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aWb");
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             1,
             2,
             Value::symbol("display"),
@@ -1643,7 +1655,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aXb");
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             1,
             2,
             Value::symbol("display"),
@@ -1972,7 +1984,7 @@ fn layout_frame_rust_display_space_align_keeps_suffix_text_in_split_windows() {
         buf.insert(text);
         for (byte_idx, ch) in text.char_indices() {
             if ch == '\t' {
-                buf.text.text_props_put_property(
+                buf.put_text_property(
                     byte_idx,
                     byte_idx + 1,
                     Value::symbol("display"),
@@ -2054,7 +2066,7 @@ fn layout_frame_rust_tty_display_space_align_stays_one_cell_high() {
         buf.insert(text);
         for (byte_idx, ch) in text.char_indices() {
             if ch == '\t' {
-                buf.text.text_props_put_property(
+                buf.put_text_property(
                     byte_idx,
                     byte_idx + 1,
                     Value::symbol("display"),
@@ -2326,7 +2338,7 @@ fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("display"),
@@ -2490,13 +2502,13 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("display"),
             display_space_width_spec(4),
         );
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("face"),
@@ -2576,13 +2588,13 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_byte(1);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("display"),
             display_space_width_spec(4),
         );
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("face"),
@@ -2642,13 +2654,13 @@ fn layout_frame_rust_records_display_point_for_display_space_slot() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("display"),
             display_space_width_spec(4),
         );
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             space_byte_start,
             space_byte_end,
             Value::symbol("face"),
@@ -2718,9 +2730,9 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(prefix);
-        let sample_byte_start = buf.text.len();
+        let sample_byte_start = buf.total_bytes();
         buf.insert(sample);
-        let sample_byte_end = buf.text.len();
+        let sample_byte_end = buf.total_bytes();
         let plist = Value::list(vec![
             Value::keyword("family"),
             Value::string("Noto Sans Mono"),
@@ -2729,7 +2741,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
             Value::keyword("weight"),
             Value::symbol("normal"),
         ]);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             sample_byte_start,
             sample_byte_end,
             Value::symbol("face"),
@@ -2851,9 +2863,9 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&truncated_prefix);
-        let sample_byte_start = buf.text.len();
+        let sample_byte_start = buf.total_bytes();
         buf.insert(sample);
-        let sample_byte_end = buf.text.len();
+        let sample_byte_end = buf.total_bytes();
         buf.insert("\n");
         let plist = Value::list(vec![
             Value::keyword("family"),
@@ -2863,7 +2875,7 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
             Value::keyword("weight"),
             Value::symbol("normal"),
         ]);
-        buf.text.text_props_put_property(
+        buf.put_text_property(
             sample_byte_start,
             sample_byte_end,
             Value::symbol("face"),
@@ -3002,7 +3014,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         for height in [0.9_f32, 1.0_f32, 1.2_f32, 1.6_f32] {
             for (weight_name, weight_value) in weights {
-                let line_beg = if buf.text.is_empty() {
+                let line_beg = if buf.is_text_empty() {
                     1usize
                 } else {
                     buf.point_max_char() as usize + 1
@@ -3010,9 +3022,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                 let sample_pos = line_beg + prefix.chars().count();
                 buf.insert(&prefix);
-                let sample_byte_start = buf.text.len();
+                let sample_byte_start = buf.total_bytes();
                 buf.insert(sample);
-                let sample_byte_end = buf.text.len();
+                let sample_byte_end = buf.total_bytes();
                 buf.insert("\n");
                 let plist = Value::list(vec![
                     Value::keyword("family"),
@@ -3022,7 +3034,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                     Value::keyword("weight"),
                     Value::symbol(weight_name),
                 ]);
-                buf.text.text_props_put_property(
+                buf.put_text_property(
                     sample_byte_start,
                     sample_byte_end,
                     Value::symbol("face"),
@@ -3232,7 +3244,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             buf.insert(&heading);
             for height in [0.9_f32, 1.0_f32, 1.2_f32, 1.6_f32] {
                 for (weight_name, weight_value) in weights {
-                    let line_beg = if buf.text.is_empty() {
+                    let line_beg = if buf.is_text_empty() {
                         1usize
                     } else {
                         buf.point_max_char() as usize + 1
@@ -3240,9 +3252,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                     let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                     let sample_pos = line_beg + prefix.chars().count();
                     buf.insert(&prefix);
-                    let sample_byte_start = buf.text.len();
+                    let sample_byte_start = buf.total_bytes();
                     buf.insert(sample);
-                    let sample_byte_end = buf.text.len();
+                    let sample_byte_end = buf.total_bytes();
                     buf.insert("\n");
                     let plist = Value::list(vec![
                         Value::keyword("family"),
@@ -3252,7 +3264,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                         Value::keyword("weight"),
                         Value::symbol(weight_name),
                     ]);
-                    buf.text.text_props_put_property(
+                    buf.put_text_property(
                         sample_byte_start,
                         sample_byte_end,
                         Value::symbol("face"),
