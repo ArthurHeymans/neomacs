@@ -3,7 +3,7 @@ use crate::neovm_bridge::RustBufferAccess;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
-use neovm_core::buffer::{BufferTextBackendKind, EmacsByteRange};
+use neovm_core::buffer::{BufferId, BufferTextBackendKind, EmacsByteRange};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -442,7 +442,14 @@ fn selected_window_layout_trace(
     }
 }
 
-fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+fn backend_layout_trace_with_buffer_setup(
+    kind: BufferTextBackendKind,
+    frame_name: &str,
+    text: &str,
+    frame_width: u32,
+    frame_height: u32,
+    setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+) -> BackendLayoutTrace {
     let mut eval = Context::new();
     convert_current_buffer_text_backend(&mut eval, kind);
     let buf_id = eval
@@ -450,19 +457,16 @@ fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
         .current_buffer()
         .expect("current buffer")
         .id();
-    let text = "abé\tz\n日本x\nlast Ω line\n";
     {
         insert_fragmented_current_buffer_text(&mut eval, text);
-        let omega_byte = text.find('Ω').expect("omega");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        setup(buffer, buf_id, text);
         assert_eq!(buffer.text_backend_kind(), kind);
-        buffer.goto_byte(omega_byte);
-        buffer.set_buffer_local("display-line-numbers", Value::T);
     }
 
-    let frame_id = eval
-        .frame_manager_mut()
-        .create_frame("layout-backend-parity", 360, 180, buf_id);
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame(frame_name, frame_width, frame_height, buf_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -473,20 +477,142 @@ fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
         let window = frame
             .find_window_mut(selected_window)
             .expect("selected window");
-        if let neovm_core::window::Window::Leaf {
-            window_start,
-            point,
-            ..
-        } = window
-        {
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
             *window_start = 1;
-            *point = 1;
         }
     }
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
     selected_window_layout_trace(&eval, &engine, frame_id)
+}
+
+fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "abé\tz\n日本x\nlast Ω line\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-parity",
+        text,
+        360,
+        180,
+        |buffer, _buf_id, text| {
+            let omega_byte = text.find('Ω').expect("omega");
+            buffer.goto_byte(omega_byte);
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+        },
+    )
+}
+
+fn display_replacement_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "abcXYZdef\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-display-replacement",
+        text,
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            let start = text.find("XYZ").expect("replacement start");
+            let end = start + "XYZ".len();
+            assert!(buffer.put_text_property(
+                start,
+                end,
+                Value::symbol("display"),
+                Value::string("R")
+            ));
+            buffer.goto_byte(start + 1);
+        },
+    )
+}
+
+fn invisible_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "abc hidden xyz\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-invisible",
+        text,
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            let start = text.find("hidden").expect("hidden start");
+            let end = start + "hidden".len();
+            assert!(buffer.put_text_property(start, end, Value::symbol("invisible"), Value::T));
+            buffer.goto_byte(start + 2);
+        },
+    )
+}
+
+fn multiline_overlay_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "x";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-overlay",
+        text,
+        360,
+        140,
+        |buffer, buf_id, _text| {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                serial: 0,
+                plist: Value::NIL,
+                buffer: Some(buf_id),
+                start: 0,
+                end: 1,
+                front_advance: false,
+                rear_advance: false,
+            });
+            buffer.overlays_mut().insert_overlay(overlay);
+            let _ = buffer.overlays_mut().overlay_put(
+                overlay,
+                Value::symbol("after-string"),
+                Value::string("A\nB"),
+            );
+            buffer.goto_byte(buffer.point_max_byte());
+        },
+    )
+}
+
+fn bidi_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
+    let text = "abc אבג def\n";
+    backend_layout_trace_with_buffer_setup(
+        kind,
+        "layout-backend-bidi",
+        text,
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            let alef_byte = text.find('א').expect("alef");
+            buffer.goto_byte(alef_byte);
+        },
+    )
+}
+
+fn trace_text_rows(trace: &BackendLayoutTrace) -> Vec<String> {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text)
+        .map(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .map(|glyph| match &glyph.kind {
+                    GlyphKindTrace::Char(ch) => ch.to_string(),
+                    GlyphKindTrace::Composite(text) => text.clone(),
+                    GlyphKindTrace::Stretch(width) => " ".repeat(usize::from(*width)),
+                    GlyphKindTrace::Image(_) | GlyphKindTrace::Glyphless(_) => String::new(),
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .collect()
+}
+
+fn trace_has_nonzero_bidi_level(trace: &BackendLayoutTrace) -> bool {
+    trace.matrix_rows.iter().any(|row| {
+        row.glyph_areas
+            .iter()
+            .flat_map(|area| area.iter())
+            .any(|glyph| glyph.bidi_level > 0)
+    })
 }
 
 fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
@@ -826,6 +952,96 @@ fn implemented_text_backends_match_layout_frame_rows_points_and_cursor() {
 
     for kind in implemented_text_backends() {
         let trace = backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_layout_frame_display_replacement_output() {
+    let baseline = display_replacement_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter().any(|row| row.contains("abcRdef")),
+        "baseline should render display replacement text, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains("XYZ")),
+        "baseline should not render covered source text, rows={rows:?}"
+    );
+    assert!(
+        baseline.phys_cursor.is_some(),
+        "baseline should publish cursor geometry for replacement slot"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = display_replacement_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_layout_frame_invisible_text_output() {
+    let baseline = invisible_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter().any(|row| row.contains("abc  xyz")),
+        "baseline should omit invisible source text while preserving surrounding text, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains("hidden")),
+        "baseline should not render invisible text, rows={rows:?}"
+    );
+    assert!(
+        baseline.phys_cursor.is_some(),
+        "baseline should keep a physical cursor when point is inside invisible text"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = invisible_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_layout_frame_multiline_overlay_output() {
+    let baseline = multiline_overlay_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter().any(|row| row.contains("xA")),
+        "baseline should render overlay after-string suffix on the source row, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains('B')),
+        "baseline should render multiline overlay continuation row, rows={rows:?}"
+    );
+    assert!(
+        baseline.output_rows.iter().any(|row| row.row == 1),
+        "baseline should publish a second output row for multiline overlay, rows={:?}",
+        baseline.output_rows
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = multiline_overlay_backend_layout_trace(kind);
+        assert_eq!(trace, baseline, "{kind:?}");
+    }
+}
+
+#[test]
+fn implemented_text_backends_match_layout_frame_bidi_row_output() {
+    let baseline = bidi_backend_layout_trace(BufferTextBackendKind::GapBuffer);
+    let rows = trace_text_rows(&baseline);
+    assert!(
+        rows.iter()
+            .any(|row| row.contains('א') && row.contains('ג')),
+        "baseline should render Hebrew text in bidi row, rows={rows:?}"
+    );
+    assert!(
+        trace_has_nonzero_bidi_level(&baseline),
+        "baseline should mark reordered bidi glyphs, trace={baseline:?}"
+    );
+
+    for kind in implemented_text_backends() {
+        let trace = bidi_backend_layout_trace(kind);
         assert_eq!(trace, baseline, "{kind:?}");
     }
 }
