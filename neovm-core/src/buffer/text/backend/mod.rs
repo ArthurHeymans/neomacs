@@ -11,6 +11,12 @@ use crate::buffer::text::{TextBackendDebugLayout, TextEditRange, TextExtent, Tex
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
 
+/// Physical storage for buffer text.
+///
+/// This enum is intentionally private to the buffer module.  `BufferText`
+/// owns GNU-visible text semantics such as markers, text properties, ticks,
+/// narrowing interactions, and cache invalidation.  Concrete backends own only
+/// byte storage and backend-local lookup hints.
 #[derive(Clone)]
 pub(in crate::buffer) enum TextBackend {
     Gap(GapTextBackend),
@@ -71,12 +77,9 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn conversion_anchor(&self) -> Option<TextPositionAnchor> {
+    pub(in crate::buffer) fn position_conversion_hint(&self) -> Option<TextPositionAnchor> {
         match self {
-            Self::Gap(gap) => Some(TextPositionAnchor::new(
-                CharPos0::new(gap.gpt()),
-                EmacsBytePos::new(gap.gpt_byte()),
-            )),
+            Self::Gap(gap) => Some(gap.position_conversion_hint()),
             Self::PieceTree(_) => None,
         }
     }

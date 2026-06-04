@@ -1562,7 +1562,7 @@ impl BufferText {
         let mut best_below = TextPositionAnchor::default();
         let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
 
-        if let Some(anchor) = storage.backend.conversion_anchor() {
+        if let Some(anchor) = storage.backend.position_conversion_hint() {
             consider_char_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
@@ -1655,7 +1655,7 @@ impl BufferText {
         let mut best_below = TextPositionAnchor::default();
         let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
 
-        if let Some(anchor) = storage.backend.conversion_anchor() {
+        if let Some(anchor) = storage.backend.position_conversion_hint() {
             consider_byte_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
