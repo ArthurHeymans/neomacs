@@ -1792,6 +1792,107 @@ impl BufferText {
         out
     }
 
+    fn ensure_position_anchor_cache_current(storage: &BufferTextStorage, content_epoch: u64) {
+        if storage.anchor_cache_key.get() != content_epoch {
+            storage.anchor_cache.borrow_mut().clear();
+            storage.anchor_cache_key.set(content_epoch);
+        }
+    }
+
+    fn char_position_bounds(storage: &BufferTextStorage, target: CharPos0) -> TextPositionBounds {
+        let metrics = storage.metrics;
+        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
+            metrics.char_end(),
+            metrics.emacs_byte_end(),
+        ));
+
+        storage
+            .backend
+            .storage_position_hint()
+            .consider_char_anchor(&mut bounds, target);
+
+        let cached = storage.pos_cache.get();
+        if cached.is_valid_for(storage.content_epoch) {
+            bounds.consider_char_anchor(target, cached.anchor);
+        }
+
+        for &anchor in storage.anchor_cache.borrow().iter() {
+            bounds.consider_char_anchor(target, anchor);
+        }
+
+        let mut distance: usize = POSITION_DISTANCE_BASE;
+        // T7: marker chain walk. The chain carries the same (char, byte)
+        // pairs that the deleted Vec<MarkerEntry> used to.
+        //
+        // SAFETY: `curr` walks live chain-owned MarkerObj pointers from
+        // `storage.markers_head` until null. Each non-null node was spliced in
+        // via `chain_splice_at_head`, so its `data.next_marker` is a valid
+        // chain link or null.
+        let mut curr = storage.markers_head;
+        unsafe {
+            while !curr.is_null() {
+                let data = &(*curr).data;
+                bounds.consider_char_anchor(
+                    target,
+                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
+                );
+                if bounds.char_target_is_near(target, distance) {
+                    break;
+                }
+                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
+                curr = data.next_marker;
+            }
+        }
+
+        bounds
+    }
+
+    fn byte_position_bounds(
+        storage: &BufferTextStorage,
+        target: EmacsBytePos,
+    ) -> TextPositionBounds {
+        let metrics = storage.metrics;
+        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
+            metrics.char_end(),
+            metrics.emacs_byte_end(),
+        ));
+
+        storage
+            .backend
+            .storage_position_hint()
+            .consider_byte_anchor(&mut bounds, target);
+
+        let cached = storage.pos_cache.get();
+        if cached.is_valid_for(storage.content_epoch) {
+            bounds.consider_byte_anchor(target, cached.anchor);
+        }
+
+        for &anchor in storage.anchor_cache.borrow().iter() {
+            bounds.consider_byte_anchor(target, anchor);
+        }
+
+        let mut distance: usize = POSITION_DISTANCE_BASE;
+        // T7: marker chain walk. See sibling comment in
+        // `char_position_bounds` for the SAFETY rationale.
+        let mut curr = storage.markers_head;
+        unsafe {
+            while !curr.is_null() {
+                let data = &(*curr).data;
+                bounds.consider_byte_anchor(
+                    target,
+                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
+                );
+                if bounds.byte_target_is_near(target, distance) {
+                    break;
+                }
+                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
+                curr = data.next_marker;
+            }
+        }
+
+        bounds
+    }
+
     /// Convert a character position to a logical Emacs byte offset using an
     /// anchor-bracketed cached search. Mirrors GNU `buf_charpos_to_bytepos`
     /// (`src/marker.c:167`).
@@ -1811,53 +1912,8 @@ impl BufferText {
             return EmacsBytePos::new(target.get());
         }
 
-        // Wholesale-invalidate the anchor cache when the buffer changed.
-        if storage.anchor_cache_key.get() != content_epoch {
-            storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(content_epoch);
-        }
-
-        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
-            metrics.char_end(),
-            metrics.emacs_byte_end(),
-        ));
-
-        if let Some(anchor) = storage.backend.storage_conversion_anchor() {
-            bounds.consider_char_anchor(target, anchor);
-        }
-
-        let cached = storage.pos_cache.get();
-        if cached.is_valid_for(content_epoch) {
-            bounds.consider_char_anchor(target, cached.anchor);
-        }
-
-        for &anchor in storage.anchor_cache.borrow().iter() {
-            bounds.consider_char_anchor(target, anchor);
-        }
-
-        let mut distance: usize = POSITION_DISTANCE_BASE;
-        // T7: marker chain walk. The chain carries the same (char, byte)
-        // pairs that the deleted Vec<MarkerEntry> used to.
-        //
-        // SAFETY: `curr` walks live chain-owned MarkerObj pointers from
-        // `storage.markers_head` until null. Each non-null node was
-        // spliced in via `chain_splice_at_head`, so its `data.next_marker`
-        // is a valid chain link or null.
-        let mut curr = storage.markers_head;
-        unsafe {
-            while !curr.is_null() {
-                let data = &(*curr).data;
-                bounds.consider_char_anchor(
-                    target,
-                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                );
-                if bounds.char_target_is_near(target, distance) {
-                    break;
-                }
-                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
-                curr = data.next_marker;
-            }
-        }
+        Self::ensure_position_anchor_cache_current(&storage, content_epoch);
+        let bounds = Self::char_position_bounds(&storage, target);
 
         let nearest_anchor = bounds.nearest_char_anchor(target);
         let result = if nearest_anchor.char_pos() <= target {
@@ -1901,48 +1957,8 @@ impl BufferText {
             return CharPos0::new(target.get());
         }
 
-        // Wholesale-invalidate the anchor cache when the buffer changed.
-        if storage.anchor_cache_key.get() != content_epoch {
-            storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(content_epoch);
-        }
-
-        let mut bounds = TextPositionBounds::new(TextPositionAnchor::new(
-            metrics.char_end(),
-            metrics.emacs_byte_end(),
-        ));
-
-        if let Some(anchor) = storage.backend.storage_conversion_anchor() {
-            bounds.consider_byte_anchor(target, anchor);
-        }
-
-        let cached = storage.pos_cache.get();
-        if cached.is_valid_for(content_epoch) {
-            bounds.consider_byte_anchor(target, cached.anchor);
-        }
-
-        for &anchor in storage.anchor_cache.borrow().iter() {
-            bounds.consider_byte_anchor(target, anchor);
-        }
-
-        let mut distance: usize = POSITION_DISTANCE_BASE;
-        // T7: marker chain walk. See sibling comment in
-        // `buf_charpos_to_bytepos` for the SAFETY rationale.
-        let mut curr = storage.markers_head;
-        unsafe {
-            while !curr.is_null() {
-                let data = &(*curr).data;
-                bounds.consider_byte_anchor(
-                    target,
-                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                );
-                if bounds.byte_target_is_near(target, distance) {
-                    break;
-                }
-                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
-                curr = data.next_marker;
-            }
-        }
+        Self::ensure_position_anchor_cache_current(&storage, content_epoch);
+        let bounds = Self::byte_position_bounds(&storage, target);
 
         let nearest_anchor = bounds.nearest_byte_anchor(target);
         let result = if nearest_anchor.emacs_byte_pos() <= target {

@@ -8,7 +8,7 @@ mod rope;
 use std::fmt;
 
 use super::ImplementedBufferTextBackendKind;
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionHint};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
@@ -128,8 +128,8 @@ impl TextBackend {
         dispatch_backend_ref!(self, storage => PhysicalTextBackend::metrics(storage))
     }
 
-    pub(in crate::buffer) fn storage_conversion_anchor(&self) -> Option<TextPositionAnchor> {
-        dispatch_backend_ref!(self, storage => PhysicalTextBackend::storage_conversion_anchor(storage))
+    pub(in crate::buffer) fn storage_position_hint(&self) -> TextPositionHint {
+        dispatch_backend_ref!(self, storage => PhysicalTextBackend::storage_position_hint(storage))
     }
 
     pub(in crate::buffer) fn real_gap_compat_state(&self) -> Option<GapCompatState> {

@@ -87,6 +87,16 @@ pub struct TextPositionBounds {
     above: TextPositionAnchor,
 }
 
+/// Backend-local known position that can help char<->byte conversion.
+///
+/// This is a storage hint, not editor state.  GNU's gap position is one known
+/// `(char, byte)` pair among many; keeping it behind this wrapper avoids
+/// exposing gap-shaped APIs to the generic conversion logic.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TextPositionHint {
+    anchor: Option<TextPositionAnchor>,
+}
+
 impl TextPositionAnchor {
     pub const fn new(char_pos: CharPos0, emacs_byte_pos: EmacsBytePos) -> Self {
         Self {
@@ -116,6 +126,30 @@ impl TextPositionAnchor {
 
     pub const fn emacs_byte_pos_usize(self) -> usize {
         self.emacs_byte_pos.get()
+    }
+}
+
+impl TextPositionHint {
+    pub const fn none() -> Self {
+        Self { anchor: None }
+    }
+
+    pub const fn from_anchor(anchor: TextPositionAnchor) -> Self {
+        Self {
+            anchor: Some(anchor),
+        }
+    }
+
+    pub fn consider_char_anchor(self, bounds: &mut TextPositionBounds, target: CharPos0) {
+        if let Some(anchor) = self.anchor {
+            bounds.consider_char_anchor(target, anchor);
+        }
+    }
+
+    pub fn consider_byte_anchor(self, bounds: &mut TextPositionBounds, target: EmacsBytePos) {
+        if let Some(anchor) = self.anchor {
+            bounds.consider_byte_anchor(target, anchor);
+        }
     }
 }
 
@@ -593,6 +627,19 @@ mod tests {
             byte_bounds.nearest_byte_anchor(EmacsBytePos::new(30)),
             TextPositionAnchor::from_usize(11, 29)
         );
+    }
+
+    #[test]
+    fn text_position_hint_contributes_backend_anchor_without_exposing_storage_shape() {
+        let hint = TextPositionHint::from_anchor(TextPositionAnchor::from_usize(8, 12));
+
+        let mut char_bounds = TextPositionBounds::new(TextPositionAnchor::from_usize(20, 40));
+        hint.consider_char_anchor(&mut char_bounds, CharPos0::new(10));
+        assert_eq!(char_bounds.below(), TextPositionAnchor::from_usize(8, 12));
+
+        let mut byte_bounds = TextPositionBounds::new(TextPositionAnchor::from_usize(20, 40));
+        hint.consider_byte_anchor(&mut byte_bounds, EmacsBytePos::new(10));
+        assert_eq!(byte_bounds.above(), TextPositionAnchor::from_usize(8, 12));
     }
 }
 

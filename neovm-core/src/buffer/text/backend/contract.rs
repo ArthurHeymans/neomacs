@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionHint};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
@@ -17,8 +17,8 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
     #[cfg(test)]
     fn debug_layout(&self) -> TextBackendDebugLayout;
 
-    fn storage_conversion_anchor(&self) -> Option<TextPositionAnchor> {
-        None
+    fn storage_position_hint(&self) -> TextPositionHint {
+        TextPositionHint::none()
     }
 
     fn real_gap_compat_state(&self) -> Option<GapCompatState> {
@@ -59,8 +59,8 @@ impl PhysicalTextBackend for GapTextBackend {
         TextBackendDebugLayout::Gap(GapTextBackend::debug_layout(self))
     }
 
-    fn storage_conversion_anchor(&self) -> Option<TextPositionAnchor> {
-        Some(GapTextBackend::storage_conversion_anchor(self))
+    fn storage_position_hint(&self) -> TextPositionHint {
+        GapTextBackend::storage_position_hint(self)
     }
 
     fn real_gap_compat_state(&self) -> Option<GapCompatState> {

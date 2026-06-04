@@ -477,6 +477,11 @@ Completed so far:
   and added backend matrix coverage for shared insert policy side effects,
   including normal insert, insert-before-markers, replacement insert,
   indirect-buffer point/mark state, overlays, markers, and text properties.
+- Replaced the raw optional backend conversion anchor with a typed
+  `TextPositionHint` and centralized `BufferText` conversion-bound collection
+  so gap-buffer contributes GPT as one storage hint while generic char/byte
+  conversion keeps the GNU `marker.c` bracketing model above all physical
+  backends.
 
 Next work:
 
