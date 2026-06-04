@@ -120,50 +120,6 @@ impl BufferText {
         }
     }
 
-    fn empty_backend_for_kind(kind: ImplementedBufferTextBackendKind) -> TextBackend {
-        match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => TextBackend::new_gap(),
-            ImplementedBufferTextBackendKind::PieceTree => TextBackend::new_piece_tree(),
-        }
-    }
-
-    fn str_backend_for_kind(text: &str, kind: ImplementedBufferTextBackendKind) -> TextBackend {
-        match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => TextBackend::from_str_gap(text),
-            ImplementedBufferTextBackendKind::PieceTree => TextBackend::from_str_piece_tree(text),
-        }
-    }
-
-    fn emacs_bytes_backend_for_kind(
-        bytes: &[u8],
-        multibyte: bool,
-        kind: ImplementedBufferTextBackendKind,
-    ) -> TextBackend {
-        match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => {
-                TextBackend::from_emacs_bytes_gap(bytes, multibyte)
-            }
-            ImplementedBufferTextBackendKind::PieceTree => {
-                TextBackend::from_emacs_bytes_piece_tree(bytes, multibyte)
-            }
-        }
-    }
-
-    fn dump_backend_for_kind(
-        text: Vec<u8>,
-        multibyte: bool,
-        kind: ImplementedBufferTextBackendKind,
-    ) -> TextBackend {
-        match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => {
-                TextBackend::from_dump_gap(text, multibyte)
-            }
-            ImplementedBufferTextBackendKind::PieceTree => {
-                TextBackend::from_dump_piece_tree(text, multibyte)
-            }
-        }
-    }
-
     fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
         storage.metrics = storage.backend.metrics();
     }
@@ -190,17 +146,17 @@ impl BufferText {
     }
 
     pub fn new() -> Self {
-        Self::from_backend(Self::empty_backend_for_kind(
+        Self::from_backend(TextBackend::new(
             ImplementedBufferTextBackendKind::GapBuffer,
         ))
     }
 
     pub(crate) fn new_with_backend_kind(kind: ImplementedBufferTextBackendKind) -> Self {
-        Self::from_backend(Self::empty_backend_for_kind(kind))
+        Self::from_backend(TextBackend::new(kind))
     }
 
     pub fn from_str(text: &str) -> Self {
-        Self::from_backend(Self::str_backend_for_kind(
+        Self::from_backend(TextBackend::from_str(
             text,
             ImplementedBufferTextBackendKind::GapBuffer,
         ))
@@ -210,7 +166,7 @@ impl BufferText {
         text: &str,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        Self::from_backend(Self::str_backend_for_kind(text, kind))
+        Self::from_backend(TextBackend::from_str(text, kind))
     }
 
     pub fn from_lisp_string(text: &crate::heap_types::LispString) -> Self {
@@ -221,7 +177,7 @@ impl BufferText {
         text: &crate::heap_types::LispString,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        Self::from_backend(Self::emacs_bytes_backend_for_kind(
+        Self::from_backend(TextBackend::from_emacs_bytes(
             text.as_bytes(),
             text.is_multibyte(),
             kind,
@@ -239,7 +195,7 @@ impl BufferText {
         }
         let text = storage.backend.dump_text();
         let multibyte = storage.backend.is_multibyte();
-        storage.backend = Self::dump_backend_for_kind(text, multibyte, kind);
+        storage.backend = TextBackend::from_dump(text, multibyte, kind);
         Self::refresh_backend_metrics(&mut storage);
         Self::invalidate_position_caches(&mut storage);
     }
@@ -523,7 +479,7 @@ impl BufferText {
     }
 
     pub(crate) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::from_backend(Self::dump_backend_for_kind(
+        Self::from_backend(TextBackend::from_dump(
             text,
             multibyte,
             ImplementedBufferTextBackendKind::GapBuffer,
@@ -535,7 +491,7 @@ impl BufferText {
         multibyte: bool,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        Self::from_backend(Self::dump_backend_for_kind(text, multibyte, kind))
+        Self::from_backend(TextBackend::from_dump(text, multibyte, kind))
     }
 
     pub fn set_modification_state(
@@ -632,8 +588,7 @@ impl BufferText {
             .kind()
             .implemented()
             .expect("active buffer text backend is implemented");
-        storage.backend =
-            Self::emacs_bytes_backend_for_kind(text.as_bytes(), text.is_multibyte(), kind);
+        storage.backend = TextBackend::from_emacs_bytes(text.as_bytes(), text.is_multibyte(), kind);
         Self::refresh_backend_metrics(&mut storage);
         storage.text_props = text_props;
         // Wholesale content replacement: invalidate position caches. If the new

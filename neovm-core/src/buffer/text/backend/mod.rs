@@ -3,7 +3,7 @@ mod piece;
 
 use std::fmt;
 
-use super::BufferTextBackendKind;
+use super::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 use crate::buffer::position::{
     CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
 };
@@ -24,36 +24,54 @@ pub(in crate::buffer) enum TextBackend {
 }
 
 impl TextBackend {
-    pub(in crate::buffer) fn new_gap() -> Self {
-        Self::Gap(GapTextBackend::new())
+    pub(in crate::buffer) fn new(kind: ImplementedBufferTextBackendKind) -> Self {
+        match kind {
+            ImplementedBufferTextBackendKind::GapBuffer => Self::Gap(GapTextBackend::new()),
+            ImplementedBufferTextBackendKind::PieceTree => {
+                Self::PieceTree(PieceTreeTextBackend::new())
+            }
+        }
     }
 
-    pub(in crate::buffer) fn from_str_gap(text: &str) -> Self {
-        Self::Gap(GapTextBackend::from_str(text))
+    pub(in crate::buffer) fn from_str(text: &str, kind: ImplementedBufferTextBackendKind) -> Self {
+        match kind {
+            ImplementedBufferTextBackendKind::GapBuffer => {
+                Self::Gap(GapTextBackend::from_str(text))
+            }
+            ImplementedBufferTextBackendKind::PieceTree => {
+                Self::PieceTree(PieceTreeTextBackend::from_str(text))
+            }
+        }
     }
 
-    pub(in crate::buffer) fn from_emacs_bytes_gap(bytes: &[u8], multibyte: bool) -> Self {
-        Self::Gap(GapTextBackend::from_emacs_bytes(bytes, multibyte))
+    pub(in crate::buffer) fn from_emacs_bytes(
+        bytes: &[u8],
+        multibyte: bool,
+        kind: ImplementedBufferTextBackendKind,
+    ) -> Self {
+        match kind {
+            ImplementedBufferTextBackendKind::GapBuffer => {
+                Self::Gap(GapTextBackend::from_emacs_bytes(bytes, multibyte))
+            }
+            ImplementedBufferTextBackendKind::PieceTree => {
+                Self::PieceTree(PieceTreeTextBackend::from_emacs_bytes(bytes, multibyte))
+            }
+        }
     }
 
-    pub(in crate::buffer) fn from_dump_gap(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::Gap(GapTextBackend::from_dump(text, multibyte))
-    }
-
-    pub(in crate::buffer) fn new_piece_tree() -> Self {
-        Self::PieceTree(PieceTreeTextBackend::new())
-    }
-
-    pub(in crate::buffer) fn from_str_piece_tree(text: &str) -> Self {
-        Self::PieceTree(PieceTreeTextBackend::from_str(text))
-    }
-
-    pub(in crate::buffer) fn from_emacs_bytes_piece_tree(bytes: &[u8], multibyte: bool) -> Self {
-        Self::PieceTree(PieceTreeTextBackend::from_emacs_bytes(bytes, multibyte))
-    }
-
-    pub(in crate::buffer) fn from_dump_piece_tree(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
+    pub(in crate::buffer) fn from_dump(
+        text: Vec<u8>,
+        multibyte: bool,
+        kind: ImplementedBufferTextBackendKind,
+    ) -> Self {
+        match kind {
+            ImplementedBufferTextBackendKind::GapBuffer => {
+                Self::Gap(GapTextBackend::from_dump(text, multibyte))
+            }
+            ImplementedBufferTextBackendKind::PieceTree => {
+                Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
+            }
+        }
     }
 
     pub(in crate::buffer) fn kind(&self) -> BufferTextBackendKind {
