@@ -10,8 +10,8 @@ pub mod text_props;
 pub mod undo;
 
 pub use buffer::{
-    Buffer, BufferId, BufferManager, InsertionType, LabeledRestriction, LabeledRestrictionLabel,
-    SavedRestrictionKind, SavedRestrictionState,
+    Buffer, BufferId, BufferManager, BufferTextSnapshot, InsertionType, LabeledRestriction,
+    LabeledRestrictionLabel, SavedRestrictionKind, SavedRestrictionState,
 };
 pub use buffer_text::BufferText;
 pub use overlay::{Overlay, OverlayList};

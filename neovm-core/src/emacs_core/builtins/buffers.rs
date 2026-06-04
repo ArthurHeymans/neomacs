@@ -1514,8 +1514,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     .mark_byte()
                     .map(|mark| EmacsBytePos::new(mark.min(total_bytes))),
                 last_window_start_old_emacs_byte: buffer
-                    .text
-                    .char_pos_to_emacs_byte_pos(last_window_start.to_char_pos()),
+                    .lisp_pos_to_full_buffer_emacs_byte_pos(last_window_start.as_i64()),
                 overlays,
             });
         }
@@ -1534,41 +1533,46 @@ pub(crate) fn builtin_set_buffer_multibyte(
     let new_storage = piece.text;
     let new_total_bytes = new_storage.sbytes();
 
-    let shared_text = {
+    let new_props = {
         let buffer = eval
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        buffer.text.shared_clone()
-    };
-    let old_props = shared_text.text_props_snapshot();
-
-    let new_props = match mode {
-        BufferMultibyteConversionMode::ToMultibyte => old_props,
-        BufferMultibyteConversionMode::AsUnibyte | BufferMultibyteConversionMode::AsMultibyte => {
-            remap_text_property_table(&old_props, |char_pos| {
-                let logical_byte = shared_text
-                    .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-                    .get();
-                let boundary = lisp_string_advance_byte_to_boundary(
-                    &new_storage,
-                    logical_byte.min(new_total_bytes),
-                );
-                lisp_string_byte_to_char(&new_storage, boundary)
-            })
+        let old_props = buffer.text_props_snapshot();
+        match mode {
+            BufferMultibyteConversionMode::ToMultibyte => old_props,
+            BufferMultibyteConversionMode::AsUnibyte
+            | BufferMultibyteConversionMode::AsMultibyte => {
+                remap_text_property_table(&old_props, |char_pos| {
+                    let logical_byte = buffer
+                        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+                        .get();
+                    let boundary = lisp_string_advance_byte_to_boundary(
+                        &new_storage,
+                        logical_byte.min(new_total_bytes),
+                    );
+                    lisp_string_byte_to_char(&new_storage, boundary)
+                })
+            }
         }
     };
 
     // Walk the intrusive marker chain and remap each logical byte position
     // through the same boundary arithmetic used for point, narrowing and
     // overlays.
-    shared_text.remap_markers_through(|old_byte| {
-        let boundary =
-            lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
-        let new_char = lisp_string_byte_to_char(&new_storage, boundary);
-        (boundary, new_char)
-    });
-    shared_text.replace_lisp_string(&new_storage, new_props);
+    {
+        let buffer = eval
+            .buffers
+            .get_mut(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        buffer.remap_text_markers_through(|old_byte| {
+            let boundary =
+                lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
+            let new_char = lisp_string_byte_to_char(&new_storage, boundary);
+            (boundary, new_char)
+        });
+        buffer.replace_lisp_string_with_text_props(&new_storage, new_props);
+    }
 
     for snapshot in snapshots {
         let buf = eval

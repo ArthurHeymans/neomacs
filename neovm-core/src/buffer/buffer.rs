@@ -1451,6 +1451,51 @@ impl PartialEq for BufferStateMarkers {
 }
 impl Eq for BufferStateMarkers {}
 
+/// Read-only snapshot of buffer text for layout and rendering.
+///
+/// A snapshot is intentionally separate from [`BufferText`]: callers can read
+/// text and text properties, but cannot observe or mutate the concrete text
+/// backend. `BufferText::Clone` is a deep snapshot, so this is safe to move
+/// across the display boundary.
+#[derive(Clone)]
+pub struct BufferTextSnapshot {
+    text: BufferText,
+}
+
+impl BufferTextSnapshot {
+    pub fn emacs_byte_len(&self) -> usize {
+        self.text.emacs_byte_len()
+    }
+
+    pub fn char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
+        self.text.char_pos_to_emacs_byte_pos(charpos)
+    }
+
+    pub fn emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
+        self.text.emacs_byte_pos_to_char_pos(bytepos)
+    }
+
+    pub fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+        self.text.copy_emacs_byte_range_to(range, out);
+    }
+
+    pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.text.emacs_byte_at_pos(pos)
+    }
+
+    pub fn text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value> {
+        self.text
+            .text_props_get_property_at_emacs_byte_pos(pos, name)
+    }
+
+    pub fn next_text_prop_change_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text.text_props_next_change_after_emacs_byte_pos(pos)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AccessibleBufferRegionSnapshot {
     start_char: CharPos0,
@@ -1969,6 +2014,12 @@ impl Buffer {
         self.text.full_text_string()
     }
 
+    pub fn text_snapshot(&self) -> BufferTextSnapshot {
+        BufferTextSnapshot {
+            text: self.text.clone(),
+        }
+    }
+
     pub fn text_backend_kind(&self) -> BufferTextBackendKind {
         self.text.backend_kind()
     }
@@ -2225,10 +2276,29 @@ impl Buffer {
         self.text.text_props_is_empty()
     }
 
+    pub fn text_props_snapshot(&self) -> TextPropertyTable {
+        self.text.text_props_snapshot()
+    }
+
     pub fn text_props_slice_emacs_byte_range(&self, range: EmacsByteRange) -> TextPropertyTable {
         let clamped = self.clamped_emacs_byte_range(range);
         self.text
             .text_props_slice(clamped.start_usize(), clamped.end_usize())
+    }
+
+    pub fn replace_lisp_string_with_text_props(
+        &mut self,
+        text: &crate::heap_types::LispString,
+        text_props: TextPropertyTable,
+    ) {
+        self.text.replace_lisp_string(text, text_props);
+    }
+
+    pub fn remap_text_markers_through<F>(&mut self, f: F)
+    where
+        F: FnMut(usize) -> (usize, usize),
+    {
+        self.text.remap_markers_through(f);
     }
 
     pub fn emacs_byte_range_contains_char_code(&self, range: EmacsByteRange, code: u32) -> bool {

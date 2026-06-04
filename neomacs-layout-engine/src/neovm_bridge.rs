@@ -4,9 +4,8 @@
 //! the Rust Context's state, replacing C FFI data sources.
 
 use neovm_core::buffer::{
-    Buffer, CharPos0, EmacsBytePos, EmacsByteRange,
+    Buffer, BufferTextSnapshot, CharPos0, EmacsBytePos, EmacsByteRange,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
-    buffer_text::BufferText,
     overlay::OverlayList,
 };
 use neovm_core::emacs_core::intern;
@@ -103,7 +102,7 @@ pub(crate) trait LayoutBufferView {
 #[derive(Clone)]
 pub(crate) struct LayoutBufferSnapshot {
     pub name: String,
-    pub text: BufferText,
+    text_snapshot: BufferTextSnapshot,
     pub accessible_start_emacs_byte: EmacsBytePos,
     pub accessible_end_emacs_byte: EmacsBytePos,
     pub accessible_end_char: usize,
@@ -117,7 +116,7 @@ impl LayoutBufferSnapshot {
     pub fn from_buffer(buffer: &Buffer) -> Self {
         Self {
             name: buffer.name_runtime_string_owned(),
-            text: buffer.text.clone(),
+            text_snapshot: buffer.text_snapshot(),
             accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
             accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
             accessible_end_char: buffer.point_max_char(),
@@ -264,38 +263,39 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     }
 
     fn layout_total_emacs_byte_len(&self) -> usize {
-        self.text.emacs_byte_len()
+        self.text_snapshot.emacs_byte_len()
     }
 
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
-        self.text
+        self.text_snapshot
             .char_pos_to_emacs_byte_pos(CharPos0::new(charpos.get().min(self.accessible_end_char)))
     }
 
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
-        self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-            bytepos.get().min(self.accessible_end_emacs_byte.get()),
-        ))
+        self.text_snapshot
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+                bytepos.get().min(self.accessible_end_emacs_byte.get()),
+            ))
     }
 
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
-        self.text.copy_emacs_byte_range_to(range, out);
+        self.text_snapshot.copy_emacs_byte_range_to(range, out);
     }
 
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
-        self.text.emacs_byte_at_pos(pos)
+        self.text_snapshot.emacs_byte_at_pos(pos)
     }
 
     fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value> {
-        self.text
-            .text_props_get_property_at_emacs_byte_pos(pos, name)
+        self.text_snapshot.text_prop_at_emacs_byte_pos(pos, name)
     }
 
     fn layout_next_text_prop_change_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
-        self.text.text_props_next_change_after_emacs_byte_pos(pos)
+        self.text_snapshot
+            .next_text_prop_change_after_emacs_byte_pos(pos)
     }
 
     fn layout_overlays(&self) -> &OverlayList {
