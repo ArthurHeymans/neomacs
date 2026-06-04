@@ -9,8 +9,7 @@ use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
     ReplaceSideEffectPolicy, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
-    delete_state_after_edit, emacs_byte_for_char_pos, insert_state_after_edit,
-    lisp_string_from_buffer_bytes, modification_tick_delta, replace_state_after_edit,
+    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -134,12 +133,12 @@ impl Buffer {
     ) -> TextInsertion {
         let insertion = self.insertion_at_point(extent);
         let edit = MeasuredInsertEdit::new(insertion, marker_placement, marker_adjustment);
-        let insert_pos = edit.insertion().byte_pos_usize();
-        let insert_char_pos = edit.insertion().char_pos_usize();
-        let char_len = edit.insertion().extent().chars().get();
-        if bytes.is_empty() {
+        if edit.is_empty() {
             return edit.insertion();
         }
+        let insert_pos = edit.byte_pos_usize();
+        let insert_char_pos = edit.char_pos_usize();
+        let char_len = edit.char_len_usize();
 
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
@@ -155,17 +154,12 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        self.text.insert_measured_emacs_bytes(
-            edit.insertion().byte_pos(),
-            bytes,
-            edit.insertion().extent(),
-        );
+        self.text
+            .insert_measured_emacs_bytes(edit.byte_pos(), bytes, edit.extent());
         self.apply_byte_insert_side_effects(edit, InsertSideEffectPolicy::current_buffer());
         if edit.before_markers() {
-            self.text.advance_markers_at_position(
-                edit.insertion().byte_pos(),
-                edit.insertion().extent(),
-            );
+            self.text
+                .advance_markers_at_position(edit.byte_pos(), edit.extent());
         }
         edit.insertion()
     }
@@ -175,29 +169,23 @@ impl Buffer {
         edit: MeasuredInsertEdit,
         policy: InsertSideEffectPolicy,
     ) {
-        let insertion = edit.insertion();
-        let insert_pos = insertion.byte_pos_usize();
-        let insert_char_pos = insertion.char_pos_usize();
-        let byte_len = insertion.extent().emacs_bytes().get();
-        let char_len = insertion.extent().chars().get();
-        if byte_len == 0 {
+        if edit.is_empty() {
             return;
         }
+        let insertion = edit.insertion();
+        let insert_pos = edit.byte_pos_usize();
+        let insert_char_pos = edit.char_pos_usize();
+        let byte_len = edit.byte_len_usize();
+        let char_len = edit.char_len_usize();
 
-        self.set_edit_state(insert_state_after_edit(
-            self.edit_state(),
-            insertion,
-            policy,
-        ));
+        self.set_edit_state(edit.state_after(self.edit_state(), policy));
         if policy.adjust_shared_markers {
             if edit.marker_adjustment() == InsertMarkerAdjustment::StrictAfter {
-                self.text.adjust_markers_for_insert_extent_strict_after(
-                    insertion.byte_pos(),
-                    insertion.extent(),
-                );
+                self.text
+                    .adjust_markers_for_insert_extent_strict_after(edit.byte_pos(), edit.extent());
             } else {
                 self.text
-                    .adjust_markers_for_insert_extent(insertion.byte_pos(), insertion.extent());
+                    .adjust_markers_for_insert_extent(edit.byte_pos(), edit.extent());
             }
         }
         debug_assert_eq!(
@@ -223,15 +211,14 @@ impl Buffer {
         policy: DeleteSideEffectPolicy,
     ) {
         let range = edit.range();
-        if range.is_empty() {
+        if edit.is_empty() {
             return;
         }
-        let start = range.byte_start_usize();
-        let end = range.byte_end_usize();
-        let byte_len = range.byte_len().get();
-        let char_len = range.char_len().get();
+        let start = edit.byte_start_usize();
+        let end = edit.byte_end_usize();
+        let char_len = edit.char_len_usize();
 
-        self.set_edit_state(delete_state_after_edit(self.edit_state(), range, policy));
+        self.set_edit_state(edit.state_after(self.edit_state(), policy));
 
         if policy.adjust_shared_markers {
             self.text.adjust_markers_for_delete_range(range);
@@ -262,33 +249,31 @@ impl Buffer {
         edit: MeasuredReplaceEdit,
         policy: ReplaceSideEffectPolicy,
     ) {
-        let replacement = edit.replacement();
-        if replacement.old_range().is_empty() && replacement.new_extent().is_empty() {
+        if edit.is_empty() {
             return;
         }
 
+        let replacement = edit.replacement();
         let old_range = replacement.old_range();
-        let start = old_range.byte_start_usize();
-        let old_byte_len = replacement.old_byte_len().get();
-        let new_byte_len = replacement.new_byte_len().get();
+        let start = edit.old_byte_start_usize();
+        let old_byte_len = edit.old_byte_len_usize();
+        let new_byte_len = edit.new_byte_len_usize();
 
-        if policy.update_state_fields {
-            self.set_edit_state(replace_state_after_edit(self.edit_state(), replacement));
-        }
+        self.set_edit_state(edit.state_after(self.edit_state(), policy));
         if policy.adjust_shared_markers {
             self.text
-                .adjust_markers_for_replace_range(old_range, replacement.new_extent());
+                .adjust_markers_for_replace_range(old_range, edit.new_extent());
         }
         if policy.adjust_shared_text_props {
             self.text.adjust_text_props_for_replace_at(
-                old_range.char_start(),
-                old_range.char_len(),
-                replacement.new_extent().chars(),
+                edit.old_char_start(),
+                edit.old_char_len(),
+                edit.new_char_len(),
             );
         }
         self.overlays
             .adjust_for_replace(start, old_byte_len, new_byte_len);
-        self.record_char_modification(replacement.changed_chars_usize());
+        self.record_char_modification(edit.changed_chars_usize());
     }
 
     fn record_char_modification(&mut self, changed_chars: usize) {
@@ -851,16 +836,6 @@ impl BufferManager {
 
     fn adjust_shared_insert_metadata(
         buf: &mut Buffer,
-        insertion: TextInsertion,
-        update_state_fields: bool,
-        marker_placement: InsertMarkerPlacement,
-    ) {
-        let edit = MeasuredInsertEdit::by_insertion_type(insertion, marker_placement);
-        Self::adjust_shared_insert_metadata_full(buf, edit, update_state_fields);
-    }
-
-    fn adjust_shared_insert_metadata_full(
-        buf: &mut Buffer,
         edit: MeasuredInsertEdit,
         update_state_fields: bool,
     ) {
@@ -872,22 +847,22 @@ impl BufferManager {
 
     fn adjust_shared_delete_metadata(
         buf: &mut Buffer,
-        range: TextEditRange,
+        edit: MeasuredDeleteEdit,
         update_state_fields: bool,
     ) {
         buf.apply_byte_delete_side_effects(
-            MeasuredDeleteEdit::new(range),
+            edit,
             DeleteSideEffectPolicy::shared_buffer(update_state_fields),
         );
     }
 
     fn adjust_shared_replace_metadata(
         buf: &mut Buffer,
-        replacement: TextReplacement,
+        edit: MeasuredReplaceEdit,
         update_state_fields: bool,
     ) {
         buf.apply_replace_side_effects(
-            MeasuredReplaceEdit::new(replacement),
+            edit,
             ReplaceSideEffectPolicy::shared_buffer(update_state_fields),
         );
     }
@@ -917,14 +892,11 @@ impl BufferManager {
         }
         let scope = self.shared_text_edit_scope(id)?;
         let insertion = self.buffers.get_mut(&id)?.insert(text);
+        let edit =
+            MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::AfterMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insertion,
-                update_state_fields,
-                InsertMarkerPlacement::AfterMarkers,
-            );
+            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
         })
     }
 
@@ -967,14 +939,14 @@ impl BufferManager {
         } else {
             self.buffers.get_mut(&id)?.insert_lisp_string(text)
         };
+        let edit = MeasuredInsertEdit::new(
+            insertion,
+            InsertMarkerPlacement::AfterMarkers,
+            marker_adjustment,
+        );
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            let edit = MeasuredInsertEdit::new(
-                insertion,
-                InsertMarkerPlacement::AfterMarkers,
-                marker_adjustment,
-            );
-            Self::adjust_shared_insert_metadata_full(sibling, edit, update_state_fields);
+            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
         })
     }
 
@@ -984,14 +956,11 @@ impl BufferManager {
         }
         let scope = self.shared_text_edit_scope(id)?;
         let insertion = self.buffers.get_mut(&id)?.insert_before_markers(text);
+        let edit =
+            MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insertion,
-                update_state_fields,
-                InsertMarkerPlacement::BeforeMarkers,
-            );
+            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
         })
     }
 
@@ -1009,14 +978,11 @@ impl BufferManager {
             .buffers
             .get_mut(&id)?
             .insert_lisp_string_before_markers(text);
+        let edit =
+            MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insertion,
-                update_state_fields,
-                InsertMarkerPlacement::BeforeMarkers,
-            );
+            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
         })
     }
 
@@ -1058,9 +1024,10 @@ impl BufferManager {
 
         let scope = self.shared_text_edit_scope(id)?;
         let range = self.buffers.get_mut(&id)?.delete_measured_region(range);
+        let edit = MeasuredDeleteEdit::new(range);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_delete_metadata(sibling, range, update_state_fields);
+            Self::adjust_shared_delete_metadata(sibling, edit, update_state_fields);
         })
     }
 
@@ -1095,9 +1062,10 @@ impl BufferManager {
             .buffers
             .get_mut(&id)?
             .replace_measured_region_lisp_string(range, text);
+        let edit = MeasuredReplaceEdit::new(replacement);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_replace_metadata(sibling, replacement, update_state_fields);
+            Self::adjust_shared_replace_metadata(sibling, edit, update_state_fields);
         })
     }
 

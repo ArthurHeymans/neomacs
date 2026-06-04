@@ -7,8 +7,8 @@
 
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
-    BufferText, CharPos0, EmacsBytePos, TextEditRange, TextInsertion, TextPositionAnchor,
-    TextReplacement,
+    BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, TextEditRange, TextExtent,
+    TextInsertion, TextPositionAnchor, TextReplacement,
 };
 use crate::heap_types::LispString;
 
@@ -392,6 +392,42 @@ impl MeasuredInsertEdit {
         self.insertion
     }
 
+    pub(in crate::buffer) const fn is_empty(self) -> bool {
+        self.insertion.extent().is_empty()
+    }
+
+    pub(in crate::buffer) const fn byte_pos(self) -> EmacsBytePos {
+        self.insertion.byte_pos()
+    }
+
+    pub(in crate::buffer) const fn byte_pos_usize(self) -> usize {
+        self.insertion.byte_pos_usize()
+    }
+
+    pub(in crate::buffer) const fn char_pos_usize(self) -> usize {
+        self.insertion.char_pos_usize()
+    }
+
+    pub(in crate::buffer) const fn extent(self) -> TextExtent {
+        self.insertion.extent()
+    }
+
+    pub(in crate::buffer) const fn byte_len(self) -> EmacsByteLen {
+        self.insertion.extent().emacs_bytes()
+    }
+
+    pub(in crate::buffer) const fn byte_len_usize(self) -> usize {
+        self.byte_len().get()
+    }
+
+    pub(in crate::buffer) const fn char_len(self) -> CharLen {
+        self.insertion.extent().chars()
+    }
+
+    pub(in crate::buffer) const fn char_len_usize(self) -> usize {
+        self.char_len().get()
+    }
+
     pub(in crate::buffer) const fn marker_placement(self) -> InsertMarkerPlacement {
         self.marker_placement
     }
@@ -402,6 +438,14 @@ impl MeasuredInsertEdit {
 
     pub(in crate::buffer) const fn before_markers(self) -> bool {
         self.marker_placement.before_markers()
+    }
+
+    pub(in crate::buffer) fn state_after(
+        self,
+        state: BufferEditState,
+        policy: InsertSideEffectPolicy,
+    ) -> BufferEditState {
+        insert_state_after_edit(state, self.insertion, policy)
     }
 }
 
@@ -417,6 +461,34 @@ impl MeasuredDeleteEdit {
 
     pub(in crate::buffer) const fn range(self) -> TextEditRange {
         self.range
+    }
+
+    pub(in crate::buffer) const fn is_empty(self) -> bool {
+        self.range.is_empty()
+    }
+
+    pub(in crate::buffer) const fn byte_start_usize(self) -> usize {
+        self.range.byte_start_usize()
+    }
+
+    pub(in crate::buffer) const fn byte_end_usize(self) -> usize {
+        self.range.byte_end_usize()
+    }
+
+    pub(in crate::buffer) const fn char_len(self) -> CharLen {
+        self.range.char_len()
+    }
+
+    pub(in crate::buffer) const fn char_len_usize(self) -> usize {
+        self.char_len().get()
+    }
+
+    pub(in crate::buffer) fn state_after(
+        self,
+        state: BufferEditState,
+        policy: DeleteSideEffectPolicy,
+    ) -> BufferEditState {
+        delete_state_after_edit(state, self.range, policy)
     }
 }
 
@@ -434,8 +506,56 @@ impl MeasuredReplaceEdit {
         self.replacement
     }
 
+    pub(in crate::buffer) const fn is_empty(self) -> bool {
+        self.replacement.old_range().is_empty() && self.replacement.new_extent().is_empty()
+    }
+
     pub(in crate::buffer) const fn old_range(self) -> TextEditRange {
         self.replacement.old_range()
+    }
+
+    pub(in crate::buffer) const fn old_byte_start_usize(self) -> usize {
+        self.replacement.old_range().byte_start_usize()
+    }
+
+    pub(in crate::buffer) const fn old_byte_len_usize(self) -> usize {
+        self.replacement.old_byte_len().get()
+    }
+
+    pub(in crate::buffer) const fn old_char_start(self) -> CharPos0 {
+        self.replacement.old_range().char_start()
+    }
+
+    pub(in crate::buffer) const fn old_char_len(self) -> CharLen {
+        self.replacement.old_char_len()
+    }
+
+    pub(in crate::buffer) const fn new_extent(self) -> TextExtent {
+        self.replacement.new_extent()
+    }
+
+    pub(in crate::buffer) const fn new_byte_len_usize(self) -> usize {
+        self.replacement.new_byte_len().get()
+    }
+
+    pub(in crate::buffer) const fn new_char_len(self) -> CharLen {
+        self.replacement.new_char_len()
+    }
+
+    pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
+        self.replacement.changed_chars_usize()
+    }
+
+    pub(in crate::buffer) fn state_after(
+        self,
+        state: BufferEditState,
+        policy: ReplaceSideEffectPolicy,
+    ) -> BufferEditState {
+        if policy.update_state_fields {
+            replace_state_after_edit(state, self.replacement)
+        } else {
+            state
+        }
     }
 }
 
