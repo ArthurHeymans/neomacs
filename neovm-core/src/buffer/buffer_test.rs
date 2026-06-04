@@ -69,7 +69,7 @@ fn register_marker_for_test(
     marker_id: u64,
     pos: usize,
     insertion_type: InsertionType,
-) {
+) -> Value {
     let marker_value = Value::make_marker(crate::heap_types::LispMarker {
         buffer: Some(buf.id),
         insertion_type: insertion_type == InsertionType::After,
@@ -84,6 +84,7 @@ fn register_marker_for_test(
         .expect("freshly allocated marker should have a veclike ptr")
         as *mut crate::tagged::header::MarkerObj;
     buf.register_marker(marker_ptr, marker_id, pos, insertion_type);
+    marker_value
 }
 
 // -----------------------------------------------------------------------
@@ -415,6 +416,215 @@ fn indirect_buffer_overlays_track_shared_edits() {
         assert_eq!(indirect.text.backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BufferSwapPayloadSnapshot {
+    backend_kind: BufferTextBackendKind,
+    buffer_string: String,
+    point_byte: usize,
+    point_min_byte: usize,
+    point_max_byte: usize,
+    mark_byte: Option<usize>,
+    undo_list: Value,
+    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+}
+
+fn buffer_swap_payload_snapshot(buf: &Buffer) -> BufferSwapPayloadSnapshot {
+    BufferSwapPayloadSnapshot {
+        backend_kind: buf.text.backend_kind(),
+        buffer_string: buf.buffer_string(),
+        point_byte: buf.point_byte(),
+        point_min_byte: buf.point_min_byte(),
+        point_max_byte: buf.point_max_byte(),
+        mark_byte: buf.mark_byte(),
+        undo_list: buf.get_undo_list(),
+        text_properties: buffer_text_property_snapshot(buf),
+    }
+}
+
+fn buffer_byte_pos_for_char(mgr: &BufferManager, id: BufferId, char_pos: usize) -> usize {
+    mgr.get(id)
+        .expect("buffer")
+        .text
+        .buf_charpos_to_bytepos(char_pos)
+}
+
+#[test]
+fn implemented_text_backends_match_buffer_swap_text_side_effects() {
+    crate::test_utils::init_test_tracing();
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+
+    for left_kind in implemented_text_backends() {
+        for right_kind in implemented_text_backends() {
+            let mut mgr = BufferManager::new();
+            let left_id = mgr.current_buffer_id().expect("scratch buffer");
+            let right_id = mgr.create_buffer("*swap-right*");
+            mgr.get(left_id)
+                .expect("left buffer")
+                .text
+                .try_convert_backend_kind(left_kind)
+                .expect("left backend should convert");
+            mgr.get(right_id)
+                .expect("right buffer")
+                .text
+                .try_convert_backend_kind(right_kind)
+                .expect("right backend should convert");
+
+            mgr.insert_into_buffer(left_id, "aébc日本")
+                .expect("left insert");
+            mgr.insert_into_buffer(right_id, "uvwxyzλ")
+                .expect("right insert");
+
+            let left_prop_start = buffer_byte_pos_for_char(&mgr, left_id, 1);
+            let left_prop_end = buffer_byte_pos_for_char(&mgr, left_id, 5);
+            mgr.put_buffer_text_property(left_id, left_prop_start, left_prop_end, face, bold)
+                .expect("left property");
+            let right_prop_start = buffer_byte_pos_for_char(&mgr, right_id, 2);
+            let right_prop_end = buffer_byte_pos_for_char(&mgr, right_id, 7);
+            mgr.put_buffer_text_property(right_id, right_prop_start, right_prop_end, face, italic)
+                .expect("right property");
+
+            let left_marker_pos = buffer_byte_pos_for_char(&mgr, left_id, 3);
+            let left_marker = register_marker_for_test(
+                mgr.get_mut(left_id).expect("left buffer"),
+                501,
+                left_marker_pos,
+                InsertionType::After,
+            );
+            let right_marker_pos = buffer_byte_pos_for_char(&mgr, right_id, 4);
+            let right_marker = register_marker_for_test(
+                mgr.get_mut(right_id).expect("right buffer"),
+                502,
+                right_marker_pos,
+                InsertionType::Before,
+            );
+
+            let left_overlay_start = buffer_byte_pos_for_char(&mgr, left_id, 1);
+            let left_overlay_end = buffer_byte_pos_for_char(&mgr, left_id, 4);
+            let left_overlay = Value::make_overlay(OverlayData {
+                serial: 0,
+                plist: Value::NIL,
+                buffer: Some(left_id),
+                start: left_overlay_start,
+                end: left_overlay_end,
+                front_advance: false,
+                rear_advance: true,
+            });
+            mgr.get_mut(left_id)
+                .expect("left buffer")
+                .overlays
+                .insert_overlay(left_overlay);
+
+            let right_overlay_start = buffer_byte_pos_for_char(&mgr, right_id, 2);
+            let right_overlay_end = buffer_byte_pos_for_char(&mgr, right_id, 6);
+            let right_overlay = Value::make_overlay(OverlayData {
+                serial: 0,
+                plist: Value::NIL,
+                buffer: Some(right_id),
+                start: right_overlay_start,
+                end: right_overlay_end,
+                front_advance: true,
+                rear_advance: false,
+            });
+            mgr.get_mut(right_id)
+                .expect("right buffer")
+                .overlays
+                .insert_overlay(right_overlay);
+
+            let left_point = buffer_byte_pos_for_char(&mgr, left_id, 3);
+            let left_mark = buffer_byte_pos_for_char(&mgr, left_id, 4);
+            let left_narrow_start = buffer_byte_pos_for_char(&mgr, left_id, 1);
+            let left_narrow_end = buffer_byte_pos_for_char(&mgr, left_id, 5);
+            mgr.narrow_buffer_to_region(left_id, left_narrow_start, left_narrow_end)
+                .expect("left narrow");
+            mgr.goto_buffer_byte(left_id, left_point)
+                .expect("left point");
+            mgr.set_buffer_mark(left_id, left_mark).expect("left mark");
+
+            let right_point = buffer_byte_pos_for_char(&mgr, right_id, 5);
+            let right_mark = buffer_byte_pos_for_char(&mgr, right_id, 1);
+            let right_narrow_start = buffer_byte_pos_for_char(&mgr, right_id, 2);
+            let right_narrow_end = buffer_byte_pos_for_char(&mgr, right_id, 7);
+            mgr.narrow_buffer_to_region(right_id, right_narrow_start, right_narrow_end)
+                .expect("right narrow");
+            mgr.goto_buffer_byte(right_id, right_point)
+                .expect("right point");
+            mgr.set_buffer_mark(right_id, right_mark)
+                .expect("right mark");
+
+            mgr.get_mut(left_id)
+                .expect("left buffer")
+                .set_undo_list(Value::symbol("left-undo"));
+            mgr.get_mut(right_id)
+                .expect("right buffer")
+                .set_undo_list(Value::symbol("right-undo"));
+
+            let left_before = buffer_swap_payload_snapshot(mgr.get(left_id).expect("left buffer"));
+            let right_before =
+                buffer_swap_payload_snapshot(mgr.get(right_id).expect("right buffer"));
+
+            mgr.swap_buffer_text(left_id, right_id)
+                .expect("swap should succeed");
+
+            let left_after = mgr.get(left_id).expect("left buffer");
+            let right_after = mgr.get(right_id).expect("right buffer");
+            assert_eq!(
+                buffer_swap_payload_snapshot(left_after),
+                right_before,
+                "left buffer after swap should have right payload for {left_kind:?}->{right_kind:?}"
+            );
+            assert_eq!(
+                buffer_swap_payload_snapshot(right_after),
+                left_before,
+                "right buffer after swap should have left payload for {left_kind:?}->{right_kind:?}"
+            );
+
+            assert_eq!(left_after.overlays.len(), 1);
+            assert_eq!(right_after.overlays.len(), 1);
+            assert_eq!(
+                right_overlay.as_overlay_data().unwrap().buffer,
+                Some(left_id)
+            );
+            assert_eq!(
+                left_overlay.as_overlay_data().unwrap().buffer,
+                Some(right_id)
+            );
+            assert_eq!(
+                left_after.overlays.overlay_start(right_overlay),
+                Some(right_overlay_start)
+            );
+            assert_eq!(
+                right_after.overlays.overlay_start(left_overlay),
+                Some(left_overlay_start)
+            );
+
+            assert_eq!(right_marker.as_marker_data().unwrap().buffer, Some(left_id));
+            assert_eq!(left_marker.as_marker_data().unwrap().buffer, Some(right_id));
+            assert_eq!(
+                left_after
+                    .text
+                    .marker_chain_lookup(502)
+                    .map(|(b, c, _)| (b, c)),
+                Some((
+                    right_marker_pos,
+                    left_after.text.buf_bytepos_to_charpos(right_marker_pos)
+                ))
+            );
+            assert_eq!(
+                right_after
+                    .text
+                    .marker_chain_lookup(501)
+                    .map(|(b, c, _)| (b, c)),
+                Some((
+                    left_marker_pos,
+                    right_after.text.buf_bytepos_to_charpos(left_marker_pos)
+                ))
+            );
+        }
     }
 }
 
