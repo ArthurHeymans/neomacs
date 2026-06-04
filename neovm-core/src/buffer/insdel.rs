@@ -64,13 +64,26 @@ impl Buffer {
         string
     }
 
-    fn insert_bytes_internal(&mut self, bytes: &[u8], char_len: usize, before_markers: bool) {
+    fn insertion_at_point(&self, extent: TextExtent) -> TextInsertion {
+        TextInsertion::new(
+            crate::buffer::EmacsBytePos::new(self.pt_byte),
+            crate::buffer::CharPos0::new(self.pt),
+            extent,
+        )
+    }
+
+    fn insert_bytes_internal(
+        &mut self,
+        bytes: &[u8],
+        char_len: usize,
+        before_markers: bool,
+    ) -> TextInsertion {
         self.insert_bytes_internal_full(
             bytes,
             char_len,
             before_markers,
             InsertMarkerAdjustment::ByInsertionType,
-        );
+        )
     }
 
     /// Same as `insert_bytes_internal`, but with explicit marker adjustment
@@ -84,14 +97,13 @@ impl Buffer {
         char_len: usize,
         before_markers: bool,
         marker_adjustment: InsertMarkerAdjustment,
-    ) {
-        let insert_pos = self.pt_byte;
-        let insert_char_pos = self.pt;
+    ) -> TextInsertion {
+        let insertion = self.insertion_at_point(TextExtent::from_usize(char_len, bytes.len()));
+        let insert_pos = insertion.byte_pos_usize();
+        let insert_char_pos = insertion.char_pos_usize();
         if bytes.is_empty() {
-            return;
+            return insertion;
         }
-        let byte_len = bytes.len();
-        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
@@ -117,6 +129,7 @@ impl Buffer {
             self.text
                 .advance_markers_at_position(insertion.byte_pos(), insertion.extent());
         }
+        insertion
     }
 
     fn apply_byte_insert_side_effects(
@@ -237,49 +250,48 @@ impl Buffer {
     /// Insert `text` at point, advancing point past the inserted text.
     ///
     /// Markers at the insertion site move according to their `InsertionType`.
-    /// Returns the `(byte_len, char_len)` of the inserted text so callers
-    /// can update sibling-buffer bookkeeping without re-measuring the
-    /// storage-form input.
-    fn insert_internal(&mut self, text: &str, before_markers: bool) -> (usize, usize) {
+    /// Returns the measured insertion so callers can update sibling-buffer
+    /// bookkeeping without re-measuring the storage-form input.
+    fn insert_internal(&mut self, text: &str, before_markers: bool) -> TextInsertion {
         if text.is_empty() {
-            return (0, 0);
+            return self.insertion_at_point(TextExtent::ZERO);
         }
         let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
             text,
             self.get_multibyte(),
         );
         let char_len = emacs_char_count(&bytes, self.get_multibyte());
-        let byte_len = bytes.len();
-        self.insert_bytes_internal(&bytes, char_len, before_markers);
-        (byte_len, char_len)
+        self.insert_bytes_internal(&bytes, char_len, before_markers)
     }
 
-    pub fn insert(&mut self, text: &str) -> (usize, usize) {
+    pub fn insert(&mut self, text: &str) -> TextInsertion {
         self.insert_internal(text, false)
     }
 
-    pub fn insert_before_markers(&mut self, text: &str) -> (usize, usize) {
+    pub fn insert_before_markers(&mut self, text: &str) -> TextInsertion {
         self.insert_internal(text, true)
     }
 
-    pub fn insert_lisp_string(&mut self, text: &LispString) {
+    pub fn insert_lisp_string(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        self.insert_bytes_internal(text.as_bytes(), text.schars(), false);
+        let insertion = self.insert_bytes_internal(text.as_bytes(), text.schars(), false);
         if text.has_intervals() {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
         }
+        insertion
     }
 
-    pub fn insert_lisp_string_before_markers(&mut self, text: &LispString) {
+    pub fn insert_lisp_string_before_markers(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        self.insert_bytes_internal(text.as_bytes(), text.schars(), true);
+        let insertion = self.insert_bytes_internal(text.as_bytes(), text.schars(), true);
         if text.has_intervals() {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
         }
+        insertion
     }
 
     /// GNU-equivalent replace path: insert `text` at point but do NOT
@@ -287,10 +299,10 @@ impl Buffer {
     /// `insertion_type` is true. This matches GNU
     /// `adjust_markers_for_replace` (insdel.c:341), where markers at
     /// `from_byte` stay put regardless of insertion_type.
-    pub fn insert_lisp_string_for_replace(&mut self, text: &LispString) {
+    pub fn insert_lisp_string_for_replace(&mut self, text: &LispString) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        self.insert_bytes_internal_full(
+        let insertion = self.insert_bytes_internal_full(
             text.as_bytes(),
             text.schars(),
             false,
@@ -300,6 +312,7 @@ impl Buffer {
             self.text
                 .text_props_append_shifted(text.intervals(), insert_pos);
         }
+        insertion
     }
 
     pub fn replace_region_lisp_string(&mut self, start: usize, end: usize, text: &LispString) {
@@ -819,12 +832,7 @@ impl BufferManager {
             return Some(());
         }
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let insert_pos = source.pt_byte;
-        let insert_char_pos = source.pt;
-
-        let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert(text);
-        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
+        let insertion = self.buffers.get_mut(&id)?.insert(text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, false);
@@ -861,22 +869,15 @@ impl BufferManager {
         if text.is_empty() {
             return Some(());
         }
-        let byte_len = text.sbytes();
-        let char_len = text.schars();
-
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let insert_pos = source.pt_byte;
-        let insert_char_pos = source.pt;
-        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
-        if marker_adjustment == InsertMarkerAdjustment::StrictAfter {
+        let insertion = if marker_adjustment == InsertMarkerAdjustment::StrictAfter {
             self.buffers
                 .get_mut(&id)?
-                .insert_lisp_string_for_replace(text);
+                .insert_lisp_string_for_replace(text)
         } else {
-            self.buffers.get_mut(&id)?.insert_lisp_string(text);
-        }
+            self.buffers.get_mut(&id)?.insert_lisp_string(text)
+        };
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata_full(
@@ -894,12 +895,7 @@ impl BufferManager {
             return Some(());
         }
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let insert_pos = source.pt_byte;
-        let insert_char_pos = source.pt;
-
-        let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert_before_markers(text);
-        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
+        let insertion = self.buffers.get_mut(&id)?.insert_before_markers(text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, true);
@@ -914,15 +910,10 @@ impl BufferManager {
         if text.is_empty() {
             return Some(());
         }
-        let byte_len = text.sbytes();
-        let char_len = text.schars();
         let scope = self.shared_text_edit_scope(id)?;
-        let source = self.buffers.get(&id)?;
-        let insert_pos = source.pt_byte;
-        let insert_char_pos = source.pt;
-        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
-        self.buffers
+        let insertion = self
+            .buffers
             .get_mut(&id)?
             .insert_lisp_string_before_markers(text);
 
