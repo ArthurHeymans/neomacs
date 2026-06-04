@@ -187,7 +187,6 @@ fn raw_unibyte_display_width(byte: u8) -> usize {
 fn buffer_char_display_width(buf: &Buffer, byte_pos: usize, code: u32) -> usize {
     if !buf.get_multibyte() {
         return buf
-            .text
             .emacs_byte_at_pos(EmacsBytePos::new(byte_pos))
             .map(raw_unibyte_display_width)
             .unwrap_or(1);

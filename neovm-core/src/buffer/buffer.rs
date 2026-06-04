@@ -2249,6 +2249,16 @@ impl Buffer {
         self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
+    pub fn text_props_get_properties_plist_value_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Value {
+        self.text
+            .text_props_get_properties_plist_value_at_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
     pub fn text_props_put_property_in_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
@@ -2312,6 +2322,26 @@ impl Buffer {
             ))
     }
 
+    pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_next_interval_boundary_after_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
+    pub fn text_props_previous_interval_boundary_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_previous_interval_boundary_before_emacs_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
     pub fn text_props_is_empty(&self) -> bool {
         self.text.text_props_is_empty()
     }
@@ -2371,6 +2401,28 @@ impl Buffer {
             .text_props_range_has_any_property_named_in_emacs_byte_range(
                 self.clamped_emacs_byte_range(range),
                 names,
+            )
+    }
+
+    pub fn text_props_range_has_all_properties_in_emacs_byte_range(
+        &self,
+        range: EmacsByteRange,
+        properties: &[(Value, Value)],
+    ) -> bool {
+        self.text
+            .text_props_range_has_all_properties_in_emacs_byte_range(
+                self.clamped_emacs_byte_range(range),
+                properties,
+            )
+    }
+
+    pub fn text_props_range_has_any_interval_in_emacs_byte_range(
+        &self,
+        range: EmacsByteRange,
+    ) -> bool {
+        self.text
+            .text_props_range_has_any_interval_in_emacs_byte_range(
+                self.clamped_emacs_byte_range(range),
             )
     }
 

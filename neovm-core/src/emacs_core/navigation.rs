@@ -413,7 +413,6 @@ fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Op
 fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
     let accessible = buf.accessible_emacs_byte_region();
     let text_prev = buf
-        .text
         .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
         .map(EmacsBytePos::get)
         .filter(|prev| *prev >= accessible.start_usize());

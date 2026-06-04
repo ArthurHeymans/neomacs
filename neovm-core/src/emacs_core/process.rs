@@ -4257,7 +4257,12 @@ pub(crate) fn builtin_internal_default_process_filter(
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| Value::fixnum(EmacsBytePos::new(new_mark).to_lisp(&b.text).as_i64()))
+            .map(|b| {
+                Value::fixnum(
+                    b.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(new_mark))
+                        .as_i64(),
+                )
+            })
             .unwrap_or(Value::NIL);
         let _ = super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,
@@ -4350,7 +4355,12 @@ pub(crate) fn builtin_internal_default_process_sentinel(
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| Value::fixnum(EmacsBytePos::new(new_mark).to_lisp(&b.text).as_i64()))
+            .map(|b| {
+                Value::fixnum(
+                    b.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(new_mark))
+                        .as_i64(),
+                )
+            })
             .unwrap_or(Value::NIL);
         super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,

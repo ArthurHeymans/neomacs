@@ -1003,25 +1003,23 @@ pub(crate) fn prepare_interval_modification_for_change(
         let mod_sym = Value::symbol("modification-hooks");
         let mut prev: Option<Value> = None;
         let mut hooks = Vec::new();
-        let _ = buf
-            .text
-            .text_props_try_for_each_interval_in_emacs_byte_range(
-                EmacsByteRange::from_usize(start, end),
-                |_, _, plist| {
-                    let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
-                    if mh.is_nil() {
-                        return Ok::<(), ()>(());
-                    }
-                    if let Some(p) = prev
-                        && eq_value(&p, &mh)
-                    {
-                        return Ok(());
-                    }
-                    prev = Some(mh);
-                    hooks.push(mh);
-                    Ok(())
-                },
-            );
+        let _ = buf.text_props_try_for_each_interval_in_emacs_byte_range(
+            EmacsByteRange::from_usize(start, end),
+            |_, _, plist| {
+                let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
+                if mh.is_nil() {
+                    return Ok::<(), ()>(());
+                }
+                if let Some(p) = prev
+                    && eq_value(&p, &mh)
+                {
+                    return Ok(());
+                }
+                prev = Some(mh);
+                hooks.push(mh);
+                Ok(())
+            },
+        );
         (lisp_start, lisp_end, hooks)
     };
 
@@ -1044,9 +1042,8 @@ fn record_interval_insert_hooks(
         && let Some(prev_len) = buf.char_before_emacs_len(byte_pos)
     {
         let prev_byte = byte_pos.saturating_sub(prev_len);
-        if let Some(hooks) = buf
-            .text
-            .text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(prev_byte), behind_sym)
+        if let Some(hooks) =
+            buf.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(prev_byte), behind_sym)
             && !hooks.is_nil()
         {
             eval.interval_insert_behind_hooks = hooks;
@@ -1054,9 +1051,8 @@ fn record_interval_insert_hooks(
     }
 
     if byte_pos < accessible.end_usize()
-        && let Some(hooks) = buf
-            .text
-            .text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), front_sym)
+        && let Some(hooks) =
+            buf.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), front_sym)
         && !hooks.is_nil()
     {
         eval.interval_insert_in_front_hooks = hooks;
@@ -1093,12 +1089,10 @@ pub(crate) fn builtin_put_text_property(
         buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
             let buf = eval.buffers.get(buf_id)?;
             let properties = [(args[2], args[3])];
-            (!buf
-                .text
-                .text_props_range_has_all_properties_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                    &properties,
-                ))
+            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
+                EmacsByteRange::from_usize(byte_beg, byte_end),
+                &properties,
+            ))
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
@@ -1329,12 +1323,10 @@ pub(crate) fn builtin_add_text_properties(
     let change =
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
             let buf = eval.buffers.get(buf_id)?;
-            (!buf
-                .text
-                .text_props_range_has_all_properties_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                    &pairs_for_probe,
-                ))
+            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
+                EmacsByteRange::from_usize(byte_beg, byte_end),
+                &pairs_for_probe,
+            ))
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
@@ -1482,12 +1474,10 @@ pub(crate) fn builtin_add_face_text_property(
                 return None;
             };
             let new_face = args[2];
-            (!buf
-                .text
-                .text_props_range_has_all_properties_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                    &[(Value::symbol("face"), new_face)],
-                ))
+            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
+                EmacsByteRange::from_usize(byte_beg, byte_end),
+                &[(Value::symbol("face"), new_face)],
+            ))
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
@@ -1584,16 +1574,12 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
     let byte_end_pos = EmacsBytePos::new(byte_end);
     let mut seg_start = EmacsBytePos::new(byte_beg);
     while seg_start < byte_end_pos {
-        let seg_end = match buf
-            .text
-            .text_props_next_change_after_emacs_byte_pos(seg_start)
-        {
+        let seg_end = match buf.text_props_next_change_after_emacs_byte_pos(seg_start) {
             Some(p) if p < byte_end_pos => p,
             _ => byte_end_pos,
         };
-        let existing = buf
-            .text
-            .text_props_get_property_at_emacs_byte_pos(seg_start, Value::symbol("face"));
+        let existing =
+            buf.text_props_get_property_at_emacs_byte_pos(seg_start, Value::symbol("face"));
         let merged = merge_face_property(existing, new_face, append)?;
         segments.push((seg_start.get(), seg_end.get(), merged));
         seg_start = seg_end;
@@ -1718,11 +1704,9 @@ pub(crate) fn builtin_set_text_properties(
         buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
             let buf = eval.buffers.get(buf_id)?;
             (!pairs_for_probe.is_empty()
-                || buf
-                    .text
-                    .text_props_range_has_any_interval_in_emacs_byte_range(
-                        EmacsByteRange::from_usize(byte_beg, byte_end),
-                    ))
+                || buf.text_props_range_has_any_interval_in_emacs_byte_range(
+                    EmacsByteRange::from_usize(byte_beg, byte_end),
+                ))
             .then_some((buf_id, byte_beg, byte_end))
         });
     let before = if let Some((buf_id, byte_beg, byte_end)) = change {
@@ -1936,9 +1920,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
     if byte_pos == buffer_end_emacs_byte_pos(buf) {
         return Ok(Value::NIL);
     }
-    Ok(buf
-        .text
-        .text_props_get_properties_plist_value_at_emacs_byte_pos(byte_pos))
+    Ok(buf.text_props_get_properties_plist_value_at_emacs_byte_pos(byte_pos))
 }
 
 /// (next-single-property-change POS PROP &optional OBJECT LIMIT)
@@ -2025,10 +2007,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     let mut cursor = byte_pos;
 
     loop {
-        match buf
-            .text
-            .text_props_next_interval_boundary_after_emacs_byte_pos(cursor)
-        {
+        match buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
             Some(next) => {
                 if let Some(lim) = limit_pos {
                     if byte_to_elisp_pos(buf, next.get()) >= lim {
@@ -2148,10 +2127,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
     let mut cursor = byte_pos;
 
     loop {
-        match buf
-            .text
-            .text_props_previous_interval_boundary_before_emacs_byte_pos(cursor)
-        {
+        match buf.text_props_previous_interval_boundary_before_emacs_byte_pos(cursor) {
             Some(prev) => {
                 if let Some(lim) = limit_pos {
                     if byte_to_elisp_pos(buf, prev.get()) <= lim {
@@ -2254,7 +2230,6 @@ pub(crate) fn builtin_next_property_change_in_buffers(
     let byte_pos = validate_buffer_property_point_emacs_byte_pos_raw(buf, pos, args[0])?;
     if limit_arg.is_some_and(|v| v.is_t()) {
         let next = buf
-            .text
             .text_props_next_interval_boundary_after_emacs_byte_pos(byte_pos)
             .unwrap_or_else(|| EmacsBytePos::new(buf.accessible_emacs_byte_region().end_usize()));
         return Ok(Value::fixnum(byte_to_elisp_pos(buf, next.get())));
@@ -2268,10 +2243,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
     };
     let buf_end = EmacsBytePos::new(buf.accessible_emacs_byte_region().end_usize());
 
-    match buf
-        .text
-        .text_props_next_change_after_emacs_byte_pos(byte_pos)
-    {
+    match buf.text_props_next_change_after_emacs_byte_pos(byte_pos) {
         Some(next) => {
             if let Some(lim) = limit_pos {
                 if byte_to_elisp_pos(buf, next.get()) >= lim {
@@ -2388,10 +2360,7 @@ pub(crate) fn builtin_text_property_any_in_state(
             if found.is_nil() {
                 return Ok(Value::fixnum(byte_to_elisp_pos(buf, cursor.get())));
             }
-            match buf
-                .text
-                .text_props_next_interval_boundary_after_emacs_byte_pos(cursor)
-            {
+            match buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
                 Some(next) if next <= byte_end => {
                     cursor = next;
                 }
@@ -2407,10 +2376,7 @@ pub(crate) fn builtin_text_property_any_in_state(
         if eq_value(&found, val) {
             return Ok(Value::fixnum(byte_to_elisp_pos(buf, cursor.get())));
         }
-        match buf
-            .text
-            .text_props_next_interval_boundary_after_emacs_byte_pos(cursor)
-        {
+        match buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
             Some(next) if next > cursor && next <= byte_end => cursor = next,
             _ => break,
         }
