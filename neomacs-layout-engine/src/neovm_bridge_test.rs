@@ -1,6 +1,6 @@
 use super::*;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
-use neovm_core::buffer::{Buffer, BufferManager, EmacsByteRange};
+use neovm_core::buffer::{Buffer, BufferId, BufferManager, BufferTextBackendKind, EmacsByteRange};
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId};
 
@@ -9,7 +9,12 @@ fn eval_lisp(eval: &mut neovm_core::emacs_core::Context, source: &str) -> Value 
 }
 
 fn test_buffer(id: u64, name: &str) -> Buffer {
-    Buffer::new(neovm_core::buffer::BufferId(id), Value::string(name))
+    Buffer::new(BufferId(id), Value::string(name))
+}
+
+fn test_buffer_with_backend(id: u64, name: &str, kind: BufferTextBackendKind) -> Buffer {
+    Buffer::try_new_with_text_backend_kind(BufferId(id), Value::string(name), kind)
+        .expect("test backend should be implemented")
 }
 
 fn set_buffer_text(buf: &mut Buffer, text: &str) {
@@ -992,6 +997,34 @@ fn test_rust_buffer_access_count_lines() {
     assert_eq!(access.count_lines(0, 17), 2); // 2 newlines
     assert_eq!(access.count_lines(0, 6), 1); // 1 newline in "line1\n"
     assert_eq!(access.count_lines(0, 5), 0); // no newline in "line1"
+}
+
+#[test]
+fn rust_buffer_access_count_lines_is_text_backend_neutral() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let text: String = (0..2500)
+        .map(|idx| if idx % 37 == 0 { '\n' } else { 'x' })
+        .collect();
+    let expected = text.bytes().filter(|byte| *byte == b'\n').count() as i64;
+
+    for kind in [
+        BufferTextBackendKind::GapBuffer,
+        BufferTextBackendKind::PieceTree,
+        BufferTextBackendKind::Rope,
+    ] {
+        let mut buf = test_buffer_with_backend(100 + u64::from(u8::from(kind)), "*lines*", kind);
+        set_buffer_text(&mut buf, &text);
+        let snapshot = LayoutBufferSnapshot::from_buffer(&buf);
+        let access = RustBufferAccess::new(&snapshot);
+
+        assert_eq!(
+            access.count_lines(0, text.len() as i64),
+            expected,
+            "{kind:?}"
+        );
+        assert_eq!(access.count_lines(1, 36), 0, "{kind:?}");
+        assert_eq!(access.count_lines(1, 38), 1, "{kind:?}");
+    }
 }
 
 // -----------------------------------------------------------------------
