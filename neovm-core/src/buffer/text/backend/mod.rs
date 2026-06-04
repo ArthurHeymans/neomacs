@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod conformance;
 mod gap;
 mod piece_tree;
 mod rope;
