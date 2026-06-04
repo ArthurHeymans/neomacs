@@ -433,14 +433,24 @@ Completed so far:
 - Added a private `PhysicalTextBackend` contract so gap-buffer, piece-tree, and
   rope must implement the same storage-only surface while `TextBackend` remains
   an enum with static, exhaustive dispatch.
+- Moved `BufferEditState` to typed `TextPositionAnchor` fields for point,
+  `BEGV`, and `ZV`, and added internal `TextExtentDelta` helpers so insert,
+  delete, and replace state transitions update paired char/byte coordinates
+  together, matching GNU's `insdel.c` invariant that semantic positions carry
+  both coordinate spaces.
+- Added focused edit-transaction tests for equality-boundary behavior around
+  insertion positions, deletion starts, replacement starts/ends, `BEGV`, and
+  `ZV`.
 
 Next work:
 
-- Continue migrating semantic layers above `TextBackend` to typed positions.
-- Continue making insert/delete/replace transaction order explicit and fully
-  typed in `edit_transaction.rs`.
-- Keep expanding backend matrix coverage when new semantic layers start using
-  `BufferText`.
+- Continue moving full insert/delete/replace ordering into
+  `edit_transaction.rs`, including cache invalidation and before/after-change
+  hook sequencing.
+- Continue migrating semantic layers above `TextBackend` to typed positions in
+  larger behavior-preserving chunks.
+- Keep expanding backend matrix coverage whenever a newly migrated semantic
+  layer starts using `BufferText`.
 
 ## Success Criteria
 

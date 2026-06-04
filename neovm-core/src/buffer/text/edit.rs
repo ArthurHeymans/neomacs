@@ -1,5 +1,5 @@
 use crate::buffer::position::{
-    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
 };
 
 /// Logical size of inserted or deleted buffer text.
@@ -7,6 +7,18 @@ use crate::buffer::position::{
 pub struct TextExtent {
     chars: CharLen,
     emacs_bytes: EmacsByteLen,
+}
+
+/// Signed logical size change produced by a structural text edit.
+///
+/// GNU edit code updates char and byte coordinates together (`PT` with
+/// `PT_BYTE`, marker `charpos` with `bytepos`, and so on).  Keeping the signed
+/// delta typed prevents replacement paths from shifting only one coordinate
+/// space when the byte and character lengths differ.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(in crate::buffer) struct TextExtentDelta {
+    chars: isize,
+    emacs_bytes: isize,
 }
 
 /// Insertion point plus the text size known by the caller.
@@ -91,6 +103,43 @@ impl TextExtent {
     }
 }
 
+impl TextExtentDelta {
+    pub(in crate::buffer) fn insertion(extent: TextExtent) -> Self {
+        Self {
+            chars: extent.chars().get() as isize,
+            emacs_bytes: extent.emacs_bytes().get() as isize,
+        }
+    }
+
+    pub(in crate::buffer) fn deletion(extent: TextExtent) -> Self {
+        Self {
+            chars: -(extent.chars().get() as isize),
+            emacs_bytes: -(extent.emacs_bytes().get() as isize),
+        }
+    }
+
+    pub(in crate::buffer) fn replacement(old_extent: TextExtent, new_extent: TextExtent) -> Self {
+        Self {
+            chars: new_extent.chars().get() as isize - old_extent.chars().get() as isize,
+            emacs_bytes: new_extent.emacs_bytes().get() as isize
+                - old_extent.emacs_bytes().get() as isize,
+        }
+    }
+
+    pub(in crate::buffer) fn apply_to_anchor(
+        self,
+        position: TextPositionAnchor,
+    ) -> TextPositionAnchor {
+        TextPositionAnchor::new(
+            CharPos0::new(apply_signed_delta(position.char_pos_usize(), self.chars)),
+            EmacsBytePos::new(apply_signed_delta(
+                position.emacs_byte_pos_usize(),
+                self.emacs_bytes,
+            )),
+        )
+    }
+}
+
 impl TextInsertion {
     pub const fn new(byte_pos: EmacsBytePos, char_pos: CharPos0, extent: TextExtent) -> Self {
         Self {
@@ -121,12 +170,20 @@ impl TextInsertion {
         self.char_pos
     }
 
+    pub const fn start_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.char_pos, self.byte_pos)
+    }
+
     pub const fn byte_end(self) -> EmacsBytePos {
         self.byte_pos.add_len(self.extent.emacs_bytes())
     }
 
     pub const fn char_end(self) -> CharPos0 {
         self.char_pos.add_len(self.extent.chars())
+    }
+
+    pub const fn end_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.char_end(), self.byte_end())
     }
 
     pub const fn extent(self) -> TextExtent {
@@ -160,6 +217,14 @@ impl TextReplacement {
 
     pub const fn byte_start(self) -> EmacsBytePos {
         self.old_range.byte_start()
+    }
+
+    pub const fn old_start_anchor(self) -> TextPositionAnchor {
+        self.old_range.start_anchor()
+    }
+
+    pub const fn old_end_anchor(self) -> TextPositionAnchor {
+        self.old_range.end_anchor()
     }
 
     pub const fn byte_start_usize(self) -> usize {
@@ -318,8 +383,16 @@ impl TextEditRange {
         self.byte_range.start()
     }
 
+    pub const fn start_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.char_start, self.byte_range.start())
+    }
+
     pub const fn byte_end(self) -> EmacsBytePos {
         self.byte_range.end()
+    }
+
+    pub const fn end_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.char_end, self.byte_range.end())
     }
 
     pub const fn char_start(self) -> CharPos0 {
@@ -383,6 +456,18 @@ const fn transpose_half_open_position(
         (pos as isize + diff) as usize
     } else {
         pos - (start2 - start1)
+    }
+}
+
+fn apply_signed_delta(value: usize, delta: isize) -> usize {
+    if delta >= 0 {
+        value
+            .checked_add(delta as usize)
+            .expect("buffer text edit position overflow")
+    } else {
+        value
+            .checked_sub(delta.unsigned_abs())
+            .expect("buffer text edit position underflow")
     }
 }
 

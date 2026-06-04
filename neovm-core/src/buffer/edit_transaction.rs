@@ -5,8 +5,10 @@
 //! these types separate is the first step toward a central insert/delete/
 //! replace transaction boundary.
 
+use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
-    BufferText, CharPos0, EmacsBytePos, TextEditRange, TextInsertion, TextReplacement,
+    BufferText, CharPos0, EmacsBytePos, TextEditRange, TextInsertion, TextPositionAnchor,
+    TextReplacement,
 };
 use crate::heap_types::LispString;
 
@@ -94,12 +96,9 @@ pub(in crate::buffer) fn convert_lisp_string_for_buffer_mode(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct BufferEditState {
-    pub(in crate::buffer) pt_byte: EmacsBytePos,
-    pub(in crate::buffer) pt: CharPos0,
-    pub(in crate::buffer) begv_byte: EmacsBytePos,
-    pub(in crate::buffer) begv: CharPos0,
-    pub(in crate::buffer) zv_byte: EmacsBytePos,
-    pub(in crate::buffer) zv: CharPos0,
+    point: TextPositionAnchor,
+    begv: TextPositionAnchor,
+    zv: TextPositionAnchor,
 }
 
 impl BufferEditState {
@@ -112,13 +111,18 @@ impl BufferEditState {
         zv: CharPos0,
     ) -> Self {
         Self {
-            pt_byte,
-            pt,
-            begv_byte,
-            begv,
-            zv_byte,
-            zv,
+            point: TextPositionAnchor::new(pt, pt_byte),
+            begv: TextPositionAnchor::new(begv, begv_byte),
+            zv: TextPositionAnchor::new(zv, zv_byte),
         }
+    }
+
+    pub(in crate::buffer) const fn from_anchors(
+        point: TextPositionAnchor,
+        begv: TextPositionAnchor,
+        zv: TextPositionAnchor,
+    ) -> Self {
+        Self { point, begv, zv }
     }
 
     pub(in crate::buffer) fn from_usize(
@@ -138,49 +142,136 @@ impl BufferEditState {
             CharPos0::new(zv),
         )
     }
+
+    pub(in crate::buffer) const fn point(self) -> TextPositionAnchor {
+        self.point
+    }
+
+    pub(in crate::buffer) const fn begv(self) -> TextPositionAnchor {
+        self.begv
+    }
+
+    pub(in crate::buffer) const fn zv(self) -> TextPositionAnchor {
+        self.zv
+    }
+
+    fn set_point(&mut self, point: TextPositionAnchor) {
+        self.point = point;
+    }
+
+    fn set_begv(&mut self, begv: TextPositionAnchor) {
+        self.begv = begv;
+    }
+
+    fn set_zv(&mut self, zv: TextPositionAnchor) {
+        self.zv = zv;
+    }
+}
+
+fn anchor_byte_gt(anchor: TextPositionAnchor, other: TextPositionAnchor) -> bool {
+    anchor.emacs_byte_pos() > other.emacs_byte_pos()
+}
+
+fn anchor_byte_ge(anchor: TextPositionAnchor, other: TextPositionAnchor) -> bool {
+    anchor.emacs_byte_pos() >= other.emacs_byte_pos()
+}
+
+fn anchor_byte_eq(anchor: TextPositionAnchor, other: TextPositionAnchor) -> bool {
+    anchor.emacs_byte_pos() == other.emacs_byte_pos()
+}
+
+fn move_after_insert(
+    position: TextPositionAnchor,
+    insertion: TextInsertion,
+    move_at_insertion: bool,
+) -> TextPositionAnchor {
+    let start = insertion.start_anchor();
+    if anchor_byte_gt(position, start) || (move_at_insertion && anchor_byte_eq(position, start)) {
+        TextExtentDelta::insertion(insertion.extent()).apply_to_anchor(position)
+    } else {
+        position
+    }
+}
+
+fn move_after_delete(
+    position: TextPositionAnchor,
+    range: TextEditRange,
+    move_at_end: bool,
+) -> TextPositionAnchor {
+    let start = range.start_anchor();
+    let end = range.end_anchor();
+    if anchor_byte_gt(position, end) || (move_at_end && anchor_byte_eq(position, end)) {
+        TextExtentDelta::deletion(range.extent()).apply_to_anchor(position)
+    } else if anchor_byte_gt(position, start) {
+        start
+    } else {
+        position
+    }
+}
+
+fn move_after_replace_for_point(
+    position: TextPositionAnchor,
+    replacement: TextReplacement,
+) -> TextPositionAnchor {
+    let old_range = replacement.old_range();
+    let start = replacement.old_start_anchor();
+    let end = replacement.old_end_anchor();
+
+    if anchor_byte_gt(position, start) && position.emacs_byte_pos() < end.emacs_byte_pos()
+        || anchor_byte_eq(position, end)
+    {
+        TextExtentDelta::insertion(replacement.new_extent()).apply_to_anchor(start)
+    } else if anchor_byte_gt(position, end) {
+        TextExtentDelta::replacement(old_range.extent(), replacement.new_extent())
+            .apply_to_anchor(position)
+    } else {
+        position
+    }
+}
+
+fn move_after_replace_for_begv(
+    position: TextPositionAnchor,
+    replacement: TextReplacement,
+) -> TextPositionAnchor {
+    let old_range = replacement.old_range();
+    let start = replacement.old_start_anchor();
+    let end = replacement.old_end_anchor();
+
+    if anchor_byte_gt(position, end) {
+        TextExtentDelta::replacement(old_range.extent(), replacement.new_extent())
+            .apply_to_anchor(position)
+    } else if anchor_byte_gt(position, start) {
+        start
+    } else {
+        position
+    }
+}
+
+fn move_after_replace_for_zv(
+    position: TextPositionAnchor,
+    replacement: TextReplacement,
+) -> TextPositionAnchor {
+    let old_range = replacement.old_range();
+    let start = replacement.old_start_anchor();
+    let end = replacement.old_end_anchor();
+
+    if anchor_byte_ge(position, end) {
+        TextExtentDelta::replacement(old_range.extent(), replacement.new_extent())
+            .apply_to_anchor(position)
+    } else if anchor_byte_gt(position, start) {
+        TextExtentDelta::insertion(replacement.new_extent()).apply_to_anchor(start)
+    } else {
+        position
+    }
 }
 
 pub(in crate::buffer) fn replace_state_after_edit(
     mut state: BufferEditState,
     replacement: TextReplacement,
 ) -> BufferEditState {
-    let old_range = replacement.old_range();
-    let start = old_range.byte_start_usize();
-    let end = old_range.byte_end_usize();
-    let start_char = old_range.char_start_usize();
-    let end_char = old_range.char_end_usize();
-    let old_byte_len = replacement.old_byte_len().get();
-    let old_char_len = replacement.old_char_len().get();
-    let new_byte_len = replacement.new_byte_len().get();
-    let new_char_len = replacement.new_char_len().get();
-    let old_pt_byte = state.pt_byte.get();
-    let old_pt = state.pt.get();
-
-    if start < old_pt_byte || old_pt_byte == end {
-        let clamped = old_pt_byte.min(end);
-        state.pt_byte = EmacsBytePos::new(old_pt_byte + start + new_byte_len - clamped);
-        let clamped_char = old_pt.min(end_char);
-        state.pt = CharPos0::new(old_pt + start_char + new_char_len - clamped_char);
-    } else if old_pt_byte > end {
-        state.pt_byte = EmacsBytePos::new(old_pt_byte + new_byte_len - old_byte_len);
-        state.pt = CharPos0::new(old_pt + new_char_len - old_char_len);
-    }
-
-    if state.begv_byte.get() > end {
-        state.begv_byte = EmacsBytePos::new(state.begv_byte.get() + new_byte_len - old_byte_len);
-        state.begv = CharPos0::new(state.begv.get() + new_char_len - old_char_len);
-    } else if state.begv_byte.get() > start {
-        state.begv_byte = EmacsBytePos::new(start);
-        state.begv = CharPos0::new(start_char);
-    }
-
-    if state.zv_byte.get() >= end {
-        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() + new_byte_len - old_byte_len);
-        state.zv = CharPos0::new(state.zv.get() + new_char_len - old_char_len);
-    } else if state.zv_byte.get() > start {
-        state.zv_byte = EmacsBytePos::new(start + new_byte_len);
-        state.zv = CharPos0::new(start_char + new_char_len);
-    }
+    state.set_point(move_after_replace_for_point(state.point(), replacement));
+    state.set_begv(move_after_replace_for_begv(state.begv(), replacement));
+    state.set_zv(move_after_replace_for_zv(state.zv(), replacement));
 
     state
 }
@@ -194,23 +285,15 @@ pub(in crate::buffer) fn insert_state_after_edit(
         return state;
     }
 
-    let insert_pos = insertion.byte_pos_usize();
-    let byte_len = insertion.extent().emacs_bytes().get();
-    let char_len = insertion.extent().chars().get();
-    if state.pt_byte.get() > insert_pos
-        || (policy.advance_point_at_insert && state.pt_byte.get() == insert_pos)
-    {
-        state.pt_byte = EmacsBytePos::new(state.pt_byte.get() + byte_len);
-        state.pt = CharPos0::new(state.pt.get() + char_len);
+    state.set_point(move_after_insert(
+        state.point(),
+        insertion,
+        policy.advance_point_at_insert,
+    ));
+    if policy.shift_begv {
+        state.set_begv(move_after_insert(state.begv(), insertion, false));
     }
-    if policy.shift_begv && state.begv_byte.get() > insert_pos {
-        state.begv_byte = EmacsBytePos::new(state.begv_byte.get() + byte_len);
-        state.begv = CharPos0::new(state.begv.get() + char_len);
-    }
-    if state.zv_byte.get() >= insert_pos {
-        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() + byte_len);
-        state.zv = CharPos0::new(state.zv.get() + char_len);
-    }
+    state.set_zv(move_after_insert(state.zv(), insertion, true));
 
     state
 }
@@ -224,37 +307,12 @@ pub(in crate::buffer) fn delete_state_after_edit(
         return state;
     }
 
-    let start = range.byte_start_usize();
-    let end = range.byte_end_usize();
-    let start_char = range.char_start_usize();
-    let byte_len = range.byte_len().get();
-    let char_len = range.char_len().get();
-
-    if state.pt_byte.get() >= end {
-        state.pt_byte = EmacsBytePos::new(state.pt_byte.get() - byte_len);
-        state.pt = CharPos0::new(state.pt.get() - char_len);
-    } else if state.pt_byte.get() > start {
-        state.pt_byte = EmacsBytePos::new(start);
-        state.pt = CharPos0::new(start_char);
-    }
+    state.set_point(move_after_delete(state.point(), range, true));
 
     if policy.shift_begv {
-        if state.begv_byte.get() >= end {
-            state.begv_byte = EmacsBytePos::new(state.begv_byte.get() - byte_len);
-            state.begv = CharPos0::new(state.begv.get() - char_len);
-        } else if state.begv_byte.get() > start {
-            state.begv_byte = EmacsBytePos::new(start);
-            state.begv = CharPos0::new(start_char);
-        }
+        state.set_begv(move_after_delete(state.begv(), range, true));
     }
-
-    if state.zv_byte.get() >= end {
-        state.zv_byte = EmacsBytePos::new(state.zv_byte.get() - byte_len);
-        state.zv = CharPos0::new(state.zv.get() - char_len);
-    } else if state.zv_byte.get() > start {
-        state.zv_byte = EmacsBytePos::new(start);
-        state.zv = CharPos0::new(start_char);
-    }
+    state.set_zv(move_after_delete(state.zv(), range, true));
 
     state
 }
@@ -412,10 +470,38 @@ mod tests {
     }
 
     #[test]
+    fn insert_state_shifts_zv_at_insert_position() {
+        assert_eq!(
+            insert_state_after_edit(
+                state(0, 0, 0, 0, 20, 10),
+                insertion(),
+                InsertSideEffectPolicy::shared_buffer(
+                    true,
+                    false,
+                    InsertMarkerAdjustment::ByInsertionType,
+                ),
+            ),
+            state(0, 0, 0, 0, 25, 13)
+        );
+    }
+
+    #[test]
     fn delete_state_current_buffer_maps_point_inside_range_to_deleted_start() {
         assert_eq!(
             delete_state_after_edit(
                 state(28, 14, 0, 0, 60, 42),
+                deleted_range(),
+                DeleteSideEffectPolicy::current_buffer(),
+            ),
+            state(20, 10, 0, 0, 44, 34)
+        );
+    }
+
+    #[test]
+    fn delete_state_keeps_point_at_deleted_start() {
+        assert_eq!(
+            delete_state_after_edit(
+                state(20, 10, 0, 0, 60, 42),
                 deleted_range(),
                 DeleteSideEffectPolicy::current_buffer(),
             ),
@@ -470,6 +556,14 @@ mod tests {
     }
 
     #[test]
+    fn replace_state_keeps_point_at_deleted_start() {
+        assert_eq!(
+            replace_state(state(20, 10, 0, 0, 60, 42)),
+            state(20, 10, 0, 0, 49, 37)
+        );
+    }
+
+    #[test]
     fn replace_state_maps_point_at_deleted_end_to_replacement_end() {
         assert_eq!(
             replace_state(state(36, 18, 0, 0, 60, 42)),
@@ -489,6 +583,14 @@ mod tests {
     fn replace_state_clamps_begv_inside_deleted_range_to_deleted_start() {
         assert_eq!(
             replace_state(state(0, 0, 28, 14, 60, 42)),
+            state(0, 0, 20, 10, 49, 37)
+        );
+    }
+
+    #[test]
+    fn replace_state_maps_begv_at_deleted_end_to_deleted_start() {
+        assert_eq!(
+            replace_state(state(0, 0, 36, 18, 60, 42)),
             state(0, 0, 20, 10, 49, 37)
         );
     }

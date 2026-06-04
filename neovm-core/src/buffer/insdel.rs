@@ -46,12 +46,12 @@ impl Buffer {
     }
 
     fn set_edit_state(&mut self, state: BufferEditState) {
-        self.pt_byte = state.pt_byte.get();
-        self.pt = state.pt.get();
-        self.begv_byte = state.begv_byte.get();
-        self.begv = state.begv.get();
-        self.zv_byte = state.zv_byte.get();
-        self.zv = state.zv.get();
+        self.pt_byte = state.point().emacs_byte_pos_usize();
+        self.pt = state.point().char_pos_usize();
+        self.begv_byte = state.begv().emacs_byte_pos_usize();
+        self.begv = state.begv().char_pos_usize();
+        self.zv_byte = state.zv().emacs_byte_pos_usize();
+        self.zv = state.zv().char_pos_usize();
     }
 
     fn buffer_region_lisp_string(&self, range: EmacsByteRange) -> LispString {
