@@ -1604,7 +1604,7 @@ pub struct Buffer {
     /// Mirrors GNU `struct buffer.last_name_` and `BVAR (buf, last_name)`.
     pub(crate) last_name: Value,
     /// Base buffer when this is an indirect buffer.
-    pub base_buffer: Option<BufferId>,
+    pub(crate) base_buffer: Option<BufferId>,
     /// The underlying text storage.
     text: BufferText,
     /// Point — the current cursor character position.
@@ -1615,10 +1615,10 @@ pub struct Buffer {
     /// there are no separate mark position fields (matching GNU's design).
     /// The marker tracks its own position through the chain; read it via
     /// `mark_byte()` / `mark_char()` / `mark()`.
-    pub mark_marker_id: Option<u64>,
+    pub(crate) mark_marker_id: Option<u64>,
     /// Cached raw pointer to the mark MarkerObj, for fast position reads
     /// and GC root tracing (mirrors BufferStateMarkers pointers).
-    pub mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
+    pub(crate) mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
     /// Beginning of accessible (narrowed) portion (char pos, inclusive).
     pub(crate) begv: usize,
     /// Beginning of accessible (narrowed) portion (byte pos, inclusive).
@@ -1629,18 +1629,18 @@ pub struct Buffer {
     pub(crate) zv_byte: usize,
     /// GNU `BUF_AUTOSAVE_MODIFF`: recent auto-save state is
     /// `save_modiff < autosave_modified_tick`.
-    pub autosave_modified_tick: i64,
+    pub(crate) autosave_modified_tick: i64,
     /// GNU `last_window_start`: start position of the most recently
     /// disconnected window that showed this buffer.
-    pub last_window_start: usize,
+    pub(crate) last_window_start: usize,
     /// GNU `last_selected_window`: most recently selected live window showing
     /// this buffer, when known.
-    pub last_selected_window: Option<WindowId>,
+    pub(crate) last_selected_window: Option<WindowId>,
     /// GNU `inhibit_buffer_hooks`: suppress buffer lifecycle hooks for
     /// temporary/internal buffers.
-    pub inhibit_buffer_hooks: bool,
+    pub(crate) inhibit_buffer_hooks: bool,
     /// GNU-style noncurrent PT/BEGV/ZV markers for buffers that share text.
-    pub state_markers: Option<BufferStateMarkers>,
+    pub(crate) state_markers: Option<BufferStateMarkers>,
     /// `local_var_alist` — list of `(SYMBOL . VALUE)` per-buffer
     /// bindings for `SYMBOL_LOCALIZED` variables. Mirrors GNU
     /// `BVAR(buffer, local_var_alist)` (`buffer.h:362`). This is
@@ -1650,14 +1650,14 @@ pub struct Buffer {
     pub(crate) local_var_alist: crate::emacs_core::value::Value,
     /// `BVAR(buffer, keymap)` — the buffer's local keymap
     /// (`buffer.h:385`). `Value::NIL` when no local keymap is set.
-    pub keymap: crate::emacs_core::value::Value,
+    pub(crate) keymap: crate::emacs_core::value::Value,
     /// File modification time as seconds since epoch (GNU `struct timespec`).
     /// `None` means unknown or never visited.
-    pub modtime_sec: Option<i64>,
+    pub(crate) modtime_sec: Option<i64>,
     /// File modification time nanoseconds component.
-    pub modtime_nsec: Option<i32>,
+    pub(crate) modtime_nsec: Option<i32>,
     /// File size in bytes when `modtime` was captured.
-    pub modtime_size: Option<i64>,
+    pub(crate) modtime_size: Option<i64>,
     /// `BUFFER_OBJFWD` slot table — per-buffer storage for variables
     /// that are forwarded into the C-side `struct buffer` in GNU.
     /// Mirrors the union of GNU's `Lisp_Object` slot fields in
@@ -1685,14 +1685,14 @@ pub struct Buffer {
     ///
     /// Phase 10D wires the bitmap up; Phase 10A-C only used the
     /// always-local arm.
-    pub local_flags: u64,
+    pub(crate) local_flags: u64,
     /// Overlays attached to the buffer.
     pub(crate) overlays: OverlayList,
     /// GNU `BUF_OVERLAY_MODIFF`: incremented when live overlay ranges or
     /// properties change so redisplay observes overlay-only UI updates.
-    pub overlay_modified_tick: i64,
+    pub(crate) overlay_modified_tick: i64,
     /// Shared undo owner for this text.
-    pub undo_state: SharedUndoState,
+    pub(crate) undo_state: SharedUndoState,
 }
 
 impl Buffer {
