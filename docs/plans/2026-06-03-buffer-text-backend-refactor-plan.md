@@ -207,7 +207,7 @@ pub struct GapDebugLayout {
 pub enum TextBackendDebugLayout {
     Gap(GapDebugLayout),
     PieceTree(TextMetrics),
-    Rope(TextMetrics),
+    // Add Rope(TextMetrics) only when a real Rope backend lands.
 }
 ```
 
