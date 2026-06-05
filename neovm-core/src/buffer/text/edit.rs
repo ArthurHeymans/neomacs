@@ -408,6 +408,14 @@ impl TextTransposition {
         CharRange::new(self.first.char_start(), self.second.char_end())
     }
 
+    pub const fn span_edit_range(self) -> TextEditRange {
+        TextEditRange::new(
+            self.byte_span(),
+            self.char_span().start(),
+            self.char_span().end(),
+        )
+    }
+
     pub const fn middle_byte_range(self) -> EmacsByteRange {
         EmacsByteRange::new(self.first.byte_end(), self.second.byte_start())
     }
@@ -668,6 +676,10 @@ mod tests {
         );
         assert_eq!(transposition.byte_span(), EmacsByteRange::from_usize(0, 13));
         assert_eq!(transposition.char_span(), CharRange::from_usize(0, 9));
+        assert_eq!(
+            transposition.span_edit_range(),
+            TextEditRange::from_usize(0, 13, 0, 9)
+        );
         assert_eq!(
             transposition.middle_byte_range(),
             EmacsByteRange::from_usize(3, 8)

@@ -8,9 +8,9 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, char_pos_for_emacs_byte,
-    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
-    modification_tick_delta,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan,
+    TranspositionStoragePlan, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
+    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -700,10 +700,7 @@ impl Buffer {
 
         let old_span = self.buffer_region_lisp_string(byte_span);
 
-        let mut replacement = Vec::with_capacity(byte_span.len().get());
-        replacement.extend_from_slice(&region2);
-        replacement.extend_from_slice(&mid);
-        replacement.extend_from_slice(&region1);
+        let plan = TranspositionStoragePlan::new(transposition, &region1, &mid, &region2);
 
         self.undo_prepare_change(start1_byte, self.pt_byte);
         let mut undo_list = self.get_undo_list();
@@ -765,17 +762,8 @@ impl Buffer {
         let new_point =
             transposition.transpose_anchor(TextPositionAnchor::from_usize(self.pt, self.pt_byte));
 
-        self.text.replace_same_len_measured_range(
-            TextReplacement::new(
-                TextEditRange::new(
-                    byte_span,
-                    transposition.char_span().start(),
-                    transposition.char_span().end(),
-                ),
-                TextExtent::from_emacs_bytes(&replacement, self.get_multibyte()),
-            ),
-            &replacement,
-        );
+        self.text
+            .replace_same_len_measured_range(plan.replacement(), plan.replacement_bytes());
         self.text.text_props_replace(replacement_props);
         if leave_markers {
             self.text
@@ -801,12 +789,7 @@ impl Buffer {
 
         self.pt_byte = new_point.emacs_byte_pos_usize();
         self.pt = new_point.char_pos_usize();
-        let edit = MeasuredSameLenEdit::covering(TextEditRange::new(
-            byte_span,
-            transposition.char_span().start(),
-            transposition.char_span().end(),
-        ));
-        self.apply_same_len_edit_side_effects(edit, false);
+        self.apply_same_len_edit_side_effects(plan.edit(), false);
     }
 }
 
@@ -1144,11 +1127,7 @@ impl BufferManager {
         self.buffers
             .get_mut(&id)?
             .transpose_regions(transposition, leave_markers);
-        let edit = MeasuredSameLenEdit::covering(TextEditRange::new(
-            transposition.byte_span(),
-            transposition.char_span().start(),
-            transposition.char_span().end(),
-        ));
+        let edit = MeasuredSameLenEdit::covering(transposition.span_edit_range());
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {

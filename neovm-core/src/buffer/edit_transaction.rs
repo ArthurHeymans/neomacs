@@ -8,7 +8,7 @@
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
     BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
-    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement,
+    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -763,6 +763,57 @@ impl SameLenSubstitutionPlan {
     }
 }
 
+/// Backend-neutral storage plan for GNU `transpose-regions`.
+///
+/// GNU transposes bytes over the full `[start1, end2)` span without changing
+/// the span's total size.  Undo records and text properties still have special
+/// character-length cases, so this plan only owns the storage replacement and
+/// the measured same-size edit descriptor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct TranspositionStoragePlan {
+    replacement_bytes: Vec<u8>,
+    replacement: TextReplacement,
+    edit: MeasuredSameLenEdit,
+}
+
+impl TranspositionStoragePlan {
+    pub(in crate::buffer) fn new(
+        transposition: TextTransposition,
+        first: &[u8],
+        middle: &[u8],
+        second: &[u8],
+    ) -> Self {
+        let span = transposition.span_edit_range();
+        let mut replacement_bytes = Vec::with_capacity(span.byte_len().get());
+        replacement_bytes.extend_from_slice(second);
+        replacement_bytes.extend_from_slice(middle);
+        replacement_bytes.extend_from_slice(first);
+        debug_assert_eq!(
+            replacement_bytes.len(),
+            span.byte_len().get(),
+            "transpose-regions storage replacement must preserve byte length"
+        );
+        let replacement = TextReplacement::new(span, span.extent());
+        Self {
+            replacement_bytes,
+            replacement,
+            edit: MeasuredSameLenEdit::covering(span),
+        }
+    }
+
+    pub(in crate::buffer) fn replacement_bytes(&self) -> &[u8] {
+        &self.replacement_bytes
+    }
+
+    pub(in crate::buffer) const fn replacement(&self) -> TextReplacement {
+        self.replacement
+    }
+
+    pub(in crate::buffer) const fn edit(&self) -> MeasuredSameLenEdit {
+        self.edit
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) update_state_fields: bool,
@@ -1120,5 +1171,19 @@ mod tests {
         let range = TextEditRange::from_usize(0, 5, 0, 5);
 
         assert!(SameLenSubstitutionPlan::new(range, b"abcde", true, b'z' as u32, b"q").is_none());
+    }
+
+    #[test]
+    fn transposition_storage_plan_swaps_outer_regions_over_full_span() {
+        let transposition = TextTransposition::from_usize(2, 5, 1, 3, 8, 10, 5, 7);
+        let plan = TranspositionStoragePlan::new(transposition, b"abc", b"XYZ", b"de");
+        let span = TextEditRange::from_usize(2, 10, 1, 7);
+
+        assert_eq!(plan.replacement_bytes(), b"deXYZabc");
+        assert_eq!(
+            plan.replacement(),
+            TextReplacement::new(span, span.extent())
+        );
+        assert_eq!(plan.edit(), MeasuredSameLenEdit::covering(span));
     }
 }
