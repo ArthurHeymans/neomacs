@@ -71,8 +71,8 @@ impl RopeNode {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
         self.metrics = TextMetrics::new(
-            left.chars() + self.chunk.char_len() + right.chars(),
-            left.emacs_bytes() + self.chunk.len() + right.emacs_bytes(),
+            left.chars_usize() + self.chunk.char_len() + right.chars_usize(),
+            left.emacs_bytes_usize() + self.chunk.len() + right.emacs_bytes_usize(),
         );
     }
 }
@@ -118,7 +118,7 @@ impl RopeTextBackend {
     }
 
     pub(in crate::buffer) fn len(&self) -> usize {
-        self.metrics().emacs_bytes()
+        self.metrics().emacs_bytes_usize()
     }
 
     pub(in crate::buffer) fn is_empty(&self) -> bool {
@@ -196,14 +196,14 @@ impl RopeTextBackend {
     pub(in crate::buffer) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         let char_pos = char_pos.get();
         let metrics = self.metrics();
-        if char_pos >= metrics.chars() {
-            if char_pos > metrics.chars() {
+        if char_pos >= metrics.chars_usize() {
+            if char_pos > metrics.chars_usize() {
                 tracing::debug!(
                     "rope char_to_byte: char_pos ({char_pos}) exceeds char_count ({}), clamping",
-                    metrics.chars()
+                    metrics.chars_usize()
                 );
             }
-            return EmacsBytePos::new(metrics.emacs_bytes());
+            return EmacsBytePos::new(metrics.emacs_bytes_usize());
         }
         EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
     }
@@ -512,13 +512,13 @@ impl RopeTextBackend {
         };
 
         assert!(
-            byte_pos <= node.metrics.emacs_bytes(),
+            byte_pos <= node.metrics.emacs_bytes_usize(),
             "split_at_byte: byte_pos ({byte_pos}) > subtree len ({})",
-            node.metrics.emacs_bytes()
+            node.metrics.emacs_bytes_usize()
         );
 
         let left_metrics = node_metrics(&node.left);
-        let chunk_start = left_metrics.emacs_bytes();
+        let chunk_start = left_metrics.emacs_bytes_usize();
         let chunk_end = chunk_start + node.chunk.len();
 
         if byte_pos < chunk_start {
@@ -611,16 +611,16 @@ impl RopeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if byte_pos <= left.emacs_bytes() {
+        if byte_pos <= left.emacs_bytes_usize() {
             return self.byte_to_char_in_node(&node.left, byte_pos);
         }
 
-        let after_left = byte_pos - left.emacs_bytes();
+        let after_left = byte_pos - left.emacs_bytes_usize();
         if after_left <= node.chunk.len() {
-            return left.chars() + self.chunk_byte_to_char(&node.chunk, after_left);
+            return left.chars_usize() + self.chunk_byte_to_char(&node.chunk, after_left);
         }
 
-        left.chars()
+        left.chars_usize()
             + node.chunk.char_len()
             + self.byte_to_char_in_node(&node.right, after_left - node.chunk.len())
     }
@@ -631,17 +631,17 @@ impl RopeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if char_pos <= left.chars() {
+        if char_pos <= left.chars_usize() {
             return self.char_to_byte_in_node(&node.left, char_pos);
         }
 
-        let after_left = char_pos - left.chars();
+        let after_left = char_pos - left.chars_usize();
         if after_left <= node.chunk.char_len() {
-            return left.emacs_bytes()
+            return left.emacs_bytes_usize()
                 + emacs_char_to_byte_in_slice(&node.chunk.bytes, after_left, self.multibyte);
         }
 
-        left.emacs_bytes()
+        left.emacs_bytes_usize()
             + node.chunk.len()
             + self.char_to_byte_in_node(&node.right, after_left - node.chunk.char_len())
     }
@@ -661,11 +661,11 @@ impl RopeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if start < left.emacs_bytes() {
-            self.for_each_range(&node.left, start, end.min(left.emacs_bytes()), f)?;
+        if start < left.emacs_bytes_usize() {
+            self.for_each_range(&node.left, start, end.min(left.emacs_bytes_usize()), f)?;
         }
 
-        let chunk_start = left.emacs_bytes();
+        let chunk_start = left.emacs_bytes_usize();
         let chunk_end = chunk_start + node.chunk.len();
         if start < chunk_end && end > chunk_start {
             let local_start = start.max(chunk_start) - chunk_start;
@@ -700,11 +700,11 @@ impl RopeTextBackend {
     ) -> Option<&'a [u8]> {
         let node = tree.as_ref()?;
         let left = node_metrics(&node.left);
-        if end <= left.emacs_bytes() {
+        if end <= left.emacs_bytes_usize() {
             return self.contiguous_slice_in_node(&node.left, start, end);
         }
 
-        let chunk_start = left.emacs_bytes();
+        let chunk_start = left.emacs_bytes_usize();
         let chunk_end = chunk_start + node.chunk.len();
         if start >= chunk_end {
             return self.contiguous_slice_in_node(&node.right, start - chunk_end, end - chunk_end);
@@ -746,7 +746,7 @@ impl fmt::Debug for RopeTextBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RopeTextBackend")
             .field("bytes", &self.len())
-            .field("chars", &self.metrics().chars())
+            .field("chars", &self.metrics().chars_usize())
             .field("multibyte", &self.multibyte)
             .finish()
     }
@@ -841,8 +841,8 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
     let left = assert_node_invariants(&node.left, multibyte);
     let right = assert_node_invariants(&node.right, multibyte);
     let expected = TextMetrics::new(
-        left.chars() + node.chunk.char_len() + right.chars(),
-        left.emacs_bytes() + node.chunk.len() + right.emacs_bytes(),
+        left.chars_usize() + node.chunk.char_len() + right.chars_usize(),
+        left.emacs_bytes_usize() + node.chunk.len() + right.emacs_bytes_usize(),
     );
     assert_eq!(
         node.metrics, expected,
@@ -883,7 +883,7 @@ mod tests {
     fn assert_matches_gap(rope: &RopeTextBackend, gap: &GapBuffer) {
         rope.assert_invariants();
         assert_eq!(rope.len(), gap.len());
-        assert_eq!(rope.metrics().chars(), gap.char_count());
+        assert_eq!(rope.metrics().chars_usize(), gap.char_count());
         assert_eq!(rope.to_string(), gap.to_string());
 
         let mut rope_bytes = Vec::new();
@@ -902,13 +902,13 @@ mod tests {
         assert_eq!(rope_emacs_byte_at(rope, rope.len()), None);
         assert_eq!(gap_emacs_byte_at(gap, gap.len()), None);
 
-        for char_pos in 0..=rope.metrics().chars() {
+        for char_pos in 0..=rope.metrics().chars_usize() {
             let rope_byte = rope_char_to_byte(rope, char_pos);
             let gap_byte = gap_char_to_byte(gap, char_pos);
             assert_eq!(rope_byte, gap_byte, "char_to_byte({char_pos})");
             assert_eq!(rope_byte_to_char(rope, rope_byte), char_pos);
             assert_eq!(gap_byte_to_char(gap, gap_byte), char_pos);
-            if char_pos < rope.metrics().chars() {
+            if char_pos < rope.metrics().chars_usize() {
                 assert_eq!(
                     rope_char_code_at(rope, rope_byte),
                     gap_char_code_at(gap, gap_byte)
@@ -1150,8 +1150,8 @@ mod tests {
         insert_rope_bytes_both(&mut backend, 1, &[b'\n'], 1);
 
         assert!(!backend.is_multibyte());
-        assert_eq!(backend.metrics().chars(), 4);
-        assert_eq!(backend.metrics().emacs_bytes(), 4);
+        assert_eq!(backend.metrics().chars_usize(), 4);
+        assert_eq!(backend.metrics().emacs_bytes_usize(), 4);
         assert_eq!(rope_byte_to_char(&backend, 3), 3);
         assert_eq!(rope_char_to_byte(&backend, 4), 4);
 
@@ -1172,16 +1172,16 @@ mod tests {
             for (kind, a, b, seed) in ops {
                 match kind {
                     0 => {
-                        let char_pos = a % (rope.metrics().chars() + 1);
+                        let char_pos = a % (rope.metrics().chars_usize() + 1);
                         let byte_pos = rope_char_to_byte(&rope, char_pos);
                         let text = sample_insert(seed);
                         insert_rope_str(&mut rope, byte_pos, text);
                         insert_gap_str(&mut gap, byte_pos, text);
                     }
                     1 => {
-                        if rope.metrics().chars() > 0 {
-                            let char_a = a % (rope.metrics().chars() + 1);
-                            let char_b = b % (rope.metrics().chars() + 1);
+                        if rope.metrics().chars_usize() > 0 {
+                            let char_a = a % (rope.metrics().chars_usize() + 1);
+                            let char_b = b % (rope.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
                             let start = rope_char_to_byte(&rope, start_char);
@@ -1192,8 +1192,8 @@ mod tests {
                         }
                     }
                     _ => {
-                        if rope.metrics().chars() > 0 {
-                            let char_pos = a % rope.metrics().chars();
+                        if rope.metrics().chars_usize() > 0 {
+                            let char_pos = a % rope.metrics().chars_usize();
                             let start = rope_char_to_byte(&rope, char_pos);
                             let end = rope_char_to_byte(&rope, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, seed) {

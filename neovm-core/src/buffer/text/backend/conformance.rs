@@ -26,8 +26,8 @@ fn assert_backend_matches_gap(
         gap.is_multibyte(),
         "{kind:?} multibyte flag diverged"
     );
-    let backend_len = backend.metrics().emacs_bytes();
-    let gap_len = gap.metrics().emacs_bytes();
+    let backend_len = backend.metrics().emacs_bytes_usize();
+    let gap_len = gap.metrics().emacs_bytes_usize();
     assert_eq!(backend_len, gap_len, "{kind:?} byte length diverged");
     assert_eq!(
         backend.to_string(),
@@ -67,7 +67,7 @@ fn assert_backend_matches_gap(
     );
 
     let mut char_boundaries = Vec::new();
-    for char_pos in 0..=backend.metrics().chars() {
+    for char_pos in 0..=backend.metrics().chars_usize() {
         let char_pos0 = CharPos0::new(char_pos);
         let backend_byte = backend.char_pos_to_emacs_byte_pos(char_pos0);
         let gap_byte = gap.char_pos_to_emacs_byte_pos(char_pos0);
@@ -83,7 +83,7 @@ fn assert_backend_matches_gap(
 
         char_boundaries.push(backend_byte.get());
 
-        if char_pos < backend.metrics().chars() {
+        if char_pos < backend.metrics().chars_usize() {
             assert_eq!(
                 backend.char_code_at_emacs_byte_pos(backend_byte),
                 gap.char_code_at_emacs_byte_pos(gap_byte),
@@ -391,16 +391,16 @@ proptest! {
             for (op, a, b, seed) in &ops {
                 match op {
                     0 => {
-                        let char_pos = a % (backend.metrics().chars() + 1);
+                        let char_pos = a % (backend.metrics().chars_usize() + 1);
                         let byte_pos = char_to_byte(&backend, char_pos);
                         let text = sample_insert(*seed);
                         insert_text(&mut backend, byte_pos, text);
                         insert_text(&mut gap, byte_pos, text);
                     }
                     1 => {
-                        if backend.metrics().chars() > 0 {
-                            let char_a = a % (backend.metrics().chars() + 1);
-                            let char_b = b % (backend.metrics().chars() + 1);
+                        if backend.metrics().chars_usize() > 0 {
+                            let char_a = a % (backend.metrics().chars_usize() + 1);
+                            let char_b = b % (backend.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
                             delete_char_range(&mut backend, start_char, end_char);
@@ -408,8 +408,8 @@ proptest! {
                         }
                     }
                     2 => {
-                        if backend.metrics().chars() > 0 {
-                            let char_pos = a % backend.metrics().chars();
+                        if backend.metrics().chars_usize() > 0 {
+                            let char_pos = a % backend.metrics().chars_usize();
                             let start = char_to_byte(&backend, char_pos);
                             let end = char_to_byte(&backend, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, *seed) {
@@ -419,9 +419,9 @@ proptest! {
                         }
                     }
                     _ => {
-                        if backend.metrics().chars() > 0 {
-                            let char_a = a % (backend.metrics().chars() + 1);
-                            let char_b = b % (backend.metrics().chars() + 1);
+                        if backend.metrics().chars_usize() > 0 {
+                            let char_a = a % (backend.metrics().chars_usize() + 1);
+                            let char_b = b % (backend.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
                             replace_char_range(&mut backend, start_char, end_char, sample_insert(*seed));
@@ -453,7 +453,7 @@ proptest! {
             for (op, a, b, seed) in &ops {
                 match op {
                     0 => {
-                        let backend_len = backend.metrics().emacs_bytes();
+                        let backend_len = backend.metrics().emacs_bytes_usize();
                         let byte_pos = a % (backend_len + 1);
                         let bytes = sample_unibyte_insert(*seed);
                         insert_bytes(&mut backend, byte_pos, &bytes, bytes.len());
@@ -461,7 +461,7 @@ proptest! {
                     }
                     1 => {
                         if !backend.metrics().is_empty() {
-                            let backend_len = backend.metrics().emacs_bytes();
+                            let backend_len = backend.metrics().emacs_bytes_usize();
                             let byte_a = a % (backend_len + 1);
                             let byte_b = b % (backend_len + 1);
                             let start = byte_a.min(byte_b);
@@ -472,7 +472,7 @@ proptest! {
                     }
                     2 => {
                         if !backend.metrics().is_empty() {
-                            let backend_len = backend.metrics().emacs_bytes();
+                            let backend_len = backend.metrics().emacs_bytes_usize();
                             let start = a % backend_len;
                             let end = (start + 1 + (b % 4)).min(backend_len);
                             let replacement = vec![*seed; end - start];
@@ -482,7 +482,7 @@ proptest! {
                     }
                     _ => {
                         if !backend.metrics().is_empty() {
-                            let backend_len = backend.metrics().emacs_bytes();
+                            let backend_len = backend.metrics().emacs_bytes_usize();
                             let byte_a = a % (backend_len + 1);
                             let byte_b = b % (backend_len + 1);
                             let start = byte_a.min(byte_b);

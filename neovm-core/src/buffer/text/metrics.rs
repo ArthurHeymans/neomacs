@@ -37,11 +37,19 @@ impl TextMetrics {
         }
     }
 
-    pub const fn chars(self) -> usize {
+    pub const fn char_len(self) -> CharLen {
+        self.chars
+    }
+
+    pub const fn emacs_byte_len(self) -> EmacsByteLen {
+        self.emacs_bytes
+    }
+
+    pub const fn chars_usize(self) -> usize {
         self.chars.get()
     }
 
-    pub const fn emacs_bytes(self) -> usize {
+    pub const fn emacs_bytes_usize(self) -> usize {
         self.emacs_bytes.get()
     }
 

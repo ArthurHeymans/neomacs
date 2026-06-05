@@ -190,7 +190,7 @@ impl Default for BufferText {
 
 impl BufferText {
     fn gap_compat_at_text_end(metrics: TextMetrics, size: usize) -> GapCompatState {
-        GapCompatState::new(CharPos0::new(metrics.chars()), size)
+        GapCompatState::new(metrics.char_end(), size)
     }
 
     fn initial_virtual_gap_for_backend(
@@ -487,11 +487,11 @@ impl BufferText {
     }
 
     pub fn char_count(&self) -> CharLen {
-        CharLen::new(self.storage.borrow().metrics.chars())
+        self.storage.borrow().metrics.char_len()
     }
 
     pub fn emacs_byte_len(&self) -> EmacsByteLen {
-        EmacsByteLen::new(self.storage.borrow().metrics.emacs_bytes())
+        self.storage.borrow().metrics.emacs_byte_len()
     }
 
     pub fn metrics(&self) -> TextMetrics {
@@ -862,13 +862,13 @@ impl BufferText {
             let storage = self.storage.borrow();
             (
                 Self::byte_range_to_char_range_with_storage(&storage, byte_range),
-                storage.metrics.chars(),
+                storage.metrics.char_len(),
             )
         };
         self.storage
             .borrow_mut()
             .text_props
-            .put_property_for_object_char_len(range, CharLen::new(object_len), name, value)
+            .put_property_for_object_char_len(range, object_len, name, value)
     }
 
     pub fn text_props_get_property_at_emacs_byte_pos(
@@ -980,13 +980,13 @@ impl BufferText {
             let storage = self.storage.borrow();
             (
                 Self::byte_range_to_char_range_with_storage(&storage, byte_range),
-                storage.metrics.chars(),
+                storage.metrics.char_len(),
             )
         };
         self.storage
             .borrow_mut()
             .text_props
-            .set_properties_for_object_char_len(range, CharLen::new(object_len), plist);
+            .set_properties_for_object_char_len(range, object_len, plist);
     }
 
     pub fn text_props_next_change_after_emacs_byte_pos(
@@ -1798,15 +1798,15 @@ impl BufferText {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let content_epoch = storage.content_epoch;
-        let total_chars = storage.metrics.chars();
-        let total_bytes = storage.metrics.emacs_bytes();
+        let total_chars = storage.metrics.char_len();
+        let total_bytes = storage.metrics.emacs_byte_len();
 
-        if target.get() >= total_chars {
+        if target >= metrics.char_end() {
             return metrics.emacs_byte_end();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
-        if total_chars == total_bytes {
+        if total_chars.get() == total_bytes.get() {
             return EmacsBytePos::new(target.get());
         }
 
@@ -1852,15 +1852,15 @@ impl BufferText {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let content_epoch = storage.content_epoch;
-        let total_chars = storage.metrics.chars();
-        let total_bytes = storage.metrics.emacs_bytes();
+        let total_chars = storage.metrics.char_len();
+        let total_bytes = storage.metrics.emacs_byte_len();
 
-        if target.get() >= total_bytes {
+        if target >= metrics.emacs_byte_end() {
             return metrics.char_end();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
-        if total_chars == total_bytes {
+        if total_chars.get() == total_bytes.get() {
             return CharPos0::new(target.get());
         }
 
@@ -2062,10 +2062,7 @@ fn scan_forward(
         return EmacsBytePos::new(bp + target.get() - cp);
     }
 
-    let range = EmacsByteRange::new(
-        EmacsBytePos::new(bp),
-        EmacsBytePos::new(backend.metrics().emacs_bytes()),
-    );
+    let range = EmacsByteRange::new(EmacsBytePos::new(bp), backend.metrics().emacs_byte_end());
     let mut scan = ForwardMultibytePositionScan::new(anchor);
     match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
         scan.consume_chunk_until_char(chunk, target)
@@ -2117,10 +2114,7 @@ fn scan_forward_bytes(
         return CharPos0::new(cp + target.get() - bp);
     }
 
-    let range = EmacsByteRange::new(
-        EmacsBytePos::new(bp),
-        EmacsBytePos::new(backend.metrics().emacs_bytes()),
-    );
+    let range = EmacsByteRange::new(EmacsBytePos::new(bp), backend.metrics().emacs_byte_end());
     let mut scan = ForwardMultibytePositionScan::new(anchor);
     match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
         scan.consume_chunk_until_byte(chunk, target)

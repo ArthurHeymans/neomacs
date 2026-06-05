@@ -126,8 +126,8 @@ impl PieceNode {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
         self.metrics = TextMetrics::new(
-            left.chars() + self.piece.char_len_usize() + right.chars(),
-            left.emacs_bytes() + self.piece.len_usize() + right.emacs_bytes(),
+            left.chars_usize() + self.piece.char_len_usize() + right.chars_usize(),
+            left.emacs_bytes_usize() + self.piece.len_usize() + right.emacs_bytes_usize(),
         );
     }
 }
@@ -183,7 +183,7 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn len(&self) -> usize {
-        self.metrics().emacs_bytes()
+        self.metrics().emacs_bytes_usize()
     }
 
     pub(in crate::buffer) fn is_empty(&self) -> bool {
@@ -261,14 +261,14 @@ impl PieceTreeTextBackend {
     pub(in crate::buffer) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
         let char_pos = char_pos.get();
         let metrics = self.metrics();
-        if char_pos >= metrics.chars() {
-            if char_pos > metrics.chars() {
+        if char_pos >= metrics.chars_usize() {
+            if char_pos > metrics.chars_usize() {
                 tracing::debug!(
                     "piece tree char_to_byte: char_pos ({char_pos}) exceeds char_count ({}), clamping",
-                    metrics.chars()
+                    metrics.chars_usize()
                 );
             }
-            return EmacsBytePos::new(metrics.emacs_bytes());
+            return EmacsBytePos::new(metrics.emacs_bytes_usize());
         }
         EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
     }
@@ -564,13 +564,13 @@ impl PieceTreeTextBackend {
         };
 
         assert!(
-            byte_pos <= node.metrics.emacs_bytes(),
+            byte_pos <= node.metrics.emacs_bytes_usize(),
             "split_at_byte: byte_pos ({byte_pos}) > subtree len ({})",
-            node.metrics.emacs_bytes()
+            node.metrics.emacs_bytes_usize()
         );
 
         let left_metrics = node_metrics(&node.left);
-        let piece_start = left_metrics.emacs_bytes();
+        let piece_start = left_metrics.emacs_bytes_usize();
         let piece_end = piece_start + node.piece.len_usize();
 
         if byte_pos < piece_start {
@@ -653,16 +653,16 @@ impl PieceTreeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if byte_pos <= left.emacs_bytes() {
+        if byte_pos <= left.emacs_bytes_usize() {
             return self.byte_to_char_in_node(&node.left, byte_pos);
         }
 
-        let after_left = byte_pos - left.emacs_bytes();
+        let after_left = byte_pos - left.emacs_bytes_usize();
         if after_left <= node.piece.len_usize() {
-            return left.chars() + self.piece_byte_to_char(node.piece, after_left);
+            return left.chars_usize() + self.piece_byte_to_char(node.piece, after_left);
         }
 
-        left.chars()
+        left.chars_usize()
             + node.piece.char_len_usize()
             + self.byte_to_char_in_node(&node.right, after_left - node.piece.len_usize())
     }
@@ -673,13 +673,13 @@ impl PieceTreeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if char_pos <= left.chars() {
+        if char_pos <= left.chars_usize() {
             return self.char_to_byte_in_node(&node.left, char_pos);
         }
 
-        let after_left = char_pos - left.chars();
+        let after_left = char_pos - left.chars_usize();
         if after_left <= node.piece.char_len_usize() {
-            return left.emacs_bytes()
+            return left.emacs_bytes_usize()
                 + emacs_char_to_byte_in_slice(
                     self.piece_slice(node.piece),
                     after_left,
@@ -687,7 +687,7 @@ impl PieceTreeTextBackend {
                 );
         }
 
-        left.emacs_bytes()
+        left.emacs_bytes_usize()
             + node.piece.len_usize()
             + self.char_to_byte_in_node(&node.right, after_left - node.piece.char_len_usize())
     }
@@ -707,11 +707,11 @@ impl PieceTreeTextBackend {
         };
 
         let left = node_metrics(&node.left);
-        if start < left.emacs_bytes() {
-            self.for_each_range(&node.left, start, end.min(left.emacs_bytes()), f)?;
+        if start < left.emacs_bytes_usize() {
+            self.for_each_range(&node.left, start, end.min(left.emacs_bytes_usize()), f)?;
         }
 
-        let piece_start = left.emacs_bytes();
+        let piece_start = left.emacs_bytes_usize();
         let piece_end = piece_start + node.piece.len_usize();
         if start < piece_end && end > piece_start {
             let local_start = start.max(piece_start) - piece_start;
@@ -746,11 +746,11 @@ impl PieceTreeTextBackend {
     ) -> Option<&[u8]> {
         let node = tree.as_ref()?;
         let left = node_metrics(&node.left);
-        if end <= left.emacs_bytes() {
+        if end <= left.emacs_bytes_usize() {
             return self.contiguous_slice_in_node(&node.left, start, end);
         }
 
-        let piece_start = left.emacs_bytes();
+        let piece_start = left.emacs_bytes_usize();
         let piece_end = piece_start + node.piece.len_usize();
         if start >= piece_end {
             return self.contiguous_slice_in_node(&node.right, start - piece_end, end - piece_end);
@@ -779,7 +779,7 @@ impl fmt::Debug for PieceTreeTextBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PieceTreeTextBackend")
             .field("bytes", &self.len())
-            .field("chars", &self.metrics().chars())
+            .field("chars", &self.metrics().chars_usize())
             .field("multibyte", &self.multibyte)
             .finish()
     }
@@ -808,7 +808,7 @@ mod tests {
 
     fn assert_matches_gap(piece: &PieceTreeTextBackend, gap: &GapBuffer) {
         assert_eq!(piece.len(), gap.len());
-        assert_eq!(piece.metrics().chars(), gap.char_count());
+        assert_eq!(piece.metrics().chars_usize(), gap.char_count());
         assert_eq!(piece.to_string(), gap.to_string());
 
         let mut piece_bytes = Vec::new();
@@ -827,13 +827,13 @@ mod tests {
         assert_eq!(piece_emacs_byte_at(piece, piece.len()), None);
         assert_eq!(gap_emacs_byte_at(gap, gap.len()), None);
 
-        for char_pos in 0..=piece.metrics().chars() {
+        for char_pos in 0..=piece.metrics().chars_usize() {
             let piece_byte = piece_char_to_byte(piece, char_pos);
             let gap_byte = gap_char_to_byte(gap, char_pos);
             assert_eq!(piece_byte, gap_byte, "char_to_byte({char_pos})");
             assert_eq!(piece_byte_to_char(piece, piece_byte), char_pos);
             assert_eq!(gap_byte_to_char(gap, gap_byte), char_pos);
-            if char_pos < piece.metrics().chars() {
+            if char_pos < piece.metrics().chars_usize() {
                 assert_eq!(
                     piece_char_code_at(piece, piece_byte),
                     gap_char_code_at(gap, gap_byte)
@@ -1068,8 +1068,8 @@ mod tests {
         insert_piece_bytes_both(&mut backend, 1, &[b'\n'], 1);
 
         assert!(!backend.is_multibyte());
-        assert_eq!(backend.metrics().chars(), 4);
-        assert_eq!(backend.metrics().emacs_bytes(), 4);
+        assert_eq!(backend.metrics().chars_usize(), 4);
+        assert_eq!(backend.metrics().emacs_bytes_usize(), 4);
         assert_eq!(piece_byte_to_char(&backend, 3), 3);
         assert_eq!(piece_char_to_byte(&backend, 4), 4);
 
@@ -1090,16 +1090,16 @@ mod tests {
             for (kind, a, b, seed) in ops {
                 match kind {
                     0 => {
-                        let char_pos = a % (piece.metrics().chars() + 1);
+                        let char_pos = a % (piece.metrics().chars_usize() + 1);
                         let byte_pos = piece_char_to_byte(&piece, char_pos);
                         let text = sample_insert(seed);
                         insert_piece_str(&mut piece, byte_pos, text);
                         insert_gap_str(&mut gap, byte_pos, text);
                     }
                     1 => {
-                        if piece.metrics().chars() > 0 {
-                            let char_a = a % (piece.metrics().chars() + 1);
-                            let char_b = b % (piece.metrics().chars() + 1);
+                        if piece.metrics().chars_usize() > 0 {
+                            let char_a = a % (piece.metrics().chars_usize() + 1);
+                            let char_b = b % (piece.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
                             let start = piece_char_to_byte(&piece, start_char);
@@ -1110,8 +1110,8 @@ mod tests {
                         }
                     }
                     _ => {
-                        if piece.metrics().chars() > 0 {
-                            let char_pos = a % piece.metrics().chars();
+                        if piece.metrics().chars_usize() > 0 {
+                            let char_pos = a % piece.metrics().chars_usize();
                             let start = piece_char_to_byte(&piece, char_pos);
                             let end = piece_char_to_byte(&piece, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, seed) {
