@@ -4901,7 +4901,7 @@ fn decide_auto_coding_for_insert_file_contents(
         .insert_lisp_string_into_buffer(work_buffer, &raw)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     if let Some(buf) = eval.buffers.get_mut(work_buffer) {
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
 
     let result = eval.apply(
@@ -4961,7 +4961,7 @@ fn restore_empty_buffer_after_auto_coding_probe(
         .set_buffer_multibyte_flag(buffer_id, saved_multibyte);
     if let Some(buf) = eval.buffers.get_mut(buffer_id) {
         buf.set_undo_list(saved_undo_list);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
 }
 
@@ -4996,7 +4996,7 @@ fn decide_auto_coding_for_empty_insert_file_contents(
         .insert_lisp_string_into_buffer(current_id, &raw)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     if let Some(buf) = eval.buffers.get_mut(current_id) {
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
 
     let result = eval.apply(

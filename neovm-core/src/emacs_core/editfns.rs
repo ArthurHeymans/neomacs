@@ -1165,7 +1165,7 @@ pub(crate) fn erase_buffer_impl(
         let _ = buffers.delete_buffer_measured_region(current_id, delete_range);
     }
     if let Some(buf) = buffers.get_mut(current_id) {
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
     Ok(Value::NIL)
 }

@@ -41,7 +41,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::buffer::{Buffer, BufferId, CharPos0, EmacsByteRange};
+use crate::buffer::{Buffer, BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::casefiddle::apply_replace_match_case;
 use crate::emacs_core::regex_emacs::{
     self, BufferSyntaxLookup, CaseTranslation, CompiledPattern, DefaultSyntaxLookup,
@@ -1444,7 +1444,7 @@ pub fn search_forward(
     if let Some((rel_start, rel_end)) = found {
         let match_start = start + rel_start;
         let match_end = start + rel_end;
-        buf.goto_byte(match_end);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(match_end));
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
@@ -1496,7 +1496,7 @@ pub fn search_backward(
     if let Some((rel_start, rel_end)) = found {
         let match_start = limit + rel_start;
         let match_end = limit + rel_end;
-        buf.goto_byte(match_start);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(match_start));
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
@@ -1590,7 +1590,7 @@ pub fn re_search_forward_with_posix(
 
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
-        buf.goto_byte(full_match.1);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.1));
         *match_data = Some(md);
         Ok(Some(full_match.1))
     } else if noerror {
@@ -1683,7 +1683,7 @@ pub fn re_search_backward_with_posix(
 
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
-        buf.goto_byte(full_match.0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.0));
         *match_data = Some(md);
         Ok(Some(full_match.0))
     } else if noerror {
@@ -1738,7 +1738,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
         let mut md = buffer_match_data_from_registers(&regs, region_start);
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
-        buf.goto_byte(full_match.1);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.1));
         *match_data = Some(md);
         Ok(Some(full_match.1))
     } else if noerror {
@@ -1792,7 +1792,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         let mut md = buffer_match_data_from_registers(&regs, region_start);
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
-        buf.goto_byte(full_match.0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.0));
         *match_data = Some(md);
         Ok(Some(full_match.0))
     } else if noerror {
@@ -2246,7 +2246,7 @@ pub fn replace_match_buffer_with_syntax(
         case_symbols_as_words,
     )?;
 
-    buf.goto_byte(match_start);
+    buf.goto_emacs_byte_pos(EmacsBytePos::new(match_start));
     buf.delete_emacs_byte_range(EmacsByteRange::from_usize(match_start, match_end));
     buf.insert_lisp_string(&replacement);
     Ok(())

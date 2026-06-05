@@ -430,7 +430,7 @@ impl Buffer {
         let end = old_range.byte_end_usize();
 
         if old_range.is_empty() {
-            self.goto_byte(start);
+            self.goto_emacs_byte_pos(old_range.byte_start());
             let insertion = self.insert_lisp_string(&text);
             debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
             debug_assert_eq!(old_range.char_start(), insertion.char_pos());

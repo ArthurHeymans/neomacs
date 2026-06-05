@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::buffer::{BufferId, BufferManager, EmacsByteRange};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -325,7 +325,7 @@ pub(crate) fn install_minibuffer_buffer_text(
     if text_len > 0 {
         buf.delete_emacs_byte_range(EmacsByteRange::from_usize(0, text_len));
     }
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
 
     buf.insert_lisp_string(prompt);
     let prompt_end = buf.total_bytes();
@@ -355,7 +355,7 @@ pub(crate) fn install_minibuffer_buffer_text(
 
     let total_len = buf.total_bytes();
     buf.widen();
-    buf.goto_byte(total_len);
+    buf.goto_emacs_byte_pos(EmacsBytePos::new(total_len));
     prompt_end
 }
 

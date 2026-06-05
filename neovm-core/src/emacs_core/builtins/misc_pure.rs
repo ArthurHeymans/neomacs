@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::EmacsBytePos;
 
 // ===========================================================================
 // Misc
@@ -52,7 +53,7 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         let zv_at_end = old_accessible.end_emacs_byte().get() == old_total_bytes;
 
         buf.widen();
-        buf.goto_byte(buf.total_bytes());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(buf.total_bytes()));
         if buf.get_multibyte() == msg.is_multibyte() {
             buf.insert_lisp_string(msg);
         } else {
@@ -72,7 +73,7 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         } else {
             old_pt_byte
         };
-        buf.goto_byte(restored_point);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(restored_point));
     }
     if let Some(old) = old_buf {
         ctx.restore_current_buffer_if_live(old);

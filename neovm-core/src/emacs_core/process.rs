@@ -4221,7 +4221,7 @@ pub(crate) fn builtin_internal_default_process_filter(
     // Temporarily clear read-only so process output can be inserted.
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_byte(insert_pos);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(insert_pos));
     }
 
     // Insert text at point (which is now at the mark position).
@@ -4249,7 +4249,7 @@ pub(crate) fn builtin_internal_default_process_filter(
         } else {
             old_pt
         };
-        buf.goto_byte(adjusted_pt);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(adjusted_pt));
     }
 
     // Advance the stored process marker.
@@ -4323,7 +4323,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     eval.set_current_buffer_unrecorded(buf_id)?;
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_byte(insert_pos);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(insert_pos));
     }
 
     let text = format!("\nProcess {name} {msg}");
@@ -4348,7 +4348,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
         } else {
             old_pt
         };
-        buf.goto_byte(adjusted_pt);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(adjusted_pt));
     }
 
     if let Some(proc) = eval.processes.get_any_mut(id) {
