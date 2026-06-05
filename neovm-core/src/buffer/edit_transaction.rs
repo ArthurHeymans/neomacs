@@ -384,16 +384,8 @@ impl MeasuredInsertEdit {
         self.insertion.extent().emacs_bytes()
     }
 
-    pub(in crate::buffer) const fn byte_len_usize(self) -> usize {
-        self.byte_len().get()
-    }
-
     pub(in crate::buffer) const fn char_len(self) -> CharLen {
         self.insertion.extent().chars()
-    }
-
-    pub(in crate::buffer) const fn char_len_usize(self) -> usize {
-        self.char_len().get()
     }
 
     pub(in crate::buffer) const fn marker_placement(self) -> InsertMarkerPlacement {
@@ -435,20 +427,8 @@ impl MeasuredDeleteEdit {
         self.range.is_empty()
     }
 
-    pub(in crate::buffer) const fn byte_start_usize(self) -> usize {
-        self.range.byte_start_usize()
-    }
-
-    pub(in crate::buffer) const fn byte_end_usize(self) -> usize {
-        self.range.byte_end_usize()
-    }
-
     pub(in crate::buffer) const fn char_len(self) -> CharLen {
         self.range.char_len()
-    }
-
-    pub(in crate::buffer) const fn char_len_usize(self) -> usize {
-        self.char_len().get()
     }
 
     pub(in crate::buffer) fn state_after(
@@ -482,14 +462,6 @@ impl MeasuredReplaceEdit {
         self.replacement.old_range()
     }
 
-    pub(in crate::buffer) const fn old_byte_start_usize(self) -> usize {
-        self.replacement.old_range().byte_start_usize()
-    }
-
-    pub(in crate::buffer) const fn old_byte_len_usize(self) -> usize {
-        self.replacement.old_byte_len().get()
-    }
-
     pub(in crate::buffer) const fn old_char_start(self) -> CharPos0 {
         self.replacement.old_range().char_start()
     }
@@ -502,20 +474,12 @@ impl MeasuredReplaceEdit {
         self.replacement.new_extent()
     }
 
-    pub(in crate::buffer) const fn new_byte_len_usize(self) -> usize {
-        self.replacement.new_byte_len().get()
-    }
-
     pub(in crate::buffer) const fn new_char_len(self) -> CharLen {
         self.replacement.new_char_len()
     }
 
     pub(in crate::buffer) const fn changed_chars(self) -> CharLen {
         self.replacement.changed_chars()
-    }
-
-    pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
-        self.replacement.changed_chars_usize()
     }
 
     pub(in crate::buffer) fn state_after(
@@ -574,10 +538,6 @@ impl MeasuredSameLenEdit {
 
     pub(in crate::buffer) const fn changed_chars(self) -> CharLen {
         self.modified_range.char_len()
-    }
-
-    pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
-        self.changed_chars().get()
     }
 }
 
@@ -1084,7 +1044,7 @@ mod tests {
             edit.modified_range(),
             TextEditRange::from_usize(3, 10, 3, 10)
         );
-        assert_eq!(edit.changed_chars_usize(), 7);
+        assert_eq!(edit.changed_chars(), CharLen::new(7));
     }
 
     #[test]
