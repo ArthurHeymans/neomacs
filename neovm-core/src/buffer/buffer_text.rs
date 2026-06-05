@@ -380,7 +380,7 @@ impl BufferText {
 
     pub fn new() -> Self {
         Self::from_backend(TextBackend::new(
-            ImplementedBufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
         ))
     }
 
@@ -397,7 +397,7 @@ impl BufferText {
     pub fn from_str(text: &str) -> Self {
         Self::from_backend(TextBackend::from_str(
             text,
-            ImplementedBufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
         ))
     }
 
@@ -416,7 +416,7 @@ impl BufferText {
     }
 
     pub fn from_lisp_string(text: &crate::heap_types::LispString) -> Self {
-        Self::from_lisp_string_with_backend_kind(text, ImplementedBufferTextBackendKind::GapBuffer)
+        Self::from_lisp_string_with_backend_kind(text, ImplementedBufferTextBackendKind::GAP_BUFFER)
     }
 
     pub fn try_from_lisp_string_with_backend_kind(
@@ -693,7 +693,7 @@ impl BufferText {
     pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
         Self::from_backend(TextBackend::from_snapshot(
             snapshot,
-            ImplementedBufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
         ))
     }
 

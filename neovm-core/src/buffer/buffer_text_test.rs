@@ -94,6 +94,16 @@ fn backend_kind_defaults_to_gap_buffer_with_stable_symbol_spelling() {
             BufferTextBackendKind::Rope,
         ]
     );
+    assert_eq!(
+        ImplementedBufferTextBackendKind::variants()
+            .map(ImplementedBufferTextBackendKind::public_kind)
+            .collect::<Vec<_>>(),
+        BufferTextBackendKind::implemented_variants().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        ImplementedBufferTextBackendKind::PIECE_TREE.symbol_name(),
+        "piece-tree"
+    );
     assert!(BufferTextBackendKind::PieceTree.is_implemented());
     assert!(BufferTextBackendKind::Rope.is_implemented());
 }

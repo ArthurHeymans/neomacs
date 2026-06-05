@@ -288,7 +288,7 @@ fn implemented_backends_match_gap_for_scripted_multibyte_edits() {
     for kind in ImplementedBufferTextBackendKind::variants() {
         let mut backend = TextBackend::from_str("abécd日本\nΩ", kind);
         let mut gap =
-            TextBackend::from_str("abécd日本\nΩ", ImplementedBufferTextBackendKind::GapBuffer);
+            TextBackend::from_str("abécd日本\nΩ", ImplementedBufferTextBackendKind::GAP_BUFFER);
         assert_backend_matches_gap(kind, &backend, &gap);
 
         let insert_pos = char_to_byte(&backend, 2);
@@ -329,7 +329,7 @@ fn implemented_backends_match_gap_for_scripted_unibyte_edits() {
         let mut gap = TextBackend::from_emacs_bytes(
             &initial,
             false,
-            ImplementedBufferTextBackendKind::GapBuffer,
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
         );
         assert_backend_matches_gap(kind, &backend, &gap);
 
@@ -361,7 +361,7 @@ fn backend_dump_round_trips_across_implemented_kinds() {
         replace_char_range(&mut source, 1, 3, "Ω");
 
         let mut gap =
-            TextBackend::from_str("αβ\n日本🙂", ImplementedBufferTextBackendKind::GapBuffer);
+            TextBackend::from_str("αβ\n日本🙂", ImplementedBufferTextBackendKind::GAP_BUFFER);
         let insert_pos = char_to_byte(&gap, 2);
         insert_text(&mut gap, insert_pos, "XY");
         replace_char_range(&mut gap, 1, 3, "Ω");
@@ -384,7 +384,7 @@ proptest! {
             let mut backend = TextBackend::from_str("abécd日本", kind);
             let mut gap = TextBackend::from_str(
                 "abécd日本",
-                ImplementedBufferTextBackendKind::GapBuffer,
+                ImplementedBufferTextBackendKind::GAP_BUFFER,
             );
             assert_backend_matches_gap(kind, &backend, &gap);
 
@@ -446,7 +446,7 @@ proptest! {
             let mut gap = TextBackend::from_emacs_bytes(
                 &initial,
                 false,
-                ImplementedBufferTextBackendKind::GapBuffer,
+                ImplementedBufferTextBackendKind::GAP_BUFFER,
             );
             assert_backend_matches_gap(kind, &backend, &gap);
 

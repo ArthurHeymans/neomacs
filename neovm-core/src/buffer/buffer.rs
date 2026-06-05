@@ -1759,7 +1759,7 @@ impl Buffer {
 
     /// Create a new, empty buffer.
     pub fn new(id: BufferId, name: Value) -> Self {
-        Self::new_with_text_backend_kind(id, name, ImplementedBufferTextBackendKind::GapBuffer)
+        Self::new_with_text_backend_kind(id, name, ImplementedBufferTextBackendKind::GAP_BUFFER)
     }
 
     pub fn try_new_with_text_backend_kind(
@@ -3902,7 +3902,7 @@ impl BufferManager {
             next_id: 1,
             next_marker_id: 1,
             labeled_restrictions: HashMap::new(),
-            default_text_backend_kind: ImplementedBufferTextBackendKind::GapBuffer,
+            default_text_backend_kind: ImplementedBufferTextBackendKind::GAP_BUFFER,
             buffer_defaults,
         };
         let scratch = mgr.create_buffer("*scratch*");

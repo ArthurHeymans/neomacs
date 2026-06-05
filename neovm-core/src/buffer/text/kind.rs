@@ -24,28 +24,14 @@ pub enum BufferTextBackendKind {
     Rope = 2,
 }
 
-#[repr(u8)]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    EnumIter,
-    EnumString,
-    IntoPrimitive,
-    IntoStaticStr,
-    TryFromPrimitive,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub(crate) enum ImplementedBufferTextBackendKind {
-    #[default]
-    GapBuffer = 0,
-    PieceTree = 1,
-    Rope = 2,
-}
+/// Buffer backend kind after rejecting unsupported public choices.
+///
+/// Keep this as a private wrapper instead of a second enum: Lisp-visible
+/// symbol spelling and pdump tag values belong to `BufferTextBackendKind`,
+/// while internal constructors require this validated type.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(crate) struct ImplementedBufferTextBackendKind(BufferTextBackendKind);
 
 impl BufferTextBackendKind {
     pub fn variants() -> impl Iterator<Item = Self> {
@@ -74,32 +60,36 @@ impl BufferTextBackendKind {
 
     pub(crate) fn implemented(self) -> Option<ImplementedBufferTextBackendKind> {
         match self {
-            Self::GapBuffer => Some(ImplementedBufferTextBackendKind::GapBuffer),
-            Self::PieceTree => Some(ImplementedBufferTextBackendKind::PieceTree),
-            Self::Rope => Some(ImplementedBufferTextBackendKind::Rope),
+            Self::GapBuffer => Some(ImplementedBufferTextBackendKind::GAP_BUFFER),
+            Self::PieceTree => Some(ImplementedBufferTextBackendKind::PIECE_TREE),
+            Self::Rope => Some(ImplementedBufferTextBackendKind::ROPE),
         }
     }
 }
 
 impl ImplementedBufferTextBackendKind {
+    pub(crate) const GAP_BUFFER: Self = Self(BufferTextBackendKind::GapBuffer);
+    pub(crate) const PIECE_TREE: Self = Self(BufferTextBackendKind::PieceTree);
+    pub(crate) const ROPE: Self = Self(BufferTextBackendKind::Rope);
+
     pub(crate) fn variants() -> impl Iterator<Item = Self> {
-        Self::iter()
+        BufferTextBackendKind::implemented_variants().filter_map(BufferTextBackendKind::implemented)
     }
 
     pub(crate) fn non_gap_variants() -> impl Iterator<Item = Self> {
-        Self::iter().filter(|kind| !kind.is_gap_buffer())
+        Self::variants().filter(|kind| !kind.is_gap_buffer())
     }
 
     pub(crate) fn symbol_name(self) -> &'static str {
-        self.into()
+        self.0.symbol_name()
     }
 
     pub(crate) const fn is_gap_buffer(self) -> bool {
-        matches!(self, Self::GapBuffer)
+        self.0.is_gap_buffer()
     }
 
     pub(crate) fn public_kind(self) -> BufferTextBackendKind {
-        self.into()
+        self.0
     }
 }
 
@@ -113,10 +103,6 @@ impl TryFrom<BufferTextBackendKind> for ImplementedBufferTextBackendKind {
 
 impl From<ImplementedBufferTextBackendKind> for BufferTextBackendKind {
     fn from(kind: ImplementedBufferTextBackendKind) -> Self {
-        match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => Self::GapBuffer,
-            ImplementedBufferTextBackendKind::PieceTree => Self::PieceTree,
-            ImplementedBufferTextBackendKind::Rope => Self::Rope,
-        }
+        kind.public_kind()
     }
 }

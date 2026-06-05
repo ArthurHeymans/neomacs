@@ -58,23 +58,23 @@ pub(in crate::buffer) enum TextBackend {
 impl TextBackend {
     pub(in crate::buffer) fn new(kind: ImplementedBufferTextBackendKind) -> Self {
         match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => Self::Gap(GapTextBackend::new()),
-            ImplementedBufferTextBackendKind::PieceTree => {
+            ImplementedBufferTextBackendKind::GAP_BUFFER => Self::Gap(GapTextBackend::new()),
+            ImplementedBufferTextBackendKind::PIECE_TREE => {
                 Self::PieceTree(PieceTreeTextBackend::new())
             }
-            ImplementedBufferTextBackendKind::Rope => Self::Rope(RopeTextBackend::new()),
+            ImplementedBufferTextBackendKind::ROPE => Self::Rope(RopeTextBackend::new()),
         }
     }
 
     pub(in crate::buffer) fn from_str(text: &str, kind: ImplementedBufferTextBackendKind) -> Self {
         match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => {
+            ImplementedBufferTextBackendKind::GAP_BUFFER => {
                 Self::Gap(GapTextBackend::from_str(text))
             }
-            ImplementedBufferTextBackendKind::PieceTree => {
+            ImplementedBufferTextBackendKind::PIECE_TREE => {
                 Self::PieceTree(PieceTreeTextBackend::from_str(text))
             }
-            ImplementedBufferTextBackendKind::Rope => Self::Rope(RopeTextBackend::from_str(text)),
+            ImplementedBufferTextBackendKind::ROPE => Self::Rope(RopeTextBackend::from_str(text)),
         }
     }
 
@@ -84,13 +84,13 @@ impl TextBackend {
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
         match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => {
+            ImplementedBufferTextBackendKind::GAP_BUFFER => {
                 Self::Gap(GapTextBackend::from_emacs_bytes(bytes, multibyte))
             }
-            ImplementedBufferTextBackendKind::PieceTree => {
+            ImplementedBufferTextBackendKind::PIECE_TREE => {
                 Self::PieceTree(PieceTreeTextBackend::from_emacs_bytes(bytes, multibyte))
             }
-            ImplementedBufferTextBackendKind::Rope => {
+            ImplementedBufferTextBackendKind::ROPE => {
                 Self::Rope(RopeTextBackend::from_emacs_bytes(bytes, multibyte))
             }
         }
@@ -110,13 +110,13 @@ impl TextBackend {
     ) -> Self {
         let (text, multibyte) = snapshot.into_parts();
         match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => {
+            ImplementedBufferTextBackendKind::GAP_BUFFER => {
                 Self::Gap(GapTextBackend::from_dump(text, multibyte))
             }
-            ImplementedBufferTextBackendKind::PieceTree => {
+            ImplementedBufferTextBackendKind::PIECE_TREE => {
                 Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
             }
-            ImplementedBufferTextBackendKind::Rope => {
+            ImplementedBufferTextBackendKind::ROPE => {
                 Self::Rope(RopeTextBackend::from_dump(text, multibyte))
             }
         }
@@ -142,13 +142,13 @@ impl TextBackend {
     ) -> Self {
         let (text, multibyte) = snapshot.into_parts();
         match kind {
-            ImplementedBufferTextBackendKind::GapBuffer => Self::Gap(
+            ImplementedBufferTextBackendKind::GAP_BUFFER => Self::Gap(
                 GapTextBackend::from_dump_with_gap_compat_state(text, multibyte, gap_state),
             ),
-            ImplementedBufferTextBackendKind::PieceTree => {
+            ImplementedBufferTextBackendKind::PIECE_TREE => {
                 Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
             }
-            ImplementedBufferTextBackendKind::Rope => {
+            ImplementedBufferTextBackendKind::ROPE => {
                 Self::Rope(RopeTextBackend::from_dump(text, multibyte))
             }
         }
@@ -156,9 +156,9 @@ impl TextBackend {
 
     pub(in crate::buffer) fn kind(&self) -> ImplementedBufferTextBackendKind {
         match self {
-            Self::Gap(_) => ImplementedBufferTextBackendKind::GapBuffer,
-            Self::PieceTree(_) => ImplementedBufferTextBackendKind::PieceTree,
-            Self::Rope(_) => ImplementedBufferTextBackendKind::Rope,
+            Self::Gap(_) => ImplementedBufferTextBackendKind::GAP_BUFFER,
+            Self::PieceTree(_) => ImplementedBufferTextBackendKind::PIECE_TREE,
+            Self::Rope(_) => ImplementedBufferTextBackendKind::ROPE,
         }
     }
 
