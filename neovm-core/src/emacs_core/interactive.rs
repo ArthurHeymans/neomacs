@@ -1518,7 +1518,11 @@ fn interactive_mark_arg_in_buffers(buffers: &crate::buffer::BufferManager) -> Re
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     buf.mark_emacs_byte_pos()
         .ok_or_else(|| signal("error", vec![Value::string("The mark is not set now")]))?;
-    let mark_char = buf.mark_char().expect("mark byte/char stay in sync") as i64 + 1;
+    let mark_char = buf
+        .mark_char_pos()
+        .expect("mark byte/char stay in sync")
+        .get() as i64
+        + 1;
     Ok(Value::fixnum(mark_char))
 }
 

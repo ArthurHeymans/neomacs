@@ -275,8 +275,8 @@ pub(crate) fn marker_position_as_int_with_buffers(
         if let Some(buf_id) = marker_buffer_id(v)
             && let Some(buf) = buffers.get(buf_id)
         {
-            return match buf.mark_char() {
-                Some(char_pos) => Ok(char_pos as i64 + 1),
+            return match buf.mark_char_pos() {
+                Some(char_pos) => Ok(char_pos.get() as i64 + 1),
                 None => Err(signal(
                     "error",
                     vec![Value::string("Marker does not point anywhere")],
@@ -476,7 +476,7 @@ pub(crate) fn builtin_copy_marker_in_buffers(
             let position = if is_mark_marker(src) {
                 buffer_id
                     .and_then(|buf_id| buffers.get(buf_id))
-                    .and_then(|buf| buf.mark_char().map(|m| m as i64 + 1))
+                    .and_then(|buf| buf.mark_char_pos().map(|m| m.get() as i64 + 1))
             } else {
                 match marker_position_value(src).kind() {
                     ValueKind::Fixnum(n) => Some(n),

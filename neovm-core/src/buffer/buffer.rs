@@ -3002,12 +3002,18 @@ impl Buffer {
     }
 
     /// Return the mark character position, None if mark inactive.
-    pub fn mark_char(&self) -> Option<usize> {
+    pub fn mark_char_pos(&self) -> Option<CharPos0> {
         if self.mark_marker_ptr.is_null() {
             None
         } else {
-            unsafe { Some((*self.mark_marker_ptr).data.charpos) }
+            unsafe { Some(CharPos0::new((*self.mark_marker_ptr).data.charpos)) }
         }
+    }
+
+    /// Return the mark as a raw character position, None if mark inactive.
+    #[cfg(test)]
+    pub fn mark_char(&self) -> Option<usize> {
+        self.mark_char_pos().map(CharPos0::get)
     }
 
     /// Deactivate the mark.
