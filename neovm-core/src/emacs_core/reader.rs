@@ -83,14 +83,14 @@ fn empty_runtime_lisp_string(multibyte: bool) -> crate::heap_types::LispString {
 fn minibuffer_result_lisp_string(
     buffers: &crate::buffer::BufferManager,
     minibuf_id: crate::buffer::BufferId,
-    prompt_byte_len: usize,
+    prompt_byte_pos: EmacsBytePos,
 ) -> crate::heap_types::LispString {
     if let Some(buf) = buffers.get(minibuf_id) {
-        let total_len = buf.total_bytes();
-        if total_len > prompt_byte_len {
-            return buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
-                prompt_byte_len,
-                total_len,
+        let full_end = buf.full_emacs_byte_range().end();
+        if full_end > prompt_byte_pos {
+            return buf.buffer_substring_lisp_string_range(EmacsByteRange::new(
+                prompt_byte_pos,
+                full_end,
             ));
         }
         return empty_runtime_lisp_string(buf.get_multibyte());
@@ -992,14 +992,14 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
 
     // Clear the minibuffer buffer and insert prompt + initial input
-    let prompt_byte_len;
+    let prompt_byte_pos;
     {
         let buf = buffers.get_mut(minibuf_id).unwrap();
         let prompt_properties = obarray
             .symbol_value("minibuffer-prompt-properties")
             .copied()
             .unwrap_or(Value::NIL);
-        prompt_byte_len = super::minibuffer::install_minibuffer_buffer_text(
+        prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
             buf,
             &prompt,
             initial_input.as_ref(),
@@ -1065,7 +1065,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let edit_result = run_recursive_edit();
 
     // Read the minibuffer contents (everything after the prompt)
-    let result_text = minibuffer_result_lisp_string(buffers, minibuf_id, prompt_byte_len);
+    let result_text = minibuffer_result_lisp_string(buffers, minibuf_id, prompt_byte_pos);
 
     let _ = buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match run_exit_hook() {
@@ -1541,7 +1541,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let minibuf_depth = shared.minibuffers.depth() + 1;
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
-    let prompt_byte_len;
+    let prompt_byte_pos;
     {
         let buf = shared.buffers.get_mut(minibuf_id).unwrap();
         let prompt_properties = shared
@@ -1549,7 +1549,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
             .symbol_value("minibuffer-prompt-properties")
             .copied()
             .unwrap_or(Value::NIL);
-        prompt_byte_len = super::minibuffer::install_minibuffer_buffer_text(
+        prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
             buf,
             &prompt,
             initial_input.as_ref(),
@@ -1628,7 +1628,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let edit_result = shared.minibuffer_command_loop_inner();
     shared.restore_specpdl_roots(gc_roots);
 
-    let result_text = minibuffer_result_lisp_string(&shared.buffers, minibuf_id, prompt_byte_len);
+    let result_text = minibuffer_result_lisp_string(&shared.buffers, minibuf_id, prompt_byte_pos);
 
     let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {

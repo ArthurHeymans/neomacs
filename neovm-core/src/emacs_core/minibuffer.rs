@@ -316,21 +316,21 @@ pub(crate) fn install_minibuffer_buffer_text(
     prompt: &LispString,
     initial: Option<&LispString>,
     prompt_properties: Value,
-) -> usize {
+) -> EmacsBytePos {
     // Match GNU `read_minibuf` / `erase-buffer`: clear the minibuffer through
     // the buffer edit pipeline so point, narrowing, and sibling state reset
     // together before we insert the new prompt and initial contents.
     buf.widen();
-    let text_len = buf.total_bytes();
-    if text_len > 0 {
-        buf.delete_emacs_byte_range(EmacsByteRange::from_usize(0, text_len));
+    let old_text_range = buf.full_emacs_byte_range();
+    if !old_text_range.is_empty() {
+        buf.delete_emacs_byte_range(old_text_range);
     }
     buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
 
     buf.insert_lisp_string(prompt);
-    let prompt_end = buf.total_bytes();
-    if prompt_end > 0 {
-        let prompt_range = EmacsByteRange::from_usize(0, prompt_end);
+    let prompt_end = buf.full_emacs_byte_range().end();
+    if prompt_end.get() > 0 {
+        let prompt_range = EmacsByteRange::new(EmacsBytePos::new(0), prompt_end);
         buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
             Value::symbol("field"),
@@ -353,9 +353,9 @@ pub(crate) fn install_minibuffer_buffer_text(
         buf.insert_lisp_string(initial);
     }
 
-    let total_len = buf.total_bytes();
+    let full_end = buf.full_emacs_byte_range().end();
     buf.widen();
-    buf.goto_emacs_byte_pos(EmacsBytePos::new(total_len));
+    buf.goto_emacs_byte_pos(full_end);
     prompt_end
 }
 
@@ -365,10 +365,10 @@ pub(crate) fn default_minibuffer_prompt_properties() -> Value {
 
 fn apply_minibuffer_prompt_properties(
     buf: &mut crate::buffer::Buffer,
-    prompt_end: usize,
+    prompt_end: EmacsBytePos,
     prompt_properties: Value,
 ) {
-    let prompt_range = EmacsByteRange::from_usize(0, prompt_end);
+    let prompt_range = EmacsByteRange::new(EmacsBytePos::new(0), prompt_end);
     let mut cursor = prompt_properties;
     while cursor.is_cons() {
         let key = cursor.cons_car();

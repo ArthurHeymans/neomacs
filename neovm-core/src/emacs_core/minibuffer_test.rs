@@ -964,7 +964,10 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
 
-    assert_eq!(prompt_end, "Prompt: ".len());
+    assert_eq!(
+        prompt_end,
+        crate::buffer::EmacsBytePos::new("Prompt: ".len())
+    );
     assert_eq!(
         buf.text_props_get_property_at_emacs_byte_pos(
             crate::buffer::EmacsBytePos::new(0),
@@ -1001,10 +1004,7 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
         None
     );
     assert_eq!(
-        buf.text_props_get_property_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(prompt_end),
-            Value::symbol("read-only")
-        ),
+        buf.text_props_get_property_at_emacs_byte_pos(prompt_end, Value::symbol("read-only")),
         None
     );
 }
@@ -1023,7 +1023,7 @@ fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() 
             crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
         let _ = buf.text_props_remove_property_in_emacs_byte_range(
-            crate::buffer::EmacsByteRange::from_usize(0, prompt_end),
+            crate::buffer::EmacsByteRange::new(crate::buffer::EmacsBytePos::new(0), prompt_end),
             Value::symbol("field"),
         );
     }
@@ -1057,7 +1057,10 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         Some(&crate::heap_types::LispString::from_utf8("stale")),
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
-    assert_eq!(first_prompt_end, "Prompt: ".len());
+    assert_eq!(
+        first_prompt_end,
+        crate::buffer::EmacsBytePos::new("Prompt: ".len())
+    );
     assert_eq!(buf.point_byte(), "Prompt: stale".len());
 
     let second_prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
@@ -1067,7 +1070,10 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
 
-    assert_eq!(second_prompt_end, "Switch to buffer: ".len());
+    assert_eq!(
+        second_prompt_end,
+        crate::buffer::EmacsBytePos::new("Switch to buffer: ".len())
+    );
     assert_eq!(buf.buffer_string(), "Switch to buffer: *Messages*");
     assert_eq!(buf.point_byte(), "Switch to buffer: *Messages*".len());
 }
