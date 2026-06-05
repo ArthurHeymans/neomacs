@@ -255,6 +255,7 @@ impl TextReplacement {
         self.old_range.end_anchor()
     }
 
+    #[cfg(test)]
     pub const fn byte_start_usize(self) -> usize {
         self.old_range.byte_start_usize()
     }
@@ -281,6 +282,7 @@ impl TextReplacement {
         CharLen::new(if old > new { old } else { new })
     }
 
+    #[cfg(test)]
     pub const fn changed_chars_usize(self) -> usize {
         self.changed_chars().get()
     }
