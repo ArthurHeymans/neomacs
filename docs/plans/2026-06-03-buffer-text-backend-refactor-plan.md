@@ -520,6 +520,8 @@ Completed so far:
   tuples across the buffer-text boundary.
 - Gated raw point and mark mutators to tests so production movement code uses
   typed `EmacsBytePos` / anchor entry points.
+- Gated the raw buffer substring `text_range` helper to tests so production
+  string extraction uses `EmacsByteRange`.
 
 Next work:
 

@@ -2672,6 +2672,7 @@ impl Buffer {
         )
     }
 
+    #[cfg(test)]
     pub fn text_range(&self, start: usize, end: usize) -> String {
         self.buffer_substring_range(EmacsByteRange::from_usize(start, end))
     }
