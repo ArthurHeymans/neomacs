@@ -598,7 +598,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
                     if let Some(byte_pos) =
                         buffers.get(buf_id).map(|buf| lisp_pos_to_byte(buf, pos))
                     {
-                        let _ = buffers.set_buffer_mark(buf_id, byte_pos.get());
+                        let _ = buffers.set_buffer_mark_emacs_byte_pos(buf_id, byte_pos);
                     }
                 }
                 None => {

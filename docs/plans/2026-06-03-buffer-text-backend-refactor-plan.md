@@ -502,6 +502,10 @@ Completed so far:
   so gap-buffer contributes GPT as one storage hint while generic char/byte
   conversion keeps the GNU `marker.c` bracketing model above all physical
   backends.
+- Added typed point, mark, and narrowing entry points at the `Buffer` and
+  `BufferManager` boundary (`EmacsBytePos` / `EmacsByteRange`) and moved
+  representative marker, shift-selection, narrowing, indirect-buffer clone,
+  and whole-buffer replacement paths onto those typed APIs.
 
 Next work:
 

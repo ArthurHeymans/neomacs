@@ -1916,8 +1916,8 @@ impl Buffer {
         self.mark_marker_ptr = std::ptr::null_mut();
         self.state_markers = None;
         self.undo_state = SharedUndoState::new();
-        self.narrow_to_byte_region(0, 0);
-        self.goto_byte(0);
+        self.narrow_to_emacs_byte_range(EmacsByteRange::from_usize(0, 0));
+        self.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
 
     pub fn set_last_name_value(&mut self, name: Value) {
@@ -2724,11 +2724,11 @@ impl Buffer {
 
     // -- Narrowing -----------------------------------------------------------
 
-    /// Restrict the accessible portion to the Emacs-byte range `[start, end)`.
-    pub fn narrow_to_byte_region(&mut self, start: usize, end: usize) {
+    /// Restrict the accessible portion to the Emacs-byte range.
+    pub fn narrow_to_emacs_byte_range(&mut self, range: EmacsByteRange) {
         let total = self.total_bytes();
-        let s = start.min(total);
-        let e = end.clamp(s, total);
+        let s = range.start_usize().min(total);
+        let e = range.end_usize().clamp(s, total);
         let total_chars = self.text.char_count();
         self.begv_byte = s;
         self.begv = self
@@ -2744,7 +2744,13 @@ impl Buffer {
                 .get()
         };
         // Clamp point into the new accessible region.
-        self.goto_byte(self.pt_byte);
+        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
+    }
+
+    /// Restrict the accessible portion to the raw Emacs-byte range
+    /// `[start, end)`.
+    pub fn narrow_to_byte_region(&mut self, start: usize, end: usize) {
+        self.narrow_to_emacs_byte_range(EmacsByteRange::from_usize(start, end));
     }
 
     /// Legacy narrowing API retained while buffer internals are byte-only.
@@ -2754,7 +2760,7 @@ impl Buffer {
 
     /// Remove narrowing — make the entire buffer accessible again.
     pub fn widen(&mut self) {
-        self.narrow_to_byte_region(0, self.total_bytes());
+        self.narrow_to_emacs_byte_range(EmacsByteRange::from_usize(0, self.total_bytes()));
     }
 
     pub fn accessible_region_snapshot(&self) -> AccessibleBufferRegionSnapshot {
@@ -2771,7 +2777,7 @@ impl Buffer {
         self.begv_byte = snapshot.start_emacs_byte.get();
         self.zv = snapshot.end_char.get();
         self.zv_byte = snapshot.end_emacs_byte.get();
-        self.goto_byte(self.pt_byte);
+        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
     pub fn restore_accessible_region_with_current_full_end(
@@ -2782,7 +2788,7 @@ impl Buffer {
         self.begv_byte = snapshot.start_emacs_byte.get();
         self.zv = self.total_chars();
         self.zv_byte = self.total_bytes();
-        self.goto_byte(self.pt_byte);
+        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
     pub fn register_marker(
@@ -2890,9 +2896,9 @@ impl Buffer {
     // separate position fields.  The marker tracks its own position
     // through the buffer's marker chain and auto-adjusts on edits.
 
-    /// Set the mark to byte position `pos`, creating the marker if needed.
-    pub fn set_mark_byte(&mut self, pos: usize) {
-        let clamped = pos.min(self.total_bytes());
+    /// Set the mark to Emacs-byte position `pos`, creating the marker if needed.
+    pub fn set_mark_emacs_byte_pos(&mut self, pos: EmacsBytePos) {
+        let clamped = pos.get().min(self.total_bytes());
         let char_pos = self
             .text
             .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
@@ -2931,6 +2937,11 @@ impl Buffer {
                 (*ptr).data.charpos = char_pos;
             }
         }
+    }
+
+    /// Set the mark to raw Emacs-byte position `pos`, creating the marker if needed.
+    pub fn set_mark_byte(&mut self, pos: usize) {
+        self.set_mark_emacs_byte_pos(EmacsBytePos::new(pos));
     }
 
     /// Legacy mark setter.
@@ -4019,8 +4030,9 @@ impl BufferManager {
         indirect.inhibit_buffer_hooks = inhibit_buffer_hooks;
         indirect.text = shared_text;
         indirect.undo_state = root.undo_state.clone();
-        indirect.narrow_to_byte_region(root.begv_byte, root.zv_byte);
-        indirect.goto_byte(root.pt_byte);
+        indirect
+            .narrow_to_emacs_byte_range(EmacsByteRange::from_usize(root.begv_byte, root.zv_byte));
+        indirect.goto_emacs_byte_pos(EmacsBytePos::new(root.pt_byte));
         indirect.set_multibyte_value(root.get_multibyte());
         indirect.autosave_modified_tick = root.autosave_modified_tick;
         indirect.slots[BUFFER_SLOT_FILE_NAME] = Value::NIL;
@@ -4036,7 +4048,9 @@ impl BufferManager {
         let _ = self.ensure_buffer_state_markers(root_id);
         let _ = self.ensure_buffer_state_markers(id);
         if let Some(mark_byte) = root_mark_byte {
-            self.buffers.get_mut(&id)?.set_mark_byte(mark_byte);
+            self.buffers
+                .get_mut(&id)?
+                .set_mark_emacs_byte_pos(EmacsBytePos::new(mark_byte));
         }
         Some(id)
     }
@@ -4538,7 +4552,7 @@ impl BufferManager {
 
     fn widen_buffer_fully(&mut self, id: BufferId) -> Option<()> {
         let (begv, zv) = self.full_buffer_bounds(id)?;
-        self.restore_buffer_restriction(id, begv, zv)
+        self.restore_buffer_emacs_byte_restriction(id, EmacsByteRange::from_usize(begv, zv))
     }
 
     fn buffers_sharing_root_ids(&self, root_id: BufferId) -> Vec<BufferId> {
@@ -4556,18 +4570,18 @@ impl BufferManager {
         self.shared_text_root_id(id)
     }
 
-    pub fn goto_buffer_byte(&mut self, id: BufferId, pos: usize) -> Option<usize> {
+    pub fn goto_buffer_emacs_byte_pos(&mut self, id: BufferId, pos: EmacsBytePos) -> Option<usize> {
         {
             let buf = self.buffers.get_mut(&id)?;
-            buf.goto_byte(pos);
+            buf.goto_emacs_byte_pos(pos);
         }
         let point = self.buffers.get(&id)?.point_byte();
         let _ = self.record_buffer_state_markers(id);
         Some(point)
     }
 
-    pub fn goto_buffer_emacs_byte_pos(&mut self, id: BufferId, pos: EmacsBytePos) -> Option<usize> {
-        self.goto_buffer_byte(id, pos.get())
+    pub fn goto_buffer_byte(&mut self, id: BufferId, pos: usize) -> Option<usize> {
+        self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(pos))
     }
 
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
@@ -4602,15 +4616,23 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn narrow_buffer_to_emacs_byte_range(
+        &mut self,
+        id: BufferId,
+        range: EmacsByteRange,
+    ) -> Option<()> {
+        self.buffers.get_mut(&id)?.narrow_to_emacs_byte_range(range);
+        let _ = self.record_buffer_state_markers(id);
+        Some(())
+    }
+
     pub fn narrow_buffer_to_region(
         &mut self,
         id: BufferId,
         start: usize,
         end: usize,
     ) -> Option<()> {
-        self.buffers.get_mut(&id)?.narrow_to_byte_region(start, end);
-        let _ = self.record_buffer_state_markers(id);
-        Some(())
+        self.narrow_buffer_to_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))
     }
 
     pub fn widen_buffer(&mut self, id: BufferId) -> Option<()> {
@@ -4622,7 +4644,7 @@ impl BufferManager {
             self.replace_labeled_restrictions(id, None);
             return self.widen_buffer_fully(id);
         };
-        self.restore_buffer_restriction(id, begv, zv)?;
+        self.restore_buffer_emacs_byte_restriction(id, EmacsByteRange::from_usize(begv, zv))?;
         if matches!(restriction.label, LabeledRestrictionLabel::Outermost) {
             let _ = self.pop_labeled_restriction(id);
         }
@@ -4640,11 +4662,11 @@ impl BufferManager {
         {
             let buf = self.buffers.get_mut(&id)?;
             buf.widen();
-            buf.goto_byte(0);
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
         }
         if !text.is_empty() {
             self.insert_into_buffer(id, text)?;
-            self.goto_buffer_byte(id, 0)?;
+            self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(0))?;
         }
         Some(())
     }
@@ -4669,11 +4691,11 @@ impl BufferManager {
         {
             let buf = self.buffers.get_mut(&id)?;
             buf.widen();
-            buf.goto_byte(0);
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
         }
         if !text.is_empty() {
             self.insert_lisp_string_into_buffer(id, text)?;
-            self.goto_buffer_byte(id, 0)?;
+            self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(0))?;
         }
         Some(())
     }
@@ -4906,9 +4928,17 @@ impl BufferManager {
         Some(())
     }
 
-    pub fn set_buffer_mark(&mut self, id: BufferId, pos: usize) -> Option<()> {
-        self.buffers.get_mut(&id)?.set_mark_byte(pos);
+    pub fn set_buffer_mark_emacs_byte_pos(
+        &mut self,
+        id: BufferId,
+        pos: EmacsBytePos,
+    ) -> Option<()> {
+        self.buffers.get_mut(&id)?.set_mark_emacs_byte_pos(pos);
         Some(())
+    }
+
+    pub fn set_buffer_mark(&mut self, id: BufferId, pos: usize) -> Option<()> {
+        self.set_buffer_mark_emacs_byte_pos(id, EmacsBytePos::new(pos))
     }
 
     pub fn clear_buffer_mark(&mut self, id: BufferId) -> Option<()> {
@@ -5006,15 +5036,23 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn restore_buffer_emacs_byte_restriction(
+        &mut self,
+        id: BufferId,
+        range: EmacsByteRange,
+    ) -> Option<()> {
+        self.buffers.get_mut(&id)?.narrow_to_emacs_byte_range(range);
+        let _ = self.record_buffer_state_markers(id);
+        Some(())
+    }
+
     pub fn restore_buffer_restriction(
         &mut self,
         id: BufferId,
         begv: usize,
         zv: usize,
     ) -> Option<()> {
-        self.buffers.get_mut(&id)?.narrow_to_byte_region(begv, zv);
-        let _ = self.record_buffer_state_markers(id);
-        Some(())
+        self.restore_buffer_emacs_byte_restriction(id, EmacsByteRange::from_usize(begv, zv))
     }
 
     pub fn save_current_restriction_state(&mut self) -> Option<SavedRestrictionState> {
@@ -5054,7 +5092,10 @@ impl BufferManager {
                 continue;
             };
             if self
-                .restore_buffer_restriction(buffer_id, begv, zv)
+                .restore_buffer_emacs_byte_restriction(
+                    buffer_id,
+                    EmacsByteRange::from_usize(begv, zv),
+                )
                 .is_some()
             {
                 retained_buffers.push(buffer_id);
@@ -5072,7 +5113,10 @@ impl BufferManager {
     pub fn restore_outermost_restrictions(&mut self, state: OutermostRestrictionResetState) {
         for buffer_id in state.affected_buffers {
             if let Some((begv, zv)) = self.current_labeled_restriction_bounds(buffer_id) {
-                let _ = self.restore_buffer_restriction(buffer_id, begv, zv);
+                let _ = self.restore_buffer_emacs_byte_restriction(
+                    buffer_id,
+                    EmacsByteRange::from_usize(begv, zv),
+                );
             } else {
                 self.replace_labeled_restrictions(buffer_id, None);
             }
@@ -5108,7 +5152,10 @@ impl BufferManager {
                     if restored_begv > restored_zv {
                         std::mem::swap(&mut restored_begv, &mut restored_zv);
                     }
-                    let _ = self.restore_buffer_restriction(buffer_id, restored_begv, restored_zv);
+                    let _ = self.restore_buffer_emacs_byte_restriction(
+                        buffer_id,
+                        EmacsByteRange::from_usize(restored_begv, restored_zv),
+                    );
                 }
                 self.remove_marker(beg_marker);
                 self.remove_marker(end_marker);
@@ -5130,7 +5177,10 @@ impl BufferManager {
                 LabeledRestrictionLabel::Outermost,
             )?;
         }
-        self.restore_buffer_restriction(buffer_id, start, end)?;
+        self.restore_buffer_emacs_byte_restriction(
+            buffer_id,
+            EmacsByteRange::from_usize(start, end),
+        )?;
         self.push_labeled_restriction_for_current_bounds(
             buffer_id,
             LabeledRestrictionLabel::User(label),

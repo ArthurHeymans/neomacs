@@ -3629,9 +3629,10 @@ pub(crate) fn builtin_narrow_to_region(
         args[0],
         args[1],
     )?;
-    let _ = eval
-        .buffers
-        .narrow_buffer_to_region(current_id, byte_start, byte_end);
+    let _ = eval.buffers.narrow_buffer_to_emacs_byte_range(
+        current_id,
+        EmacsByteRange::from_usize(byte_start, byte_end),
+    );
     Ok(Value::NIL)
 }
 
