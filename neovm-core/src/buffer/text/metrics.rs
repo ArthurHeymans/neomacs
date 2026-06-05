@@ -59,11 +59,11 @@ impl TextMetrics {
         self.emacs_bytes
     }
 
-    pub const fn chars_usize(self) -> usize {
+    pub(in crate::buffer) const fn chars_usize(self) -> usize {
         self.chars.get()
     }
 
-    pub const fn emacs_bytes_usize(self) -> usize {
+    pub(in crate::buffer) const fn emacs_bytes_usize(self) -> usize {
         self.emacs_bytes.get()
     }
 
