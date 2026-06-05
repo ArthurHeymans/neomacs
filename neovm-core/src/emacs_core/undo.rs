@@ -408,14 +408,14 @@ fn primitive_undo_inner(
                                     if let Some(buf) = ctx.buffers.get(buf_id) {
                                         ensure_undo_lisp_range_is_visible(buf, b, e)?;
                                         let accessible_start =
-                                            buf.accessible_emacs_byte_region().start_usize();
+                                            buf.accessible_emacs_byte_region().start();
                                         let byte_beg = if b > 0 {
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
                                                 (b - 1) as usize,
                                             ))
                                             .get()
                                         } else {
-                                            accessible_start
+                                            accessible_start.get()
                                         };
                                         let byte_end = if e > 0 {
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
@@ -423,7 +423,7 @@ fn primitive_undo_inner(
                                             ))
                                             .get()
                                         } else {
-                                            accessible_start
+                                            accessible_start.get()
                                         };
                                         let _ = ctx.buffers.put_buffer_text_property(
                                             buf_id, byte_beg, byte_end, prop, val,

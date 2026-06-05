@@ -734,7 +734,7 @@ pub(crate) fn builtin_line_number_at_pos(
     let start = if _absolute {
         0
     } else {
-        buf.accessible_emacs_byte_region().start_usize()
+        buf.accessible_emacs_byte_region().start().get()
     };
     let line_num = count_newlines(&text, start, byte_pos.get()) + 1;
     Ok(Value::fixnum(line_num as i64))

@@ -1518,26 +1518,13 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 .collect();
             let last_window_start = LispCharPos1::new(buffer.last_window_start.max(1) as i64);
             let total_bytes = buffer.total_emacs_byte_len();
+            let total_end = EmacsBytePos::new(total_bytes.get());
             snapshots.push(BufferSnapshot {
                 id: *id,
-                pt_old_emacs_byte: EmacsBytePos::new(
-                    buffer.point_emacs_byte_pos().get().min(total_bytes.get()),
-                ),
-                begv_old_emacs_byte: EmacsBytePos::new(
-                    buffer
-                        .point_min_emacs_byte_pos()
-                        .get()
-                        .min(total_bytes.get()),
-                ),
-                zv_old_emacs_byte: EmacsBytePos::new(
-                    buffer
-                        .point_max_emacs_byte_pos()
-                        .get()
-                        .min(total_bytes.get()),
-                ),
-                mark_old_emacs_byte: buffer
-                    .mark_emacs_byte_pos()
-                    .map(|mark| EmacsBytePos::new(mark.get().min(total_bytes.get()))),
+                pt_old_emacs_byte: buffer.point_emacs_byte_pos().min(total_end),
+                begv_old_emacs_byte: buffer.point_min_emacs_byte_pos().min(total_end),
+                zv_old_emacs_byte: buffer.point_max_emacs_byte_pos().min(total_end),
+                mark_old_emacs_byte: buffer.mark_emacs_byte_pos().map(|mark| mark.min(total_end)),
                 last_window_start_old_emacs_byte: buffer
                     .lisp_pos_to_full_buffer_emacs_byte_pos(last_window_start.as_i64()),
                 overlays,

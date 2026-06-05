@@ -1036,8 +1036,8 @@ pub fn scan_sexps(
 ) -> Result<usize, String> {
     match scan_sexps_with_options(buf, table, from, count, false).map_err(|err| err.message)? {
         Some(pos) => Ok(pos),
-        None if count < 0 => Ok(buf.accessible_emacs_byte_region().start_usize()),
-        None => Ok(buf.accessible_emacs_byte_region().end_usize()),
+        None if count < 0 => Ok(buf.accessible_emacs_byte_region().start().get()),
+        None => Ok(buf.accessible_emacs_byte_region().end().get()),
     }
 }
 
