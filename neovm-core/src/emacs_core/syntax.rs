@@ -3204,7 +3204,9 @@ pub(crate) fn builtin_forward_word(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_byte(current_id, final_byte);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(final_byte));
 
     // GNU returns t when the requested motion fully succeeded, nil when it
     // stopped early at a buffer edge or a field boundary.
@@ -3244,7 +3246,7 @@ pub(crate) fn builtin_forward_word_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
     Ok(Value::NIL)
 }
 
@@ -3279,7 +3281,9 @@ pub(crate) fn builtin_backward_word(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
     Ok(Value::NIL)
 }
 
@@ -3330,7 +3334,9 @@ pub(crate) fn builtin_forward_sexp(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
     Ok(Value::NIL)
 }
 
@@ -3382,7 +3388,9 @@ pub(crate) fn builtin_backward_sexp(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
     Ok(Value::NIL)
 }
 
@@ -4373,7 +4381,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
 
     // Return number of characters skipped (Emacs convention).
     let buf = buffers
@@ -4439,7 +4447,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_byte(current_id, new_pos);
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
 
     // Return negative number of characters skipped.
     let buf = buffers

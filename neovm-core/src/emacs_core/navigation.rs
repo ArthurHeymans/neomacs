@@ -776,7 +776,9 @@ pub(crate) fn builtin_forward_line(
     let (new_pos, moved) = move_by_lines_narrowed(&text, pt, n, begv, zv);
     let direction = if n >= 0 { 1 } else { -1 };
     let adjusted = adjust_for_intangible(eval, new_pos, direction);
-    let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
 
     let mut shortage = n - moved;
     if shortage != 0 && n > 0 && begv < zv && new_pos != pt && new_pos > 0 {
@@ -823,7 +825,9 @@ pub(crate) fn builtin_beginning_of_line(
         buf.pt_byte
     };
     let adjusted = adjust_for_intangible(eval, target_byte, -1);
-    let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
     check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
 }
@@ -855,7 +859,9 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
             .get()
     };
     let adjusted = adjust_for_intangible(eval, target_byte, 1);
-    let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
     check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
 }
@@ -900,7 +906,9 @@ pub(crate) fn builtin_forward_char(
     };
     let direction = if n >= 0 { 1 } else { -1 };
     let adjusted = adjust_for_intangible(eval, new_byte, direction);
-    let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
     // GNU `move_point`: signal beginning-of-buffer / end-of-buffer when
     // the requested position falls outside the accessible portion.
     let desired = cur_char as i64 + n;
@@ -1183,7 +1191,9 @@ pub(crate) fn builtin_skip_chars_forward(
     };
 
     debug_assert!(pos >= start_pos || limit <= start_pos);
-    let _ = ctx.buffers.goto_buffer_byte(current_id, pos);
+    let _ = ctx
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
     Ok(Value::fixnum(moved_chars))
 }
 
@@ -1235,7 +1245,9 @@ pub(crate) fn builtin_skip_chars_backward(
         debug_assert!(pos <= start_pos);
         (pos, moved_chars)
     };
-    let _ = ctx.buffers.goto_buffer_byte(current_id, pos);
+    let _ = ctx
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
     Ok(Value::fixnum(moved_chars))
 }
 

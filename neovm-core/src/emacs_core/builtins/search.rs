@@ -289,11 +289,11 @@ fn handle_search_failure_in_manager(
     match kind {
         SearchErrorKind::NotFound => match opts.noerror_mode {
             SearchNoErrorMode::Signal => {
-                let _ = buffers.goto_buffer_byte(buffer_id, start_pt);
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(start_pt));
                 Err(signal("search-failed", vec![pattern]))
             }
             SearchNoErrorMode::KeepPoint => {
-                let _ = buffers.goto_buffer_byte(buffer_id, start_pt);
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(start_pt));
                 Ok(Value::NIL)
             }
             SearchNoErrorMode::MoveToBound => {
@@ -301,7 +301,7 @@ fn handle_search_failure_in_manager(
                     .get(buffer_id)
                     .map(|buf| search_failure_position(buf, opts))
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.goto_buffer_byte(buffer_id, target);
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(target));
                 Ok(Value::NIL)
             }
         },
@@ -478,7 +478,7 @@ pub(crate) fn re_search_forward_with_state_posix(
                 return Err(signal("search-failed", vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
-                let _ = buffers.goto_buffer_byte(current_id, start_pt);
+                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start_pt));
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
             Err(_) => {
@@ -585,7 +585,7 @@ pub(crate) fn re_search_backward_with_state_posix(
                 return Err(signal("search-failed", vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
-                let _ = buffers.goto_buffer_byte(current_id, start_pt);
+                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start_pt));
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
             Err(_) => {
@@ -1904,7 +1904,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     // replacement text.  Lisp parsers such as `xml-parse-string` depend on
     // this to continue after an expanded entity rather than re-reading the
     // replacement from its beginning.
-    let _ = buffers.goto_buffer_byte(current_id, newend);
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(newend));
     update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
     Ok(Value::NIL)
 }
