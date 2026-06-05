@@ -243,7 +243,8 @@ impl BufferText {
         Self::invalidate_position_caches(storage);
     }
 
-    fn virtual_gap_consume_bytes(storage: &mut BufferTextStorage, bytes: usize) {
+    fn virtual_gap_consume_bytes(storage: &mut BufferTextStorage, bytes: EmacsByteLen) {
+        let bytes = bytes.get();
         let mut size = storage.virtual_gap.byte_len().get();
         if size < bytes {
             let need = bytes - size;
@@ -265,8 +266,8 @@ impl BufferText {
         let start_char = storage.backend.emacs_byte_pos_to_char_pos(pos);
         storage.virtual_gap = storage
             .virtual_gap
-            .with_pos(CharPos0::new(start_char.get() + extent.chars().get()));
-        Self::virtual_gap_consume_bytes(storage, extent.emacs_bytes().get());
+            .with_pos(start_char.add_len(extent.chars()));
+        Self::virtual_gap_consume_bytes(storage, extent.emacs_bytes());
     }
 
     fn note_virtual_gap_delete(storage: &mut BufferTextStorage, range: TextEditRange) {
@@ -285,13 +286,13 @@ impl BufferText {
         }
         let char_start = replacement.old_range().char_start();
         storage.virtual_gap = GapCompatState::new(
-            CharPos0::new(char_start.get() + replacement.new_extent().chars().get()),
+            char_start.add_len(replacement.new_extent().chars()),
             storage
                 .virtual_gap
                 .byte_len()
                 .add_len(replacement.old_range().byte_len()),
         );
-        Self::virtual_gap_consume_bytes(storage, replacement.new_extent().emacs_bytes().get());
+        Self::virtual_gap_consume_bytes(storage, replacement.new_extent().emacs_bytes());
     }
 
     fn note_virtual_gap_same_len_replace(
@@ -325,13 +326,12 @@ impl BufferText {
                 .backend
                 .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start + before_gap_len))
         };
-        let old_before_chars = split_char.get() - old_range.char_start().get();
+        let old_before_chars = split_char.saturating_offset_from(old_range.char_start());
         let new_before_chars =
             TextExtent::from_emacs_bytes(&bytes[..before_gap_len], storage.backend.is_multibyte())
-                .chars()
-                .get();
+                .chars();
         if old_before_chars != new_before_chars {
-            let delta = new_before_chars as isize - old_before_chars as isize;
+            let delta = new_before_chars.get() as isize - old_before_chars.get() as isize;
             let pos = storage.virtual_gap.pos().get().saturating_add_signed(delta);
             storage.virtual_gap = storage.virtual_gap.with_pos(CharPos0::new(pos));
         }
