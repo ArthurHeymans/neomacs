@@ -2474,13 +2474,13 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
             let class = entry.class;
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_char(pt + ch.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
                 continue;
             }
             // In GNU Emacs, EndComment newline is treated as whitespace
             // for forward scanning.
             if class == SyntaxClass::EndComment && ch == '\n' {
-                buf.goto_char(pt + ch.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
                 continue;
             }
             break;
@@ -2508,7 +2508,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         if class == SyntaxClass::Comment {
             let style_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-            buf.goto_char(pt + ch.len_utf8());
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                 return false;
             }
@@ -2518,7 +2518,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
 
         // Comment fence (class `!` = Generic).
         if class == SyntaxClass::CommentFence {
-            buf.goto_char(pt + ch.len_utf8());
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             // Scan forward for matching comment fence.
             if !scan_forward_comment_fence(buf, honor_properties) {
                 return false;
@@ -2545,7 +2545,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
                         let style_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                         let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                             || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-                        buf.goto_char(next_pos + ch2.len_utf8());
+                        buf.goto_emacs_byte_pos(EmacsBytePos::new(next_pos + ch2.len_utf8()));
                         if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                             return false;
                         }
@@ -2595,14 +2595,14 @@ fn scan_forward_comment_body(
 
         // Handle escape / charquote.
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_char(pt + ch.len_utf8());
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             // Skip the next char too.
             let pt2 = buf.point();
             if pt2 >= max {
                 return false;
             }
             if let Some(ch2) = buf.char_after(pt2) {
-                buf.goto_char(pt2 + ch2.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt2 + ch2.len_utf8()));
             }
             continue;
         }
@@ -2613,7 +2613,7 @@ fn scan_forward_comment_body(
                 let sf_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                 if sf_b == style_b {
                     nesting += 1;
-                    buf.goto_char(pt + ch.len_utf8());
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
                     continue;
                 }
             }
@@ -2634,7 +2634,9 @@ fn scan_forward_comment_body(
                             let sf_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                             if sf_b == style_b {
                                 nesting += 1;
-                                buf.goto_char(next_pos + ch2.len_utf8());
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(
+                                    next_pos + ch2.len_utf8(),
+                                ));
                                 continue;
                             }
                         }
@@ -2647,7 +2649,7 @@ fn scan_forward_comment_body(
         if class == SyntaxClass::EndComment {
             let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             if se_b == style_b {
-                buf.goto_char(pt + ch.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
                 nesting -= 1;
                 if nesting <= 0 {
                     return true;
@@ -2658,7 +2660,7 @@ fn scan_forward_comment_body(
 
         // Comment fence end.
         if class == SyntaxClass::CommentFence {
-            buf.goto_char(pt + ch.len_utf8());
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             nesting -= 1;
             if nesting <= 0 {
                 return true;
@@ -2682,7 +2684,7 @@ fn scan_forward_comment_body(
                     if flags2.contains(SyntaxFlags::COMMENT_END_SECOND) {
                         let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                         if se_b == style_b {
-                            buf.goto_char(next_pos + ch2.len_utf8());
+                            buf.goto_emacs_byte_pos(EmacsBytePos::new(next_pos + ch2.len_utf8()));
                             nesting -= 1;
                             if nesting <= 0 {
                                 return true;
@@ -2694,7 +2696,7 @@ fn scan_forward_comment_body(
             }
         }
 
-        buf.goto_char(pt + ch.len_utf8());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
     }
 }
 
@@ -2719,18 +2721,18 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
         let class = entry.class;
 
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_char(pt + ch.len_utf8());
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             let pt2 = buf.point();
             if pt2 >= max {
                 return false;
             }
             if let Some(ch2) = buf.char_after(pt2) {
-                buf.goto_char(pt2 + ch2.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt2 + ch2.len_utf8()));
             }
             continue;
         }
 
-        buf.goto_char(pt + ch.len_utf8());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -2800,7 +2802,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                             comstyle_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                             nested = nested || flags2.contains(SyntaxFlags::COMMENT_NESTABLE);
                             // Move past both chars of the two-char end.
-                            buf.goto_char(prev_pos - ch2.len_utf8());
+                            buf.goto_emacs_byte_pos(EmacsBytePos::new(prev_pos - ch2.len_utf8()));
                         }
                     }
                 }
@@ -2808,9 +2810,9 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
 
             // Comment fence backward.
             if code == SyntaxClass::CommentFence {
-                buf.goto_char(pt - ch.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                 if !scan_backward_comment_fence(buf, honor_properties) {
-                    buf.goto_char(pt);
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
                     return false;
                 }
                 // Successfully skipped one comment via fence.
@@ -2821,7 +2823,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                 // If we didn't already move point for a two-char end,
                 // move past the single-char end now.
                 if buf.point() == pt {
-                    buf.goto_char(pt - ch.len_utf8());
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                 }
                 let saved = buf.point();
                 if scan_backward_comment_body(buf, comstyle_b, nested, honor_properties) {
@@ -2834,22 +2836,22 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                     // Treat it like a whitespace."
                     // Restore to just before the newline and continue
                     // the inner loop.
-                    buf.goto_char(pt - ch.len_utf8());
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                     continue;
                 }
                 // Non-newline EndComment that failed to find a matching
                 // comment start — failure.
                 if class != SyntaxClass::EndComment {
                     // Was a two-char sequence: restore one char forward.
-                    buf.goto_char(saved + ch.len_utf8());
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(saved + ch.len_utf8()));
                 } else {
-                    buf.goto_char(pt);
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
                 }
                 return false;
             }
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_char(pt - ch.len_utf8());
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                 continue;
             }
 
@@ -2918,7 +2920,7 @@ fn scan_backward_comment_body(
             if se_b == style_b {
                 if nested {
                     nesting += 1;
-                    buf.goto_char(pt - ch.len_utf8());
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                     continue;
                 } else {
                     // Non-nested: this is a same-style comment ender.
@@ -2948,7 +2950,9 @@ fn scan_backward_comment_body(
                         if se_b == style_b {
                             if nested {
                                 nesting += 1;
-                                buf.goto_char(prev_pos - ch2.len_utf8());
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(
+                                    prev_pos - ch2.len_utf8(),
+                                ));
                                 continue;
                             } else {
                                 break;
@@ -2965,7 +2969,7 @@ fn scan_backward_comment_body(
             if sc_b == style_b {
                 let new_pos = pt - ch.len_utf8();
                 if nested {
-                    buf.goto_char(new_pos);
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                     nesting -= 1;
                     if nesting <= 0 {
                         return true;
@@ -2975,7 +2979,7 @@ fn scan_backward_comment_body(
                     // Non-nested: record this as the best (earliest)
                     // comment-start candidate and keep scanning.
                     comstart_pos = Some(new_pos);
-                    buf.goto_char(new_pos);
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                     continue;
                 }
             }
@@ -2984,7 +2988,7 @@ fn scan_backward_comment_body(
         // ── Comment fence ────────────────────────────────────────
         if class == SyntaxClass::CommentFence {
             let new_pos = pt - ch.len_utf8();
-            buf.goto_char(new_pos);
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
             if nested {
                 nesting -= 1;
                 if nesting <= 0 {
@@ -3017,7 +3021,7 @@ fn scan_backward_comment_body(
                         if sc_b == style_b {
                             let new_pos = prev_pos - ch2.len_utf8();
                             if nested {
-                                buf.goto_char(new_pos);
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                                 nesting -= 1;
                                 if nesting <= 0 {
                                     return true;
@@ -3025,7 +3029,7 @@ fn scan_backward_comment_body(
                                 continue;
                             } else {
                                 comstart_pos = Some(new_pos);
-                                buf.goto_char(new_pos);
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                                 continue;
                             }
                         }
@@ -3035,13 +3039,13 @@ fn scan_backward_comment_body(
         }
 
         // Default: skip this character and continue scanning.
-        buf.goto_char(pt - ch.len_utf8());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
     }
 
     // For non-nested comments, check if we recorded any comment-start.
     if !nested {
         if let Some(pos) = comstart_pos {
-            buf.goto_char(pos);
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(pos));
             return true;
         }
     }
@@ -3070,7 +3074,7 @@ fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool
         );
         let class = entry.class;
 
-        buf.goto_char(pt - ch.len_utf8());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -3131,7 +3135,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         if !is_prefix {
             break;
         }
-        buf.goto_char(pt.saturating_sub(ch.len_utf8()));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt.saturating_sub(ch.len_utf8())));
     }
 
     Ok(Value::NIL)
@@ -4221,7 +4225,7 @@ pub(crate) fn builtin_parse_partial_sexp(
     );
     let stop_byte = lisp_pos_to_byte(buf, stop_pos).get();
     if let Some(buf_mut) = eval.buffers.current_buffer_mut() {
-        buf_mut.goto_char(stop_byte);
+        buf_mut.goto_emacs_byte_pos(EmacsBytePos::new(stop_byte));
     }
     Ok(state)
 }

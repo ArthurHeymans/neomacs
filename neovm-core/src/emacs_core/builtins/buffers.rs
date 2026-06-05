@@ -1615,7 +1615,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
         buf.zv_byte = zv_byte;
 
         if let Some(mark_byte) = mark_byte {
-            buf.set_mark_byte(mark_byte);
+            buf.set_mark_emacs_byte_pos(EmacsBytePos::new(mark_byte));
         } else {
             buf.mark_marker_id = None;
             buf.mark_marker_ptr = std::ptr::null_mut();

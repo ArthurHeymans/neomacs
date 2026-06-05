@@ -497,7 +497,7 @@ fn replace_current_buffer_region_in_buffers(
             eval.buffers
                 .current_buffer_id()
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?,
-            buf.point(),
+            buf.point_emacs_byte_pos(),
         )
     };
     super::fns::replace_buffer_emacs_byte_range_lisp_string(
@@ -508,8 +508,8 @@ fn replace_current_buffer_region_in_buffers(
     )?;
     if restore_point {
         if let Some(buf) = eval.buffers.current_buffer_mut() {
-            let accessible_end = buf.accessible_emacs_byte_region().end_usize();
-            buf.goto_char(saved_pt.min(accessible_end));
+            let accessible_end = buf.accessible_emacs_byte_region().end();
+            buf.goto_emacs_byte_pos(saved_pt.min(accessible_end));
         }
     }
     Ok(Value::NIL)
