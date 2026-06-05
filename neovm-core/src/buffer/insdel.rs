@@ -64,9 +64,8 @@ impl Buffer {
     }
 
     fn insertion_at_point(&self, extent: TextExtent) -> TextInsertion {
-        TextInsertion::new(
-            EmacsBytePos::new(self.pt_byte),
-            CharPos0::new(self.pt),
+        TextInsertion::at_anchor(
+            TextPositionAnchor::from_usize(self.pt, self.pt_byte),
             extent,
         )
     }

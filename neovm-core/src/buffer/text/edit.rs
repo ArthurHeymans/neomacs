@@ -164,6 +164,15 @@ impl TextInsertion {
         }
     }
 
+    pub const fn at_anchor(anchor: TextPositionAnchor, extent: TextExtent) -> Self {
+        Self {
+            byte_pos: anchor.emacs_byte_pos(),
+            char_pos: anchor.char_pos(),
+            extent,
+        }
+    }
+
+    #[cfg(test)]
     pub const fn from_usize(
         byte_pos: usize,
         char_pos: usize,
@@ -375,6 +384,7 @@ impl TextTransposition {
         Self { first, second }
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub const fn from_usize(
         start1_byte: usize,

@@ -375,7 +375,10 @@ impl BufferText {
         byte_pos: EmacsBytePos,
         extent: TextExtent,
     ) -> TextInsertion {
-        TextInsertion::new(byte_pos, self.emacs_byte_pos_to_char_pos(byte_pos), extent)
+        TextInsertion::at_anchor(
+            TextPositionAnchor::new(self.emacs_byte_pos_to_char_pos(byte_pos), byte_pos),
+            extent,
+        )
     }
 
     pub fn new() -> Self {
