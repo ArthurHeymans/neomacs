@@ -2024,7 +2024,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     };
 
     let current_val = lookup_buffer_text_property(obarray, buffers, buf, byte_pos.get(), prop);
-    let buf_end = EmacsBytePos::new(buf.accessible_emacs_byte_region().end_usize());
+    let buf_end = buf.accessible_emacs_byte_region().end();
     let mut cursor = byte_pos;
 
     loop {
@@ -2255,7 +2255,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
     if limit_arg.is_some_and(|v| v.is_t()) {
         let next = buf
             .text_props_next_interval_boundary_after_emacs_byte_pos(byte_pos)
-            .unwrap_or_else(|| EmacsBytePos::new(buf.accessible_emacs_byte_region().end_usize()));
+            .unwrap_or_else(|| buf.accessible_emacs_byte_region().end());
         return Ok(Value::fixnum(byte_to_elisp_pos(buf, next.get())));
     }
     let (limit_pos, limit_val) = match limit_arg {
@@ -2265,7 +2265,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         }
         _ => (None, None),
     };
-    let buf_end = EmacsBytePos::new(buf.accessible_emacs_byte_region().end_usize());
+    let buf_end = buf.accessible_emacs_byte_region().end();
 
     match buf.text_props_next_change_after_emacs_byte_pos(byte_pos) {
         Some(next) => {
