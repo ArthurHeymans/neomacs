@@ -2082,7 +2082,10 @@ impl Buffer {
                 .get()
         };
         if self.pt_byte == requested_byte {
-            debug_assert_eq!(self.pt, point.char_pos_usize().min(self.total_chars()));
+            debug_assert_eq!(
+                self.pt,
+                point.char_pos_usize().min(self.total_char_len().get())
+            );
         }
     }
 
@@ -2137,13 +2140,23 @@ impl Buffer {
     }
 
     /// Total number of characters in the buffer text.
+    pub fn total_char_len(&self) -> CharLen {
+        self.text.char_count()
+    }
+
+    /// Total number of Emacs bytes in the buffer text.
+    pub fn total_emacs_byte_len(&self) -> EmacsByteLen {
+        self.text.emacs_byte_len()
+    }
+
+    /// Total number of characters in the buffer text.
     pub fn total_chars(&self) -> usize {
-        self.text.char_count().get()
+        self.total_char_len().get()
     }
 
     /// Total number of Emacs bytes in the buffer text.
     pub fn total_bytes(&self) -> usize {
-        self.text.emacs_byte_len().get()
+        self.total_emacs_byte_len().get()
     }
 
     pub fn is_text_empty(&self) -> bool {
@@ -2201,7 +2214,7 @@ impl Buffer {
 
     /// Full buffer range in Emacs bytes, ignoring narrowing.
     pub fn full_emacs_byte_range(&self) -> EmacsByteRange {
-        EmacsByteRange::from_usize(0, self.total_bytes())
+        EmacsByteRange::from_start_len(EmacsBytePos::ZERO, self.total_emacs_byte_len())
     }
 
     /// Accessible buffer range in Emacs bytes, respecting narrowing.
@@ -2222,21 +2235,23 @@ impl Buffer {
 
     pub fn is_narrowed(&self) -> bool {
         let accessible = self.accessible_emacs_byte_region();
-        accessible.start_usize() > 0 || accessible.end_usize() < self.total_bytes()
+        accessible.start_usize() > 0 || accessible.end_usize() < self.total_emacs_byte_len().get()
     }
 
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
-        self.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos.get().min(self.total_chars())))
+        self.text.char_pos_to_emacs_byte_pos(CharPos0::new(
+            char_pos.get().min(self.total_char_len().get()),
+        ))
     }
 
     /// Convert an Emacs byte position to a 0-based character position,
     /// clamping to the buffer text length.
     pub fn emacs_byte_pos_to_char_pos_clamped(&self, byte_pos: EmacsBytePos) -> CharPos0 {
-        self.text
-            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos.get().min(self.total_bytes())))
+        self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+            byte_pos.get().min(self.total_emacs_byte_len().get()),
+        ))
     }
 
     pub fn emacs_byte_pos_to_lisp_char_pos(&self, byte_pos: EmacsBytePos) -> LispCharPos1 {
@@ -2278,7 +2293,7 @@ impl Buffer {
         } else {
             0
         };
-        let clamped_char = char_pos.min(self.total_chars());
+        let clamped_char = char_pos.min(self.total_char_len().get());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
     }
@@ -2322,8 +2337,12 @@ impl Buffer {
 
     // -- Text queries --------------------------------------------------------
 
+    fn clamped_emacs_byte_pos(&self, pos: EmacsBytePos) -> EmacsBytePos {
+        EmacsBytePos::new(pos.get().min(self.total_emacs_byte_len().get()))
+    }
+
     fn clamped_emacs_byte_range(&self, range: EmacsByteRange) -> EmacsByteRange {
-        let total = self.total_bytes();
+        let total = self.total_emacs_byte_len().get();
         let start = range.start_usize().min(total);
         let end = range.end_usize().max(start).min(total);
         EmacsByteRange::from_usize(start, end)
@@ -2336,12 +2355,12 @@ impl Buffer {
 
     pub fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         self.text
-            .emacs_byte_at_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
+            .emacs_byte_at_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
         self.text
-            .char_at_emacs_byte_pos(EmacsBytePos::new(pos.get().min(self.total_bytes())))
+            .char_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn text_props_get_property_at_emacs_byte_pos(
@@ -2349,10 +2368,8 @@ impl Buffer {
         pos: EmacsBytePos,
         name: Value,
     ) -> Option<Value> {
-        self.text.text_props_get_property_at_emacs_byte_pos(
-            EmacsBytePos::new(pos.get().min(self.total_bytes())),
-            name,
-        )
+        self.text
+            .text_props_get_property_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos), name)
     }
 
     pub fn text_props_get_properties_at_emacs_byte_pos(
@@ -2360,9 +2377,7 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> HashMap<Value, Value> {
         self.text
-            .text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_get_properties_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn text_props_get_properties_ordered_at_emacs_byte_pos(
@@ -2370,9 +2385,7 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Vec<(Value, Value)> {
         self.text
-            .text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_get_properties_ordered_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn text_props_get_properties_plist_value_at_emacs_byte_pos(
@@ -2380,9 +2393,9 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Value {
         self.text
-            .text_props_get_properties_plist_value_at_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_get_properties_plist_value_at_emacs_byte_pos(
+                self.clamped_emacs_byte_pos(pos),
+            )
     }
 
     pub fn text_props_put_property_in_emacs_byte_range(
@@ -2419,9 +2432,7 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
         self.text
-            .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_next_change_after_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn text_props_previous_change_before_emacs_byte_pos(
@@ -2429,9 +2440,7 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
         self.text
-            .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_previous_change_before_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
@@ -2439,9 +2448,9 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
         self.text
-            .text_props_next_interval_boundary_after_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_next_interval_boundary_after_emacs_byte_pos(
+                self.clamped_emacs_byte_pos(pos),
+            )
     }
 
     pub fn text_props_previous_interval_boundary_before_emacs_byte_pos(
@@ -2449,9 +2458,9 @@ impl Buffer {
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
         self.text
-            .text_props_previous_interval_boundary_before_emacs_byte_pos(EmacsBytePos::new(
-                pos.get().min(self.total_bytes()),
-            ))
+            .text_props_previous_interval_boundary_before_emacs_byte_pos(
+                self.clamped_emacs_byte_pos(pos),
+            )
     }
 
     pub fn text_props_is_empty(&self) -> bool {
@@ -2466,7 +2475,7 @@ impl Buffer {
         &self,
     ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
         self.text
-            .text_props_object_interval_runs(CharLen::new(self.total_chars()))
+            .text_props_object_interval_runs(self.total_char_len())
     }
 
     #[cfg(test)]
@@ -2645,7 +2654,7 @@ impl Buffer {
     /// Emacs character code at Emacs byte position `pos`, or `None` if out of range.
     pub fn char_code_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
         let pos = pos.get();
-        if pos >= self.total_bytes() {
+        if pos >= self.total_emacs_byte_len().get() {
             return None;
         }
         self.text
@@ -2661,7 +2670,7 @@ impl Buffer {
     /// Emacs character code immediately before Emacs byte position `pos`, or `None`.
     pub fn char_code_before_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
         let pos = pos.get();
-        if pos == 0 || pos > self.total_bytes() {
+        if pos == 0 || pos > self.total_emacs_byte_len().get() {
             return None;
         }
         let prior_char = self
@@ -2682,7 +2691,7 @@ impl Buffer {
     /// Emacs-byte width of the character starting at `pos`.
     pub fn char_after_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
         let pos = pos.get();
-        if pos >= self.total_bytes() {
+        if pos >= self.total_emacs_byte_len().get() {
             return None;
         }
         let char_idx = self
@@ -2700,7 +2709,7 @@ impl Buffer {
     /// Emacs-byte width of the character ending at `pos`.
     pub fn char_before_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
         let pos = pos.get();
-        if pos == 0 || pos > self.total_bytes() {
+        if pos == 0 || pos > self.total_emacs_byte_len().get() {
             return None;
         }
         let prior_char = self
@@ -2721,10 +2730,10 @@ impl Buffer {
 
     /// Restrict the accessible portion to the Emacs-byte range.
     pub fn narrow_to_emacs_byte_range(&mut self, range: EmacsByteRange) {
-        let total = self.total_bytes();
+        let total = self.total_emacs_byte_len().get();
         let s = range.start_usize().min(total);
         let e = range.end_usize().clamp(s, total);
-        let total_chars = self.text.char_count().get();
+        let total_chars = self.total_char_len().get();
         self.begv_byte = s;
         self.begv = self
             .text
@@ -2759,7 +2768,7 @@ impl Buffer {
 
     /// Remove narrowing — make the entire buffer accessible again.
     pub fn widen(&mut self) {
-        self.narrow_to_emacs_byte_range(EmacsByteRange::from_usize(0, self.total_bytes()));
+        self.narrow_to_emacs_byte_range(self.full_emacs_byte_range());
     }
 
     pub fn accessible_region_snapshot(&self) -> AccessibleBufferRegionSnapshot {
@@ -2785,8 +2794,8 @@ impl Buffer {
     ) {
         self.begv = snapshot.start_char.get();
         self.begv_byte = snapshot.start_emacs_byte.get();
-        self.zv = self.total_chars();
-        self.zv_byte = self.total_bytes();
+        self.zv = self.total_char_len().get();
+        self.zv_byte = self.total_emacs_byte_len().get();
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
@@ -2814,7 +2823,7 @@ impl Buffer {
     }
 
     fn marker_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
-        let clamped = pos.get().min(self.total_bytes());
+        let clamped = pos.get().min(self.total_emacs_byte_len().get());
         let char_pos = if clamped == self.begv_byte {
             self.begv
         } else if clamped == self.zv_byte {
