@@ -388,7 +388,7 @@ impl PieceTreeTextBackend {
             "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
         );
         debug_assert_eq!(
-            nchars,
+            CharLen::new(nchars),
             emacs_char_count_bytes(bytes, self.multibyte),
             "insert_emacs_bytes_both: caller-supplied nchars mismatches actual"
         );
@@ -950,8 +950,7 @@ mod tests {
     fn insert_piece_str(piece: &mut PieceTreeTextBackend, byte_pos: usize, text: &str) {
         let bytes =
             crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, piece.multibyte);
-        let extent =
-            TextExtent::from_usize(emacs_char_count_bytes(&bytes, piece.multibyte), bytes.len());
+        let extent = TextExtent::from_emacs_bytes(&bytes, piece.multibyte);
         piece.insert_measured_emacs_bytes(EmacsBytePos::new(byte_pos), &bytes, extent);
     }
 

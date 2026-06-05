@@ -90,7 +90,7 @@ impl GapBuffer {
     /// Create a gap buffer pre-loaded with raw Emacs bytes.
     pub fn from_emacs_bytes(text: &[u8], multibyte: bool) -> Self {
         let gap = GAP_BYTES_DFL;
-        let char_count = emacs_char_count_bytes(text, multibyte);
+        let char_count = emacs_char_count_bytes(text, multibyte).get();
         let byte_count = text.len();
         let mut buf = Vec::with_capacity(text.len() + gap);
         buf.extend_from_slice(text);
@@ -112,7 +112,7 @@ impl GapBuffer {
         multibyte: bool,
         gap_state: GapCompatState,
     ) -> Self {
-        let total_chars = emacs_char_count_bytes(text, multibyte);
+        let total_chars = emacs_char_count_bytes(text, multibyte).get();
         let gap_start_chars = gap_state.pos().get();
         assert!(
             gap_start_chars <= total_chars,
@@ -172,8 +172,9 @@ impl GapBuffer {
             EmacsByteRange::new(EmacsBytePos::ZERO, EmacsBytePos::new(self.len())),
             &mut logical,
         );
-        self.gap_start_chars = emacs_char_count_bytes(&logical[..self.gap_start], self.multibyte);
-        self.total_chars = emacs_char_count_bytes(&logical, self.multibyte);
+        self.gap_start_chars =
+            emacs_char_count_bytes(&logical[..self.gap_start], self.multibyte).get();
+        self.total_chars = emacs_char_count_bytes(&logical, self.multibyte).get();
         self.gap_start_bytes = self.gap_start;
         self.total_bytes = logical.len();
     }
@@ -464,7 +465,7 @@ impl GapBuffer {
             "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
         );
         debug_assert_eq!(
-            nchars,
+            CharLen::new(nchars),
             emacs_char_count_bytes(bytes, self.multibyte),
             "insert_emacs_bytes_both: caller-supplied nchars mismatches actual"
         );
@@ -507,7 +508,7 @@ impl GapBuffer {
         let mut tmp = Vec::with_capacity(end - start);
         self.copy_emacs_byte_range_to(range, &mut tmp);
         let nchars = emacs_char_count_bytes(&tmp, self.multibyte);
-        self.delete_emacs_byte_range_with_char_len(range, CharLen::new(nchars));
+        self.delete_emacs_byte_range_with_char_len(range, nchars);
     }
 
     /// Delete the logical byte range `[start, end)`, given pre-computed char
@@ -661,12 +662,12 @@ impl GapBuffer {
         };
         let gap = self.gap_size();
         let old_before_chars = if before_gap_len == 0 {
-            0
+            CharLen::ZERO
         } else {
             emacs_char_count_bytes(&self.buf[start..start + before_gap_len], self.multibyte)
         };
         let old_after_chars = if after_gap_len == 0 {
-            0
+            CharLen::ZERO
         } else {
             let phys_start = start.max(self.gap_start_bytes) + gap;
             emacs_char_count_bytes(
@@ -675,13 +676,13 @@ impl GapBuffer {
             )
         };
         debug_assert_eq!(
-            replacement.new_char_len().get(),
+            replacement.new_char_len(),
             emacs_char_count_bytes(bytes, self.multibyte),
             "replace_same_len_range: measured new char count mismatches replacement bytes"
         );
         debug_assert_eq!(
-            replacement.old_char_len().get(),
-            old_before_chars + old_after_chars,
+            replacement.old_char_len(),
+            old_before_chars.add_len(old_after_chars),
             "replace_same_len_range: measured old char count mismatches storage"
         );
 
@@ -699,7 +700,7 @@ impl GapBuffer {
         let new_chars = replacement.new_char_len().get();
         let new_before_chars = emacs_char_count_bytes(&bytes[..before_gap_len], self.multibyte);
         if old_before_chars != new_before_chars {
-            let delta = new_before_chars as isize - old_before_chars as isize;
+            let delta = new_before_chars.get() as isize - old_before_chars.get() as isize;
             self.gap_start_chars = self.gap_start_chars.saturating_add_signed(delta);
         }
         if old_chars != new_chars {
@@ -729,13 +730,13 @@ impl GapBuffer {
         // exactly what move_gap_both lets the caller skip.
         let charpos = if pos < self.gap_start {
             let moved = emacs_char_count_bytes(&self.buf[pos..self.gap_start], self.multibyte);
-            self.gap_start_chars - moved
+            self.gap_start_chars - moved.get()
         } else {
             let moved = emacs_char_count_bytes(
                 &self.buf[self.gap_end..self.gap_end + (pos - self.gap_start)],
                 self.multibyte,
             );
-            self.gap_start_chars + moved
+            self.gap_start_chars + moved.get()
         };
         self.move_gap_to_emacs_byte_pos_and_char_pos(
             EmacsBytePos::new(pos),
@@ -906,7 +907,7 @@ impl GapBuffer {
     /// Reconstruct from text bytes (for pdump load).
     pub(crate) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
         let len = text.len();
-        let char_count = emacs_char_count_bytes(&text, multibyte);
+        let char_count = emacs_char_count_bytes(&text, multibyte).get();
         let byte_count = text.len();
         Self {
             buf: text,

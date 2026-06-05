@@ -330,7 +330,7 @@ impl RopeTextBackend {
             "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
         );
         debug_assert_eq!(
-            extent.chars().get(),
+            extent.chars(),
             emacs_char_count_bytes(bytes, self.multibyte),
             "insert_emacs_bytes_both: caller-supplied nchars mismatches actual"
         );
@@ -398,7 +398,7 @@ impl RopeTextBackend {
             "replace_range_both: caller-supplied new byte count mismatches actual"
         );
         debug_assert_eq!(
-            replacement.new_char_len().get(),
+            replacement.new_char_len(),
             emacs_char_count_bytes(bytes, self.multibyte),
             "replace_range_both: caller-supplied new char count mismatches actual"
         );
@@ -827,7 +827,7 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
         node.chunk.len_usize()
     );
     assert_eq!(
-        node.chunk.char_len_usize(),
+        node.chunk.char_len(),
         emacs_char_count_bytes(&node.chunk.bytes, multibyte),
         "rope leaf cached char count diverged"
     );

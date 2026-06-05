@@ -23,10 +23,10 @@ pub use metrics::TextMetrics;
 pub(crate) use snapshot::BufferTextBytesSnapshot;
 
 #[inline]
-pub(crate) fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> usize {
-    if multibyte {
+pub(crate) fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> crate::buffer::CharLen {
+    crate::buffer::CharLen::new(if multibyte {
         crate::emacs_core::emacs_char::chars_in_multibyte(bytes)
     } else {
         bytes.len()
-    }
+    })
 }

@@ -104,7 +104,7 @@ impl TextExtent {
 
     pub fn from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Self {
         Self::new(
-            CharLen::new(super::emacs_char_count_bytes(bytes, multibyte)),
+            super::emacs_char_count_bytes(bytes, multibyte),
             EmacsByteLen::new(bytes.len()),
         )
     }
