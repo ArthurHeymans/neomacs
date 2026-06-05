@@ -138,7 +138,7 @@ fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flo
 }
 
 pub(crate) fn byte_span_char_len(buf: &crate::buffer::Buffer, beg: usize, end: usize) -> usize {
-    let range = EmacsByteRange::from_usize(beg.min(end), beg.max(end));
+    let range = EmacsByteRange::ordered(EmacsBytePos::new(beg), EmacsBytePos::new(end));
     buf.edit_range_for_emacs_byte_range(range).char_len().get()
 }
 
@@ -672,7 +672,10 @@ fn collect_overlay_change_hooks(
     let search_end = if insertion { end + 1 } else { end.max(beg) };
     let overlay_ids = buf
         .overlays
-        .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(search_beg, search_end));
+        .overlays_in_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::new(search_beg),
+            EmacsBytePos::new(search_end),
+        ));
 
     let mut result = Vec::new();
     for ov_id in overlay_ids {
@@ -1125,7 +1128,7 @@ pub(crate) fn builtin_erase_buffer(
         .buffers
         .get(current_id)
         .map(|buf| buf.full_emacs_byte_range())
-        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+        .unwrap_or(EmacsByteRange::EMPTY);
     let delete_range =
         buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
     let change = TextChange::deletion(delete_range);
@@ -1604,8 +1607,6 @@ pub(crate) fn builtin_translate_region_internal(
     if byte_range.is_empty() {
         return Ok(Value::fixnum(0));
     }
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
     let multibyte = eval
         .buffers
         .get(buffer_id)
@@ -1776,7 +1777,7 @@ pub(crate) fn builtin_translate_region_internal(
         super::fns::replace_buffer_emacs_byte_range_lisp_string(
             eval,
             buffer_id,
-            EmacsByteRange::from_usize(start_byte, end_byte),
+            byte_range,
             &replacement,
         )?;
     }

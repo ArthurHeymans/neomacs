@@ -131,10 +131,6 @@ fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, raw: i64) -> EmacsBytePos {
     buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
 }
 
-fn ordered_emacs_byte_range(start: EmacsBytePos, end: EmacsBytePos) -> EmacsByteRange {
-    EmacsByteRange::new(start.min(end), start.max(end))
-}
-
 fn replacement_region_bounds(
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
@@ -153,7 +149,7 @@ fn replacement_region_bounds(
             )
         })?;
         let pt = buf.point_emacs_byte_pos();
-        return Ok(ordered_emacs_byte_range(pt, mark));
+        return Ok(EmacsByteRange::ordered(pt, mark));
     }
 
     let start = match start_arg {
@@ -166,7 +162,7 @@ fn replacement_region_bounds(
         _ if backward => buf.point_emacs_byte_pos(),
         _ => accessible.end(),
     };
-    Ok(ordered_emacs_byte_range(start, end))
+    Ok(EmacsByteRange::ordered(start, end))
 }
 
 fn line_operation_region_bounds(
@@ -183,7 +179,7 @@ fn line_operation_region_bounds(
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
         _ => accessible.end(),
     };
-    Ok(ordered_emacs_byte_range(start, end))
+    Ok(EmacsByteRange::ordered(start, end))
 }
 
 fn line_start_at_or_before(source: &str, at: usize) -> usize {

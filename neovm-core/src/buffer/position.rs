@@ -409,8 +409,17 @@ impl EmacsByteLen {
 }
 
 impl EmacsByteRange {
+    pub const EMPTY: Self = Self {
+        start: EmacsBytePos::ZERO,
+        end: EmacsBytePos::ZERO,
+    };
+
     pub const fn new(start: EmacsBytePos, end: EmacsBytePos) -> Self {
         Self { start, end }
+    }
+
+    pub fn ordered(start: EmacsBytePos, end: EmacsBytePos) -> Self {
+        Self::new(start.min(end), start.max(end))
     }
 
     pub const fn from_start_len(start: EmacsBytePos, len: EmacsByteLen) -> Self {
