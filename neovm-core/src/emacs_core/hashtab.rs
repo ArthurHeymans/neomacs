@@ -11,6 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::print::print_value;
 use super::value::*;
+use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::tagged::gc::with_tagged_heap;
 use std::collections::{BTreeMap, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -290,13 +291,16 @@ fn sxhash_equal_including_properties_emacs_uint(value: &Value) -> u64 {
         return hash;
     };
     if let Some(table) = get_string_text_properties_table_for_value(*value) {
-        let _ = table.try_for_each_interval_in_range(0, string.schars(), |start, end, plist| {
-            hash = sxhash_combine(hash, start as u64);
-            hash = sxhash_combine(hash, end.saturating_sub(start) as u64);
-            let plist_value = plist_pairs_to_value(plist);
-            hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&plist_value, 0));
-            Ok::<(), ()>(())
-        });
+        let _ = table.try_for_each_interval_in_char_range(
+            CharRange::from_start_len(CharPos0::ZERO, CharLen::new(string.schars())),
+            |start, end, plist| {
+                hash = sxhash_combine(hash, start as u64);
+                hash = sxhash_combine(hash, end.saturating_sub(start) as u64);
+                let plist_value = plist_pairs_to_value(plist);
+                hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&plist_value, 0));
+                Ok::<(), ()>(())
+            },
+        );
     }
     hash
 }

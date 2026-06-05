@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::{CharLen, CharRange};
 use crate::emacs_core::coding::TextQuotingStyle;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, get_string_text_properties_table_for_value,
@@ -172,7 +173,8 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                         .expect("validated storage substring bounds")
                 };
                 let sliced_props = if let Some(src_table) = src_props.as_ref() {
-                    let sliced = src_table.slice_copy_text_properties(from, to);
+                    let sliced = src_table
+                        .slice_copy_text_properties_char_range(CharRange::from_usize(from, to));
                     (!sliced.is_empty()).then_some(sliced)
                 } else {
                     None
@@ -388,7 +390,10 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             for (src_val, offset) in &string_sources {
                 if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
                     if !src_table.is_empty() {
-                        combined_table.append_shifted_via_add_text_properties(&src_table, *offset);
+                        combined_table.append_shifted_via_add_text_properties_at_char_offset(
+                            &src_table,
+                            CharLen::new(*offset),
+                        );
                         has_props = true;
                     }
                 }
@@ -471,7 +476,10 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             for (src_val, offset) in &string_sources {
                 if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
                     if !src_table.is_empty() {
-                        combined_table.append_shifted_via_add_text_properties(&src_table, *offset);
+                        combined_table.append_shifted_via_add_text_properties_at_char_offset(
+                            &src_table,
+                            CharLen::new(*offset),
+                        );
                         has_props = true;
                     }
                 }
@@ -1745,10 +1753,9 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
 
         let ordered: Vec<_> = src_interval.ordered_properties().collect();
         for (name, value) in ordered.into_iter().rev() {
-            if table.put_property_for_object_len(
-                result_start,
-                result_end,
-                result_string.schars(),
+            if table.put_property_for_object_char_len(
+                CharRange::from_usize(result_start, result_end),
+                CharLen::new(result_string.schars()),
                 name,
                 *value,
             ) {
@@ -1827,10 +1834,12 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
             }
             let ordered: Vec<_> = interval.ordered_properties().collect();
             for (name, value) in ordered.into_iter().rev() {
-                if table.put_property_for_object_len(
-                    span.result_char_start + interval.start,
-                    span.result_char_start + end,
-                    result_string.schars(),
+                if table.put_property_for_object_char_len(
+                    CharRange::from_usize(
+                        span.result_char_start + interval.start,
+                        span.result_char_start + end,
+                    ),
+                    CharLen::new(result_string.schars()),
                     name,
                     *value,
                 ) {

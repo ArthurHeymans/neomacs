@@ -1,5 +1,6 @@
 use super::super::eval::Context;
 use super::*;
+use crate::buffer::{CharLen, CharRange};
 use crate::emacs_core::builtins::{
     builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
     builtin_make_indirect_buffer,
@@ -168,15 +169,13 @@ fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
 
     let key = Value::string("C-u");
     let mut props = crate::buffer::text_props::TextPropertyTable::new();
-    props.put_property(
-        0,
-        3,
+    props.put_property_in_char_range(
+        CharRange::from_usize(0, 3),
         Value::symbol("face"),
         Value::symbol("help-key-binding"),
     );
-    props.put_property(
-        0,
-        3,
+    props.put_property_in_char_range(
+        CharRange::from_usize(0, 3),
         Value::symbol("font-lock-face"),
         Value::symbol("help-key-binding"),
     );
@@ -197,7 +196,7 @@ fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
     let text = buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range());
     let shape: Vec<_> = text
         .intervals()
-        .object_interval_runs(text.schars())
+        .object_interval_runs_for_char_len(CharLen::new(text.schars()))
         .into_iter()
         .map(|(start, end, plist)| (start, end, plist.is_empty()))
         .collect();

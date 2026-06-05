@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 
+use super::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -1378,7 +1379,16 @@ impl TextPropertyTable {
 
     // -- Public API ----------------------------------------------------------
 
-    pub fn put_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
+    pub fn put_property_in_char_range(
+        &mut self,
+        range: CharRange,
+        name: Value,
+        value: Value,
+    ) -> bool {
+        self.put_property(range.start_usize(), range.end_usize(), name, value)
+    }
+
+    fn put_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
         if start >= end {
             return false;
         }
@@ -1398,7 +1408,23 @@ impl TextPropertyTable {
         changed
     }
 
-    pub fn put_property_for_object_len(
+    pub fn put_property_for_object_char_len(
+        &mut self,
+        range: CharRange,
+        object_len: CharLen,
+        name: Value,
+        value: Value,
+    ) -> bool {
+        self.put_property_for_object_len(
+            range.start_usize(),
+            range.end_usize(),
+            object_len.get(),
+            name,
+            value,
+        )
+    }
+
+    fn put_property_for_object_len(
         &mut self,
         start: usize,
         end: usize,
@@ -1435,12 +1461,20 @@ impl TextPropertyTable {
         )
     }
 
-    pub fn get_property(&self, pos: usize, name: Value) -> Option<Value> {
+    pub fn get_property_at_char_pos(&self, pos: CharPos0, name: Value) -> Option<Value> {
+        self.get_property(pos.get(), name)
+    }
+
+    fn get_property(&self, pos: usize, name: Value) -> Option<Value> {
         let (_, node) = self.find_interval(pos)?;
         plist_value_get(node.plist, name)
     }
 
-    pub fn get_properties(&self, pos: usize) -> HashMap<Value, Value> {
+    pub fn get_properties_at_char_pos(&self, pos: CharPos0) -> HashMap<Value, Value> {
+        self.get_properties(pos.get())
+    }
+
+    fn get_properties(&self, pos: usize) -> HashMap<Value, Value> {
         let Some((start, id)) = self.intervals.find_id(pos) else {
             return HashMap::new();
         };
@@ -1449,21 +1483,37 @@ impl TextPropertyTable {
         PropertyInterval::from_plist(start, end, &plist_pairs(node.plist)).properties
     }
 
-    pub fn get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
+    pub fn get_properties_ordered_at_char_pos(&self, pos: CharPos0) -> Vec<(Value, Value)> {
+        self.get_properties_ordered(pos.get())
+    }
+
+    fn get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
         let Some((_, node)) = self.find_interval(pos) else {
             return Vec::new();
         };
         plist_pairs(node.plist)
     }
 
-    pub fn get_properties_plist_value(&self, pos: usize) -> Value {
+    pub fn get_properties_plist_value_at_char_pos(&self, pos: CharPos0) -> Value {
+        self.get_properties_plist_value(pos.get())
+    }
+
+    fn get_properties_plist_value(&self, pos: usize) -> Value {
         let Some((_, node)) = self.find_interval(pos) else {
             return Value::NIL;
         };
         node.plist
     }
 
-    pub fn range_has_all_properties(
+    pub fn range_has_all_properties_in_char_range(
+        &self,
+        range: CharRange,
+        properties: &[(Value, Value)],
+    ) -> bool {
+        self.range_has_all_properties(range.start_usize(), range.end_usize(), properties)
+    }
+
+    fn range_has_all_properties(
         &self,
         start: usize,
         end: usize,
@@ -1504,7 +1554,15 @@ impl TextPropertyTable {
         true
     }
 
-    pub fn range_has_any_property_named(&self, start: usize, end: usize, names: &[Value]) -> bool {
+    pub fn range_has_any_property_named_in_char_range(
+        &self,
+        range: CharRange,
+        names: &[Value],
+    ) -> bool {
+        self.range_has_any_property_named(range.start_usize(), range.end_usize(), names)
+    }
+
+    fn range_has_any_property_named(&self, start: usize, end: usize, names: &[Value]) -> bool {
         if start >= end || names.is_empty() {
             return false;
         }
@@ -1516,7 +1574,11 @@ impl TextPropertyTable {
         })
     }
 
-    pub fn range_has_any_interval(&self, start: usize, end: usize) -> bool {
+    pub fn range_has_any_interval_in_char_range(&self, range: CharRange) -> bool {
+        self.range_has_any_interval(range.start_usize(), range.end_usize())
+    }
+
+    fn range_has_any_interval(&self, start: usize, end: usize) -> bool {
         if start >= end {
             return false;
         }
@@ -1524,7 +1586,11 @@ impl TextPropertyTable {
         self.any_interval_overlapping(start, end, |_, node| !node.is_empty_plist())
     }
 
-    pub fn remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
+    pub fn remove_property_in_char_range(&mut self, range: CharRange, name: Value) -> bool {
+        self.remove_property(range.start_usize(), range.end_usize(), name)
+    }
+
+    fn remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
         if start >= end {
             return false;
         }
@@ -1542,7 +1608,11 @@ impl TextPropertyTable {
         changed
     }
 
-    pub fn remove_all_properties(&mut self, start: usize, end: usize) {
+    pub fn remove_all_properties_in_char_range(&mut self, range: CharRange) {
+        self.remove_all_properties(range.start_usize(), range.end_usize());
+    }
+
+    fn remove_all_properties(&mut self, start: usize, end: usize) {
         if start >= end {
             return;
         }
@@ -1556,7 +1626,11 @@ impl TextPropertyTable {
         self.intervals.prune_trailing_empty_intervals();
     }
 
-    pub fn set_properties(&mut self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
+    pub fn set_properties_in_char_range(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
+        self.set_properties(range.start_usize(), range.end_usize(), plist);
+    }
+
+    fn set_properties(&mut self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
         if start >= end {
             return;
         }
@@ -1596,7 +1670,21 @@ impl TextPropertyTable {
         }
     }
 
-    pub fn set_properties_for_object_len(
+    pub fn set_properties_for_object_char_len(
+        &mut self,
+        range: CharRange,
+        object_len: CharLen,
+        plist: Vec<(Value, Value)>,
+    ) {
+        self.set_properties_for_object_len(
+            range.start_usize(),
+            range.end_usize(),
+            object_len.get(),
+            plist,
+        );
+    }
+
+    fn set_properties_for_object_len(
         &mut self,
         start: usize,
         end: usize,
@@ -1635,7 +1723,11 @@ impl TextPropertyTable {
         }
     }
 
-    pub fn next_property_change(&self, pos: usize) -> Option<usize> {
+    pub fn next_property_change_after_char_pos(&self, pos: CharPos0) -> Option<CharPos0> {
+        self.next_property_change(pos.get()).map(CharPos0::new)
+    }
+
+    fn next_property_change(&self, pos: usize) -> Option<usize> {
         let current = self.plist_at(pos).unwrap_or_default();
         let mut cursor = pos;
         while let Some(next) = self.next_interval_boundary(cursor) {
@@ -1651,7 +1743,11 @@ impl TextPropertyTable {
         None
     }
 
-    pub fn previous_property_change(&self, pos: usize) -> Option<usize> {
+    pub fn previous_property_change_before_char_pos(&self, pos: CharPos0) -> Option<CharPos0> {
+        self.previous_property_change(pos.get()).map(CharPos0::new)
+    }
+
+    fn previous_property_change(&self, pos: usize) -> Option<usize> {
         if pos == 0 {
             return None;
         }
@@ -1678,7 +1774,11 @@ impl TextPropertyTable {
     /// Return the next raw interval boundary after `pos`, even when adjacent
     /// interval plists are equal.  This matches GNU's `next_interval` path used
     /// by `(next-property-change POS OBJECT t)`.
-    pub fn next_interval_boundary(&self, pos: usize) -> Option<usize> {
+    pub fn next_interval_boundary_after_char_pos(&self, pos: CharPos0) -> Option<CharPos0> {
+        self.next_interval_boundary(pos.get()).map(CharPos0::new)
+    }
+
+    fn next_interval_boundary(&self, pos: usize) -> Option<usize> {
         if let Some((start, id)) = self.intervals.find_id(pos) {
             return Some(start + self.intervals.node_len(id));
         }
@@ -1687,7 +1787,12 @@ impl TextPropertyTable {
     }
 
     /// Return the previous raw interval boundary before `pos`.
-    pub fn previous_interval_boundary(&self, pos: usize) -> Option<usize> {
+    pub fn previous_interval_boundary_before_char_pos(&self, pos: CharPos0) -> Option<CharPos0> {
+        self.previous_interval_boundary(pos.get())
+            .map(CharPos0::new)
+    }
+
+    fn previous_interval_boundary(&self, pos: usize) -> Option<usize> {
         if pos == 0 {
             return None;
         }
@@ -1701,7 +1806,11 @@ impl TextPropertyTable {
         (tree_len > 0 && tree_len < pos).then_some(tree_len)
     }
 
-    pub fn adjust_for_insert(&mut self, pos: usize, len: usize) {
+    pub fn adjust_for_insert_at_char_pos(&mut self, pos: CharPos0, len: CharLen) {
+        self.adjust_for_insert(pos.get(), len.get());
+    }
+
+    fn adjust_for_insert(&mut self, pos: usize, len: usize) {
         if len == 0 {
             return;
         }
@@ -1709,7 +1818,11 @@ impl TextPropertyTable {
         self.intervals.insert_default_at(pos, len);
     }
 
-    pub fn adjust_for_delete(&mut self, start: usize, end: usize) {
+    pub fn adjust_for_delete_char_range(&mut self, range: CharRange) {
+        self.adjust_for_delete(range.start_usize(), range.end_usize());
+    }
+
+    fn adjust_for_delete(&mut self, start: usize, end: usize) {
         if start >= end {
             return;
         }
@@ -1717,7 +1830,16 @@ impl TextPropertyTable {
         self.intervals.delete_range(start, end);
     }
 
-    pub fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
+    pub fn adjust_for_replace_at_char_pos(
+        &mut self,
+        start: CharPos0,
+        old_len: CharLen,
+        new_len: CharLen,
+    ) {
+        self.adjust_for_replace(start.get(), old_len.get(), new_len.get());
+    }
+
+    fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
         match new_len.cmp(&old_len) {
             std::cmp::Ordering::Greater => {
                 self.adjust_for_insert(start, new_len - old_len);
@@ -1743,7 +1865,14 @@ impl TextPropertyTable {
     /// Unlike `intervals_snapshot', this keeps nil-property gaps once an
     /// interval tree exists.  GNU reports those gaps so callers can observe the
     /// complete interval partition of the string.
-    pub fn object_interval_runs(&self, len: usize) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    pub fn object_interval_runs_for_char_len(
+        &self,
+        len: CharLen,
+    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        self.object_interval_runs(len.get())
+    }
+
+    fn object_interval_runs(&self, len: usize) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
         self.object_interval_plist_runs(len)
             .into_iter()
             .map(|(start, end, plist)| (start, end, plist_pairs(plist)))
@@ -1755,7 +1884,14 @@ impl TextPropertyTable {
     /// GNU `collect_interval' stores `interval->plist' directly in the
     /// returned structure, so later property replacement can be visible through
     /// that plist object.
-    pub fn object_interval_plist_runs(&self, len: usize) -> Vec<(usize, usize, Value)> {
+    pub fn object_interval_plist_runs_for_char_len(
+        &self,
+        len: CharLen,
+    ) -> Vec<(usize, usize, Value)> {
+        self.object_interval_plist_runs(len.get())
+    }
+
+    fn object_interval_plist_runs(&self, len: usize) -> Vec<(usize, usize, Value)> {
         if self.intervals.is_empty() {
             return Vec::new();
         }
@@ -1779,7 +1915,22 @@ impl TextPropertyTable {
         runs
     }
 
-    pub fn first_interval_pos_with_property_eq(
+    pub fn first_interval_pos_with_property_eq_in_char_range(
+        &self,
+        range: CharRange,
+        name: Value,
+        value: Value,
+    ) -> Option<CharPos0> {
+        self.first_interval_pos_with_property_eq(
+            range.start_usize(),
+            range.end_usize(),
+            name,
+            value,
+        )
+        .map(CharPos0::new)
+    }
+
+    fn first_interval_pos_with_property_eq(
         &self,
         start: usize,
         end: usize,
@@ -1807,7 +1958,15 @@ impl TextPropertyTable {
         }
     }
 
-    pub(crate) fn try_for_each_interval_in_range<E>(
+    pub(crate) fn try_for_each_interval_in_char_range<E>(
+        &self,
+        range: CharRange,
+        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.try_for_each_interval_in_range(range.start_usize(), range.end_usize(), f)
+    }
+
+    fn try_for_each_interval_in_range<E>(
         &self,
         start: usize,
         end: usize,
@@ -1876,7 +2035,11 @@ impl TextPropertyTable {
         true
     }
 
-    pub fn slice(&self, start: usize, end: usize) -> TextPropertyTable {
+    pub fn slice_char_range(&self, range: CharRange) -> TextPropertyTable {
+        self.slice(range.start_usize(), range.end_usize())
+    }
+
+    fn slice(&self, start: usize, end: usize) -> TextPropertyTable {
         if start >= end {
             return TextPropertyTable::new();
         }
@@ -1893,7 +2056,11 @@ impl TextPropertyTable {
         TextPropertyTable::from_plist_runs(runs)
     }
 
-    pub fn slice_copy_text_properties(&self, start: usize, end: usize) -> TextPropertyTable {
+    pub fn slice_copy_text_properties_char_range(&self, range: CharRange) -> TextPropertyTable {
+        self.slice_copy_text_properties(range.start_usize(), range.end_usize())
+    }
+
+    fn slice_copy_text_properties(&self, start: usize, end: usize) -> TextPropertyTable {
         if start >= end {
             return TextPropertyTable::new();
         }
@@ -1906,13 +2073,21 @@ impl TextPropertyTable {
                 return;
             }
             for (name, value) in plist_pairs(node.plist) {
-                table.put_property(new_start, new_end, name, value);
+                table.put_property_in_char_range(
+                    CharRange::from_usize(new_start, new_end),
+                    name,
+                    value,
+                );
             }
         });
         table
     }
 
-    pub fn append_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
+    pub fn append_shifted_at_char_offset(&mut self, other: &TextPropertyTable, offset: CharLen) {
+        self.append_shifted(other, offset.get());
+    }
+
+    fn append_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
         let mut runs = self.intervals.runs();
         for mut run in other.intervals.runs() {
             run.start += offset;
@@ -1922,22 +2097,38 @@ impl TextPropertyTable {
         self.replace_runs_preserving_shape(runs);
     }
 
-    pub fn append_shifted_via_add_text_properties(
+    pub fn append_shifted_via_add_text_properties_at_char_offset(
         &mut self,
         other: &TextPropertyTable,
-        offset: usize,
+        offset: CharLen,
     ) {
+        self.append_shifted_via_add_text_properties(other, offset.get());
+    }
+
+    fn append_shifted_via_add_text_properties(&mut self, other: &TextPropertyTable, offset: usize) {
         for run in other.intervals.runs() {
             if run.is_empty_plist() {
                 continue;
             }
             for (name, value) in plist_pairs(run.plist) {
-                self.put_property(run.start + offset, run.end + offset, name, value);
+                self.put_property_in_char_range(
+                    CharRange::from_usize(run.start + offset, run.end + offset),
+                    name,
+                    value,
+                );
             }
         }
     }
 
-    pub fn merge_missing_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
+    pub fn merge_missing_shifted_at_char_offset(
+        &mut self,
+        other: &TextPropertyTable,
+        offset: CharLen,
+    ) {
+        self.merge_missing_shifted(other, offset.get());
+    }
+
+    fn merge_missing_shifted(&mut self, other: &TextPropertyTable, offset: usize) {
         let mut target_runs = self.intervals.runs();
         for source in other.intervals.runs() {
             if source.is_empty_plist() {
@@ -1964,7 +2155,11 @@ impl TextPropertyTable {
         self.replace_runs_preserving_shape(target_runs);
     }
 
-    pub fn merge_adjacent_equal_properties_around(&mut self, start: usize, end: usize) {
+    pub fn merge_adjacent_equal_properties_around_char_range(&mut self, range: CharRange) {
+        self.merge_adjacent_equal_properties_around(range.start_usize(), range.end_usize());
+    }
+
+    fn merge_adjacent_equal_properties_around(&mut self, start: usize, end: usize) {
         let mut runs = self.intervals.runs();
         if start > end || runs.len() < 2 {
             return;

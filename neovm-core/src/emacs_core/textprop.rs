@@ -11,7 +11,9 @@ use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
-use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{
+    Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
+};
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
 
@@ -68,6 +70,21 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
 #[inline]
 fn buffer_end_emacs_byte_pos(buf: &Buffer) -> EmacsBytePos {
     buffer_char_to_emacs_byte_pos(buf, buf.total_chars())
+}
+
+#[inline]
+fn string_char_pos(pos: usize) -> CharPos0 {
+    CharPos0::new(pos)
+}
+
+#[inline]
+fn string_char_range(start: usize, end: usize) -> CharRange {
+    CharRange::from_usize(start, end)
+}
+
+#[inline]
+fn string_char_len(len: usize) -> CharLen {
+    CharLen::new(len)
 }
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
@@ -298,7 +315,7 @@ fn lookup_string_text_property(
     lookup_char_property_from_direct(
         obarray,
         buffers,
-        |name| table.get_property(char_pos, name),
+        |name| table.get_property_at_char_pos(string_char_pos(char_pos), name),
         prop,
         true,
     )
@@ -1127,7 +1144,12 @@ pub(crate) fn builtin_put_text_property_in_buffers(
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.put_property_for_object_len(char_beg, char_end, s.schars(), prop, val);
+        table.put_property_for_object_char_len(
+            string_char_range(char_beg, char_end),
+            string_char_len(s.schars()),
+            prop,
+            val,
+        );
         save_string_props_for_value(str_val, table);
         return Ok(Value::NIL);
     }
@@ -1362,7 +1384,12 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_changed = false;
         for (name, val) in pairs {
-            if table.put_property_for_object_len(char_beg, char_end, s.schars(), name, val) {
+            if table.put_property_for_object_char_len(
+                string_char_range(char_beg, char_end),
+                string_char_len(s.schars()),
+                name,
+                val,
+            ) {
                 any_changed = true;
             }
         }
@@ -1516,16 +1543,17 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         // face value and merge. Walk the range segment-by-segment.
         let mut seg_start = char_beg;
         while seg_start < char_end {
-            let seg_end = match table.next_property_change(seg_start) {
-                Some(p) if p < char_end => p,
-                _ => char_end,
-            };
-            let existing = table.get_property(seg_start, Value::symbol("face"));
+            let seg_end =
+                match table.next_property_change_after_char_pos(string_char_pos(seg_start)) {
+                    Some(p) if p.get() < char_end => p.get(),
+                    _ => char_end,
+                };
+            let existing =
+                table.get_property_at_char_pos(string_char_pos(seg_start), Value::symbol("face"));
             let merged = merge_face_property(existing, new_face, append)?;
-            table.put_property_for_object_len(
-                seg_start,
-                seg_end,
-                s.schars(),
+            table.put_property_for_object_char_len(
+                string_char_range(seg_start, seg_end),
+                string_char_len(s.schars()),
                 Value::symbol("face"),
                 merged,
             );
@@ -1646,7 +1674,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_removed = false;
         for name in names {
-            if table.remove_property(char_beg, char_end, name) {
+            if table.remove_property_in_char_range(string_char_range(char_beg, char_end), name) {
                 any_removed = true;
             }
         }
@@ -1748,7 +1776,11 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
             return Ok(Value::T);
         }
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.set_properties_for_object_len(char_beg, char_end, s.schars(), pairs);
+        table.set_properties_for_object_char_len(
+            string_char_range(char_beg, char_end),
+            string_char_len(s.schars()),
+            pairs,
+        );
         save_string_props_for_value(str_val, table);
         return Ok(Value::T);
     }
@@ -1822,7 +1854,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut changed = false;
         for name in names {
-            if table.remove_property(char_beg, char_end, name) {
+            if table.remove_property_in_char_range(string_char_range(char_beg, char_end), name) {
                 changed = true;
             }
         }
@@ -1894,7 +1926,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
             return Ok(Value::NIL);
         }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
-            return Ok(table.get_properties_plist_value(char_pos));
+            return Ok(table.get_properties_plist_value_at_char_pos(string_char_pos(char_pos)));
         }
         return Ok(Value::NIL);
     }
@@ -1946,8 +1978,9 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         let str_len = s.schars();
         let mut cursor = char_pos;
         loop {
-            match table.next_interval_boundary(cursor) {
+            match table.next_interval_boundary_after_char_pos(string_char_pos(cursor)) {
                 Some(next) => {
+                    let next = next.get();
                     if let Some(lim) = limit_pos {
                         if next as i64 >= lim {
                             return Ok(match limit_val {
@@ -2060,8 +2093,9 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         let current_val = lookup_string_text_property(obarray, buffers, &table, ref_char, prop);
         let mut cursor = char_pos;
         loop {
-            match table.previous_interval_boundary(cursor) {
+            match table.previous_interval_boundary_before_char_pos(string_char_pos(cursor)) {
                 Some(prev) => {
+                    let prev = prev.get();
                     if let Some(lim) = limit_pos {
                         if (prev as i64) <= lim {
                             return Ok(match limit_val {
@@ -2179,7 +2213,8 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         let limit_arg = args.get(2);
         if limit_arg.is_some_and(|v| v.is_t()) {
             let next = table
-                .next_interval_boundary(char_pos)
+                .next_interval_boundary_after_char_pos(string_char_pos(char_pos))
+                .map(|pos| pos.get())
                 .unwrap_or_else(|| s.schars());
             return Ok(Value::fixnum(next as i64));
         }
@@ -2191,8 +2226,9 @@ pub(crate) fn builtin_next_property_change_in_buffers(
             _ => (None, None),
         };
         let str_char_len = s.schars();
-        return match table.next_property_change(char_pos) {
+        return match table.next_property_change_after_char_pos(string_char_pos(char_pos)) {
             Some(next) => {
+                let next = next.get();
                 if let Some(lim) = limit_pos {
                     if (next as i64) >= lim {
                         return Ok(limit_val.unwrap_or(Value::NIL));
@@ -2294,8 +2330,8 @@ pub(crate) fn builtin_text_property_any_in_state(
                 if found.is_nil() {
                     return Ok(Value::fixnum(string_char_to_elisp_pos(s, cursor)));
                 }
-                match table.next_interval_boundary(cursor) {
-                    Some(next) if next <= char_end => cursor = next,
+                match table.next_interval_boundary_after_char_pos(string_char_pos(cursor)) {
+                    Some(next) if next.get() <= char_end => cursor = next.get(),
                     _ => break,
                 }
             }
@@ -2307,8 +2343,8 @@ pub(crate) fn builtin_text_property_any_in_state(
             if eq_value(&found, val) {
                 return Ok(Value::fixnum(string_char_to_elisp_pos(s, cursor)));
             }
-            match table.next_interval_boundary(cursor) {
-                Some(next) if next > cursor && next <= char_end => cursor = next,
+            match table.next_interval_boundary_after_char_pos(string_char_pos(cursor)) {
+                Some(next) if next.get() > cursor && next.get() <= char_end => cursor = next.get(),
                 _ => break,
             }
         }
@@ -2416,8 +2452,8 @@ pub(crate) fn builtin_text_property_not_all_in_state(
             if !matches {
                 return Ok(Value::fixnum(string_char_to_elisp_pos(s, cursor)));
             }
-            match table.next_property_change(cursor) {
-                Some(next) if next > cursor && next < char_end => cursor = next,
+            match table.next_property_change_after_char_pos(string_char_pos(cursor)) {
+                Some(next) if next.get() > cursor && next.get() < char_end => cursor = next.get(),
                 _ => break,
             }
         }

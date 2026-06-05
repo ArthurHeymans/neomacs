@@ -870,13 +870,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .put_property_for_object_len(
-                range.start_usize(),
-                range.end_usize(),
-                object_len,
-                name,
-                value,
-            )
+            .put_property_for_object_char_len(range, CharLen::new(object_len), name, value)
     }
 
     pub fn text_props_get_property_at_emacs_byte_pos(
@@ -888,7 +882,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .get_property(pos.start_usize(), name)
+            .get_property_at_char_pos(pos.start(), name)
     }
 
     pub fn text_props_get_properties_at_emacs_byte_pos(
@@ -899,7 +893,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .get_properties(pos.start_usize())
+            .get_properties_at_char_pos(pos.start())
     }
 
     pub fn text_props_get_properties_ordered_at_emacs_byte_pos(
@@ -910,7 +904,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .get_properties_ordered(pos.start_usize())
+            .get_properties_ordered_at_char_pos(pos.start())
     }
 
     pub fn text_props_get_properties_plist_value_at_emacs_byte_pos(
@@ -921,7 +915,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .get_properties_plist_value(pos.start_usize())
+            .get_properties_plist_value_at_char_pos(pos.start())
     }
 
     pub fn text_props_range_has_all_properties_in_emacs_byte_range(
@@ -930,11 +924,10 @@ impl BufferText {
         properties: &[(Value, Value)],
     ) -> bool {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage.borrow().text_props.range_has_all_properties(
-            range.start_usize(),
-            range.end_usize(),
-            properties,
-        )
+        self.storage
+            .borrow()
+            .text_props
+            .range_has_all_properties_in_char_range(range, properties)
     }
 
     pub fn text_props_range_has_any_property_named_in_emacs_byte_range(
@@ -946,7 +939,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .range_has_any_property_named(range.start_usize(), range.end_usize(), names)
+            .range_has_any_property_named_in_char_range(range, names)
     }
 
     pub fn text_props_range_has_any_interval_in_emacs_byte_range(
@@ -957,7 +950,7 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .range_has_any_interval(range.start_usize(), range.end_usize())
+            .range_has_any_interval_in_char_range(range)
     }
 
     pub fn text_props_remove_property_in_emacs_byte_range(
@@ -966,11 +959,10 @@ impl BufferText {
         name: Value,
     ) -> bool {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage.borrow_mut().text_props.remove_property(
-            range.start_usize(),
-            range.end_usize(),
-            name,
-        )
+        self.storage
+            .borrow_mut()
+            .text_props
+            .remove_property_in_char_range(range, name)
     }
 
     pub fn text_props_remove_all_in_emacs_byte_range(&self, byte_range: EmacsByteRange) {
@@ -978,7 +970,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .remove_all_properties(range.start_usize(), range.end_usize());
+            .remove_all_properties_in_char_range(range);
     }
 
     pub fn text_props_set_properties_in_emacs_byte_range(
@@ -996,12 +988,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .set_properties_for_object_len(
-                range.start_usize(),
-                range.end_usize(),
-                object_len,
-                plist,
-            );
+            .set_properties_for_object_char_len(range, CharLen::new(object_len), plist);
     }
 
     pub fn text_props_next_change_after_emacs_byte_pos(
@@ -1015,9 +1002,9 @@ impl BufferText {
             self.storage
                 .borrow()
                 .text_props
-                .next_property_change(char_pos)
+                .next_property_change_after_char_pos(CharPos0::new(char_pos))
         };
-        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)))
+        next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
 
     pub fn text_props_previous_change_before_emacs_byte_pos(
@@ -1031,9 +1018,9 @@ impl BufferText {
             self.storage
                 .borrow()
                 .text_props
-                .previous_property_change(char_pos)
+                .previous_property_change_before_char_pos(CharPos0::new(char_pos))
         };
-        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)))
+        prev.map(|prev| self.char_pos_to_emacs_byte_pos(prev))
     }
 
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
@@ -1047,9 +1034,9 @@ impl BufferText {
             self.storage
                 .borrow()
                 .text_props
-                .next_interval_boundary(char_pos)
+                .next_interval_boundary_after_char_pos(CharPos0::new(char_pos))
         };
-        next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)))
+        next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
 
     pub fn text_props_first_interval_pos_with_property_eq_in_emacs_byte_range(
@@ -1063,13 +1050,8 @@ impl BufferText {
             .storage
             .borrow()
             .text_props
-            .first_interval_pos_with_property_eq(
-                range.start_usize(),
-                range.end_usize(),
-                name,
-                value,
-            )?;
-        Some(self.char_pos_to_emacs_byte_pos(CharPos0::new(pos)))
+            .first_interval_pos_with_property_eq_in_char_range(range, name, value)?;
+        Some(self.char_pos_to_emacs_byte_pos(pos))
     }
 
     pub fn text_props_previous_interval_boundary_before_emacs_byte_pos(
@@ -1083,9 +1065,9 @@ impl BufferText {
             self.storage
                 .borrow()
                 .text_props
-                .previous_interval_boundary(char_pos)
+                .previous_interval_boundary_before_char_pos(CharPos0::new(char_pos))
         };
-        prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)))
+        prev.map(|prev| self.char_pos_to_emacs_byte_pos(prev))
     }
 
     pub fn text_props_append_shifted_at_emacs_byte_pos(
@@ -1099,7 +1081,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .append_shifted(other, char_offset);
+            .append_shifted_at_char_offset(other, CharLen::new(char_offset));
     }
 
     pub fn text_props_merge_missing_shifted_at_emacs_byte_pos(
@@ -1113,7 +1095,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .merge_missing_shifted(other, char_offset);
+            .merge_missing_shifted_at_char_offset(other, CharLen::new(char_offset));
     }
 
     pub fn text_props_merge_adjacent_equal_around_emacs_byte_range(
@@ -1124,7 +1106,7 @@ impl BufferText {
         self.storage
             .borrow_mut()
             .text_props
-            .merge_adjacent_equal_properties_around(range.start_usize(), range.end_usize());
+            .merge_adjacent_equal_properties_around_char_range(range);
     }
 
     pub fn text_props_slice_emacs_byte_range(
@@ -1132,10 +1114,7 @@ impl BufferText {
         byte_range: EmacsByteRange,
     ) -> TextPropertyTable {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage
-            .borrow()
-            .text_props
-            .slice(range.start_usize(), range.end_usize())
+        self.storage.borrow().text_props.slice_char_range(range)
     }
 
     pub fn text_props_intervals_snapshot(&self) -> Vec<PropertyInterval> {
@@ -1146,7 +1125,10 @@ impl BufferText {
         &self,
         len: usize,
     ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
-        self.storage.borrow().text_props.object_interval_runs(len)
+        self.storage
+            .borrow()
+            .text_props
+            .object_interval_runs_for_char_len(CharLen::new(len))
     }
 
     #[cfg(test)]
@@ -1171,21 +1153,21 @@ impl BufferText {
         self.storage
             .borrow()
             .text_props
-            .try_for_each_interval_in_range(range.start_usize(), range.end_usize(), f)
+            .try_for_each_interval_in_char_range(range, f)
     }
 
     pub(crate) fn adjust_text_props_for_insert_at(&self, pos: CharPos0, len: CharLen) {
         self.storage
             .borrow_mut()
             .text_props
-            .adjust_for_insert(pos.get(), len.get());
+            .adjust_for_insert_at_char_pos(pos, len);
     }
 
     pub(crate) fn adjust_text_props_for_delete_range(&self, range: CharRange) {
         self.storage
             .borrow_mut()
             .text_props
-            .adjust_for_delete(range.start_usize(), range.end_usize());
+            .adjust_for_delete_char_range(range);
     }
 
     pub(crate) fn adjust_text_props_for_replace_at(
@@ -1194,11 +1176,10 @@ impl BufferText {
         old_len: CharLen,
         new_len: CharLen,
     ) {
-        self.storage.borrow_mut().text_props.adjust_for_replace(
-            start.get(),
-            old_len.get(),
-            new_len.get(),
-        );
+        self.storage
+            .borrow_mut()
+            .text_props
+            .adjust_for_replace_at_char_pos(start, old_len, new_len);
     }
 
     pub fn trace_text_prop_roots(&self, roots: &mut Vec<Value>) {

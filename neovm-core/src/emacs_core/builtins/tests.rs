@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::CharRange;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
@@ -17,6 +18,16 @@ use crate::test_utils::{
 };
 use std::fs;
 use tree_sitter::Language;
+
+fn put_string_property(
+    table: &mut crate::buffer::text_props::TextPropertyTable,
+    start: usize,
+    end: usize,
+    name: Value,
+    value: Value,
+) -> bool {
+    table.put_property_in_char_range(CharRange::from_usize(start, end), name, value)
+}
 
 /// Decode char codes from a Value's LispString using emacs_char.
 fn decode_value_char_codes(v: &Value) -> Vec<u32> {
@@ -2455,7 +2466,13 @@ fn insert_copies_string_text_properties_into_buffer() {
     assert!(text.is_string(), "expected string value");
 
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+    put_string_property(
+        &mut table,
+        0,
+        2,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
 
     assert_eq!(builtin_insert(&mut eval, vec![text]).unwrap(), Value::NIL);
@@ -2486,8 +2503,20 @@ fn insert_before_markers_copies_string_text_properties_into_buffer() {
     assert!(text.is_string(), "expected string value");
 
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
-    table.put_property(1, 2, Value::symbol("help-echo"), Value::string("tip"));
+    put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
+    put_string_property(
+        &mut table,
+        1,
+        2,
+        Value::symbol("help-echo"),
+        Value::string("tip"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
 
     assert_eq!(
@@ -2671,8 +2700,15 @@ fn insert_and_inherit_copies_string_properties_then_inherits_overlapping_names()
     let text = Value::string("X");
     assert!(text.is_string(), "expected string value");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 1, Value::symbol("face"), Value::symbol("italic"));
-    table.put_property(
+    put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("italic"),
+    );
+    put_string_property(
+        &mut table,
         0,
         1,
         Value::symbol("mouse-face"),
@@ -8113,7 +8149,13 @@ fn substring_no_properties_drops_string_text_properties_like_gnu() {
     crate::test_utils::init_test_tracing();
     let source = Value::string("abcd");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    let _ = table.put_property(1, 3, Value::symbol("face"), Value::symbol("bold"));
+    let _ = put_string_property(
+        &mut table,
+        1,
+        3,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
 
     let result = builtin_substring_no_properties(vec![source, Value::fixnum(1), Value::fixnum(3)])
@@ -8385,7 +8427,13 @@ fn copy_sequence_handles_raw_unibyte_strings_and_preserves_text_properties() {
         0xFF, b'A',
     ]));
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    let _ = table.put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+    let _ = put_string_property(
+        &mut table,
+        0,
+        2,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(raw, table);
 
     let result =
@@ -8797,7 +8845,13 @@ fn replace_match_string_preserves_source_and_replacement_text_properties_like_gn
     fn put_face(value: Value, start: usize, end: usize, face: &str) {
         let mut table = crate::emacs_core::value::get_string_text_properties_table_for_value(value)
             .unwrap_or_else(crate::buffer::text_props::TextPropertyTable::new);
-        let _ = table.put_property(start, end, Value::symbol("face"), Value::symbol(face));
+        let _ = put_string_property(
+            &mut table,
+            start,
+            end,
+            Value::symbol("face"),
+            Value::symbol(face),
+        );
         crate::emacs_core::value::set_string_text_properties_table_for_value(value, table);
     }
 
@@ -12685,7 +12739,13 @@ fn insert_string_converts_props_from_multibyte_source_to_unibyte_buffer() {
 
     let text = Value::string("éz");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    let _ = table.put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+    let _ = put_string_property(
+        &mut table,
+        0,
+        2,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
 
     builtin_insert(&mut eval, vec![text]).unwrap();
@@ -12800,7 +12860,13 @@ fn insert_unibyte_string_converts_props_into_multibyte_buffer() {
         0xE9, b'z',
     ]));
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    let _ = table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+    let _ = put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
 
     builtin_insert(&mut eval, vec![text]).unwrap();

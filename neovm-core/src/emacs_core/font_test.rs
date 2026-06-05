@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{Buffer, CharPos0};
+use crate::buffer::{Buffer, CharPos0, CharRange};
 use crate::emacs_core::eval::{
     Context, DisplayHost, FontResolveRequest, FontSpecResolveRequest, GuiFrameHostRequest,
     ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont,
@@ -958,9 +958,13 @@ fn font_at_eval_returns_font_object_for_multibyte_string_face() {
         panic!("expected string value");
     };
     let mut table = crate::buffer::TextPropertyTable::new();
-    let start = "a".len();
-    let end = start + "好".len();
-    table.put_property(start, end, Value::symbol("face"), face);
+    let start = 1;
+    let end = 2;
+    table.put_property_in_char_range(
+        CharRange::from_usize(start, end),
+        Value::symbol("face"),
+        face,
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(string, table);
 
     let font = builtin_font_at(&mut eval, vec![Value::fixnum(1), Value::NIL, string]).unwrap();
@@ -992,9 +996,13 @@ fn font_at_eval_preserves_raw_unibyte_string_face() {
     .unwrap();
 
     let string = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let runtime = crate::emacs_core::builtins::lisp_string_to_runtime_string(string);
+    let char_len = string.as_lisp_string().expect("font test string").schars();
     let mut table = crate::buffer::TextPropertyTable::new();
-    table.put_property(0, runtime.len(), Value::symbol("face"), face);
+    table.put_property_in_char_range(
+        CharRange::from_usize(0, char_len),
+        Value::symbol("face"),
+        face,
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(string, table);
 
     let font = builtin_font_at(&mut eval, vec![Value::fixnum(0), Value::NIL, string]).unwrap();

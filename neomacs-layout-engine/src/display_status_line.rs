@@ -27,7 +27,7 @@ use super::unicode::decode_utf8;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::text_props::TextPropertyTable;
+use neovm_core::buffer::{CharPos0, text_props::TextPropertyTable};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use std::collections::HashMap;
@@ -800,8 +800,10 @@ impl LayoutEngine {
         charpos: usize,
     ) -> ResolvedFace {
         let mut face = base_face.clone();
-        let face_prop = props.get_property(charpos, Value::symbol("face"));
-        let font_lock_face_prop = props.get_property(charpos, Value::symbol("font-lock-face"));
+        let charpos = CharPos0::new(charpos);
+        let face_prop = props.get_property_at_char_pos(charpos, Value::symbol("face"));
+        let font_lock_face_prop =
+            props.get_property_at_char_pos(charpos, Value::symbol("font-lock-face"));
         if let Some(value) = face_prop.or(font_lock_face_prop)
             && let Some(next) = face_resolver.resolve_face_value_over(&face, &value)
         {

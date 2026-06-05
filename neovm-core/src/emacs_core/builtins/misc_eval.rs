@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharPos0, EmacsBytePos};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos};
 use crate::emacs_core::symbol::Obarray;
 
 fn runtime_string_value(value: Value) -> String {
@@ -164,29 +164,36 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         };
 
         let ref_char = if char_pos > 0 { char_pos - 1 } else { 0 };
-        let current_props = table.get_properties(ref_char);
-        let mut cursor = char_pos;
+        let current_props = table.get_properties_at_char_pos(CharPos0::new(ref_char));
+        let mut cursor = CharPos0::new(char_pos);
 
         loop {
-            match table.previous_property_change(cursor) {
+            match table.previous_property_change_before_char_pos(cursor) {
                 Some(prev) => {
+                    let prev_raw = prev.get();
                     if let Some(lim) = limit_pos {
-                        if (prev as i64) <= lim {
+                        if (prev_raw as i64) <= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
                             });
                         }
                     }
-                    let check = if prev > 0 { prev - 1 } else { 0 };
-                    let new_props = table.get_properties(check);
+                    let check = if prev_raw > 0 { prev_raw - 1 } else { 0 };
+                    let new_props = table.get_properties_at_char_pos(CharPos0::new(check));
                     if new_props != current_props {
-                        return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(s, prev)));
+                        return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(
+                            s, prev_raw,
+                        )));
                     }
-                    if prev == 0 {
+                    if prev_raw == 0 {
                         break;
                     }
-                    cursor = if prev < cursor { prev } else { prev - 1 };
+                    cursor = if prev_raw < cursor.get() {
+                        prev
+                    } else {
+                        CharPos0::new(prev_raw - 1)
+                    };
                 }
                 None => break,
             }
@@ -2057,7 +2064,12 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         let chunks: Vec<&[Value]> = pairs.chunks(2).collect();
         for chunk in chunks.iter().rev() {
             if chunk.len() == 2 {
-                table.put_property_for_object_len(0, char_len, char_len, chunk[0], chunk[1]);
+                table.put_property_for_object_char_len(
+                    CharRange::from_usize(0, char_len),
+                    CharLen::new(char_len),
+                    chunk[0],
+                    chunk[1],
+                );
             }
         }
         set_string_text_properties_table_for_value(new_str, table);

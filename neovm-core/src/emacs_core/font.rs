@@ -24,7 +24,7 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, EmacsBytePos};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
@@ -1669,15 +1669,16 @@ fn resolved_face_at_buffer_byte(
     apply_face_layers_with_remapping(&eval.face_table, &layers, &remapping)
 }
 
-fn resolved_face_at_string_byte(
+fn resolved_face_at_string_char_pos(
     eval: &super::eval::Context,
     str_value: Value,
-    bytepos: usize,
+    char_pos: CharPos0,
 ) -> RuntimeFace {
     let mut layers = Vec::new();
     if let Some(table) = get_string_text_properties_table_for_value(str_value) {
-        let face_prop = table.get_property(bytepos, Value::symbol("face"));
-        let font_lock_face_prop = table.get_property(bytepos, Value::symbol("font-lock-face"));
+        let face_prop = table.get_property_at_char_pos(char_pos, Value::symbol("face"));
+        let font_lock_face_prop =
+            table.get_property_at_char_pos(char_pos, Value::symbol("font-lock-face"));
         if let Some(value) = face_prop.or(font_lock_face_prop) {
             layers.extend(resolve_face_layers_from_value(&value));
         }
@@ -2025,7 +2026,8 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
             } else {
                 pos as usize
             };
-            let face = resolved_face_at_string_byte(eval, *string_value, bytepos);
+            let face =
+                resolved_face_at_string_char_pos(eval, *string_value, CharPos0::new(pos as usize));
             let code = if string.is_multibyte() {
                 crate::emacs_core::emacs_char::string_char(&string.as_bytes()[bytepos..]).0
             } else {

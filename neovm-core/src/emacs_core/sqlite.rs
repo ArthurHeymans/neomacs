@@ -16,6 +16,7 @@ use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::buffer::CharPos0;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -268,8 +269,10 @@ fn bind_elisp_value(
         }
         ValueKind::String => {
             let s = val.as_lisp_string().unwrap();
-            let coding_system = get_string_text_properties_table_for_value(*val)
-                .and_then(|table| table.get_property(0, Value::symbol("coding-system")));
+            let coding_system =
+                get_string_text_properties_table_for_value(*val).and_then(|table| {
+                    table.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("coding-system"))
+                });
             let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
             if blob {
                 if s.is_multibyte() {
@@ -337,8 +340,10 @@ unsafe fn bind_raw_value(
         ValueKind::Float => unsafe { ffi::sqlite3_bind_double(stmt, idx, val.xfloat()) },
         ValueKind::String => {
             let s = val.as_lisp_string().unwrap();
-            let coding_system = get_string_text_properties_table_for_value(*val)
-                .and_then(|table| table.get_property(0, Value::symbol("coding-system")));
+            let coding_system =
+                get_string_text_properties_table_for_value(*val).and_then(|table| {
+                    table.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("coding-system"))
+                });
             let blob = coding_system.is_some_and(|coding| coding.is_symbol_named("binary"));
             if blob {
                 if s.is_multibyte() {

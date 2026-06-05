@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharPos0, CharRange, EmacsBytePos};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -2658,7 +2658,7 @@ pub(crate) fn builtin_object_intervals(
             return Ok(Value::NIL);
         };
         let intervals = table
-            .object_interval_plist_runs(len)
+            .object_interval_plist_runs_for_char_len(CharLen::new(len))
             .into_iter()
             .map(|(start, end, plist)| {
                 Value::list(vec![

@@ -7,6 +7,7 @@
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::buffer::{CharLen, CharRange};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -172,10 +173,9 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     }
     let prop = composition_property(start, end, components, modification_func);
     let mut table = get_string_text_properties_table_for_value(args[0]).unwrap_or_default();
-    table.put_property_for_object_len(
-        start as usize,
-        end as usize,
-        len as usize,
+    table.put_property_for_object_char_len(
+        CharRange::from_usize(start as usize, end as usize),
+        CharLen::new(len as usize),
         Value::symbol("composition"),
         prop,
     );

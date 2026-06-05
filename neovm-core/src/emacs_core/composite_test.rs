@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::CharPos0;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, equal_value, get_string_text_properties_table_for_value,
 };
@@ -154,7 +155,7 @@ fn compose_string_internal_sets_composition_property() {
 
     let table = get_string_text_properties_table_for_value(s).expect("string text properties");
     let prop = table
-        .get_property(1, Value::symbol("composition"))
+        .get_property_at_char_pos(CharPos0::new(1), Value::symbol("composition"))
         .expect("composition property");
     let header = prop.cons_car();
     assert_eq!(header.cons_car().as_fixnum(), Some(3));

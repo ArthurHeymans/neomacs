@@ -14,8 +14,8 @@ use crate::buffer::edit_transaction::{
 };
 use crate::buffer::undo;
 use crate::buffer::{
-    CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
-    TextPositionAnchor, TextReplacement, TextTransposition,
+    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
+    TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -654,29 +654,32 @@ impl Buffer {
         let props1 = self
             .text
             .text_props_snapshot()
-            .slice(start1_char, end1_char);
+            .slice_char_range(CharRange::from_usize(start1_char, end1_char));
         let props2 = self
             .text
             .text_props_snapshot()
-            .slice(start2_char, end2_char);
+            .slice_char_range(CharRange::from_usize(start2_char, end2_char));
         let props_mid = if len1 == len2 {
             TextPropertyTable::new()
         } else {
             self.text
                 .text_props_snapshot()
-                .slice(end1_char, start2_char)
+                .slice_char_range(CharRange::from_usize(end1_char, start2_char))
         };
 
         let mut props = self.text.text_props_snapshot();
         if len1 == len2 {
-            props.remove_all_properties(start1_char, end1_char);
-            props.remove_all_properties(start2_char, end2_char);
+            props
+                .remove_all_properties_in_char_range(CharRange::from_usize(start1_char, end1_char));
+            props
+                .remove_all_properties_in_char_range(CharRange::from_usize(start2_char, end2_char));
         } else {
-            props.remove_all_properties(start1_char, end2_char);
-            props.append_shifted(&props_mid, start1_char + len2);
+            props
+                .remove_all_properties_in_char_range(CharRange::from_usize(start1_char, end2_char));
+            props.append_shifted_at_char_offset(&props_mid, CharLen::new(start1_char + len2));
         }
-        props.append_shifted(&props1, end2_char - len1);
-        props.append_shifted(&props2, start1_char);
+        props.append_shifted_at_char_offset(&props1, CharLen::new(end2_char - len1));
+        props.append_shifted_at_char_offset(&props2, CharLen::new(start1_char));
         props
     }
 

@@ -1,6 +1,6 @@
 use super::*;
-use crate::buffer::BufferTextBackendKind;
 use crate::buffer::buffer::BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM;
+use crate::buffer::{BufferTextBackendKind, CharPos0};
 use crate::emacs_core::Context;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::{
@@ -670,11 +670,11 @@ fn test_format_mode_line_propertize_preserves_text_properties() {
     let props =
         get_string_text_properties_table_for_value(rendered).expect("mode-line text properties");
     assert_eq!(
-        props.get_property(0, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        props.get_property(0, Value::symbol("help-echo")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("help-echo")),
         Some(Value::string("h"))
     );
 }
@@ -712,20 +712,20 @@ fn test_format_mode_line_percent_specs_preserve_source_string_text_properties() 
     let props =
         get_string_text_properties_table_for_value(rendered).expect("mode-line text properties");
     assert_eq!(
-        props.get_property(0, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        props.get_property(0, Value::symbol("help-echo")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("help-echo")),
         Some(Value::string("h"))
     );
-    let last_byte = "fmt-prop-buffer".len();
+    let last_char = "fmt-prop-buffer".chars().count();
     assert_eq!(
-        props.get_property(last_byte, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::new(last_char), Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
     assert_eq!(
-        props.get_property(last_byte, Value::symbol("help-echo")),
+        props.get_property_at_char_pos(CharPos0::new(last_char), Value::symbol("help-echo")),
         Some(Value::string("h"))
     );
 }
@@ -785,14 +785,14 @@ fn test_format_mode_line_face_argument_adds_default_face_and_merges_explicit_fac
     let props =
         get_string_text_properties_table_for_value(rendered).expect("mode-line text properties");
     assert_eq!(
-        props.get_property(0, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("face")),
         Some(Value::list(vec![
             Value::symbol("italic"),
             Value::symbol("bold")
         ]))
     );
     assert_eq!(
-        props.get_property(1, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::new(1), Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
 }
@@ -848,10 +848,13 @@ fn test_format_mode_line_fixnum_padding_does_not_inherit_inner_properties() {
     let props =
         get_string_text_properties_table_for_value(rendered).expect("mode-line text properties");
     assert_eq!(
-        props.get_property(0, Value::symbol("face")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("face")),
         Some(Value::symbol("bold"))
     );
-    assert_eq!(props.get_property(1, Value::symbol("face")), None);
+    assert_eq!(
+        props.get_property_at_char_pos(CharPos0::new(1), Value::symbol("face")),
+        None
+    );
 }
 
 #[test]

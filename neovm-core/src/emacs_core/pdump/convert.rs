@@ -17,7 +17,7 @@ use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
-use crate::buffer::{EmacsBytePos, TextPositionAnchor};
+use crate::buffer::{CharRange, EmacsBytePos, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -5975,7 +5975,11 @@ pub(crate) fn load_text_property_table(
     for iv in intervals {
         for (name, dump_val) in &iv.properties {
             let val = decoder.load_value(dump_val);
-            table.put_property(iv.start, iv.end, decoder.load_value(name), val);
+            table.put_property_in_char_range(
+                CharRange::from_usize(iv.start, iv.end),
+                decoder.load_value(name),
+                val,
+            );
         }
     }
     table

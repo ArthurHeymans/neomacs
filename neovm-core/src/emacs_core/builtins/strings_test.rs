@@ -1,5 +1,16 @@
 use super::*;
+use crate::buffer::CharRange;
 use crate::heap_types::LispString;
+
+fn put_string_property(
+    table: &mut crate::buffer::text_props::TextPropertyTable,
+    start: usize,
+    end: usize,
+    name: Value,
+    value: Value,
+) -> bool {
+    table.put_property_in_char_range(CharRange::from_usize(start, end), name, value)
+}
 
 #[test]
 fn substring_preserves_raw_unibyte_storage_semantics() {
@@ -56,7 +67,13 @@ fn concat_preserves_multibyte_text_properties_as_char_intervals() {
 
     let source = Value::string("é");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+    put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
 
     let result = builtin_concat(vec![Value::string("x"), source, Value::string("z")])
@@ -95,7 +112,13 @@ fn concat_all_unibyte_strings_with_properties_stays_unibyte_like_gnu() {
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xff]));
     let suffix = Value::heap_string(LispString::from_unibyte(vec![b'a']));
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+    put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(raw, table);
 
     let result = builtin_concat(vec![raw, suffix]).expect("concat should preserve unibyte storage");
@@ -120,7 +143,13 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
 
     let source = Value::string("éz");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+    put_string_property(
+        &mut table,
+        0,
+        1,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
     crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
 
     let mut ctx = crate::emacs_core::eval::Context::new();
@@ -145,13 +174,15 @@ fn format_preserves_percent_s_text_property_plist_order() {
 
     let source = Value::string("key");
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(
+    put_string_property(
+        &mut table,
         0,
         3,
         Value::symbol("face"),
         Value::symbol("help-key-binding"),
     );
-    table.put_property(
+    put_string_property(
+        &mut table,
         0,
         3,
         Value::symbol("font-lock-face"),

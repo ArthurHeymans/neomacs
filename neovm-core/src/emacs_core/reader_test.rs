@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::CharPos0;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::print_value;
 use crate::emacs_core::value::{
@@ -177,11 +178,11 @@ fn read_from_string_preserves_propertized_string_literal_intervals() {
         .expect("reader should apply #(\"...\" START END PLIST) intervals");
 
     assert_eq!(
-        props.get_property(0, Value::symbol("marginalia--align")),
+        props.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("marginalia--align")),
         Some(Value::symbol("t"))
     );
     let display = props
-        .get_property(0, Value::symbol("display"))
+        .get_property_at_char_pos(CharPos0::ZERO, Value::symbol("display"))
         .expect("display property should survive reader literal");
     assert!(display.is_cons());
     assert!(display.cons_car().is_symbol_named("space"));

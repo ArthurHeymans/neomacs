@@ -1681,7 +1681,11 @@ fn lisp_string_insert_into_unibyte_buffer_preserves_gnu_chars_and_properties() {
         let face = Value::symbol("face");
         let bold = Value::symbol("bold");
         let mut text = LispString::from_utf8("é日本");
-        assert!(text.intervals_mut().put_property(0, 3, face, bold));
+        assert!(text.intervals_mut().put_property_in_char_range(
+            CharRange::from_usize(0, 3),
+            face,
+            bold
+        ));
 
         buf.insert_lisp_string(&text);
 
@@ -1716,7 +1720,11 @@ fn manager_replace_lisp_string_grafts_converted_intervals_once() {
         let face = Value::symbol("face");
         let bold = Value::symbol("bold");
         let mut replacement = LispString::from_utf8("é日本");
-        assert!(replacement.intervals_mut().put_property(0, 3, face, bold));
+        assert!(replacement.intervals_mut().put_property_in_char_range(
+            CharRange::from_usize(0, 3),
+            face,
+            bold
+        ));
 
         let range = mgr
             .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(0, 1))

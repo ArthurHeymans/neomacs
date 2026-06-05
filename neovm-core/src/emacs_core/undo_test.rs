@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::CharRange;
 
 #[test]
 fn undo_entry_head_domain_matches_gnu_apply_marker() {
@@ -363,7 +364,7 @@ fn test_primitive_undo_reinserts_string_text_properties() {
     let text = Value::string("abc");
 
     let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property(0, 3, face, bold);
+    table.put_property_in_char_range(CharRange::from_usize(0, 3), face, bold);
     crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
 
     let record = Value::cons(text, Value::fixnum(1));

@@ -23,7 +23,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::{BufferId, CharPos0};
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
@@ -1339,10 +1339,12 @@ fn render_overlay_string(
             break;
         }
         if let Some(table) = text_props.as_ref()
-            && let Some(display_prop) = table.get_property(char_idx, Value::symbol("display"))
+            && let Some(display_prop) =
+                table.get_property_at_char_pos(CharPos0::new(char_idx), Value::symbol("display"))
         {
             let next_char = table
-                .next_interval_boundary(char_idx)
+                .next_interval_boundary_after_char_pos(CharPos0::new(char_idx))
+                .map(CharPos0::get)
                 .unwrap_or(total_chars)
                 .min(total_chars)
                 .max(char_idx + 1);
@@ -1582,8 +1584,10 @@ fn overlay_string_face_id_at(
     let Some(props) = text_props else {
         return base_face_id;
     };
-    let face_prop = props.get_property(char_idx, Value::symbol("face"));
-    let font_lock_face_prop = props.get_property(char_idx, Value::symbol("font-lock-face"));
+    let char_idx = CharPos0::new(char_idx);
+    let face_prop = props.get_property_at_char_pos(char_idx, Value::symbol("face"));
+    let font_lock_face_prop =
+        props.get_property_at_char_pos(char_idx, Value::symbol("font-lock-face"));
     let Some(value) = face_prop.or(font_lock_face_prop) else {
         return base_face_id;
     };
@@ -1621,7 +1625,9 @@ fn capture_overlay_string_cursor(
     let Some(props) = text_props else {
         return;
     };
-    let Some(cursor_prop) = props.get_property(char_idx, Value::symbol("cursor")) else {
+    let Some(cursor_prop) =
+        props.get_property_at_char_pos(CharPos0::new(char_idx), Value::symbol("cursor"))
+    else {
         return;
     };
     if cursor_prop.is_nil() {
