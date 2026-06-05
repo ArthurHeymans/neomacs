@@ -721,18 +721,25 @@ impl Obarray {
     /// reading; Neomacs' value reader allocates canonical symbol ids first,
     /// so callers that read source must apply the same obarray side effect.
     pub(crate) fn materialize_read_symbols(&mut self, value: Value) {
-        let mut seen = Vec::new();
+        // Cycle detection must use object *identity*, not `Value`'s `==`
+        // (which is structural `equal`).  A `Vec` + `contains` here was
+        // O(n^2) deep-`equal` over every loaded form -- the dominant cost of
+        // startup.  Track visited heap objects by their tagged-pointer bits.
+        let mut seen = rustc_hash::FxHashSet::default();
         self.materialize_read_symbols_1(value, &mut seen);
     }
 
-    fn materialize_read_symbols_1(&mut self, value: Value, seen: &mut Vec<Value>) {
+    fn materialize_read_symbols_1(
+        &mut self,
+        value: Value,
+        seen: &mut rustc_hash::FxHashSet<usize>,
+    ) {
         match value.kind() {
             ValueKind::Symbol(id) => self.ensure_interned_global_id(id),
             ValueKind::Cons => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 self.materialize_read_symbols_1(value.cons_car(), seen);
                 self.materialize_read_symbols_1(value.cons_cdr(), seen);
             }
@@ -742,10 +749,9 @@ impl Obarray {
                 | VecLikeType::Lambda
                 | VecLikeType::Macro,
             ) => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 if let Some(slots) = value
                     .as_vector_data()
                     .or_else(|| value.as_record_data())
@@ -757,10 +763,9 @@ impl Obarray {
                 }
             }
             ValueKind::Veclike(VecLikeType::CharTable) => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 if let Some(slots) = value.char_table_external_slots() {
                     for slot in slots {
                         self.materialize_read_symbols_1(slot, seen);
@@ -768,10 +773,9 @@ impl Obarray {
                 }
             }
             ValueKind::Veclike(VecLikeType::SubCharTable) => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 if let Some(table) = value.as_sub_char_table_obj() {
                     for slot in table.contents.iter().copied() {
                         self.materialize_read_symbols_1(slot, seen);
@@ -779,10 +783,9 @@ impl Obarray {
                 }
             }
             ValueKind::Veclike(VecLikeType::HashTable) => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 if let Some(table) = value.as_hash_table() {
                     for key_value in table.key_snapshots.values().copied() {
                         self.materialize_read_symbols_1(key_value, seen);
@@ -793,10 +796,9 @@ impl Obarray {
                 }
             }
             ValueKind::Veclike(VecLikeType::ByteCode) => {
-                if seen.contains(&value) {
+                if !seen.insert(value.bits()) {
                     return;
                 }
-                seen.push(value);
                 if let Some(bytecode) = value.get_bytecode_data() {
                     self.materialize_read_symbols_1(bytecode.arglist, seen);
                     for constant in bytecode.constants.iter().copied() {
