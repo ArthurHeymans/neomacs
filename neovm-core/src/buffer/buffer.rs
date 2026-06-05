@@ -4486,11 +4486,11 @@ impl BufferManager {
         self.labeled_restriction_emacs_byte_range(id, false)
     }
 
-    pub fn current_labeled_restriction_char_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
+    pub fn current_labeled_restriction_char_bounds(&self, id: BufferId) -> Option<CharRange> {
         let restriction = self.labeled_restriction_at(id, false)?;
         let beg = self.marker_char_pos(id, restriction.beg_marker)?;
         let end = self.marker_char_pos(id, restriction.end_marker)?;
-        Some((beg.get(), end.get()))
+        Some(CharRange::new(beg, end))
     }
 
     pub fn current_labeled_restriction_matches_label(&self, id: BufferId, label: &Value) -> bool {

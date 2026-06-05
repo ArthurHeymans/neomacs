@@ -78,11 +78,6 @@ fn string_char_pos(pos: usize) -> CharPos0 {
 }
 
 #[inline]
-fn string_char_range(start: usize, end: usize) -> CharRange {
-    CharRange::from_usize(start, end)
-}
-
-#[inline]
 fn string_char_len(len: usize) -> CharLen {
     CharLen::new(len)
 }
@@ -462,7 +457,7 @@ fn validate_string_range(
     end: i64,
     beg0: Value,
     end0: Value,
-) -> Result<Option<(usize, usize)>, Flow> {
+) -> Result<Option<CharRange>, Flow> {
     if beg == end {
         return Ok(None);
     }
@@ -471,7 +466,7 @@ fn validate_string_range(
     if !(0 <= start && start <= finish && finish <= len) {
         return Err(args_out_of_range_range(beg0, end0));
     }
-    Ok(Some((start as usize, finish as usize)))
+    Ok(Some(CharRange::from_usize(start as usize, finish as usize)))
 }
 
 pub(crate) fn validate_buffer_point(
@@ -1153,17 +1148,11 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.put_property_for_object_char_len(
-            string_char_range(char_beg, char_end),
-            string_char_len(s.schars()),
-            prop,
-            val,
-        );
+        table.put_property_for_object_char_len(char_range, string_char_len(s.schars()), prop, val);
         save_string_props_for_value(str_val, table);
         return Ok(Value::NIL);
     }
@@ -1387,15 +1376,14 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_changed = false;
         for (name, val) in pairs {
             if table.put_property_for_object_char_len(
-                string_char_range(char_beg, char_end),
+                char_range,
                 string_char_len(s.schars()),
                 name,
                 val,
@@ -1540,10 +1528,11 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
+        let char_beg = char_range.start_usize();
+        let char_end = char_range.end_usize();
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         // GNU iterates intervals in [beg, end); per interval, fetch its existing
         // face value and merge. Walk the range segment-by-segment.
@@ -1558,7 +1547,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
                 table.get_property_at_char_pos(string_char_pos(seg_start), Value::symbol("face"));
             let merged = merge_face_property(existing, new_face, append)?;
             table.put_property_for_object_char_len(
-                string_char_range(seg_start, seg_end),
+                CharRange::from_usize(seg_start, seg_end),
                 string_char_len(s.schars()),
                 Value::symbol("face"),
                 merged,
@@ -1674,14 +1663,13 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_removed = false;
         for name in names {
-            if table.remove_property_in_char_range(string_char_range(char_beg, char_end), name) {
+            if table.remove_property_in_char_range(char_range, name) {
                 any_removed = true;
             }
         }
@@ -1765,8 +1753,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
             .expect("string object must carry LispString payload");
         let full_string = beg == 0 && end == s.schars() as i64;
         let had_intervals = string_has_text_property_interval_tree(str_val);
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
         if pairs.is_empty() && !had_intervals {
@@ -1777,11 +1764,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
             return Ok(Value::T);
         }
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.set_properties_for_object_char_len(
-            string_char_range(char_beg, char_end),
-            string_char_len(s.schars()),
-            pairs,
-        );
+        table.set_properties_for_object_char_len(char_range, string_char_len(s.schars()), pairs);
         save_string_props_for_value(str_val, table);
         return Ok(Value::T);
     }
@@ -1844,14 +1827,13 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut changed = false;
         for name in names {
-            if table.remove_property_in_char_range(string_char_range(char_beg, char_end), name) {
+            if table.remove_property_in_char_range(char_range, name) {
                 changed = true;
             }
         }
@@ -2324,10 +2306,11 @@ pub(crate) fn builtin_text_property_any_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
+        let char_beg = char_range.start_usize();
+        let char_end = char_range.end_usize();
         let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
             return Ok(if val.is_nil() {
                 if char_beg < char_end {
@@ -2454,10 +2437,11 @@ pub(crate) fn builtin_text_property_not_all_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let Some((char_beg, char_end)) = validate_string_range(s, beg, end, args[0], args[1])?
-        else {
+        let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
+        let char_beg = char_range.start_usize();
+        let char_end = char_range.end_usize();
         let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
             return Ok(if val.is_nil() {
                 Value::NIL

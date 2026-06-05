@@ -147,10 +147,9 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     if s < full_min || s > full_max || e < full_min || e > full_max {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
-    if let Some((begv_char, zv_char)) = buffers.current_labeled_restriction_char_bounds(current_id)
-    {
-        let labeled_min = begv_char as i64 + 1;
-        let labeled_max = zv_char as i64 + 1;
+    if let Some(labeled) = buffers.current_labeled_restriction_char_bounds(current_id) {
+        let labeled_min = labeled.start_usize() as i64 + 1;
+        let labeled_max = labeled.end_usize() as i64 + 1;
         s = s.clamp(labeled_min, labeled_max);
         e = e.clamp(labeled_min, labeled_max);
     }
