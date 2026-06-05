@@ -21,7 +21,7 @@ use super::hook_runtime;
 use super::intern::intern;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsByteRange, TextPropertyTable,
+    Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextPropertyTable,
 };
 use crate::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
@@ -83,10 +83,13 @@ fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
     }
 }
 
-fn prefix_line_and_column(buf: &Buffer, end_byte: usize) -> (usize, usize) {
+fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> (usize, usize) {
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(
-        EmacsByteRange::from_usize(0, end_byte.min(buf.total_bytes())),
+        EmacsByteRange::new(
+            EmacsBytePos::ZERO,
+            end_byte.min(buf.point_max_emacs_byte_pos()),
+        ),
         &mut bytes,
     );
     let line = bytes.iter().filter(|&&b| b == b'\n').count() + 1;
@@ -1955,7 +1958,7 @@ fn expand_mode_line_percent_in_state(
     let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
     let (line_num, col_num) = if let Some(b) = buf {
-        prefix_line_and_column(b, b.point_byte())
+        prefix_line_and_column(b, b.point_emacs_byte_pos())
     } else {
         (1, 0)
     };

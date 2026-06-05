@@ -148,24 +148,25 @@ fn replacement_region_bounds(
                 )],
             )
         })?;
-        let pt = buf.point_byte();
-        return Ok((pt.min(mark), pt.max(mark)));
+        let pt = buf.point_emacs_byte_pos();
+        let mark = EmacsBytePos::new(mark);
+        return Ok((pt.min(mark).get(), pt.max(mark).get()));
     }
 
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ if backward => accessible.start_usize(),
-        _ => buf.point_byte(),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        _ if backward => accessible.start(),
+        _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ if backward => buf.point_byte(),
-        _ => accessible.end_usize(),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        _ if backward => buf.point_emacs_byte_pos(),
+        _ => accessible.end(),
     };
     if start <= end {
-        Ok((start, end))
+        Ok((start.get(), end.get()))
     } else {
-        Ok((end, start))
+        Ok((end.get(), start.get()))
     }
 }
 
@@ -176,17 +177,17 @@ fn line_operation_region_bounds(
 ) -> Result<(usize, usize), Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ => buf.point_byte(),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ => accessible.end_usize(),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        _ => accessible.end(),
     };
     if start <= end {
-        Ok((start, end))
+        Ok((start.get(), end.get()))
     } else {
-        Ok((end, start))
+        Ok((end.get(), start.get()))
     }
 }
 
