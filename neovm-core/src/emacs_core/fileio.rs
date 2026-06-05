@@ -4339,7 +4339,7 @@ fn restore_point_after_file_replace(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let point_char = CharPos0::new(new_point_char.min(buf.total_chars()));
+        let point_char = CharPos0::new(new_point_char.min(buf.total_char_len().get()));
         TextPositionAnchor::new(
             point_char,
             buf.char_pos_to_emacs_byte_pos_clamped(point_char),
@@ -4892,7 +4892,7 @@ fn decide_auto_coding_for_insert_file_contents(
     let old_range = eval
         .buffers
         .get(work_buffer)
-        .map(|buf| EmacsByteRange::from_usize(0, buf.total_bytes()))
+        .map(|buf| buf.full_emacs_byte_range())
         .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
     if !old_range.is_empty() {
         eval.buffers
@@ -4955,7 +4955,7 @@ fn restore_empty_buffer_after_auto_coding_probe(
     let delete_range = eval
         .buffers
         .get(buffer_id)
-        .map(|buf| EmacsByteRange::from_usize(0, buf.total_bytes()))
+        .map(|buf| buf.full_emacs_byte_range())
         .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
     if !delete_range.is_empty() {
         let _ = eval
@@ -5177,8 +5177,7 @@ pub(crate) fn builtin_insert_file_contents(
     let current_buffer_was_empty = eval
         .buffers
         .get(current_id)
-        .map(|buffer| buffer.total_bytes() == 0)
-        .unwrap_or(false);
+        .is_some_and(|buffer| buffer.is_text_empty());
     let auto_coding_system = if multibyte && coding_system_for_read.is_none() {
         if current_buffer_was_empty {
             decide_auto_coding_for_empty_insert_file_contents(
@@ -5709,7 +5708,12 @@ pub(crate) fn builtin_do_auto_save(
             let mut bytes = Vec::new();
             buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut bytes);
 
-            (auto_name, visit_name, bytes, buf.total_bytes() as i64)
+            (
+                auto_name,
+                visit_name,
+                bytes,
+                buf.total_emacs_byte_len().get() as i64,
+            )
         };
 
         // Determine which file to write to

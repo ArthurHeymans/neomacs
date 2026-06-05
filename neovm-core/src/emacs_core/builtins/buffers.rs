@@ -1332,15 +1332,15 @@ pub(crate) fn builtin_replace_buffer_contents(
         .map(|text| buffer_insert_lisp_string_from_lisp_string(&text, target_multibyte))
         .unwrap_or_else(|| lisp_string_from_buffer_bytes(Vec::new(), target_multibyte));
 
-    let old_len_bytes = eval
+    let old_full_range = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.total_bytes())
-        .unwrap_or(0);
+        .map(|buf| buf.full_emacs_byte_range())
+        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
     let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(0, old_len_bytes),
+        old_full_range,
     )?;
     let change = TextChange::new(
         old_range,
@@ -1508,24 +1508,36 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 .into_iter()
                 .filter_map(|overlay| {
                     let data = overlay.as_overlay_data()?;
-                    let total_bytes = buffer.total_bytes();
+                    let total_bytes = buffer.total_emacs_byte_len();
                     Some(OverlaySnapshot {
                         overlay,
-                        start_old_emacs_byte: EmacsBytePos::new(data.start.min(total_bytes)),
-                        end_old_emacs_byte: EmacsBytePos::new(data.end.min(total_bytes)),
+                        start_old_emacs_byte: EmacsBytePos::new(data.start.min(total_bytes.get())),
+                        end_old_emacs_byte: EmacsBytePos::new(data.end.min(total_bytes.get())),
                     })
                 })
                 .collect();
             let last_window_start = LispCharPos1::new(buffer.last_window_start.max(1) as i64);
-            let total_bytes = buffer.total_bytes();
+            let total_bytes = buffer.total_emacs_byte_len();
             snapshots.push(BufferSnapshot {
                 id: *id,
-                pt_old_emacs_byte: EmacsBytePos::new(buffer.point_byte().min(total_bytes)),
-                begv_old_emacs_byte: EmacsBytePos::new(buffer.point_min_byte().min(total_bytes)),
-                zv_old_emacs_byte: EmacsBytePos::new(buffer.point_max_byte().min(total_bytes)),
+                pt_old_emacs_byte: EmacsBytePos::new(
+                    buffer.point_emacs_byte_pos().get().min(total_bytes.get()),
+                ),
+                begv_old_emacs_byte: EmacsBytePos::new(
+                    buffer
+                        .point_min_emacs_byte_pos()
+                        .get()
+                        .min(total_bytes.get()),
+                ),
+                zv_old_emacs_byte: EmacsBytePos::new(
+                    buffer
+                        .point_max_emacs_byte_pos()
+                        .get()
+                        .min(total_bytes.get()),
+                ),
                 mark_old_emacs_byte: buffer
                     .mark_byte()
-                    .map(|mark| EmacsBytePos::new(mark.min(total_bytes))),
+                    .map(|mark| EmacsBytePos::new(mark.min(total_bytes.get()))),
                 last_window_start_old_emacs_byte: buffer
                     .lisp_pos_to_full_buffer_emacs_byte_pos(last_window_start.as_i64()),
                 overlays,
@@ -1539,7 +1551,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        buffer_slice_value(buffer, 0, buffer.total_bytes())
+        buffer_slice_value_range(buffer, buffer.full_emacs_byte_range())
     };
     let (converted_value, mode) = convert_buffer_string_for_multibyte(source_value, flag)?;
     let piece = buffer_insert_piece_from_string(converted_value, target_multibyte)?;
@@ -4055,9 +4067,8 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        accessible
-            .contains_usize(buf.point_byte())
-            .then_some(buf.point_byte())
+        let point = buf.point_emacs_byte_pos();
+        accessible.contains_usize(point.get()).then_some(point)
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
@@ -4068,9 +4079,9 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         if pos < point_min || pos >= point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos))
     };
-    match byte_pos.and_then(|pos| buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos))) {
+    match byte_pos.and_then(|pos| buf.char_code_after_emacs_byte_pos(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
         None => Ok(Value::NIL),
     }
@@ -4084,9 +4095,10 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
+        let point = buf.point_emacs_byte_pos();
         accessible
-            .contains_preceding_char_boundary_usize(buf.point_byte())
-            .then_some(buf.point_byte())
+            .contains_preceding_char_boundary_usize(point.get())
+            .then_some(point)
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
@@ -4097,9 +4109,9 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         if pos <= point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos))
     };
-    match byte_pos.and_then(|pos| buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(pos))) {
+    match byte_pos.and_then(|pos| buf.char_code_before_emacs_byte_pos(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
         None => Ok(Value::NIL),
     }
@@ -4146,14 +4158,14 @@ pub(crate) fn builtin_byte_to_position(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let byte_len = buf.total_bytes();
+    let byte_len = buf.total_emacs_byte_len();
     let byte_pos0 = (byte_pos - 1) as usize;
-    if byte_pos0 > byte_len {
+    if byte_pos0 > byte_len.get() {
         return Ok(Value::NIL);
     }
 
     let mut boundary = byte_pos0;
-    if buf.get_multibyte() && boundary < byte_len {
+    if buf.get_multibyte() && boundary < byte_len.get() {
         while boundary > 0
             && buf
                 .emacs_byte_at_pos(EmacsBytePos::new(boundary))
@@ -4242,7 +4254,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        buf.point_byte()
+        buf.point_emacs_byte_pos()
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         let point_min = buf.point_min_lisp_char_pos().as_i64();
@@ -4253,15 +4265,15 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
                 vec![args[0], Value::fixnum(point_min), Value::fixnum(point_max)],
             ));
         }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
+        buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
     };
 
-    if byte_pos >= buf.total_bytes() {
+    if byte_pos.get() >= buf.total_emacs_byte_len().get() {
         return Ok(Value::fixnum(0));
     }
 
     if !buf.get_multibyte() {
-        let code = match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(byte_pos)) {
+        let code = match buf.char_code_after_emacs_byte_pos(byte_pos) {
             Some(code) => code,
             None => return Ok(Value::fixnum(0)),
         };
@@ -4272,7 +4284,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         return Ok(Value::fixnum(code as i64));
     }
 
-    let code = match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(byte_pos)) {
+    let code = match buf.char_code_after_emacs_byte_pos(byte_pos) {
         Some(code) => code,
         None => return Ok(Value::fixnum(0)),
     };
