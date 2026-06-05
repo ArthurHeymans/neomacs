@@ -79,7 +79,7 @@ impl Piece {
     }
 
     const fn metrics(self) -> TextMetrics {
-        TextMetrics::new(self.char_len_usize(), self.len_usize())
+        TextMetrics::from_extent(self.extent)
     }
 
     fn split_at_emacs_byte(self, local_byte: usize, chars_before: usize) -> (Self, Self) {

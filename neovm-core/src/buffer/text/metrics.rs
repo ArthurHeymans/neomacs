@@ -1,5 +1,7 @@
 use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos};
 
+use super::TextExtent;
+
 /// Backend-neutral text extent in GNU Emacs coordinate spaces.
 ///
 /// `chars` and `emacs_bytes` are lengths. Concrete backends may have a
@@ -26,6 +28,13 @@ impl TextMetrics {
 
     pub const fn from_lengths(chars: CharLen, emacs_bytes: EmacsByteLen) -> Self {
         Self { chars, emacs_bytes }
+    }
+
+    pub const fn from_extent(extent: TextExtent) -> Self {
+        Self {
+            chars: extent.chars(),
+            emacs_bytes: extent.emacs_bytes(),
+        }
     }
 
     pub const fn chars(self) -> usize {

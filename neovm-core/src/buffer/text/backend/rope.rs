@@ -31,7 +31,7 @@ impl RopeChunk {
     }
 
     fn metrics(&self) -> TextMetrics {
-        TextMetrics::new(self.char_len(), self.len())
+        TextMetrics::from_extent(self.extent)
     }
 
     fn split_at(&self, byte_pos: usize, multibyte: bool) -> (Self, Self) {
