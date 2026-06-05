@@ -322,6 +322,10 @@ impl EmacsBytePos {
     pub const fn add_len(self, len: EmacsByteLen) -> Self {
         Self(self.0 + len.get())
     }
+
+    pub const fn saturating_sub_len(self, len: EmacsByteLen) -> Self {
+        Self(self.0.saturating_sub(len.get()))
+    }
 }
 
 impl CharLen {
@@ -479,6 +483,10 @@ impl AccessibleEmacsByteRange {
 
     pub fn clamp_usize(self, pos: usize) -> usize {
         pos.clamp(self.start_usize(), self.end_usize())
+    }
+
+    pub fn clamp(self, pos: EmacsBytePos) -> EmacsBytePos {
+        EmacsBytePos::new(self.clamp_usize(pos.get()))
     }
 }
 

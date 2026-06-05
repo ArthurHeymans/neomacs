@@ -175,8 +175,8 @@ fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
-fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
-    buf.accessible_emacs_byte_region().clamp_usize(byte_pos)
+fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> EmacsBytePos {
+    buf.accessible_emacs_byte_region().clamp(byte_pos)
 }
 
 /// Return the full buffer text as raw Emacs bytes.
@@ -767,34 +767,42 @@ pub(crate) fn builtin_forward_line(
     let line_arg = optional_line_count_arg(&args, 1)?;
     let n = line_arg.count;
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
-    let (text, begv, zv, pt) = {
+    let (text, accessible, pt) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let accessible = buf.accessible_emacs_byte_region();
-        (
-            buffer_bytes(buf),
-            accessible.start_usize(),
-            accessible.end_usize(),
-            buf.point_byte(),
-        )
+        (buffer_bytes(buf), accessible, buf.point_emacs_byte_pos())
     };
     let old_byte = pt;
-    let (new_pos, moved) = move_by_lines_narrowed(&text, pt, n, begv, zv);
+    let (new_pos, moved) = move_by_lines_narrowed(
+        &text,
+        pt.get(),
+        n,
+        accessible.start_usize(),
+        accessible.end_usize(),
+    );
+    let new_pos = EmacsBytePos::new(new_pos);
     let direction = if n >= 0 { 1 } else { -1 };
-    let adjusted = adjust_for_intangible(eval, new_pos, direction);
+    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, new_pos.get(), direction));
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
+        .goto_buffer_emacs_byte_pos(current_id, adjusted);
 
     let mut shortage = n - moved;
-    if shortage != 0 && n > 0 && begv < zv && new_pos != pt && new_pos > 0 {
-        let at_line_start = eval.buffers.get(current_id).is_some_and(|buf| {
-            buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(new_pos)) == Some('\n' as u32)
-        });
+    if shortage != 0
+        && n > 0
+        && accessible.start() < accessible.end()
+        && new_pos != pt
+        && new_pos.get() > 0
+    {
+        let at_line_start = eval
+            .buffers
+            .get(current_id)
+            .is_some_and(|buf| buf.char_code_before_emacs_byte_pos(new_pos) == Some('\n' as u32));
         if !at_line_start {
             shortage -= 1;
         }
     }
-    check_point_motion_hooks(eval, old_byte, adjusted)?;
+    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
     Ok(line_count_result(line_arg, shortage))
 }
 
@@ -822,17 +830,16 @@ pub(crate) fn builtin_beginning_of_line(
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
         buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
-            .get()
     };
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        buf.point_byte()
+        buf.point_emacs_byte_pos()
     };
-    let adjusted = adjust_for_intangible(eval, target_byte, -1);
+    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, target_byte.get(), -1));
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
-    check_point_motion_hooks(eval, old_byte, adjusted)?;
+        .goto_buffer_emacs_byte_pos(current_id, adjusted);
+    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
     Ok(Value::NIL)
 }
 
@@ -849,7 +856,7 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        buf.point_byte()
+        buf.point_emacs_byte_pos()
     };
     let constrained = builtin_line_end_position(eval, vec![Value::fixnum(n)])?;
     let target_char = match constrained.kind() {
@@ -860,13 +867,12 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
         buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
-            .get()
     };
-    let adjusted = adjust_for_intangible(eval, target_byte, 1);
+    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, target_byte.get(), 1));
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
-    check_point_motion_hooks(eval, old_byte, adjusted)?;
+        .goto_buffer_emacs_byte_pos(current_id, adjusted);
+    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
     Ok(Value::NIL)
 }
 
@@ -893,7 +899,7 @@ pub(crate) fn builtin_forward_char(
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (old_byte, cur_char, begv_char, zv_char, new_byte) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        let old_byte = buf.point_byte();
+        let old_byte = buf.point_emacs_byte_pos();
         let cur_char = buf.point_char();
         let begv_char = buf.point_min_char();
         let zv_char = buf.point_max_char();
@@ -904,15 +910,14 @@ pub(crate) fn builtin_forward_char(
             cur_char,
             begv_char,
             zv_char,
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(clamped_char))
-                .get(),
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(clamped_char)),
         )
     };
     let direction = if n >= 0 { 1 } else { -1 };
-    let adjusted = adjust_for_intangible(eval, new_byte, direction);
+    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, new_byte.get(), direction));
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
+        .goto_buffer_emacs_byte_pos(current_id, adjusted);
     // GNU `move_point`: signal beginning-of-buffer / end-of-buffer when
     // the requested position falls outside the accessible portion.
     let desired = cur_char as i64 + n;
@@ -922,7 +927,7 @@ pub(crate) fn builtin_forward_char(
     if desired > zv_char as i64 {
         return Err(signal("end-of-buffer", vec![]));
     }
-    check_point_motion_hooks(eval, old_byte, adjusted)?;
+    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
     Ok(Value::NIL)
 }
 
@@ -1168,25 +1173,24 @@ pub(crate) fn builtin_skip_chars_forward(
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
         let lim_byte = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?).get()
+            char_pos_to_byte(buf, expect_int(&args[1])?)
         } else {
-            accessible.end_usize()
+            accessible.end()
         };
-        let start_pos = buf.point_byte();
-        let mut pos = buf.point_byte();
+        let start_pos = buf.point_emacs_byte_pos();
+        let mut pos = start_pos;
         let mut moved_chars = 0_i64;
-        let limit = lim_byte.min(accessible.end_usize());
+        let limit = lim_byte.min(accessible.end());
 
         while pos < limit {
-            let byte_pos = EmacsBytePos::new(pos);
-            if let Some(code) = buf.char_code_after_emacs_byte_pos(byte_pos) {
+            if let Some(code) = buf.char_code_after_emacs_byte_pos(pos) {
                 if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
-                pos += buf
-                    .char_after_emacs_byte_len(byte_pos)
-                    .map(|len| len.get())
-                    .expect("char width should exist at valid point");
+                pos = pos.add_len(
+                    buf.char_after_emacs_byte_len(pos)
+                        .expect("char width should exist at valid point"),
+                );
                 moved_chars += 1;
             } else {
                 break;
@@ -1197,9 +1201,7 @@ pub(crate) fn builtin_skip_chars_forward(
     };
 
     debug_assert!(pos >= start_pos || limit <= start_pos);
-    let _ = ctx
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
+    let _ = ctx.buffers.goto_buffer_emacs_byte_pos(current_id, pos);
     Ok(Value::fixnum(moved_chars))
 }
 
@@ -1225,25 +1227,24 @@ pub(crate) fn builtin_skip_chars_backward(
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
         let limit = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?).get()
+            char_pos_to_byte(buf, expect_int(&args[1])?)
         } else {
-            accessible.start_usize()
+            accessible.start()
         };
-        let start_pos = buf.point_byte();
-        let mut pos = buf.point_byte();
+        let start_pos = buf.point_emacs_byte_pos();
+        let mut pos = start_pos;
         let mut moved_chars = 0_i64;
 
         while pos > limit {
             // Find the character before `pos`.
-            let byte_pos = EmacsBytePos::new(pos);
-            if let Some(code) = buf.char_code_before_emacs_byte_pos(byte_pos) {
+            if let Some(code) = buf.char_code_before_emacs_byte_pos(pos) {
                 if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
-                pos -= buf
-                    .char_before_emacs_byte_len(byte_pos)
-                    .map(|len| len.get())
-                    .expect("char width should exist before valid point");
+                pos = pos.saturating_sub_len(
+                    buf.char_before_emacs_byte_len(pos)
+                        .expect("char width should exist before valid point"),
+                );
                 moved_chars -= 1;
             } else {
                 break;
@@ -1253,9 +1254,7 @@ pub(crate) fn builtin_skip_chars_backward(
         debug_assert!(pos <= start_pos);
         (pos, moved_chars)
     };
-    let _ = ctx
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
+    let _ = ctx.buffers.goto_buffer_emacs_byte_pos(current_id, pos);
     Ok(Value::fixnum(moved_chars))
 }
 
@@ -1291,13 +1290,10 @@ pub(crate) fn builtin_region_beginning(
             )],
         )
     })?;
-    let pt = clamp_byte_to_accessible(buf, buf.point_byte());
-    let mark = clamp_byte_to_accessible(buf, mark);
+    let pt = clamp_byte_to_accessible(buf, buf.point_emacs_byte_pos());
+    let mark = clamp_byte_to_accessible(buf, EmacsBytePos::new(mark));
     let start = pt.min(mark);
-    Ok(Value::fixnum(byte_to_char_pos(
-        buf,
-        EmacsBytePos::new(start),
-    )))
+    Ok(Value::fixnum(byte_to_char_pos(buf, start)))
 }
 
 /// (region-end) -> integer
@@ -1312,10 +1308,10 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
             )],
         )
     })?;
-    let pt = clamp_byte_to_accessible(buf, buf.point_byte());
-    let mark = clamp_byte_to_accessible(buf, mark);
+    let pt = clamp_byte_to_accessible(buf, buf.point_emacs_byte_pos());
+    let mark = clamp_byte_to_accessible(buf, EmacsBytePos::new(mark));
     let end = pt.max(mark);
-    Ok(Value::fixnum(byte_to_char_pos(buf, EmacsBytePos::new(end))))
+    Ok(Value::fixnum(byte_to_char_pos(buf, end)))
 }
 
 // ===========================================================================
