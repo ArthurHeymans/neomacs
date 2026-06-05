@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -1863,25 +1863,28 @@ pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: usize) -> usize {
-    buf.char_after_emacs_byte_len(EmacsBytePos::new(pos))
-        .map(|len| len.get().max(1))
-        .unwrap_or(1)
+fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsByteLen {
+    buf.char_after_emacs_byte_len(pos)
+        .map(|len| EmacsByteLen::new(len.get().max(1)))
+        .unwrap_or(EmacsByteLen::new(1))
 }
 
 fn next_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    mut pos: usize,
+    pos: usize,
 ) -> Result<Option<usize>, Flow> {
+    let mut pos = EmacsBytePos::new(pos);
     let point_max = match eval.buffers.get(buffer_id) {
-        Some(buf) => buf.accessible_emacs_byte_region().end_usize(),
+        Some(buf) => buf.accessible_emacs_byte_region().end(),
         None => return Ok(None),
     };
 
     while pos < point_max {
-        if let Some(next_visible) = xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, pos)?
+        if let Some(next_visible) =
+            xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, pos.get())?
         {
+            let next_visible = EmacsBytePos::new(next_visible);
             if next_visible > pos {
                 pos = next_visible.min(point_max);
                 continue;
@@ -1889,15 +1892,15 @@ fn next_visible_line_start(
         }
 
         let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos)) {
+            Some(buf) => match buf.char_code_after_emacs_byte_pos(pos) {
                 Some(code) => (code, char_len_at(buf, pos)),
                 None => return Ok(None),
             },
             None => return Ok(None),
         };
-        pos += len;
+        pos = pos.add_len(len);
         if code == b'\n' as u32 {
-            return Ok(Some(pos));
+            return Ok(Some(pos.get()));
         }
     }
 
@@ -1909,10 +1912,11 @@ fn previous_visible_line_start(
     buffer_id: crate::buffer::BufferId,
     pos: usize,
 ) -> Result<Option<(usize, bool)>, Flow> {
+    let pos = EmacsBytePos::new(pos);
     let (point_min, point_max) = match eval.buffers.get(buffer_id) {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
-            (accessible.start_usize(), accessible.end_usize())
+            (accessible.start(), accessible.end())
         }
         None => return Ok(None),
     };
@@ -1924,8 +1928,10 @@ fn previous_visible_line_start(
     let mut previous_start = None;
     let mut current_start = point_min;
     while scan < point_max && scan < pos {
-        if let Some(next_visible) = xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, scan)?
+        if let Some(next_visible) =
+            xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, scan.get())?
         {
+            let next_visible = EmacsBytePos::new(next_visible);
             if next_visible > scan {
                 scan = next_visible.min(point_max);
                 continue;
@@ -1933,13 +1939,13 @@ fn previous_visible_line_start(
         }
 
         let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(scan)) {
+            Some(buf) => match buf.char_code_after_emacs_byte_pos(scan) {
                 Some(code) => (code, char_len_at(buf, scan)),
                 None => break,
             },
             None => return Ok(None),
         };
-        scan += len;
+        scan = scan.add_len(len);
         if code == b'\n' as u32 {
             let next_start = scan;
             if next_start <= pos {
@@ -1952,9 +1958,9 @@ fn previous_visible_line_start(
     }
 
     if let Some(previous_start) = previous_start {
-        Ok(Some((previous_start, true)))
+        Ok(Some((previous_start.get(), true)))
     } else if pos > current_start {
-        Ok(Some((current_start, false)))
+        Ok(Some((current_start.get(), false)))
     } else {
         Ok(None)
     }
