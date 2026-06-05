@@ -2100,8 +2100,13 @@ impl Buffer {
     }
 
     /// Current point converted to a character position.
+    pub fn point_char_pos(&self) -> CharPos0 {
+        CharPos0::new(self.pt)
+    }
+
+    /// Current point converted to a raw character position.
     pub fn point_char(&self) -> usize {
-        self.pt
+        self.point_char_pos().get()
     }
 
     /// Beginning of the accessible portion (Emacs byte position).
@@ -2115,8 +2120,13 @@ impl Buffer {
     }
 
     /// Beginning of the accessible portion (character position).
+    pub fn point_min_char_pos(&self) -> CharPos0 {
+        CharPos0::new(self.begv)
+    }
+
+    /// Beginning of the accessible portion as a raw character position.
     pub fn point_min_char(&self) -> usize {
-        self.begv
+        self.point_min_char_pos().get()
     }
 
     /// Legacy narrowing accessor retained while buffer internals are byte-only.
@@ -2135,8 +2145,13 @@ impl Buffer {
     }
 
     /// End of the accessible portion (character position).
+    pub fn point_max_char_pos(&self) -> CharPos0 {
+        CharPos0::new(self.zv)
+    }
+
+    /// End of the accessible portion as a raw character position.
     pub fn point_max_char(&self) -> usize {
-        self.zv
+        self.point_max_char_pos().get()
     }
 
     /// Total number of characters in the buffer text.
@@ -2230,7 +2245,10 @@ impl Buffer {
 
     /// Accessible buffer bounds in internal character positions.
     pub fn accessible_char_region(&self) -> AccessibleCharRange {
-        AccessibleCharRange::new(CharRange::from_usize(self.begv, self.zv))
+        AccessibleCharRange::new(CharRange::new(
+            self.point_min_char_pos(),
+            self.point_max_char_pos(),
+        ))
     }
 
     pub fn is_narrowed(&self) -> bool {
@@ -2277,7 +2295,10 @@ impl Buffer {
         } else {
             0
         };
-        let clamped_char = char_pos.clamp(self.point_min_char(), self.point_max_char());
+        let clamped_char = char_pos.clamp(
+            self.point_min_char_pos().get(),
+            self.point_max_char_pos().get(),
+        );
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
     }
@@ -2773,9 +2794,9 @@ impl Buffer {
 
     pub fn accessible_region_snapshot(&self) -> AccessibleBufferRegionSnapshot {
         AccessibleBufferRegionSnapshot {
-            start_char: CharPos0::new(self.begv),
+            start_char: self.point_min_char_pos(),
             start_emacs_byte: EmacsBytePos::new(self.begv_byte),
-            end_char: CharPos0::new(self.zv),
+            end_char: self.point_max_char_pos(),
             end_emacs_byte: EmacsBytePos::new(self.zv_byte),
         }
     }
