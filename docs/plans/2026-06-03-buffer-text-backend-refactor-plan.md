@@ -537,6 +537,8 @@ Completed so far:
   production use of raw buffer character query helpers in `emacs_core`.
 - Moved dependent layout tests to typed character query APIs and gated raw
   buffer `usize` character query wrappers to `neovm-core` tests.
+- Moved dependent layout, binary, and backend benchmark point movement callers
+  off raw `goto_byte` and onto typed `EmacsBytePos` entry points.
 
 Next work:
 

@@ -8,7 +8,9 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use neovm_core::buffer::{Buffer, BufferId, BufferTextBackendKind, CharPos0, EmacsByteRange};
+use neovm_core::buffer::{
+    Buffer, BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
+};
 use neovm_core::emacs_core::value::Value;
 
 const EDITS_PER_ITER: usize = 512;
@@ -114,7 +116,7 @@ fn bench_scattered_edit_churn(c: &mut Criterion) {
                             .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
                             .get();
                         let inserted = inserts[edit % inserts.len()];
-                        buffer.goto_byte(byte_pos);
+                        buffer.goto_emacs_byte_pos(EmacsBytePos::new(byte_pos));
                         buffer.insert(inserted);
                         let end_pos = buffer
                             .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
