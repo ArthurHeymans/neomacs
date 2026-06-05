@@ -3404,7 +3404,7 @@ pub(crate) fn builtin_subst_char_in_region(
             hi.saturating_sub(1),
         ));
         let changed_range = if from_code != to_code {
-            buf.subst_char_changed_range(range, from_code as u32)
+            buf.subst_char_changed_range(range, from_code as u32, &to_bytes)
         } else {
             None
         };

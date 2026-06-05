@@ -7,8 +7,8 @@
 
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
-    BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, TextEditRange, TextExtent,
-    TextInsertion, TextPositionAnchor, TextReplacement,
+    BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
+    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement,
 };
 use crate::heap_types::LispString;
 
@@ -605,6 +605,164 @@ impl MeasuredSameLenEdit {
     }
 }
 
+/// Backend-neutral plan for GNU `subst-char-in-region`.
+///
+/// GNU scans the buffer once to find each single-character replacement, records
+/// undo per changed character, then rewrites the original storage range in
+/// place because FROM and TO have the same Emacs-byte length.  Keeping the
+/// replacement bytes together with the per-character changed ranges prevents
+/// callers from recomputing those paired byte/char spans independently.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::buffer) struct SameLenSubstitutionPlan {
+    replacement_bytes: Vec<u8>,
+    changed_ranges: Vec<TextEditRange>,
+}
+
+impl SameLenSubstitutionPlan {
+    pub(in crate::buffer) fn new(
+        range: TextEditRange,
+        region_bytes: &[u8],
+        multibyte: bool,
+        from_code: u32,
+        to_bytes: &[u8],
+    ) -> Option<Self> {
+        let mut replacement_bytes = Vec::with_capacity(region_bytes.len());
+        let mut changed_ranges = Vec::new();
+        if multibyte {
+            Self::append_multibyte_substitutions(
+                range,
+                region_bytes,
+                from_code,
+                to_bytes,
+                &mut replacement_bytes,
+                &mut changed_ranges,
+            );
+        } else {
+            Self::append_unibyte_substitutions(
+                range,
+                region_bytes,
+                from_code,
+                to_bytes,
+                &mut replacement_bytes,
+                &mut changed_ranges,
+            )?;
+        }
+
+        if changed_ranges.is_empty() {
+            None
+        } else {
+            Some(Self {
+                replacement_bytes,
+                changed_ranges,
+            })
+        }
+    }
+
+    fn append_multibyte_substitutions(
+        range: TextEditRange,
+        region_bytes: &[u8],
+        from_code: u32,
+        to_bytes: &[u8],
+        replacement_bytes: &mut Vec<u8>,
+        changed_ranges: &mut Vec<TextEditRange>,
+    ) {
+        let start = range.byte_start_usize();
+        let mut byte_offset = 0;
+        let mut char_offset = 0;
+        while byte_offset < region_bytes.len() {
+            let (code, len) =
+                crate::emacs_core::emacs_char::string_char(&region_bytes[byte_offset..]);
+            let clen = len.max(1);
+            if code == from_code {
+                debug_assert_eq!(
+                    clen,
+                    to_bytes.len(),
+                    "subst-char-in-region: matched char byte length ({}) must equal replacement length ({})",
+                    clen,
+                    to_bytes.len()
+                );
+                replacement_bytes.extend_from_slice(to_bytes);
+                let char_pos = range.char_start_usize() + char_offset;
+                changed_ranges.push(TextEditRange::from_usize(
+                    start + byte_offset,
+                    start + byte_offset + clen,
+                    char_pos,
+                    char_pos + 1,
+                ));
+            } else {
+                replacement_bytes.extend_from_slice(&region_bytes[byte_offset..byte_offset + clen]);
+            }
+            byte_offset += clen;
+            char_offset += 1;
+        }
+    }
+
+    fn append_unibyte_substitutions(
+        range: TextEditRange,
+        region_bytes: &[u8],
+        from_code: u32,
+        to_bytes: &[u8],
+        replacement_bytes: &mut Vec<u8>,
+        changed_ranges: &mut Vec<TextEditRange>,
+    ) -> Option<()> {
+        if from_code > 0xFF || to_bytes.len() != 1 {
+            return None;
+        }
+        let start = range.byte_start_usize();
+        let from_byte = from_code as u8;
+        for (index, &byte) in region_bytes.iter().enumerate() {
+            if byte == from_byte {
+                replacement_bytes.push(to_bytes[0]);
+                let char_pos = range.char_start_usize() + index;
+                changed_ranges.push(TextEditRange::from_usize(
+                    start + index,
+                    start + index + 1,
+                    char_pos,
+                    char_pos + 1,
+                ));
+            } else {
+                replacement_bytes.push(byte);
+            }
+        }
+        Some(())
+    }
+
+    pub(in crate::buffer) fn replacement_bytes(&self) -> &[u8] {
+        &self.replacement_bytes
+    }
+
+    pub(in crate::buffer) fn changed_ranges(&self) -> &[TextEditRange] {
+        &self.changed_ranges
+    }
+
+    pub(in crate::buffer) fn first_to_last_changed_range(&self) -> TextEditRange {
+        let first = self
+            .changed_ranges
+            .first()
+            .expect("substitution plan should contain at least one changed range");
+        let last = self
+            .changed_ranges
+            .last()
+            .expect("substitution plan should contain at least one changed range");
+        TextEditRange::new(
+            EmacsByteRange::new(first.byte_start(), last.byte_end()),
+            first.char_start(),
+            last.char_end(),
+        )
+    }
+
+    pub(in crate::buffer) fn replacement_for_range(
+        &self,
+        range: TextEditRange,
+        multibyte: bool,
+    ) -> TextReplacement {
+        TextReplacement::new(
+            range,
+            TextExtent::from_emacs_bytes(&self.replacement_bytes, multibyte),
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) update_state_fields: bool,
@@ -902,5 +1060,65 @@ mod tests {
             TextEditRange::from_usize(3, 10, 3, 10)
         );
         assert_eq!(edit.changed_chars_usize(), 7);
+    }
+
+    #[test]
+    fn same_len_substitution_plan_records_per_character_multibyte_ranges() {
+        let range = TextEditRange::from_usize(0, "a日本日".len(), 0, 4);
+        let plan = SameLenSubstitutionPlan::new(
+            range,
+            "a日本日".as_bytes(),
+            true,
+            '日' as u32,
+            "本".as_bytes(),
+        )
+        .expect("matching chars should produce a substitution plan");
+
+        assert_eq!(plan.replacement_bytes(), "a本本本".as_bytes());
+        assert_eq!(
+            plan.changed_ranges(),
+            &[
+                TextEditRange::from_usize(1, 4, 1, 2),
+                TextEditRange::from_usize(7, 10, 3, 4),
+            ]
+        );
+        assert_eq!(
+            plan.first_to_last_changed_range(),
+            TextEditRange::from_usize(1, 10, 1, 4)
+        );
+        assert_eq!(
+            plan.replacement_for_range(range, true),
+            TextReplacement::new(range, TextExtent::from_usize(4, "a本本本".len()))
+        );
+    }
+
+    #[test]
+    fn same_len_substitution_plan_records_unibyte_ranges_and_rejects_non_bytes() {
+        let range = TextEditRange::from_usize(20, 25, 10, 15);
+        let plan = SameLenSubstitutionPlan::new(range, b"ababa", false, b'a' as u32, b"z")
+            .expect("matching unibyte chars should produce a substitution plan");
+
+        assert_eq!(plan.replacement_bytes(), b"zbzbz");
+        assert_eq!(
+            plan.changed_ranges(),
+            &[
+                TextEditRange::from_usize(20, 21, 10, 11),
+                TextEditRange::from_usize(22, 23, 12, 13),
+                TextEditRange::from_usize(24, 25, 14, 15),
+            ]
+        );
+        assert_eq!(
+            plan.first_to_last_changed_range(),
+            TextEditRange::from_usize(20, 25, 10, 15)
+        );
+        assert!(SameLenSubstitutionPlan::new(range, b"ababa", false, 0x100, b"z").is_none());
+        assert!(SameLenSubstitutionPlan::new(range, b"ababa", false, b'a' as u32, b"zz").is_none());
+    }
+
+    #[test]
+    fn same_len_substitution_plan_returns_none_without_matches() {
+        let range = TextEditRange::from_usize(0, 5, 0, 5);
+
+        assert!(SameLenSubstitutionPlan::new(range, b"abcde", true, b'z' as u32, b"q").is_none());
     }
 }

@@ -8,7 +8,7 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, char_pos_for_emacs_byte,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, char_pos_for_emacs_byte,
     convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
     modification_tick_delta,
 };
@@ -554,73 +554,24 @@ impl Buffer {
         }
         let start = range.byte_start_usize();
 
-        // Copy the region's raw Emacs bytes and build a replacement by
-        // walking chars and substituting the matched ones with to_bytes.
-        use crate::emacs_core::emacs_char;
         let mut region_bytes = Vec::with_capacity(range.byte_len().get());
         self.text
             .copy_emacs_byte_range_to(range.byte_range(), &mut region_bytes);
-        let mut replacement_bytes = Vec::with_capacity(region_bytes.len());
-        let mut changed_ranges = Vec::new();
-        if self.get_multibyte() {
-            let mut pos = 0;
-            let mut char_offset = 0;
-            while pos < region_bytes.len() {
-                let (code, len) = emacs_char::string_char(&region_bytes[pos..]);
-                let clen = len.max(1);
-                if code == from_code {
-                    debug_assert_eq!(
-                        clen,
-                        to_bytes.len(),
-                        "subst_char_in_region: matched char byte length ({}) must equal replacement length ({})",
-                        clen,
-                        to_bytes.len()
-                    );
-                    replacement_bytes.extend_from_slice(to_bytes);
-                    let char_pos = range.char_start_usize() + char_offset;
-                    changed_ranges.push(TextEditRange::from_usize(
-                        start + pos,
-                        start + pos + clen,
-                        char_pos,
-                        char_pos + 1,
-                    ));
-                } else {
-                    replacement_bytes.extend_from_slice(&region_bytes[pos..pos + clen]);
-                }
-                pos += clen;
-                char_offset += 1;
-            }
-        } else {
-            // Unibyte: each byte is one character. Replacement must be a
-            // single byte whose value matches to_bytes[0].
-            if from_code > 0xFF || to_bytes.len() != 1 {
-                return false;
-            }
-            let from_byte = from_code as u8;
-            for (index, &b) in region_bytes.iter().enumerate() {
-                if b == from_byte {
-                    replacement_bytes.push(to_bytes[0]);
-                    let char_pos = range.char_start_usize() + index;
-                    changed_ranges.push(TextEditRange::from_usize(
-                        start + index,
-                        start + index + 1,
-                        char_pos,
-                        char_pos + 1,
-                    ));
-                } else {
-                    replacement_bytes.push(b);
-                }
-            }
-        }
-        if changed_ranges.is_empty() {
+        let Some(plan) = SameLenSubstitutionPlan::new(
+            range,
+            &region_bytes,
+            self.get_multibyte(),
+            from_code,
+            to_bytes,
+        ) else {
             return false;
-        }
+        };
 
         if !noundo {
             self.undo_prepare_change(modified_range.byte_start_usize(), self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
-                for changed_range in changed_ranges.iter().copied() {
+                for changed_range in plan.changed_ranges().iter().copied() {
                     let mut deleted = lisp_string_from_buffer_bytes(
                         region_bytes[changed_range.byte_start_usize() - start
                             ..changed_range.byte_end_usize() - start]
@@ -653,11 +604,8 @@ impl Buffer {
         }
 
         self.text.replace_same_len_measured_range(
-            TextReplacement::new(
-                range,
-                TextExtent::from_emacs_bytes(&replacement_bytes, self.get_multibyte()),
-            ),
-            &replacement_bytes,
+            plan.replacement_for_range(range, self.get_multibyte()),
+            plan.replacement_bytes(),
         );
         self.apply_same_len_edit_side_effects(edit, false);
         true
@@ -667,6 +615,7 @@ impl Buffer {
         &self,
         range: TextEditRange,
         from_code: u32,
+        to_bytes: &[u8],
     ) -> Option<TextEditRange> {
         if range.byte_range().is_empty() {
             return None;
@@ -676,54 +625,14 @@ impl Buffer {
         self.text
             .copy_emacs_byte_range_to(range.byte_range(), &mut region_bytes);
 
-        let range_start_byte = range.byte_start_usize();
-        let range_start_char = range.char_start_usize();
-        let mut first_changed: Option<TextPositionAnchor> = None;
-        let mut last_changed = TextPositionAnchor::from_usize(range_start_char, range_start_byte);
-
-        if self.get_multibyte() {
-            use crate::emacs_core::emacs_char;
-
-            let mut byte_offset = 0;
-            let mut char_offset = 0;
-            while byte_offset < region_bytes.len() {
-                let (code, len) = emacs_char::string_char(&region_bytes[byte_offset..]);
-                let clen = len.max(1);
-                let char_pos = range_start_char + char_offset;
-                let byte_pos = range_start_byte + byte_offset;
-                if code == from_code {
-                    first_changed
-                        .get_or_insert_with(|| TextPositionAnchor::from_usize(char_pos, byte_pos));
-                    last_changed = TextPositionAnchor::from_usize(char_pos + 1, byte_pos + clen);
-                }
-                byte_offset += clen;
-                char_offset += 1;
-            }
-        } else {
-            if from_code > 0xFF {
-                return None;
-            }
-            let from_byte = from_code as u8;
-            for (index, &byte) in region_bytes.iter().enumerate() {
-                if byte == from_byte {
-                    let char_pos = range_start_char + index;
-                    let byte_pos = range_start_byte + index;
-                    first_changed
-                        .get_or_insert_with(|| TextPositionAnchor::from_usize(char_pos, byte_pos));
-                    last_changed = TextPositionAnchor::from_usize(char_pos + 1, byte_pos + 1);
-                }
-            }
-        }
-
-        let first_changed = first_changed?;
-        Some(TextEditRange::new(
-            EmacsByteRange::new(
-                first_changed.emacs_byte_pos(),
-                last_changed.emacs_byte_pos(),
-            ),
-            first_changed.char_pos(),
-            last_changed.char_pos(),
-        ))
+        SameLenSubstitutionPlan::new(
+            range,
+            &region_bytes,
+            self.get_multibyte(),
+            from_code,
+            to_bytes,
+        )
+        .map(|plan| plan.first_to_last_changed_range())
     }
 
     fn transpose_region_properties(&self, transposition: TextTransposition) -> TextPropertyTable {
