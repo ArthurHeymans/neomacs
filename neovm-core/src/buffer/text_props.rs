@@ -1363,7 +1363,7 @@ impl TextPropertyTable {
     fn try_for_each_interval_overlapping<E>(
         &self,
         range: CharRange,
-        mut f: impl FnMut(usize, usize, &IntervalNode) -> Result<(), E>,
+        mut f: impl FnMut(CharRange, &IntervalNode) -> Result<(), E>,
     ) -> Result<(), E> {
         let Some((mut node_start, mut id)) = self.first_interval_overlapping(range) else {
             return Ok(());
@@ -1375,7 +1375,7 @@ impl TextPropertyTable {
             let node_end = self.intervals.interval_end(node_start, id);
             if node_end > range.start() {
                 let node = &self.intervals.nodes[id.0];
-                f(node_start.get(), node_end.get(), node)?;
+                f(CharRange::new(node_start, node_end), node)?;
             }
             let Some(next_id) = self.intervals.next_id(id) else {
                 break;
@@ -2018,7 +2018,7 @@ impl TextPropertyTable {
     pub(crate) fn try_for_each_interval_in_char_range<E>(
         &self,
         range: CharRange,
-        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+        f: impl FnMut(CharRange, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
         self.try_for_each_interval_in_range_raw(range, f)
     }
@@ -2026,14 +2026,14 @@ impl TextPropertyTable {
     fn try_for_each_interval_in_range_raw<E>(
         &self,
         range: CharRange,
-        mut f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+        mut f: impl FnMut(CharRange, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
         if range.is_empty() {
             return Ok(());
         }
-        self.try_for_each_interval_overlapping(range, |interval_start, interval_end, node| {
+        self.try_for_each_interval_overlapping(range, |interval_range, node| {
             let pairs = plist_pairs(node.plist);
-            f(interval_start, interval_end, &pairs)
+            f(interval_range, &pairs)
         })
     }
 

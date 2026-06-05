@@ -831,7 +831,7 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
     }
     let read_only_sym = Value::symbol("read-only");
     let inhibit_sym = Value::symbol("inhibit-read-only");
-    buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_, _, plist| {
+    buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_range, plist| {
         let read_only = lookup_char_property_from_direct(
             obarray,
             buffers,
@@ -1032,8 +1032,9 @@ pub(crate) fn prepare_interval_modification_for_change(
         let mod_sym = Value::symbol("modification-hooks");
         let mut prev: Option<Value> = None;
         let mut hooks = Vec::new();
-        let _ =
-            buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_, _, plist| {
+        let _ = buf.text_props_try_for_each_interval_in_emacs_byte_range(
+            byte_range,
+            |_range, plist| {
                 let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
                 if mh.is_nil() {
                     return Ok::<(), ()>(());
@@ -1046,7 +1047,8 @@ pub(crate) fn prepare_interval_modification_for_change(
                 prev = Some(mh);
                 hooks.push(mh);
                 Ok(())
-            });
+            },
+        );
         (lisp_start, lisp_end, hooks)
     };
 

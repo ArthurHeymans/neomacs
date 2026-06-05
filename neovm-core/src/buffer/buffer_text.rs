@@ -1129,7 +1129,7 @@ impl BufferText {
     pub(crate) fn text_props_try_for_each_interval_in_emacs_byte_range<E>(
         &self,
         byte_range: EmacsByteRange,
-        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+        f: impl FnMut(CharRange, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
         let range = self.byte_range_to_char_range(byte_range);
         self.storage

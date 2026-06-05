@@ -2589,7 +2589,7 @@ impl Buffer {
     pub(crate) fn text_props_try_for_each_interval_in_emacs_byte_range<E>(
         &self,
         range: EmacsByteRange,
-        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
+        f: impl FnMut(CharRange, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
         self.text
             .text_props_try_for_each_interval_in_emacs_byte_range(
@@ -3719,33 +3719,29 @@ fn buffer_text_property_undo_runs(
     let mut cursor = changed_range.start();
     let _ = buf
         .text
-        .text_props_try_for_each_interval_in_emacs_byte_range(
-            byte_range,
-            |interval_start, interval_end, plist| {
-                let source_range = CharRange::from_usize(interval_start, interval_end);
-                let clipped_range = CharRange::new(
-                    source_range.start().max(changed_range.start()),
-                    source_range.end().min(changed_range.end()),
-                );
-                if clipped_range.is_empty() {
-                    return Ok::<(), ()>(());
-                }
-                if cursor < clipped_range.start() {
-                    runs.push(TextPropertyUndoRun {
-                        range: CharRange::new(cursor, clipped_range.start()),
-                        source_range: CharRange::new(cursor, clipped_range.start()),
-                        plist: Vec::new(),
-                    });
-                }
+        .text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |source_range, plist| {
+            let clipped_range = CharRange::new(
+                source_range.start().max(changed_range.start()),
+                source_range.end().min(changed_range.end()),
+            );
+            if clipped_range.is_empty() {
+                return Ok::<(), ()>(());
+            }
+            if cursor < clipped_range.start() {
                 runs.push(TextPropertyUndoRun {
-                    range: clipped_range,
-                    source_range,
-                    plist: plist.to_vec(),
+                    range: CharRange::new(cursor, clipped_range.start()),
+                    source_range: CharRange::new(cursor, clipped_range.start()),
+                    plist: Vec::new(),
                 });
-                cursor = clipped_range.end();
-                Ok(())
-            },
-        );
+            }
+            runs.push(TextPropertyUndoRun {
+                range: clipped_range,
+                source_range,
+                plist: plist.to_vec(),
+            });
+            cursor = clipped_range.end();
+            Ok(())
+        });
     if cursor < changed_range.end() {
         runs.push(TextPropertyUndoRun {
             range: CharRange::new(cursor, changed_range.end()),
