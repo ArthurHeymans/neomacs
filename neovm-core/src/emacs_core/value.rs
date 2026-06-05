@@ -958,6 +958,22 @@ impl LispHashTable {
         self.entry_slot_by_key.insert(key, slot);
     }
 
+    /// Insert or update `hash_key` -> `value`, maintaining iteration-order
+    /// bookkeeping in O(1) (mirrors the main `puthash` path).  Callers that
+    /// bypass `puthash` -- e.g. the frame face cache -- must use this instead
+    /// of `ensure_hash_key_iterable`, whose duplicate check is an O(n) scan
+    /// with `HashKey` equality and becomes O(n^2) when realising many keys (a
+    /// Doom-startup hot spot).
+    pub fn upsert_iterable(&mut self, hash_key: HashKey, key_value: Value, value: Value) {
+        let is_new = !self.data.contains_key(&hash_key);
+        self.key_snapshots.insert(hash_key.clone(), key_value);
+        if is_new {
+            self.insertion_order.push(hash_key.clone());
+            self.note_hash_key_inserted(hash_key.clone());
+        }
+        self.data.insert(hash_key, value);
+    }
+
     pub fn ensure_hash_key_iterable(&mut self, key: &HashKey) {
         if !self.insertion_order.iter().any(|existing| existing == key) {
             self.insertion_order.push(key.clone());

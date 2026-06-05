@@ -225,8 +225,11 @@ fn insert_frame_face_hash_entry_if_absent(table: Value, key: Value, value: Value
                 ValueKind::Symbol(id) => HashKey::Symbol(id),
                 _ => unreachable!("face hash keys are symbols"),
             };
+            // Key is already present (looked up above), so it is already in
+            // `insertion_order`; just refresh the snapshot and ensure a slot.
+            // `note_hash_key_inserted` is idempotent and O(1).
             hash_table.key_snapshots.insert(hash_key.clone(), key);
-            hash_table.ensure_hash_key_iterable(&hash_key);
+            hash_table.note_hash_key_inserted(hash_key);
         });
     }
 }
@@ -240,9 +243,9 @@ pub(crate) fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Valu
             ValueKind::Symbol(id) => HashKey::Symbol(id),
             _ => unreachable!("face hash keys are symbols"),
         };
-        hash_table.key_snapshots.insert(hash_key.clone(), key);
-        hash_table.ensure_hash_key_iterable(&hash_key);
-        hash_table.data.insert(hash_key, value);
+        // Use the O(1) puthash-style upsert; `ensure_hash_key_iterable`'s
+        // duplicate scan is O(n) and made face realisation O(n^2).
+        hash_table.upsert_iterable(hash_key, key, value);
     });
 }
 
