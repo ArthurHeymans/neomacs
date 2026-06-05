@@ -2196,6 +2196,112 @@ const POSITION_DISTANCE_INCR: usize = 50;
 /// Mirrors GNU `marker.c:238-241` (5000-char threshold).
 const POSITION_ANCHOR_STRIDE: usize = 5000;
 
+struct ForwardMultibytePositionScan {
+    byte_pos: usize,
+    char_pos: usize,
+    pending: [u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH],
+    pending_len: usize,
+}
+
+impl ForwardMultibytePositionScan {
+    fn new(anchor: TextPositionAnchor) -> Self {
+        Self {
+            byte_pos: anchor.emacs_byte_pos_usize(),
+            char_pos: anchor.char_pos_usize(),
+            pending: [0; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH],
+            pending_len: 0,
+        }
+    }
+
+    fn finish_pending_char(&mut self, chunk: &[u8], offset: &mut usize) -> bool {
+        if self.pending_len == 0 {
+            return true;
+        }
+
+        let expected = emacs_multibyte_candidate_len(self.pending[0]);
+        let take = expected.saturating_sub(self.pending_len).min(chunk.len());
+        self.pending[self.pending_len..self.pending_len + take].copy_from_slice(&chunk[..take]);
+        self.pending_len += take;
+        self.byte_pos += take;
+        *offset += take;
+
+        if self.pending_len < expected {
+            return false;
+        }
+
+        let (_, len) = crate::emacs_core::emacs_char::string_char(&self.pending[..expected]);
+        debug_assert_eq!(
+            len, expected,
+            "forward position scan should only complete valid Emacs characters"
+        );
+        self.pending_len = 0;
+        self.char_pos += 1;
+        true
+    }
+
+    fn consume_chunk_until_char(&mut self, chunk: &[u8], target: CharPos0) -> Option<EmacsBytePos> {
+        let mut offset = 0;
+        if !self.finish_pending_char(chunk, &mut offset) {
+            return None;
+        }
+        if self.char_pos >= target.get() {
+            return Some(EmacsBytePos::new(self.byte_pos));
+        }
+
+        while offset < chunk.len() {
+            let expected = emacs_multibyte_candidate_len(chunk[offset]);
+            let available = chunk.len() - offset;
+            if available < expected {
+                self.pending[..available].copy_from_slice(&chunk[offset..]);
+                self.pending_len = available;
+                self.byte_pos += available;
+                return None;
+            }
+
+            let (_, len) =
+                crate::emacs_core::emacs_char::string_char(&chunk[offset..offset + expected]);
+            offset += len;
+            self.byte_pos += len;
+            self.char_pos += 1;
+            if self.char_pos >= target.get() {
+                return Some(EmacsBytePos::new(self.byte_pos));
+            }
+        }
+        None
+    }
+
+    fn consume_chunk_until_byte(&mut self, chunk: &[u8], target: EmacsBytePos) -> Option<CharPos0> {
+        let mut offset = 0;
+        if !self.finish_pending_char(chunk, &mut offset) {
+            return None;
+        }
+        if self.byte_pos >= target.get() {
+            return Some(CharPos0::new(self.char_pos));
+        }
+
+        while offset < chunk.len() {
+            let expected = emacs_multibyte_candidate_len(chunk[offset]);
+            let available = chunk.len() - offset;
+            if available < expected {
+                self.pending[..available].copy_from_slice(&chunk[offset..]);
+                self.pending_len = available;
+                self.byte_pos += available;
+                return None;
+            }
+
+            let (_, len) =
+                crate::emacs_core::emacs_char::string_char(&chunk[offset..offset + expected]);
+            offset += len;
+            self.byte_pos += len;
+            self.char_pos += 1;
+            if self.byte_pos >= target.get() {
+                return Some(CharPos0::new(self.char_pos));
+            }
+        }
+        None
+    }
+}
+
 /// Walk forward from `anchor` to reach `target` chars.
 /// Returns the byte position.
 fn scan_forward(
@@ -2203,25 +2309,24 @@ fn scan_forward(
     anchor: TextPositionAnchor,
     target: CharPos0,
 ) -> EmacsBytePos {
-    let mut cp = anchor.char_pos_usize();
-    let mut bp = anchor.emacs_byte_pos_usize();
-    let total_bytes = backend.metrics().emacs_bytes();
-    while cp < target.get() {
-        if !backend.is_multibyte() {
-            bp += 1;
-            cp += 1;
-            continue;
-        }
-        let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (total_bytes - bp).min(tmp.len());
-        for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
-        }
-        let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
-        bp += len;
-        cp += 1;
+    let cp = anchor.char_pos_usize();
+    let bp = anchor.emacs_byte_pos_usize();
+    if cp >= target.get() {
+        return EmacsBytePos::new(bp);
     }
-    EmacsBytePos::new(bp)
+    if !backend.is_multibyte() {
+        return EmacsBytePos::new(bp + target.get() - cp);
+    }
+
+    let range = EmacsByteRange::from_usize(bp, backend.metrics().emacs_bytes());
+    let mut scan = ForwardMultibytePositionScan::new(anchor);
+    match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
+        scan.consume_chunk_until_char(chunk, target)
+            .map_or(Ok(()), Err)
+    }) {
+        Ok(()) => EmacsBytePos::new(scan.byte_pos),
+        Err(result) => result,
+    }
 }
 
 /// Walk backward from `anchor` to reach `target` chars.
@@ -2256,25 +2361,24 @@ fn scan_forward_bytes(
     anchor: TextPositionAnchor,
     target: EmacsBytePos,
 ) -> CharPos0 {
-    let mut bp = anchor.emacs_byte_pos_usize();
-    let mut cp = anchor.char_pos_usize();
-    let total_bytes = backend.metrics().emacs_bytes();
-    while bp < target.get() {
-        if !backend.is_multibyte() {
-            bp += 1;
-            cp += 1;
-            continue;
-        }
-        let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (total_bytes - bp).min(tmp.len());
-        for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
-        }
-        let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
-        bp += len;
-        cp += 1;
+    let bp = anchor.emacs_byte_pos_usize();
+    let cp = anchor.char_pos_usize();
+    if bp >= target.get() {
+        return CharPos0::new(cp);
     }
-    CharPos0::new(cp)
+    if !backend.is_multibyte() {
+        return CharPos0::new(cp + target.get() - bp);
+    }
+
+    let range = EmacsByteRange::from_usize(bp, backend.metrics().emacs_bytes());
+    let mut scan = ForwardMultibytePositionScan::new(anchor);
+    match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
+        scan.consume_chunk_until_byte(chunk, target)
+            .map_or(Ok(()), Err)
+    }) {
+        Ok(()) => CharPos0::new(scan.char_pos),
+        Err(result) => result,
+    }
 }
 
 /// Walk backward from `anchor` to reach `target` bytepos.

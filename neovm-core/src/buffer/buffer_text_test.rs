@@ -272,6 +272,33 @@ fn edit_measurement_boundary_is_backend_neutral() {
 }
 
 #[test]
+fn non_gap_position_conversion_forward_scan_crosses_backend_chunks() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
+        let mut char_scan =
+            BufferText::from_str_with_backend_kind("aé日本🙂zzzz", implemented_kind(kind));
+        char_scan.insert_str(1, "Ω");
+
+        assert_eq!(char_scan.to_string(), "aΩé日本🙂zzzz");
+        assert_eq!(
+            char_scan.buf_charpos_to_bytepos(4),
+            "aΩé日".len(),
+            "{kind:?} char-to-byte forward scan should cross edited chunks"
+        );
+
+        let mut byte_scan =
+            BufferText::from_str_with_backend_kind("aé日本🙂zzzz", implemented_kind(kind));
+        byte_scan.insert_str(1, "Ω");
+        assert_eq!(byte_scan.to_string(), "aΩé日本🙂zzzz");
+        assert_eq!(
+            byte_scan.buf_bytepos_to_charpos("aΩé日".len()),
+            4,
+            "{kind:?} byte-to-char forward scan should cross edited chunks"
+        );
+    }
+}
+
+#[test]
 fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::non_gap_implemented_variants() {
