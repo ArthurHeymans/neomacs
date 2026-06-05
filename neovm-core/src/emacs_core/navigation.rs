@@ -388,7 +388,7 @@ fn lookup_buffer_char_property(
     byte_pos: usize,
     prop: Value,
 ) -> Value {
-    if byte_pos >= buf.total_bytes() {
+    if byte_pos >= buf.total_emacs_byte_len().get() {
         return Value::NIL;
     }
     if let Some((value, _overlay)) =

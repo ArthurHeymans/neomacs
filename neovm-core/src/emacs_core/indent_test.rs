@@ -312,7 +312,11 @@ fn eval_move_to_column_force_subset() {
             buffer_id,
             crate::buffer::EmacsByteRange::from_usize(
                 0,
-                ev.buffers.get(buffer_id).unwrap().total_bytes(),
+                ev.buffers
+                    .get(buffer_id)
+                    .unwrap()
+                    .total_emacs_byte_len()
+                    .get(),
             ),
         )
         .expect("clear buffer");
@@ -333,7 +337,11 @@ fn eval_move_to_column_force_subset() {
             buffer_id,
             crate::buffer::EmacsByteRange::from_usize(
                 0,
-                ev.buffers.get(buffer_id).unwrap().total_bytes(),
+                ev.buffers
+                    .get(buffer_id)
+                    .unwrap()
+                    .total_emacs_byte_len()
+                    .get(),
             ),
         )
         .expect("clear buffer");

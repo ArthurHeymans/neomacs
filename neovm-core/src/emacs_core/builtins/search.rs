@@ -1248,7 +1248,7 @@ pub(crate) fn builtin_match_string(
         None => return Ok(Value::NIL),
     };
     if md.uses_buffer_byte_positions() {
-        if end <= buf.total_bytes() {
+        if end <= buf.total_emacs_byte_len().get() {
             return Ok(buf.buffer_substring_value_range(EmacsByteRange::new(
                 EmacsBytePos::new(start),
                 EmacsBytePos::new(end),
@@ -1259,7 +1259,7 @@ pub(crate) fn builtin_match_string(
 
     let start_byte = buf.lisp_pos_to_emacs_byte_pos(start as i64);
     let end_byte = buf.lisp_pos_to_emacs_byte_pos(end as i64);
-    if end_byte.get() <= buf.total_bytes() && start_byte <= end_byte {
+    if end_byte.get() <= buf.total_emacs_byte_len().get() && start_byte <= end_byte {
         Ok(buf.buffer_substring_value_range(EmacsByteRange::new(start_byte, end_byte)))
     } else {
         Ok(Value::NIL)
@@ -1299,7 +1299,7 @@ pub(crate) fn builtin_match_beginning_with_state(
                             .searched_buffer
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
-                        if start <= buf.total_bytes() {
+                        if start <= buf.total_emacs_byte_len().get() {
                             let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(start));
                             Ok(Value::fixnum(pos))
                         } else {
@@ -1356,7 +1356,7 @@ pub(crate) fn builtin_match_end_with_state(
                             .searched_buffer
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
-                        if end <= buf.total_bytes() {
+                        if end <= buf.total_emacs_byte_len().get() {
                             let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(end));
                             Ok(Value::fixnum(pos))
                         } else {
@@ -1431,7 +1431,7 @@ pub(crate) fn builtin_match_data_with_state(
                     searched_buffer_id.and_then(|buffer_id| {
                         buffers.as_deref().and_then(|bufs| {
                             bufs.get(buffer_id).and_then(|buffer| {
-                                if start <= end && end <= buffer.total_bytes() {
+                                if start <= end && end <= buffer.total_emacs_byte_len().get() {
                                     Some((
                                         buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(start)),
                                         buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(end)),

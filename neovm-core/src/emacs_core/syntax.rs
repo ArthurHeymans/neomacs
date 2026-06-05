@@ -2440,7 +2440,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
     let char_index = pos as usize - 1;
     let byte_index = EmacsBytePos::new(buffer_char_to_byte_pos(
         buf,
-        char_index.min(buf.total_chars()),
+        char_index.min(buf.total_char_len().get()),
     ));
     let Some(unit) = buffer_syntax_char_after(buf, byte_index) else {
         return Ok(Value::NIL);
@@ -3577,7 +3577,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let table = SyntaxTable::for_buffer(buf);
 
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
-    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.total_chars()));
+    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.total_char_len().get()));
 
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(

@@ -409,10 +409,10 @@ impl<'a> Reader<'a> {
         let start = range.start_usize();
         let end = range.end_usize();
         assert!(start <= end, "invalid buffer reader range: {start}..{end}");
+        let input_len = input.total_emacs_byte_len().get();
         assert!(
-            end <= input.total_bytes(),
-            "buffer reader end {end} exceeds logical length {}",
-            input.total_bytes()
+            end <= input_len,
+            "buffer reader end {end} exceeds logical length {input_len}"
         );
         Self {
             source: ReaderSource::Buffer(input),
@@ -2251,7 +2251,7 @@ impl<'a> Reader<'a> {
     }
 
     fn buffer_code_step(&self, input: &Buffer, pos: usize) -> Option<(u32, usize)> {
-        if pos >= self.limit || pos >= input.total_bytes() {
+        if pos >= self.limit || pos >= input.total_emacs_byte_len().get() {
             return None;
         }
 

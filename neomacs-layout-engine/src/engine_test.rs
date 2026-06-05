@@ -1819,7 +1819,12 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
             Value::keyword("weight"),
             Value::symbol("extra-bold"),
         ]);
-        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            plist,
+        );
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
     let frame_id = eval
@@ -1977,7 +1982,12 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
             Value::keyword("weight"),
             Value::symbol("regular"),
         ]);
-        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            plist,
+        );
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
@@ -2174,7 +2184,12 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
             Value::keyword("weight"),
             Value::symbol("regular"),
         ]);
-        buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            plist,
+        );
         let visual_cursor = Value::list(vec![
             Value::keyword(":position"),
             Value::fixnum(1),
@@ -3947,9 +3962,9 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(prefix);
-        let sample_byte_start = buf.total_bytes();
+        let sample_byte_start = buf.total_emacs_byte_len().get();
         buf.insert(sample);
-        let sample_byte_end = buf.total_bytes();
+        let sample_byte_end = buf.total_emacs_byte_len().get();
         let plist = Value::list(vec![
             Value::keyword("family"),
             Value::string("Noto Sans Mono"),
@@ -4080,9 +4095,9 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&truncated_prefix);
-        let sample_byte_start = buf.total_bytes();
+        let sample_byte_start = buf.total_emacs_byte_len().get();
         buf.insert(sample);
-        let sample_byte_end = buf.total_bytes();
+        let sample_byte_end = buf.total_emacs_byte_len().get();
         buf.insert("\n");
         let plist = Value::list(vec![
             Value::keyword("family"),
@@ -4239,9 +4254,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                 let sample_pos = line_beg + prefix.chars().count();
                 buf.insert(&prefix);
-                let sample_byte_start = buf.total_bytes();
+                let sample_byte_start = buf.total_emacs_byte_len().get();
                 buf.insert(sample);
-                let sample_byte_end = buf.total_bytes();
+                let sample_byte_end = buf.total_emacs_byte_len().get();
                 buf.insert("\n");
                 let plist = Value::list(vec![
                     Value::keyword("family"),
@@ -4471,9 +4486,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                     let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                     let sample_pos = line_beg + prefix.chars().count();
                     buf.insert(&prefix);
-                    let sample_byte_start = buf.total_bytes();
+                    let sample_byte_start = buf.total_emacs_byte_len().get();
                     buf.insert(sample);
-                    let sample_byte_end = buf.total_bytes();
+                    let sample_byte_end = buf.total_emacs_byte_len().get();
                     buf.insert("\n");
                     let plist = Value::list(vec![
                         Value::keyword("family"),

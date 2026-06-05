@@ -3067,7 +3067,7 @@ impl LayoutEngine {
                     let overlay_lines: usize = overlays
                         .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(
                             0,
-                            b.total_bytes(),
+                            b.total_emacs_byte_len().get(),
                         ))
                         .iter()
                         .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {

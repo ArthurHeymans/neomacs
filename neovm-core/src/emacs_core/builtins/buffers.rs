@@ -844,7 +844,7 @@ fn buffer_slice_for_char_region(
     };
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
     let to_char = if to > 0 { to as usize - 1 } else { 0 };
-    let char_count = buf.total_chars();
+    let char_count = buf.total_char_len().get();
     let from_byte = char_pos_to_buffer_byte(buf, from_char.min(char_count));
     let to_byte = char_pos_to_buffer_byte(buf, to_char.min(char_count));
     let byte_range = EmacsByteRange::new(EmacsBytePos::new(from_byte), EmacsBytePos::new(to_byte));
@@ -1966,7 +1966,7 @@ pub(crate) fn builtin_compute_motion(
         .unwrap_or(8);
 
     // Convert 1-based char positions to byte offsets.
-    let max_chars = buf.total_chars();
+    let max_chars = buf.total_char_len().get();
     let from_byte = char_pos_to_buffer_byte(buf, ((from - 1).max(0) as usize).min(max_chars));
     let to_byte = char_pos_to_buffer_byte(buf, ((to - 1).max(0) as usize).min(max_chars));
 
@@ -3630,12 +3630,12 @@ pub(crate) fn builtin_buffer_size(eval: &mut super::eval::Context, args: Vec<Val
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        return Ok(Value::fixnum(buf.total_chars() as i64));
+        return Ok(Value::fixnum(buf.total_char_len().get() as i64));
     }
 
     let id = expect_buffer_id(&args[0])?;
     if let Some(buf) = eval.buffers.get(id) {
-        Ok(Value::fixnum(buf.total_chars() as i64))
+        Ok(Value::fixnum(buf.total_char_len().get() as i64))
     } else {
         Ok(Value::fixnum(0))
     }

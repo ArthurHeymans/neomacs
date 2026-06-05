@@ -2761,7 +2761,7 @@ fn bootstrap_buffers(
         .clear_buffer_labeled_restrictions(msg_id);
     if let Some(buf) = eval.buffer_manager_mut().get_mut(msg_id) {
         buf.widen();
-        let len = buf.total_bytes();
+        let len = buf.total_emacs_byte_len().get();
         if len > 0 {
             buf.delete_emacs_byte_range(EmacsByteRange::new(
                 EmacsBytePos::ZERO,

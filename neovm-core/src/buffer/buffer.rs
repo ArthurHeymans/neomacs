@@ -2182,16 +2182,6 @@ impl Buffer {
         self.text.emacs_byte_len()
     }
 
-    /// Total number of characters in the buffer text.
-    pub fn total_chars(&self) -> usize {
-        self.total_char_len().get()
-    }
-
-    /// Total number of Emacs bytes in the buffer text.
-    pub fn total_bytes(&self) -> usize {
-        self.total_emacs_byte_len().get()
-    }
-
     pub fn is_text_empty(&self) -> bool {
         self.text.is_empty()
     }

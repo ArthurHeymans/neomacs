@@ -1582,7 +1582,9 @@ fn literal_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+        buf.total_emacs_byte_len().get(),
+    ));
     let result = search_backward(&mut buf, "foo", None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
@@ -1628,7 +1630,9 @@ fn regex_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+        buf.total_emacs_byte_len().get(),
+    ));
     let result = re_search_backward(
         &mut buf,
         "\\(foo\\)\\([0-9]+\\)",
@@ -1724,7 +1728,9 @@ fn unibyte_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+        buf.total_emacs_byte_len().get(),
+    ));
     let result = search_backward(&mut buf, "b", None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
@@ -2117,7 +2123,9 @@ fn re_search_backward_log_line_loop_progresses() {
     let mut buf = make_test_buffer(
         "[09:01:00] INFO: Server started\n[09:02:15] INFO: Connection from 10.0.0.1\n[09:03:30] WARN: High memory usage detected",
     );
-    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+        buf.total_emacs_byte_len().get(),
+    ));
     let mut md = None;
     let pattern = "\\[\\([0-9:]+\\)\\] \\(INFO\\|WARN\\|ERROR\\): \\(.*\\)$";
     let mut positions = Vec::new();
@@ -2263,7 +2271,7 @@ fn replace_match_literal() {
     assert!(result.is_ok());
     let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
         0,
-        buf.total_bytes(),
+        buf.total_emacs_byte_len().get(),
     ));
     assert_eq!(content, "hello rust");
 }
@@ -2280,7 +2288,7 @@ fn replace_match_with_backref() {
     assert!(result.is_ok());
     let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
         0,
-        buf.total_bytes(),
+        buf.total_emacs_byte_len().get(),
     ));
     assert_eq!(content, "hello there world");
 }
@@ -2303,7 +2311,7 @@ fn replace_match_buffer_preserves_unibyte_raw_bytes() {
     let content = buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range());
     assert!(!content.is_multibyte());
     assert_eq!(content.as_bytes(), &[0xFF]);
-    assert_eq!(buf.total_bytes(), 1);
+    assert_eq!(buf.total_emacs_byte_len().get(), 1);
 }
 
 #[test]

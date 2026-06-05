@@ -7933,7 +7933,7 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
     assert_eq!(
         buffer.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
             0,
-            buffer.total_bytes(),
+            buffer.total_emacs_byte_len().get(),
         )),
         "omega one"
     );
@@ -8947,7 +8947,7 @@ fn replace_match_buffer_updates_live_match_data_like_gnu() {
     assert_eq!(
         buffer.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
             0,
-            buffer.total_bytes(),
+            buffer.total_emacs_byte_len().get(),
         )),
         "42-foo"
     );

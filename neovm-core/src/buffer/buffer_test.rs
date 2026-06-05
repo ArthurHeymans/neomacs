@@ -392,7 +392,7 @@ fn cloned_indirect_buffers_do_not_share_base_state_markers() {
 
     let base = mgr.get(base_id).expect("base buffer");
     assert_eq!(base.point_min_byte(), 0);
-    assert_eq!(base.point_max_byte(), base.total_bytes());
+    assert_eq!(base.point_max_byte(), base.total_emacs_byte_len().get());
 
     let second = mgr.get(second).expect("second indirect buffer");
     assert_eq!(second.point_min_byte(), 4);
@@ -768,7 +768,9 @@ fn accessible_region_snapshot_restores_saved_bounds() {
 
         let saved = buf.accessible_region_snapshot();
         buf.widen();
-        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+            buf.total_emacs_byte_len().get(),
+        ));
         buf.insert("Z");
         buf.restore_accessible_region(saved);
 
@@ -787,20 +789,22 @@ fn accessible_region_snapshot_can_restore_end_to_current_full_buffer() {
         let mut buf = buf_with_text_backend("aébc", kind);
         buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
             1,
-            buf.total_bytes(),
+            buf.total_emacs_byte_len().get(),
         ));
 
         let saved = buf.accessible_region_snapshot();
         buf.widen();
-        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+            buf.total_emacs_byte_len().get(),
+        ));
         buf.insert("Z");
         buf.restore_accessible_region_with_current_full_end(saved);
 
         assert_eq!(buf.point_min_byte(), 1);
-        assert_eq!(buf.point_max_byte(), buf.total_bytes());
+        assert_eq!(buf.point_max_byte(), buf.total_emacs_byte_len().get());
         assert_eq!(buf.point_min_char(), 1);
-        assert_eq!(buf.point_max_char(), buf.total_chars());
-        assert_eq!(buf.point_byte(), buf.total_bytes());
+        assert_eq!(buf.point_max_char(), buf.total_char_len().get());
+        assert_eq!(buf.point_byte(), buf.total_emacs_byte_len().get());
     }
 }
 
@@ -836,7 +840,7 @@ fn cached_char_positions_track_multibyte_edits_and_narrowing() {
 fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
-    assert_eq!(buf.total_chars(), 3);
+    assert_eq!(buf.total_char_len().get(), 3);
     assert_eq!(
         buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(99))
             .get(),
@@ -1724,8 +1728,8 @@ fn lisp_string_insert_into_unibyte_buffer_preserves_gnu_chars_and_properties() {
 
         buf.insert_lisp_string(&text);
 
-        assert_eq!(buf.total_chars(), 3, "backend {kind:?}");
-        assert_eq!(buf.total_bytes(), 3, "backend {kind:?}");
+        assert_eq!(buf.total_char_len().get(), 3, "backend {kind:?}");
+        assert_eq!(buf.total_emacs_byte_len().get(), 3, "backend {kind:?}");
         assert_eq!(
             buf.buffer_substring_bytes_range(EmacsByteRange::from_usize(0, 3)),
             vec![0xE9, 0xE5, 0x2C],
@@ -1768,7 +1772,7 @@ fn manager_replace_lisp_string_grafts_converted_intervals_once() {
             .expect("replace text");
 
         let buf = mgr.get(id).expect("scratch buffer");
-        assert_eq!(buf.total_chars(), 4, "backend {kind:?}");
+        assert_eq!(buf.total_char_len().get(), 4, "backend {kind:?}");
         assert_eq!(
             buf.buffer_substring_bytes_range(EmacsByteRange::from_usize(0, 4)),
             vec![0xE9, 0xE5, 0x2C, b'B'],

@@ -307,7 +307,7 @@ fn clamped_window_position_in_state(
     };
     let buffer_end = buffers
         .get(*buffer_id)
-        .map(|buf| buf.total_chars().saturating_add(1))
+        .map(|buf| buf.total_char_len().get().saturating_add(1))
         .unwrap_or(requested);
     Some(requested.min(buffer_end.max(1)))
 }
@@ -2029,7 +2029,7 @@ fn estimated_window_end_from_body_lines(
     let Some(buf) = buffers.get(buffer_id) else {
         return window_start;
     };
-    let buffer_end = buf.total_chars().saturating_add(1);
+    let buffer_end = buf.total_char_len().get().saturating_add(1);
     let text = buf.full_text_string();
     let start_char = window_start.saturating_sub(1);
     let mut char_pos = start_char;

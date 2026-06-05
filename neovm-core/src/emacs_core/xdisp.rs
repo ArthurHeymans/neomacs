@@ -2618,7 +2618,7 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         .get(2)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
         .map(|i| (i.max(1) - 1) as usize)
-        .unwrap_or(buf.total_bytes());
+        .unwrap_or(buf.total_emacs_byte_len().get());
 
     // Count lines and max columns in the region.  GNU's TO=t means
     // measure through the line ending the last non-empty line, not
@@ -2627,7 +2627,7 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     buf.copy_emacs_byte_range_to(
         EmacsByteRange::new(
             EmacsBytePos::new(from_pos),
-            EmacsBytePos::new(to_pos.min(buf.total_bytes())),
+            EmacsBytePos::new(to_pos.min(buf.total_emacs_byte_len().get())),
         ),
         &mut bytes,
     );
@@ -3061,7 +3061,7 @@ pub(crate) fn builtin_move_to_window_line(
     // Walk from window-start forward, counting newlines, to find the
     // character position at the start of `target_line`.
     let text = buf.full_text_string();
-    let char_count = buf.total_chars();
+    let char_count = buf.total_char_len().get();
     let start_char = ws.saturating_sub(1); // window_start is 1-based
     let mut lines_seen: usize = 0;
     let mut target_char_pos = start_char; // fallback: stay at window-start

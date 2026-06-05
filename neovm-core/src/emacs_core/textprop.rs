@@ -69,7 +69,7 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
 
 #[inline]
 fn buffer_end_emacs_byte_pos(buf: &Buffer) -> EmacsBytePos {
-    buffer_char_to_emacs_byte_pos(buf, buf.total_chars())
+    EmacsBytePos::new(buf.total_emacs_byte_len().get())
 }
 
 #[inline]
