@@ -1574,7 +1574,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .get_mut(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         buffer.remap_text_marker_anchors(|old_position| {
-            let old_byte = old_position.emacs_byte_pos_usize();
+            let old_byte = old_position.emacs_byte_pos().get();
             let boundary =
                 lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
             let new_char = lisp_string_byte_to_char(&new_storage, boundary);

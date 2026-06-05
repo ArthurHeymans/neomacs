@@ -143,11 +143,11 @@ impl TextPositionAnchor {
         self.emacs_byte_pos
     }
 
-    pub const fn char_pos_usize(self) -> usize {
+    pub(in crate::buffer) const fn char_pos_usize(self) -> usize {
         self.char_pos.get()
     }
 
-    pub const fn emacs_byte_pos_usize(self) -> usize {
+    pub(in crate::buffer) const fn emacs_byte_pos_usize(self) -> usize {
         self.emacs_byte_pos.get()
     }
 }
