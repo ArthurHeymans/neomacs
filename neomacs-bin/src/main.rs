@@ -43,7 +43,7 @@ use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
 
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::{BufferId, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
@@ -2737,7 +2737,7 @@ fn bootstrap_buffers(
         // curly-quote conversion via text-quoting-style. Hardcoding
         // the content in Rust bypassed both of those, producing bare
         // "C-x C-f" instead of quoted "'C-x C-f'".
-        buf.goto_byte(buf.point_max());
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(buf.point_max()));
     }
 
     // Set *scratch* as the current buffer
@@ -2752,7 +2752,7 @@ fn bootstrap_buffers(
         .configure_buffer_undo_list(mini_id, Value::NIL);
     if let Some(buf) = eval.buffer_manager_mut().get_mut(mini_id) {
         buf.widen();
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
 
     let msg_id = find_or_create_buffer(eval, "*Messages*");
@@ -2765,7 +2765,7 @@ fn bootstrap_buffers(
         if len > 0 {
             buf.delete_region(0, len);
         }
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }
     let _ = eval.buffer_manager_mut().note_buffer_order_tail(msg_id);
 

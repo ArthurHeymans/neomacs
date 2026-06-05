@@ -2306,11 +2306,13 @@ impl Buffer {
 
     /// Set point in raw Emacs bytes, clamping to the accessible region
     /// `[begv, zv]`.
+    #[cfg(test)]
     pub fn goto_byte(&mut self, pos: usize) {
         self.goto_emacs_byte_pos(EmacsBytePos::new(pos));
     }
 
     /// Legacy point setter retained while buffer internals are byte-only.
+    #[cfg(test)]
     pub fn goto_char(&mut self, pos: usize) {
         self.goto_byte(pos);
     }
@@ -3003,11 +3005,13 @@ impl Buffer {
     }
 
     /// Set the mark to raw Emacs-byte position `pos`, creating the marker if needed.
+    #[cfg(test)]
     pub fn set_mark_byte(&mut self, pos: usize) {
         self.set_mark_emacs_byte_pos(EmacsBytePos::new(pos));
     }
 
     /// Legacy mark setter.
+    #[cfg(test)]
     pub fn set_mark(&mut self, pos: usize) {
         self.set_mark_byte(pos);
     }

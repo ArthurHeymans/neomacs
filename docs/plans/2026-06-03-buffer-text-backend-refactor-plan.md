@@ -518,6 +518,8 @@ Completed so far:
 - Moved labeled-restriction marker cloning to typed `TextPositionAnchor`
   lookup/creation so production no longer unwraps raw marker `(byte, char)`
   tuples across the buffer-text boundary.
+- Gated raw point and mark mutators to tests so production movement code uses
+  typed `EmacsBytePos` / anchor entry points.
 
 Next work:
 
