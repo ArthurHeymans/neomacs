@@ -910,9 +910,9 @@ pub(crate) fn builtin_forward_char(
     let (old_byte, cur_char, begv_char, zv_char, new_byte) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let old_byte = buf.point_emacs_byte_pos();
-        let cur_char = buf.point_char();
-        let begv_char = buf.point_min_char();
-        let zv_char = buf.point_max_char();
+        let cur_char = buf.point_char_pos().get();
+        let begv_char = buf.point_min_char_pos().get();
+        let zv_char = buf.point_max_char_pos().get();
         let desired = cur_char as i64 + n;
         let clamped_char = desired.clamp(begv_char as i64, zv_char as i64) as usize;
         (

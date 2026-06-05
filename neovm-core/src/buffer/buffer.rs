@@ -2108,6 +2108,7 @@ impl Buffer {
     }
 
     /// Current point converted to a raw character position.
+    #[cfg(test)]
     pub fn point_char(&self) -> usize {
         self.point_char_pos().get()
     }
@@ -2134,6 +2135,7 @@ impl Buffer {
     }
 
     /// Beginning of the accessible portion as a raw character position.
+    #[cfg(test)]
     pub fn point_min_char(&self) -> usize {
         self.point_min_char_pos().get()
     }
@@ -2160,6 +2162,7 @@ impl Buffer {
     }
 
     /// End of the accessible portion as a raw character position.
+    #[cfg(test)]
     pub fn point_max_char(&self) -> usize {
         self.point_max_char_pos().get()
     }

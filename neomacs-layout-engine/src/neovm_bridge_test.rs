@@ -372,7 +372,7 @@ fn test_window_params_nonselected_reads_window_point() {
     // Window::point = 5 (1-based); params.point is 0-based, so 4.
     // buffer.pt_char = 0 (we called goto_emacs_byte_pos(0)). The non-selected
     // branch must NOT use the buffer's point.
-    assert_ne!(buffer.point_char() as i64, params.point);
+    assert_ne!(buffer.point_char_pos().get() as i64, params.point);
     assert_eq!(params.point, 4);
 }
 
@@ -952,7 +952,7 @@ fn test_layout_buffer_snapshot_preserves_byte_bounds_for_multibyte_text() {
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
-    assert_eq!(buf.point_max_char(), 5);
+    assert_eq!(buf.point_max_char_pos().get(), 5);
     assert_eq!(buf.point_max_emacs_byte_pos().get(), 9);
 
     let snapshot = LayoutBufferSnapshot::from_buffer(buf);
@@ -1394,7 +1394,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
     );
     assert!(bob_after.is_empty());
 
-    let (eob_before, eob_after) = access.overlay_strings_at(buf.point_max_char() as i64);
+    let (eob_before, eob_after) = access.overlay_strings_at(buf.point_max_char_pos().get() as i64);
     assert_eq!(eob_before.len(), 1);
     assert_eq!(
         std::str::from_utf8(eob_before[0].bytes().unwrap()).unwrap(),
@@ -1450,7 +1450,7 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     let access = RustTextPropAccess::new_for_window(buf, 1);
-    let (before, _) = access.overlay_strings_at(buf.point_max_char() as i64);
+    let (before, _) = access.overlay_strings_at(buf.point_max_char_pos().get() as i64);
     let rendered: Vec<String> = before
         .into_iter()
         .map(|string| {
@@ -1589,7 +1589,7 @@ fn test_face_resolver_with_text_property() {
     // Set "face" to the symbol "bold" on positions 0..5.
     buf.put_text_property(0, 5, Value::symbol("face"), Value::symbol("bold"));
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
 
     // Bold face should have weight 700.
@@ -1598,7 +1598,7 @@ fn test_face_resolver_with_text_property() {
     assert_eq!(next_check, 5);
 
     // Position 6 should have default weight.
-    let mut nc2 = buf.point_max_char();
+    let mut nc2 = buf.point_max_char_pos().get();
     let resolved2 = resolver.face_at_pos(&buf, 6, &mut nc2);
     assert_eq!(resolved2.font_weight, FontWeight::NORMAL.css_weight());
 }
@@ -1633,7 +1633,7 @@ fn face_resolver_underline_styles_use_gnu_codes() {
         buf.widen();
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol(name));
 
-        let mut next_check = buf.point_max_char();
+        let mut next_check = buf.point_max_char_pos().get();
         let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
         assert_eq!(resolved.underline_style, code, "{name}");
     }
@@ -1667,7 +1667,7 @@ fn face_resolver_box_styles_use_gnu_codes() {
         buf.widen();
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol(name));
 
-        let mut next_check = buf.point_max_char();
+        let mut next_check = buf.point_max_char_pos().get();
         let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
         assert_eq!(resolved.box_type, code, "{name}");
     }
@@ -1690,7 +1690,7 @@ fn test_face_resolver_with_font_lock_face() {
         Value::symbol("font-lock-keyword-face"),
     );
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 2, &mut next_check);
 
     // font-lock-keyword-face has foreground purple (128, 0, 128).
@@ -1715,7 +1715,7 @@ fn test_face_resolver_face_property_precedes_font_lock_face() {
         Value::symbol("italic"),
     );
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 3, &mut next_check);
 
     assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
@@ -1737,17 +1737,17 @@ fn test_face_resolver_next_check() {
     buf.put_text_property(4, 6, Value::symbol("face"), Value::symbol("italic"));
 
     // At position 0, next_check should be 2 (first property boundary).
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let _ = resolver.face_at_pos(&buf, 0, &mut nc);
     assert_eq!(nc, 2);
 
     // At position 2, next_check should be 4 (end of bold range).
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let _ = resolver.face_at_pos(&buf, 2, &mut nc);
     assert_eq!(nc, 4);
 
     // At position 4, next_check should be 6 (end of italic range).
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let _ = resolver.face_at_pos(&buf, 4, &mut nc);
     assert_eq!(nc, 6);
 }
@@ -1775,7 +1775,7 @@ fn test_face_resolver_overlay_face() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer");
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(buf, 3, &mut nc);
     assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     // next_check should be at most 7 (end of overlay).
@@ -1821,7 +1821,7 @@ fn test_face_resolver_overlay_priority() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer");
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(buf, 5, &mut nc);
     // face-b (blue, priority 20) should override face-a (red, priority 10).
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(0, 0, 255)));
@@ -1852,7 +1852,7 @@ fn test_face_resolver_face_ref_list_respects_gnu_precedence() {
         Value::list(vec![Value::symbol("face-a"), Value::symbol("face-b")]),
     );
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(255, 0, 0)));
 }
@@ -1875,7 +1875,7 @@ fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
         ])]),
     );
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(0, 154, 205)));
 }
@@ -1899,7 +1899,7 @@ fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
     );
     buf.put_text_property(0, 4, Value::symbol("face"), Value::symbol("bold"));
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
     assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(255, 69, 0)));
@@ -1923,7 +1923,7 @@ fn test_face_resolver_inverse_video() {
     buf.widen();
     buf.put_text_property(0, 8, Value::symbol("face"), Value::symbol("inverse-test"));
 
-    let mut nc = buf.point_max_char();
+    let mut nc = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut nc);
     // Inverse: fg and bg should be swapped.
     assert_eq!(resolved.fg, 0x00000000); // was white, now black
@@ -1964,7 +1964,7 @@ fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
     buf.widen();
     buf.put_text_property(4, 5, Value::symbol("face"), Value::symbol("bold"));
 
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 2, &mut next_check);
 
     assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
@@ -1994,7 +1994,7 @@ fn test_face_resolver_multibyte_overlay_uses_byte_offsets() {
         .buffer_manager()
         .current_buffer()
         .expect("current buffer");
-    let mut next_check = buf.point_max_char();
+    let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(buf, 2, &mut next_check);
 
     assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());

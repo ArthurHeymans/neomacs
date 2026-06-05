@@ -2066,7 +2066,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             let update_requested = args.get(1).is_some_and(|arg| !arg.is_nil());
             let stored_end = buffers
                 .get(*buffer_id)
-                .map(|b| b.point_max_char().saturating_add(1))
+                .map(|b| b.point_max_char_pos().get().saturating_add(1))
                 .unwrap_or(*window_start)
                 .saturating_sub(*window_end_pos)
                 .max(1);
@@ -2113,7 +2113,9 @@ pub(crate) fn builtin_window_point(
             });
             if selected_live_window {
                 if let Some(buffer) = buffers.get(*buffer_id) {
-                    return Ok(Value::fixnum(buffer.point_char().saturating_add(1) as i64));
+                    return Ok(Value::fixnum(
+                        buffer.point_char_pos().get().saturating_add(1) as i64,
+                    ));
                 }
             }
             Ok(Value::fixnum(*point as i64))
@@ -4007,7 +4009,7 @@ pub(crate) fn remember_selected_window_point_in_state(
     };
     let Some(point) = buffers
         .get(buffer_id)
-        .map(|buffer| buffer.point_char().saturating_add(1))
+        .map(|buffer| buffer.point_char_pos().get().saturating_add(1))
     else {
         return;
     };
@@ -4499,7 +4501,7 @@ pub(crate) fn builtin_set_window_buffer(
                 .map(|buf| {
                     (
                         buf.last_window_start.max(1),
-                        buf.point_char().saturating_add(1).max(1),
+                        buf.point_char_pos().get().saturating_add(1).max(1),
                     )
                 })
                 .unwrap_or((1, 1))
@@ -5543,7 +5545,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 }
                 let point = buffers
                     .get(*buffer_id)
-                    .map(|buf| buf.point_char().saturating_add(1))
+                    .map(|buf| buf.point_char_pos().get().saturating_add(1))
                     .unwrap_or(*point);
                 (*buffer_id, point as i64)
             }

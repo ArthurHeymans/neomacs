@@ -124,7 +124,7 @@ impl LayoutBufferSnapshot {
             text_snapshot: buffer.text_snapshot(),
             accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
             accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
-            accessible_end_char: buffer.point_max_char(),
+            accessible_end_char: buffer.point_max_char_pos().get(),
             local_var_alist: buffer.local_var_alist_value(),
             slots: buffer.slot_values_snapshot(),
             overlays: buffer.overlays().clone(),
@@ -221,7 +221,7 @@ impl LayoutBufferView for Buffer {
     }
 
     fn layout_point_max_char(&self) -> usize {
-        self.point_max_char()
+        self.point_max_char_pos().get()
     }
 
     fn layout_total_emacs_byte_len(&self) -> usize {
@@ -1192,7 +1192,8 @@ pub fn window_params_from_neovm(
         // 0-based char position space.  GNU stores this as an offset from Z.
         window_end: if window_end_valid {
             buffer
-                .point_max_char()
+                .point_max_char_pos()
+                .get()
                 .saturating_add(1)
                 .saturating_sub(window_end_pos)
                 .saturating_sub(1) as i64
@@ -1220,12 +1221,12 @@ pub fn window_params_from_neovm(
         // internal coordinate system); `Window::point` is GNU/Lisp 1-based
         // and gets normalized with the usual `-1`.
         point: if is_selected {
-            buffer.point_char() as i64
+            buffer.point_char_pos().get() as i64
         } else {
             point.saturating_sub(1) as i64
         },
-        buffer_size: buffer.point_max_char() as i64,
-        buffer_begv: buffer.point_min_char() as i64,
+        buffer_size: buffer.point_max_char_pos().get() as i64,
+        buffer_begv: buffer.point_min_char_pos().get() as i64,
         hscroll: hscroll as i32,
         vscroll: 0,
         truncate_lines,

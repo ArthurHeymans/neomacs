@@ -1859,7 +1859,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
                 .font_pixel_size,
             Some("neo".to_string()),
         );
-        let mut next_check = buffer.point_max_char();
+        let mut next_check = buffer.point_max_char_pos().get();
         let resolved = face_resolver.face_at_pos(buffer, 0, &mut next_check);
         assert_eq!(resolved.font_family, "JetBrains Mono");
         assert_eq!(resolved.font_weight, 800);
@@ -4234,7 +4234,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 let line_beg = if buf.is_text_empty() {
                     1usize
                 } else {
-                    buf.point_max_char() as usize + 1
+                    buf.point_max_char_pos().get() as usize + 1
                 };
                 let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                 let sample_pos = line_beg + prefix.chars().count();
@@ -4466,7 +4466,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                     let line_beg = if buf.is_text_empty() {
                         1usize
                     } else {
-                        buf.point_max_char() as usize + 1
+                        buf.point_max_char_pos().get() as usize + 1
                     };
                     let prefix = format!("  {:<35} ", format!("h={height} w={weight_name}:"));
                     let sample_pos = line_beg + prefix.chars().count();
@@ -5032,7 +5032,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdefghijklmnopqrstuvwxyz\n");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
-        buf.point_max_char() as i64
+        buf.point_max_char_pos().get() as i64
     };
     let access = {
         let buf = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -5129,7 +5129,7 @@ fn next_window_start_for_point_line_continuation_ignores_newline_terminated_rows
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("needle target\nfiller line 06\n");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
-        buf.point_max_char() as i64
+        buf.point_max_char_pos().get() as i64
     };
     let access = {
         let buf = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -5167,7 +5167,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
-        buf.point_max_char() as i64
+        buf.point_max_char_pos().get() as i64
     };
     let access = {
         let buf = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -5485,7 +5485,7 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
-        buf.point_max_char() + 1
+        buf.point_max_char_pos().get() + 1
     };
     let frame_id = eval
         .frame_manager_mut()
@@ -5550,7 +5550,7 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
     let point = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
         point
     };
@@ -5619,7 +5619,7 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&text);
         buf.set_buffer_local("mode-line-format", Value::string("%o|%p|%P"));
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         // Selected-window point lives in the buffer; see
         // window.c:window_point.
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
@@ -5833,7 +5833,7 @@ fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
@@ -5919,7 +5919,7 @@ fn layout_frame_rust_uses_full_window_row_space_for_header_text_and_mode_line() 
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
         buf.set_buffer_local("header-line-format", Value::string("LEFT HEADER"));
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
@@ -5977,7 +5977,7 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
         buf.set_buffer_local("tab-line-format", Value::string("TAB ROW"));
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
@@ -6049,7 +6049,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
             Value::symbol("after-string"),
             Value::string("A\nB"),
         );
-        let point = buf.point_max_char() + 1;
+        let point = buf.point_max_char_pos().get() + 1;
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
 

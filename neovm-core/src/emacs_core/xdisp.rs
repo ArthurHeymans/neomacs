@@ -686,7 +686,8 @@ fn build_mode_line_percent_context(
             ctx.window_start = window_start.saturating_sub(1);
             if let Some(buf) = context_buffer {
                 ctx.window_end = buf
-                    .point_max_char()
+                    .point_max_char_pos()
+                    .get()
                     .saturating_add(1)
                     .saturating_sub(*window_end_pos);
             } else {
@@ -696,7 +697,7 @@ fn build_mode_line_percent_context(
     } else if let Some(buf) = context_buffer {
         // Fallback: use buffer positions when no window is available.
         ctx.window_start = 0;
-        ctx.window_end = buf.point_max_char();
+        ctx.window_end = buf.point_max_char_pos().get();
     }
 
     // --- TTY detection (GNU: FRAME_WINDOW_P) ---
@@ -2214,8 +2215,11 @@ fn expand_mode_line_percent_in_state(
                 let text = if let Some(b) = buf {
                     let pos = pctx.window_start;
                     let botpos = pctx.window_end;
-                    let begv = b.point_min_char();
-                    let zv = b.point_max_char().max(b.point_min_char());
+                    let begv = b.point_min_char_pos().get();
+                    let zv = b
+                        .point_max_char_pos()
+                        .get()
+                        .max(b.point_min_char_pos().get());
                     if botpos >= zv {
                         if pos <= begv {
                             "All".to_owned()
@@ -2238,8 +2242,11 @@ fn expand_mode_line_percent_in_state(
                 let text = if let Some(b) = buf {
                     let toppos = pctx.window_start;
                     let botpos = pctx.window_end;
-                    let begv = b.point_min_char();
-                    let zv = b.point_max_char().max(b.point_min_char());
+                    let begv = b.point_min_char_pos().get();
+                    let zv = b
+                        .point_max_char_pos()
+                        .get()
+                        .max(b.point_min_char_pos().get());
                     if botpos >= zv {
                         if toppos <= begv {
                             "All".to_owned()
@@ -2265,8 +2272,11 @@ fn expand_mode_line_percent_in_state(
                 let text = if let Some(b) = buf {
                     let toppos = pctx.window_start;
                     let botpos = pctx.window_end;
-                    let begv = b.point_min_char();
-                    let zv = b.point_max_char().max(b.point_min_char());
+                    let begv = b.point_min_char_pos().get();
+                    let zv = b
+                        .point_max_char_pos()
+                        .get()
+                        .max(b.point_min_char_pos().get());
                     if botpos >= zv {
                         if toppos <= begv {
                             "All".to_owned()
@@ -2291,8 +2301,11 @@ fn expand_mode_line_percent_in_state(
                 let text = if let Some(b) = buf {
                     let toppos = pctx.window_start;
                     let botpos = pctx.window_end;
-                    let begv = b.point_min_char();
-                    let zv = b.point_max_char().max(b.point_min_char());
+                    let begv = b.point_min_char_pos().get();
+                    let zv = b
+                        .point_max_char_pos()
+                        .get()
+                        .max(b.point_min_char_pos().get());
                     if toppos <= begv && botpos >= zv {
                         "All   ".to_owned()
                     } else {
@@ -3565,7 +3578,7 @@ fn resolve_live_window_display_context(
     let body_lines = ((body_height + char_height - 1) / char_height).max(1);
     let chars = buffer.full_text_string().chars().collect::<Vec<_>>();
     let window_point = if frame.selected_window == wid {
-        buffer.point_char().saturating_add(1)
+        buffer.point_char_pos().get().saturating_add(1)
     } else {
         (*point).max(1)
     };

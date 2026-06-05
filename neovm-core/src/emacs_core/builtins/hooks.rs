@@ -564,7 +564,7 @@ fn normalize_selected_window_point_in_snapshot(
     };
     let Some(point) = buffers
         .get(buffer_id)
-        .map(|buffer| buffer.point_char().saturating_add(1))
+        .map(|buffer| buffer.point_char_pos().get().saturating_add(1))
     else {
         return;
     };
