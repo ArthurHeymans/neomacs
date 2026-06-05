@@ -35,7 +35,7 @@ use super::keymap::{
 use super::mode::{MajorMode, MinorMode};
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange, TextExtent};
+use crate::buffer::{EmacsBytePos, TextExtent};
 use crate::emacs_core::SymId;
 
 // ---------------------------------------------------------------------------
@@ -3419,18 +3419,18 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         let (insert_pos, target_multibyte) = eval
             .buffers
             .get(current_id)
-            .map(|b| (b.point_byte(), b.get_multibyte()))
-            .unwrap_or((0, true));
+            .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
+            .unwrap_or((EmacsBytePos::ZERO, true));
         tracing::info!(
             "self-insert-command: inserting {:?} at pos {} in buffer {:?}",
             text,
-            insert_pos,
+            insert_pos.get(),
             current_id
         );
-        let change = super::editfns::text_change_for_replacement_in_manager(
+        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            insert_pos,
             TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
         )?;
         super::editfns::signal_before_text_change(eval, change)?;

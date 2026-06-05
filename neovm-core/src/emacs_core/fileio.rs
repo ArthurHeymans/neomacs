@@ -16,7 +16,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{
-    CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor, text_props::TextPropertyTable,
+    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    text_props::TextPropertyTable,
 };
 use crate::heap_types::LispString;
 
@@ -4379,7 +4380,7 @@ fn signal_and_delete_file_replace_region(
 fn signal_and_insert_file_replace_text(
     eval: &mut Context,
     current_id: crate::buffer::BufferId,
-    byte_pos: usize,
+    byte_pos: EmacsBytePos,
     text: &LispString,
     signal_hooks: bool,
 ) -> Result<(), Flow> {
@@ -4387,12 +4388,12 @@ fn signal_and_insert_file_replace_text(
         return Ok(());
     }
     eval.buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(byte_pos))
+        .goto_buffer_emacs_byte_pos(current_id, byte_pos)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(byte_pos, byte_pos),
+        EmacsByteRange::from_start_len(byte_pos, EmacsByteLen::ZERO),
         text,
     )?;
     if signal_hooks {
@@ -4488,7 +4489,7 @@ fn replace_accessible_portion_for_insert_file_contents(
     signal_and_insert_file_replace_text(
         eval,
         current_id,
-        delete_start,
+        EmacsBytePos::new(delete_start),
         &insert_text,
         signal_hooks,
     )?;

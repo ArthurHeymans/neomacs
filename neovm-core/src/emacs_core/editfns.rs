@@ -14,8 +14,8 @@ use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, TextChange, TextEditRange,
-    TextExtent,
+    Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextChange,
+    TextEditRange, TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -164,6 +164,20 @@ pub(crate) fn text_change_for_replacement_in_manager(
 ) -> Result<TextChange, Flow> {
     let old_range = buffer_edit_range_for_byte_range_in_manager(buffers, buffer_id, byte_range)?;
     Ok(TextChange::new(old_range, new_extent))
+}
+
+pub(crate) fn text_change_for_empty_insertion_at_emacs_byte_pos(
+    buffers: &BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    byte_pos: EmacsBytePos,
+    new_extent: TextExtent,
+) -> Result<TextChange, Flow> {
+    text_change_for_replacement_in_manager(
+        buffers,
+        buffer_id,
+        EmacsByteRange::from_start_len(byte_pos, EmacsByteLen::ZERO),
+        new_extent,
+    )
 }
 
 pub(crate) fn text_change_for_lisp_string_replacement_in_manager(

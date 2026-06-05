@@ -2681,18 +2681,15 @@ fn insert_pieces_extent(pieces: &[InsertPiece]) -> TextExtent {
     )
 }
 
-fn current_empty_text_change_at_byte(
+fn current_empty_text_change_at_emacs_byte_pos(
     buffers: &BufferManager,
     current_id: BufferId,
-    byte_pos: usize,
+    byte_pos: EmacsBytePos,
     new_extent: TextExtent,
 ) -> Result<TextChange, Flow> {
-    let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
-        buffers,
-        current_id,
-        EmacsByteRange::from_usize(byte_pos, byte_pos),
-    )?;
-    Ok(TextChange::new(old_range, new_extent))
+    super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+        buffers, current_id, byte_pos, new_extent,
+    )
 }
 
 fn current_buffer_multibyte(buffers: &BufferManager) -> Result<bool, Flow> {
@@ -3025,10 +3022,14 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        insert_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, false)?;
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3052,10 +3053,14 @@ pub(crate) fn builtin_insert_before_markers(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        insert_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, false)?;
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3079,10 +3084,14 @@ pub(crate) fn builtin_insert_and_inherit(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        insert_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, true)?;
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3106,10 +3115,14 @@ pub(crate) fn builtin_insert_before_markers_and_inherit(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        insert_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, true)?;
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3264,12 +3277,16 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
     let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
-    let text_len = text_extent.emacs_bytes().get();
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, text_extent)?;
+    let text_len = text_extent.emacs_bytes();
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        text_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
@@ -3280,12 +3297,12 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
             &[],
             &mut eval.buffers,
             current_id,
-            insert_pos,
-            text_len,
+            insert_pos.get(),
+            text_len.get(),
         );
         let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos + text_len),
+            EmacsByteRange::from_start_len(insert_pos, text_len),
         );
     }
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3341,12 +3358,16 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(Buffer::point_byte)
-        .unwrap_or(0);
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
     let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
-    let text_len = text_extent.emacs_bytes().get();
-    let change =
-        current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, text_extent)?;
+    let text_len = text_extent.emacs_bytes();
+    let change = current_empty_text_change_at_emacs_byte_pos(
+        &eval.buffers,
+        current_id,
+        insert_pos,
+        text_extent,
+    )?;
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
@@ -3357,12 +3378,12 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
             &[],
             &mut eval.buffers,
             current_id,
-            insert_pos,
-            text_len,
+            insert_pos.get(),
+            text_len.get(),
         );
         let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos + text_len),
+            EmacsByteRange::from_start_len(insert_pos, text_len),
         );
     }
     super::editfns::signal_after_text_change(eval, change)?;

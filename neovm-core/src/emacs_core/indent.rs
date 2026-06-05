@@ -11,7 +11,9 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, EmacsBytePos, EmacsByteRange, TextExtent};
+use crate::buffer::{
+    Buffer, BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
+};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -559,26 +561,27 @@ pub(crate) fn builtin_move_to_column(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
+        let tab_byte_pos = EmacsBytePos::new(tab_byte);
         let _ = ctx
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(tab_byte));
+            .goto_buffer_emacs_byte_pos(current_id, tab_byte_pos);
         let pad = spaces_to_column(col_before_tab, target);
-        let insert_pos = tab_byte;
+        let insert_pos = tab_byte_pos;
         let pad_len = pad.len();
-        let pad_change = super::editfns::text_change_for_replacement_in_manager(
+        let pad_change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &ctx.buffers,
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            insert_pos,
             TextExtent::from_usize(pad_len, pad_len),
         )?;
         super::editfns::signal_before_text_change(ctx, pad_change)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
         super::editfns::signal_after_text_change(ctx, pad_change)?;
-        let tab_after_pad = insert_pos + pad_len;
+        let tab_after_pad = insert_pos.add_len(EmacsByteLen::new(pad_len));
         let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
             &ctx.buffers,
             current_id,
-            EmacsByteRange::from_usize(tab_after_pad, tab_after_pad + 1),
+            EmacsByteRange::from_start_len(tab_after_pad, EmacsByteLen::new(1)),
         )?;
         let delete_change = crate::buffer::TextChange::deletion(delete_range);
         super::editfns::signal_before_text_change(ctx, delete_change)?;
@@ -589,11 +592,11 @@ pub(crate) fn builtin_move_to_column(
         let goal_point = tab_after_pad;
         let _ = ctx
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(goal_point));
+            .goto_buffer_emacs_byte_pos(current_id, goal_point);
         let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
         let _ = ctx
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(goal_point));
+            .goto_buffer_emacs_byte_pos(current_id, goal_point);
         return Ok(Value::fixnum(target as i64));
     }
 
@@ -610,13 +613,13 @@ pub(crate) fn builtin_move_to_column(
         let insert_pos = ctx
             .buffers
             .get(current_id)
-            .map(|b| b.point_byte())
-            .unwrap_or(0);
+            .map(|b| b.point_emacs_byte_pos())
+            .unwrap_or(EmacsBytePos::ZERO);
         let pad_len = pad.len();
-        let change = super::editfns::text_change_for_replacement_in_manager(
+        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &ctx.buffers,
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            insert_pos,
             TextExtent::from_usize(pad_len, pad_len),
         )?;
         super::editfns::signal_before_text_change(ctx, change)?;
@@ -696,14 +699,14 @@ pub(crate) fn builtin_indent_to(
     let insert_pos = ctx
         .buffers
         .get(current_id)
-        .map(|b| b.point_byte())
-        .unwrap_or(0);
+        .map(|b| b.point_emacs_byte_pos())
+        .unwrap_or(EmacsBytePos::ZERO);
     let indent_len = indent.len();
     if indent_len > 0 {
-        let change = super::editfns::text_change_for_replacement_in_manager(
+        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &ctx.buffers,
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            insert_pos,
             TextExtent::from_usize(indent_len, indent_len),
         )?;
         super::editfns::signal_before_text_change(ctx, change)?;

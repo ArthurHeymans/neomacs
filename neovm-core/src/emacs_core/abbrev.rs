@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{EmacsByteRange, TextExtent};
+use crate::buffer::{EmacsBytePos, TextExtent};
 use crate::heap_types::LispString;
 use strum::EnumString;
 
@@ -1049,12 +1049,12 @@ pub(crate) fn builtin_insert_abbrev_table_description(
             let (insert_pos, target_multibyte) = eval
                 .buffers
                 .get(current_id)
-                .map(|b| (b.point_byte(), b.get_multibyte()))
-                .unwrap_or((0, true));
-            let change = super::editfns::text_change_for_replacement_in_manager(
+                .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
+                .unwrap_or((EmacsBytePos::ZERO, true));
+            let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
                 &eval.buffers,
                 current_id,
-                EmacsByteRange::from_usize(insert_pos, insert_pos),
+                insert_pos,
                 TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
             )?;
             super::editfns::signal_before_text_change(eval, change)?;
@@ -1123,12 +1123,12 @@ pub(crate) fn builtin_insert_abbrev_table_description(
         let (insert_pos, target_multibyte) = eval
             .buffers
             .get(current_id)
-            .map(|b| (b.point_byte(), b.get_multibyte()))
-            .unwrap_or((0, true));
-        let change = super::editfns::text_change_for_replacement_in_manager(
+            .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
+            .unwrap_or((EmacsBytePos::ZERO, true));
+        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(insert_pos, insert_pos),
+            insert_pos,
             TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
         )?;
         super::editfns::signal_before_text_change(eval, change)?;

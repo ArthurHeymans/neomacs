@@ -1356,10 +1356,10 @@ pub(crate) fn builtin_json_insert(eval: &mut super::eval::Context, args: Vec<Val
         .get(current_id)
         .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
         .unwrap_or((EmacsBytePos::ZERO, true));
-    let change = super::editfns::text_change_for_replacement_in_manager(
+    let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_start_len(insert_pos, EmacsByteLen::ZERO),
+        insert_pos,
         TextExtent::from_emacs_bytes(json.as_bytes(), target_multibyte),
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
