@@ -515,6 +515,9 @@ Completed so far:
 - Gated raw text-property convenience wrappers to tests so production callers
   use typed `EmacsBytePos` / `EmacsByteRange` boundaries while the interval
   table stays character-indexed like GNU intervals.
+- Moved labeled-restriction marker cloning to typed `TextPositionAnchor`
+  lookup/creation so production no longer unwraps raw marker `(byte, char)`
+  tuples across the buffer-text boundary.
 
 Next work:
 

@@ -2892,6 +2892,7 @@ impl Buffer {
         self.text.has_marker(marker_id)
     }
 
+    #[cfg(test)]
     pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
         self.text.marker_chain_lookup(marker_id)
     }
@@ -4514,14 +4515,12 @@ impl BufferManager {
     }
 
     fn clone_marker_in_buffer(&mut self, buffer_id: BufferId, marker_id: u64) -> Option<u64> {
-        let (pos, insertion_type) = {
+        let (position, insertion_type) = {
             let buf = self.buffers.get(&buffer_id)?;
-            // T7: read byte_pos / insertion_type directly from the chain
-            // node instead of the deleted Vec<MarkerEntry>.
-            let (bytepos, _charpos, ins_type) = buf.marker_chain_lookup(marker_id)?;
-            (bytepos, ins_type)
+            buf.marker_chain_anchor_lookup(marker_id)?
         };
-        let (marker_id, _marker_ptr) = self.create_marker(buffer_id, pos, insertion_type);
+        let (marker_id, _marker_ptr) =
+            self.create_marker_at_anchor(buffer_id, position, insertion_type);
         Some(marker_id)
     }
 

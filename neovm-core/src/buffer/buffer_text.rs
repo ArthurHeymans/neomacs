@@ -1594,6 +1594,7 @@ impl BufferText {
         None
     }
 
+    #[cfg(test)]
     pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
         self.marker_chain_anchor_lookup(marker_id)
             .map(|(position, insertion_type)| {
