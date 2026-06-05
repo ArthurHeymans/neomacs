@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use super::buffer_text::BufferText;
 use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
-    EmacsByteRange, LispCharPos1,
+    EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
 use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
@@ -1513,6 +1513,10 @@ pub struct AccessibleBufferRegionSnapshot {
 }
 
 impl AccessibleBufferRegionSnapshot {
+    pub fn start_emacs_byte(self) -> EmacsBytePos {
+        self.start_emacs_byte
+    }
+
     pub fn end_emacs_byte(self) -> EmacsBytePos {
         self.end_emacs_byte
     }
@@ -2051,6 +2055,11 @@ impl Buffer {
     /// Current point as an Emacs byte position.
     pub fn point_emacs_byte_pos(&self) -> EmacsBytePos {
         EmacsBytePos::new(self.pt_byte)
+    }
+
+    /// Current point as a paired character/byte anchor.
+    pub fn point_anchor(&self) -> TextPositionAnchor {
+        TextPositionAnchor::from_usize(self.pt, self.pt_byte)
     }
 
     /// Current point as a raw Emacs byte position.
@@ -2745,6 +2754,21 @@ impl Buffer {
         };
         // Clamp point into the new accessible region.
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
+    }
+
+    /// Set the accessible byte range and point as one coherent buffer state.
+    ///
+    /// This mirrors GNU's invariant that `PT`/`PT_BYTE`, `BEGV`/`BEGV_BYTE`
+    /// and `ZV`/`ZV_BYTE` are paired coordinates.  Callers provide byte
+    /// positions; the active text backend recomputes the matching character
+    /// positions.
+    pub fn set_accessible_region_and_point_from_emacs_bytes(
+        &mut self,
+        range: EmacsByteRange,
+        point: EmacsBytePos,
+    ) {
+        self.narrow_to_emacs_byte_range(range);
+        self.goto_emacs_byte_pos(point);
     }
 
     /// Restrict the accessible portion to the raw Emacs-byte range

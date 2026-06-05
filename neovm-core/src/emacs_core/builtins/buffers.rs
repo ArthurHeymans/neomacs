@@ -1520,9 +1520,9 @@ pub(crate) fn builtin_set_buffer_multibyte(
             let total_bytes = buffer.total_bytes();
             snapshots.push(BufferSnapshot {
                 id: *id,
-                pt_old_emacs_byte: EmacsBytePos::new(buffer.pt_byte.min(total_bytes)),
-                begv_old_emacs_byte: EmacsBytePos::new(buffer.begv_byte.min(total_bytes)),
-                zv_old_emacs_byte: EmacsBytePos::new(buffer.zv_byte.min(total_bytes)),
+                pt_old_emacs_byte: EmacsBytePos::new(buffer.point_byte().min(total_bytes)),
+                begv_old_emacs_byte: EmacsBytePos::new(buffer.point_min_byte().min(total_bytes)),
+                zv_old_emacs_byte: EmacsBytePos::new(buffer.point_max_byte().min(total_bytes)),
                 mark_old_emacs_byte: buffer
                     .mark_byte()
                     .map(|mark| EmacsBytePos::new(mark.min(total_bytes))),
@@ -1605,14 +1605,10 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .map(|old_byte| map_boundary(old_byte.get()));
         let last_window_start_byte = map_boundary(snapshot.last_window_start_old_emacs_byte.get());
 
-        buf.pt = lisp_string_byte_to_char(&new_storage, pt_byte);
-        buf.pt_byte = pt_byte;
-
-        buf.begv = lisp_string_byte_to_char(&new_storage, begv_byte);
-        buf.begv_byte = begv_byte;
-
-        buf.zv = lisp_string_byte_to_char(&new_storage, zv_byte);
-        buf.zv_byte = zv_byte;
+        buf.set_accessible_region_and_point_from_emacs_bytes(
+            EmacsByteRange::from_usize(begv_byte, zv_byte),
+            EmacsBytePos::new(pt_byte),
+        );
 
         if let Some(mark_byte) = mark_byte {
             buf.set_mark_emacs_byte_pos(EmacsBytePos::new(mark_byte));
@@ -2319,8 +2315,8 @@ fn resolve_field_position_in_buffers(
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
     let pos = match position_value {
-        None => point_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
-        Some(value) if value.is_nil() => point_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
+        None => point_char_pos(buf, buf.point_emacs_byte_pos()),
+        Some(value) if value.is_nil() => point_char_pos(buf, buf.point_emacs_byte_pos()),
         Some(value) => expect_integer_or_marker_in_buffers(buffers, value)?,
     };
     if pos < point_min || pos > point_max {
@@ -2629,7 +2625,7 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
-            buf.pt_byte,
+            buf.point_byte(),
             buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get(),
         )
     };
@@ -3000,7 +2996,7 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let change =
         current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
@@ -3027,7 +3023,7 @@ pub(crate) fn builtin_insert_before_markers(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let change =
         current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
@@ -3054,7 +3050,7 @@ pub(crate) fn builtin_insert_and_inherit(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let change =
         current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
@@ -3081,7 +3077,7 @@ pub(crate) fn builtin_insert_before_markers_and_inherit(
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let change =
         current_empty_text_change_at_byte(&eval.buffers, current_id, insert_pos, insert_extent)?;
@@ -3120,7 +3116,7 @@ fn insert_pieces_in_state(
         if piece.text.is_empty() {
             continue;
         }
-        let insert_pos = buffers.get(current_id).map(|buf| buf.pt_byte).unwrap_or(0);
+        let insert_pos = buffers.get(current_id).map(Buffer::point_byte).unwrap_or(0);
         if before_markers {
             let _ = buffers.insert_lisp_string_into_buffer_before_markers(current_id, &piece.text);
         } else {
@@ -3239,7 +3235,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
     let text_len = text_extent.emacs_bytes().get();
@@ -3316,7 +3312,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
     let insert_pos = eval
         .buffers
         .get(current_id)
-        .map(|buf| buf.pt_byte)
+        .map(Buffer::point_byte)
         .unwrap_or(0);
     let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
     let text_len = text_extent.emacs_bytes().get();
