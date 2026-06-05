@@ -1275,7 +1275,7 @@ pub(crate) fn buffer_overlay_property_for_inserted_char_at_byte_pos(
 ) -> Option<(Value, Value)> {
     let overlay_id = buf
         .overlays
-        .highest_priority_overlay_for_inserted_char(byte_pos, &prop)?;
+        .highest_priority_overlay_for_inserted_emacs_byte_pos(EmacsBytePos::new(byte_pos), &prop)?;
     let value = buf.overlays.overlay_get(overlay_id, &prop)?;
     Some((value, overlay_id))
 }
@@ -2755,8 +2755,8 @@ pub(crate) fn builtin_overlay_put_in_buffers(
             let is_empty = buffers
                 .get(buf_id)
                 .and_then(|buf| {
-                    let start = buf.overlays.overlay_start(overlay)?;
-                    let end = buf.overlays.overlay_end(overlay)?;
+                    let start = buf.overlays.overlay_start_emacs_byte_pos(overlay)?;
+                    let end = buf.overlays.overlay_end_emacs_byte_pos(overlay)?;
                     Some(start == end)
                 })
                 .unwrap_or(false);
@@ -2969,8 +2969,8 @@ pub(crate) fn builtin_overlay_start_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    match buf.overlays.overlay_start(overlay) {
-        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos))),
+    match buf.overlays.overlay_start_emacs_byte_pos(overlay) {
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos.get()))),
         None => Ok(Value::NIL),
     }
 }
@@ -2993,8 +2993,8 @@ pub(crate) fn builtin_overlay_end_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    match buf.overlays.overlay_end(overlay) {
-        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos))),
+    match buf.overlays.overlay_end_emacs_byte_pos(overlay) {
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos.get()))),
         None => Ok(Value::NIL),
     }
 }

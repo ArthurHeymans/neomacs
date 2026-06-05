@@ -1619,8 +1619,10 @@ pub(crate) fn builtin_set_buffer_multibyte(
         for overlay in snapshot.overlays {
             let start_byte = map_boundary(overlay.start_old_emacs_byte.get());
             let end_byte = map_boundary(overlay.end_old_emacs_byte.get());
-            buf.overlays
-                .move_overlay(overlay.overlay, start_byte, end_byte);
+            buf.overlays.move_overlay_to_emacs_byte_range(
+                overlay.overlay,
+                EmacsByteRange::from_usize(start_byte, end_byte),
+            );
         }
 
         buf.set_multibyte_value(target_multibyte);

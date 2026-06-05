@@ -676,19 +676,21 @@ fn collect_overlay_change_hooks(
             EmacsBytePos::new(search_beg),
             EmacsBytePos::new(search_end),
         ));
+    let beg_pos = EmacsBytePos::new(beg);
+    let end_pos = EmacsBytePos::new(end);
 
     let mut result = Vec::new();
     for ov_id in overlay_ids {
-        let ov_start = match buf.overlays.overlay_start(ov_id) {
+        let ov_start = match buf.overlays.overlay_start_emacs_byte_pos(ov_id) {
             Some(s) => s,
             None => continue,
         };
-        let ov_end = match buf.overlays.overlay_end(ov_id) {
+        let ov_end = match buf.overlays.overlay_end_emacs_byte_pos(ov_id) {
             Some(e) => e,
             None => continue,
         };
 
-        if insertion && (beg == ov_start || end == ov_start) {
+        if insertion && (beg_pos == ov_start || end_pos == ov_start) {
             if let Some(hook_val) = buf
                 .overlays
                 .overlay_get_named(ov_id, Value::symbol("insert-in-front-hooks"))
@@ -700,7 +702,7 @@ fn collect_overlay_change_hooks(
                 });
             }
         }
-        if insertion && (beg == ov_end || end == ov_end) {
+        if insertion && (beg_pos == ov_end || end_pos == ov_end) {
             if let Some(hook_val) = buf
                 .overlays
                 .overlay_get_named(ov_id, Value::symbol("insert-behind-hooks"))
@@ -714,7 +716,7 @@ fn collect_overlay_change_hooks(
         }
         // GNU intersection test (open interval):
         //   end > obegin && begin < oend
-        if end > ov_start && beg < ov_end {
+        if end_pos > ov_start && beg_pos < ov_end {
             if let Some(hook_val) = buf
                 .overlays
                 .overlay_get_named(ov_id, Value::symbol("modification-hooks"))
