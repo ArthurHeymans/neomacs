@@ -25,6 +25,16 @@ pub struct CharLen(usize);
 #[repr(transparent)]
 pub struct EmacsByteLen(usize);
 
+/// Signed change in logical Emacs characters.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(in crate::buffer) struct CharDelta(isize);
+
+/// Signed change in logical Emacs bytes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(in crate::buffer) struct EmacsByteDelta(isize);
+
 /// Half-open internal character range `[start, end)`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CharRange {
@@ -429,6 +439,58 @@ impl EmacsByteLen {
 
     pub const fn saturating_sub(self, len: Self) -> Self {
         Self(self.0.saturating_sub(len.0))
+    }
+}
+
+impl CharDelta {
+    pub(in crate::buffer) const ZERO: Self = Self(0);
+
+    pub(in crate::buffer) fn insertion(len: CharLen) -> Self {
+        Self(len.get() as isize)
+    }
+
+    pub(in crate::buffer) fn deletion(len: CharLen) -> Self {
+        Self(-(len.get() as isize))
+    }
+
+    pub(in crate::buffer) fn replacement(old_len: CharLen, new_len: CharLen) -> Self {
+        Self(new_len.get() as isize - old_len.get() as isize)
+    }
+
+    pub(in crate::buffer) fn apply_to_pos(self, pos: CharPos0) -> CharPos0 {
+        CharPos0::new(apply_signed_delta(pos.get(), self.0))
+    }
+}
+
+impl EmacsByteDelta {
+    pub(in crate::buffer) const ZERO: Self = Self(0);
+
+    pub(in crate::buffer) fn insertion(len: EmacsByteLen) -> Self {
+        Self(len.get() as isize)
+    }
+
+    pub(in crate::buffer) fn deletion(len: EmacsByteLen) -> Self {
+        Self(-(len.get() as isize))
+    }
+
+    pub(in crate::buffer) fn replacement(old_len: EmacsByteLen, new_len: EmacsByteLen) -> Self {
+        Self(new_len.get() as isize - old_len.get() as isize)
+    }
+
+    pub(in crate::buffer) fn apply_to_pos(self, pos: EmacsBytePos) -> EmacsBytePos {
+        EmacsBytePos::new(apply_signed_delta(pos.get(), self.0))
+    }
+}
+
+fn apply_signed_delta(value: usize, delta: isize) -> usize {
+    if delta >= 0 {
+        value
+            .checked_add(delta as usize)
+            .expect("buffer text edit position overflow")
+    } else {
+        value
+            .checked_sub(delta.unsigned_abs())
+            .expect("buffer text edit position underflow")
     }
 }
 

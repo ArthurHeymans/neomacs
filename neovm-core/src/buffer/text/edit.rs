@@ -1,5 +1,6 @@
 use crate::buffer::position::{
-    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    CharDelta, CharLen, CharPos0, CharRange, EmacsByteDelta, EmacsByteLen, EmacsBytePos,
+    EmacsByteRange, TextPositionAnchor,
 };
 
 /// Logical size of inserted or deleted buffer text.
@@ -17,8 +18,8 @@ pub struct TextExtent {
 /// space when the byte and character lengths differ.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(in crate::buffer) struct TextExtentDelta {
-    chars: isize,
-    emacs_bytes: isize,
+    chars: CharDelta,
+    emacs_bytes: EmacsByteDelta,
 }
 
 /// Insertion point plus the text size known by the caller.
@@ -121,23 +122,25 @@ impl TextExtent {
 impl TextExtentDelta {
     pub(in crate::buffer) fn insertion(extent: TextExtent) -> Self {
         Self {
-            chars: extent.chars().get() as isize,
-            emacs_bytes: extent.emacs_bytes().get() as isize,
+            chars: CharDelta::insertion(extent.chars()),
+            emacs_bytes: EmacsByteDelta::insertion(extent.emacs_bytes()),
         }
     }
 
     pub(in crate::buffer) fn deletion(extent: TextExtent) -> Self {
         Self {
-            chars: -(extent.chars().get() as isize),
-            emacs_bytes: -(extent.emacs_bytes().get() as isize),
+            chars: CharDelta::deletion(extent.chars()),
+            emacs_bytes: EmacsByteDelta::deletion(extent.emacs_bytes()),
         }
     }
 
     pub(in crate::buffer) fn replacement(old_extent: TextExtent, new_extent: TextExtent) -> Self {
         Self {
-            chars: new_extent.chars().get() as isize - old_extent.chars().get() as isize,
-            emacs_bytes: new_extent.emacs_bytes().get() as isize
-                - old_extent.emacs_bytes().get() as isize,
+            chars: CharDelta::replacement(old_extent.chars(), new_extent.chars()),
+            emacs_bytes: EmacsByteDelta::replacement(
+                old_extent.emacs_bytes(),
+                new_extent.emacs_bytes(),
+            ),
         }
     }
 
@@ -146,11 +149,8 @@ impl TextExtentDelta {
         position: TextPositionAnchor,
     ) -> TextPositionAnchor {
         TextPositionAnchor::new(
-            CharPos0::new(apply_signed_delta(position.char_pos_usize(), self.chars)),
-            EmacsBytePos::new(apply_signed_delta(
-                position.emacs_byte_pos_usize(),
-                self.emacs_bytes,
-            )),
+            self.chars.apply_to_pos(position.char_pos()),
+            self.emacs_bytes.apply_to_pos(position.emacs_byte_pos()),
         )
     }
 }
@@ -590,18 +590,6 @@ const fn transpose_half_open_position(
         (pos as isize + diff) as usize
     } else {
         pos - (start2 - start1)
-    }
-}
-
-fn apply_signed_delta(value: usize, delta: isize) -> usize {
-    if delta >= 0 {
-        value
-            .checked_add(delta as usize)
-            .expect("buffer text edit position overflow")
-    } else {
-        value
-            .checked_sub(delta.unsigned_abs())
-            .expect("buffer text edit position underflow")
     }
 }
 
