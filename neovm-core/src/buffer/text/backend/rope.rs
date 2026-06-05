@@ -883,14 +883,14 @@ mod tests {
         assert_eq!(rope_bytes, gap_bytes);
 
         for byte_pos in 0..rope.len() {
-            assert_eq!(rope_byte_at(rope, byte_pos), gap.byte_at(byte_pos));
+            assert_eq!(rope_byte_at(rope, byte_pos), gap_byte_at(gap, byte_pos));
             assert_eq!(
                 rope_emacs_byte_at(rope, byte_pos),
-                gap.emacs_byte_at(byte_pos)
+                gap_emacs_byte_at(gap, byte_pos)
             );
         }
         assert_eq!(rope_emacs_byte_at(rope, rope.len()), None);
-        assert_eq!(gap.emacs_byte_at(gap.len()), None);
+        assert_eq!(gap_emacs_byte_at(gap, gap.len()), None);
 
         for char_pos in 0..=rope.metrics().chars() {
             let rope_byte = rope_char_to_byte(rope, char_pos);
@@ -901,7 +901,7 @@ mod tests {
             if char_pos < rope.metrics().chars() {
                 assert_eq!(
                     rope_char_code_at(rope, rope_byte),
-                    gap.char_code_at(gap_byte)
+                    gap_char_code_at(gap, gap_byte)
                 );
             }
         }
@@ -915,6 +915,41 @@ mod tests {
     fn gap_char_to_byte(gap: &GapBuffer, char_pos: usize) -> usize {
         gap.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
             .get()
+    }
+
+    fn gap_byte_at(gap: &GapBuffer, byte_pos: usize) -> u8 {
+        gap.byte_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn gap_emacs_byte_at(gap: &GapBuffer, byte_pos: usize) -> Option<u8> {
+        gap.emacs_byte_at_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn gap_char_code_at(gap: &GapBuffer, byte_pos: usize) -> Option<u32> {
+        gap.char_code_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn insert_gap_str(gap: &mut GapBuffer, byte_pos: usize, text: &str) {
+        gap.insert_storage_string_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), text);
+    }
+
+    fn insert_gap_bytes_both(gap: &mut GapBuffer, byte_pos: usize, bytes: &[u8], nchars: usize) {
+        gap.insert_emacs_bytes_at_emacs_byte_pos_with_char_len(
+            EmacsBytePos::new(byte_pos),
+            bytes,
+            crate::buffer::CharLen::new(nchars),
+        );
+    }
+
+    fn delete_gap_range_both(gap: &mut GapBuffer, start: usize, end: usize, nchars: usize) {
+        gap.delete_emacs_byte_range_with_char_len(
+            EmacsByteRange::from_usize(start, end),
+            crate::buffer::CharLen::new(nchars),
+        );
+    }
+
+    fn replace_gap_same_len(gap: &mut GapBuffer, start: usize, end: usize, replacement: &[u8]) {
+        gap.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
     }
 
     fn rope_byte_to_char(rope: &RopeTextBackend, byte_pos: usize) -> usize {
@@ -1081,20 +1116,20 @@ mod tests {
 
         let pos = rope_char_to_byte(&rope, 2);
         insert_rope_str(&mut rope, pos, "XYZ");
-        gap.insert_str(pos, "XYZ");
+        insert_gap_str(&mut gap, pos, "XYZ");
         assert_matches_gap(&rope, &gap);
 
         let start = rope_char_to_byte(&rope, 1);
         let end = rope_char_to_byte(&rope, 5);
         let nchars = rope_byte_to_char(&rope, end) - rope_byte_to_char(&rope, start);
         delete_rope_range_both(&mut rope, start, end, nchars);
-        gap.delete_range_both(start, end, nchars);
+        delete_gap_range_both(&mut gap, start, end, nchars);
         assert_matches_gap(&rope, &gap);
 
         let start = rope_char_to_byte(&rope, 1);
         let end = rope_char_to_byte(&rope, 2);
         replace_rope_same_len(&mut rope, start, end, "ß".as_bytes());
-        gap.replace_same_len_emacs_bytes(start, end, "ß".as_bytes());
+        replace_gap_same_len(&mut gap, start, end, "ß".as_bytes());
         assert_matches_gap(&rope, &gap);
     }
 
@@ -1131,7 +1166,7 @@ mod tests {
                         let byte_pos = rope_char_to_byte(&rope, char_pos);
                         let text = sample_insert(seed);
                         insert_rope_str(&mut rope, byte_pos, text);
-                        gap.insert_str(byte_pos, text);
+                        insert_gap_str(&mut gap, byte_pos, text);
                     }
                     1 => {
                         if rope.metrics().chars() > 0 {
@@ -1143,7 +1178,7 @@ mod tests {
                             let end = rope_char_to_byte(&rope, end_char);
                             let nchars = end_char - start_char;
                             delete_rope_range_both(&mut rope, start, end, nchars);
-                            gap.delete_range_both(start, end, nchars);
+                            delete_gap_range_both(&mut gap, start, end, nchars);
                         }
                     }
                     _ => {
@@ -1153,7 +1188,7 @@ mod tests {
                             let end = rope_char_to_byte(&rope, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, seed) {
                                 replace_rope_same_len(&mut rope, start, end, &replacement);
-                                gap.replace_same_len_emacs_bytes(start, end, &replacement);
+                                replace_gap_same_len(&mut gap, start, end, &replacement);
                             }
                         }
                     }
@@ -1179,7 +1214,7 @@ mod tests {
                         let byte_pos = a % (rope.len() + 1);
                         let bytes = sample_unibyte_insert(seed);
                         insert_rope_bytes_both(&mut rope, byte_pos, &bytes, bytes.len());
-                        gap.insert_emacs_bytes_both(byte_pos, &bytes, bytes.len());
+                        insert_gap_bytes_both(&mut gap, byte_pos, &bytes, bytes.len());
                     }
                     1 => {
                         if !rope.is_empty() {
@@ -1188,7 +1223,7 @@ mod tests {
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
                             delete_rope_range_both(&mut rope, start, end, end - start);
-                            gap.delete_range_both(start, end, end - start);
+                            delete_gap_range_both(&mut gap, start, end, end - start);
                         }
                     }
                     _ => {
@@ -1197,7 +1232,7 @@ mod tests {
                             let end = (start + 1 + (b % 4)).min(rope.len());
                             let replacement = vec![seed; end - start];
                             replace_rope_same_len(&mut rope, start, end, &replacement);
-                            gap.replace_same_len_emacs_bytes(start, end, &replacement);
+                            replace_gap_same_len(&mut gap, start, end, &replacement);
                         }
                     }
                 }

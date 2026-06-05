@@ -5,10 +5,12 @@
 //! amortized. The gap is relocated to the edit site before each mutation so
 //! that sequential edits in the same neighborhood avoid large copies.
 //!
-//! All public positions are byte positions into the logical text (i.e. the
-//! text with the gap removed) unless a parameter is explicitly named
-//! `char_pos`. The underlying bytes are Emacs internal bytes, not sentinel-
-//! encoded Rust strings.
+//! Raw internal helpers use byte positions into the logical text (i.e. the
+//! text with the gap removed). Cross-module entrypoints use typed
+//! `EmacsBytePos`/`EmacsByteRange` plus measured edit types, so callers cannot
+//! accidentally mix Emacs-byte and character coordinates at the backend
+//! boundary. The underlying bytes are Emacs internal bytes, not
+//! sentinel-encoded Rust strings.
 
 use std::fmt;
 
@@ -17,7 +19,7 @@ use crate::buffer::text::{
     emacs_char_to_byte_in_slice,
 };
 use crate::buffer::{
-    CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextReplacement,
+    CharLen, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextReplacement,
 };
 
 /// Default extra gap bytes to pre-allocate on any growth.
@@ -165,7 +167,7 @@ impl GapBuffer {
         }
         self.multibyte = multibyte;
         let mut logical = Vec::with_capacity(self.len());
-        self.copy_bytes_to(0, self.len(), &mut logical);
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, self.len()), &mut logical);
         self.gap_start_chars = emacs_char_count_bytes(&logical[..self.gap_start], self.multibyte);
         self.total_chars = emacs_char_count_bytes(&logical, self.multibyte);
         self.gap_start_bytes = self.gap_start;
@@ -217,7 +219,7 @@ impl GapBuffer {
     /// # Panics
     ///
     /// Panics if `pos >= self.len()`.
-    pub fn byte_at(&self, pos: usize) -> u8 {
+    fn byte_at(&self, pos: usize) -> u8 {
         assert!(
             pos < self.len(),
             "byte_at: position {pos} out of range (len {})",
@@ -230,24 +232,27 @@ impl GapBuffer {
         }
     }
 
+    pub(crate) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
+        self.byte_at(pos.get())
+    }
+
     /// Return the logical Emacs byte at `pos`, or `None` if out of range.
-    pub fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
+    fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
         (pos < self.total_bytes).then(|| self.byte_at(pos))
     }
 
-    /// Return the `char` whose first byte starts at logical byte position `pos`,
-    /// or `None` if `pos >= self.len()`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `pos` does not lie on a UTF-8 character boundary.
-    pub fn char_at(&self, pos: usize) -> Option<char> {
-        self.char_code_at(pos).and_then(char::from_u32)
+    pub(crate) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        self.emacs_byte_at(pos.get())
+    }
+
+    pub(crate) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.char_code_at_emacs_byte_pos(pos)
+            .and_then(char::from_u32)
     }
 
     /// Return the Emacs character code whose first byte begins at logical
     /// byte position `pos`, or `None` if `pos >= self.len()`.
-    pub fn char_code_at(&self, pos: usize) -> Option<u32> {
+    fn char_code_at(&self, pos: usize) -> Option<u32> {
         if pos >= self.len() {
             return None;
         }
@@ -267,18 +272,13 @@ impl GapBuffer {
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..available]).0)
     }
 
+    pub(crate) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        self.char_code_at(pos.get())
+    }
+
     // -----------------------------------------------------------------------
     // Range extraction
     // -----------------------------------------------------------------------
-
-    /// Extract the text in the logical byte range `[start, end)` as a `String`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `start > end` or `end > self.len()`.
-    pub fn text_range(&self, start: usize, end: usize) -> String {
-        self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-    }
 
     pub(crate) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
         let start = range.start_usize();
@@ -293,20 +293,8 @@ impl GapBuffer {
             return String::new();
         }
         let mut out = Vec::with_capacity(end - start);
-        self.copy_bytes_to(start, end, &mut out);
+        self.copy_emacs_byte_range_to(range, &mut out);
         crate::emacs_core::string_escape::emacs_bytes_to_storage_string(&out, self.multibyte)
-    }
-
-    /// Copy bytes in the logical range `[start, end)` into `out`.
-    ///
-    /// `out` is cleared first, then the bytes are appended.
-    /// This is more efficient than `text_range()` when you don't need
-    /// a `String` — it avoids the UTF-8 validation and String allocation.
-    ///
-    /// # Panics
-    /// Panics if `start > end` or `end > self.len()`.
-    pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
@@ -422,33 +410,27 @@ impl GapBuffer {
     // Mutation
     // -----------------------------------------------------------------------
 
-    /// Insert raw Emacs bytes at logical byte position `pos`.
-    ///
-    /// Convenience wrapper that counts characters in `bytes`. If the caller
-    /// already knows `nchars`, prefer `insert_emacs_bytes_both`.
-    pub fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
+    pub(crate) fn insert_emacs_bytes_at_emacs_byte_pos(&mut self, pos: EmacsBytePos, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
         self.insert_measured_emacs_bytes(
-            EmacsBytePos::new(pos),
+            pos,
             bytes,
             TextExtent::from_emacs_bytes(bytes, self.multibyte),
         );
     }
 
-    /// Insert raw Emacs bytes at logical byte position `pos`, given the
-    /// pre-computed character count.
-    ///
-    /// `nchars` **must** equal `chars_in_multibyte(bytes)` (or `bytes.len()` in
-    /// unibyte mode). Passing a wrong value corrupts the char/byte counters.
-    ///
-    /// Mirrors GNU `insert_1_both` (`src/insdel.c:891`).
-    pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
+    pub(crate) fn insert_emacs_bytes_at_emacs_byte_pos_with_char_len(
+        &mut self,
+        pos: EmacsBytePos,
+        bytes: &[u8],
+        char_len: CharLen,
+    ) {
         self.insert_measured_emacs_bytes(
-            EmacsBytePos::new(pos),
+            pos,
             bytes,
-            TextExtent::from_usize(nchars, bytes.len()),
+            TextExtent::new(char_len, crate::buffer::EmacsByteLen::new(bytes.len())),
         );
     }
 
@@ -495,28 +477,18 @@ impl GapBuffer {
         self.total_bytes += inserted_bytes;
     }
 
-    /// Insert `s` at logical byte position `pos`.
-    ///
-    /// After the call the gap sits immediately after the newly inserted text,
-    /// so consecutive inserts at the same position are fast.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `pos > self.len()` or `pos` is not on a UTF-8 boundary.
-    pub fn insert_str(&mut self, pos: usize, s: &str) {
+    pub(crate) fn insert_storage_string_at_emacs_byte_pos(&mut self, pos: EmacsBytePos, s: &str) {
         if s.is_empty() {
             return;
         }
         let bytes =
             crate::emacs_core::string_escape::storage_string_to_buffer_bytes(s, self.multibyte);
-        self.insert_emacs_bytes(pos, &bytes);
+        self.insert_emacs_bytes_at_emacs_byte_pos(pos, &bytes);
     }
 
-    /// Delete the logical byte range `[start, end)`.
-    ///
-    /// Wrapper that counts deleted chars. Prefer `delete_range_both` if the
-    /// caller already knows the count.
-    pub fn delete_range(&mut self, start: usize, end: usize) {
+    pub(crate) fn delete_emacs_byte_range(&mut self, range: EmacsByteRange) {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(start <= end, "delete_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -527,26 +499,28 @@ impl GapBuffer {
             return;
         }
         // Count chars in the about-to-be-deleted region. This is the scan that
-        // delete_range_both lets callers skip.
+        // delete_emacs_byte_range_with_char_len lets callers skip.
         let mut tmp = Vec::with_capacity(end - start);
-        self.copy_bytes_to(start, end, &mut tmp);
+        self.copy_emacs_byte_range_to(range, &mut tmp);
         let nchars = emacs_char_count_bytes(&tmp, self.multibyte);
-        self.delete_range_both(start, end, nchars);
+        self.delete_emacs_byte_range_with_char_len(range, CharLen::new(nchars));
     }
 
     /// Delete the logical byte range `[start, end)`, given pre-computed char
     /// count of the region.
     ///
     /// Mirrors GNU `del_range_2` (`src/insdel.c:1991`).
-    pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        let start_char = self
-            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
-            .get();
+    pub(crate) fn delete_emacs_byte_range_with_char_len(
+        &mut self,
+        range: EmacsByteRange,
+        char_len: CharLen,
+    ) {
+        let start_char = self.emacs_byte_pos_to_char_pos(range.start());
         self.delete_measured_range(TextEditRange::from_usize(
-            start,
-            end,
-            start_char,
-            start_char + nchars,
+            range.start_usize(),
+            range.end_usize(),
+            start_char.get(),
+            start_char.get() + char_len.get(),
         ));
     }
 
@@ -611,9 +585,11 @@ impl GapBuffer {
         self.insert_measured_emacs_bytes(replacement.byte_start(), bytes, replacement.new_extent());
     }
 
-    /// Overwrite the logical byte range `[start, end)` with raw Emacs bytes.
-    pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
-        let range = EmacsByteRange::from_usize(start, end);
+    pub(crate) fn replace_same_len_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        replacement: &[u8],
+    ) {
         let start_char = self.emacs_byte_pos_to_char_pos(range.start());
         let end_char = self.emacs_byte_pos_to_char_pos(range.end());
         self.replace_same_len_measured_range(
@@ -734,7 +710,7 @@ impl GapBuffer {
     ///
     /// Wrapper that computes the char delta by scanning moved bytes. Prefer
     /// `move_gap_both` when the caller knows the target char position.
-    pub fn move_gap_to(&mut self, pos: usize) {
+    fn move_gap_to(&mut self, pos: usize) {
         assert!(
             pos <= self.len(),
             "move_gap_to: position {pos} out of range (len {})",
@@ -755,16 +731,19 @@ impl GapBuffer {
             );
             self.gap_start_chars + moved
         };
-        self.move_gap_both(pos, charpos);
+        self.move_gap_to_emacs_byte_pos_and_char_pos(
+            EmacsBytePos::new(pos),
+            CharPos0::new(charpos),
+        );
     }
 
-    /// Move the gap so that `gap_start == bytepos` and `gap_start_chars == charpos`.
-    ///
-    /// `charpos` **must** be the logical character position corresponding to
-    /// `bytepos`. Passing a wrong value corrupts the char counters.
-    ///
-    /// Mirrors GNU `move_gap_both` (`src/insdel.c:88`).
-    pub fn move_gap_both(&mut self, bytepos: usize, charpos: usize) {
+    pub(crate) fn move_gap_to_emacs_byte_pos_and_char_pos(
+        &mut self,
+        bytepos: EmacsBytePos,
+        charpos: CharPos0,
+    ) {
+        let bytepos = bytepos.get();
+        let charpos = charpos.get();
         assert!(
             bytepos <= self.len(),
             "move_gap_both: bytepos {bytepos} out of range (len {})",
@@ -948,7 +927,7 @@ impl Default for GapBuffer {
 
 impl fmt::Display for GapBuffer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.text_range(0, self.len()))
+        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::from_usize(0, self.len())))
     }
 }
 

@@ -117,19 +117,19 @@ impl GapTextBackend {
     }
 
     pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
-        self.gap.byte_at(pos.get())
+        self.gap.byte_at_emacs_byte_pos(pos)
     }
 
     pub(in crate::buffer) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
-        self.gap.emacs_byte_at(pos.get())
+        self.gap.emacs_byte_at_pos(pos)
     }
 
     pub(in crate::buffer) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
-        self.gap.char_at(pos.get())
+        self.gap.char_at_emacs_byte_pos(pos)
     }
 
     pub(in crate::buffer) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
-        self.gap.char_code_at(pos.get())
+        self.gap.char_code_at_emacs_byte_pos(pos)
     }
 
     pub(in crate::buffer) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {

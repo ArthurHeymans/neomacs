@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 
 fn byte_to_char(buf: &GapBuffer, byte_pos: usize) -> usize {
     buf.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
@@ -9,6 +9,75 @@ fn byte_to_char(buf: &GapBuffer, byte_pos: usize) -> usize {
 fn char_to_byte(buf: &GapBuffer, char_pos: usize) -> usize {
     buf.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
         .get()
+}
+
+fn byte_at(buf: &GapBuffer, byte_pos: usize) -> u8 {
+    buf.byte_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+}
+
+fn char_at(buf: &GapBuffer, byte_pos: usize) -> Option<char> {
+    buf.char_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+}
+
+fn gap_text_range(buf: &GapBuffer, start: usize, end: usize) -> String {
+    buf.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+}
+
+fn gap_copy_bytes_to(buf: &GapBuffer, start: usize, end: usize, out: &mut Vec<u8>) {
+    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+}
+
+fn gap_insert_emacs_bytes(buf: &mut GapBuffer, byte_pos: usize, bytes: &[u8]) {
+    buf.insert_emacs_bytes_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), bytes);
+}
+
+fn gap_insert_emacs_bytes_with_char_len(
+    buf: &mut GapBuffer,
+    byte_pos: usize,
+    bytes: &[u8],
+    nchars: usize,
+) {
+    buf.insert_emacs_bytes_at_emacs_byte_pos_with_char_len(
+        EmacsBytePos::new(byte_pos),
+        bytes,
+        CharLen::new(nchars),
+    );
+}
+
+fn gap_insert_storage_string(buf: &mut GapBuffer, byte_pos: usize, text: &str) {
+    buf.insert_storage_string_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), text);
+}
+
+fn gap_delete_emacs_range(buf: &mut GapBuffer, start: usize, end: usize) {
+    buf.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+}
+
+fn gap_delete_emacs_range_with_char_len(
+    buf: &mut GapBuffer,
+    start: usize,
+    end: usize,
+    nchars: usize,
+) {
+    buf.delete_emacs_byte_range_with_char_len(
+        EmacsByteRange::from_usize(start, end),
+        CharLen::new(nchars),
+    );
+}
+
+fn gap_replace_same_len_emacs_bytes(
+    buf: &mut GapBuffer,
+    start: usize,
+    end: usize,
+    replacement: &[u8],
+) {
+    buf.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+}
+
+fn gap_move_to_emacs_byte_and_char(buf: &mut GapBuffer, byte_pos: usize, char_pos: usize) {
+    buf.move_gap_to_emacs_byte_pos_and_char_pos(
+        EmacsBytePos::new(byte_pos),
+        CharPos0::new(char_pos),
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -51,7 +120,7 @@ fn from_str_empty() {
 fn insert_at_beginning() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("world");
-    buf.insert_str(0, "hello ");
+    gap_insert_storage_string(&mut buf, 0, "hello ");
     assert_eq!(buf.to_string(), "hello world");
 }
 
@@ -59,7 +128,7 @@ fn insert_at_beginning() {
 fn insert_at_end() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello");
-    buf.insert_str(5, " world");
+    gap_insert_storage_string(&mut buf, 5, " world");
     assert_eq!(buf.to_string(), "hello world");
 }
 
@@ -67,7 +136,7 @@ fn insert_at_end() {
 fn insert_in_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("helo");
-    buf.insert_str(2, "l");
+    gap_insert_storage_string(&mut buf, 2, "l");
     assert_eq!(buf.to_string(), "hello");
 }
 
@@ -75,7 +144,7 @@ fn insert_in_middle() {
 fn insert_into_empty_buffer() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::new();
-    buf.insert_str(0, "abc");
+    gap_insert_storage_string(&mut buf, 0, "abc");
     assert_eq!(buf.to_string(), "abc");
     assert_eq!(buf.len(), 3);
 }
@@ -84,7 +153,7 @@ fn insert_into_empty_buffer() {
 fn insert_empty_string_is_noop() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello");
-    buf.insert_str(3, "");
+    gap_insert_storage_string(&mut buf, 3, "");
     assert_eq!(buf.to_string(), "hello");
 }
 
@@ -92,10 +161,10 @@ fn insert_empty_string_is_noop() {
 fn multiple_sequential_inserts() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::new();
-    buf.insert_str(0, "a");
-    buf.insert_str(1, "b");
-    buf.insert_str(2, "c");
-    buf.insert_str(3, "d");
+    gap_insert_storage_string(&mut buf, 0, "a");
+    gap_insert_storage_string(&mut buf, 1, "b");
+    gap_insert_storage_string(&mut buf, 2, "c");
+    gap_insert_storage_string(&mut buf, 3, "d");
     assert_eq!(buf.to_string(), "abcd");
 }
 
@@ -104,7 +173,7 @@ fn insert_larger_than_gap() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::new();
     let long = "x".repeat(256);
-    buf.insert_str(0, &long);
+    gap_insert_storage_string(&mut buf, 0, &long);
     assert_eq!(buf.to_string(), long);
     assert_eq!(buf.len(), 256);
 }
@@ -117,7 +186,7 @@ fn insert_larger_than_gap() {
 fn delete_from_beginning() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello world");
-    buf.delete_range(0, 6);
+    gap_delete_emacs_range(&mut buf, 0, 6);
     assert_eq!(buf.to_string(), "world");
 }
 
@@ -125,7 +194,7 @@ fn delete_from_beginning() {
 fn delete_from_end() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello world");
-    buf.delete_range(5, 11);
+    gap_delete_emacs_range(&mut buf, 5, 11);
     assert_eq!(buf.to_string(), "hello");
 }
 
@@ -133,7 +202,7 @@ fn delete_from_end() {
 fn delete_from_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello world");
-    buf.delete_range(5, 6); // delete the space
+    gap_delete_emacs_range(&mut buf, 5, 6); // delete the space
     assert_eq!(buf.to_string(), "helloworld");
 }
 
@@ -141,7 +210,7 @@ fn delete_from_middle() {
 fn delete_everything() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello");
-    buf.delete_range(0, 5);
+    gap_delete_emacs_range(&mut buf, 0, 5);
     assert_eq!(buf.to_string(), "");
     assert!(buf.is_empty());
 }
@@ -150,7 +219,7 @@ fn delete_everything() {
 fn delete_empty_range_is_noop() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello");
-    buf.delete_range(2, 2);
+    gap_delete_emacs_range(&mut buf, 2, 2);
     assert_eq!(buf.to_string(), "hello");
 }
 
@@ -158,8 +227,8 @@ fn delete_empty_range_is_noop() {
 fn delete_then_insert() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello world");
-    buf.delete_range(5, 11);
-    buf.insert_str(5, " rust");
+    gap_delete_emacs_range(&mut buf, 5, 11);
+    gap_insert_storage_string(&mut buf, 5, " rust");
     assert_eq!(buf.to_string(), "hello rust");
 }
 
@@ -177,7 +246,7 @@ fn replace_same_len_preserves_gap_position_before_and_after_gap() {
 
     let before_start = char_to_byte(&buf, 2);
     let before_end = char_to_byte(&buf, 3);
-    buf.replace_same_len_emacs_bytes(before_start, before_end, "ß".as_bytes());
+    gap_replace_same_len_emacs_bytes(&mut buf, before_start, before_end, "ß".as_bytes());
 
     assert_eq!(buf.to_string(), "abßcd日本");
     assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
@@ -186,7 +255,7 @@ fn replace_same_len_preserves_gap_position_before_and_after_gap() {
 
     let after_start = char_to_byte(&buf, 5);
     let after_end = char_to_byte(&buf, 6);
-    buf.replace_same_len_emacs_bytes(after_start, after_end, "界".as_bytes());
+    gap_replace_same_len_emacs_bytes(&mut buf, after_start, after_end, "界".as_bytes());
 
     assert_eq!(buf.to_string(), "abßcd界本");
     assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
@@ -204,7 +273,7 @@ fn replace_same_len_preserves_gap_position_when_range_straddles_gap() {
 
     let start = char_to_byte(&buf, 2);
     let end = char_to_byte(&buf, 4);
-    buf.replace_same_len_emacs_bytes(start, end, "ßx".as_bytes());
+    gap_replace_same_len_emacs_bytes(&mut buf, start, end, "ßx".as_bytes());
 
     assert_eq!(buf.to_string(), "abßxd日本");
     assert_eq!((buf.gpt(), buf.gpt_byte()), gap);
@@ -220,8 +289,8 @@ fn replace_same_len_preserves_gap_position_when_range_straddles_gap() {
 fn byte_at_ascii() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("abcde");
-    assert_eq!(buf.byte_at(0), b'a');
-    assert_eq!(buf.byte_at(4), b'e');
+    assert_eq!(byte_at(&buf, 0), b'a');
+    assert_eq!(byte_at(&buf, 4), b'e');
 }
 
 #[test]
@@ -230,18 +299,18 @@ fn byte_at_after_gap_move() {
     let mut buf = GapBuffer::from_str("abcde");
     buf.move_gap_to(2);
     // Logical content unchanged.
-    assert_eq!(buf.byte_at(0), b'a');
-    assert_eq!(buf.byte_at(2), b'c');
-    assert_eq!(buf.byte_at(4), b'e');
+    assert_eq!(byte_at(&buf, 0), b'a');
+    assert_eq!(byte_at(&buf, 2), b'c');
+    assert_eq!(byte_at(&buf, 4), b'e');
 }
 
 #[test]
 fn char_at_ascii() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello");
-    assert_eq!(buf.char_at(0), Some('h'));
-    assert_eq!(buf.char_at(4), Some('o'));
-    assert_eq!(buf.char_at(5), None);
+    assert_eq!(char_at(&buf, 0), Some('h'));
+    assert_eq!(char_at(&buf, 4), Some('o'));
+    assert_eq!(char_at(&buf, 5), None);
 }
 
 #[test]
@@ -249,7 +318,7 @@ fn char_at_ascii() {
 fn byte_at_out_of_range_panics() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hi");
-    buf.byte_at(2);
+    byte_at(&buf, 2);
 }
 
 // -----------------------------------------------------------------------
@@ -260,21 +329,21 @@ fn byte_at_out_of_range_panics() {
 fn text_range_full() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello world");
-    assert_eq!(buf.text_range(0, 11), "hello world");
+    assert_eq!(gap_text_range(&buf, 0, 11), "hello world");
 }
 
 #[test]
 fn text_range_prefix() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello world");
-    assert_eq!(buf.text_range(0, 5), "hello");
+    assert_eq!(gap_text_range(&buf, 0, 5), "hello");
 }
 
 #[test]
 fn text_range_suffix() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello world");
-    assert_eq!(buf.text_range(6, 11), "world");
+    assert_eq!(gap_text_range(&buf, 6, 11), "world");
 }
 
 #[test]
@@ -283,14 +352,14 @@ fn text_range_spanning_gap() {
     let mut buf = GapBuffer::from_str("hello world");
     buf.move_gap_to(5);
     // Range spans the gap.
-    assert_eq!(buf.text_range(3, 8), "lo wo");
+    assert_eq!(gap_text_range(&buf, 3, 8), "lo wo");
 }
 
 #[test]
 fn text_range_empty() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hello");
-    assert_eq!(buf.text_range(2, 2), "");
+    assert_eq!(gap_text_range(&buf, 2, 2), "");
 }
 
 // -----------------------------------------------------------------------
@@ -366,10 +435,10 @@ fn multibyte_cjk() {
     assert_eq!(buf.to_string(), text);
 
     // char_at at byte boundaries
-    assert_eq!(buf.char_at(0), Some('\u{4F60}')); // 你
-    assert_eq!(buf.char_at(3), Some('\u{597D}')); // 好
-    assert_eq!(buf.char_at(6), Some('\u{4E16}')); // 世
-    assert_eq!(buf.char_at(9), Some('\u{754C}')); // 界
+    assert_eq!(char_at(&buf, 0), Some('\u{4F60}')); // 你
+    assert_eq!(char_at(&buf, 3), Some('\u{597D}')); // 好
+    assert_eq!(char_at(&buf, 6), Some('\u{4E16}')); // 世
+    assert_eq!(char_at(&buf, 9), Some('\u{754C}')); // 界
 }
 
 #[test]
@@ -380,15 +449,15 @@ fn multibyte_emoji() {
     let buf = GapBuffer::from_str(text);
     assert_eq!(buf.len(), 8);
     assert_eq!(buf.char_count(), 2);
-    assert_eq!(buf.char_at(0), Some('\u{1F600}'));
-    assert_eq!(buf.char_at(4), Some('\u{1F60D}'));
+    assert_eq!(char_at(&buf, 0), Some('\u{1F600}'));
+    assert_eq!(char_at(&buf, 4), Some('\u{1F60D}'));
 }
 
 #[test]
 fn insert_multibyte_in_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("ab");
-    buf.insert_str(1, "\u{1F600}"); // insert emoji between a and b
+    gap_insert_storage_string(&mut buf, 1, "\u{1F600}"); // insert emoji between a and b
     assert_eq!(buf.to_string(), "a\u{1F600}b");
     assert_eq!(buf.len(), 6); // 1 + 4 + 1
     assert_eq!(buf.char_count(), 3);
@@ -399,7 +468,7 @@ fn delete_multibyte_char() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("a\u{4F60}b"); // a你b
     // Delete the CJK char (bytes 1..4).
-    buf.delete_range(1, 4);
+    gap_delete_emacs_range(&mut buf, 1, 4);
     assert_eq!(buf.to_string(), "ab");
 }
 
@@ -409,9 +478,9 @@ fn text_range_multibyte_spanning_gap() {
     let text = "\u{4F60}\u{597D}\u{4E16}\u{754C}"; // 你好世界
     let mut buf = GapBuffer::from_str(text);
     buf.move_gap_to(6); // gap between 好 and 世
-    assert_eq!(buf.text_range(0, 6), "\u{4F60}\u{597D}");
-    assert_eq!(buf.text_range(6, 12), "\u{4E16}\u{754C}");
-    assert_eq!(buf.text_range(3, 9), "\u{597D}\u{4E16}");
+    assert_eq!(gap_text_range(&buf, 0, 6), "\u{4F60}\u{597D}");
+    assert_eq!(gap_text_range(&buf, 6, 12), "\u{4E16}\u{754C}");
+    assert_eq!(gap_text_range(&buf, 3, 9), "\u{597D}\u{4E16}");
 }
 
 #[test]
@@ -422,11 +491,11 @@ fn mixed_ascii_and_multibyte() {
     assert_eq!(buf.len(), 12);
     assert_eq!(buf.char_count(), 8);
 
-    buf.insert_str(5, " ");
+    gap_insert_storage_string(&mut buf, 5, " ");
     assert_eq!(buf.to_string(), "hello \u{4E16}\u{754C}!");
     assert_eq!(buf.len(), 13);
 
-    buf.delete_range(6, 12); // delete "世界"
+    gap_delete_emacs_range(&mut buf, 6, 12); // delete "世界"
     assert_eq!(buf.to_string(), "hello !");
 }
 
@@ -564,14 +633,15 @@ fn repeated_insert_delete_cycle() {
     let mut buf = GapBuffer::new();
     for i in 0..100 {
         let s = format!("{i}");
-        buf.insert_str(buf.len(), &s);
+        let end = buf.len();
+        gap_insert_storage_string(&mut buf, end, &s);
     }
     let full = buf.to_string();
     assert!(!full.is_empty());
 
     // Delete everything one byte at a time from the front.
     while !buf.is_empty() {
-        buf.delete_range(0, 1);
+        gap_delete_emacs_range(&mut buf, 0, 1);
     }
     assert!(buf.is_empty());
     assert_eq!(buf.to_string(), "");
@@ -581,13 +651,13 @@ fn repeated_insert_delete_cycle() {
 fn gap_moves_correctly_after_multiple_operations() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("the quick brown fox");
-    buf.delete_range(4, 10); // delete "quick "
+    gap_delete_emacs_range(&mut buf, 4, 10); // delete "quick "
     assert_eq!(buf.to_string(), "the brown fox");
-    buf.insert_str(4, "slow ");
+    gap_insert_storage_string(&mut buf, 4, "slow ");
     assert_eq!(buf.to_string(), "the slow brown fox");
-    buf.delete_range(9, 15); // delete "brown "
+    gap_delete_emacs_range(&mut buf, 9, 15); // delete "brown "
     assert_eq!(buf.to_string(), "the slow fox");
-    buf.insert_str(9, "red ");
+    gap_insert_storage_string(&mut buf, 9, "red ");
     assert_eq!(buf.to_string(), "the slow red fox");
 }
 
@@ -596,9 +666,9 @@ fn insert_at_every_position() {
     crate::test_utils::init_test_tracing();
     for pos in 0..=5 {
         let mut buf = GapBuffer::from_str("hello");
-        buf.insert_str(pos, "X");
+        gap_insert_storage_string(&mut buf, pos, "X");
         assert_eq!(buf.len(), 6);
-        assert_eq!(buf.byte_at(pos), b'X');
+        assert_eq!(byte_at(&buf, pos), b'X');
     }
 }
 
@@ -631,7 +701,7 @@ fn clone_is_independent() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("original");
     let clone = buf.clone();
-    buf.insert_str(0, "X");
+    gap_insert_storage_string(&mut buf, 0, "X");
     assert_eq!(buf.to_string(), "Xoriginal");
     assert_eq!(clone.to_string(), "original");
 }
@@ -641,7 +711,7 @@ fn clone_is_independent() {
 fn insert_past_end_panics() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hi");
-    buf.insert_str(3, "x");
+    gap_insert_storage_string(&mut buf, 3, "x");
 }
 
 #[test]
@@ -649,7 +719,7 @@ fn insert_past_end_panics() {
 fn delete_past_end_panics() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hi");
-    buf.delete_range(0, 3);
+    gap_delete_emacs_range(&mut buf, 0, 3);
 }
 
 #[test]
@@ -657,7 +727,7 @@ fn delete_past_end_panics() {
 fn delete_inverted_range_panics() {
     crate::test_utils::init_test_tracing();
     let mut buf = GapBuffer::from_str("hello");
-    buf.delete_range(3, 1);
+    gap_delete_emacs_range(&mut buf, 3, 1);
 }
 
 #[test]
@@ -665,7 +735,7 @@ fn delete_inverted_range_panics() {
 fn text_range_past_end_panics() {
     crate::test_utils::init_test_tracing();
     let buf = GapBuffer::from_str("hi");
-    buf.text_range(0, 3);
+    gap_text_range(&buf, 0, 3);
 }
 
 #[test]
@@ -703,10 +773,10 @@ fn copy_bytes_to_basic() {
     crate::test_utils::init_test_tracing();
     let gb = GapBuffer::from_str("Hello, world!");
     let mut out = Vec::new();
-    gb.copy_bytes_to(0, 5, &mut out);
+    gap_copy_bytes_to(&gb, 0, 5, &mut out);
     assert_eq!(&out, b"Hello");
 
-    gb.copy_bytes_to(7, 13, &mut out);
+    gap_copy_bytes_to(&gb, 7, 13, &mut out);
     assert_eq!(&out, b"world!");
 }
 
@@ -716,7 +786,7 @@ fn copy_bytes_to_spanning_gap() {
     let mut gb = GapBuffer::from_str("abcdef");
     gb.move_gap_to(3); // gap after "abc"
     let mut out = Vec::new();
-    gb.copy_bytes_to(1, 5, &mut out); // "bcde" — spans gap
+    gap_copy_bytes_to(&gb, 1, 5, &mut out); // "bcde" — spans gap
     assert_eq!(&out, b"bcde");
 }
 
@@ -725,7 +795,7 @@ fn copy_bytes_to_empty_range() {
     crate::test_utils::init_test_tracing();
     let gb = GapBuffer::from_str("test");
     let mut out = vec![1, 2, 3]; // pre-existing contents
-    gb.copy_bytes_to(2, 2, &mut out);
+    gap_copy_bytes_to(&gb, 2, 2, &mut out);
     assert!(out.is_empty());
 }
 
@@ -826,7 +896,7 @@ fn ensure_gap_grows_beyond_requested_minimum() {
     let mut gb = GapBuffer::new();
     // Fill current gap completely so the next ensure_gap must actually grow.
     let filler = vec![b'a'; gb.gap_size()];
-    gb.insert_emacs_bytes(0, &filler);
+    gap_insert_emacs_bytes(&mut gb, 0, &filler);
     assert_eq!(gb.gap_size(), 0);
     gb.ensure_gap(1);
     // GNU adds GAP_BYTES_DFL beyond caller's request.
@@ -851,7 +921,7 @@ fn is_char_boundary_matches_oracle_on_large_multibyte_buffer() {
     }
     let gb = GapBuffer::from_str(&s);
     // Oracle: walk char boundaries from 0, mark each one.
-    let bytes: Vec<u8> = (0..gb.len()).map(|i| gb.byte_at(i)).collect();
+    let bytes: Vec<u8> = (0..gb.len()).map(|i| byte_at(&gb, i)).collect();
     let mut oracle_boundary = vec![false; gb.len() + 1];
     oracle_boundary[0] = true;
     let mut p = 0usize;
@@ -876,10 +946,10 @@ fn insert_emacs_bytes_both_matches_scanning_variant() {
     let nchars = crate::emacs_core::emacs_char::chars_in_multibyte(&bytes);
 
     let mut a = GapBuffer::new();
-    a.insert_emacs_bytes(0, &bytes);
+    gap_insert_emacs_bytes(&mut a, 0, &bytes);
 
     let mut b = GapBuffer::new();
-    b.insert_emacs_bytes_both(0, &bytes, nchars);
+    gap_insert_emacs_bytes_with_char_len(&mut b, 0, &bytes, nchars);
 
     assert_eq!(a.to_string(), b.to_string());
     assert_eq!(a.char_count(), b.char_count());
@@ -901,11 +971,11 @@ fn delete_range_both_matches_scanning_variant() {
 
     // Compute nchars for the deleted slice via oracle.
     let mut tmp = Vec::new();
-    b.copy_bytes_to(from, to, &mut tmp);
+    gap_copy_bytes_to(&b, from, to, &mut tmp);
     let nchars = crate::emacs_core::emacs_char::chars_in_multibyte(&tmp);
 
-    a.delete_range(from, to);
-    b.delete_range_both(from, to, nchars);
+    gap_delete_emacs_range(&mut a, from, to);
+    gap_delete_emacs_range_with_char_len(&mut b, from, to, nchars);
 
     assert_eq!(a.to_string(), b.to_string());
     assert_eq!(a.char_count(), b.char_count());
@@ -924,7 +994,7 @@ fn move_gap_both_matches_scanning_variant() {
     let charpos = byte_to_char(&a, bytepos);
 
     a.move_gap_to(bytepos);
-    b.move_gap_both(bytepos, charpos);
+    gap_move_to_emacs_byte_and_char(&mut b, bytepos, charpos);
 
     assert_eq!(a.to_string(), b.to_string());
     assert_eq!(a.gpt(), b.gpt());
