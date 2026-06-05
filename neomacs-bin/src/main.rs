@@ -43,7 +43,7 @@ use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
 
-use neovm_core::buffer::{BufferId, EmacsBytePos};
+use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
@@ -2763,7 +2763,10 @@ fn bootstrap_buffers(
         buf.widen();
         let len = buf.total_bytes();
         if len > 0 {
-            buf.delete_region(0, len);
+            buf.delete_emacs_byte_range(EmacsByteRange::new(
+                EmacsBytePos::ZERO,
+                EmacsBytePos::new(len),
+            ));
         }
         buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
     }

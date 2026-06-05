@@ -4706,6 +4706,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub fn narrow_buffer_to_region(
         &mut self,
         id: BufferId,
@@ -4800,6 +4801,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub fn put_buffer_text_property(
         &mut self,
         id: BufferId,
@@ -4882,6 +4884,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub fn remove_buffer_text_property(
         &mut self,
         id: BufferId,
@@ -4914,6 +4917,7 @@ impl BufferManager {
         Some(buf.text_props_remove_property_in_emacs_byte_range(byte_range, name))
     }
 
+    #[cfg(test)]
     pub fn clear_buffer_text_properties(
         &mut self,
         id: BufferId,
@@ -4937,6 +4941,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub(crate) fn clear_inserted_plain_text_properties(
         &mut self,
         id: BufferId,
@@ -4961,6 +4966,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub fn set_buffer_text_properties(
         &mut self,
         id: BufferId,
@@ -5178,6 +5184,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[cfg(test)]
     pub fn restore_buffer_restriction(
         &mut self,
         id: BufferId,
@@ -5298,6 +5305,7 @@ impl BufferManager {
         }
     }
 
+    #[cfg(test)]
     pub fn internal_labeled_narrow_to_region(
         &mut self,
         buffer_id: BufferId,

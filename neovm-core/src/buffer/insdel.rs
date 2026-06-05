@@ -383,6 +383,7 @@ impl Buffer {
         insertion
     }
 
+    #[cfg(test)]
     pub fn replace_region_lisp_string(
         &mut self,
         start: usize,
@@ -492,6 +493,7 @@ impl Buffer {
     /// Delete the byte range `[start, end)`.
     ///
     /// Adjusts point, mark, markers, and the narrowing boundary.
+    #[cfg(test)]
     pub fn delete_region(&mut self, start: usize, end: usize) -> TextEditRange {
         if start >= end {
             return TextEditRange::default();
@@ -1050,6 +1052,7 @@ impl BufferManager {
         })
     }
 
+    #[cfg(test)]
     pub fn replace_buffer_region_lisp_string(
         &mut self,
         id: BufferId,
