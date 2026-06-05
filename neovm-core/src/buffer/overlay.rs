@@ -265,7 +265,7 @@ impl OverlayList {
 
     pub fn insert_overlay(&mut self, overlay: Value) {
         let data = overlay.as_overlay_data().unwrap();
-        let range = EmacsByteRange::from_usize(data.start, data.end);
+        let range = overlay_data_range(data);
         if !self.overlays.insert(overlay) {
             return;
         }
@@ -425,7 +425,7 @@ impl OverlayList {
             if data.buffer.is_none() {
                 return false;
             }
-            let range = EmacsByteRange::from_usize(data.start, data.end);
+            let range = overlay_data_range(data);
             !(range.start() == pos && data.front_advance)
                 && !(range.end() == pos && !data.rear_advance)
                 && range.start() <= pos
@@ -737,10 +737,13 @@ fn overlay_live_buffer(overlay: Value) -> Option<crate::buffer::BufferId> {
     overlay.as_overlay_data().and_then(|d| d.buffer)
 }
 
+fn overlay_data_range(data: &OverlayData) -> EmacsByteRange {
+    EmacsByteRange::new(EmacsBytePos::new(data.start), EmacsBytePos::new(data.end))
+}
+
 fn overlay_range(overlay: Value) -> Option<EmacsByteRange> {
     let data = overlay.as_overlay_data()?;
-    data.buffer
-        .map(|_| EmacsByteRange::from_usize(data.start, data.end))
+    data.buffer.map(|_| overlay_data_range(data))
 }
 
 fn overlay_covers_pos(overlay: Value, pos: EmacsBytePos) -> bool {
@@ -750,7 +753,7 @@ fn overlay_covers_pos(overlay: Value, pos: EmacsBytePos) -> bool {
     if data.buffer.is_none() {
         return false;
     }
-    let range = EmacsByteRange::from_usize(data.start, data.end);
+    let range = overlay_data_range(data);
     range.start() <= pos && pos < range.end()
 }
 
@@ -765,7 +768,7 @@ fn overlay_overlaps_region(
     if data.buffer.is_none() {
         return false;
     }
-    let overlay_range = EmacsByteRange::from_usize(data.start, data.end);
+    let overlay_range = overlay_data_range(data);
     if overlay_range.is_empty() {
         return overlay_range.start() == range.start()
             || (range.start() < overlay_range.start() && overlay_range.start() < range.end())
@@ -793,8 +796,8 @@ fn compare_overlay_precedence(left: Value, right: Value) -> Ordering {
     };
     let (left_priority, left_subpriority) = overlay_priority(left_overlay);
     let (right_priority, right_subpriority) = overlay_priority(right_overlay);
-    let left_range = EmacsByteRange::from_usize(left_overlay.start, left_overlay.end);
-    let right_range = EmacsByteRange::from_usize(right_overlay.start, right_overlay.end);
+    let left_range = overlay_data_range(left_overlay);
+    let right_range = overlay_data_range(right_overlay);
 
     if left_priority != right_priority {
         return left_priority.cmp(&right_priority);
