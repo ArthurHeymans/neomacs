@@ -4215,7 +4215,11 @@ impl BufferManager {
         }
         let (pt, begv, zv) = {
             let buffer = self.buffers.get(&buffer_id)?;
-            (buffer.pt_byte, buffer.begv_byte, buffer.zv_byte)
+            (
+                buffer.point_byte(),
+                buffer.point_min_byte(),
+                buffer.point_max_byte(),
+            )
         };
         let (pt_marker, pt_marker_ptr) = self.create_marker(buffer_id, pt, InsertionType::Before);
         let (begv_marker, begv_marker_ptr) =
@@ -4236,7 +4240,11 @@ impl BufferManager {
         let markers = self.buffers.get(&buffer_id)?.state_markers?;
         let (pt, begv, zv) = {
             let buffer = self.buffers.get(&buffer_id)?;
-            (buffer.pt_byte, buffer.begv_byte, buffer.zv_byte)
+            (
+                buffer.point_byte(),
+                buffer.point_min_byte(),
+                buffer.point_max_byte(),
+            )
         };
         // State markers live on this buffer's chain already; unlink before
         // re-registering so chain_splice_at_head's precondition holds.
@@ -4272,18 +4280,13 @@ impl BufferManager {
     fn fetch_buffer_state_markers(&mut self, buffer_id: BufferId) -> Option<()> {
         let markers = self.buffers.get(&buffer_id)?.state_markers?;
         let pt = self.marker_position(buffer_id, markers.pt_marker)?;
-        let pt_char = self.marker_char_position(buffer_id, markers.pt_marker)?;
         let begv = self.marker_position(buffer_id, markers.begv_marker)?;
-        let begv_char = self.marker_char_position(buffer_id, markers.begv_marker)?;
         let zv = self.marker_position(buffer_id, markers.zv_marker)?;
-        let zv_char = self.marker_char_position(buffer_id, markers.zv_marker)?;
         let buffer = self.buffers.get_mut(&buffer_id)?;
-        buffer.pt = pt_char;
-        buffer.pt_byte = pt;
-        buffer.begv = begv_char;
-        buffer.begv_byte = begv;
-        buffer.zv = zv_char;
-        buffer.zv_byte = zv;
+        buffer.set_accessible_region_and_point_from_emacs_bytes(
+            EmacsByteRange::from_usize(begv, zv),
+            EmacsBytePos::new(pt),
+        );
         Some(())
     }
 
@@ -4571,7 +4574,7 @@ impl BufferManager {
     ) -> Option<()> {
         let (begv, zv) = {
             let buf = self.buffers.get(&buffer_id)?;
-            (buf.begv_byte, buf.zv_byte)
+            (buf.point_min_byte(), buf.point_max_byte())
         };
         let (beg_marker, _) = self.create_marker(buffer_id, begv, InsertionType::Before);
         let (end_marker, _) = self.create_marker(buffer_id, zv, InsertionType::After);
@@ -5112,7 +5115,11 @@ impl BufferManager {
         let buffer_id = self.current_buffer_id()?;
         let (begv, zv, len) = {
             let buffer = self.get(buffer_id)?;
-            (buffer.begv_byte, buffer.zv_byte, buffer.total_bytes())
+            (
+                buffer.point_min_byte(),
+                buffer.point_max_byte(),
+                buffer.total_bytes(),
+            )
         };
         let restriction = if begv == 0 && zv == len {
             SavedRestrictionKind::None
