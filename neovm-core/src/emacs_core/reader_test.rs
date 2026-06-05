@@ -1090,7 +1090,7 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .replace_buffer_contents(active_buffer, "Eval: (+ 1 2)")
         .expect("replace active minibuffer contents");
     ev.buffer_manager_mut()
-        .goto_buffer_byte(active_buffer, 13)
+        .goto_buffer_emacs_byte_pos(active_buffer, crate::buffer::EmacsBytePos::new(13))
         .expect("move active minibuffer point");
     if let Some(crate::window::Window::Leaf { point, .. }) = ev
         .frame_manager_mut()
@@ -3937,7 +3937,7 @@ fn read_buffer_hash_table_literal_returns_hash_table() {
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("#s(hash-table size 3 test equal data (\"a\" 1 \"b\" 2))");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     let value = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("read from buffer");
     if !value.is_hash_table() {
@@ -3966,7 +3966,7 @@ fn read_from_buffer_advances_point_across_multiple_forms() {
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert(source);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let first = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("first form");
@@ -4011,7 +4011,7 @@ fn read_from_unibyte_buffer_preserves_unibyte_string_literals() {
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
             b'"', 0xFF, b'"',
         ]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let value = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("read from buffer");
@@ -4031,7 +4031,7 @@ fn read_from_buffer_preserves_string_literals_during_eval() {
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert(r#"(progn (setq reader-string nil) (setq reader-string "abc") reader-string)"#);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let form = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("read form");
@@ -4047,7 +4047,7 @@ fn read_from_buffer_incomplete_list_signals_end_of_file_like_gnu_emacs() {
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("(progn (list 1 2)");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
@@ -4062,7 +4062,7 @@ fn read_from_buffer_invalid_read_syntax_reports_line_and_column_like_gnu_emacs()
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("?child");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
@@ -4086,7 +4086,7 @@ fn read_from_buffer_unmatched_close_paren_reports_post_consumption_column_like_g
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert(")");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
@@ -4110,7 +4110,7 @@ fn read_from_buffer_invalid_hash_dispatch_reports_post_consumption_column_like_g
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("#t");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
@@ -4134,7 +4134,7 @@ fn read_from_buffer_empty_dotted_list_reports_post_dot_column_like_gnu_emacs() {
     {
         let buf = ev.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("(. 1)");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);

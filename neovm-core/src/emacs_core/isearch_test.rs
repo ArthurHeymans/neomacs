@@ -1085,7 +1085,7 @@ fn replace_string_and_regexp_preserve_unibyte_raw_bytes() {
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
             0xFF, 0xFF,
         ]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let raw_ff = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
@@ -1102,7 +1102,9 @@ fn replace_string_and_regexp_preserve_unibyte_raw_bytes() {
         current_id,
         &crate::heap_types::LispString::from_unibyte(vec![0xFF]),
     );
-    let _ = eval.buffers.goto_buffer_byte(current_id, 0);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, crate::buffer::EmacsBytePos::new(0));
 
     builtin_replace_regexp(
         &mut eval,
@@ -1129,7 +1131,7 @@ fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
             0xFF, b'\n', b'a', b'\n', 0xFF, b'\n',
         ]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let raw_ff = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
@@ -1142,7 +1144,9 @@ fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
         current_id,
         &crate::heap_types::LispString::from_unibyte(vec![0xFF, b'\n', b'a', b'\n']),
     );
-    let _ = eval.buffers.goto_buffer_byte(current_id, 0);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, crate::buffer::EmacsBytePos::new(0));
 
     builtin_flush_lines(
         &mut eval,
@@ -1243,7 +1247,7 @@ fn count_matches_and_how_many_preserve_unibyte_raw_bytes() {
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
             0xFF, b'a', 0xFF,
         ]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let raw_ff = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));

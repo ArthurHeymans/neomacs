@@ -24,7 +24,7 @@ fn ctx_with_buffer(text: &str) -> (Context, BufferId) {
         let buf = ctx.buffer_manager_mut().get_mut(id).expect("buffer");
         buf.insert(text);
         buf.widen();
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     let _ = ctx.switch_current_buffer(id);
     (ctx, id)

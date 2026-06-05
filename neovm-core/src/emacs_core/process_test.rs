@@ -774,7 +774,7 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
     ev.buffers
         .get_mut(buffer_id)
         .expect("process buffer")
-        .goto_byte(6);
+        .goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6));
 
     let pid = ev.processes.create_process(
         "sentinel-proc".into(),

@@ -2304,19 +2304,6 @@ impl Buffer {
         };
     }
 
-    /// Set point in raw Emacs bytes, clamping to the accessible region
-    /// `[begv, zv]`.
-    #[cfg(test)]
-    pub fn goto_byte(&mut self, pos: usize) {
-        self.goto_emacs_byte_pos(EmacsBytePos::new(pos));
-    }
-
-    /// Legacy point setter retained while buffer internals are byte-only.
-    #[cfg(test)]
-    pub fn goto_char(&mut self, pos: usize) {
-        self.goto_byte(pos);
-    }
-
     // -- Undo helpers --------------------------------------------------------
 
     /// Get the current `buffer-undo-list` value from buffer-local properties.
@@ -2672,11 +2659,6 @@ impl Buffer {
         )
     }
 
-    #[cfg(test)]
-    pub fn text_range(&self, start: usize, end: usize) -> String {
-        self.buffer_substring_range(EmacsByteRange::from_usize(start, end))
-    }
-
     /// Return the entire accessible portion of the buffer as a `String`.
     pub fn buffer_string(&self) -> String {
         self.buffer_substring_range(self.accessible_emacs_byte_range())
@@ -2693,12 +2675,6 @@ impl Buffer {
             .and_then(char::from_u32)
     }
 
-    /// Character at raw Emacs byte position `pos`, or `None` if out of range.
-    #[cfg(test)]
-    pub fn char_after(&self, pos: usize) -> Option<char> {
-        self.char_after_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     /// Emacs character code at Emacs byte position `pos`, or `None` if out of range.
     pub fn char_code_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
         let pos = pos.get();
@@ -2709,22 +2685,10 @@ impl Buffer {
             .char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
-    /// Emacs character code at raw Emacs byte position `pos`, or `None` if out of range.
-    #[cfg(test)]
-    pub fn char_code_after(&self, pos: usize) -> Option<u32> {
-        self.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     /// Character immediately before Emacs byte position `pos`, or `None`.
     pub fn char_before_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
         self.char_code_before_emacs_byte_pos(pos)
             .and_then(char::from_u32)
-    }
-
-    /// Character immediately before raw Emacs byte position `pos`, or `None`.
-    #[cfg(test)]
-    pub fn char_before(&self, pos: usize) -> Option<char> {
-        self.char_before_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     /// Emacs character code immediately before Emacs byte position `pos`, or `None`.
@@ -2748,12 +2712,6 @@ impl Buffer {
             .char_code_at_emacs_byte_pos(EmacsBytePos::new(prior_byte))
     }
 
-    /// Emacs character code immediately before raw Emacs byte position `pos`, or `None`.
-    #[cfg(test)]
-    pub fn char_code_before(&self, pos: usize) -> Option<u32> {
-        self.char_code_before_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     /// Emacs-byte width of the character starting at `pos`.
     pub fn char_after_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
         let pos = pos.get();
@@ -2770,13 +2728,6 @@ impl Buffer {
                 .get()
                 - pos,
         ))
-    }
-
-    /// Raw Emacs-byte width of the character starting at `pos`.
-    #[cfg(test)]
-    pub fn char_after_emacs_len(&self, pos: usize) -> Option<usize> {
-        self.char_after_emacs_byte_len(EmacsBytePos::new(pos))
-            .map(EmacsByteLen::get)
     }
 
     /// Emacs-byte width of the character ending at `pos`.
@@ -2797,13 +2748,6 @@ impl Buffer {
             .char_pos_to_emacs_byte_pos(CharPos0::new(prior_char - 1))
             .get();
         Some(EmacsByteLen::new(pos - prior_byte))
-    }
-
-    /// Raw Emacs-byte width of the character ending at `pos`.
-    #[cfg(test)]
-    pub fn char_before_emacs_len(&self, pos: usize) -> Option<usize> {
-        self.char_before_emacs_byte_len(EmacsBytePos::new(pos))
-            .map(EmacsByteLen::get)
     }
 
     // -- Narrowing -----------------------------------------------------------
@@ -2844,17 +2788,6 @@ impl Buffer {
     ) {
         self.narrow_to_emacs_byte_range(range);
         self.goto_emacs_byte_pos(point);
-    }
-
-    /// Restrict the accessible portion to the raw Emacs-byte range
-    /// `[start, end)`.
-    pub fn narrow_to_byte_region(&mut self, start: usize, end: usize) {
-        self.narrow_to_emacs_byte_range(EmacsByteRange::from_usize(start, end));
-    }
-
-    /// Legacy narrowing API retained while buffer internals are byte-only.
-    pub fn narrow_to_region(&mut self, start: usize, end: usize) {
-        self.narrow_to_byte_region(start, end);
     }
 
     /// Remove narrowing — make the entire buffer accessible again.
@@ -3047,18 +2980,6 @@ impl Buffer {
                 (*ptr).data.charpos = position.char_pos_usize();
             }
         }
-    }
-
-    /// Set the mark to raw Emacs-byte position `pos`, creating the marker if needed.
-    #[cfg(test)]
-    pub fn set_mark_byte(&mut self, pos: usize) {
-        self.set_mark_emacs_byte_pos(EmacsBytePos::new(pos));
-    }
-
-    /// Legacy mark setter.
-    #[cfg(test)]
-    pub fn set_mark(&mut self, pos: usize) {
-        self.set_mark_byte(pos);
     }
 
     /// Return the mark byte position, None if mark inactive.
@@ -4697,11 +4618,6 @@ impl BufferManager {
         Some(point)
     }
 
-    pub fn goto_buffer_byte(&mut self, id: BufferId, pos: usize) -> Option<usize> {
-        self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(pos))
-            .map(EmacsBytePos::get)
-    }
-
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         if !buf.overlays.is_empty() {
@@ -5053,10 +4969,6 @@ impl BufferManager {
     ) -> Option<()> {
         self.buffers.get_mut(&id)?.set_mark_emacs_byte_pos(pos);
         Some(())
-    }
-
-    pub fn set_buffer_mark(&mut self, id: BufferId, pos: usize) -> Option<()> {
-        self.set_buffer_mark_emacs_byte_pos(id, EmacsBytePos::new(pos))
     }
 
     pub fn clear_buffer_mark(&mut self, id: BufferId) -> Option<()> {

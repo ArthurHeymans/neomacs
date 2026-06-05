@@ -1803,7 +1803,9 @@ fn make_indirect_buffer_shares_text_and_flattens_base_buffer_chain() {
             .shares_text_storage_with(eval.buffers.get(indirect_id).unwrap())
     );
 
-    let _ = eval.buffers.goto_buffer_byte(base_id, 0);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(0));
     let _ = eval.buffers.insert_into_buffer(base_id, "zz");
     assert_eq!(
         eval.buffers.get(indirect_id).unwrap().buffer_string(),
@@ -2530,7 +2532,7 @@ fn plain_insert_does_not_inherit_spanning_text_properties() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("ab");
         buf.text_props_put_property(0, 2, Value::symbol("foo"), Value::symbol("bar"));
-        buf.goto_char(1);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     }
 
     assert_eq!(
@@ -3099,16 +3101,16 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
             .narrow_buffer_to_region(first_id, 1, 4)
             .expect("first narrow should succeed");
         eval.buffers
-            .goto_buffer_byte(first_id, 2)
+            .goto_buffer_emacs_byte_pos(first_id, crate::buffer::EmacsBytePos::new(2))
             .expect("first point should move");
         eval.buffers
-            .goto_buffer_byte(second_id, 5)
+            .goto_buffer_emacs_byte_pos(second_id, crate::buffer::EmacsBytePos::new(5))
             .expect("second point should move");
         eval.buffers
-            .set_buffer_mark(first_id, 3)
+            .set_buffer_mark_emacs_byte_pos(first_id, crate::buffer::EmacsBytePos::new(3))
             .expect("first mark should set");
         eval.buffers
-            .set_buffer_mark(second_id, 1)
+            .set_buffer_mark_emacs_byte_pos(second_id, crate::buffer::EmacsBytePos::new(1))
             .expect("second mark should set");
 
         {
@@ -7791,7 +7793,7 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("alpha one");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     builtin_search_forward(&mut eval, vec![Value::string("alpha")])
@@ -7825,7 +7827,13 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
         .expect("replace-match should honor restored buffer match positions");
 
     let buffer = eval.buffers.current_buffer().expect("current buffer");
-    assert_eq!(buffer.text_range(0, buffer.total_bytes()), "omega one");
+    assert_eq!(
+        buffer.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
+            0,
+            buffer.total_bytes(),
+        )),
+        "omega one"
+    );
 }
 
 #[test]
@@ -8190,7 +8198,7 @@ fn looking_at_inhibit_modify_preserves_match_data() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("abc");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let baseline = Value::list(vec![Value::fixnum(10), Value::fixnum(11)]);
@@ -8211,7 +8219,7 @@ fn looking_at_updates_match_data_when_allowed() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("abc");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     builtin_set_match_data(&mut eval, vec![Value::NIL]).expect("clear match-data");
@@ -8254,7 +8262,7 @@ fn looking_at_p_preserves_match_data() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("abc");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let baseline = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
@@ -8274,7 +8282,7 @@ fn looking_at_handles_raw_unibyte_pattern_without_panicking() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("abc");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let pattern = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
@@ -8806,7 +8814,7 @@ fn replace_match_buffer_updates_live_match_data_like_gnu() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("foo-42");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     builtin_re_search_forward(&mut eval, vec![Value::string("\\([a-z]+\\)-\\([0-9]+\\)")])
@@ -8815,7 +8823,13 @@ fn replace_match_buffer_updates_live_match_data_like_gnu() {
         .expect("replace-match should succeed");
 
     let buffer = eval.buffers.current_buffer().expect("scratch buffer");
-    assert_eq!(buffer.text_range(0, buffer.total_bytes()), "42-foo");
+    assert_eq!(
+        buffer.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
+            0,
+            buffer.total_bytes(),
+        )),
+        "42-foo"
+    );
 
     assert_eq!(
         builtin_match_beginning(&mut eval, vec![Value::fixnum(0)]).expect("match-beginning 0"),
@@ -8882,7 +8896,7 @@ fn looking_at_p_respects_case_fold_search() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("A");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     eval.set_variable("case-fold-search", Value::NIL);
@@ -8929,7 +8943,7 @@ fn looking_at_honors_per_buffer_case_fold_search() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("A");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     // Confirm the global default is t.
@@ -9017,7 +9031,7 @@ fn re_search_forward_honors_inhibit_changing_match_data() {
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buffer.insert("axxxxb");
-        buffer.goto_char(0);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     eval.set_variable("case-fold-search", Value::T);
     eval.set_variable("inhibit-changing-match-data", Value::NIL);
@@ -9041,7 +9055,7 @@ fn re_search_forward_honors_inhibit_changing_match_data() {
     eval.set_variable("inhibit-changing-match-data", Value::T);
     {
         let buf = eval.buffers.current_buffer_mut().expect("scratch");
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     // Run a fresh search against "b" — the evaluator's match_data
@@ -11864,8 +11878,8 @@ fn message_log_appends_after_full_messages_buffer_when_narrowed() {
             .get_mut(messages_id)
             .expect("*Messages* buffer");
         messages.insert("keep");
-        messages.narrow_to_byte_region(0, 2);
-        messages.goto_byte(2);
+        messages.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(0, 2));
+        messages.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
     }
 
     builtin_message(&mut eval, vec![Value::string("hello")])

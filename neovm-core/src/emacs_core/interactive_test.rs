@@ -1321,8 +1321,12 @@ fn call_interactively_state_resolution_handles_simple_string_codes_without_eval(
         .set_symbol_value("current-prefix-arg", Value::list(vec![Value::fixnum(4)]));
     let current = ev.buffers.current_buffer_id().expect("current buffer");
     let _ = ev.buffers.replace_buffer_contents(current, "abcd");
-    let _ = ev.buffers.goto_buffer_byte(current, 2);
-    let _ = ev.buffers.set_buffer_mark(current, 1);
+    let _ = ev
+        .buffers
+        .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
+    let _ = ev
+        .buffers
+        .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(1));
 
     let event = ev
         .eval_str("(list 'mouse-1 (list (list (selected-window) (point) '(0 . 0) 0)))")
@@ -1375,7 +1379,9 @@ fn call_interactively_state_resolution_applies_shift_selection_prefix_in_state()
     let mut ev = Context::new();
     let current = ev.buffers.current_buffer_id().expect("current buffer");
     let _ = ev.buffers.replace_buffer_contents(current, "abcd");
-    let _ = ev.buffers.goto_buffer_byte(current, 2);
+    let _ = ev
+        .buffers
+        .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
     ev.obarray
         .set_symbol_value("this-command-keys-shift-translated", Value::T);
     ev.obarray.set_symbol_value("shift-select-mode", Value::T);
@@ -1444,8 +1450,12 @@ fn interactive_lambda_r_capital_spec_uses_use_region_p_semantics() {
     let mut ev = Context::new();
     let current = ev.buffers.current_buffer_id().expect("current buffer");
     let _ = ev.buffers.replace_buffer_contents(current, "abcd");
-    let _ = ev.buffers.goto_buffer_byte(current, 2);
-    let _ = ev.buffers.set_buffer_mark(current, 1);
+    let _ = ev
+        .buffers
+        .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
+    let _ = ev
+        .buffers
+        .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(1));
 
     let mut context = InteractiveInvocationContext::default();
     let _ = ev.eval_str("(fset 'use-region-p (lambda () nil))");
@@ -3734,7 +3744,7 @@ fn interactive_shift_selection_prefix_sets_mark_and_mark_active() {
     {
         let buf = ev.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("abcd");
-        buf.goto_char(2);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
     }
     ev.obarray
         .set_symbol_value("this-command-keys-shift-translated", Value::T);

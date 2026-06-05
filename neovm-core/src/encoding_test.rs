@@ -461,7 +461,7 @@ fn encode_coding_string_buffer_destination_inserts_without_moving_point() {
         .insert_lisp_string_into_buffer(dest, &crate::heap_types::LispString::from_utf8("XY"))
         .expect("insert destination seed");
     eval.buffers
-        .goto_buffer_byte(dest, 1)
+        .goto_buffer_emacs_byte_pos(dest, crate::buffer::EmacsBytePos::new(1))
         .expect("move destination point");
 
     let produced = builtin_encode_coding_string_in_context(

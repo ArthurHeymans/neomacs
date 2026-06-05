@@ -272,7 +272,8 @@ fn eval_upcase_region_noncontiguous_uses_live_mark() {
     let mut ev = crate::test_utils::runtime_startup_context();
     let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
     ev.buffers.insert_into_buffer(buffer_id, "abc");
-    ev.buffers.set_buffer_mark(buffer_id, 1);
+    ev.buffers
+        .set_buffer_mark_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(1));
 
     super::builtin_upcase_region(&mut ev, vec![Value::fixnum(1), Value::fixnum(3), Value::T])
         .expect("upcase-region");
@@ -315,7 +316,8 @@ fn eval_capitalize_word_preserves_raw_unibyte_bytes() {
         buffer_id,
         &crate::heap_types::LispString::from_unibyte(vec![0xFF, b'a', b'b']),
     );
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
     super::builtin_capitalize_word(&mut ev, vec![Value::fixnum(1)]).expect("capitalize-word");
 
@@ -331,7 +333,8 @@ fn eval_capitalize_word_updates_buffer_text() {
     let mut ev = super::super::eval::Context::new();
     let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
     ev.buffers.insert_into_buffer(buffer_id, "hELLO world");
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
     super::builtin_capitalize_word(&mut ev, vec![Value::fixnum(1)]).expect("capitalize-word");
 

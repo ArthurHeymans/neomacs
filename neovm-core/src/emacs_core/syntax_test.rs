@@ -8,7 +8,7 @@ fn buf_with_text(text: &str) -> Buffer {
     let mut buf = Buffer::new(BufferId(99), Value::string("test-syntax"));
     buf.insert(text);
     buf.widen();
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf
 }
 
@@ -396,7 +396,7 @@ fn char_syntax_accepts_full_emacs_character_codes() {
 fn forward_word_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 1);
     // "hello" ends at byte 5.
@@ -407,7 +407,7 @@ fn forward_word_basic() {
 fn forward_word_two() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 2);
     // Past "hello world" = byte 11.
@@ -418,7 +418,7 @@ fn forward_word_two() {
 fn forward_word_from_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(3); // inside "hello"
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // inside "hello"
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 1);
     assert_eq!(pos, 5); // end of "hello"
@@ -428,7 +428,7 @@ fn forward_word_from_middle() {
 fn backward_word_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(11); // end of text
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end of text
     let table = SyntaxTable::new_standard();
     let pos = backward_word(&buf, &table, 1);
     assert_eq!(pos, 6); // start of "world"
@@ -438,7 +438,7 @@ fn backward_word_basic() {
 fn backward_word_two() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let table = SyntaxTable::new_standard();
     let pos = backward_word(&buf, &table, 2);
     assert_eq!(pos, 0); // start of "hello"
@@ -448,7 +448,7 @@ fn backward_word_two() {
 fn forward_word_negative_goes_backward() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, -1);
     assert_eq!(pos, 6);
@@ -462,7 +462,7 @@ fn forward_word_negative_goes_backward() {
 fn skip_syntax_forward_word() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let table = SyntaxTable::new_standard();
     let pos = skip_syntax_forward(&buf, &table, "w", None);
     assert_eq!(pos, 5); // end of "hello"
@@ -472,7 +472,7 @@ fn skip_syntax_forward_word() {
 fn skip_syntax_forward_whitespace_and_word() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("  hello");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let table = SyntaxTable::new_standard();
     let pos = skip_syntax_forward(&buf, &table, " w", None);
     assert_eq!(pos, 7); // end of "  hello"
@@ -482,7 +482,7 @@ fn skip_syntax_forward_whitespace_and_word() {
 fn skip_syntax_backward_word() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_byte(11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let table = SyntaxTable::new_standard();
     let pos = skip_syntax_backward(&buf, &table, "w", None);
     assert_eq!(pos, 6); // start of "world"
@@ -492,7 +492,7 @@ fn skip_syntax_backward_word() {
 fn skip_syntax_forward_with_limit() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("helloworld");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let table = SyntaxTable::new_standard();
     let pos = skip_syntax_forward(&buf, &table, "w", Some(3));
     assert_eq!(pos, 3);
@@ -506,7 +506,7 @@ fn builtin_skip_syntax_forward_limit_uses_char_positions_for_multibyte_text() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("éézz");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     let moved =
@@ -530,8 +530,11 @@ fn builtin_skip_syntax_forward_limit_stays_absolute_under_narrowing() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("aéézz");
-        buf.narrow_to_byte_region(1, buf.point_max());
-        buf.goto_byte(buf.point_min());
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            1,
+            buf.point_max(),
+        ));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     let moved =
@@ -999,7 +1002,7 @@ fn forward_comment_skips_whitespace_and_returns_nil() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("  foo");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     let out = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
@@ -1021,7 +1024,7 @@ fn skip_syntax_forward_honors_complement_marker() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("  hello");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     let out = builtin_skip_syntax_forward(&mut eval, vec![Value::string("^ w")]).unwrap();
@@ -1047,7 +1050,7 @@ fn forward_comment_two_char_end_style_uses_first_ender_char() {
         tbl.modify_syntax_entry('*', string_to_syntax(". 23").unwrap());
         tbl.modify_syntax_entry('\n', string_to_syntax("> b").unwrap());
         buf.insert("code /* block comment */ more // line comment\nrest");
-        buf.goto_char(buf.point_min() + 5);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min() + 5));
     }
 
     let out = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
@@ -1125,7 +1128,7 @@ fn forward_comment_backward_single_line_comments() {
             },
         );
         buf.insert("code\n;; c1\n;; c2\n;; c3\n");
-        buf.goto_char(buf.point_max());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_max()));
     }
 
     // forward-comment -1 from point-max: skip back one comment
@@ -1145,7 +1148,7 @@ fn forward_comment_backward_single_line_comments() {
     // Reset to point-max, forward-comment -3: skip back three comments
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.goto_char(buf.point_max());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_max()));
     }
     let out = builtin_forward_comment(&mut eval, vec![Value::fixnum(-3)]).unwrap();
     assert_eq!(out, Value::T, "forward-comment -3 should return t");
@@ -1210,7 +1213,7 @@ fn forward_comment_backward_stops_at_non_comment() {
             },
         );
         buf.insert("code\n;; c1\n;; c2\n;; c3\n");
-        buf.goto_char(buf.point_max());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_max()));
     }
 
     // forward-comment -100 from point-max: try to skip more comments than exist
@@ -1241,7 +1244,7 @@ fn backward_prefix_chars_default_is_noop() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("''foo");
-        buf.goto_char(char_pos_to_byte(buf, 2));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(char_pos_to_byte(buf, 2)));
     }
 
     let out = builtin_backward_prefix_chars(&mut eval, vec![]).unwrap();
@@ -1263,10 +1266,10 @@ fn backward_prefix_chars_moves_over_prefix_flag_chars() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("''foo");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
         let entry = string_to_syntax(". p").unwrap();
         super::SyntaxTable::isolate_for_buffer(buf).modify_syntax_entry('\'', entry);
-        buf.goto_char(char_pos_to_byte(buf, 2));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(char_pos_to_byte(buf, 2)));
     }
 
     builtin_backward_prefix_chars(&mut eval, vec![]).unwrap();
@@ -1522,7 +1525,7 @@ fn forward_sexp_unexpected_close_signal_carries_gnu_positions() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert(")");
-        buf.goto_byte(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     match builtin_forward_sexp(&mut eval, vec![Value::fixnum(1)]) {
@@ -1549,8 +1552,8 @@ fn forward_sexp_stops_at_narrowing_boundary_like_gnu() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("(aaa (bbb (ccc) ddd) eee)");
-        buf.narrow_to_byte_region(5, 20);
-        buf.goto_byte(buf.point_min());
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 20));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     builtin_forward_sexp(&mut eval, vec![Value::fixnum(3)]).unwrap();
@@ -1868,7 +1871,7 @@ fn parse_partial_sexp_commentstop_syntax_table_moves_point_across_comment() {
         tbl.modify_syntax_entry('\n', SyntaxEntry::simple(SyntaxClass::EndComment));
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert(";; x\nfoo");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
 
     let first = builtin_parse_partial_sexp(

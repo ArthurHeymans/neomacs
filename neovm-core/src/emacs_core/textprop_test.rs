@@ -12,7 +12,10 @@ fn eval_with_text(text: &str) -> Context {
     let mut eval = Context::new();
     eval.buffers.current_buffer_mut().unwrap().insert(text);
     // Reset point to beginning.
-    eval.buffers.current_buffer_mut().unwrap().goto_char(0);
+    eval.buffers
+        .current_buffer_mut()
+        .unwrap()
+        .goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     eval
 }
 

@@ -848,7 +848,7 @@ fn window_start_marker_stays_before_insert_at_start() {
         .insert_into_buffer(buffer_id, "line A\nline B\n")
         .expect("insert test text");
     buffers
-        .goto_buffer_byte(buffer_id, 0)
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
         .expect("move point to beginning");
 
     let mut frames = FrameManager::new();

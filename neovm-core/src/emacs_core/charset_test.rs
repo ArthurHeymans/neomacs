@@ -1203,7 +1203,7 @@ fn charset_after_default_returns_unicode() {
             .current_buffer_mut()
             .expect("current buffer must exist");
         buf.insert("😀");
-        buf.goto_char(buf.point_min());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min()));
     }
     let r = builtin_charset_after(&mut eval, vec![]).unwrap();
     assert!(r.is_symbol_named("unicode"));
@@ -1290,7 +1290,7 @@ fn charset_after_respects_narrowed_end() {
             .current_buffer_mut()
             .expect("current buffer must exist");
         buf.insert("abé");
-        buf.narrow_to_byte_region(0, 2);
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(0, 2));
     }
 
     assert_eq!(

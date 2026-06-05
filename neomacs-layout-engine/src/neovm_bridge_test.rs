@@ -370,7 +370,7 @@ fn test_window_params_nonselected_reads_window_point() {
     .expect("window params");
 
     // Window::point = 5 (1-based); params.point is 0-based, so 4.
-    // buffer.pt_char = 0 (we called goto_byte(0)). The non-selected
+    // buffer.pt_char = 0 (we called goto_emacs_byte_pos(0)). The non-selected
     // branch must NOT use the buffer's point.
     assert_ne!(buffer.point_char() as i64, params.point);
     assert_eq!(params.point, 4);

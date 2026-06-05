@@ -352,7 +352,7 @@ fn json_parse_buffer_advances_point_after_value() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert(" 42 trailing");
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let value = builtin_json_parse_buffer(&mut eval, vec![]).expect("parse buffer");
@@ -393,7 +393,7 @@ fn json_parse_buffer_invalid_utf8_does_not_advance_point() {
         buf.insert_lisp_string(&LispString::from_unibyte(vec![
             b'"', 0xFF, b'"', b' ', b'x',
         ]));
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     match builtin_json_parse_buffer(&mut eval, vec![]) {
@@ -423,7 +423,7 @@ fn json_parse_buffer_end_of_file_uses_gnu_signal_shape() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert(" ");
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     match builtin_json_parse_buffer(&mut eval, vec![]) {
@@ -453,7 +453,7 @@ fn json_insert_writes_at_point_and_advances() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("ab");
-        buf.goto_char(1);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     }
 
     builtin_json_insert(

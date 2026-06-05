@@ -1001,13 +1001,6 @@ impl BufferManager {
         })
     }
 
-    pub fn delete_buffer_region(&mut self, id: BufferId, start: usize, end: usize) -> Option<()> {
-        if start >= end {
-            return Some(());
-        }
-        self.delete_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))
-    }
-
     pub fn delete_buffer_emacs_byte_range(
         &mut self,
         id: BufferId,

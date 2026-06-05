@@ -243,7 +243,9 @@ fn mark_marker_follows_cached_mark_char_position() {
     let mut eval = super::super::eval::Context::new();
     let buf_id = eval.buffers.current_buffer_id().expect("current buffer");
     let _ = eval.buffers.insert_into_buffer(buf_id, "ééz");
-    let _ = eval.buffers.set_buffer_mark(buf_id, 'é'.len_utf8());
+    let _ = eval
+        .buffers
+        .set_buffer_mark_emacs_byte_pos(buf_id, crate::buffer::EmacsBytePos::new('é'.len_utf8()));
 
     let marker = builtin_mark_marker(&mut eval, vec![]).expect("mark-marker");
     assert_eq!(

@@ -282,7 +282,7 @@ fn base64_region_preserves_unibyte_raw_bytes() {
         buf.set_multibyte_value(false);
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
 
     let encoded = builtin_base64_encode_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(2)])

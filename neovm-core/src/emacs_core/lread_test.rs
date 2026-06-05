@@ -439,7 +439,7 @@ fn eval_region_keeps_point_stable_without_side_effects() {
     {
         let buf = ev.buffers.current_buffer_mut().expect("current buffer");
         buf.insert("(setq lread-er-point 1)");
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");

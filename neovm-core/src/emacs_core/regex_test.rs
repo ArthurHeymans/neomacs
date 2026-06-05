@@ -850,7 +850,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     // buffers / tests.
     crate::emacs_core::syntax::SyntaxTable::isolate_for_buffer(&mut buf)
         .modify_syntax_entry('_', SyntaxEntry::simple(SyntaxClass::Word));
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
 
     let mut md = None;
     let matched = looking_at(&buf, "[[:word:]]+", false, &mut md).expect("compile ok");
@@ -865,7 +865,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     // Without the override, `_` is Symbol (not Word) in the
     // standard syntax table, so the match stops at index 3.
     let mut buf2 = make_test_buffer("foo_bar baz");
-    buf2.goto_byte(0);
+    buf2.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     let matched = looking_at(&buf2, "[[:word:]]+", false, &mut md).expect("compile ok");
     assert!(matched);
@@ -1489,7 +1489,7 @@ fn make_test_buffer_with_backend(text: &str, kind: BufferTextBackendKind) -> Buf
         Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
     buf.insert(text);
     // Reset point to beginning
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     // zv was updated by insert
     buf
 }
@@ -1502,16 +1502,16 @@ fn make_fragmented_search_buffer(kind: BufferTextBackendKind) -> Buffer {
     let mut buf = make_test_buffer_with_backend("α foo\nBeta 123\nγ foo42\nomega", kind);
 
     let first_fragment = "α ".len();
-    buf.goto_byte(first_fragment);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first_fragment));
     buf.insert("tmp");
     buf.delete_region(first_fragment, first_fragment + "tmp".len());
 
     let second_fragment = "α foo\nBeta ".len();
-    buf.goto_byte(second_fragment);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(second_fragment));
     buf.insert("xx");
     buf.delete_region(second_fragment, second_fragment + "xx".len());
 
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     assert_eq!(buf.buffer_string(), "α foo\nBeta 123\nγ foo42\nomega");
     assert_eq!(buf.text_backend_kind(), kind);
     buf
@@ -1572,25 +1572,28 @@ fn literal_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte(buf.total_bytes());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
     let result = search_backward(&mut buf, "foo", None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let result = search_forward(&mut buf, "beta", None, false, true, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     let narrow_start = "α foo\n".len();
     let narrow_end = "α foo\nBeta 123".len();
-    buf.narrow_to_byte_region(narrow_start, narrow_end);
-    buf.goto_byte(narrow_start);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        narrow_start,
+        narrow_end,
+    ));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
     let result = search_forward(&mut buf, "foo", None, true, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte(narrow_start);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
     let result = search_forward(&mut buf, "Beta", None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
@@ -1615,7 +1618,7 @@ fn regex_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte(buf.total_bytes());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
     let result = re_search_backward(
         &mut buf,
         "\\(foo\\)\\([0-9]+\\)",
@@ -1629,8 +1632,11 @@ fn regex_search_backend_trace(
     md = None;
     let narrow_start = "α foo\n".len();
     let narrow_end = "α foo\nBeta 123".len();
-    buf.narrow_to_byte_region(narrow_start, narrow_end);
-    buf.goto_byte(narrow_start);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        narrow_start,
+        narrow_end,
+    ));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
     let result = re_search_forward(
         &mut buf,
         "^\\([^ ]+\\) \\([0-9]+\\)$",
@@ -1650,12 +1656,12 @@ fn looking_at_backend_trace(kind: BufferTextBackendKind) -> Vec<BufferSearchSnap
 
     let mut md = None;
     let gamma_line = "α foo\nBeta 123\n".len();
-    buf.goto_byte(gamma_line);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(gamma_line));
     let result = looking_at(&buf, "\\(.\\) foo\\([0-9]+\\)", false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte("α ".len());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("α ".len()));
     let result = looking_at(&buf, "foo", false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
@@ -1688,7 +1694,7 @@ fn make_unibyte_search_buffer(kind: BufferTextBackendKind) -> Buffer {
         Buffer::new_with_text_backend_kind(BufferId(1), Value::string("raw"), implemented_kind);
     buf.set_multibyte_value(false);
     buf.insert_lisp_string(&LispString::from_unibyte(vec![0xFF, b'a', b'b', 0x80]));
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     assert_eq!(buf.text_backend_kind(), kind);
     buf
 }
@@ -1708,7 +1714,7 @@ fn unibyte_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    buf.goto_byte(buf.total_bytes());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
     let result = search_backward(&mut buf, "b", None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
@@ -1889,7 +1895,7 @@ fn search_forward_with_bound() {
 fn search_forward_from_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("aaa bbb aaa");
-    buf.goto_byte(4); // after "aaa "
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4)); // after "aaa "
     let mut md = None;
     let result = search_forward(&mut buf, "aaa", None, false, false, &mut md);
     assert!(result.is_ok());
@@ -1904,7 +1910,7 @@ fn search_forward_from_middle() {
 fn search_backward_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(11); // end of buffer
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end of buffer
     let mut md = None;
     let result = search_backward(&mut buf, "hello", None, false, false, &mut md);
     assert!(result.is_ok());
@@ -1916,7 +1922,7 @@ fn search_backward_basic() {
 fn search_backward_not_found() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let mut md = None;
     let result = search_backward(&mut buf, "xyz", None, true, false, &mut md);
     assert!(result.is_ok());
@@ -1927,7 +1933,7 @@ fn search_backward_not_found() {
 fn search_backward_finds_last_occurrence() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("aaa bbb aaa");
-    buf.goto_byte(11); // end
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end
     let mut md = None;
     let result = search_backward(&mut buf, "aaa", None, false, false, &mut md);
     assert!(result.is_ok());
@@ -1940,7 +1946,7 @@ fn search_backward_finds_last_occurrence() {
 fn search_backward_case_fold_true_unicode_literal() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("Ää");
-    buf.goto_byte("Ää".len());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("Ää".len()));
     let mut md = None;
     let result = search_backward(&mut buf, "ä", None, false, true, &mut md);
     assert!(result.is_ok());
@@ -2005,7 +2011,10 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(first, Some("alpha=1".len()));
     let first_md = md.as_ref().expect("match data for first search");
     let (s1, e1) = first_md.groups[1].unwrap();
-    assert_eq!(buf.text_range(s1, e1), "alpha");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        "alpha"
+    );
 
     let second = re_search_forward(
         &mut buf,
@@ -2019,16 +2028,22 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(second, Some("alpha=1\nbeta=2".len()));
     let second_md = md.as_ref().expect("match data for second search");
     let (s1, e1) = second_md.groups[1].unwrap();
-    assert_eq!(buf.text_range(s1, e1), "beta");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        "beta"
+    );
     let (s2, e2) = second_md.groups[2].unwrap();
-    assert_eq!(buf.text_range(s2, e2), "2");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s2, e2)),
+        "2"
+    );
 }
 
 #[test]
 fn re_search_forward_bound_is_not_artificial_line_end() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("* TODO Alpha\n:LOGBOOK:\nCLOCK: \n:END:\n* TODO Beta\n");
-    buf.goto_byte(30);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(30));
     let mut md = None;
 
     // GNU `search_buffer_re` passes the full visible buffer to
@@ -2050,7 +2065,7 @@ fn re_search_forward_bound_is_not_artificial_line_end() {
 fn re_search_backward_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("abc 123 def 456");
-    buf.goto_byte(15); // end
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(15)); // end
     let mut md = None;
     let result = re_search_backward(&mut buf, "[0-9]+", None, false, false, &mut md);
     assert!(result.is_ok());
@@ -2065,7 +2080,7 @@ fn re_search_backward_basic() {
 fn re_search_backward_rejects_match_extending_past_point() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("ab12cd");
-    buf.goto_byte(2); // point at the start of the current match
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2)); // point at the start of the current match
     let mut md = None;
     let result = re_search_backward(&mut buf, "[0-9]+", Some(0), true, false, &mut md);
     assert_eq!(result, Ok(None));
@@ -2077,7 +2092,7 @@ fn re_search_backward_rejects_match_extending_past_point() {
 fn re_search_backward_finds_nullable_match_at_point() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("abc\n");
-    buf.goto_byte(3); // point before trailing newline
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // point before trailing newline
     let mut md = None;
     let result = re_search_backward(&mut buf, "\\(?:$\\)\\=", Some(0), true, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
@@ -2092,7 +2107,7 @@ fn re_search_backward_log_line_loop_progresses() {
     let mut buf = make_test_buffer(
         "[09:01:00] INFO: Server started\n[09:02:15] INFO: Connection from 10.0.0.1\n[09:03:30] WARN: High memory usage detected",
     );
-    buf.goto_byte(buf.total_bytes());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
     let mut md = None;
     let pattern = "\\[\\([0-9:]+\\)\\] \\(INFO\\|WARN\\|ERROR\\): \\(.*\\)$";
     let mut positions = Vec::new();
@@ -2119,7 +2134,7 @@ fn re_search_backward_log_line_loop_progresses() {
 fn re_search_forward_finds_nullable_match_at_buffer_end() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("abc");
-    buf.goto_byte(3);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     let mut md = None;
     let result = re_search_forward(&mut buf, "\\=", None, true, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
@@ -2136,7 +2151,7 @@ fn re_search_forward_finds_nullable_match_at_buffer_end() {
 fn looking_at_matches() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     let result = looking_at(&buf, "hello", true, &mut md);
     assert!(result.is_ok());
@@ -2148,7 +2163,7 @@ fn looking_at_matches() {
 fn looking_at_no_match() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     let result = looking_at(&buf, "world", true, &mut md);
     assert!(result.is_ok());
@@ -2159,7 +2174,7 @@ fn looking_at_no_match() {
 fn looking_at_from_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(6); // "world"
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6)); // "world"
     let mut md = None;
     let result = looking_at(&buf, "world", true, &mut md);
     assert!(result.is_ok());
@@ -2170,7 +2185,7 @@ fn looking_at_from_middle() {
 fn looking_at_defaults_to_case_fold() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("A");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     let result = looking_at(&buf, "a", true, &mut md);
     assert!(result.is_ok());
@@ -2181,7 +2196,7 @@ fn looking_at_defaults_to_case_fold() {
 fn looking_at_respects_case_fold_false() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("A");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     let result = looking_at(&buf, "a", false, &mut md);
     assert!(result.is_ok());
@@ -2192,7 +2207,7 @@ fn looking_at_respects_case_fold_false() {
 fn looking_at_with_groups() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("foo123bar");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     // Emacs: \(\w+\)\([0-9]+\)
     let result = looking_at(&buf, "\\(\\w+\\)\\([0-9]+\\)", true, &mut md);
@@ -2236,7 +2251,10 @@ fn replace_match_literal() {
     let _ = re_search_forward(&mut buf, "world", None, false, false, &mut md);
     let result = replace_match_buffer(&mut buf, "rust", false, true, 0, &md);
     assert!(result.is_ok());
-    let content = buf.text_range(0, buf.total_bytes());
+    let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
+        0,
+        buf.total_bytes(),
+    ));
     assert_eq!(content, "hello rust");
 }
 
@@ -2244,13 +2262,16 @@ fn replace_match_literal() {
 fn replace_match_with_backref() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     // Match "hello" with a group
     let _ = re_search_forward(&mut buf, "\\(hello\\)", None, false, false, &mut md);
     let result = replace_match_buffer(&mut buf, "\\1 there", false, false, 0, &md);
     assert!(result.is_ok());
-    let content = buf.text_range(0, buf.total_bytes());
+    let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
+        0,
+        buf.total_bytes(),
+    ));
     assert_eq!(content, "hello there world");
 }
 
@@ -2260,7 +2281,7 @@ fn replace_match_buffer_preserves_unibyte_raw_bytes() {
     let mut buf = Buffer::new(BufferId(1), Value::string("raw"));
     buf.set_multibyte_value(false);
     buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
 
     let mut md = None;
     let result = re_search_forward(&mut buf, ".", None, false, false, &mut md);
@@ -2409,15 +2430,24 @@ fn search_forward_then_match_string() {
 
     // match-string 0 = "quick brown"
     let (s0, e0) = md.groups[0].unwrap();
-    assert_eq!(buf.text_range(s0, e0), "quick brown");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s0, e0)),
+        "quick brown"
+    );
 
     // match-string 1 = "quick"
     let (s1, e1) = md.groups[1].unwrap();
-    assert_eq!(buf.text_range(s1, e1), "quick");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        "quick"
+    );
 
     // match-string 2 = "brown"
     let (s2, e2) = md.groups[2].unwrap();
-    assert_eq!(buf.text_range(s2, e2), "brown");
+    assert_eq!(
+        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s2, e2)),
+        "brown"
+    );
 }
 
 #[test]

@@ -14,7 +14,7 @@ fn eval_with_text(text: &str) -> Context {
         let buf = ev.buffers.current_buffer_mut().unwrap();
         buf.insert(text);
         // Point is now at the end. Reset to beginning.
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     ev
 }
@@ -26,7 +26,7 @@ fn eval_with_unibyte_bytes(bytes: &[u8]) -> Context {
         let buf = ev.buffers.current_buffer_mut().unwrap();
         buf.set_multibyte_value(false);
         buf.insert(&storage);
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     ev
 }
@@ -38,7 +38,7 @@ fn gnu_simple_line_eval_with_unibyte_bytes(bytes: &[u8]) -> Context {
         let buf = ev.buffers.current_buffer_mut().unwrap();
         buf.set_multibyte_value(false);
         buf.insert(&storage);
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     ev
 }
@@ -48,7 +48,7 @@ fn bootstrap_eval_with_text(text: &str) -> Context {
     {
         let buf = ev.buffers.current_buffer_mut().unwrap();
         buf.insert(text);
-        buf.goto_char(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     ev
 }

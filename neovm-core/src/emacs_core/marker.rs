@@ -774,7 +774,7 @@ pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Val
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
         .id;
 
-    // Return the real marker created by set_mark_byte, if it exists.
+    // Return the real marker created by set_mark_emacs_byte_pos, if it exists.
     if let Some(buf) = eval.buffers.get(buffer_id) {
         if !buf.mark_marker_ptr.is_null() {
             unsafe {

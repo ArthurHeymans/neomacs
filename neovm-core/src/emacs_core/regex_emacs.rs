@@ -3858,8 +3858,8 @@ fn compile_fastmap(pattern: &mut CompiledPattern) {
 /// `drafts/regex-search-audit.md` flags this as missing in neomacs.
 ///
 /// We currently allocate the full buffer text via
-/// `Buffer::text_range(0, Buffer::total_bytes())` at the call site in
-/// `regex.rs::re_search_forward_with_posix` and friends, which is
+/// `Buffer::buffer_substring_range(Buffer::accessible_emacs_byte_range())` at
+/// the call site in `regex.rs::re_search_forward_with_posix` and friends, which is
 /// correctness-equivalent to GNU's `re_match_2_internal` running
 /// over a single string but is O(buffer-size) per search instead of
 /// O(match-length). Porting the gap-aware path is a separate

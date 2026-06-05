@@ -259,7 +259,8 @@ fn move_to_column_handles_unibyte_raw_byte_display_width() {
         buffer_id,
         &crate::heap_types::LispString::from_unibyte(vec![b' ', b'\t', 0xFF, b'a']),
     );
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
     let reached = builtin_move_to_column(&mut ev, vec![Value::fixnum(9)]).expect("move-to-column");
     assert_eq!(reached, Value::fixnum(12));
@@ -296,7 +297,8 @@ fn eval_move_to_column_force_subset() {
     ev.buffers
         .insert_into_buffer(buffer_id, "abc")
         .expect("insert text");
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
     let first =
         builtin_move_to_column(&mut ev, vec![Value::fixnum(10), Value::T]).expect("force eol");
@@ -306,16 +308,19 @@ fn eval_move_to_column_force_subset() {
     assert_eq!(buffer.buffer_string(), "abc\t  ");
 
     ev.buffers
-        .delete_buffer_region(
+        .delete_buffer_emacs_byte_range(
             buffer_id,
-            0,
-            ev.buffers.get(buffer_id).unwrap().total_bytes(),
+            crate::buffer::EmacsByteRange::from_usize(
+                0,
+                ev.buffers.get(buffer_id).unwrap().total_bytes(),
+            ),
         )
         .expect("clear buffer");
     ev.buffers
         .insert_into_buffer(buffer_id, "a\tb")
         .expect("insert tab text");
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
     let second =
         builtin_move_to_column(&mut ev, vec![Value::fixnum(5), Value::T]).expect("split tab");
     assert_eq!(second, Value::fixnum(5));
@@ -324,10 +329,12 @@ fn eval_move_to_column_force_subset() {
     assert_eq!(buffer.buffer_string(), "a    \tb");
 
     ev.buffers
-        .delete_buffer_region(
+        .delete_buffer_emacs_byte_range(
             buffer_id,
-            0,
-            ev.buffers.get(buffer_id).unwrap().total_bytes(),
+            crate::buffer::EmacsByteRange::from_usize(
+                0,
+                ev.buffers.get(buffer_id).unwrap().total_bytes(),
+            ),
         )
         .expect("clear buffer");
     ev.buffers
@@ -337,7 +344,8 @@ fn eval_move_to_column_force_subset() {
     ev.buffers
         .insert_into_buffer(buffer_id, "a\tb\n")
         .expect("insert tab line");
-    ev.buffers.goto_buffer_byte(buffer_id, 0);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
     let third = builtin_move_to_column(&mut ev, vec![Value::fixnum(4), Value::T])
         .expect("split tab with spaces");
     assert_eq!(third, Value::fixnum(4));

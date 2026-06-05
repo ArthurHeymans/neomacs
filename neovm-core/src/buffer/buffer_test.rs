@@ -17,7 +17,7 @@ fn buf_with_text_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
         Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
     buf.insert(text);
     buf.widen();
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf.set_undo_list(Value::NIL);
     buf.set_modified(false);
     buf
@@ -165,12 +165,15 @@ fn create_indirect_buffer_shares_root_text_and_updates_siblings() {
         assert!(base.shares_text_storage_with(indirect));
         assert_eq!(indirect.buffer_string(), "abcd");
 
-        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(0));
         let _ = mgr.insert_into_buffer(base_id, "zz");
         assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzabcd");
         assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzabcd");
 
-        let _ = mgr.delete_buffer_region(indirect_id, 2, 4);
+        let _ = mgr.delete_buffer_emacs_byte_range(
+            indirect_id,
+            crate::buffer::EmacsByteRange::from_usize(2, 4),
+        );
         assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "zzcd");
         assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "zzcd");
     }
@@ -310,9 +313,9 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
             .expect("indirect buffer");
 
         let _ = mgr.narrow_buffer_to_region(indirect_id, 2, 6);
-        let _ = mgr.goto_buffer_byte(indirect_id, 4);
+        let _ = mgr.goto_buffer_emacs_byte_pos(indirect_id, crate::buffer::EmacsBytePos::new(4));
 
-        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(0));
         let _ = mgr.insert_into_buffer(base_id, "zz");
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
@@ -322,7 +325,10 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
         assert_eq!(indirect.point(), 6);
         assert_eq!(indirect.buffer_string(), "cdef");
 
-        let _ = mgr.delete_buffer_region(base_id, 0, 2);
+        let _ = mgr.delete_buffer_emacs_byte_range(
+            base_id,
+            crate::buffer::EmacsByteRange::from_usize(0, 2),
+        );
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
@@ -368,14 +374,16 @@ fn cloned_indirect_buffers_do_not_share_base_mark_marker() {
     let mut mgr = BufferManager::new();
     let base_id = mgr.current_buffer_id().expect("scratch buffer");
     let _ = mgr.insert_into_buffer(base_id, "abcdef");
-    mgr.get_mut(base_id).expect("base buffer").set_mark_byte(2);
+    mgr.get_mut(base_id)
+        .expect("base buffer")
+        .set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
 
     let indirect = mgr
         .create_indirect_buffer(base_id, "*indirect-mark-clone*", true)
         .expect("indirect buffer");
     mgr.get_mut(indirect)
         .expect("indirect buffer")
-        .set_mark_byte(5);
+        .set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
 
     assert_eq!(mgr.get(base_id).expect("base buffer").mark_byte(), Some(2));
     assert_eq!(
@@ -409,21 +417,24 @@ fn indirect_buffer_overlays_track_shared_edits() {
             .overlays
             .insert_overlay(overlay);
 
-        let _ = mgr.goto_buffer_byte(base_id, 0);
+        let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(0));
         let _ = mgr.insert_into_buffer(base_id, "zz");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
 
-        let _ = mgr.goto_buffer_byte(base_id, 4);
+        let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(4));
         let _ = mgr.insert_into_buffer_before_markers(base_id, "yy");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(6));
         assert_eq!(indirect.overlays.overlay_end(overlay), Some(8));
 
-        let _ = mgr.delete_buffer_region(base_id, 0, 2);
+        let _ = mgr.delete_buffer_emacs_byte_range(
+            base_id,
+            crate::buffer::EmacsByteRange::from_usize(0, 2),
+        );
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
@@ -546,9 +557,13 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             let left_narrow_end = buffer_byte_pos_for_char(&mgr, left_id, 5);
             mgr.narrow_buffer_to_region(left_id, left_narrow_start, left_narrow_end)
                 .expect("left narrow");
-            mgr.goto_buffer_byte(left_id, left_point)
+            mgr.goto_buffer_emacs_byte_pos(left_id, crate::buffer::EmacsBytePos::new(left_point))
                 .expect("left point");
-            mgr.set_buffer_mark(left_id, left_mark).expect("left mark");
+            mgr.set_buffer_mark_emacs_byte_pos(
+                left_id,
+                crate::buffer::EmacsBytePos::new(left_mark),
+            )
+            .expect("left mark");
 
             let right_point = buffer_byte_pos_for_char(&mgr, right_id, 5);
             let right_mark = buffer_byte_pos_for_char(&mgr, right_id, 1);
@@ -556,10 +571,13 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             let right_narrow_end = buffer_byte_pos_for_char(&mgr, right_id, 7);
             mgr.narrow_buffer_to_region(right_id, right_narrow_start, right_narrow_end)
                 .expect("right narrow");
-            mgr.goto_buffer_byte(right_id, right_point)
+            mgr.goto_buffer_emacs_byte_pos(right_id, crate::buffer::EmacsBytePos::new(right_point))
                 .expect("right point");
-            mgr.set_buffer_mark(right_id, right_mark)
-                .expect("right mark");
+            mgr.set_buffer_mark_emacs_byte_pos(
+                right_id,
+                crate::buffer::EmacsBytePos::new(right_mark),
+            )
+            .expect("right mark");
 
             mgr.get_mut(left_id)
                 .expect("left buffer")
@@ -635,17 +653,20 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
 fn goto_char_clamps_to_accessible_region() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello");
-    buf.goto_char(3);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     assert_eq!(buf.point(), 3);
 
     // Past end — clamped to zv.
-    buf.goto_char(999);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(999));
     assert_eq!(buf.point(), buf.point_max());
 
     // Before start — clamped to begv.
-    buf.goto_char(0);
-    buf.narrow_to_byte_region(2, buf.point_max_byte());
-    buf.goto_char(0);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        2,
+        buf.point_max_byte(),
+    ));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     assert_eq!(buf.point(), 2);
 }
 
@@ -654,7 +675,7 @@ fn point_char_converts_byte_to_char_pos() {
     crate::test_utils::init_test_tracing();
     // "cafe\u{0301}" — 'e' + combining acute = 5 bytes, 5 chars in UTF-8
     let mut buf = buf_with_text("hello");
-    buf.goto_char(3);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     assert_eq!(buf.point_char(), 3);
 }
 
@@ -667,23 +688,23 @@ fn gnu_style_buffer_fields_track_char_and_byte_positions() {
     assert_eq!(buf.zv, 2);
     assert_eq!(buf.zv_byte, 3);
 
-    buf.goto_byte('é'.len_utf8());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     assert_eq!(buf.pt, 1);
     assert_eq!(buf.pt_byte, 2);
 
-    buf.set_mark_byte(3);
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     assert_eq!(buf.mark(), Some(3));
     assert_eq!(buf.mark_byte(), Some(3));
     assert_eq!(buf.mark_char(), Some(2));
 }
 
 #[test]
-fn byte_position_aliases_match_legacy_buffer_apis() {
+fn byte_position_accessors_match_lisp_compat_accessors() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.narrow_to_byte_region(2, 9);
-    buf.goto_byte(7);
-    buf.set_mark_byte(4);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 9));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(7));
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
 
     assert_eq!(buf.point_byte(), buf.point());
     assert_eq!(buf.point_min_byte(), buf.point_min());
@@ -696,12 +717,12 @@ fn accessible_region_snapshot_restores_saved_bounds() {
     crate::test_utils::init_test_tracing();
     for kind in implemented_text_backends() {
         let mut buf = buf_with_text_backend("aébc", kind);
-        buf.narrow_to_byte_region(1, 4);
-        buf.goto_byte(3);
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 4));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
 
         let saved = buf.accessible_region_snapshot();
         buf.widen();
-        buf.goto_byte(buf.total_bytes());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
         buf.insert("Z");
         buf.restore_accessible_region(saved);
 
@@ -718,11 +739,14 @@ fn accessible_region_snapshot_can_restore_end_to_current_full_buffer() {
     crate::test_utils::init_test_tracing();
     for kind in implemented_text_backends() {
         let mut buf = buf_with_text_backend("aébc", kind);
-        buf.narrow_to_byte_region(1, buf.total_bytes());
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            1,
+            buf.total_bytes(),
+        ));
 
         let saved = buf.accessible_region_snapshot();
         buf.widen();
-        buf.goto_byte(buf.total_bytes());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.total_bytes()));
         buf.insert("Z");
         buf.restore_accessible_region_with_current_full_end(saved);
 
@@ -740,7 +764,7 @@ fn cached_char_positions_track_multibyte_edits_and_narrowing() {
     let mut buf = buf_with_text("ééz");
     assert_eq!(buf.point_max_char(), 3);
 
-    buf.goto_byte('é'.len_utf8());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     assert_eq!(buf.point_char(), 1);
 
     buf.insert("ß");
@@ -748,7 +772,10 @@ fn cached_char_positions_track_multibyte_edits_and_narrowing() {
     assert_eq!(buf.point_char(), 2);
     assert_eq!(buf.point_max_char(), 4);
 
-    buf.narrow_to_byte_region('é'.len_utf8(), buf.point_max_byte());
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        'é'.len_utf8(),
+        buf.point_max_byte(),
+    ));
     assert_eq!(buf.point_min_char(), 1);
     assert_eq!(buf.point_max_char(), 4);
 
@@ -771,7 +798,10 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
     );
     assert_eq!(buf.lisp_pos_to_emacs_byte_pos(99).get(), "ééz".len());
 
-    buf.narrow_to_byte_region('é'.len_utf8(), "ééz".len());
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        'é'.len_utf8(),
+        "ééz".len(),
+    ));
     assert_eq!(buf.point_min_char(), 1);
     assert_eq!(buf.point_max_char(), 3);
     assert_eq!(
@@ -804,7 +834,7 @@ fn insert_at_point_advances_point() {
 fn insert_in_middle() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("helo");
-    buf.goto_char(3);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     buf.insert("l");
     assert_eq!(buf.buffer_string(), "hello");
     assert_eq!(buf.point(), 4);
@@ -814,8 +844,8 @@ fn insert_in_middle() {
 fn insert_adjusts_mark() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ab");
-    buf.set_mark(1);
-    buf.goto_char(0);
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf.insert("X");
     // Mark was at 1, insert at 0 pushes it to 2.
     assert_eq!(buf.mark(), Some(2));
@@ -826,7 +856,7 @@ fn insert_adjusts_mark() {
 fn insert_empty_string_is_noop() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello");
-    buf.goto_char(2);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
     buf.insert("");
     assert_eq!(buf.buffer_string(), "hello");
     assert!(!buf.is_modified()); // still unmodified from initial state
@@ -840,7 +870,7 @@ fn insert_empty_string_is_noop() {
 fn delete_region_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_char(11); // at end
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // at end
     buf.delete_region(5, 11);
     assert_eq!(buf.buffer_string(), "hello");
     assert_eq!(buf.point(), 5); // was past deleted range
@@ -850,7 +880,7 @@ fn delete_region_basic() {
 fn delete_region_adjusts_point_inside() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
-    buf.goto_char(3); // in middle of deleted range
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // in middle of deleted range
     buf.delete_region(1, 5);
     assert_eq!(buf.point(), 1); // collapsed to start of deletion
     assert_eq!(buf.buffer_string(), "af");
@@ -860,7 +890,7 @@ fn delete_region_adjusts_point_inside() {
 fn delete_region_adjusts_point_at_end_boundary() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
-    buf.goto_char(5);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
     buf.delete_region(1, 5);
     assert_eq!(buf.point(), 1);
     assert_eq!(buf.point_char(), 1);
@@ -870,7 +900,7 @@ fn delete_region_adjusts_point_at_end_boundary() {
 fn delete_region_adjusts_mark() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
-    buf.set_mark(4);
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     buf.delete_region(1, 3);
     // mark was at 4, past deleted range end (3), so shifts by 2
     assert_eq!(buf.mark(), Some(2));
@@ -892,8 +922,8 @@ fn delete_region_moves_marker_at_end_to_start() {
 fn mark_char_tracks_multibyte_edits() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
-    buf.set_mark_byte('é'.len_utf8());
-    buf.goto_byte('é'.len_utf8());
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.insert("ß");
     assert_eq!(buf.mark(), Some(2));
     assert_eq!(buf.mark_char(), Some(1));
@@ -938,7 +968,7 @@ fn buffer_substring_range() {
 fn buffer_string_returns_accessible() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.narrow_to_region(6, 11);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(6, 11));
     assert_eq!(buf.buffer_string(), "world");
 }
 
@@ -950,18 +980,36 @@ fn buffer_string_returns_accessible() {
 fn char_after_basic() {
     crate::test_utils::init_test_tracing();
     let buf = buf_with_text("hello");
-    assert_eq!(buf.char_after(0), Some('h'));
-    assert_eq!(buf.char_after(4), Some('o'));
-    assert_eq!(buf.char_after(5), None);
+    assert_eq!(
+        buf.char_after_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0)),
+        Some('h')
+    );
+    assert_eq!(
+        buf.char_after_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4)),
+        Some('o')
+    );
+    assert_eq!(
+        buf.char_after_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5)),
+        None
+    );
 }
 
 #[test]
 fn char_before_basic() {
     crate::test_utils::init_test_tracing();
     let buf = buf_with_text("hello");
-    assert_eq!(buf.char_before(0), None);
-    assert_eq!(buf.char_before(1), Some('h'));
-    assert_eq!(buf.char_before(5), Some('o'));
+    assert_eq!(
+        buf.char_before_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0)),
+        None
+    );
+    assert_eq!(
+        buf.char_before_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1)),
+        Some('h')
+    );
+    assert_eq!(
+        buf.char_before_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5)),
+        Some('o')
+    );
 }
 
 #[test]
@@ -969,16 +1017,28 @@ fn char_after_multibyte() {
     crate::test_utils::init_test_tracing();
     // Each Chinese character is 3 bytes in UTF-8.
     let buf = buf_with_text("\u{4f60}\u{597d}"); // "nihao" in Chinese
-    assert_eq!(buf.char_after(0), Some('\u{4f60}'));
-    assert_eq!(buf.char_after(3), Some('\u{597d}'));
+    assert_eq!(
+        buf.char_after_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0)),
+        Some('\u{4f60}')
+    );
+    assert_eq!(
+        buf.char_after_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)),
+        Some('\u{597d}')
+    );
 }
 
 #[test]
 fn char_before_multibyte() {
     crate::test_utils::init_test_tracing();
     let buf = buf_with_text("\u{4f60}\u{597d}");
-    assert_eq!(buf.char_before(3), Some('\u{4f60}'));
-    assert_eq!(buf.char_before(6), Some('\u{597d}'));
+    assert_eq!(
+        buf.char_before_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)),
+        Some('\u{4f60}')
+    );
+    assert_eq!(
+        buf.char_before_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6)),
+        Some('\u{597d}')
+    );
 }
 
 #[test]
@@ -987,15 +1047,47 @@ fn char_width_helpers_use_typed_emacs_byte_positions() {
     for kind in implemented_text_backends() {
         let buf = buf_with_text_backend("a\u{4f60}b", kind);
 
-        assert_eq!(buf.char_after_emacs_len(0), Some(1));
-        assert_eq!(buf.char_after_emacs_len(1), Some('\u{4f60}'.len_utf8()));
-        assert_eq!(buf.char_after_emacs_len(4), Some(1));
-        assert_eq!(buf.char_after_emacs_len(5), None);
+        assert_eq!(
+            buf.char_after_emacs_byte_len(crate::buffer::EmacsBytePos::new(0))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some(1)
+        );
+        assert_eq!(
+            buf.char_after_emacs_byte_len(crate::buffer::EmacsBytePos::new(1))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some('\u{4f60}'.len_utf8())
+        );
+        assert_eq!(
+            buf.char_after_emacs_byte_len(crate::buffer::EmacsBytePos::new(4))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some(1)
+        );
+        assert_eq!(
+            buf.char_after_emacs_byte_len(crate::buffer::EmacsBytePos::new(5))
+                .map(crate::buffer::EmacsByteLen::get),
+            None
+        );
 
-        assert_eq!(buf.char_before_emacs_len(1), Some(1));
-        assert_eq!(buf.char_before_emacs_len(4), Some('\u{4f60}'.len_utf8()));
-        assert_eq!(buf.char_before_emacs_len(5), Some(1));
-        assert_eq!(buf.char_before_emacs_len(0), None);
+        assert_eq!(
+            buf.char_before_emacs_byte_len(crate::buffer::EmacsBytePos::new(1))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some(1)
+        );
+        assert_eq!(
+            buf.char_before_emacs_byte_len(crate::buffer::EmacsBytePos::new(4))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some('\u{4f60}'.len_utf8())
+        );
+        assert_eq!(
+            buf.char_before_emacs_byte_len(crate::buffer::EmacsBytePos::new(5))
+                .map(crate::buffer::EmacsByteLen::get),
+            Some(1)
+        );
+        assert_eq!(
+            buf.char_before_emacs_byte_len(crate::buffer::EmacsBytePos::new(0))
+                .map(crate::buffer::EmacsByteLen::get),
+            None
+        );
     }
 }
 
@@ -1007,8 +1099,8 @@ fn char_width_helpers_use_typed_emacs_byte_positions() {
 fn narrow_and_widen() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_char(8);
-    buf.narrow_to_region(6, 11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(8));
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(6, 11));
     assert_eq!(buf.point_min(), 6);
     assert_eq!(buf.point_max(), 11);
     assert_eq!(buf.buffer_size(), 5);
@@ -1025,8 +1117,8 @@ fn narrow_and_widen() {
 fn narrow_clamps_point() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
-    buf.goto_char(2);
-    buf.narrow_to_region(5, 11);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 11));
     // Point 2 < begv 5 => clamped to 5.
     assert_eq!(buf.point(), 5);
 }
@@ -1040,7 +1132,7 @@ fn marker_tracks_insertion_after() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ab");
     register_marker_for_test(&mut buf, 1, 1, InsertionType::After);
-    buf.goto_char(1);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     buf.insert("XY");
     // Marker was at 1 with After => advances to 3.
     let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
@@ -1053,7 +1145,7 @@ fn marker_stays_on_insertion_before() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ab");
     register_marker_for_test(&mut buf, 1, 1, InsertionType::Before);
-    buf.goto_char(1);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     buf.insert("XY");
     // Marker was at 1 with Before => stays at 1.
     let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
@@ -1090,7 +1182,7 @@ fn marker_char_pos_tracks_multibyte_edits() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
     register_marker_for_test(&mut buf, 1, 'é'.len_utf8(), InsertionType::After);
-    buf.goto_byte('é'.len_utf8());
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.insert("ß");
     let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
     assert_eq!(byte_pos, 4);
@@ -1121,9 +1213,9 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let bold = Value::symbol("bold");
     assert!(buf.text_props_put_property(2, 6, face, bold));
     register_marker_for_test(&mut buf, 42, 3, InsertionType::After);
-    buf.set_mark_byte(2);
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
 
-    buf.goto_byte(3);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     buf.insert("日本");
 
     let delete_start = byte_pos_for_char(&buf, 2);
@@ -1171,8 +1263,8 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
     ));
     let marker_byte = byte_pos_for_char(&buf, 1);
     register_marker_for_test(&mut buf, 42, marker_byte, InsertionType::Before);
-    buf.set_mark_byte(byte_pos_for_char(&buf, 5));
-    buf.goto_byte(byte_pos_for_char(&buf, 8));
+    buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(&buf, 5)));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(&buf, 8)));
 
     let transposition = buf.text_transposition_for_char_ranges(
         CharRange::from_usize(0, 2),
@@ -1378,8 +1470,8 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
         let buf = mgr.get_mut(id).expect("scratch buffer");
         buf.insert("aébc日本z");
         buf.widen();
-        buf.goto_byte(0);
-        buf.set_mark_byte(byte_pos_for_char(&buf, 2));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+        buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(&buf, 2)));
         let prop_start = byte_pos_for_char(&buf, 1);
         let prop_end = byte_pos_for_char(&buf, 5);
         assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
@@ -1391,7 +1483,8 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
     mgr.record_undo_point_before_command(id)
         .expect("record point before command");
     let insert_pos = buffer_byte_pos_for_char(&mgr, id, 2);
-    mgr.goto_buffer_byte(id, insert_pos).expect("goto insert");
+    mgr.goto_buffer_emacs_byte_pos(id, crate::buffer::EmacsBytePos::new(insert_pos))
+        .expect("goto insert");
     mgr.insert_into_buffer(id, "Ω").expect("insert text");
 
     let prop_start = buffer_byte_pos_for_char(&mgr, id, 1);
@@ -1401,8 +1494,11 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
 
     let delete_start = buffer_byte_pos_for_char(&mgr, id, 4);
     let delete_end = buffer_byte_pos_for_char(&mgr, id, 6);
-    mgr.delete_buffer_region(id, delete_start, delete_end)
-        .expect("delete region");
+    mgr.delete_buffer_emacs_byte_range(
+        id,
+        crate::buffer::EmacsByteRange::from_usize(delete_start, delete_end),
+    )
+    .expect("delete region");
 
     let replace_start = buffer_byte_pos_for_char(&mgr, id, 1);
     let replace_end = buffer_byte_pos_for_char(&mgr, id, 3);
@@ -1474,8 +1570,8 @@ fn run_manager_edit_entrypoint_script(
         let buf = mgr.get_mut(id).expect("scratch buffer");
         buf.insert("aébc日本z");
         buf.widen();
-        buf.goto_byte(0);
-        buf.set_mark_byte(byte_pos_for_char(buf, 5));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+        buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(buf, 5)));
         let prop_start = byte_pos_for_char(buf, 1);
         let prop_end = byte_pos_for_char(buf, 6);
         let marker_pos = byte_pos_for_char(buf, 4);
@@ -1496,8 +1592,11 @@ fn run_manager_edit_entrypoint_script(
         mgr.delete_buffer_measured_region(id, delete_range)
             .expect("delete measured range");
     } else {
-        mgr.delete_buffer_region(id, delete_start, delete_end)
-            .expect("delete raw range");
+        mgr.delete_buffer_emacs_byte_range(
+            id,
+            crate::buffer::EmacsByteRange::from_usize(delete_start, delete_end),
+        )
+        .expect("delete raw range");
     }
 
     let replace_start = buffer_byte_pos_for_char(&mgr, id, 1);
@@ -1533,13 +1632,13 @@ fn run_manager_edit_entrypoint_script(
 }
 
 #[test]
-fn measured_manager_edit_entrypoints_match_raw_wrappers() {
+fn measured_manager_edit_entrypoints_match_typed_range_entrypoints() {
     crate::test_utils::init_test_tracing();
     for kind in implemented_text_backends() {
         assert_eq!(
             run_manager_edit_entrypoint_script(kind, true),
             run_manager_edit_entrypoint_script(kind, false),
-            "{kind:?} measured edit entrypoints diverged from raw wrappers"
+            "{kind:?} measured edit entrypoints diverged from typed range entrypoints"
         );
     }
 }
@@ -1582,7 +1681,7 @@ fn manager_replace_lisp_string_grafts_converted_intervals_once() {
             buf.set_multibyte_value(false);
             buf.insert("AB");
             buf.widen();
-            buf.goto_byte(0);
+            buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
         }
 
         let face = Value::symbol("face");
@@ -1674,21 +1773,33 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
         .overlays
         .insert_overlay(indirect_overlay);
 
-    mgr.set_buffer_mark(base_id, buffer_byte_pos_for_char(&mgr, base_id, 5))
-        .expect("base mark");
-    mgr.set_buffer_mark(indirect_id, buffer_byte_pos_for_char(&mgr, indirect_id, 4))
-        .expect("indirect mark");
-    mgr.goto_buffer_byte(indirect_id, buffer_byte_pos_for_char(&mgr, indirect_id, 3))
-        .expect("indirect point");
+    mgr.set_buffer_mark_emacs_byte_pos(
+        base_id,
+        crate::buffer::EmacsBytePos::new(buffer_byte_pos_for_char(&mgr, base_id, 5)),
+    )
+    .expect("base mark");
+    mgr.set_buffer_mark_emacs_byte_pos(
+        indirect_id,
+        crate::buffer::EmacsBytePos::new(buffer_byte_pos_for_char(&mgr, indirect_id, 4)),
+    )
+    .expect("indirect mark");
+    mgr.goto_buffer_emacs_byte_pos(
+        indirect_id,
+        crate::buffer::EmacsBytePos::new(buffer_byte_pos_for_char(&mgr, indirect_id, 3)),
+    )
+    .expect("indirect point");
 
-    mgr.goto_buffer_byte(base_id, insert_pos)
+    mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(insert_pos))
         .expect("base insert point");
     mgr.insert_lisp_string_into_buffer(base_id, &insert)
         .expect("normal insert");
 
     let before_markers_pos = buffer_byte_pos_for_char(&mgr, base_id, 3);
-    mgr.goto_buffer_byte(base_id, before_markers_pos)
-        .expect("before-markers insert point");
+    mgr.goto_buffer_emacs_byte_pos(
+        base_id,
+        crate::buffer::EmacsBytePos::new(before_markers_pos),
+    )
+    .expect("before-markers insert point");
     mgr.insert_lisp_string_into_buffer_before_markers(base_id, &before_markers_insert)
         .expect("before-markers insert");
 
@@ -1781,7 +1892,7 @@ fn run_backend_migration_script(
     assert_eq!(char_pos_for_byte(&buf, cached_byte), 4);
 
     let insert_pos = byte_pos_for_char(&buf, 2);
-    buf.goto_byte(insert_pos);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(insert_pos));
     buf.insert("Ω");
 
     let delete_start = byte_pos_for_char(&buf, 5);
@@ -2378,8 +2489,8 @@ fn manager_replace_buffer_contents_resets_narrowing_and_point() {
     let current = mgr.current_buffer_id().unwrap();
     let buf = mgr.get_mut(current).unwrap();
     buf.insert("abcdefgh");
-    buf.narrow_to_region(2, 6);
-    buf.goto_char(4);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 6));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
 
     mgr.replace_buffer_contents(current, "xy");
 
@@ -2401,10 +2512,10 @@ fn integration_edit_narrow_widen() {
     buf.insert("abcdefghij");
     assert_eq!(buf.buffer_string(), "abcdefghij");
 
-    buf.narrow_to_region(2, 8);
+    buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 8));
     assert_eq!(buf.buffer_string(), "cdefgh");
 
-    buf.goto_char(5);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
     buf.insert("XX");
     assert_eq!(buf.buffer_string(), "cdeXXfgh");
 
@@ -2544,7 +2655,9 @@ fn buffer_mark_marker_survives_gc_without_lisp_reference() {
     let mut eval = crate::emacs_core::eval::Context::new();
     let buffer_id = eval.buffers.current_buffer_id().expect("scratch buffer");
     let _ = eval.buffers.insert_into_buffer(buffer_id, "alpha\nbeta\n");
-    let _ = eval.buffers.set_buffer_mark(buffer_id, 1);
+    let _ = eval
+        .buffers
+        .set_buffer_mark_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(1));
 
     let mark_ptr = eval
         .buffers

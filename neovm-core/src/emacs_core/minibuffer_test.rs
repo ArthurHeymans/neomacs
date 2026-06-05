@@ -1159,7 +1159,7 @@ fn builtin_minibuffer_contents_respects_narrowing_in_current_buffer() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("scratch buffer");
         buf.insert("012345");
-        buf.narrow_to_byte_region(1, 4);
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 4));
     }
 
     let contents = builtin_minibuffer_contents_ctx(&mut eval, vec![]).unwrap();

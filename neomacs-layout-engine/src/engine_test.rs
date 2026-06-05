@@ -4305,7 +4305,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
                 .get()
         };
-        let _ = eval.buffer_manager_mut().goto_buffer_byte(buf_id, byte_pos);
+        let _ = eval
+            .buffer_manager_mut()
+            .goto_buffer_emacs_byte_pos(buf_id, neovm_core::buffer::EmacsBytePos::new(byte_pos));
         {
             let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
             let window = frame
@@ -4539,7 +4541,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                 .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
                 .get()
         };
-        let _ = eval.buffer_manager_mut().goto_buffer_byte(buf_id, byte_pos);
+        let _ = eval
+            .buffer_manager_mut()
+            .goto_buffer_emacs_byte_pos(buf_id, neovm_core::buffer::EmacsBytePos::new(byte_pos));
         {
             let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
             let window = frame

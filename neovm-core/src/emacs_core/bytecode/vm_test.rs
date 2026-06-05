@@ -1738,7 +1738,7 @@ fn vm_unbind_restores_saved_excursion_point() {
         {
             let buffer = buffers.get_mut(buffer_id).expect("buffer");
             buffer.insert("abcdef");
-            buffer.goto_char(2);
+            buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
         }
         let saved_point = buffers.get(buffer_id).expect("buffer").pt;
 
@@ -1828,8 +1828,8 @@ fn vm_unbind_restores_saved_restriction() {
         {
             let buffer = buffers.get_mut(buffer_id).expect("buffer");
             buffer.insert("abcdef");
-            buffer.narrow_to_byte_region(1, 5);
-            buffer.goto_byte(3);
+            buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
+            buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
         }
         let buffer = buffers.get(buffer_id).expect("buffer");
         let saved = (buffer_id, buffer.begv, buffer.zv);
@@ -3078,7 +3078,9 @@ fn vm_call_interactively_builtin_forward_char_uses_default_prefix_arg() {
             |eval| {
                 let current = eval.buffers.current_buffer_id().expect("current buffer");
                 let _ = eval.buffers.replace_buffer_contents(current, "ab");
-                let _ = eval.buffers.goto_buffer_byte(current, 0);
+                let _ = eval
+                    .buffers
+                    .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(0));
             },
         ),
         "OK 2"
@@ -3120,8 +3122,12 @@ i")
             |eval| {
                 let current = eval.buffers.current_buffer_id().expect("current buffer");
                 let _ = eval.buffers.replace_buffer_contents(current, "abcd");
-                let _ = eval.buffers.goto_buffer_byte(current, 2);
-                let _ = eval.buffers.set_buffer_mark(current, 1);
+                let _ = eval
+                    .buffers
+                    .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
+                let _ = eval
+                    .buffers
+                    .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(1));
             }
         ),
         "OK ((4) 4 3 2 2 3 mouse-1 nil nil)"
@@ -3267,8 +3273,12 @@ fn vm_call_interactively_handles_r_capital_spec_via_use_region_p_on_shared_runti
             |eval| {
                 let current = eval.buffers.current_buffer_id().expect("current buffer");
                 let _ = eval.buffers.replace_buffer_contents(current, "abcd");
-                let _ = eval.buffers.goto_buffer_byte(current, 2);
-                let _ = eval.buffers.set_buffer_mark(current, 1);
+                let _ = eval
+                    .buffers
+                    .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
+                let _ = eval
+                    .buffers
+                    .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(1));
             },
         ),
         "OK ((nil nil) (2 3))"
@@ -4204,7 +4214,9 @@ fn vm_current_buffer_query_builtins_use_shared_runtime_state() {
                 buffer.insert("hello");
                 let start = buffer.lisp_pos_to_emacs_byte_pos(2).get();
                 let end = buffer.lisp_pos_to_emacs_byte_pos(5).get();
-                buffer.narrow_to_region(start, end);
+                buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+                    start, end,
+                ));
             },
         ),
         r#"OK (2 5 "ell" 99 5 2 2 101 nil)"#
@@ -4248,8 +4260,10 @@ fn vm_navigation_predicates_and_line_positions_use_shared_narrowed_buffer_state(
                 buffer.insert("wx\nab\ncd");
                 let start = buffer.lisp_pos_to_emacs_byte_pos(4).get();
                 let end = buffer.lisp_pos_to_emacs_byte_pos(6).get();
-                buffer.narrow_to_region(start, end);
-                buffer.goto_char(buffer.begv);
+                buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+                    start, end,
+                ));
+                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buffer.begv));
             },
         ),
         "OK ((t nil t nil 4 6) (nil t nil t 4 6))"
@@ -7650,7 +7664,7 @@ fn vm_indentation_builtins_use_buffer_local_current_buffer_state() {
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.set_buffer_local("tab-width", Value::fixnum(4));
                 buffer.insert("\tb");
-                buffer.goto_char(3);
+                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
             },
         ),
         "OK (4 5 4 4)"
@@ -7881,8 +7895,10 @@ fn vm_char_primitives_and_buffer_substring_use_narrowed_current_buffer_state() {
                 buffer.insert("Hello, 世界");
                 let start = buffer.lisp_pos_to_emacs_byte_pos(3).get();
                 let end = buffer.lisp_pos_to_emacs_byte_pos(8).get();
-                buffer.narrow_to_region(start, end);
-                buffer.goto_char(buffer.begv);
+                buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+                    start, end,
+                ));
+                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buffer.begv));
             },
         ),
         r#"OK (108 0 "llo, " "llo, " args-out-of-range)"#
@@ -7985,7 +8001,7 @@ fn vm_delete_char_uses_shared_read_only_and_narrowing_state() {
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("abc");
-                buffer.goto_char(0);
+                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
             },
         ),
         r#"OK (buffer-read-only "bc" end-of-buffer)"#
@@ -9216,7 +9232,9 @@ fn vm_mark_marker_uses_shared_buffer_mark_state() {
         vm_eval_with_init_str("(marker-position (mark-marker))", |eval| {
             let current = eval.buffers.current_buffer_id().expect("current buffer");
             let _ = eval.buffers.replace_buffer_contents(current, "abcd");
-            let _ = eval.buffers.set_buffer_mark(current, 2);
+            let _ = eval
+                .buffers
+                .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
         }),
         "OK 3"
     );
@@ -9310,8 +9328,12 @@ fn vm_region_bounds_use_shared_mark_state() {
         vm_eval_with_init_str("(list (region-beginning) (region-end))", |eval| {
             let current = eval.buffers.current_buffer_id().expect("current buffer");
             let _ = eval.buffers.replace_buffer_contents(current, "abcdef");
-            let _ = eval.buffers.goto_buffer_byte(current, 2);
-            let _ = eval.buffers.set_buffer_mark(current, 4);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(2));
+            let _ = eval
+                .buffers
+                .set_buffer_mark_emacs_byte_pos(current, crate::buffer::EmacsBytePos::new(4));
         }),
         "OK (3 5)"
     );

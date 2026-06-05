@@ -207,8 +207,8 @@ fn erase_buffer_widens_before_deleting_current_contents() {
     let _ = buffers.insert_into_buffer(current, "abcdef");
     {
         let buf = buffers.get_mut(current).expect("buffer");
-        buf.narrow_to_region(2, 4);
-        buf.goto_char(4);
+        buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     }
 
     let result = erase_buffer_impl(&obarray, &dynamic, &mut buffers, vec![]);

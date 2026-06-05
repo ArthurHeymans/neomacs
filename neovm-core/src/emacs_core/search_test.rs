@@ -216,7 +216,7 @@ fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
                 .current_buffer_mut()
                 .expect("current buffer");
             buf.insert(buffer_text);
-            buf.goto_byte(0);
+            buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
         }
         let result = builtin_looking_at(&mut new_ctx, vec![pattern]);
         *slot.borrow_mut() = Some(new_ctx);
@@ -463,7 +463,7 @@ fn set_match_data_reseat_detaches_buffer_markers() {
         .insert_into_buffer(buffer_id, "alpha beta")
         .expect("insert test text");
     eval.buffers
-        .goto_buffer_byte(buffer_id, 0)
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
         .expect("rewind point");
 
     assert_true(builtin_looking_at(&mut eval, vec![Value::string("alpha")]).unwrap());
@@ -493,7 +493,7 @@ fn match_data_destructively_fills_reuse_list_like_gnu() {
         .insert_into_buffer(buffer_id, "abc")
         .expect("insert test text");
     eval.buffers
-        .goto_buffer_byte(buffer_id, 0)
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
         .expect("rewind point");
 
     builtin_re_search_forward(&mut eval, vec![Value::string("\\(a\\)b")])
@@ -531,7 +531,7 @@ fn match_data_reseat_reuse_markers_before_refill_like_gnu() {
         .insert_into_buffer(buffer_id, "abc")
         .expect("insert test text");
     eval.buffers
-        .goto_buffer_byte(buffer_id, 0)
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
         .expect("rewind point");
 
     builtin_re_search_forward(&mut eval, vec![Value::string("b")]).expect("regexp should match");

@@ -668,7 +668,7 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
         .replace_buffer_contents(buffer_id, "abc\ndef\n")
         .expect("replace selected buffer contents");
     ev.buffer_manager_mut()
-        .goto_buffer_byte(buffer_id, 4)
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(4))
         .expect("move selected buffer point");
     if let Some(crate::window::Window::Leaf { point, .. }) = ev
         .frame_manager_mut()

@@ -33,12 +33,12 @@ fn fragment_current_buffer(eval: &mut Context, text: &str) {
     buffer.insert(text);
 
     let first_fragment = text.find('\n').unwrap_or(text.len()).min(text.len());
-    buffer.goto_byte(first_fragment);
+    buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first_fragment));
     buffer.insert("tmp");
     buffer.delete_region(first_fragment, first_fragment + "tmp".len());
 
     let second_fragment = text.len().saturating_sub(1);
-    buffer.goto_byte(second_fragment);
+    buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(second_fragment));
     buffer.insert("xx");
     buffer.delete_region(second_fragment, second_fragment + "xx".len());
 
@@ -290,7 +290,7 @@ fn test_resolve_live_window_display_context_uses_selected_window_buffer_point() 
             .get_mut(selected_buffer_id)
             .expect("selected window buffer");
         buffer.insert("abc\ndef\n");
-        buffer.goto_byte(5);
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
     }
     let other_id = eval.buffers.create_buffer("*other*");
     eval.buffers.set_current(other_id);
@@ -751,7 +751,7 @@ fn test_format_mode_line_status_specs_match_gnu_buffer_state() {
         let buffer = eval.buffers.get_mut(buffer_id).expect("buffer");
         buffer.set_buffer_local("buffer-read-only", Value::NIL);
         buffer.set_modified(false);
-        buffer.narrow_to_region(1, 2);
+        buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 2));
     }
 
     let narrowed =
@@ -905,7 +905,7 @@ fn test_format_mode_line_column_c_and_big_c_specs_match_gnu() {
     {
         let buffer = eval.buffers.get_mut(buffer_id).expect("buffer");
         buffer.insert("abcdef");
-        buffer.goto_byte(3); // point at column 3 (0-indexed)
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // point at column 3 (0-indexed)
     }
 
     let rendered =
@@ -921,7 +921,7 @@ fn format_mode_line_position_backend_trace(kind: BufferTextBackendKind) -> Strin
     {
         let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
         let buffer = eval.buffers.get_mut(buffer_id).expect("current buffer");
-        buffer.goto_byte("αβ\ncd".len());
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("αβ\ncd".len()));
         assert_eq!(buffer.text_backend_kind(), kind);
     }
 
@@ -1696,7 +1696,7 @@ fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() 
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abc\ndef\nghi\n");
-        buf.goto_byte(4);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
@@ -1739,7 +1739,7 @@ fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abc\ndef\n");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     }
 
     let implicit = builtin_pos_visible_in_window_p_ctx(&mut eval, vec![Value::fixnum(1)]).unwrap();
@@ -1765,7 +1765,7 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abc\ndef\nghi\n");
-        buf.goto_byte(4);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
@@ -1985,7 +1985,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
-        buf.goto_byte(4);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
@@ -2051,7 +2051,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
-        buf.goto_byte(4);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
@@ -2129,7 +2129,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abcdefghijklmnopqrstuvwxyz\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
@@ -2217,7 +2217,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
