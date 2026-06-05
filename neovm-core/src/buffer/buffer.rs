@@ -5238,6 +5238,19 @@ impl BufferManager {
         end: usize,
         label: Value,
     ) -> Option<()> {
+        self.internal_labeled_narrow_to_emacs_byte_range(
+            buffer_id,
+            EmacsByteRange::from_usize(start, end),
+            label,
+        )
+    }
+
+    pub fn internal_labeled_narrow_to_emacs_byte_range(
+        &mut self,
+        buffer_id: BufferId,
+        range: EmacsByteRange,
+        label: Value,
+    ) -> Option<()> {
         self.buffers.get(&buffer_id)?;
         if self.labeled_restriction_at(buffer_id, false).is_none() {
             self.push_labeled_restriction_for_current_bounds(
@@ -5245,10 +5258,7 @@ impl BufferManager {
                 LabeledRestrictionLabel::Outermost,
             )?;
         }
-        self.restore_buffer_emacs_byte_restriction(
-            buffer_id,
-            EmacsByteRange::from_usize(start, end),
-        )?;
+        self.restore_buffer_emacs_byte_restriction(buffer_id, range)?;
         self.push_labeled_restriction_for_current_bounds(
             buffer_id,
             LabeledRestrictionLabel::User(label),

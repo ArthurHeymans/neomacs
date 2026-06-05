@@ -1179,10 +1179,10 @@ pub(crate) fn builtin_internal_labeled_narrow_to_region_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (byte_start, byte_end) = super::buffers::normalize_narrow_region_in_buffers(
+    let byte_range = super::buffers::normalize_narrow_region_in_buffers(
         buffers, current_id, start, end, args[0], args[1],
     )?;
-    let _ = buffers.internal_labeled_narrow_to_region(current_id, byte_start, byte_end, label);
+    let _ = buffers.internal_labeled_narrow_to_emacs_byte_range(current_id, byte_range, label);
     Ok(Value::NIL)
 }
 

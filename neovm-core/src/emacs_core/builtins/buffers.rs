@@ -133,7 +133,7 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     end: i64,
     start_arg: Value,
     end_arg: Value,
-) -> Result<(usize, usize), Flow> {
+) -> Result<EmacsByteRange, Flow> {
     let buf = buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -156,11 +156,9 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     }
     let start_char = if s > 0 { s as usize - 1 } else { 0 };
     let end_char = if e > 0 { e as usize - 1 } else { 0 };
-    Ok((
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start_char))
-            .get(),
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char))
-            .get(),
+    Ok(EmacsByteRange::new(
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start_char)),
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char)),
     ))
 }
 
@@ -850,9 +848,8 @@ fn buffer_slice_for_char_region(
     let char_count = buf.total_chars();
     let from_byte = char_pos_to_buffer_byte(buf, from_char.min(char_count));
     let to_byte = char_pos_to_buffer_byte(buf, to_char.min(char_count));
-    super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(from_byte, to_byte)),
-    )
+    let byte_range = EmacsByteRange::new(EmacsBytePos::new(from_byte), EmacsBytePos::new(to_byte));
+    super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string_range(byte_range))
 }
 
 fn accessible_lisp_range_to_byte_range(buf: &Buffer, start: i64, end: i64) -> EmacsByteRange {
@@ -1336,7 +1333,7 @@ pub(crate) fn builtin_replace_buffer_contents(
         .buffers
         .get(current_id)
         .map(|buf| buf.full_emacs_byte_range())
-        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+        .unwrap_or(EmacsByteRange::EMPTY);
     let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
         &eval.buffers,
         current_id,
@@ -1380,7 +1377,7 @@ pub(crate) fn builtin_replace_region_contents(
         return Err(signal("buffer-read-only", vec![name]));
     }
 
-    let (lo, hi) = {
+    let byte_range = {
         let buf = eval
             .buffers
             .get(current_id)
@@ -1392,12 +1389,12 @@ pub(crate) fn builtin_replace_region_contents(
         } else {
             EmacsByteRange::new(end_byte, start_byte)
         };
-        (byte_range.start_usize(), byte_range.end_usize())
+        byte_range
     };
     let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(lo, hi),
+        byte_range,
     )?;
     // Signal before the combined delete+insert operation.
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
@@ -1410,7 +1407,7 @@ pub(crate) fn builtin_replace_region_contents(
         .delete_buffer_measured_region(current_id, old_range);
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(lo));
+        .goto_buffer_emacs_byte_pos(current_id, byte_range.start());
     // The insert builtins already call signal hooks internally, but the
     // surrounding before/after pair covers the whole replace operation.
     // To avoid double-firing, we use insert_pieces_in_state directly.
@@ -1606,7 +1603,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
         let last_window_start_byte = map_boundary(snapshot.last_window_start_old_emacs_byte.get());
 
         buf.set_accessible_region_and_point_from_emacs_bytes(
-            EmacsByteRange::from_usize(begv_byte, zv_byte),
+            EmacsByteRange::new(EmacsBytePos::new(begv_byte), EmacsBytePos::new(zv_byte)),
             EmacsBytePos::new(pt_byte),
         );
 
@@ -2845,22 +2842,22 @@ pub(crate) fn buffer_slice_value(
     start_byte: usize,
     end_byte: usize,
 ) -> Value {
-    buffer_slice_value_range(buf, EmacsByteRange::from_usize(start_byte, end_byte))
+    buffer_slice_value_range(
+        buf,
+        EmacsByteRange::new(EmacsBytePos::new(start_byte), EmacsBytePos::new(end_byte)),
+    )
 }
 
 pub(crate) fn buffer_slice_value_range(
     buf: &crate::buffer::Buffer,
     byte_range: EmacsByteRange,
 ) -> Value {
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(byte_range, &mut bytes);
     let string = lisp_string_from_buffer_bytes(bytes, buf.get_multibyte());
     let value = Value::heap_string(string);
     if !buf.text_props_is_empty() {
-        let sliced =
-            buf.text_props_slice_emacs_byte_range(EmacsByteRange::from_usize(start_byte, end_byte));
+        let sliced = buf.text_props_slice_emacs_byte_range(byte_range);
         if !sliced.is_empty() {
             set_string_text_properties_table_for_value(value, sliced);
         }
@@ -3659,7 +3656,7 @@ pub(crate) fn builtin_narrow_to_region(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (byte_start, byte_end) = normalize_narrow_region_in_buffers(
+    let byte_range = normalize_narrow_region_in_buffers(
         &eval.buffers,
         current_id,
         start,
@@ -3667,10 +3664,9 @@ pub(crate) fn builtin_narrow_to_region(
         args[0],
         args[1],
     )?;
-    let _ = eval.buffers.narrow_buffer_to_emacs_byte_range(
-        current_id,
-        EmacsByteRange::from_usize(byte_start, byte_end),
-    );
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(current_id, byte_range);
     Ok(Value::NIL)
 }
 
