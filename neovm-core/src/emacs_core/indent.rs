@@ -138,18 +138,18 @@ struct DecodedUnit {
 
 #[derive(Clone, Copy, Debug)]
 struct ColumnScan {
-    byte_pos: usize,
+    byte_pos: EmacsBytePos,
     column: usize,
-    previous_byte_pos: usize,
+    previous_byte_pos: EmacsBytePos,
     previous_column: usize,
     previous_code: Option<u32>,
 }
 
-fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
+fn line_bounds(buf: &Buffer, point: EmacsBytePos) -> EmacsByteRange {
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start_usize();
     let zv = accessible.end_usize();
-    let pt = accessible.clamp_usize(point);
+    let pt = accessible.clamp(point).get();
 
     let mut bol = pt;
     while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
@@ -161,7 +161,7 @@ fn line_bounds(buf: &Buffer, point: usize) -> (usize, usize) {
         eol += 1;
     }
 
-    (bol, eol)
+    EmacsByteRange::from_usize(bol, eol)
 }
 
 fn next_column(column: usize, ch: char, tab_width: usize) -> usize {
@@ -186,10 +186,10 @@ fn raw_unibyte_display_width(byte: u8) -> usize {
     if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
 }
 
-fn buffer_char_display_width(buf: &Buffer, byte_pos: usize, code: u32) -> usize {
+fn buffer_char_display_width(buf: &Buffer, byte_pos: EmacsBytePos, code: u32) -> usize {
     if !buf.get_multibyte() {
         return buf
-            .emacs_byte_at_pos(EmacsBytePos::new(byte_pos))
+            .emacs_byte_at_pos(byte_pos)
             .map(raw_unibyte_display_width)
             .unwrap_or(1);
     }
@@ -205,8 +205,8 @@ fn buffer_char_display_width(buf: &Buffer, byte_pos: usize, code: u32) -> usize 
 fn current_buffer_line_bounds(
     ctx: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    point: usize,
-) -> Result<(usize, usize), Flow> {
+    point: EmacsBytePos,
+) -> Result<EmacsByteRange, Flow> {
     let buf = ctx
         .buffers
         .get(buffer_id)
@@ -217,7 +217,7 @@ fn current_buffer_line_bounds(
 fn scan_for_column(
     ctx: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    end_byte: usize,
+    end_byte: Option<EmacsBytePos>,
     goal_column: Option<usize>,
 ) -> Result<ColumnScan, Flow> {
     let (mut scan, line_end, tab_width) = {
@@ -225,10 +225,17 @@ fn scan_for_column(
             .buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (bol, eol) = line_bounds(buf, buf.point_byte());
-        (bol, eol, tab_width_in_state(&ctx.obarray, &[], Some(buf)))
+        let line = line_bounds(buf, buf.point_emacs_byte_pos());
+        (
+            line.start_usize(),
+            line.end_usize(),
+            tab_width_in_state(&ctx.obarray, &[], Some(buf)),
+        )
     };
-    let end = end_byte.min(line_end);
+    let end = end_byte
+        .map(|pos| pos.get())
+        .unwrap_or(line_end)
+        .min(line_end);
     let goal = goal_column.unwrap_or(usize::MAX);
     let mut column = 0usize;
     let mut previous_byte_pos = scan;
@@ -265,7 +272,7 @@ fn scan_for_column(
                 .char_after_emacs_byte_len(scan_pos)
                 .map(|len| len.get().max(1))
                 .unwrap_or(1);
-            let width = buffer_char_display_width(buf, scan, code);
+            let width = buffer_char_display_width(buf, scan_pos, code);
             (code, char_len, width)
         };
 
@@ -281,9 +288,9 @@ fn scan_for_column(
     }
 
     Ok(ColumnScan {
-        byte_pos: scan,
+        byte_pos: EmacsBytePos::new(scan),
         column,
-        previous_byte_pos,
+        previous_byte_pos: EmacsBytePos::new(previous_byte_pos),
         previous_column,
         previous_code,
     })
@@ -395,7 +402,7 @@ fn delete_horizontal_space_at_point(
     let accessible = buf.accessible_emacs_byte_region();
     let pmin = accessible.start_usize();
     let pmax = accessible.end_usize();
-    let pt = buf.point_byte();
+    let pt = buf.point_emacs_byte_pos().get();
 
     let mut left = pt;
     while left > pmin {
@@ -472,8 +479,8 @@ pub(crate) fn builtin_current_indentation(
     };
 
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
-    let (bol, eol) = line_bounds(buf, buf.point_byte());
-    let line = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, eol));
+    let line_range = line_bounds(buf, buf.point_emacs_byte_pos());
+    let line = buf.buffer_substring_lisp_string_range(line_range);
 
     let mut column = 0usize;
     for unit in decode_lisp_string_units(&line) {
@@ -503,9 +510,9 @@ pub(crate) fn builtin_current_column(
             return Ok(Value::fixnum(0));
         };
         buf.accessible_emacs_byte_region()
-            .clamp_usize(buf.point_byte())
+            .clamp(buf.point_emacs_byte_pos())
     };
-    let scan = scan_for_column(ctx, current_id, point, None)?;
+    let scan = scan_for_column(ctx, current_id, Some(point), None)?;
     Ok(Value::fixnum(scan.column as i64))
 }
 
@@ -532,19 +539,19 @@ pub(crate) fn builtin_move_to_column(
     let read_only = super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
     let pt = buf
         .accessible_emacs_byte_region()
-        .clamp_usize(buf.point_byte());
+        .clamp(buf.point_emacs_byte_pos());
     let buffer_name = buf.name_value();
 
     if target == 0 {
-        let (bol, _) = current_buffer_line_bounds(ctx, current_id, pt)?;
+        let line = current_buffer_line_bounds(ctx, current_id, pt)?;
         let _ = ctx
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(bol));
+            .goto_buffer_emacs_byte_pos(current_id, line.start());
         return Ok(Value::fixnum(0));
     }
 
-    let mut tab_split: Option<(usize, usize, usize)> = None;
-    let scan = scan_for_column(ctx, current_id, usize::MAX, Some(target))?;
+    let mut tab_split: Option<(EmacsBytePos, usize, usize)> = None;
+    let scan = scan_for_column(ctx, current_id, None, Some(target))?;
     let dest_byte = scan.byte_pos;
     let mut reached = scan.column;
 
@@ -561,12 +568,9 @@ pub(crate) fn builtin_move_to_column(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
-        let tab_byte_pos = EmacsBytePos::new(tab_byte);
-        let _ = ctx
-            .buffers
-            .goto_buffer_emacs_byte_pos(current_id, tab_byte_pos);
+        let _ = ctx.buffers.goto_buffer_emacs_byte_pos(current_id, tab_byte);
         let pad = spaces_to_column(col_before_tab, target);
-        let insert_pos = tab_byte_pos;
+        let insert_pos = tab_byte;
         let pad_len = pad.len();
         let pad_change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &ctx.buffers,
@@ -602,7 +606,7 @@ pub(crate) fn builtin_move_to_column(
 
     let _ = ctx
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(dest_byte));
+        .goto_buffer_emacs_byte_pos(current_id, dest_byte);
 
     if force_is_t && reached < target {
         if read_only {
@@ -656,10 +660,9 @@ pub(crate) fn builtin_indent_to(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let pt = buf.point_byte();
-    let pmin = buf.accessible_emacs_byte_region().start_usize();
-    let (bol, _) = line_bounds(buf, pt);
-    let line_prefix = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, pt));
+    let pt = buf.point_emacs_byte_pos();
+    let line = line_bounds(buf, pt);
+    let line_prefix = buf.buffer_substring_lisp_string_range(EmacsByteRange::new(line.start(), pt));
     let tab_width = tab_width_in_state(&ctx.obarray, &[], Some(buf));
 
     let fromcol = column_for_lisp_string(&line_prefix, tab_width);
