@@ -354,7 +354,10 @@ impl BufferText {
         byte_range: EmacsByteRange,
     ) -> TextEditRange {
         let char_range = self.byte_range_to_char_range(byte_range);
-        TextEditRange::new(byte_range, char_range.start(), char_range.end())
+        TextEditRange::from_start_end(
+            TextPositionAnchor::new(char_range.start(), byte_range.start()),
+            TextPositionAnchor::new(char_range.end(), byte_range.end()),
+        )
     }
 
     pub(crate) fn edit_range_for_char_range(&self, char_range: CharRange) -> TextEditRange {
@@ -362,7 +365,10 @@ impl BufferText {
             self.char_pos_to_emacs_byte_pos(char_range.start()),
             self.char_pos_to_emacs_byte_pos(char_range.end()),
         );
-        TextEditRange::new(byte_range, char_range.start(), char_range.end())
+        TextEditRange::from_start_end(
+            TextPositionAnchor::new(char_range.start(), byte_range.start()),
+            TextPositionAnchor::new(char_range.end(), byte_range.end()),
+        )
     }
 
     pub(crate) fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {

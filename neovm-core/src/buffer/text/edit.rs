@@ -419,11 +419,7 @@ impl TextTransposition {
     }
 
     pub const fn span_edit_range(self) -> TextEditRange {
-        TextEditRange::new(
-            self.byte_span(),
-            self.char_span().start(),
-            self.char_span().end(),
-        )
+        TextEditRange::from_start_end(self.first.start_anchor(), self.second.end_anchor())
     }
 
     pub const fn middle_byte_range(self) -> EmacsByteRange {
@@ -489,6 +485,14 @@ impl TextEditRange {
 
     pub const fn empty_at(byte_pos: EmacsBytePos, char_pos: CharPos0) -> Self {
         Self::new(EmacsByteRange::new(byte_pos, byte_pos), char_pos, char_pos)
+    }
+
+    pub const fn from_start_end(start: TextPositionAnchor, end: TextPositionAnchor) -> Self {
+        Self {
+            byte_range: EmacsByteRange::new(start.emacs_byte_pos(), end.emacs_byte_pos()),
+            char_start: start.char_pos(),
+            char_end: end.char_pos(),
+        }
     }
 
     pub const fn from_start_extent(

@@ -19,7 +19,8 @@ use crate::buffer::text::{
     emacs_char_to_byte_in_slice,
 };
 use crate::buffer::{
-    CharLen, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextReplacement,
+    CharLen, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextPositionAnchor,
+    TextReplacement,
 };
 
 /// Default extra gap bytes to pre-allocate on any growth.
@@ -596,7 +597,10 @@ impl GapBuffer {
         let end_char = self.emacs_byte_pos_to_char_pos(range.end());
         self.replace_same_len_measured_range(
             TextReplacement::new(
-                TextEditRange::new(range, start_char, end_char),
+                TextEditRange::from_start_end(
+                    TextPositionAnchor::new(start_char, range.start()),
+                    TextPositionAnchor::new(end_char, range.end()),
+                ),
                 TextExtent::from_emacs_bytes(replacement, self.multibyte),
             ),
             replacement,

@@ -714,11 +714,7 @@ impl SameLenSubstitutionPlan {
             .changed_ranges
             .last()
             .expect("substitution plan should contain at least one changed range");
-        TextEditRange::new(
-            EmacsByteRange::new(first.byte_start(), last.byte_end()),
-            first.char_start(),
-            last.char_end(),
-        )
+        TextEditRange::from_start_end(first.start_anchor(), last.end_anchor())
     }
 
     pub(in crate::buffer) fn replacement_for_range(

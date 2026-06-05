@@ -3443,11 +3443,8 @@ pub(crate) fn builtin_subst_char_in_region(
     // so changed bytes keep their old extent.  GNU calls modify_text from the
     // first changed character through the original END, but after-change only
     // reports through the last changed character.
-    let before_range = TextEditRange::new(
-        EmacsByteRange::new(changed_range.byte_start(), range.byte_end()),
-        changed_range.char_start(),
-        range.char_end(),
-    );
+    let before_range =
+        TextEditRange::from_start_end(changed_range.start_anchor(), range.end_anchor());
     let change = TextChange::unchanged_extent_with_after_range(before_range, changed_range);
     super::editfns::signal_before_text_change(eval, change)?;
 
@@ -3462,11 +3459,8 @@ pub(crate) fn builtin_subst_char_in_region(
     else {
         return Ok(Value::NIL);
     };
-    let changed_range_through_end = TextEditRange::new(
-        EmacsByteRange::new(changed_range.byte_start(), range.byte_end()),
-        changed_range.char_start(),
-        range.char_end(),
-    );
+    let changed_range_through_end =
+        TextEditRange::from_start_end(changed_range.start_anchor(), range.end_anchor());
     let after_change =
         TextChange::unchanged_extent_with_after_range(changed_range_through_end, changed_range);
     let changed = eval.buffers.subst_char_in_buffer_region(
