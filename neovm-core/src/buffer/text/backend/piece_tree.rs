@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
@@ -14,12 +14,92 @@ enum PieceSource {
     Add,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct SourceBytePos(usize);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Piece {
     source: PieceSource,
-    start: usize,
-    len: usize,
-    chars: usize,
+    start: SourceBytePos,
+    extent: TextExtent,
+}
+
+impl SourceBytePos {
+    const ZERO: Self = Self(0);
+
+    const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    const fn get(self) -> usize {
+        self.0
+    }
+
+    const fn add_emacs_bytes(self, len: EmacsByteLen) -> Self {
+        Self(self.0 + len.get())
+    }
+}
+
+impl Piece {
+    const fn new(source: PieceSource, start: SourceBytePos, extent: TextExtent) -> Self {
+        Self {
+            source,
+            start,
+            extent,
+        }
+    }
+
+    const fn emacs_byte_len(self) -> EmacsByteLen {
+        self.extent.emacs_bytes()
+    }
+
+    const fn char_len(self) -> CharLen {
+        self.extent.chars()
+    }
+
+    const fn len_usize(self) -> usize {
+        self.emacs_byte_len().get()
+    }
+
+    const fn char_len_usize(self) -> usize {
+        self.char_len().get()
+    }
+
+    const fn source_start_usize(self) -> usize {
+        self.start.get()
+    }
+
+    const fn source_end_usize(self) -> usize {
+        self.start.add_emacs_bytes(self.emacs_byte_len()).get()
+    }
+
+    const fn is_empty(self) -> bool {
+        self.emacs_byte_len().is_empty()
+    }
+
+    const fn metrics(self) -> TextMetrics {
+        TextMetrics::new(self.char_len_usize(), self.len_usize())
+    }
+
+    fn split_at_emacs_byte(self, local_byte: usize, chars_before: usize) -> (Self, Self) {
+        debug_assert!(local_byte > 0 && local_byte < self.len_usize());
+        (
+            Self::new(
+                self.source,
+                self.start,
+                TextExtent::from_usize(chars_before, local_byte),
+            ),
+            Self::new(
+                self.source,
+                self.start.add_emacs_bytes(EmacsByteLen::new(local_byte)),
+                TextExtent::from_usize(
+                    self.char_len_usize() - chars_before,
+                    self.len_usize() - local_byte,
+                ),
+            ),
+        )
+    }
 }
 
 #[derive(Clone)]
@@ -46,8 +126,8 @@ impl PieceNode {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
         self.metrics = TextMetrics::new(
-            left.chars() + self.piece.chars + right.chars(),
-            left.emacs_bytes() + self.piece.len + right.emacs_bytes(),
+            left.chars() + self.piece.char_len_usize() + right.chars(),
+            left.emacs_bytes() + self.piece.len_usize() + right.emacs_bytes(),
         );
     }
 }
@@ -85,12 +165,11 @@ impl PieceTreeTextBackend {
             root: None,
             next_piece_id: 1,
         };
-        backend.root = backend.node_for_piece(Piece {
-            source: PieceSource::Original,
-            start: 0,
-            len: bytes.len(),
-            chars: emacs_char_count_bytes(bytes, multibyte),
-        });
+        backend.root = backend.node_for_piece(Piece::new(
+            PieceSource::Original,
+            SourceBytePos::ZERO,
+            TextExtent::from_usize(emacs_char_count_bytes(bytes, multibyte), bytes.len()),
+        ));
         backend
     }
 
@@ -319,12 +398,11 @@ impl PieceTreeTextBackend {
 
         let add_start = self.add.len();
         self.add.extend_from_slice(bytes);
-        let piece = self.node_for_piece(Piece {
-            source: PieceSource::Add,
-            start: add_start,
-            len: bytes.len(),
-            chars: nchars,
-        });
+        let piece = self.node_for_piece(Piece::new(
+            PieceSource::Add,
+            SourceBytePos::new(add_start),
+            TextExtent::from_usize(nchars, bytes.len()),
+        ));
         let root = self.root.take();
         let (left, right) = self.split_at_byte(root, pos);
         self.root = Self::merge(Self::merge(left, piece), right);
@@ -455,12 +533,14 @@ impl PieceTreeTextBackend {
         self.multibyte = multibyte;
         self.root = None;
         self.next_piece_id = 1;
-        self.root = self.node_for_piece(Piece {
-            source: PieceSource::Original,
-            start: 0,
-            len: self.original.len(),
-            chars: emacs_char_count_bytes(&self.original, multibyte),
-        });
+        self.root = self.node_for_piece(Piece::new(
+            PieceSource::Original,
+            SourceBytePos::ZERO,
+            TextExtent::from_usize(
+                emacs_char_count_bytes(&self.original, multibyte),
+                self.original.len(),
+            ),
+        ));
     }
 
     fn next_priority(&mut self) -> u64 {
@@ -470,7 +550,7 @@ impl PieceTreeTextBackend {
     }
 
     fn node_for_piece(&mut self, piece: Piece) -> Option<Box<PieceNode>> {
-        (piece.len > 0).then(|| PieceNode::new(piece, self.next_priority()))
+        (!piece.is_empty()).then(|| PieceNode::new(piece, self.next_priority()))
     }
 
     fn split_at_byte(
@@ -491,7 +571,7 @@ impl PieceTreeTextBackend {
 
         let left_metrics = node_metrics(&node.left);
         let piece_start = left_metrics.emacs_bytes();
-        let piece_end = piece_start + node.piece.len;
+        let piece_end = piece_start + node.piece.len_usize();
 
         if byte_pos < piece_start {
             let (left, right_of_left) = self.split_at_byte(node.left.take(), byte_pos);
@@ -514,7 +594,7 @@ impl PieceTreeTextBackend {
             node.refresh();
             return (left, Some(node));
         }
-        if local == node.piece.len {
+        if local == node.piece.len_usize() {
             let right = node.right.take();
             node.refresh();
             return (Some(node), right);
@@ -527,22 +607,9 @@ impl PieceTreeTextBackend {
     }
 
     fn split_piece(&self, piece: Piece, local_byte: usize) -> (Piece, Piece) {
-        debug_assert!(local_byte > 0 && local_byte < piece.len);
+        debug_assert!(local_byte > 0 && local_byte < piece.len_usize());
         let chars_before = self.piece_byte_to_char(piece, local_byte);
-        (
-            Piece {
-                source: piece.source,
-                start: piece.start,
-                len: local_byte,
-                chars: chars_before,
-            },
-            Piece {
-                source: piece.source,
-                start: piece.start + local_byte,
-                len: piece.len - local_byte,
-                chars: piece.chars - chars_before,
-            },
-        )
+        piece.split_at_emacs_byte(local_byte, chars_before)
     }
 
     fn merge(
@@ -568,8 +635,10 @@ impl PieceTreeTextBackend {
 
     fn piece_slice(&self, piece: Piece) -> &[u8] {
         match piece.source {
-            PieceSource::Original => &self.original[piece.start..piece.start + piece.len],
-            PieceSource::Add => &self.add[piece.start..piece.start + piece.len],
+            PieceSource::Original => {
+                &self.original[piece.source_start_usize()..piece.source_end_usize()]
+            }
+            PieceSource::Add => &self.add[piece.source_start_usize()..piece.source_end_usize()],
         }
     }
 
@@ -589,13 +658,13 @@ impl PieceTreeTextBackend {
         }
 
         let after_left = byte_pos - left.emacs_bytes();
-        if after_left <= node.piece.len {
+        if after_left <= node.piece.len_usize() {
             return left.chars() + self.piece_byte_to_char(node.piece, after_left);
         }
 
         left.chars()
-            + node.piece.chars
-            + self.byte_to_char_in_node(&node.right, after_left - node.piece.len)
+            + node.piece.char_len_usize()
+            + self.byte_to_char_in_node(&node.right, after_left - node.piece.len_usize())
     }
 
     fn char_to_byte_in_node(&self, tree: &Option<Box<PieceNode>>, char_pos: usize) -> usize {
@@ -609,7 +678,7 @@ impl PieceTreeTextBackend {
         }
 
         let after_left = char_pos - left.chars();
-        if after_left <= node.piece.chars {
+        if after_left <= node.piece.char_len_usize() {
             return left.emacs_bytes()
                 + emacs_char_to_byte_in_slice(
                     self.piece_slice(node.piece),
@@ -619,8 +688,8 @@ impl PieceTreeTextBackend {
         }
 
         left.emacs_bytes()
-            + node.piece.len
-            + self.char_to_byte_in_node(&node.right, after_left - node.piece.chars)
+            + node.piece.len_usize()
+            + self.char_to_byte_in_node(&node.right, after_left - node.piece.char_len_usize())
     }
 
     fn for_each_range<E>(
@@ -643,7 +712,7 @@ impl PieceTreeTextBackend {
         }
 
         let piece_start = left.emacs_bytes();
-        let piece_end = piece_start + node.piece.len;
+        let piece_end = piece_start + node.piece.len_usize();
         if start < piece_end && end > piece_start {
             let local_start = start.max(piece_start) - piece_start;
             let local_end = end.min(piece_end) - piece_start;
@@ -682,7 +751,7 @@ impl PieceTreeTextBackend {
         }
 
         let piece_start = left.emacs_bytes();
-        let piece_end = piece_start + node.piece.len;
+        let piece_end = piece_start + node.piece.len_usize();
         if start >= piece_end {
             return self.contiguous_slice_in_node(&node.right, start - piece_end, end - piece_end);
         }
@@ -721,7 +790,7 @@ fn node_metrics(node: &Option<Box<PieceNode>>) -> TextMetrics {
 }
 
 fn piece_metrics(piece: Piece) -> TextMetrics {
-    TextMetrics::new(piece.chars, piece.len)
+    piece.metrics()
 }
 
 fn splitmix64(mut x: u64) -> u64 {
