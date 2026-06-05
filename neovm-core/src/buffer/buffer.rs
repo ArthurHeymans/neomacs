@@ -2064,6 +2064,16 @@ impl Buffer {
         TextPositionAnchor::new(self.point_char_pos(), self.point_emacs_byte_pos())
     }
 
+    /// Beginning of the accessible portion as a paired character/byte anchor.
+    pub fn point_min_anchor(&self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.point_min_char_pos(), self.point_min_emacs_byte_pos())
+    }
+
+    /// End of the accessible portion as a paired character/byte anchor.
+    pub fn point_max_anchor(&self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.point_max_char_pos(), self.point_max_emacs_byte_pos())
+    }
+
     /// Restore point from a paired character/byte anchor.
     ///
     /// This is the Rust-side equivalent of GNU's `SET_PT_BOTH`/

@@ -37,9 +37,9 @@ impl SharedTextEditScope {
 impl Buffer {
     fn edit_state(&self) -> BufferEditState {
         BufferEditState::new(
-            TextPositionAnchor::from_usize(self.pt, self.pt_byte),
-            TextPositionAnchor::from_usize(self.begv, self.begv_byte),
-            TextPositionAnchor::from_usize(self.zv, self.zv_byte),
+            self.point_anchor(),
+            self.point_min_anchor(),
+            self.point_max_anchor(),
         )
     }
 
@@ -64,10 +64,7 @@ impl Buffer {
     }
 
     fn insertion_at_point(&self, extent: TextExtent) -> TextInsertion {
-        TextInsertion::at_anchor(
-            TextPositionAnchor::from_usize(self.pt, self.pt_byte),
-            extent,
-        )
+        TextInsertion::at_anchor(self.point_anchor(), extent)
     }
 
     fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
@@ -746,8 +743,7 @@ impl Buffer {
         } else {
             self.set_text_properties_with_undo(start1_byte, end2_byte, Vec::new());
         }
-        let new_point =
-            transposition.transpose_anchor(TextPositionAnchor::from_usize(self.pt, self.pt_byte));
+        let new_point = transposition.transpose_anchor(self.point_anchor());
 
         self.text
             .replace_same_len_measured_range(plan.replacement(), plan.replacement_bytes());
@@ -1122,8 +1118,7 @@ impl BufferManager {
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {
-                let point = transposition
-                    .transpose_anchor(TextPositionAnchor::from_usize(sibling.pt, sibling.pt_byte));
+                let point = transposition.transpose_anchor(sibling.point_anchor());
                 sibling.pt_byte = point.emacs_byte_pos_usize();
                 sibling.pt = point.char_pos_usize();
             }
