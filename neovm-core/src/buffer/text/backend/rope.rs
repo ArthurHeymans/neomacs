@@ -4,8 +4,9 @@ use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos, Ema
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
-    TextEditRange, TextExtent, TextMetrics, TextReplacement, emacs_byte_to_char_in_slice,
-    emacs_char_count_bytes, emacs_char_to_byte_in_slice, is_emacs_char_boundary,
+    BufferTextBytesSnapshot, TextEditRange, TextExtent, TextMetrics, TextReplacement,
+    emacs_byte_to_char_in_slice, emacs_char_count_bytes, emacs_char_to_byte_in_slice,
+    is_emacs_char_boundary,
 };
 
 const MAX_LEAF_BYTES: usize = 1024;
@@ -113,8 +114,8 @@ impl RopeTextBackend {
         backend
     }
 
-    pub(in crate::buffer) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::from_emacs_bytes(&text, multibyte)
+    pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
+        Self::from_emacs_bytes(snapshot.bytes(), snapshot.is_multibyte())
     }
 
     #[cfg(test)]

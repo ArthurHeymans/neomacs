@@ -7,7 +7,8 @@ use crate::buffer::position::{
 #[cfg(test)]
 use crate::buffer::text::GapDebugLayout;
 use crate::buffer::text::{
-    GapCompatState, TextEditRange, TextExtent, TextMetrics, TextReplacement,
+    BufferTextBytesSnapshot, GapCompatState, TextEditRange, TextExtent, TextMetrics,
+    TextReplacement,
 };
 
 #[derive(Clone)]
@@ -34,17 +35,18 @@ impl GapTextBackend {
         }
     }
 
-    pub(in crate::buffer) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
+    pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
+        let (text, multibyte) = snapshot.into_parts();
         Self {
             gap: GapBuffer::from_dump(text, multibyte),
         }
     }
 
-    pub(in crate::buffer) fn from_dump_with_gap_compat_state(
-        text: Vec<u8>,
-        multibyte: bool,
+    pub(in crate::buffer) fn from_snapshot_with_gap_compat_state(
+        snapshot: BufferTextBytesSnapshot,
         gap_state: GapCompatState,
     ) -> Self {
+        let (text, multibyte) = snapshot.into_parts();
         Self {
             gap: GapBuffer::from_emacs_bytes_with_gap_compat_state(&text, multibyte, gap_state),
         }

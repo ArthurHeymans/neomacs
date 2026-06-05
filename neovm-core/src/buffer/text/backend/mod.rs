@@ -96,43 +96,21 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn from_dump(
-        text: Vec<u8>,
-        multibyte: bool,
-        kind: ImplementedBufferTextBackendKind,
-    ) -> Self {
-        Self::from_snapshot(BufferTextBytesSnapshot::new(text, multibyte), kind)
-    }
-
     pub(in crate::buffer) fn from_snapshot(
         snapshot: BufferTextBytesSnapshot,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
-        let (text, multibyte) = snapshot.into_parts();
         match kind {
             ImplementedBufferTextBackendKind::GAP_BUFFER => {
-                Self::Gap(GapTextBackend::from_dump(text, multibyte))
+                Self::Gap(GapTextBackend::from_snapshot(snapshot))
             }
             ImplementedBufferTextBackendKind::PIECE_TREE => {
-                Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
+                Self::PieceTree(PieceTreeTextBackend::from_snapshot(snapshot))
             }
             ImplementedBufferTextBackendKind::ROPE => {
-                Self::Rope(RopeTextBackend::from_dump(text, multibyte))
+                Self::Rope(RopeTextBackend::from_snapshot(snapshot))
             }
         }
-    }
-
-    pub(in crate::buffer) fn from_dump_with_gap_compat_state(
-        text: Vec<u8>,
-        multibyte: bool,
-        kind: ImplementedBufferTextBackendKind,
-        gap_state: GapCompatState,
-    ) -> Self {
-        Self::from_snapshot_with_gap_compat_state(
-            BufferTextBytesSnapshot::new(text, multibyte),
-            kind,
-            gap_state,
-        )
     }
 
     pub(in crate::buffer) fn from_snapshot_with_gap_compat_state(
@@ -140,16 +118,15 @@ impl TextBackend {
         kind: ImplementedBufferTextBackendKind,
         gap_state: GapCompatState,
     ) -> Self {
-        let (text, multibyte) = snapshot.into_parts();
         match kind {
             ImplementedBufferTextBackendKind::GAP_BUFFER => Self::Gap(
-                GapTextBackend::from_dump_with_gap_compat_state(text, multibyte, gap_state),
+                GapTextBackend::from_snapshot_with_gap_compat_state(snapshot, gap_state),
             ),
             ImplementedBufferTextBackendKind::PIECE_TREE => {
-                Self::PieceTree(PieceTreeTextBackend::from_dump(text, multibyte))
+                Self::PieceTree(PieceTreeTextBackend::from_snapshot(snapshot))
             }
             ImplementedBufferTextBackendKind::ROPE => {
-                Self::Rope(RopeTextBackend::from_dump(text, multibyte))
+                Self::Rope(RopeTextBackend::from_snapshot(snapshot))
             }
         }
     }
