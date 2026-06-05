@@ -1465,8 +1465,8 @@ pub struct BufferTextSnapshot {
 }
 
 impl BufferTextSnapshot {
-    pub fn emacs_byte_len(&self) -> usize {
-        self.text.emacs_byte_len().get()
+    pub fn emacs_byte_len(&self) -> EmacsByteLen {
+        self.text.emacs_byte_len()
     }
 
     pub fn char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {

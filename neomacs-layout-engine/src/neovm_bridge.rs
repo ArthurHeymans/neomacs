@@ -4,7 +4,7 @@
 //! the Rust Context's state, replacing C FFI data sources.
 
 use neovm_core::buffer::{
-    Buffer, BufferTextSnapshot, CharPos0, EmacsBytePos, EmacsByteRange,
+    Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     overlay::OverlayList,
 };
@@ -86,7 +86,7 @@ pub(crate) trait LayoutBufferView {
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_char(&self) -> usize;
-    fn layout_total_emacs_byte_len(&self) -> usize;
+    fn layout_total_emacs_byte_len(&self) -> EmacsByteLen;
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos;
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0;
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>);
@@ -224,8 +224,8 @@ impl LayoutBufferView for Buffer {
         self.point_max_char_pos().get()
     }
 
-    fn layout_total_emacs_byte_len(&self) -> usize {
-        self.total_bytes()
+    fn layout_total_emacs_byte_len(&self) -> EmacsByteLen {
+        self.total_emacs_byte_len()
     }
 
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
@@ -291,7 +291,7 @@ impl LayoutBufferView for LayoutBufferSnapshot {
         self.accessible_end_char
     }
 
-    fn layout_total_emacs_byte_len(&self) -> usize {
+    fn layout_total_emacs_byte_len(&self) -> EmacsByteLen {
         self.text_snapshot.emacs_byte_len()
     }
 
@@ -1462,7 +1462,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// Uses backend-neutral Emacs byte ranges so layout is independent of
     /// the concrete buffer storage.
     pub fn copy_text(&self, byte_from: i64, byte_to: i64, out: &mut Vec<u8>) {
-        let text_len = self.buffer.layout_total_emacs_byte_len();
+        let text_len = self.buffer.layout_total_emacs_byte_len().get();
         let from = (byte_from as usize).min(text_len);
         let to = (byte_to as usize).min(text_len);
         if from >= to {
@@ -1477,7 +1477,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     ///
     /// Used for line number display.
     pub fn count_lines(&self, byte_from: i64, byte_to: i64) -> i64 {
-        let text_len = self.buffer.layout_total_emacs_byte_len();
+        let text_len = self.buffer.layout_total_emacs_byte_len().get();
         let from = (byte_from as usize).min(text_len);
         let to = (byte_to as usize).min(text_len);
         if from >= to {
@@ -1504,7 +1504,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
             return None;
         }
         let pos = byte_pos as usize;
-        if pos < self.buffer.layout_total_emacs_byte_len() {
+        if pos < self.buffer.layout_total_emacs_byte_len().get() {
             self.buffer.layout_emacs_byte_at_pos(EmacsBytePos::new(pos))
         } else {
             None
