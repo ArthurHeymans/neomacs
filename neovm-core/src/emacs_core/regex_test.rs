@@ -1504,12 +1504,18 @@ fn make_fragmented_search_buffer(kind: BufferTextBackendKind) -> Buffer {
     let first_fragment = "α ".len();
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first_fragment));
     buf.insert("tmp");
-    buf.delete_region(first_fragment, first_fragment + "tmp".len());
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        first_fragment,
+        first_fragment + "tmp".len(),
+    ));
 
     let second_fragment = "α foo\nBeta ".len();
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(second_fragment));
     buf.insert("xx");
-    buf.delete_region(second_fragment, second_fragment + "xx".len());
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        second_fragment,
+        second_fragment + "xx".len(),
+    ));
 
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     assert_eq!(buf.buffer_string(), "α foo\nBeta 123\nγ foo42\nomega");

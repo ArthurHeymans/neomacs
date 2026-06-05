@@ -811,7 +811,7 @@ fn cached_char_positions_track_multibyte_edits_and_narrowing() {
     assert_eq!(buf.point_min_char(), 1);
     assert_eq!(buf.point_max_char(), 4);
 
-    buf.delete_region(2, 4);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
     assert_eq!(buf.point_byte(), 2);
     assert_eq!(buf.point_char(), 1);
     assert_eq!(buf.point_max_char(), 3);
@@ -903,7 +903,7 @@ fn delete_region_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // at end
-    buf.delete_region(5, 11);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 11));
     assert_eq!(buf.buffer_string(), "hello");
     assert_eq!(buf.point_byte(), 5); // was past deleted range
 }
@@ -913,7 +913,7 @@ fn delete_region_adjusts_point_inside() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // in middle of deleted range
-    buf.delete_region(1, 5);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
     assert_eq!(buf.point_byte(), 1); // collapsed to start of deletion
     assert_eq!(buf.buffer_string(), "af");
 }
@@ -923,7 +923,7 @@ fn delete_region_adjusts_point_at_end_boundary() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
-    buf.delete_region(1, 5);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
     assert_eq!(buf.point_byte(), 1);
     assert_eq!(buf.point_char(), 1);
 }
@@ -933,7 +933,7 @@ fn delete_region_adjusts_mark() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
-    buf.delete_region(1, 3);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 3));
     // mark was at 4, past deleted range end (3), so shifts by 2
     assert_eq!(buf.mark_byte(), Some(2));
     assert_eq!(buf.mark_char(), Some(2));
@@ -944,7 +944,7 @@ fn delete_region_moves_marker_at_end_to_start() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("0123456789ABCDEF");
     register_marker_for_test(&mut buf, 1, 12, InsertionType::Before);
-    buf.delete_region(5, 12);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 12));
     let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 5);
     assert_eq!(char_pos, 5);
@@ -960,7 +960,7 @@ fn mark_char_tracks_multibyte_edits() {
     assert_eq!(buf.mark_byte(), Some(2));
     assert_eq!(buf.mark_char(), Some(1));
 
-    buf.delete_region(0, 2);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(0, 2));
     assert_eq!(buf.mark_byte(), Some(0));
     assert_eq!(buf.mark_char(), Some(0));
 }
@@ -970,7 +970,7 @@ fn delete_region_adjusts_zv() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     assert_eq!(buf.zv, 6);
-    buf.delete_region(2, 4);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
     assert_eq!(buf.zv, 4);
 }
 
@@ -978,7 +978,7 @@ fn delete_region_adjusts_zv() {
 fn delete_empty_range_is_noop() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello");
-    buf.delete_region(2, 2);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 2));
     assert_eq!(buf.buffer_string(), "hello");
 }
 
@@ -1190,7 +1190,7 @@ fn marker_adjusts_on_deletion() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     register_marker_for_test(&mut buf, 1, 4, InsertionType::After);
-    buf.delete_region(1, 3);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 3));
     // Marker was at 4 (past deleted range [1,3)), shifts by 2 => 2.
     let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 2);
@@ -1202,7 +1202,7 @@ fn marker_inside_deleted_range_collapses() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
     register_marker_for_test(&mut buf, 1, 2, InsertionType::After);
-    buf.delete_region(1, 5);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
     // Marker at 2 inside [1,5) => collapses to 1.
     let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 1);
@@ -1220,7 +1220,7 @@ fn marker_char_pos_tracks_multibyte_edits() {
     assert_eq!(byte_pos, 4);
     assert_eq!(char_pos, 2);
 
-    buf.delete_region(2, 4);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
     let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 1);
@@ -1256,7 +1256,10 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
 
     let delete_start = byte_pos_for_char(&buf, 2);
     let delete_end = byte_pos_for_char(&buf, 4);
-    buf.delete_region(delete_start, delete_end);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        delete_start,
+        delete_end,
+    ));
 
     let replace_start = byte_pos_for_char(&buf, 1);
     let replace_end = byte_pos_for_char(&buf, 3);
@@ -1951,7 +1954,10 @@ fn run_backend_migration_script(
 
     let delete_start = byte_pos_for_char(&buf, 5);
     let delete_end = byte_pos_for_char(&buf, 6);
-    buf.delete_region(delete_start, delete_end);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        delete_start,
+        delete_end,
+    ));
 
     let char_to_byte_4 = byte_pos_for_char(&buf, 4);
     BackendMigrationSnapshot {
@@ -2191,7 +2197,7 @@ fn modification_ticks_track_content_changes() {
     assert_eq!(buf.chars_modified_tick(), 4);
     assert_eq!(buf.modified_state_value(), Value::NIL);
 
-    buf.delete_region(0, 6);
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(0, 6));
     assert_eq!(buf.modified_tick(), 7);
     assert_eq!(buf.chars_modified_tick(), 7);
     assert_eq!(buf.modified_state_value(), Value::T);

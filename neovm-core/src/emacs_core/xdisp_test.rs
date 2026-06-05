@@ -35,12 +35,18 @@ fn fragment_current_buffer(eval: &mut Context, text: &str) {
     let first_fragment = text.find('\n').unwrap_or(text.len()).min(text.len());
     buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first_fragment));
     buffer.insert("tmp");
-    buffer.delete_region(first_fragment, first_fragment + "tmp".len());
+    buffer.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        first_fragment,
+        first_fragment + "tmp".len(),
+    ));
 
     let second_fragment = text.len().saturating_sub(1);
     buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(second_fragment));
     buffer.insert("xx");
-    buffer.delete_region(second_fragment, second_fragment + "xx".len());
+    buffer.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        second_fragment,
+        second_fragment + "xx".len(),
+    ));
 
     assert_eq!(buffer.buffer_string(), text);
 }

@@ -486,20 +486,6 @@ impl Buffer {
         MeasuredReplaceEdit::new(self.replace_measured_region_lisp_string(old_range, text))
     }
 
-    /// Delete the byte range `[start, end)`.
-    ///
-    /// Adjusts point, mark, markers, and the narrowing boundary.
-    #[cfg(test)]
-    pub fn delete_region(&mut self, start: usize, end: usize) -> TextEditRange {
-        if start >= end {
-            return TextEditRange::default();
-        }
-        self.delete_emacs_byte_range(EmacsByteRange::new(
-            EmacsBytePos::new(start),
-            EmacsBytePos::new(end),
-        ))
-    }
-
     /// Delete an Emacs-byte range.
     ///
     /// Adjusts point, mark, markers, and the narrowing boundary.

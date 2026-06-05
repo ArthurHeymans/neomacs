@@ -350,7 +350,10 @@ fn json_parse_buffer_advances_point_after_value() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(" 42 trailing");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
@@ -388,7 +391,10 @@ fn json_parse_buffer_invalid_utf8_does_not_advance_point() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.set_multibyte_value(false);
         buf.insert_lisp_string(&LispString::from_unibyte(vec![
             b'"', 0xFF, b'"', b' ', b'x',
@@ -421,7 +427,10 @@ fn json_parse_buffer_end_of_file_uses_gnu_signal_shape() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(" ");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
@@ -451,7 +460,10 @@ fn json_insert_writes_at_point_and_advances() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("ab");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     }

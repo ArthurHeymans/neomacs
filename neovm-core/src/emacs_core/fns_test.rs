@@ -224,7 +224,10 @@ fn base64_region_eval_encode_decode_roundtrip() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("Hi");
     }
 
@@ -255,7 +258,10 @@ fn base64_region_eval_swapped_bounds_and_url_encoding() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("ab");
     }
 
@@ -280,7 +286,10 @@ fn base64_region_preserves_unibyte_raw_bytes() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.set_multibyte_value(false);
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![0xFF]));
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     }
@@ -313,7 +322,10 @@ fn base64_decode_region_noerror_semantics() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("%%");
     }
 
@@ -356,7 +368,10 @@ fn base64_region_eval_error_shapes() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("Hi");
     }
 
@@ -584,7 +599,10 @@ fn md5_eval_buffer_core_semantics() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -609,7 +627,10 @@ fn md5_eval_buffer_range_errors() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -671,7 +692,10 @@ fn md5_and_secure_hash_preserve_unibyte_raw_bytes() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.set_multibyte_value(false);
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -855,7 +879,10 @@ fn secure_hash_eval_buffer_sha1() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -876,7 +903,10 @@ fn secure_hash_eval_buffer_range_errors() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -929,7 +959,10 @@ fn secure_hash_eval_buffer_marker_range() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -978,7 +1011,10 @@ fn buffer_hash_eval_current_buffer_sha1() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-    buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        buf.point_min_byte(),
+        buf.point_max_byte(),
+    ));
     buf.insert("abc");
     let r = builtin_buffer_hash(&mut eval, vec![]).unwrap();
     assert_eq!(
@@ -992,7 +1028,10 @@ fn buffer_hash_eval_by_name_sha1() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-    buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+    buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+        buf.point_min_byte(),
+        buf.point_max_byte(),
+    ));
     buf.insert("abc");
     let name = eval
         .buffers

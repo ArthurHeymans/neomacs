@@ -504,7 +504,10 @@ fn builtin_skip_syntax_forward_limit_uses_char_positions_for_multibyte_text() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("éézz");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
     }
@@ -528,7 +531,10 @@ fn builtin_skip_syntax_forward_limit_stays_absolute_under_narrowing() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("aéézz");
         buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
             1,
@@ -1000,7 +1006,10 @@ fn forward_comment_skips_whitespace_and_returns_nil() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("  foo");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
     }
@@ -1022,7 +1031,10 @@ fn skip_syntax_forward_honors_complement_marker() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("  hello");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
     }
@@ -1044,7 +1056,10 @@ fn forward_comment_two_char_end_style_uses_first_ender_char() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
         tbl.modify_syntax_entry('/', string_to_syntax(". 124b").unwrap());
         tbl.modify_syntax_entry('*', string_to_syntax(". 23").unwrap());
@@ -1108,7 +1123,10 @@ fn forward_comment_backward_single_line_comments() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         // Set up ; as comment start, \n as comment end
         let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
         tbl.modify_syntax_entry(
@@ -1194,7 +1212,10 @@ fn forward_comment_backward_stops_at_non_comment() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
         tbl.modify_syntax_entry(
             ';',
@@ -1242,7 +1263,10 @@ fn backward_prefix_chars_default_is_noop() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("''foo");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(char_pos_to_byte(buf, 2)));
     }
@@ -1264,7 +1288,10 @@ fn backward_prefix_chars_moves_over_prefix_flag_chars() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("''foo");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
         let entry = string_to_syntax(". p").unwrap();
@@ -1356,7 +1383,10 @@ fn scan_lists_basic_and_backward_nil() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(a b)");
     }
 
@@ -1388,7 +1418,10 @@ fn scan_lists_depth_exits_containing_list() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(progn\n  (message \"x\")\n  )tail\n");
     }
 
@@ -1406,7 +1439,10 @@ fn scan_lists_unbalanced_signal_carries_gnu_positions() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(foo (bar baz) quux)");
     }
 
@@ -1435,7 +1471,10 @@ fn syntax_after_returns_descriptor_and_nil_out_of_range() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("a(");
     }
 
@@ -1461,7 +1500,10 @@ fn scan_sexps_basic_and_backward_nil() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(a b)");
     }
 
@@ -1479,7 +1521,10 @@ fn scan_sexps_returns_nil_when_count_not_exhausted_at_boundary() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
 
@@ -1497,7 +1542,10 @@ fn scan_sexps_unbalanced_signal_carries_gnu_positions() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(foo (bar baz)");
     }
 
@@ -1523,7 +1571,10 @@ fn forward_sexp_unexpected_close_signal_carries_gnu_positions() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(")");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
     }
@@ -1550,7 +1601,10 @@ fn forward_sexp_stops_at_narrowing_boundary_like_gnu() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(aaa (bbb (ccc) ddd) eee)");
         buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 20));
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
@@ -1573,7 +1627,10 @@ fn parse_partial_sexp_baseline_shapes() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
     let state =
@@ -1597,7 +1654,10 @@ fn parse_partial_sexp_baseline_shapes() {
 
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(a)");
     }
     let nested =
@@ -1626,7 +1686,10 @@ fn parse_partial_sexp_accepts_marker_positions_like_gnu() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("abc");
     }
 
@@ -1690,7 +1753,10 @@ fn parse_partial_sexp_tracks_completed_sexp_per_nesting_level_like_gnu() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(a (");
     }
 
@@ -1720,7 +1786,10 @@ fn parse_partial_sexp_preserves_gnu_negative_depth_state() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(")");
     }
 
@@ -1745,7 +1814,10 @@ fn parse_partial_sexp_preserves_gnu_negative_depth_state() {
 
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(")(");
     }
 
@@ -1775,7 +1847,10 @@ fn syntax_ppss_baseline_shape() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("(a)");
     }
 
@@ -1807,7 +1882,10 @@ fn parse_partial_sexp_enters_single_char_line_comment_state() {
         let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
         tbl.modify_syntax_entry(';', SyntaxEntry::simple(SyntaxClass::Comment));
         tbl.modify_syntax_entry('\n', SyntaxEntry::simple(SyntaxClass::EndComment));
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(";; x\n");
     }
 
@@ -1837,7 +1915,10 @@ fn syntax_ppss_reports_string_state_and_start_position() {
     let mut eval = crate::emacs_core::eval::Context::new();
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert("\"ab");
     }
 
@@ -1869,7 +1950,10 @@ fn parse_partial_sexp_commentstop_syntax_table_moves_point_across_comment() {
         let mut tbl = super::SyntaxTable::isolate_for_buffer(buf);
         tbl.modify_syntax_entry(';', SyntaxEntry::simple(SyntaxClass::Comment));
         tbl.modify_syntax_entry('\n', SyntaxEntry::simple(SyntaxClass::EndComment));
-        buf.delete_region(buf.point_min_byte(), buf.point_max_byte());
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_byte(),
+            buf.point_max_byte(),
+        ));
         buf.insert(";; x\nfoo");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
     }
