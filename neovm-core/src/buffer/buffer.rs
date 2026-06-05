@@ -13,8 +13,8 @@ use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
 use super::position::{
-    AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
-    EmacsByteRange, LispCharPos1, TextPositionAnchor,
+    AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, EmacsByteLen,
+    EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
 use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
@@ -2466,7 +2466,7 @@ impl Buffer {
         &self,
     ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
         self.text
-            .text_props_object_interval_runs(self.total_chars())
+            .text_props_object_interval_runs(CharLen::new(self.total_chars()))
     }
 
     #[cfg(test)]

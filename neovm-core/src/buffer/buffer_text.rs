@@ -1123,25 +1123,12 @@ impl BufferText {
 
     pub fn text_props_object_interval_runs(
         &self,
-        len: usize,
+        len: CharLen,
     ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
         self.storage
             .borrow()
             .text_props
-            .object_interval_runs_for_char_len(CharLen::new(len))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn text_props_try_for_each_interval_in_range<E>(
-        &self,
-        start: usize,
-        end: usize,
-        f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
-    ) -> Result<(), E> {
-        self.text_props_try_for_each_interval_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            f,
-        )
+            .object_interval_runs_for_char_len(len)
     }
 
     pub(crate) fn text_props_try_for_each_interval_in_emacs_byte_range<E>(
