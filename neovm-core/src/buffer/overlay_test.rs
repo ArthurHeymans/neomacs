@@ -13,15 +13,53 @@ fn alloc_overlay(start: usize, end: usize) -> Value {
     })
 }
 
+fn emacs_byte_pos(byte: usize) -> EmacsBytePos {
+    EmacsBytePos::new(byte)
+}
+
+fn emacs_byte_range(start: usize, end: usize) -> EmacsByteRange {
+    EmacsByteRange::from_usize(start, end)
+}
+
+fn emacs_byte_len(len: usize) -> EmacsByteLen {
+    EmacsByteLen::new(len)
+}
+
+fn overlay_start(list: &OverlayList, overlay: Value) -> Option<usize> {
+    list.overlay_start_emacs_byte_pos(overlay)
+        .map(EmacsBytePos::get)
+}
+
+fn overlay_end(list: &OverlayList, overlay: Value) -> Option<usize> {
+    list.overlay_end_emacs_byte_pos(overlay)
+        .map(EmacsBytePos::get)
+}
+
+fn overlays_at(list: &OverlayList, pos: usize) -> Vec<Value> {
+    list.overlays_at_emacs_byte_pos(emacs_byte_pos(pos))
+}
+
+fn overlays_in_region(
+    list: &OverlayList,
+    start: usize,
+    end: usize,
+    accessible_end: usize,
+) -> Vec<Value> {
+    list.overlays_in_accessible_emacs_byte_range(
+        emacs_byte_range(start, end),
+        emacs_byte_pos(accessible_end),
+    )
+}
+
 #[test]
 fn insert_and_delete_overlay_preserves_object_identity() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
     let overlay = alloc_overlay(2, 5);
     list.insert_overlay(overlay);
-    assert_eq!(list.overlays_at(3), vec![overlay]);
+    assert_eq!(overlays_at(&list, 3), vec![overlay]);
     assert!(list.delete_overlay(overlay));
-    assert!(list.overlays_at(3).is_empty());
+    assert!(overlays_at(&list, 3).is_empty());
     assert!(overlay_live_buffer(overlay).is_none());
 }
 
@@ -34,13 +72,13 @@ fn same_range_overlays_remain_distinct_objects() {
     list.insert_overlay(first);
     list.insert_overlay(second);
 
-    let overlays = list.overlays_at(3);
+    let overlays = overlays_at(&list, 3);
     assert_eq!(overlays.len(), 2);
     assert!(overlays.iter().any(|overlay| eq_value(overlay, &first)));
     assert!(overlays.iter().any(|overlay| eq_value(overlay, &second)));
 
     assert!(list.delete_overlay(first));
-    let overlays = list.overlays_at(3);
+    let overlays = overlays_at(&list, 3);
     assert_eq!(overlays.len(), 1);
     assert!(eq_value(&overlays[0], &second));
 }
@@ -56,10 +94,10 @@ fn raw_overlays_at_matches_gnu_same_start_itree_order() {
     list.insert_overlay(second);
     list.insert_overlay(third);
 
-    assert_eq!(list.overlays_at(3), vec![third, second, first]);
+    assert_eq!(overlays_at(&list, 3), vec![third, second, first]);
 
     assert!(list.delete_overlay(second));
-    assert_eq!(list.overlays_at(3), vec![third, first]);
+    assert_eq!(overlays_at(&list, 3), vec![third, first]);
 }
 
 #[test]
@@ -73,7 +111,7 @@ fn raw_overlays_in_matches_gnu_same_start_itree_order() {
     list.insert_overlay(end);
     list.insert_overlay(full);
 
-    assert_eq!(list.overlays_in_region(1, 52, 52), vec![full, start, end]);
+    assert_eq!(overlays_in_region(&list, 1, 52, 52), vec![full, start, end]);
 }
 
 #[test]
@@ -85,7 +123,7 @@ fn sorted_overlay_precedence_matches_gnu_same_range_identity_order() {
     list.insert_overlay(first);
     list.insert_overlay(second);
 
-    let mut overlays = list.overlays_at(3);
+    let mut overlays = overlays_at(&list, 3);
     list.sort_overlay_ids_by_priority_desc(&mut overlays);
     assert_eq!(overlays, vec![second, first]);
 }
@@ -99,10 +137,10 @@ fn delete_overlay_removes_non_root_interval_entry() {
     list.insert_overlay(root);
     list.insert_overlay(earlier);
 
-    assert_eq!(list.overlays_at(5), vec![earlier]);
+    assert_eq!(overlays_at(&list, 5), vec![earlier]);
     assert!(list.delete_overlay(earlier));
-    assert!(list.overlays_at(5).is_empty());
-    assert_eq!(list.overlays_at(25), vec![root]);
+    assert!(overlays_at(&list, 5).is_empty());
+    assert_eq!(overlays_at(&list, 25), vec![root]);
     assert!(overlay_live_buffer(earlier).is_none());
 }
 
@@ -133,10 +171,10 @@ fn move_overlay_updates_boundaries() {
     let mut list = OverlayList::new();
     let overlay = alloc_overlay(0, 2);
     list.insert_overlay(overlay);
-    list.move_overlay(overlay, 4, 7);
-    assert_eq!(list.overlay_start(overlay), Some(4));
-    assert_eq!(list.overlay_end(overlay), Some(7));
-    assert_eq!(list.overlays_at(5), vec![overlay]);
+    list.move_overlay_to_emacs_byte_range(overlay, emacs_byte_range(4, 7));
+    assert_eq!(overlay_start(&list, overlay), Some(4));
+    assert_eq!(overlay_end(&list, overlay), Some(7));
+    assert_eq!(overlays_at(&list, 5), vec![overlay]);
 }
 
 #[test]
@@ -148,12 +186,12 @@ fn move_overlay_removes_old_non_root_interval_entry() {
     list.insert_overlay(root);
     list.insert_overlay(earlier);
 
-    list.move_overlay(earlier, 40, 45);
-    assert!(list.overlays_at(5).is_empty());
-    assert_eq!(list.overlays_at(25), vec![root]);
-    assert_eq!(list.overlays_at(42), vec![earlier]);
-    assert_eq!(list.overlay_start(earlier), Some(40));
-    assert_eq!(list.overlay_end(earlier), Some(45));
+    list.move_overlay_to_emacs_byte_range(earlier, emacs_byte_range(40, 45));
+    assert!(overlays_at(&list, 5).is_empty());
+    assert_eq!(overlays_at(&list, 25), vec![root]);
+    assert_eq!(overlays_at(&list, 42), vec![earlier]);
+    assert_eq!(overlay_start(&list, earlier), Some(40));
+    assert_eq!(overlay_end(&list, earlier), Some(45));
 }
 
 #[test]
@@ -164,7 +202,7 @@ fn move_overlay_evaporates_zero_width_overlay() {
     list.insert_overlay(overlay);
     list.overlay_put(overlay, Value::symbol("evaporate"), Value::T)
         .unwrap();
-    list.move_overlay(overlay, 4, 4);
+    list.move_overlay_to_emacs_byte_range(overlay, emacs_byte_range(4, 4));
     assert!(list.is_empty());
     assert!(overlay_live_buffer(overlay).is_none());
 }
@@ -177,9 +215,9 @@ fn insert_adjusts_front_and_rear_advance() {
     list.insert_overlay(overlay);
     list.set_front_advance(overlay, true);
     list.set_rear_advance(overlay, true);
-    list.adjust_for_insert(5, 2, false);
-    assert_eq!(list.overlay_start(overlay), Some(7));
-    assert_eq!(list.overlay_end(overlay), Some(12));
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(5), emacs_byte_len(2), false);
+    assert_eq!(overlay_start(&list, overlay), Some(7));
+    assert_eq!(overlay_end(&list, overlay), Some(12));
 }
 
 #[test]
@@ -190,9 +228,9 @@ fn empty_front_advance_overlay_does_not_invert_on_insert() {
     list.insert_overlay(overlay);
     list.set_front_advance(overlay, true);
     list.set_rear_advance(overlay, false);
-    list.adjust_for_insert(5, 2, false);
-    assert_eq!(list.overlay_start(overlay), Some(5));
-    assert_eq!(list.overlay_end(overlay), Some(5));
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(5), emacs_byte_len(2), false);
+    assert_eq!(overlay_start(&list, overlay), Some(5));
+    assert_eq!(overlay_end(&list, overlay), Some(5));
 }
 
 #[test]
@@ -205,13 +243,13 @@ fn before_markers_insert_moves_overlay_boundaries_at_point() {
     list.insert_overlay(starts_here);
     list.insert_overlay(ends_here);
     list.insert_overlay(empty);
-    list.adjust_for_insert(5, 2, true);
-    assert_eq!(list.overlay_start(starts_here), Some(7));
-    assert_eq!(list.overlay_end(starts_here), Some(12));
-    assert_eq!(list.overlay_start(ends_here), Some(2));
-    assert_eq!(list.overlay_end(ends_here), Some(7));
-    assert_eq!(list.overlay_start(empty), Some(7));
-    assert_eq!(list.overlay_end(empty), Some(7));
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(5), emacs_byte_len(2), true);
+    assert_eq!(overlay_start(&list, starts_here), Some(7));
+    assert_eq!(overlay_end(&list, starts_here), Some(12));
+    assert_eq!(overlay_start(&list, ends_here), Some(2));
+    assert_eq!(overlay_end(&list, ends_here), Some(7));
+    assert_eq!(overlay_start(&list, empty), Some(7));
+    assert_eq!(overlay_end(&list, empty), Some(7));
 }
 
 #[test]
@@ -221,13 +259,17 @@ fn replace_preserves_overlay_spanning_replaced_text() {
     let overlay = alloc_overlay(25, 32);
     list.insert_overlay(overlay);
 
-    list.adjust_for_replace(26, 5, 5);
-    assert_eq!(list.overlay_start(overlay), Some(25));
-    assert_eq!(list.overlay_end(overlay), Some(32));
+    list.adjust_for_replace_at_emacs_byte_pos(
+        emacs_byte_pos(26),
+        emacs_byte_len(5),
+        emacs_byte_len(5),
+    );
+    assert_eq!(overlay_start(&list, overlay), Some(25));
+    assert_eq!(overlay_end(&list, overlay), Some(32));
 
-    list.adjust_for_insert(10, 15, false);
-    assert_eq!(list.overlay_start(overlay), Some(40));
-    assert_eq!(list.overlay_end(overlay), Some(47));
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(10), emacs_byte_len(15), false);
+    assert_eq!(overlay_start(&list, overlay), Some(40));
+    assert_eq!(overlay_end(&list, overlay), Some(47));
 }
 
 #[test]
@@ -238,7 +280,7 @@ fn delete_evaporates_zero_width_overlay() {
     list.insert_overlay(overlay);
     list.overlay_put(overlay, Value::symbol("evaporate"), Value::T)
         .unwrap();
-    list.adjust_for_delete(5, 10);
+    list.adjust_for_delete_emacs_byte_range(emacs_byte_range(5, 10));
     assert!(list.is_empty());
     assert!(overlay_live_buffer(overlay).is_none());
 }
@@ -263,7 +305,7 @@ fn priority_sort_uses_gnu_precedence_rules() {
         Value::cons(Value::fixnum(1), Value::fixnum(2)),
     )
     .unwrap();
-    let mut ids = list.overlays_at(4);
+    let mut ids = overlays_at(&list, 4);
     list.sort_overlay_ids_by_priority_desc(&mut ids);
     assert_eq!(ids, vec![high, low]);
 }

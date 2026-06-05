@@ -344,11 +344,6 @@ impl OverlayList {
         None
     }
 
-    pub fn overlay_start(&self, overlay: Value) -> Option<usize> {
-        self.overlay_start_emacs_byte_pos(overlay)
-            .map(EmacsBytePos::get)
-    }
-
     pub fn overlay_start_emacs_byte_pos(&self, overlay: Value) -> Option<EmacsBytePos> {
         if overlay_live_buffer(overlay).is_none() {
             return None;
@@ -356,20 +351,11 @@ impl OverlayList {
         overlay_range(overlay).map(EmacsByteRange::start)
     }
 
-    pub fn overlay_end(&self, overlay: Value) -> Option<usize> {
-        self.overlay_end_emacs_byte_pos(overlay)
-            .map(EmacsBytePos::get)
-    }
-
     pub fn overlay_end_emacs_byte_pos(&self, overlay: Value) -> Option<EmacsBytePos> {
         if overlay_live_buffer(overlay).is_none() {
             return None;
         }
         overlay_range(overlay).map(EmacsByteRange::end)
-    }
-
-    pub fn move_overlay(&mut self, overlay: Value, start: usize, end: usize) {
-        self.move_overlay_to_emacs_byte_range(overlay, EmacsByteRange::from_usize(start, end));
     }
 
     pub fn move_overlay_to_emacs_byte_range(&mut self, overlay: Value, range: EmacsByteRange) {
@@ -398,35 +384,14 @@ impl OverlayList {
         }
     }
 
-    /// Return all overlays covering `pos`, O(log n + k) via interval tree.
-    pub fn overlays_at(&self, pos: usize) -> Vec<Value> {
-        self.overlays_at_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     pub fn overlays_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Vec<Value> {
         let mut overlays = Vec::new();
         self.itree.overlays_at(pos, &mut overlays);
         overlays
     }
 
-    pub fn overlays_in(&self, start: usize, end: usize) -> Vec<Value> {
-        self.overlays_in_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-    }
-
     pub fn overlays_in_emacs_byte_range(&self, range: EmacsByteRange) -> Vec<Value> {
         self.overlays_in_accessible_emacs_byte_range(range, range.end())
-    }
-
-    pub fn overlays_in_region(
-        &self,
-        start: usize,
-        end: usize,
-        accessible_end: usize,
-    ) -> Vec<Value> {
-        self.overlays_in_accessible_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            EmacsBytePos::new(accessible_end),
-        )
     }
 
     pub fn overlays_in_accessible_emacs_byte_range(
@@ -440,24 +405,12 @@ impl OverlayList {
         overlays
     }
 
-    pub fn highest_priority_overlay_at(&self, pos: usize, property: Value) -> Option<Value> {
-        self.highest_priority_overlay_at_emacs_byte_pos(EmacsBytePos::new(pos), property)
-    }
-
     pub fn highest_priority_overlay_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
         property: Value,
     ) -> Option<Value> {
         self.best_overlay_for(property, |overlay| overlay_covers_pos(overlay, pos))
-    }
-
-    pub fn highest_priority_overlay_for_inserted_char(
-        &self,
-        pos: usize,
-        property: &Value,
-    ) -> Option<Value> {
-        self.highest_priority_overlay_for_inserted_emacs_byte_pos(EmacsBytePos::new(pos), property)
     }
 
     pub fn highest_priority_overlay_for_inserted_emacs_byte_pos(
@@ -482,14 +435,6 @@ impl OverlayList {
 
     pub fn sort_overlay_ids_by_priority_desc(&self, overlay_ids: &mut [Value]) {
         overlay_ids.sort_by(|left, right| compare_overlay_precedence(*right, *left));
-    }
-
-    pub fn adjust_for_insert(&mut self, pos: usize, len: usize, before_markers: bool) {
-        self.adjust_for_insert_at_emacs_byte_pos(
-            EmacsBytePos::new(pos),
-            EmacsByteLen::new(len),
-            before_markers,
-        );
     }
 
     pub fn adjust_for_insert_at_emacs_byte_pos(
@@ -538,10 +483,6 @@ impl OverlayList {
             insertion.extent().emacs_bytes(),
             before_markers,
         );
-    }
-
-    pub fn adjust_for_delete(&mut self, start: usize, end: usize) {
-        self.adjust_for_delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
     }
 
     pub fn adjust_for_delete_emacs_byte_range(&mut self, range: EmacsByteRange) {
@@ -594,14 +535,6 @@ impl OverlayList {
 
     pub fn adjust_for_deleted_text(&mut self, range: TextEditRange) {
         self.adjust_for_delete_emacs_byte_range(range.byte_range());
-    }
-
-    pub fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
-        self.adjust_for_replace_at_emacs_byte_pos(
-            EmacsBytePos::new(start),
-            EmacsByteLen::new(old_len),
-            EmacsByteLen::new(new_len),
-        );
     }
 
     pub fn adjust_for_replace_at_emacs_byte_pos(

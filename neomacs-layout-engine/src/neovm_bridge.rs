@@ -1696,7 +1696,10 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             status = invisible_prop_status(Some(value), spec);
         }
         if !status.hidden {
-            let mut overlay_ids = self.buffer.layout_overlays().overlays_at(bytepos.get());
+            let mut overlay_ids = self
+                .buffer
+                .layout_overlays()
+                .overlays_at_emacs_byte_pos(bytepos);
             self.buffer
                 .layout_overlays()
                 .sort_overlay_ids_by_priority_desc(&mut overlay_ids);
@@ -1784,7 +1787,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         &self,
         charpos: i64,
     ) -> (Vec<OverlayDisplayString>, Vec<OverlayDisplayString>) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize).get();
+        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
         let mut before = Vec::new();
         let mut after = Vec::new();
 
@@ -1793,10 +1796,13 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         // the position.  Zero-length completion overlays sit at point/EOB and
         // carry their displayed candidates in `before-string', so `overlays_at'
         // would miss exactly the strings redisplay must show.
-        let mut overlay_ids = self
-            .buffer
-            .layout_overlays()
-            .overlays_in(bytepos.saturating_sub(1), bytepos.saturating_add(1));
+        let mut overlay_ids =
+            self.buffer
+                .layout_overlays()
+                .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(
+                    bytepos.get().saturating_sub(1),
+                    bytepos.get().saturating_add(1),
+                ));
         overlay_ids.sort();
         overlay_ids.dedup();
 
@@ -1804,7 +1810,12 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             if !self.overlay_applies_to_window(oid) {
                 continue;
             }
-            if self.buffer.layout_overlays().overlay_start(oid) == Some(bytepos) {
+            if self
+                .buffer
+                .layout_overlays()
+                .overlay_start_emacs_byte_pos(oid)
+                == Some(bytepos)
+            {
                 if let Some(val) = self
                     .buffer
                     .layout_overlays()
@@ -1818,7 +1829,12 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                 }
             }
 
-            if self.buffer.layout_overlays().overlay_end(oid) == Some(bytepos) {
+            if self
+                .buffer
+                .layout_overlays()
+                .overlay_end_emacs_byte_pos(oid)
+                == Some(bytepos)
+            {
                 if let Some(val) = self
                     .buffer
                     .layout_overlays()
@@ -2591,18 +2607,15 @@ impl FaceResolver {
         }
 
         // 2. Overlay faces (sorted by priority, lowest first)
-        let overlay_ids = buffer.layout_overlays().overlays_at(bytepos.get());
+        let overlay_ids = buffer.layout_overlays().overlays_at_emacs_byte_pos(bytepos);
         if !overlay_ids.is_empty() {
             let mut overlay_faces: Vec<(i64, Value)> = Vec::new();
             for oid in &overlay_ids {
                 let oid = *oid;
                 // Update next_check from overlay boundaries
-                if let Some(end) = buffer.layout_overlays().overlay_end(oid) {
-                    if end > bytepos.get() {
-                        min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(
-                            buffer,
-                            EmacsBytePos::new(end),
-                        ));
+                if let Some(end) = buffer.layout_overlays().overlay_end_emacs_byte_pos(oid) {
+                    if end > bytepos {
+                        min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, end));
                     }
                 }
                 // Get priority (default 0)

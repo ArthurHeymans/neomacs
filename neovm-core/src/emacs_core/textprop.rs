@@ -3067,7 +3067,7 @@ pub(crate) fn builtin_remove_overlays(
         } else {
             elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[1])?)
         };
-        (start.get(), end.get())
+        (start, end)
     };
 
     let buf = eval
@@ -3089,9 +3089,10 @@ pub(crate) fn builtin_remove_overlays(
 
     // Collect overlay ids in range.
     let accessible = buf.accessible_emacs_byte_region();
-    let ids = buf
-        .overlays
-        .overlays_in_region(start_pos, end_pos, accessible.end_usize());
+    let ids = buf.overlays.overlays_in_accessible_emacs_byte_range(
+        EmacsByteRange::new(start_pos, end_pos),
+        accessible.end(),
+    );
 
     // Filter and delete.
     for overlay in ids {

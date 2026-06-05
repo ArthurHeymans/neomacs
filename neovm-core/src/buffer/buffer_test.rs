@@ -69,6 +69,18 @@ fn char_pos_for_byte(buf: &Buffer, byte_pos: usize) -> usize {
         .get()
 }
 
+fn overlay_start_for_test(buf: &Buffer, overlay: Value) -> Option<usize> {
+    buf.overlays
+        .overlay_start_emacs_byte_pos(overlay)
+        .map(EmacsBytePos::get)
+}
+
+fn overlay_end_for_test(buf: &Buffer, overlay: Value) -> Option<usize> {
+    buf.overlays
+        .overlay_end_emacs_byte_pos(overlay)
+        .map(EmacsBytePos::get)
+}
+
 fn marker_chain_lookup_for_test(
     buf: &Buffer,
     marker_id: u64,
@@ -438,15 +450,15 @@ fn indirect_buffer_overlays_track_shared_edits() {
         let _ = mgr.insert_into_buffer(base_id, "zz");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
-        assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+        assert_eq!(overlay_start_for_test(indirect, overlay), Some(4));
+        assert_eq!(overlay_end_for_test(indirect, overlay), Some(6));
 
         let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(4));
         let _ = mgr.insert_into_buffer_before_markers(base_id, "yy");
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.overlays.overlay_start(overlay), Some(6));
-        assert_eq!(indirect.overlays.overlay_end(overlay), Some(8));
+        assert_eq!(overlay_start_for_test(indirect, overlay), Some(6));
+        assert_eq!(overlay_end_for_test(indirect, overlay), Some(8));
 
         let _ = mgr.delete_buffer_emacs_byte_range(
             base_id,
@@ -454,8 +466,8 @@ fn indirect_buffer_overlays_track_shared_edits() {
         );
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.overlays.overlay_start(overlay), Some(4));
-        assert_eq!(indirect.overlays.overlay_end(overlay), Some(6));
+        assert_eq!(overlay_start_for_test(indirect, overlay), Some(4));
+        assert_eq!(overlay_end_for_test(indirect, overlay), Some(6));
     }
 }
 
@@ -634,11 +646,11 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
                 Some(right_id)
             );
             assert_eq!(
-                left_after.overlays.overlay_start(right_overlay),
+                overlay_start_for_test(left_after, right_overlay),
                 Some(right_overlay_start)
             );
             assert_eq!(
-                right_after.overlays.overlay_start(left_overlay),
+                overlay_start_for_test(right_after, left_overlay),
                 Some(left_overlay_start)
             );
 
@@ -1882,8 +1894,8 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
         marker_before_position: marker_chain_lookup_for_test(&indirect, 702)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         indirect_overlay_range: (
-            indirect.overlays.overlay_start(indirect_overlay),
-            indirect.overlays.overlay_end(indirect_overlay),
+            overlay_start_for_test(indirect, indirect_overlay),
+            overlay_end_for_test(indirect, indirect_overlay),
         ),
         text_properties: buffer_text_property_snapshot(base),
     }
@@ -1971,8 +1983,8 @@ fn run_backend_migration_script(
         marker_position: marker_chain_lookup_for_test(&buf, 77)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         overlay_range: (
-            buf.overlays.overlay_start(overlay),
-            buf.overlays.overlay_end(overlay),
+            overlay_start_for_test(&buf, overlay),
+            overlay_end_for_test(&buf, overlay),
         ),
         text_properties: buffer_text_property_snapshot(&buf),
     }

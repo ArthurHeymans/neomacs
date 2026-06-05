@@ -23,7 +23,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, CharPos0};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
@@ -3062,10 +3062,13 @@ impl LayoutEngine {
                     // Scan all overlays in the buffer's Emacs-byte range.
                     let window_sym = Value::symbol("window");
                     let current_window_id = params.window_id as u64;
-                    let accessible_end_byte = b.accessible_emacs_byte_region().end_usize();
+                    let accessible_end_byte = b.accessible_emacs_byte_region().end();
                     let overlays = b.overlays();
                     let overlay_lines: usize = overlays
-                        .overlays_in(0, b.total_bytes())
+                        .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(
+                            0,
+                            b.total_bytes(),
+                        ))
                         .iter()
                         .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
                             Some(prop) => prop
@@ -3075,7 +3078,7 @@ impl LayoutEngine {
                         })
                         .map(|ov| {
                             let before_lines = if overlays
-                                .overlay_start(*ov)
+                                .overlay_start_emacs_byte_pos(*ov)
                                 .is_some_and(|start| start < accessible_end_byte)
                             {
                                 overlays
