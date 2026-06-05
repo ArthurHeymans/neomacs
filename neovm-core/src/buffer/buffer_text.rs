@@ -525,12 +525,12 @@ impl BufferText {
     }
 
     #[cfg(test)]
-    pub(crate) fn backend_debug_layout(&self) -> TextBackendDebugLayout {
+    pub(in crate::buffer) fn backend_debug_layout(&self) -> TextBackendDebugLayout {
         self.storage.borrow().backend.debug_layout()
     }
 
     #[cfg(test)]
-    pub(crate) fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
+    pub(in crate::buffer) fn gap_debug_layout(&self) -> Option<GapDebugLayout> {
         self.storage.borrow().backend.debug_layout().gap()
     }
 

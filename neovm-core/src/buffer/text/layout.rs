@@ -2,40 +2,40 @@ use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos};
 use crate::buffer::text::TextMetrics;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct GapCompatState {
+pub(in crate::buffer) struct GapCompatState {
     pos: CharPos0,
     byte_len: EmacsByteLen,
 }
 
 impl GapCompatState {
-    pub const fn new(pos: CharPos0, byte_len: EmacsByteLen) -> Self {
+    pub(in crate::buffer) const fn new(pos: CharPos0, byte_len: EmacsByteLen) -> Self {
         Self { pos, byte_len }
     }
 
-    pub const fn pos(self) -> CharPos0 {
+    pub(in crate::buffer) const fn pos(self) -> CharPos0 {
         self.pos
     }
 
-    pub const fn byte_len(self) -> EmacsByteLen {
+    pub(in crate::buffer) const fn byte_len(self) -> EmacsByteLen {
         self.byte_len
     }
 
-    pub fn lisp_position(self) -> i64 {
+    pub(in crate::buffer) fn lisp_position(self) -> i64 {
         self.pos.to_lisp().as_i64()
     }
 
-    pub fn lisp_size(self) -> i64 {
+    pub(in crate::buffer) fn lisp_size(self) -> i64 {
         self.byte_len.get() as i64
     }
 
-    pub const fn with_pos(self, pos: CharPos0) -> Self {
+    pub(in crate::buffer) const fn with_pos(self, pos: CharPos0) -> Self {
         Self {
             pos,
             byte_len: self.byte_len,
         }
     }
 
-    pub const fn with_byte_len(self, byte_len: EmacsByteLen) -> Self {
+    pub(in crate::buffer) const fn with_byte_len(self, byte_len: EmacsByteLen) -> Self {
         Self {
             pos: self.pos,
             byte_len,
@@ -44,29 +44,29 @@ impl GapCompatState {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct GapDebugLayout {
-    pub gpt: CharPos0,
-    pub z: CharPos0,
-    pub gpt_byte: EmacsBytePos,
-    pub z_byte: EmacsBytePos,
-    pub gap_byte_len: EmacsByteLen,
+pub(in crate::buffer) struct GapDebugLayout {
+    pub(in crate::buffer) gpt: CharPos0,
+    pub(in crate::buffer) z: CharPos0,
+    pub(in crate::buffer) gpt_byte: EmacsBytePos,
+    pub(in crate::buffer) z_byte: EmacsBytePos,
+    pub(in crate::buffer) gap_byte_len: EmacsByteLen,
 }
 
 impl GapDebugLayout {
-    pub const fn compat_state(self) -> GapCompatState {
+    pub(in crate::buffer) const fn compat_state(self) -> GapCompatState {
         GapCompatState::new(self.gpt, self.gap_byte_len)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextBackendDebugLayout {
+pub(in crate::buffer) enum TextBackendDebugLayout {
     Gap(GapDebugLayout),
     PieceTree(TextMetrics),
     Rope(TextMetrics),
 }
 
 impl TextBackendDebugLayout {
-    pub fn metrics(self) -> TextMetrics {
+    pub(in crate::buffer) fn metrics(self) -> TextMetrics {
         match self {
             Self::Gap(layout) => TextMetrics::from_lengths(
                 CharLen::new(layout.z.get()),
@@ -77,7 +77,7 @@ impl TextBackendDebugLayout {
         }
     }
 
-    pub fn gap(self) -> Option<GapDebugLayout> {
+    pub(in crate::buffer) fn gap(self) -> Option<GapDebugLayout> {
         match self {
             Self::Gap(layout) => Some(layout),
             Self::PieceTree(_) | Self::Rope(_) => None,

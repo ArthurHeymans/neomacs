@@ -16,9 +16,9 @@ pub(in crate::buffer) use emacs_bytes::{
 };
 pub use kind::BufferTextBackendKind;
 pub(crate) use kind::ImplementedBufferTextBackendKind;
-pub use layout::GapCompatState;
+pub(in crate::buffer) use layout::GapCompatState;
 #[cfg(test)]
-pub use layout::{GapDebugLayout, TextBackendDebugLayout};
+pub(in crate::buffer) use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
 pub(crate) use snapshot::BufferTextBytesSnapshot;
 

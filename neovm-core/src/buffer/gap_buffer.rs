@@ -107,7 +107,7 @@ impl GapBuffer {
         }
     }
 
-    pub(crate) fn from_emacs_bytes_with_gap_compat_state(
+    pub(in crate::buffer) fn from_emacs_bytes_with_gap_compat_state(
         text: &[u8],
         multibyte: bool,
         gap_state: GapCompatState,
