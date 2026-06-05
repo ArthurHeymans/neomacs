@@ -21,7 +21,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsBytePos, EmacsByteRange, TextExtent};
+use crate::buffer::{BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -1314,11 +1314,10 @@ pub(crate) fn builtin_json_parse_buffer(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let accessible = buf.accessible_emacs_byte_region();
-        let input = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
-            buf.point_byte(),
-            accessible.end_usize(),
-        ));
-        (input, buf.point_byte())
+        let point_base = buf.point_emacs_byte_pos();
+        let input = buf
+            .buffer_substring_lisp_string_range(EmacsByteRange::new(point_base, accessible.end()));
+        (input, point_base)
     };
 
     let mut parser = JsonParser::new(input.as_bytes(), input.is_multibyte(), opts);
@@ -1332,11 +1331,11 @@ pub(crate) fn builtin_json_parse_buffer(
     }
 
     let result = parser.parse_value()?;
-    let new_point = point_base + parser.pos;
+    let new_point = point_base.add_len(EmacsByteLen::new(parser.pos));
     if let Some(current_id) = eval.buffers.current_buffer_id() {
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_point));
+            .goto_buffer_emacs_byte_pos(current_id, new_point);
     }
     Ok(result)
 }
@@ -1355,12 +1354,12 @@ pub(crate) fn builtin_json_insert(eval: &mut super::eval::Context, args: Vec<Val
     let (insert_pos, target_multibyte) = eval
         .buffers
         .get(current_id)
-        .map(|b| (b.point_byte(), b.get_multibyte()))
-        .unwrap_or((0, true));
+        .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
+        .unwrap_or((EmacsBytePos::ZERO, true));
     let change = super::editfns::text_change_for_replacement_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(insert_pos, insert_pos),
+        EmacsByteRange::from_start_len(insert_pos, EmacsByteLen::ZERO),
         TextExtent::from_emacs_bytes(json.as_bytes(), target_multibyte),
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
