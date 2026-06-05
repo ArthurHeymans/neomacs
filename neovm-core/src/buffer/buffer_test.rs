@@ -133,7 +133,7 @@ fn new_buffer_is_empty() {
     assert_eq!(buf.point_byte(), 0);
     assert_eq!(buf.point_min_byte(), 0);
     assert_eq!(buf.point_max_byte(), 0);
-    assert_eq!(buf.buffer_size(), 0);
+    assert_eq!(buf.total_char_len().get(), 0);
     assert!(!buf.is_modified());
     assert!(!buf.get_read_only());
     assert!(buf.get_multibyte());
@@ -876,7 +876,7 @@ fn insert_at_point_advances_point() {
     buf.insert("hello");
     assert_eq!(buf.point_byte(), 5);
     assert_eq!(buf.buffer_string(), "hello");
-    assert_eq!(buf.buffer_size(), 5);
+    assert_eq!(buf.accessible_char_len().get(), 5);
     assert!(buf.is_modified());
 }
 
@@ -1153,7 +1153,7 @@ fn narrow_and_widen() {
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(6, 11));
     assert_eq!(buf.point_min_byte(), 6);
     assert_eq!(buf.point_max_byte(), 11);
-    assert_eq!(buf.buffer_size(), 5);
+    assert_eq!(buf.accessible_char_len().get(), 5);
     assert_eq!(buf.buffer_string(), "world");
     // Point was 8 — still within [6, 11].
     assert_eq!(buf.point_byte(), 8);

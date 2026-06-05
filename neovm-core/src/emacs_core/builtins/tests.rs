@@ -1686,6 +1686,20 @@ fn buffer_size_and_modified_p_return_defaults_for_deleted_buffer_objects() {
 }
 
 #[test]
+fn buffer_size_counts_full_buffer_characters_ignoring_narrowing() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+
+    builtin_insert(&mut eval, vec![Value::string("aébc")]).unwrap();
+    builtin_narrow_to_region(&mut eval, vec![Value::fixnum(2), Value::fixnum(3)]).unwrap();
+
+    assert_eq!(
+        builtin_buffer_size(&mut eval, vec![]).unwrap(),
+        Value::fixnum(4)
+    );
+}
+
+#[test]
 fn buffer_base_buffer_and_last_name_semantics() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

@@ -2261,6 +2261,12 @@ impl Buffer {
         ))
     }
 
+    /// Character length of the accessible portion, respecting narrowing.
+    pub fn accessible_char_len(&self) -> CharLen {
+        self.point_max_char_pos()
+            .saturating_offset_from(self.point_min_char_pos())
+    }
+
     pub fn is_narrowed(&self) -> bool {
         let accessible = self.accessible_emacs_byte_region();
         accessible.start_usize() > 0 || accessible.end_usize() < self.total_emacs_byte_len().get()
@@ -2664,11 +2670,6 @@ impl Buffer {
     /// Return the entire accessible portion of the buffer as a `String`.
     pub fn buffer_string(&self) -> String {
         self.buffer_substring_range(self.accessible_emacs_byte_range())
-    }
-
-    /// Emacs-byte length of the accessible portion.
-    pub fn buffer_size(&self) -> usize {
-        self.zv_byte - self.begv_byte
     }
 
     /// Character at Emacs byte position `pos`, or `None` if out of range.
