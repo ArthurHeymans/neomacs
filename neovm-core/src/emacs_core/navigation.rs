@@ -539,7 +539,9 @@ pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
         return Ok(Value::T);
     }
     Ok(Value::bool_val(
-        buf.point_byte() == 0 || buf.char_code_before(buf.point_byte()) == Some('\n' as u32),
+        buf.point_byte() == 0
+            || buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(buf.point_byte()))
+                == Some('\n' as u32),
     ))
 }
 
@@ -550,7 +552,7 @@ pub(crate) fn builtin_eolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
     if buf.point_byte() == buf.accessible_emacs_byte_region().end_usize() {
         return Ok(Value::T);
     }
-    match buf.char_code_after(buf.point_byte()) {
+    match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())) {
         Some(code) if code == '\n' as u32 => Ok(Value::T),
         _ => Ok(Value::NIL),
     }
@@ -748,7 +750,7 @@ pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Val
     // GNU Emacs: "can be one more if START is not equal to END and the
     // greater of them is not at the start of a line."
     // i.e., if the region is non-empty and the char before `e` is not '\n'.
-    if s != e && e.get() > 0 && buf.char_code_before(e.get()) != Some('\n' as u32) {
+    if s != e && e.get() > 0 && buf.char_code_before_emacs_byte_pos(e) != Some('\n' as u32) {
         n += 1;
     }
     Ok(Value::fixnum(n as i64))
@@ -782,10 +784,9 @@ pub(crate) fn builtin_forward_line(
 
     let mut shortage = n - moved;
     if shortage != 0 && n > 0 && begv < zv && new_pos != pt && new_pos > 0 {
-        let at_line_start = eval
-            .buffers
-            .get(current_id)
-            .is_some_and(|buf| buf.char_code_before(new_pos) == Some('\n' as u32));
+        let at_line_start = eval.buffers.get(current_id).is_some_and(|buf| {
+            buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(new_pos)) == Some('\n' as u32)
+        });
         if !at_line_start {
             shortage -= 1;
         }
@@ -1174,12 +1175,14 @@ pub(crate) fn builtin_skip_chars_forward(
         let limit = lim_byte.min(accessible.end_usize());
 
         while pos < limit {
-            if let Some(code) = buf.char_code_after(pos) {
+            let byte_pos = EmacsBytePos::new(pos);
+            if let Some(code) = buf.char_code_after_emacs_byte_pos(byte_pos) {
                 if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
                 pos += buf
-                    .char_after_emacs_len(pos)
+                    .char_after_emacs_byte_len(byte_pos)
+                    .map(|len| len.get())
                     .expect("char width should exist at valid point");
                 moved_chars += 1;
             } else {
@@ -1229,12 +1232,14 @@ pub(crate) fn builtin_skip_chars_backward(
 
         while pos > limit {
             // Find the character before `pos`.
-            if let Some(code) = buf.char_code_before(pos) {
+            let byte_pos = EmacsBytePos::new(pos);
+            if let Some(code) = buf.char_code_before_emacs_byte_pos(byte_pos) {
                 if !skip_char_matches(&char_set, code, &syntax_table) {
                     break;
                 }
                 pos -= buf
-                    .char_before_emacs_len(pos)
+                    .char_before_emacs_byte_len(byte_pos)
+                    .map(|len| len.get())
                     .expect("char width should exist before valid point");
                 moved_chars -= 1;
             } else {

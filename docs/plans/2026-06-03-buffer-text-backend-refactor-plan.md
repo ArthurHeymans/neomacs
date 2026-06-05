@@ -529,6 +529,9 @@ Completed so far:
   builtins onto typed buffer character query entry points.
 - Moved indentation column scanning and horizontal-space deletion onto typed
   buffer character query entry points.
+- Moved navigation line predicates, line-count adjustment, forward-line
+  adjustment, and skip-chars loops onto typed buffer character query entry
+  points.
 
 Next work:
 
