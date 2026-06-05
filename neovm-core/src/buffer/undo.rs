@@ -22,6 +22,8 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::value::{Value, ValueKind};
 use crate::heap_types::LispString;
 
+use super::{CharLen, CharPos0, CharRange};
+
 fn prepend_undo_entry(undo_list: &mut Value, entry: Value) {
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(*undo_list);
@@ -46,11 +48,11 @@ pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
 /// insert).
 pub fn undo_list_record_insert(
     undo_list: &mut Value,
-    beg: usize,
-    len: usize,
-    point_before_command_or_undo: Option<usize>,
+    beg: CharPos0,
+    len: CharLen,
+    point_before_command_or_undo: Option<CharPos0>,
 ) {
-    if undo_list_is_disabled(undo_list) || len == 0 {
+    if undo_list_is_disabled(undo_list) || len.is_empty() {
         return;
     }
 
@@ -62,8 +64,8 @@ pub fn undo_list_record_insert(
         undo_list_record_point(undo_list, point);
     }
 
-    let beg1 = (beg + 1) as i64;
-    let end1 = (beg + len + 1) as i64;
+    let beg1 = beg.to_lisp().as_i64();
+    let end1 = beg.add_len(len).to_lisp().as_i64();
 
     // Try to merge with the head entry if it's an adjacent insert.
     if undo_list.is_cons() {
@@ -74,7 +76,7 @@ pub fn undo_list_record_insert(
             if let (Some(prev_beg), Some(prev_end)) = (car.as_fixnum(), cdr.as_fixnum()) {
                 if prev_end == beg1 {
                     // Merge: extend the existing insert entry.
-                    head.set_cdr(Value::fixnum(prev_end + len as i64));
+                    head.set_cdr(Value::fixnum(prev_end + len.get() as i64));
                     return;
                 }
                 // Check if insert is at the beginning of the previous range
@@ -103,10 +105,10 @@ pub fn undo_list_record_insert(
 /// END of the deleted region (i.e. `pt == beg + SCHARS (text)`).
 pub fn undo_list_record_delete(
     undo_list: &mut Value,
-    beg: usize,
+    beg: CharPos0,
     text: LispString,
-    pt: usize,
-    point_before_command_or_undo: Option<usize>,
+    pt: CharPos0,
+    point_before_command_or_undo: Option<CharPos0>,
 ) {
     if undo_list_is_disabled(undo_list) || text.is_empty() {
         return;
@@ -120,8 +122,8 @@ pub fn undo_list_record_delete(
         undo_list_record_point(undo_list, point);
     }
 
-    let pos1 = (beg + 1) as i64;
-    let stored_pos = if pt == beg + text.schars() {
+    let pos1 = beg.to_lisp().as_i64();
+    let stored_pos = if pt == beg.add_len(CharLen::new(text.schars())) {
         -pos1
     } else {
         pos1
@@ -158,11 +160,11 @@ pub fn undo_list_record_marker_adjustment(undo_list: &mut Value, marker: Value, 
 
 /// Record the cursor position (0-indexed `pt`) as a 1-indexed integer.
 /// Skips if the most recent entry is the same position.
-pub fn undo_list_record_point(undo_list: &mut Value, pt: usize) {
+pub fn undo_list_record_point(undo_list: &mut Value, pt: CharPos0) {
     if undo_list_is_disabled(undo_list) {
         return;
     }
-    let pt1 = Value::fixnum((pt + 1) as i64);
+    let pt1 = Value::fixnum(pt.to_lisp().as_i64());
 
     // Don't record consecutive identical positions.
     if undo_list.is_cons() {
@@ -184,18 +186,17 @@ pub fn undo_list_record_property_change(
     undo_list: &mut Value,
     prop: Value,
     val: Value,
-    beg: usize,
-    end: usize,
+    range: CharRange,
 ) {
-    if undo_list_is_disabled(undo_list) || beg >= end {
+    if undo_list_is_disabled(undo_list) || range.is_empty() {
         return;
     }
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(*undo_list);
     push_scratch_gc_root(prop);
     push_scratch_gc_root(val);
-    let beg1 = Value::fixnum((beg + 1) as i64);
-    let end1 = Value::fixnum((end + 1) as i64);
+    let beg1 = Value::fixnum(range.start().to_lisp().as_i64());
+    let end1 = Value::fixnum(range.end().to_lisp().as_i64());
     // Build (nil PROP VAL BEG . END)
     let inner = Value::cons(beg1, end1);
     push_scratch_gc_root(inner);

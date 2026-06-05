@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::CharPos0;
 use crate::emacs_core::value::Value;
 
 #[derive(Clone)]
@@ -13,7 +14,7 @@ struct SharedUndoStateInner {
     list: Value,
     in_progress: bool,
     recorded_first_change: bool,
-    point_before_command_or_undo: Option<usize>,
+    point_before_command_or_undo: Option<CharPos0>,
 }
 
 impl SharedUndoState {
@@ -60,11 +61,11 @@ impl SharedUndoState {
         self.inner.borrow_mut().recorded_first_change = recorded_first_change;
     }
 
-    pub fn point_before_command_or_undo(&self) -> Option<usize> {
+    pub fn point_before_command_or_undo(&self) -> Option<CharPos0> {
         self.inner.borrow().point_before_command_or_undo
     }
 
-    pub fn set_point_before_command_or_undo(&self, point: Option<usize>) {
+    pub fn set_point_before_command_or_undo(&self, point: Option<CharPos0>) {
         self.inner.borrow_mut().point_before_command_or_undo = point;
     }
 

@@ -3771,7 +3771,12 @@ fn record_buffer_text_property_undo_entries(
     }
     record_text_property_first_change(buf, &mut ul);
     for (name, old_value, char_start, char_end) in entries {
-        undo::undo_list_record_property_change(&mut ul, name, old_value, char_start, char_end);
+        undo::undo_list_record_property_change(
+            &mut ul,
+            name,
+            old_value,
+            CharRange::from_usize(char_start, char_end),
+        );
     }
     buf.set_undo_list(ul);
 }
@@ -5139,14 +5144,14 @@ impl BufferManager {
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.pt));
+            .set_point_before_command_or_undo(Some(CharPos0::new(buf.pt)));
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.pt));
+            .set_point_before_command_or_undo(Some(CharPos0::new(buf.pt)));
         Some(())
     }
 

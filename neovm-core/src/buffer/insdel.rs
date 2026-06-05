@@ -132,8 +132,6 @@ impl Buffer {
             return edit.insertion();
         }
         let insert_pos = edit.byte_pos_usize();
-        let insert_char_pos = edit.char_pos_usize();
-        let char_len = edit.char_len_usize();
 
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
@@ -142,8 +140,8 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_insert(
                 &mut ul,
-                insert_char_pos,
-                char_len,
+                edit.char_pos(),
+                edit.char_len(),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -429,15 +427,15 @@ impl Buffer {
             // overlay endpoints on opposite sides of the replacement distinct.
             undo::undo_list_record_insert(
                 &mut ul,
-                end_char.get(),
-                new_char_len,
+                end_char,
+                CharLen::new(new_char_len),
                 self.undo_state.point_before_command_or_undo(),
             );
             undo::undo_list_record_delete(
                 &mut ul,
-                start_char.get(),
+                start_char,
                 deleted_text,
-                old_pt,
+                CharPos0::new(old_pt),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -497,9 +495,9 @@ impl Buffer {
             }
             undo::undo_list_record_delete(
                 &mut ul,
-                range.char_start_usize(),
+                range.char_start(),
                 deleted_text,
-                self.pt,
+                CharPos0::new(self.pt),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -568,15 +566,15 @@ impl Buffer {
                     }
                     undo::undo_list_record_delete(
                         &mut ul,
-                        changed_range.char_start_usize(),
+                        changed_range.char_start(),
                         deleted,
-                        self.pt,
+                        CharPos0::new(self.pt),
                         self.undo_state.point_before_command_or_undo(),
                     );
                     undo::undo_list_record_insert(
                         &mut ul,
-                        changed_range.char_start_usize(),
-                        changed_range.char_len().get(),
+                        changed_range.char_start(),
+                        changed_range.char_len(),
                         self.undo_state.point_before_command_or_undo(),
                     );
                 }
@@ -690,11 +688,11 @@ impl Buffer {
         let mut undo_list = self.get_undo_list();
         if !undo::undo_list_is_disabled(&undo_list) {
             let record_change = |undo_list: &mut crate::emacs_core::value::Value,
-                                 start_char: usize,
+                                 start_char: CharPos0,
                                  deleted: LispString,
-                                 pt: usize,
-                                 point_before| {
-                let len_chars = deleted.schars();
+                                 pt: CharPos0,
+                                 point_before: Option<CharPos0>| {
+                let len_chars = CharLen::new(deleted.schars());
                 undo::undo_list_record_delete(undo_list, start_char, deleted, pt, point_before);
                 undo::undo_list_record_insert(undo_list, start_char, len_chars, point_before);
             };
@@ -703,33 +701,33 @@ impl Buffer {
                 if transposition.adjacent() {
                     record_change(
                         &mut undo_list,
-                        start1_char,
+                        CharPos0::new(start1_char),
                         old_span,
-                        self.pt,
+                        CharPos0::new(self.pt),
                         self.undo_state.point_before_command_or_undo(),
                     );
                 } else {
                     record_change(
                         &mut undo_list,
-                        start1_char,
+                        CharPos0::new(start1_char),
                         self.buffer_region_lisp_string(first.byte_range()),
-                        self.pt,
+                        CharPos0::new(self.pt),
                         self.undo_state.point_before_command_or_undo(),
                     );
                     record_change(
                         &mut undo_list,
-                        start2_char,
+                        CharPos0::new(start2_char),
                         self.buffer_region_lisp_string(second.byte_range()),
-                        self.pt,
+                        CharPos0::new(self.pt),
                         self.undo_state.point_before_command_or_undo(),
                     );
                 }
             } else {
                 record_change(
                     &mut undo_list,
-                    start1_char,
+                    CharPos0::new(start1_char),
                     old_span,
-                    self.pt,
+                    CharPos0::new(self.pt),
                     self.undo_state.point_before_command_or_undo(),
                 );
             }

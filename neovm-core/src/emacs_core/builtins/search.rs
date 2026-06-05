@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::regex::{char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -1898,15 +1898,15 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
             crate::buffer::undo::undo_list_record_delete(
                 &mut undo_list,
-                start_char,
+                CharPos0::new(start_char),
                 cased_text.clone(),
-                start_char + cased_text.schars(),
+                CharPos0::new(start_char + cased_text.schars()),
                 None,
             );
             crate::buffer::undo::undo_list_record_insert(
                 &mut undo_list,
-                start_char,
-                cased_text.schars(),
+                CharPos0::new(start_char),
+                CharLen::new(cased_text.schars()),
                 None,
             );
             buf.set_undo_list(undo_list);
