@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
@@ -22,12 +22,20 @@ impl RopeChunk {
         Self { bytes, extent }
     }
 
-    fn len(&self) -> usize {
-        self.extent.emacs_bytes().get()
+    fn emacs_byte_len(&self) -> EmacsByteLen {
+        self.extent.emacs_bytes()
     }
 
-    fn char_len(&self) -> usize {
-        self.extent.chars().get()
+    fn char_len(&self) -> CharLen {
+        self.extent.chars()
+    }
+
+    fn len_usize(&self) -> usize {
+        self.emacs_byte_len().get()
+    }
+
+    fn char_len_usize(&self) -> usize {
+        self.char_len().get()
     }
 
     fn metrics(&self) -> TextMetrics {
@@ -35,7 +43,7 @@ impl RopeChunk {
     }
 
     fn split_at(&self, byte_pos: usize, multibyte: bool) -> (Self, Self) {
-        debug_assert!(byte_pos > 0 && byte_pos < self.len());
+        debug_assert!(byte_pos > 0 && byte_pos < self.len_usize());
         assert!(
             is_emacs_char_boundary(&self.bytes, byte_pos, multibyte),
             "rope chunk split position {byte_pos} is not an Emacs character boundary",
@@ -516,7 +524,7 @@ impl RopeTextBackend {
 
         let left_metrics = node_metrics(&node.left);
         let chunk_start = left_metrics.emacs_bytes_usize();
-        let chunk_end = chunk_start + node.chunk.len();
+        let chunk_end = chunk_start + node.chunk.len_usize();
 
         if byte_pos < chunk_start {
             let (left, right_of_left) = self.split_at_byte(node.left.take(), byte_pos);
@@ -539,7 +547,7 @@ impl RopeTextBackend {
             node.refresh();
             return (left, Some(node));
         }
-        if local == node.chunk.len() {
+        if local == node.chunk.len_usize() {
             let right = node.right.take();
             node.refresh();
             return (Some(node), right);
@@ -613,13 +621,13 @@ impl RopeTextBackend {
         }
 
         let after_left = byte_pos - left.emacs_bytes_usize();
-        if after_left <= node.chunk.len() {
+        if after_left <= node.chunk.len_usize() {
             return left.chars_usize() + self.chunk_byte_to_char(&node.chunk, after_left);
         }
 
         left.chars_usize()
-            + node.chunk.char_len()
-            + self.byte_to_char_in_node(&node.right, after_left - node.chunk.len())
+            + node.chunk.char_len_usize()
+            + self.byte_to_char_in_node(&node.right, after_left - node.chunk.len_usize())
     }
 
     fn char_to_byte_in_node(&self, tree: &Option<Box<RopeNode>>, char_pos: usize) -> usize {
@@ -633,14 +641,14 @@ impl RopeTextBackend {
         }
 
         let after_left = char_pos - left.chars_usize();
-        if after_left <= node.chunk.char_len() {
+        if after_left <= node.chunk.char_len_usize() {
             return left.emacs_bytes_usize()
                 + emacs_char_to_byte_in_slice(&node.chunk.bytes, after_left, self.multibyte);
         }
 
         left.emacs_bytes_usize()
-            + node.chunk.len()
-            + self.char_to_byte_in_node(&node.right, after_left - node.chunk.char_len())
+            + node.chunk.len_usize()
+            + self.char_to_byte_in_node(&node.right, after_left - node.chunk.char_len_usize())
     }
 
     fn for_each_range<E>(
@@ -663,7 +671,7 @@ impl RopeTextBackend {
         }
 
         let chunk_start = left.emacs_bytes_usize();
-        let chunk_end = chunk_start + node.chunk.len();
+        let chunk_end = chunk_start + node.chunk.len_usize();
         if start < chunk_end && end > chunk_start {
             let local_start = start.max(chunk_start) - chunk_start;
             let local_end = end.min(chunk_end) - chunk_start;
@@ -702,7 +710,7 @@ impl RopeTextBackend {
         }
 
         let chunk_start = left.emacs_bytes_usize();
-        let chunk_end = chunk_start + node.chunk.len();
+        let chunk_end = chunk_start + node.chunk.len_usize();
         if start >= chunk_end {
             return self.contiguous_slice_in_node(&node.right, start - chunk_end, end - chunk_end);
         }
@@ -757,14 +765,14 @@ fn leftmost_chunk_len(node: &RopeNode) -> usize {
     if node.left.is_some() {
         return leftmost_chunk_len(node.left.as_ref().expect("left child"));
     }
-    node.chunk.len()
+    node.chunk.len_usize()
 }
 
 fn rightmost_chunk_len(node: &RopeNode) -> usize {
     if node.right.is_some() {
         return rightmost_chunk_len(node.right.as_ref().expect("right child"));
     }
-    node.chunk.len()
+    node.chunk.len_usize()
 }
 
 fn pop_leftmost(mut tree: Option<Box<RopeNode>>) -> (RopeChunk, Option<Box<RopeNode>>) {
@@ -801,7 +809,7 @@ fn collect_chunk_lengths(node: &Option<Box<RopeNode>>, out: &mut Vec<usize>) {
         return;
     };
     collect_chunk_lengths(&node.left, out);
-    out.push(node.chunk.len());
+    out.push(node.chunk.len_usize());
     collect_chunk_lengths(&node.right, out);
 }
 
@@ -813,12 +821,12 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
 
     assert!(!node.chunk.bytes.is_empty(), "rope leaf must not be empty");
     assert!(
-        node.chunk.len() <= MAX_LEAF_BYTES,
+        node.chunk.len_usize() <= MAX_LEAF_BYTES,
         "rope leaf length {} exceeds max {MAX_LEAF_BYTES}",
-        node.chunk.len()
+        node.chunk.len_usize()
     );
     assert_eq!(
-        node.chunk.char_len(),
+        node.chunk.char_len_usize(),
         emacs_char_count_bytes(&node.chunk.bytes, multibyte),
         "rope leaf cached char count diverged"
     );
