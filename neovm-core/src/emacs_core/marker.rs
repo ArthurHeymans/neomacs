@@ -122,11 +122,11 @@ pub(crate) fn make_registered_buffer_marker(
         .as_veclike_ptr()
         .map(|p| p as *mut crate::tagged::header::MarkerObj)
     {
-        let _ = buffers.register_marker_id(
+        let _ = buffers.register_marker_id_at_emacs_byte_pos(
             marker_ptr,
             buffer_id,
             marker_id,
-            byte_pos.get(),
+            byte_pos,
             if insertion_type {
                 InsertionType::After
             } else {
@@ -691,7 +691,8 @@ fn register_marker_in_buffers(
             marker_ptr,
             buffers.get(buf_id).map(|buf| lisp_pos_to_byte(buf, pos)),
         ) {
-            let _ = buffers.register_marker_id(ptr, buf_id, mid, byte_pos.get(), ins_type);
+            let _ =
+                buffers.register_marker_id_at_emacs_byte_pos(ptr, buf_id, mid, byte_pos, ins_type);
         }
     }
 }

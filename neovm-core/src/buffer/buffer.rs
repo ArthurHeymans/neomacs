@@ -4196,15 +4196,17 @@ impl BufferManager {
         let (pt, begv, zv) = {
             let buffer = self.buffers.get(&buffer_id)?;
             (
-                buffer.point_byte(),
-                buffer.point_min_byte(),
-                buffer.point_max_byte(),
+                buffer.point_emacs_byte_pos(),
+                buffer.point_min_emacs_byte_pos(),
+                buffer.point_max_emacs_byte_pos(),
             )
         };
-        let (pt_marker, pt_marker_ptr) = self.create_marker(buffer_id, pt, InsertionType::Before);
+        let (pt_marker, pt_marker_ptr) =
+            self.create_marker_at_emacs_byte_pos(buffer_id, pt, InsertionType::Before);
         let (begv_marker, begv_marker_ptr) =
-            self.create_marker(buffer_id, begv, InsertionType::Before);
-        let (zv_marker, zv_marker_ptr) = self.create_marker(buffer_id, zv, InsertionType::After);
+            self.create_marker_at_emacs_byte_pos(buffer_id, begv, InsertionType::Before);
+        let (zv_marker, zv_marker_ptr) =
+            self.create_marker_at_emacs_byte_pos(buffer_id, zv, InsertionType::After);
         self.buffers.get_mut(&buffer_id)?.state_markers = Some(BufferStateMarkers {
             pt_marker,
             begv_marker,
@@ -4221,9 +4223,9 @@ impl BufferManager {
         let (pt, begv, zv) = {
             let buffer = self.buffers.get(&buffer_id)?;
             (
-                buffer.point_byte(),
-                buffer.point_min_byte(),
-                buffer.point_max_byte(),
+                buffer.point_emacs_byte_pos(),
+                buffer.point_min_emacs_byte_pos(),
+                buffer.point_max_emacs_byte_pos(),
             )
         };
         // State markers live on this buffer's chain already; unlink before
@@ -4233,21 +4235,21 @@ impl BufferManager {
             buf.text.chain_unlink(markers.begv_marker_ptr);
             buf.text.chain_unlink(markers.zv_marker_ptr);
         }
-        self.register_marker_id(
+        self.register_marker_id_at_emacs_byte_pos(
             markers.pt_marker_ptr,
             buffer_id,
             markers.pt_marker,
             pt,
             InsertionType::Before,
         )?;
-        self.register_marker_id(
+        self.register_marker_id_at_emacs_byte_pos(
             markers.begv_marker_ptr,
             buffer_id,
             markers.begv_marker,
             begv,
             InsertionType::Before,
         )?;
-        self.register_marker_id(
+        self.register_marker_id_at_emacs_byte_pos(
             markers.zv_marker_ptr,
             buffer_id,
             markers.zv_marker,
@@ -4689,7 +4691,7 @@ impl BufferManager {
     pub fn replace_buffer_contents(&mut self, id: BufferId, text: &str) -> Option<()> {
         let delete_range = {
             let buf = self.buffers.get(&id)?;
-            EmacsByteRange::from_usize(0, buf.total_bytes())
+            buf.full_emacs_byte_range()
         };
         if !delete_range.is_empty() {
             self.delete_buffer_emacs_byte_range(id, delete_range)?;
@@ -4718,7 +4720,7 @@ impl BufferManager {
         );
         let delete_range = {
             let buf = self.buffers.get(&id)?;
-            EmacsByteRange::from_usize(0, buf.total_bytes())
+            buf.full_emacs_byte_range()
         };
         if !delete_range.is_empty() {
             self.delete_buffer_emacs_byte_range(id, delete_range)?;
@@ -5539,6 +5541,17 @@ impl BufferManager {
         let buf = self.buffers.get_mut(&buffer_id)?;
         buf.register_marker(marker_ptr, marker_id, pos, insertion_type);
         Some(())
+    }
+
+    pub fn register_marker_id_at_emacs_byte_pos(
+        &mut self,
+        marker_ptr: *mut crate::tagged::header::MarkerObj,
+        buffer_id: BufferId,
+        marker_id: u64,
+        pos: EmacsBytePos,
+        insertion_type: InsertionType,
+    ) -> Option<()> {
+        self.register_marker_id(marker_ptr, buffer_id, marker_id, pos.get(), insertion_type)
     }
 
     pub fn register_marker_id_at_anchor(
