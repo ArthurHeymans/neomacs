@@ -14,9 +14,9 @@ use super::rope::RopeTextBackend;
 macro_rules! impl_physical_text_backend {
     (
         $backend:ty,
-        debug_layout = $debug_layout:expr
-        $(, position_lookup = $position_lookup:expr)?
-        $(, storage_position_hint = $storage_position_hint:expr)?
+        debug_layout = $debug_layout:expr,
+        position_lookup = $position_lookup:expr,
+        storage_position_hint = $storage_position_hint:expr
     ) => {
         impl PhysicalTextBackend for $backend {
             fn metrics(&self) -> TextMetrics {
@@ -28,17 +28,13 @@ macro_rules! impl_physical_text_backend {
                 ($debug_layout)(self)
             }
 
-            $(
-                fn position_lookup(&self) -> TextPositionLookup {
-                    ($position_lookup)(self)
-                }
-            )?
+            fn position_lookup(&self) -> TextPositionLookup {
+                ($position_lookup)(self)
+            }
 
-            $(
-                fn storage_position_hint(&self) -> TextPositionHint {
-                    ($storage_position_hint)(self)
-                }
-            )?
+            fn storage_position_hint(&self) -> TextPositionHint {
+                ($storage_position_hint)(self)
+            }
 
             fn is_multibyte(&self) -> bool {
                 <$backend>::is_multibyte(self)
@@ -144,14 +140,8 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
     #[cfg(test)]
     fn debug_layout(&self) -> TextBackendDebugLayout;
 
-    fn position_lookup(&self) -> TextPositionLookup {
-        TextPositionLookup::AnchorScan
-    }
-
-    fn storage_position_hint(&self) -> TextPositionHint {
-        TextPositionHint::none()
-    }
-
+    fn position_lookup(&self) -> TextPositionLookup;
+    fn storage_position_hint(&self) -> TextPositionHint;
     fn is_multibyte(&self) -> bool;
     fn set_multibyte(&mut self, multibyte: bool);
     fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8;
@@ -181,6 +171,7 @@ impl_physical_text_backend!(
     debug_layout = |backend: &GapTextBackend| TextBackendDebugLayout::Gap(
         GapTextBackend::debug_layout(backend)
     ),
+    position_lookup = |_backend: &GapTextBackend| TextPositionLookup::AnchorScan,
     storage_position_hint =
         |backend: &GapTextBackend| GapTextBackend::storage_position_hint(backend)
 );
@@ -188,11 +179,13 @@ impl_physical_text_backend!(
 impl_physical_text_backend!(
     PieceTreeTextBackend,
     debug_layout = |backend: &PieceTreeTextBackend| PieceTreeTextBackend::debug_layout(backend),
-    position_lookup = |_backend: &PieceTreeTextBackend| TextPositionLookup::BackendIndex
+    position_lookup = |_backend: &PieceTreeTextBackend| TextPositionLookup::BackendIndex,
+    storage_position_hint = |_backend: &PieceTreeTextBackend| TextPositionHint::none()
 );
 
 impl_physical_text_backend!(
     RopeTextBackend,
     debug_layout = |backend: &RopeTextBackend| RopeTextBackend::debug_layout(backend),
-    position_lookup = |_backend: &RopeTextBackend| TextPositionLookup::BackendIndex
+    position_lookup = |_backend: &RopeTextBackend| TextPositionLookup::BackendIndex,
+    storage_position_hint = |_backend: &RopeTextBackend| TextPositionHint::none()
 );
