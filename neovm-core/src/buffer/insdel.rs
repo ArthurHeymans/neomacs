@@ -402,8 +402,18 @@ impl Buffer {
         if start > end {
             return TextReplacement::default();
         }
-        let old_range =
-            self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        self.replace_emacs_byte_range_lisp_string(EmacsByteRange::from_usize(start, end), text)
+    }
+
+    pub fn replace_emacs_byte_range_lisp_string(
+        &mut self,
+        byte_range: EmacsByteRange,
+        text: &LispString,
+    ) -> TextReplacement {
+        if byte_range.start() > byte_range.end() {
+            return TextReplacement::default();
+        }
+        let old_range = self.edit_range_for_emacs_byte_range(byte_range);
         self.replace_measured_region_lisp_string(old_range, text)
     }
 
@@ -493,7 +503,17 @@ impl Buffer {
         if start >= end {
             return TextEditRange::default();
         }
-        let range = self.edit_range_for_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        self.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    /// Delete an Emacs-byte range.
+    ///
+    /// Adjusts point, mark, markers, and the narrowing boundary.
+    pub fn delete_emacs_byte_range(&mut self, byte_range: EmacsByteRange) -> TextEditRange {
+        if byte_range.is_empty() {
+            return TextEditRange::default();
+        }
+        let range = self.edit_range_for_emacs_byte_range(byte_range);
         self.delete_measured_region(range)
     }
 
@@ -1058,8 +1078,23 @@ impl BufferManager {
         if start > end {
             return None;
         }
-        let range = self
-            .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(start, end))?;
+        self.replace_buffer_emacs_byte_range_lisp_string(
+            id,
+            EmacsByteRange::from_usize(start, end),
+            text,
+        )
+    }
+
+    pub fn replace_buffer_emacs_byte_range_lisp_string(
+        &mut self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+        text: &LispString,
+    ) -> Option<()> {
+        if byte_range.start() > byte_range.end() {
+            return None;
+        }
+        let range = self.edit_range_for_buffer_emacs_byte_range(id, byte_range)?;
         self.replace_buffer_measured_region_lisp_string(id, range, text)
     }
 

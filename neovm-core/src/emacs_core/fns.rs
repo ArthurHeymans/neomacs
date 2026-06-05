@@ -562,10 +562,24 @@ pub(crate) fn replace_buffer_region_lisp_string(
     end_byte: usize,
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
+    replace_buffer_emacs_byte_range_lisp_string(
+        eval,
+        buffer_id,
+        EmacsByteRange::from_usize(start_byte, end_byte),
+        replacement,
+    )
+}
+
+pub(crate) fn replace_buffer_emacs_byte_range_lisp_string(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte_range: EmacsByteRange,
+    replacement: &crate::heap_types::LispString,
+) -> Result<(), Flow> {
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         buffer_id,
-        EmacsByteRange::from_usize(start_byte, end_byte),
+        byte_range,
         replacement,
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
@@ -603,9 +617,7 @@ pub(crate) fn builtin_base64_encode_region(
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     let replacement =
         super::builtins::lisp_string_from_buffer_bytes(encoded.into_bytes(), target_multibyte);
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
-    replace_buffer_region_lisp_string(eval, buffer_id, start_byte, end_byte, &replacement)?;
+    replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
     Ok(Value::fixnum(encoded_len as i64))
 }
 
@@ -628,9 +640,7 @@ pub(crate) fn builtin_base64url_encode_region(
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     let replacement =
         super::builtins::lisp_string_from_buffer_bytes(encoded.into_bytes(), target_multibyte);
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
-    replace_buffer_region_lisp_string(eval, buffer_id, start_byte, end_byte, &replacement)?;
+    replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
     Ok(Value::fixnum(encoded_len as i64))
 }
 
@@ -655,20 +665,17 @@ pub(crate) fn builtin_base64_decode_region(
         .get(buffer_id)
         .map(|buf| buf.get_multibyte())
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
-
     match base64_decode(&source, &table, use_url, noerror) {
         Ok(bytes) => {
             let replacement =
                 super::builtins::lisp_string_from_buffer_bytes(bytes.clone(), target_multibyte);
-            replace_buffer_region_lisp_string(eval, buffer_id, start_byte, end_byte, &replacement)?;
+            replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
             Ok(Value::fixnum(bytes.len() as i64))
         }
         Err(()) if noerror => {
             let replacement =
                 super::builtins::lisp_string_from_buffer_bytes(Vec::new(), target_multibyte);
-            replace_buffer_region_lisp_string(eval, buffer_id, start_byte, end_byte, &replacement)?;
+            replace_buffer_emacs_byte_range_lisp_string(eval, buffer_id, byte_range, &replacement)?;
             Ok(Value::fixnum(0))
         }
         Err(()) => Err(signal("error", vec![Value::string("Invalid base64 data")])),

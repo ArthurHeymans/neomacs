@@ -6,6 +6,7 @@
 
 use crate::emacs_core::intern::resolve_sym;
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
+use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
 use encoding_rs::{BIG5, GBK};
 
@@ -1631,11 +1632,10 @@ fn builtin_coding_region(
                 &[],
                 &ctx.buffers,
             )?;
-            crate::emacs_core::fns::replace_buffer_region_lisp_string(
+            crate::emacs_core::fns::replace_buffer_emacs_byte_range_lisp_string(
                 ctx,
                 current_id,
-                start_byte,
-                end_byte,
+                EmacsByteRange::from_usize(start_byte, end_byte),
                 &result_text,
             )?;
             ctx.set_variable(

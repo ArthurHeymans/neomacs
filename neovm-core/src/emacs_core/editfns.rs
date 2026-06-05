@@ -1762,11 +1762,10 @@ pub(crate) fn builtin_translate_region_internal(
         } else {
             crate::heap_types::LispString::from_unibyte(out)
         };
-        super::fns::replace_buffer_region_lisp_string(
+        super::fns::replace_buffer_emacs_byte_range_lisp_string(
             eval,
             buffer_id,
-            start_byte,
-            end_byte,
+            EmacsByteRange::from_usize(start_byte, end_byte),
             &replacement,
         )?;
     }

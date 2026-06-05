@@ -323,7 +323,7 @@ pub(crate) fn install_minibuffer_buffer_text(
     buf.widen();
     let text_len = buf.total_bytes();
     if text_len > 0 {
-        buf.delete_region(0, text_len);
+        buf.delete_emacs_byte_range(EmacsByteRange::from_usize(0, text_len));
     }
     buf.goto_byte(0);
 

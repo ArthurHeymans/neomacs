@@ -500,7 +500,12 @@ fn replace_current_buffer_region_in_buffers(
             buf.point(),
         )
     };
-    super::fns::replace_buffer_region_lisp_string(eval, buffer_id, beg, end, replacement)?;
+    super::fns::replace_buffer_emacs_byte_range_lisp_string(
+        eval,
+        buffer_id,
+        EmacsByteRange::from_usize(beg, end),
+        replacement,
+    )?;
     if restore_point {
         if let Some(buf) = eval.buffers.current_buffer_mut() {
             let accessible_end = buf.accessible_emacs_byte_region().end_usize();

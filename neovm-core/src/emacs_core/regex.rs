@@ -2247,7 +2247,7 @@ pub fn replace_match_buffer_with_syntax(
     )?;
 
     buf.goto_byte(match_start);
-    buf.delete_region(match_start, match_end);
+    buf.delete_emacs_byte_range(EmacsByteRange::from_usize(match_start, match_end));
     buf.insert_lisp_string(&replacement);
     Ok(())
 }
