@@ -1,4 +1,4 @@
-use crate::buffer::position::{CharPos0, EmacsBytePos};
+use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos};
 use crate::buffer::text::TextMetrics;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -64,7 +64,10 @@ pub enum TextBackendDebugLayout {
 impl TextBackendDebugLayout {
     pub fn metrics(self) -> TextMetrics {
         match self {
-            Self::Gap(layout) => TextMetrics::from_positions(layout.z, layout.z_byte),
+            Self::Gap(layout) => TextMetrics::from_lengths(
+                CharLen::new(layout.z.get()),
+                EmacsByteLen::new(layout.z_byte.get()),
+            ),
             Self::PieceTree(metrics) => metrics,
             Self::Rope(metrics) => metrics,
         }
