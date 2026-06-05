@@ -36,13 +36,10 @@ impl SharedTextEditScope {
 
 impl Buffer {
     fn edit_state(&self) -> BufferEditState {
-        BufferEditState::from_usize(
-            self.pt_byte,
-            self.pt,
-            self.begv_byte,
-            self.begv,
-            self.zv_byte,
-            self.zv,
+        BufferEditState::new(
+            TextPositionAnchor::from_usize(self.pt, self.pt_byte),
+            TextPositionAnchor::from_usize(self.begv, self.begv_byte),
+            TextPositionAnchor::from_usize(self.zv, self.zv_byte),
         )
     }
 

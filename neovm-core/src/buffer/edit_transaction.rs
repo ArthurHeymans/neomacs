@@ -107,45 +107,12 @@ pub(in crate::buffer) struct BufferEditState {
 }
 
 impl BufferEditState {
-    pub(in crate::buffer) fn new(
-        pt_byte: EmacsBytePos,
-        pt: CharPos0,
-        begv_byte: EmacsBytePos,
-        begv: CharPos0,
-        zv_byte: EmacsBytePos,
-        zv: CharPos0,
-    ) -> Self {
-        Self {
-            point: TextPositionAnchor::new(pt, pt_byte),
-            begv: TextPositionAnchor::new(begv, begv_byte),
-            zv: TextPositionAnchor::new(zv, zv_byte),
-        }
-    }
-
-    pub(in crate::buffer) const fn from_anchors(
+    pub(in crate::buffer) const fn new(
         point: TextPositionAnchor,
         begv: TextPositionAnchor,
         zv: TextPositionAnchor,
     ) -> Self {
         Self { point, begv, zv }
-    }
-
-    pub(in crate::buffer) fn from_usize(
-        pt_byte: usize,
-        pt: usize,
-        begv_byte: usize,
-        begv: usize,
-        zv_byte: usize,
-        zv: usize,
-    ) -> Self {
-        Self::new(
-            EmacsBytePos::new(pt_byte),
-            CharPos0::new(pt),
-            EmacsBytePos::new(begv_byte),
-            CharPos0::new(begv),
-            EmacsBytePos::new(zv_byte),
-            CharPos0::new(zv),
-        )
     }
 
     pub(in crate::buffer) const fn point(self) -> TextPositionAnchor {
@@ -915,7 +882,11 @@ mod tests {
         zv_byte: usize,
         zv: usize,
     ) -> BufferEditState {
-        BufferEditState::from_usize(pt_byte, pt, begv_byte, begv, zv_byte, zv)
+        BufferEditState::new(
+            TextPositionAnchor::from_usize(pt, pt_byte),
+            TextPositionAnchor::from_usize(begv, begv_byte),
+            TextPositionAnchor::from_usize(zv, zv_byte),
+        )
     }
 
     fn replace_state(old: BufferEditState) -> BufferEditState {
