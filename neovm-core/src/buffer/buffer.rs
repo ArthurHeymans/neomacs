@@ -4570,18 +4570,23 @@ impl BufferManager {
         self.shared_text_root_id(id)
     }
 
-    pub fn goto_buffer_emacs_byte_pos(&mut self, id: BufferId, pos: EmacsBytePos) -> Option<usize> {
+    pub fn goto_buffer_emacs_byte_pos(
+        &mut self,
+        id: BufferId,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
         {
             let buf = self.buffers.get_mut(&id)?;
             buf.goto_emacs_byte_pos(pos);
         }
-        let point = self.buffers.get(&id)?.point_byte();
+        let point = self.buffers.get(&id)?.point_emacs_byte_pos();
         let _ = self.record_buffer_state_markers(id);
         Some(point)
     }
 
     pub fn goto_buffer_byte(&mut self, id: BufferId, pos: usize) -> Option<usize> {
         self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(pos))
+            .map(EmacsBytePos::get)
     }
 
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
