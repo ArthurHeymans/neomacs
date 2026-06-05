@@ -39,13 +39,12 @@ fn lisp_position_to_restricted_marker_position(
 }
 
 fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> TextPositionAnchor {
-    let char_pos = lisp_position
-        .saturating_sub(1)
-        .clamp(buffer.point_min_char(), buffer.point_max_char());
-    let byte_pos = buffer
-        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
-        .get();
-    TextPositionAnchor::from_usize(char_pos, byte_pos)
+    let char_pos = CharPos0::new(lisp_position.saturating_sub(1).clamp(
+        buffer.point_min_char_pos().get(),
+        buffer.point_max_char_pos().get(),
+    ));
+    let byte_pos = buffer.char_pos_to_emacs_byte_pos_clamped(char_pos);
+    TextPositionAnchor::new(char_pos, byte_pos)
 }
 
 fn marker_lisp_position(bm: &BufferManager, buffer_id: BufferId, marker_id: u64) -> Option<usize> {

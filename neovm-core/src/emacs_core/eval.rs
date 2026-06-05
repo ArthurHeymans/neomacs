@@ -6324,7 +6324,7 @@ impl Context {
         // reflected even when no text edit occurred.
         if let Some(buffer) = self.buffers.current_buffer() {
             if buffer.is_modified() {
-                let pt = buffer.point_char();
+                let pt = buffer.point_char_pos().get();
                 if let Some(frame) = self.frames.selected_frame_mut() {
                     if let Some(win) = frame.selected_window_mut() {
                         win.set_point(pt);
@@ -6428,14 +6428,14 @@ impl Context {
             overlay_modified_tick: buffer.overlay_modified_tick(),
             save_modified_tick: buffer.save_modified_tick(),
             autosave_modified_tick: buffer.autosave_modified_tick,
-            point: CharPos0::new(buffer.point_char()),
+            point: buffer.point_char_pos(),
             point_emacs_byte: buffer.point_emacs_byte_pos(),
             begv: accessible_chars.start(),
             begv_emacs_byte: accessible_bytes.start(),
             zv: accessible_chars.end(),
             zv_emacs_byte: accessible_bytes.end(),
-            total_chars: CharLen::new(buffer.total_chars()),
-            total_emacs_bytes: EmacsByteLen::new(buffer.total_bytes()),
+            total_chars: buffer.total_char_len(),
+            total_emacs_bytes: buffer.total_emacs_byte_len(),
             last_window_start: LispCharPos1::new(buffer.last_window_start.max(1) as i64),
             last_selected_window: buffer.last_selected_window.map(|id| id.0),
         })
