@@ -532,6 +532,9 @@ Completed so far:
 - Moved navigation line predicates, line-count adjustment, forward-line
   adjustment, and skip-chars loops onto typed buffer character query entry
   points.
+- Moved syntax scanning and comment/prefix motion onto typed syntax-character
+  units that carry Emacs byte start/end positions, eliminating direct
+  production use of raw buffer character query helpers in `emacs_core`.
 
 Next work:
 

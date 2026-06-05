@@ -27,6 +27,50 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
         .get()
 }
 
+#[derive(Clone, Copy)]
+struct BufferSyntaxChar {
+    ch: char,
+    start: usize,
+    end: usize,
+}
+
+impl BufferSyntaxChar {
+    #[inline]
+    fn byte_len(self) -> usize {
+        self.end.saturating_sub(self.start).max(1)
+    }
+}
+
+#[inline]
+fn buffer_syntax_char_after(buf: &Buffer, byte_pos: usize) -> Option<BufferSyntaxChar> {
+    let pos = EmacsBytePos::new(byte_pos);
+    let ch = buf.char_after_emacs_byte_pos(pos)?;
+    let len = buf
+        .char_after_emacs_byte_len(pos)
+        .map(|len| len.get().max(1))
+        .unwrap_or_else(|| ch.len_utf8().max(1));
+    Some(BufferSyntaxChar {
+        ch,
+        start: byte_pos,
+        end: byte_pos.checked_add(len)?,
+    })
+}
+
+#[inline]
+fn buffer_syntax_char_before(buf: &Buffer, byte_pos: usize) -> Option<BufferSyntaxChar> {
+    let pos = EmacsBytePos::new(byte_pos);
+    let ch = buf.char_before_emacs_byte_pos(pos)?;
+    let len = buf
+        .char_before_emacs_byte_len(pos)
+        .map(|len| len.get().max(1))
+        .unwrap_or_else(|| ch.len_utf8().max(1));
+    Some(BufferSyntaxChar {
+        ch,
+        start: byte_pos.checked_sub(len)?,
+        end: byte_pos,
+    })
+}
+
 #[inline]
 fn buffer_byte_to_lisp_pos(buf: &Buffer, byte_pos: usize) -> i64 {
     buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
@@ -2376,14 +2420,14 @@ pub(crate) fn builtin_syntax_after_in_buffers(
 
     let char_index = pos as usize - 1;
     let byte_index = buffer_char_to_byte_pos(buf, char_index.min(buf.total_chars()));
-    let Some(ch) = buf.char_after(byte_index) else {
+    let Some(unit) = buffer_syntax_char_after(buf, byte_index) else {
         return Ok(Value::NIL);
     };
 
     let entry = effective_syntax_entry_for_char_at_byte(
         buf,
         &SyntaxTable::for_buffer(buf),
-        ch,
+        unit.ch,
         byte_index,
         true,
     );
@@ -2461,26 +2505,26 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
             if pt >= max {
                 return false;
             }
-            let Some(ch) = buf.char_after(pt) else {
+            let Some(unit) = buffer_syntax_char_after(buf, pt) else {
                 return false;
             };
             let entry = effective_syntax_entry_for_char_at_byte(
                 buf,
                 &SyntaxTable::for_buffer(buf),
-                ch,
+                unit.ch,
                 pt,
                 honor_properties,
             );
             let class = entry.class;
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
                 continue;
             }
             // In GNU Emacs, EndComment newline is treated as whitespace
             // for forward scanning.
-            if class == SyntaxClass::EndComment && ch == '\n' {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            if class == SyntaxClass::EndComment && unit.ch == '\n' {
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
                 continue;
             }
             break;
@@ -2491,13 +2535,13 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         if pt >= max {
             return false;
         }
-        let Some(ch) = buf.char_after(pt) else {
+        let Some(unit) = buffer_syntax_char_after(buf, pt) else {
             return false;
         };
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             pt,
             honor_properties,
         );
@@ -2508,7 +2552,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         if class == SyntaxClass::Comment {
             let style_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
             if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                 return false;
             }
@@ -2518,7 +2562,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
 
         // Comment fence (class `!` = Generic).
         if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
             // Scan forward for matching comment fence.
             if !scan_forward_comment_fence(buf, honor_properties) {
                 return false;
@@ -2530,13 +2574,13 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         // Two-char comment start: check COMMENT_START_FIRST on current
         // char and COMMENT_START_SECOND on next char.
         if flags.contains(SyntaxFlags::COMMENT_START_FIRST) {
-            let next_pos = pt + ch.len_utf8();
+            let next_pos = unit.end;
             if next_pos < max {
-                if let Some(ch2) = buf.char_after(next_pos) {
+                if let Some(unit2) = buffer_syntax_char_after(buf, next_pos) {
                     let entry2 = effective_syntax_entry_for_char_at_byte(
                         buf,
                         &SyntaxTable::for_buffer(buf),
-                        ch2,
+                        unit2.ch,
                         next_pos,
                         honor_properties,
                     );
@@ -2545,7 +2589,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
                         let style_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                         let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                             || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-                        buf.goto_emacs_byte_pos(EmacsBytePos::new(next_pos + ch2.len_utf8()));
+                        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
                         if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                             return false;
                         }
@@ -2580,13 +2624,13 @@ fn scan_forward_comment_body(
         if pt >= max {
             return false;
         }
-        let Some(ch) = buf.char_after(pt) else {
+        let Some(unit) = buffer_syntax_char_after(buf, pt) else {
             return false;
         };
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             pt,
             honor_properties,
         );
@@ -2595,14 +2639,14 @@ fn scan_forward_comment_body(
 
         // Handle escape / charquote.
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
             // Skip the next char too.
             let pt2 = buf.point_byte();
             if pt2 >= max {
                 return false;
             }
-            if let Some(ch2) = buf.char_after(pt2) {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt2 + ch2.len_utf8()));
+            if let Some(unit2) = buffer_syntax_char_after(buf, pt2) {
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
             }
             continue;
         }
@@ -2613,19 +2657,19 @@ fn scan_forward_comment_body(
                 let sf_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                 if sf_b == style_b {
                     nesting += 1;
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
                     continue;
                 }
             }
 
             if flags.contains(SyntaxFlags::COMMENT_START_FIRST) {
-                let next_pos = pt + ch.len_utf8();
+                let next_pos = unit.end;
                 if next_pos < max {
-                    if let Some(ch2) = buf.char_after(next_pos) {
+                    if let Some(unit2) = buffer_syntax_char_after(buf, next_pos) {
                         let entry2 = effective_syntax_entry_for_char_at_byte(
                             buf,
                             &SyntaxTable::for_buffer(buf),
-                            ch2,
+                            unit2.ch,
                             next_pos,
                             honor_properties,
                         );
@@ -2634,9 +2678,7 @@ fn scan_forward_comment_body(
                             let sf_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                             if sf_b == style_b {
                                 nesting += 1;
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(
-                                    next_pos + ch2.len_utf8(),
-                                ));
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
                                 continue;
                             }
                         }
@@ -2649,7 +2691,7 @@ fn scan_forward_comment_body(
         if class == SyntaxClass::EndComment {
             let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             if se_b == style_b {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
                 nesting -= 1;
                 if nesting <= 0 {
                     return true;
@@ -2660,7 +2702,7 @@ fn scan_forward_comment_body(
 
         // Comment fence end.
         if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
             nesting -= 1;
             if nesting <= 0 {
                 return true;
@@ -2670,13 +2712,13 @@ fn scan_forward_comment_body(
 
         // Two-char comment end.
         if flags.contains(SyntaxFlags::COMMENT_END_FIRST) {
-            let next_pos = pt + ch.len_utf8();
+            let next_pos = unit.end;
             if next_pos < max {
-                if let Some(ch2) = buf.char_after(next_pos) {
+                if let Some(unit2) = buffer_syntax_char_after(buf, next_pos) {
                     let entry2 = effective_syntax_entry_for_char_at_byte(
                         buf,
                         &SyntaxTable::for_buffer(buf),
-                        ch2,
+                        unit2.ch,
                         next_pos,
                         honor_properties,
                     );
@@ -2684,7 +2726,7 @@ fn scan_forward_comment_body(
                     if flags2.contains(SyntaxFlags::COMMENT_END_SECOND) {
                         let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                         if se_b == style_b {
-                            buf.goto_emacs_byte_pos(EmacsBytePos::new(next_pos + ch2.len_utf8()));
+                            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
                             nesting -= 1;
                             if nesting <= 0 {
                                 return true;
@@ -2696,7 +2738,7 @@ fn scan_forward_comment_body(
             }
         }
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
     }
 }
 
@@ -2708,31 +2750,31 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
         if pt >= max {
             return false;
         }
-        let Some(ch) = buf.char_after(pt) else {
+        let Some(unit) = buffer_syntax_char_after(buf, pt) else {
             return false;
         };
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             pt,
             honor_properties,
         );
         let class = entry.class;
 
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
             let pt2 = buf.point_byte();
             if pt2 >= max {
                 return false;
             }
-            if let Some(ch2) = buf.char_after(pt2) {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt2 + ch2.len_utf8()));
+            if let Some(unit2) = buffer_syntax_char_after(buf, pt2) {
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
             }
             continue;
         }
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -2760,14 +2802,14 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             if pt <= min {
                 return false;
             }
-            let Some(ch) = buf.char_before(pt) else {
+            let Some(unit) = buffer_syntax_char_before(buf, pt) else {
                 return false;
             };
-            let ch_pos = pt - ch.len_utf8();
+            let ch_pos = unit.start;
             let entry = effective_syntax_entry_for_char_at_byte(
                 buf,
                 &SyntaxTable::for_buffer(buf),
-                ch,
+                unit.ch,
                 ch_pos,
                 honor_properties,
             );
@@ -2777,6 +2819,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             let mut code = class;
             let mut comstyle_b = false;
             let mut nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
+            let mut two_char_end_restore_pos = None;
 
             if class == SyntaxClass::EndComment {
                 comstyle_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
@@ -2785,14 +2828,14 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             // Check for two-char comment end: current char has
             // COMMENT_END_SECOND, prev char has COMMENT_END_FIRST.
             if flags.contains(SyntaxFlags::COMMENT_END_SECOND) {
-                let prev_pos = pt - ch.len_utf8();
+                let prev_pos = unit.start;
                 if prev_pos > min {
-                    if let Some(ch2) = buf.char_before(prev_pos) {
-                        let ch2_pos = prev_pos - ch2.len_utf8();
+                    if let Some(unit2) = buffer_syntax_char_before(buf, prev_pos) {
+                        let ch2_pos = unit2.start;
                         let entry2 = effective_syntax_entry_for_char_at_byte(
                             buf,
                             &SyntaxTable::for_buffer(buf),
-                            ch2,
+                            unit2.ch,
                             ch2_pos,
                             honor_properties,
                         );
@@ -2801,8 +2844,9 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                             code = SyntaxClass::EndComment;
                             comstyle_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                             nested = nested || flags2.contains(SyntaxFlags::COMMENT_NESTABLE);
+                            two_char_end_restore_pos = Some(unit2.end);
                             // Move past both chars of the two-char end.
-                            buf.goto_emacs_byte_pos(EmacsBytePos::new(prev_pos - ch2.len_utf8()));
+                            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.start));
                         }
                     }
                 }
@@ -2810,7 +2854,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
 
             // Comment fence backward.
             if code == SyntaxClass::CommentFence {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
                 if !scan_backward_comment_fence(buf, honor_properties) {
                     buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
                     return false;
@@ -2823,7 +2867,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                 // If we didn't already move point for a two-char end,
                 // move past the single-char end now.
                 if buf.point_byte() == pt {
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
                 }
                 let saved = buf.point_byte();
                 if scan_backward_comment_body(buf, comstyle_b, nested, honor_properties) {
@@ -2831,19 +2875,21 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                     break;
                 }
                 // scan_backward_comment_body failed.
-                if ch == '\n' {
+                if unit.ch == '\n' {
                     // GNU: "This end-of-line is not an end-of-comment.
                     // Treat it like a whitespace."
                     // Restore to just before the newline and continue
                     // the inner loop.
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
                     continue;
                 }
                 // Non-newline EndComment that failed to find a matching
                 // comment start — failure.
                 if class != SyntaxClass::EndComment {
                     // Was a two-char sequence: restore one char forward.
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(saved + ch.len_utf8()));
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(
+                        two_char_end_restore_pos.unwrap_or(saved + unit.byte_len()),
+                    ));
                 } else {
                     buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
                 }
@@ -2851,7 +2897,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             }
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
                 continue;
             }
 
@@ -2897,14 +2943,14 @@ fn scan_backward_comment_body(
             // Reached beginning of accessible region.
             break;
         }
-        let Some(ch) = buf.char_before(pt) else {
+        let Some(unit) = buffer_syntax_char_before(buf, pt) else {
             break;
         };
-        let ch_pos = pt - ch.len_utf8();
+        let ch_pos = unit.start;
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             ch_pos,
             honor_properties,
         );
@@ -2920,7 +2966,7 @@ fn scan_backward_comment_body(
             if se_b == style_b {
                 if nested {
                     nesting += 1;
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
                     continue;
                 } else {
                     // Non-nested: this is a same-style comment ender.
@@ -2933,14 +2979,14 @@ fn scan_backward_comment_body(
 
         // Two-char comment end backward.
         if flags.contains(SyntaxFlags::COMMENT_END_SECOND) {
-            let prev_pos = pt - ch.len_utf8();
+            let prev_pos = unit.start;
             if prev_pos > min {
-                if let Some(ch2) = buf.char_before(prev_pos) {
-                    let ch2_pos = prev_pos - ch2.len_utf8();
+                if let Some(unit2) = buffer_syntax_char_before(buf, prev_pos) {
+                    let ch2_pos = unit2.start;
                     let entry2 = effective_syntax_entry_for_char_at_byte(
                         buf,
                         &SyntaxTable::for_buffer(buf),
-                        ch2,
+                        unit2.ch,
                         ch2_pos,
                         honor_properties,
                     );
@@ -2950,9 +2996,7 @@ fn scan_backward_comment_body(
                         if se_b == style_b {
                             if nested {
                                 nesting += 1;
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(
-                                    prev_pos - ch2.len_utf8(),
-                                ));
+                                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.start));
                                 continue;
                             } else {
                                 break;
@@ -2967,7 +3011,7 @@ fn scan_backward_comment_body(
         if class == SyntaxClass::Comment {
             let sc_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             if sc_b == style_b {
-                let new_pos = pt - ch.len_utf8();
+                let new_pos = unit.start;
                 if nested {
                     buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                     nesting -= 1;
@@ -2987,7 +3031,7 @@ fn scan_backward_comment_body(
 
         // ── Comment fence ────────────────────────────────────────
         if class == SyntaxClass::CommentFence {
-            let new_pos = pt - ch.len_utf8();
+            let new_pos = unit.start;
             buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
             if nested {
                 nesting -= 1;
@@ -3004,14 +3048,14 @@ fn scan_backward_comment_body(
         // COMMENT_START_SECOND on current char, COMMENT_START_FIRST
         // on the preceding char.
         if flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
-            let prev_pos = pt - ch.len_utf8();
+            let prev_pos = unit.start;
             if prev_pos > min {
-                if let Some(ch2) = buf.char_before(prev_pos) {
-                    let ch2_pos = prev_pos - ch2.len_utf8();
+                if let Some(unit2) = buffer_syntax_char_before(buf, prev_pos) {
+                    let ch2_pos = unit2.start;
                     let entry2 = effective_syntax_entry_for_char_at_byte(
                         buf,
                         &SyntaxTable::for_buffer(buf),
-                        ch2,
+                        unit2.ch,
                         ch2_pos,
                         honor_properties,
                     );
@@ -3019,7 +3063,7 @@ fn scan_backward_comment_body(
                     if flags2.contains(SyntaxFlags::COMMENT_START_FIRST) {
                         let sc_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                         if sc_b == style_b {
-                            let new_pos = prev_pos - ch2.len_utf8();
+                            let new_pos = unit2.start;
                             if nested {
                                 buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
                                 nesting -= 1;
@@ -3039,7 +3083,7 @@ fn scan_backward_comment_body(
         }
 
         // Default: skip this character and continue scanning.
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
     }
 
     // For non-nested comments, check if we recorded any comment-start.
@@ -3061,20 +3105,20 @@ fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool
         if pt <= min {
             return false;
         }
-        let Some(ch) = buf.char_before(pt) else {
+        let Some(unit) = buffer_syntax_char_before(buf, pt) else {
             return false;
         };
-        let ch_pos = pt - ch.len_utf8();
+        let ch_pos = unit.start;
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             ch_pos,
             honor_properties,
         );
         let class = entry.class;
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -3119,14 +3163,14 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         if pt <= min {
             break;
         }
-        let Some(ch) = buf.char_before(pt) else {
+        let Some(unit) = buffer_syntax_char_before(buf, pt) else {
             break;
         };
-        let ch_pos = pt - ch.len_utf8();
+        let ch_pos = unit.start;
         let entry = effective_syntax_entry_for_char_at_byte(
             buf,
             &SyntaxTable::for_buffer(buf),
-            ch,
+            unit.ch,
             ch_pos,
             honor_properties,
         );
@@ -3135,7 +3179,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         if !is_prefix {
             break;
         }
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(pt.saturating_sub(ch.len_utf8())));
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
     }
 
     Ok(Value::NIL)
