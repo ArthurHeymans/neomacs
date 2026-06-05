@@ -2491,14 +2491,15 @@ pub(crate) fn zero_width_invisible_run_end_byte(
     buffer_id: BufferId,
     byte_pos: usize,
 ) -> Result<Option<usize>, Flow> {
+    let byte_pos = EmacsBytePos::new(byte_pos);
     let lisp_pos = {
         let Some(buf) = eval.buffers.get(buffer_id) else {
             return Ok(None);
         };
-        if byte_pos >= buf.accessible_emacs_byte_region().end_usize() {
+        if byte_pos >= buf.accessible_emacs_byte_region().end() {
             return Ok(None);
         }
-        super::textprop::byte_to_elisp_pos(buf, byte_pos)
+        super::textprop::byte_to_elisp_pos(buf, byte_pos.get())
     };
 
     if invisible_status_for_value(eval, Value::fixnum(lisp_pos))? != 1 {
@@ -2512,12 +2513,12 @@ pub(crate) fn zero_width_invisible_run_end_byte(
             return Ok(None);
         };
         match next.as_fixnum() {
-            Some(pos) => super::textprop::validate_buffer_point(buf, pos)?,
-            None => buf.accessible_emacs_byte_region().end_usize(),
+            Some(pos) => EmacsBytePos::new(super::textprop::validate_buffer_point(buf, pos)?),
+            None => buf.accessible_emacs_byte_region().end(),
         }
     };
 
-    Ok(Some(next_byte))
+    Ok(Some(next_byte.get()))
 }
 
 /// (invisible-p POS-OR-PROP) -> boolean
