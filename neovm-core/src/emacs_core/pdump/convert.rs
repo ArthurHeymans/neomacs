@@ -4408,12 +4408,12 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         db.multibyte,
         load_buffer_text_backend_kind(db.text.backend_kind),
     );
-    let total_chars = text.char_count();
+    let total_chars = text.char_count().get();
     let begv_char = db
         .begv_char
         .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, db.begv));
     let zv_char = db.zv_char.unwrap_or_else(|| {
-        if db.zv == text.len() {
+        if db.zv == text.emacs_byte_len().get() {
             total_chars
         } else {
             dump_buffer_byte_to_char_pos(&text, db.zv)

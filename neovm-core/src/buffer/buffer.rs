@@ -1464,7 +1464,7 @@ pub struct BufferTextSnapshot {
 
 impl BufferTextSnapshot {
     pub fn emacs_byte_len(&self) -> usize {
-        self.text.emacs_byte_len()
+        self.text.emacs_byte_len().get()
     }
 
     pub fn char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
@@ -2138,12 +2138,12 @@ impl Buffer {
 
     /// Total number of characters in the buffer text.
     pub fn total_chars(&self) -> usize {
-        self.text.char_count()
+        self.text.char_count().get()
     }
 
     /// Total number of Emacs bytes in the buffer text.
     pub fn total_bytes(&self) -> usize {
-        self.text.emacs_byte_len()
+        self.text.emacs_byte_len().get()
     }
 
     pub fn is_text_empty(&self) -> bool {
@@ -2724,7 +2724,7 @@ impl Buffer {
         let total = self.total_bytes();
         let s = range.start_usize().min(total);
         let e = range.end_usize().clamp(s, total);
-        let total_chars = self.text.char_count();
+        let total_chars = self.text.char_count().get();
         self.begv_byte = s;
         self.begv = self
             .text

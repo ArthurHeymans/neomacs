@@ -16,7 +16,7 @@ use crate::gc_trace::GcTrace;
 use super::buffer::{BufferId, InsertionType};
 use super::gap_buffer::{GAP_BYTES_DFL, GAP_BYTES_MIN};
 use super::position::{
-    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
     TextPositionBounds,
 };
 use super::text::backend::TextBackend;
@@ -469,10 +469,6 @@ impl BufferText {
         Self::finish_backend_shape_change(&mut storage);
     }
 
-    pub fn len(&self) -> usize {
-        self.storage.borrow().metrics.emacs_bytes()
-    }
-
     pub fn is_multibyte(&self) -> bool {
         self.storage.borrow().backend.is_multibyte()
     }
@@ -490,12 +486,12 @@ impl BufferText {
         self.storage.borrow().metrics.is_empty()
     }
 
-    pub fn char_count(&self) -> usize {
-        self.storage.borrow().metrics.chars()
+    pub fn char_count(&self) -> CharLen {
+        CharLen::new(self.storage.borrow().metrics.chars())
     }
 
-    pub fn emacs_byte_len(&self) -> usize {
-        self.storage.borrow().metrics.emacs_bytes()
+    pub fn emacs_byte_len(&self) -> EmacsByteLen {
+        EmacsByteLen::new(self.storage.borrow().metrics.emacs_bytes())
     }
 
     pub fn metrics(&self) -> TextMetrics {
@@ -556,8 +552,10 @@ impl BufferText {
     }
 
     pub(crate) fn full_text_string(&self) -> String {
-        let byte_len = self.emacs_byte_len();
-        self.text_emacs_byte_range(EmacsByteRange::from_usize(0, byte_len))
+        self.text_emacs_byte_range(EmacsByteRange::from_start_len(
+            EmacsBytePos::ZERO,
+            self.emacs_byte_len(),
+        ))
     }
 
     pub fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
@@ -1924,8 +1922,8 @@ impl fmt::Display for BufferText {
 impl fmt::Debug for BufferText {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BufferText")
-            .field("emacs_byte_len", &self.emacs_byte_len())
-            .field("chars", &self.char_count())
+            .field("emacs_byte_len", &self.emacs_byte_len().get())
+            .field("chars", &self.char_count().get())
             .finish()
     }
 }

@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use crate::buffer::text::{ImplementedBufferTextBackendKind, TextBackendDebugLayout};
 use crate::buffer::{
-    BufferTextBackendKind, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange,
-    TextExtent, TextMetrics,
+    BufferTextBackendKind, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
+    EmacsByteRange, TextEditRange, TextExtent, TextMetrics,
 };
 
 use super::BufferText;
@@ -19,6 +19,10 @@ fn emacs_byte_pos(pos: usize) -> EmacsBytePos {
 
 fn emacs_byte_range(start: usize, end: usize) -> EmacsByteRange {
     EmacsByteRange::from_usize(start, end)
+}
+
+fn full_emacs_byte_range(text: &BufferText) -> EmacsByteRange {
+    EmacsByteRange::from_start_len(EmacsBytePos::ZERO, text.emacs_byte_len())
 }
 
 fn char_pos_to_byte_pos(text: &BufferText, target: usize) -> usize {
@@ -167,7 +171,7 @@ fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
         assert_eq!(text.gap_position_lisp(), initial_gap_position);
         assert_eq!(text.gap_size_lisp(), initial_gap_size);
 
-        let end_pos = emacs_byte_pos(text.emacs_byte_len());
+        let end_pos = emacs_byte_pos(text.emacs_byte_len().get());
         insert_storage_string(&mut text, end_pos, "d");
         assert_eq!(text.gap_position_lisp(), initial_gap_position + 1);
         assert_eq!(text.gap_size_lisp(), initial_gap_size - 1);
@@ -365,13 +369,10 @@ fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
 
         assert_eq!(text.backend_kind(), kind);
         assert!(!text.is_multibyte());
-        assert_eq!(text.char_count(), 3);
+        assert_eq!(text.char_count(), CharLen::new(3));
 
         let mut bytes = Vec::new();
-        text.copy_emacs_byte_range_to(
-            EmacsByteRange::from_usize(0, text.emacs_byte_len()),
-            &mut bytes,
-        );
+        text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
         assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
     }
 }
@@ -444,14 +445,11 @@ fn from_lisp_string_preserves_unibyte_raw_bytes() {
     let text = BufferText::from_lisp_string(&raw);
 
     assert!(!text.is_multibyte());
-    assert_eq!(text.len(), 3);
-    assert_eq!(text.char_count(), 3);
+    assert_eq!(text.emacs_byte_len(), EmacsByteLen::new(3));
+    assert_eq!(text.char_count(), CharLen::new(3));
 
     let mut bytes = Vec::new();
-    text.copy_emacs_byte_range_to(
-        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
-        &mut bytes,
-    );
+    text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
 
@@ -459,13 +457,13 @@ fn from_lisp_string_preserves_unibyte_raw_bytes() {
 fn char_count_tracks_multibyte_inserts_and_deletes() {
     crate::test_utils::init_test_tracing();
     let mut text = BufferText::from_str("ééz");
-    assert_eq!(text.char_count(), 3);
+    assert_eq!(text.char_count(), CharLen::new(3));
 
     insert_storage_string(&mut text, emacs_byte_pos('é'.len_utf8()), "ß");
-    assert_eq!(text.char_count(), 4);
+    assert_eq!(text.char_count(), CharLen::new(4));
 
     delete_emacs_byte_range(&mut text, emacs_byte_range(2, 4));
-    assert_eq!(text.char_count(), 3);
+    assert_eq!(text.char_count(), CharLen::new(3));
     assert_eq!(text.to_string(), "ééz");
 }
 
@@ -475,8 +473,8 @@ fn shared_clone_observes_cached_char_count_updates() {
     let mut text = BufferText::from_str("ab");
     let shared = text.shared_clone();
     insert_storage_string(&mut text, emacs_byte_pos(2), "é");
-    assert_eq!(text.char_count(), 3);
-    assert_eq!(shared.char_count(), 3);
+    assert_eq!(text.char_count(), CharLen::new(3));
+    assert_eq!(shared.char_count(), CharLen::new(3));
 }
 
 #[test]
@@ -485,8 +483,8 @@ fn deep_clone_keeps_independent_char_count_cache() {
     let mut text = BufferText::from_str("ab");
     let cloned = text.clone();
     insert_storage_string(&mut text, emacs_byte_pos(2), "é");
-    assert_eq!(text.char_count(), 3);
-    assert_eq!(cloned.char_count(), 2);
+    assert_eq!(text.char_count(), CharLen::new(3));
+    assert_eq!(cloned.char_count(), CharLen::new(2));
 }
 
 #[test]
@@ -553,7 +551,7 @@ fn range_contains_char_code_scans_non_contiguous_backend_chunks() {
         insert_storage_string(&mut text, insert_at, "é");
 
         let mut chunks = 0;
-        text.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(0, text.len()), |_| {
+        text.for_each_emacs_byte_range_chunk(full_emacs_byte_range(&text), |_| {
             chunks += 1;
             Ok::<(), ()>(())
         })
@@ -563,11 +561,9 @@ fn range_contains_char_code_scans_non_contiguous_backend_chunks() {
             "{kind:?} should expose a multi-chunk range for this test"
         );
 
+        assert!(text.emacs_byte_range_contains_char_code(full_emacs_byte_range(&text), 'é' as u32));
         assert!(
-            text.emacs_byte_range_contains_char_code(emacs_byte_range(0, text.len()), 'é' as u32)
-        );
-        assert!(
-            !text.emacs_byte_range_contains_char_code(emacs_byte_range(0, text.len()), '日' as u32)
+            !text.emacs_byte_range_contains_char_code(full_emacs_byte_range(&text), '日' as u32)
         );
     }
 }
@@ -586,7 +582,7 @@ fn char_pos_to_emacs_byte_pos_matches_oracle() {
 
     // Oracle: contiguous bytes → char_to_byte_pos.
     let mut bytes = Vec::new();
-    text.copy_emacs_byte_range_to(emacs_byte_range(0, text.len()), &mut bytes);
+    text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
 
     for &cp in &[
         0usize,
@@ -595,8 +591,8 @@ fn char_pos_to_emacs_byte_pos_matches_oracle() {
         500,
         5000,
         12345,
-        text.char_count() - 1,
-        text.char_count(),
+        text.char_count().get() - 1,
+        text.char_count().get(),
     ] {
         let got = char_pos_to_byte_pos(&text, cp);
         let expected = crate::emacs_core::emacs_char::char_to_byte_pos(&bytes, cp);
@@ -633,9 +629,10 @@ fn emacs_byte_pos_to_char_pos_matches_oracle() {
     let text = BufferText::from_str(&s);
 
     let mut bytes = Vec::new();
-    text.copy_emacs_byte_range_to(emacs_byte_range(0, text.len()), &mut bytes);
+    text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
 
-    for &bp in &[0usize, 1, 50, 500, 5000, 12345, text.len() - 1, text.len()] {
+    let byte_len = text.emacs_byte_len().get();
+    for &bp in &[0usize, 1, 50, 500, 5000, 12345, byte_len - 1, byte_len] {
         // Oracle valid only on char boundaries — snap bp down to one.
         let mut bp_snapped = bp;
         while bp_snapped > 0 && bp_snapped < bytes.len() && (bytes[bp_snapped] & 0xC0) == 0x80 {
@@ -684,7 +681,7 @@ fn set_multibyte_invalidates_position_caches() {
 
     assert_eq!(text.anchor_cache_len(), 0);
     assert!(!text.is_multibyte());
-    assert_eq!(text.char_count(), text.emacs_byte_len());
+    assert_eq!(text.char_count().get(), text.emacs_byte_len().get());
 }
 
 #[test]
@@ -728,16 +725,13 @@ fn replace_lisp_string_handles_unibyte_raw_bytes() {
     text.replace_lisp_string(&raw, crate::buffer::text_props::TextPropertyTable::new());
 
     assert!(!text.is_multibyte());
-    assert_eq!(text.char_count(), 3);
+    assert_eq!(text.char_count(), CharLen::new(3));
     assert_eq!(char_pos_to_byte_pos(&text, 2), 2);
     assert_eq!(text.byte_at_emacs_byte_pos(emacs_byte_pos(0)), 0xFF);
     assert_eq!(text.byte_at_emacs_byte_pos(emacs_byte_pos(1)), b'A');
     assert_eq!(text.byte_at_emacs_byte_pos(emacs_byte_pos(2)), 0x80);
 
     let mut bytes = Vec::new();
-    text.copy_emacs_byte_range_to(
-        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
-        &mut bytes,
-    );
+    text.copy_emacs_byte_range_to(full_emacs_byte_range(&text), &mut bytes);
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
