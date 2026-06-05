@@ -1447,7 +1447,7 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
     let Some((point_max, current_id)) = eval
         .buffers
         .current_buffer()
-        .map(|buffer| (buffer.accessible_emacs_byte_region().end_usize(), buffer.id))
+        .map(|buffer| (buffer.accessible_emacs_byte_region().end(), buffer.id))
     else {
         return Ok(LispString::from_utf8(""));
     };
@@ -1457,10 +1457,8 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
         .buffers
         .get(current_id)
         .expect("current buffer must remain available");
-    let start = buffer
-        .lisp_pos_to_accessible_emacs_byte_pos(prompt_end_pos)
-        .get();
-    Ok(buffer.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, point_max)))
+    let start = buffer.lisp_pos_to_accessible_emacs_byte_pos(prompt_end_pos);
+    Ok(buffer.buffer_substring_lisp_string_range(EmacsByteRange::new(start, point_max)))
 }
 
 fn resolve_minibuffer_buffer_arg(

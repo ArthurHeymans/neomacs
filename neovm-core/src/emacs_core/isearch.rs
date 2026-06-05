@@ -1582,7 +1582,7 @@ fn replace_string_eval_impl(
                     )],
                 ));
             }
-            buf.accessible_emacs_byte_region().end_usize()
+            buf.accessible_emacs_byte_region().end()
         };
         let current_id = eval
             .buffers
@@ -1590,7 +1590,7 @@ fn replace_string_eval_impl(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(point_max));
+            .goto_buffer_emacs_byte_pos(current_id, point_max);
         return Ok(Value::NIL);
     }
     let (start, end, source_text, source, read_only, buffer_name) = {
@@ -1853,7 +1853,7 @@ fn replace_regexp_eval_impl(
                     )],
                 ));
             }
-            buf.accessible_emacs_byte_region().end_usize()
+            buf.accessible_emacs_byte_region().end()
         };
         let current_id = eval
             .buffers
@@ -1861,7 +1861,7 @@ fn replace_regexp_eval_impl(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(point_max));
+            .goto_buffer_emacs_byte_pos(current_id, point_max);
         return Ok(Value::NIL);
     }
 
