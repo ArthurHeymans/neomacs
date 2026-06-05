@@ -89,14 +89,14 @@ impl Piece {
             Self::new(
                 self.source,
                 self.start,
-                TextExtent::from_usize(chars_before, local_byte),
+                TextExtent::new(CharLen::new(chars_before), EmacsByteLen::new(local_byte)),
             ),
             Self::new(
                 self.source,
                 self.start.add_emacs_bytes(EmacsByteLen::new(local_byte)),
-                TextExtent::from_usize(
-                    self.char_len_usize() - chars_before,
-                    self.len_usize() - local_byte,
+                TextExtent::new(
+                    CharLen::new(self.char_len_usize() - chars_before),
+                    EmacsByteLen::new(self.len_usize() - local_byte),
                 ),
             ),
         )
@@ -166,7 +166,7 @@ impl PieceTreeTextBackend {
         backend.root = backend.node_for_piece(Piece::new(
             PieceSource::Original,
             SourceBytePos::ZERO,
-            TextExtent::from_usize(emacs_char_count_bytes(bytes, multibyte), bytes.len()),
+            TextExtent::from_emacs_bytes(bytes, multibyte),
         ));
         backend
     }
@@ -399,7 +399,7 @@ impl PieceTreeTextBackend {
         let piece = self.node_for_piece(Piece::new(
             PieceSource::Add,
             SourceBytePos::new(add_start),
-            TextExtent::from_usize(nchars, bytes.len()),
+            TextExtent::new(CharLen::new(nchars), EmacsByteLen::new(bytes.len())),
         ));
         let root = self.root.take();
         let (left, right) = self.split_at_byte(root, pos);
@@ -534,10 +534,7 @@ impl PieceTreeTextBackend {
         self.root = self.node_for_piece(Piece::new(
             PieceSource::Original,
             SourceBytePos::ZERO,
-            TextExtent::from_usize(
-                emacs_char_count_bytes(&self.original, multibyte),
-                self.original.len(),
-            ),
+            TextExtent::from_emacs_bytes(&self.original, multibyte),
         ));
     }
 

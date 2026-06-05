@@ -19,7 +19,7 @@ struct RopeChunk {
 
 impl RopeChunk {
     fn new(bytes: Vec<u8>, multibyte: bool) -> Self {
-        let extent = TextExtent::from_usize(emacs_char_count_bytes(&bytes, multibyte), bytes.len());
+        let extent = TextExtent::from_emacs_bytes(&bytes, multibyte);
         Self { bytes, extent }
     }
 
@@ -990,8 +990,7 @@ mod tests {
     fn insert_rope_str(rope: &mut RopeTextBackend, byte_pos: usize, text: &str) {
         let bytes =
             crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, rope.multibyte);
-        let extent =
-            TextExtent::from_usize(emacs_char_count_bytes(&bytes, rope.multibyte), bytes.len());
+        let extent = TextExtent::from_emacs_bytes(&bytes, rope.multibyte);
         rope.insert_measured_emacs_bytes(EmacsBytePos::new(byte_pos), &bytes, extent);
     }
 
@@ -1004,7 +1003,7 @@ mod tests {
         rope.insert_measured_emacs_bytes(
             EmacsBytePos::new(byte_pos),
             bytes,
-            TextExtent::from_usize(nchars, bytes.len()),
+            TextExtent::new(CharLen::new(nchars), EmacsByteLen::new(bytes.len())),
         );
     }
 

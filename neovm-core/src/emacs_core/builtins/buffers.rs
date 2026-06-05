@@ -5,7 +5,7 @@ use super::*;
 // ===========================================================================
 
 use crate::buffer::{
-    Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
+    Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
     EmacsByteRange, LispCharPos1, TextChange, TextEditRange, TextExtent, TextPositionAnchor,
 };
 use crate::emacs_core::filelock;
@@ -1340,7 +1340,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     )?;
     let change = TextChange::new(
         old_range,
-        TextExtent::from_usize(source_text.schars(), source_text.sbytes()),
+        super::editfns::lisp_string_text_extent(&source_text),
     );
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
@@ -2660,9 +2660,9 @@ struct InsertPiece {
 }
 
 fn insert_pieces_extent(pieces: &[InsertPiece]) -> TextExtent {
-    TextExtent::from_usize(
-        pieces.iter().map(|piece| piece.text.schars()).sum(),
-        pieces.iter().map(|piece| piece.text.sbytes()).sum(),
+    TextExtent::new(
+        CharLen::new(pieces.iter().map(|piece| piece.text.schars()).sum()),
+        EmacsByteLen::new(pieces.iter().map(|piece| piece.text.sbytes()).sum()),
     )
 }
 
@@ -3264,7 +3264,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
         .get(current_id)
         .map(Buffer::point_emacs_byte_pos)
         .unwrap_or(EmacsBytePos::ZERO);
-    let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
+    let text_extent = super::editfns::lisp_string_text_extent(&to_insert);
     let text_len = text_extent.emacs_bytes();
     let change = current_empty_text_change_at_emacs_byte_pos(
         &eval.buffers,
@@ -3345,7 +3345,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
         .get(current_id)
         .map(Buffer::point_emacs_byte_pos)
         .unwrap_or(EmacsBytePos::ZERO);
-    let text_extent = TextExtent::from_usize(to_insert.schars(), to_insert.sbytes());
+    let text_extent = super::editfns::lisp_string_text_extent(&to_insert);
     let text_len = text_extent.emacs_bytes();
     let change = current_empty_text_change_at_emacs_byte_pos(
         &eval.buffers,

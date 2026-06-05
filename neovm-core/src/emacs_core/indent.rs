@@ -12,7 +12,7 @@ use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
+    Buffer, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -579,7 +579,7 @@ pub(crate) fn builtin_move_to_column(
             &ctx.buffers,
             current_id,
             insert_pos,
-            TextExtent::from_usize(pad_len, pad_len),
+            TextExtent::new(CharLen::new(pad_len), EmacsByteLen::new(pad_len)),
         )?;
         super::editfns::signal_before_text_change(ctx, pad_change)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
@@ -627,7 +627,7 @@ pub(crate) fn builtin_move_to_column(
             &ctx.buffers,
             current_id,
             insert_pos,
-            TextExtent::from_usize(pad_len, pad_len),
+            TextExtent::new(CharLen::new(pad_len), EmacsByteLen::new(pad_len)),
         )?;
         super::editfns::signal_before_text_change(ctx, change)?;
         let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
@@ -713,7 +713,7 @@ pub(crate) fn builtin_indent_to(
             &ctx.buffers,
             current_id,
             insert_pos,
-            TextExtent::from_usize(indent_len, indent_len),
+            TextExtent::new(CharLen::new(indent_len), EmacsByteLen::new(indent_len)),
         )?;
         super::editfns::signal_before_text_change(ctx, change)?;
         super::builtins::insert_string_value_in_current_buffer(

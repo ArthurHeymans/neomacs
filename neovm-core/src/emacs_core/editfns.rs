@@ -14,8 +14,8 @@ use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextChange,
-    TextEditRange, TextExtent,
+    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    TextChange, TextEditRange, TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -148,7 +148,10 @@ pub(crate) fn buffer_edit_range_for_byte_range_in_manager(
 }
 
 pub(crate) fn lisp_string_text_extent(text: &LispString) -> TextExtent {
-    TextExtent::from_usize(text.schars(), text.sbytes())
+    TextExtent::new(
+        CharLen::new(text.schars()),
+        EmacsByteLen::new(text.sbytes()),
+    )
 }
 
 pub(crate) fn text_change_for_replacement_in_manager(

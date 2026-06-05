@@ -95,7 +95,7 @@ impl TextExtent {
         Self { chars, emacs_bytes }
     }
 
-    pub const fn from_usize(chars: usize, emacs_bytes: usize) -> Self {
+    pub(in crate::buffer) const fn from_usize(chars: usize, emacs_bytes: usize) -> Self {
         Self {
             chars: CharLen::new(chars),
             emacs_bytes: EmacsByteLen::new(emacs_bytes),
@@ -103,7 +103,10 @@ impl TextExtent {
     }
 
     pub fn from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Self {
-        Self::from_usize(super::emacs_char_count_bytes(bytes, multibyte), bytes.len())
+        Self::new(
+            CharLen::new(super::emacs_char_count_bytes(bytes, multibyte)),
+            EmacsByteLen::new(bytes.len()),
+        )
     }
 
     pub const fn chars(self) -> CharLen {

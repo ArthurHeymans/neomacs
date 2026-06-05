@@ -662,7 +662,7 @@ impl SameLenSubstitutionPlan {
                 changed_ranges.push(TextEditRange::from_start_extent(
                     EmacsBytePos::new(start + byte_offset),
                     CharPos0::new(char_pos),
-                    TextExtent::from_usize(1, clen),
+                    TextExtent::new(CharLen::new(1), EmacsByteLen::new(clen)),
                 ));
             } else {
                 replacement_bytes.extend_from_slice(&region_bytes[byte_offset..byte_offset + clen]);
@@ -692,7 +692,7 @@ impl SameLenSubstitutionPlan {
                 changed_ranges.push(TextEditRange::from_start_extent(
                     EmacsBytePos::new(start + index),
                     CharPos0::new(char_pos),
-                    TextExtent::from_usize(1, 1),
+                    TextExtent::new(CharLen::new(1), EmacsByteLen::new(1)),
                 ));
             } else {
                 replacement_bytes.push(byte);

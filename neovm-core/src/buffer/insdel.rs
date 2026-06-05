@@ -14,8 +14,8 @@ use crate::buffer::edit_transaction::{
 };
 use crate::buffer::undo;
 use crate::buffer::{
-    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
-    TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
+    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
+    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -361,7 +361,10 @@ impl Buffer {
     ) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
         let insert_pos = self.pt_byte;
-        let extent = TextExtent::from_usize(text.schars(), text.as_bytes().len());
+        let extent = TextExtent::new(
+            CharLen::new(text.schars()),
+            EmacsByteLen::new(text.as_bytes().len()),
+        );
         let insertion = self.insert_bytes_internal_full(
             text.as_bytes(),
             extent,
@@ -411,7 +414,8 @@ impl Buffer {
 
         let start_char = old_range.char_start();
         let end_char = old_range.char_end();
-        let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
+        let new_extent =
+            TextExtent::new(CharLen::new(new_char_len), EmacsByteLen::new(new_byte_len));
         let replacement = TextReplacement::new(old_range, new_extent);
 
         let old_pt_byte = self.pt_byte;
