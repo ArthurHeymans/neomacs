@@ -570,15 +570,15 @@ fn casify_word_in_state(
         let table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
         let pt = buf.point_emacs_byte_pos();
         let target = forward_word(buf, &table, n);
-        let (beg, end) = if target >= pt.get() {
-            (pt.get(), target)
+        let (beg, end) = if target >= pt {
+            (pt, target)
         } else {
-            (target, pt.get())
+            (target, pt)
         };
-        let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(beg, end));
+        let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::new(beg, end));
         (
-            beg,
-            end,
+            beg.get(),
+            end.get(),
             text,
             buf.name_value(),
             super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf),

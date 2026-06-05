@@ -400,7 +400,7 @@ fn forward_word_basic() {
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 1);
     // "hello" ends at byte 5.
-    assert_eq!(pos, 5);
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(5));
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn forward_word_two() {
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 2);
     // Past "hello world" = byte 11.
-    assert_eq!(pos, 11);
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(11));
 }
 
 #[test]
@@ -421,7 +421,7 @@ fn forward_word_from_middle() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // inside "hello"
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, 1);
-    assert_eq!(pos, 5); // end of "hello"
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(5)); // end of "hello"
 }
 
 #[test]
@@ -431,7 +431,7 @@ fn backward_word_basic() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end of text
     let table = SyntaxTable::new_standard();
     let pos = backward_word(&buf, &table, 1);
-    assert_eq!(pos, 6); // start of "world"
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(6)); // start of "world"
 }
 
 #[test]
@@ -441,7 +441,7 @@ fn backward_word_two() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let table = SyntaxTable::new_standard();
     let pos = backward_word(&buf, &table, 2);
-    assert_eq!(pos, 0); // start of "hello"
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(0)); // start of "hello"
 }
 
 #[test]
@@ -451,7 +451,7 @@ fn forward_word_negative_goes_backward() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let table = SyntaxTable::new_standard();
     let pos = forward_word(&buf, &table, -1);
-    assert_eq!(pos, 6);
+    assert_eq!(pos, crate::buffer::EmacsBytePos::new(6));
 }
 
 // -----------------------------------------------------------------------

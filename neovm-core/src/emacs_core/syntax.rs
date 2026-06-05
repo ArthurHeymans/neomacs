@@ -27,6 +27,11 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
         .get()
 }
 
+#[inline]
+fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: usize) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+}
+
 #[derive(Clone, Copy)]
 struct BufferSyntaxChar {
     ch: char,
@@ -70,8 +75,8 @@ fn buffer_syntax_char_before(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<Buf
 }
 
 #[inline]
-fn buffer_byte_to_lisp_pos(buf: &Buffer, byte_pos: usize) -> i64 {
-    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
+fn buffer_byte_to_lisp_pos(buf: &Buffer, byte_pos: EmacsBytePos) -> i64 {
+    buf.emacs_byte_pos_to_char_pos_clamped(byte_pos)
         .to_lisp()
         .as_i64()
 }
@@ -712,11 +717,11 @@ impl Default for SyntaxTable {
 // Motion functions (operate on a Buffer + SyntaxTable)
 // ===========================================================================
 
-/// Move forward over `count` words.  Returns the resulting byte position.
+/// Move forward over `count` words.  Returns the resulting Emacs byte position.
 ///
 /// A "word" is a maximal run of characters with syntax class `Word`.
 /// Between words, non-word characters are skipped.
-pub fn forward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> usize {
+pub fn forward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> EmacsBytePos {
     forward_word_with_options(buf, table, count, false).0
 }
 
@@ -767,7 +772,7 @@ fn forward_word_with_options(
     table: &SyntaxTable,
     count: i64,
     honor_properties: bool,
-) -> (usize, bool) {
+) -> (EmacsBytePos, bool) {
     if count < 0 {
         return backward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -802,7 +807,7 @@ fn forward_word_with_options(
         }
         if idx == accessible_len {
             let abs_char = accessible_char_start + idx;
-            return (buffer_char_to_byte_pos(buf, abs_char), false);
+            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
         }
         // Skip word characters
         while idx < accessible_len
@@ -824,11 +829,11 @@ fn forward_word_with_options(
 
     // Convert char index back to byte position (absolute).
     let abs_char = accessible_char_start + idx;
-    (buffer_char_to_byte_pos(buf, abs_char), true)
+    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
 }
 
-/// Move backward over `count` words.  Returns the resulting byte position.
-pub fn backward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> usize {
+/// Move backward over `count` words.  Returns the resulting Emacs byte position.
+pub fn backward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> EmacsBytePos {
     backward_word_with_options(buf, table, count, false).0
 }
 
@@ -837,7 +842,7 @@ fn backward_word_with_options(
     table: &SyntaxTable,
     count: i64,
     honor_properties: bool,
-) -> (usize, bool) {
+) -> (EmacsBytePos, bool) {
     if count < 0 {
         return forward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -871,7 +876,7 @@ fn backward_word_with_options(
         }
         if idx == 0 {
             let abs_char = accessible_char_start + idx;
-            return (buffer_char_to_byte_pos(buf, abs_char), false);
+            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
         }
         // Skip word characters backward
         while idx > 0
@@ -892,7 +897,7 @@ fn backward_word_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    (buffer_char_to_byte_pos(buf, abs_char), true)
+    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
 }
 
 /// Skip forward over characters whose syntax class matches any character in
@@ -3229,7 +3234,7 @@ pub(crate) fn builtin_forward_word(
         let table = SyntaxTable::for_buffer(buf);
         let honor_properties = parse_sexp_lookup_properties_enabled(eval);
         let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
-        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_emacs_byte_pos().get());
+        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_emacs_byte_pos());
         let raw_char = buffer_byte_to_lisp_pos(buf, raw_byte);
         (raw_byte, completed, orig_char, raw_char)
     };
@@ -3262,7 +3267,7 @@ pub(crate) fn builtin_forward_word(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         // Convert constrained 1-based char position back to a byte offset.
         let zero_based = (constrained_char - 1).max(0) as usize;
-        buffer_char_to_byte_pos(buf, zero_based)
+        buffer_char_to_emacs_byte_pos(buf, zero_based)
     };
 
     let current_id = eval
@@ -3271,7 +3276,7 @@ pub(crate) fn builtin_forward_word(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(final_byte));
+        .goto_buffer_emacs_byte_pos(current_id, final_byte);
 
     // GNU returns t when the requested motion fully succeeded, nil when it
     // stopped early at a buffer edge or a field boundary.
@@ -3311,7 +3316,7 @@ pub(crate) fn builtin_forward_word_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
     Ok(Value::NIL)
 }
 
@@ -3346,9 +3351,7 @@ pub(crate) fn builtin_backward_word(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
     Ok(Value::NIL)
 }
 
@@ -3577,7 +3580,10 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.total_chars()));
 
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
-        Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(buf, new_byte))),
+        Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(
+            buf,
+            EmacsBytePos::new(new_byte),
+        ))),
         Ok(None) => Ok(Value::NIL),
         Err(err) => Err(signal("scan-error", err.signal_data())),
     }
