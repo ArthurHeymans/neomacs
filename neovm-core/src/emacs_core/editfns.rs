@@ -948,8 +948,8 @@ pub(crate) fn builtin_delete_char(
                     if end >= accessible.end_usize() {
                         return Err(signal("end-of-buffer", vec![]));
                     }
-                    match buf.char_after_emacs_len(end) {
-                        Some(char_len) => end += char_len,
+                    match buf.char_after_emacs_byte_len(EmacsBytePos::new(end)) {
+                        Some(char_len) => end += char_len.get(),
                         None => {
                             return Err(signal("end-of-buffer", vec![]));
                         }
@@ -963,8 +963,8 @@ pub(crate) fn builtin_delete_char(
                     if start <= accessible.start_usize() {
                         return Err(signal("beginning-of-buffer", vec![]));
                     }
-                    match buf.char_before_emacs_len(start) {
-                        Some(char_len) => start -= char_len,
+                    match buf.char_before_emacs_byte_len(EmacsBytePos::new(start)) {
+                        Some(char_len) => start -= char_len.get(),
                         None => {
                             return Err(signal("beginning-of-buffer", vec![]));
                         }
@@ -1216,7 +1216,7 @@ fn following_char_value(ctx: &crate::emacs_core::eval::Context) -> EvalResult {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
             match (buf.point_byte() < accessible.end_usize())
-                .then(|| buf.char_code_after(buf.point_byte()))
+                .then(|| buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),
@@ -1237,7 +1237,7 @@ pub(crate) fn builtin_preceding_char(
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
             match (buf.point_byte() > accessible.start_usize())
-                .then(|| buf.char_code_before(buf.point_byte()))
+                .then(|| buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),

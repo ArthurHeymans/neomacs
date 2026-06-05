@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
 use super::position::{
-    AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsBytePos,
+    AccessibleCharRange, AccessibleEmacsByteRange, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
     EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
 use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
@@ -2688,12 +2688,19 @@ impl Buffer {
     }
 
     /// Character at Emacs byte position `pos`, or `None` if out of range.
+    pub fn char_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.char_code_after_emacs_byte_pos(pos)
+            .and_then(char::from_u32)
+    }
+
+    /// Character at raw Emacs byte position `pos`, or `None` if out of range.
     pub fn char_after(&self, pos: usize) -> Option<char> {
-        self.char_code_after(pos).and_then(char::from_u32)
+        self.char_after_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     /// Emacs character code at Emacs byte position `pos`, or `None` if out of range.
-    pub fn char_code_after(&self, pos: usize) -> Option<u32> {
+    pub fn char_code_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        let pos = pos.get();
         if pos >= self.total_bytes() {
             return None;
         }
@@ -2701,13 +2708,25 @@ impl Buffer {
             .char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
+    /// Emacs character code at raw Emacs byte position `pos`, or `None` if out of range.
+    pub fn char_code_after(&self, pos: usize) -> Option<u32> {
+        self.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
     /// Character immediately before Emacs byte position `pos`, or `None`.
+    pub fn char_before_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.char_code_before_emacs_byte_pos(pos)
+            .and_then(char::from_u32)
+    }
+
+    /// Character immediately before raw Emacs byte position `pos`, or `None`.
     pub fn char_before(&self, pos: usize) -> Option<char> {
-        self.char_code_before(pos).and_then(char::from_u32)
+        self.char_before_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     /// Emacs character code immediately before Emacs byte position `pos`, or `None`.
-    pub fn char_code_before(&self, pos: usize) -> Option<u32> {
+    pub fn char_code_before_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        let pos = pos.get();
         if pos == 0 || pos > self.total_bytes() {
             return None;
         }
@@ -2726,8 +2745,14 @@ impl Buffer {
             .char_code_at_emacs_byte_pos(EmacsBytePos::new(prior_byte))
     }
 
+    /// Emacs character code immediately before raw Emacs byte position `pos`, or `None`.
+    pub fn char_code_before(&self, pos: usize) -> Option<u32> {
+        self.char_code_before_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
     /// Emacs-byte width of the character starting at `pos`.
-    pub fn char_after_emacs_len(&self, pos: usize) -> Option<usize> {
+    pub fn char_after_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
+        let pos = pos.get();
         if pos >= self.total_bytes() {
             return None;
         }
@@ -2735,16 +2760,23 @@ impl Buffer {
             .text
             .emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
             .get();
-        Some(
+        Some(EmacsByteLen::new(
             self.text
                 .char_pos_to_emacs_byte_pos(CharPos0::new(char_idx + 1))
                 .get()
                 - pos,
-        )
+        ))
+    }
+
+    /// Raw Emacs-byte width of the character starting at `pos`.
+    pub fn char_after_emacs_len(&self, pos: usize) -> Option<usize> {
+        self.char_after_emacs_byte_len(EmacsBytePos::new(pos))
+            .map(EmacsByteLen::get)
     }
 
     /// Emacs-byte width of the character ending at `pos`.
-    pub fn char_before_emacs_len(&self, pos: usize) -> Option<usize> {
+    pub fn char_before_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
+        let pos = pos.get();
         if pos == 0 || pos > self.total_bytes() {
             return None;
         }
@@ -2759,7 +2791,13 @@ impl Buffer {
             .text
             .char_pos_to_emacs_byte_pos(CharPos0::new(prior_char - 1))
             .get();
-        Some(pos - prior_byte)
+        Some(EmacsByteLen::new(pos - prior_byte))
+    }
+
+    /// Raw Emacs-byte width of the character ending at `pos`.
+    pub fn char_before_emacs_len(&self, pos: usize) -> Option<usize> {
+        self.char_before_emacs_byte_len(EmacsBytePos::new(pos))
+            .map(EmacsByteLen::get)
     }
 
     // -- Narrowing -----------------------------------------------------------

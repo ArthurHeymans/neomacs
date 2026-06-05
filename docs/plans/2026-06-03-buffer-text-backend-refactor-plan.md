@@ -522,6 +522,9 @@ Completed so far:
   typed `EmacsBytePos` / anchor entry points.
 - Gated the raw buffer substring `text_range` helper to tests so production
   string extraction uses `EmacsByteRange`.
+- Added typed buffer character query helpers for `EmacsBytePos` /
+  `EmacsByteLen` and moved `editfns` character deletion/query paths onto
+  those entry points.
 
 Next work:
 
