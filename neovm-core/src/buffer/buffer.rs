@@ -2095,12 +2095,6 @@ impl Buffer {
         self.point_emacs_byte_pos().get()
     }
 
-    /// Legacy point accessor retained for tests that assert raw byte state.
-    #[cfg(test)]
-    pub fn point(&self) -> usize {
-        self.point_byte()
-    }
-
     /// Current point converted to a character position.
     pub fn point_char_pos(&self) -> CharPos0 {
         CharPos0::new(self.pt)
@@ -3025,12 +3019,6 @@ impl Buffer {
         } else {
             unsafe { Some((*self.mark_marker_ptr).data.charpos) }
         }
-    }
-
-    /// Legacy mark accessor retained for tests that assert raw byte state.
-    #[cfg(test)]
-    pub fn mark(&self) -> Option<usize> {
-        self.mark_byte()
     }
 
     /// Deactivate the mark.

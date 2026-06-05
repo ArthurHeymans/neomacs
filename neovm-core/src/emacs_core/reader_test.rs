@@ -4021,7 +4021,7 @@ fn read_from_unibyte_buffer_preserves_unibyte_string_literals() {
         .expect("reader should return a string object");
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
-    assert_eq!(ev.buffers.get(buf_id).expect("buffer").point(), 3);
+    assert_eq!(ev.buffers.get(buf_id).expect("buffer").point_byte(), 3);
 }
 
 #[test]

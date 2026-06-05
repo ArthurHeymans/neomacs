@@ -217,7 +217,7 @@ fn erase_buffer_widens_before_deleting_current_contents() {
     let buf = buffers.get(current).expect("buffer after erase");
     assert_eq!(buf.buffer_string(), "");
     assert_eq!(buf.buffer_size(), 0);
-    assert_eq!(buf.point(), 0);
+    assert_eq!(buf.point_byte(), 0);
     assert_eq!(buf.point_min(), 0);
     assert_eq!(buf.point_max(), 0);
 }

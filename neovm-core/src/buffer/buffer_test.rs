@@ -118,7 +118,7 @@ fn new_buffer_is_empty() {
     crate::test_utils::init_test_tracing();
     let buf = Buffer::new(BufferId(1), Value::string("*scratch*"));
     assert_eq!(buf.name_value(), Value::string("*scratch*"));
-    assert_eq!(buf.point(), 0);
+    assert_eq!(buf.point_byte(), 0);
     assert_eq!(buf.point_min(), 0);
     assert_eq!(buf.point_max(), 0);
     assert_eq!(buf.buffer_size(), 0);
@@ -126,7 +126,7 @@ fn new_buffer_is_empty() {
     assert!(!buf.get_read_only());
     assert!(buf.get_multibyte());
     assert!(buf.file_name_value().is_nil());
-    assert!(buf.mark().is_none());
+    assert!(buf.mark_byte().is_none());
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
         assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.point_min(), 4);
         assert_eq!(indirect.point_max(), 8);
-        assert_eq!(indirect.point(), 6);
+        assert_eq!(indirect.point_byte(), 6);
         assert_eq!(indirect.buffer_string(), "cdef");
 
         let _ = mgr.delete_buffer_emacs_byte_range(
@@ -351,7 +351,7 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
         assert_eq!(indirect.text_backend_kind(), kind);
         assert_eq!(indirect.point_min(), 2);
         assert_eq!(indirect.point_max(), 6);
-        assert_eq!(indirect.point(), 4);
+        assert_eq!(indirect.point_byte(), 4);
         assert_eq!(indirect.buffer_string(), "cdef");
     }
 }
@@ -671,11 +671,11 @@ fn goto_char_clamps_to_accessible_region() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
-    assert_eq!(buf.point(), 3);
+    assert_eq!(buf.point_byte(), 3);
 
     // Past end — clamped to zv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(999));
-    assert_eq!(buf.point(), buf.point_max());
+    assert_eq!(buf.point_byte(), buf.point_max());
 
     // Before start — clamped to begv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -684,7 +684,7 @@ fn goto_char_clamps_to_accessible_region() {
         buf.point_max_byte(),
     ));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
-    assert_eq!(buf.point(), 2);
+    assert_eq!(buf.point_byte(), 2);
 }
 
 #[test]
@@ -710,23 +710,38 @@ fn gnu_style_buffer_fields_track_char_and_byte_positions() {
     assert_eq!(buf.pt_byte, 2);
 
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
-    assert_eq!(buf.mark(), Some(3));
+    assert_eq!(
+        buf.mark_emacs_byte_pos(),
+        Some(crate::buffer::EmacsBytePos::new(3))
+    );
     assert_eq!(buf.mark_byte(), Some(3));
     assert_eq!(buf.mark_char(), Some(2));
 }
 
 #[test]
-fn byte_position_accessors_match_lisp_compat_accessors() {
+fn byte_position_accessors_report_current_state() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello world");
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 9));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(7));
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
 
-    assert_eq!(buf.point_byte(), buf.point());
-    assert_eq!(buf.point_min_byte(), buf.point_min());
-    assert_eq!(buf.point_max_byte(), buf.point_max());
-    assert_eq!(buf.mark_byte(), buf.mark());
+    assert_eq!(
+        buf.point_emacs_byte_pos(),
+        crate::buffer::EmacsBytePos::new(7)
+    );
+    assert_eq!(
+        buf.point_min_emacs_byte_pos(),
+        crate::buffer::EmacsBytePos::new(2)
+    );
+    assert_eq!(
+        buf.point_max_emacs_byte_pos(),
+        crate::buffer::EmacsBytePos::new(9)
+    );
+    assert_eq!(
+        buf.mark_emacs_byte_pos(),
+        Some(crate::buffer::EmacsBytePos::new(4))
+    );
 }
 
 #[test]
@@ -841,7 +856,7 @@ fn insert_at_point_advances_point() {
     let mut buf = Buffer::new(BufferId(1), Value::string("test"));
     // zv starts at 0 for an empty buffer; insert should extend it.
     buf.insert("hello");
-    assert_eq!(buf.point(), 5);
+    assert_eq!(buf.point_byte(), 5);
     assert_eq!(buf.buffer_string(), "hello");
     assert_eq!(buf.buffer_size(), 5);
     assert!(buf.is_modified());
@@ -854,7 +869,7 @@ fn insert_in_middle() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     buf.insert("l");
     assert_eq!(buf.buffer_string(), "hello");
-    assert_eq!(buf.point(), 4);
+    assert_eq!(buf.point_byte(), 4);
 }
 
 #[test]
@@ -865,7 +880,7 @@ fn insert_adjusts_mark() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf.insert("X");
     // Mark was at 1, insert at 0 pushes it to 2.
-    assert_eq!(buf.mark(), Some(2));
+    assert_eq!(buf.mark_byte(), Some(2));
     assert_eq!(buf.mark_char(), Some(2));
 }
 
@@ -890,7 +905,7 @@ fn delete_region_basic() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // at end
     buf.delete_region(5, 11);
     assert_eq!(buf.buffer_string(), "hello");
-    assert_eq!(buf.point(), 5); // was past deleted range
+    assert_eq!(buf.point_byte(), 5); // was past deleted range
 }
 
 #[test]
@@ -899,7 +914,7 @@ fn delete_region_adjusts_point_inside() {
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // in middle of deleted range
     buf.delete_region(1, 5);
-    assert_eq!(buf.point(), 1); // collapsed to start of deletion
+    assert_eq!(buf.point_byte(), 1); // collapsed to start of deletion
     assert_eq!(buf.buffer_string(), "af");
 }
 
@@ -909,7 +924,7 @@ fn delete_region_adjusts_point_at_end_boundary() {
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
     buf.delete_region(1, 5);
-    assert_eq!(buf.point(), 1);
+    assert_eq!(buf.point_byte(), 1);
     assert_eq!(buf.point_char(), 1);
 }
 
@@ -920,7 +935,7 @@ fn delete_region_adjusts_mark() {
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     buf.delete_region(1, 3);
     // mark was at 4, past deleted range end (3), so shifts by 2
-    assert_eq!(buf.mark(), Some(2));
+    assert_eq!(buf.mark_byte(), Some(2));
     assert_eq!(buf.mark_char(), Some(2));
 }
 
@@ -942,11 +957,11 @@ fn mark_char_tracks_multibyte_edits() {
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.insert("ß");
-    assert_eq!(buf.mark(), Some(2));
+    assert_eq!(buf.mark_byte(), Some(2));
     assert_eq!(buf.mark_char(), Some(1));
 
     buf.delete_region(0, 2);
-    assert_eq!(buf.mark(), Some(0));
+    assert_eq!(buf.mark_byte(), Some(0));
     assert_eq!(buf.mark_char(), Some(0));
 }
 
@@ -1123,7 +1138,7 @@ fn narrow_and_widen() {
     assert_eq!(buf.buffer_size(), 5);
     assert_eq!(buf.buffer_string(), "world");
     // Point was 8 — still within [6, 11].
-    assert_eq!(buf.point(), 8);
+    assert_eq!(buf.point_byte(), 8);
 
     buf.widen();
     assert_eq!(buf.point_min(), 0);
@@ -1137,7 +1152,7 @@ fn narrow_clamps_point() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 11));
     // Point 2 < begv 5 => clamped to 5.
-    assert_eq!(buf.point(), 5);
+    assert_eq!(buf.point_byte(), 5);
 }
 
 // -----------------------------------------------------------------------
@@ -1255,7 +1270,7 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
         point_byte: buf.point_byte(),
         point_char: buf.point_char(),
-        mark_byte: buf.mark(),
+        mark_byte: buf.mark_byte(),
         mark_char: buf.mark_char(),
         marker_position,
         text_properties: buffer_text_property_snapshot(&buf),
@@ -1303,7 +1318,7 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
         buffer_string: buf.buffer_string(),
         point_byte: buf.point_byte(),
         point_char: buf.point_char(),
-        mark_byte: buf.mark(),
+        mark_byte: buf.mark_byte(),
         mark_char: buf.mark_char(),
         marker_position,
         text_properties: buffer_text_property_snapshot(&buf),
@@ -1551,7 +1566,7 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
         buffer_string: buf.buffer_string(),
         point_byte: buf.point_byte(),
         point_char: buf.point_char(),
-        mark_byte: buf.mark(),
+        mark_byte: buf.mark_byte(),
         mark_char: buf.mark_char(),
         marker_position,
         text_properties: buffer_text_property_snapshot(buf),
@@ -1651,7 +1666,7 @@ fn run_manager_edit_entrypoint_script(
         buffer_string: buf.buffer_string(),
         point_byte: buf.point_byte(),
         point_char: buf.point_char(),
-        mark_byte: buf.mark(),
+        mark_byte: buf.mark_byte(),
         mark_char: buf.mark_char(),
         marker_position: marker_chain_lookup_for_test(&buf, 99)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
@@ -1854,8 +1869,8 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
         indirect_string: indirect.buffer_string(),
         base_point: (base.point_byte(), base.point_char()),
         indirect_point: (indirect.point_byte(), indirect.point_char()),
-        base_mark: (base.mark(), base.mark_char()),
-        indirect_mark: (indirect.mark(), indirect.mark_char()),
+        base_mark: (base.mark_byte(), base.mark_char()),
+        indirect_mark: (indirect.mark_byte(), indirect.mark_char()),
         marker_after_position: marker_chain_lookup_for_test(&base, 701)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         marker_before_position: marker_chain_lookup_for_test(&indirect, 702)
@@ -2540,7 +2555,7 @@ fn manager_replace_buffer_contents_resets_narrowing_and_point() {
 
     let buf = mgr.get(current).unwrap();
     assert_eq!(buf.buffer_string(), "xy");
-    assert_eq!(buf.point(), 0);
+    assert_eq!(buf.point_byte(), 0);
     assert_eq!(buf.point_min(), 0);
     assert_eq!(buf.point_max(), 2);
 }

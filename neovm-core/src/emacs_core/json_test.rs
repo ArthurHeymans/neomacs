@@ -361,7 +361,7 @@ fn json_parse_buffer_advances_point_after_value() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point(),
+            .point_byte(),
         3
     );
 }
@@ -410,7 +410,7 @@ fn json_parse_buffer_invalid_utf8_does_not_advance_point() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point(),
+            .point_byte(),
         0
     );
 }
@@ -440,7 +440,7 @@ fn json_parse_buffer_end_of_file_uses_gnu_signal_shape() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point(),
+            .point_byte(),
         0
     );
 }
@@ -464,7 +464,7 @@ fn json_insert_writes_at_point_and_advances() {
 
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "a[1,true]b");
-    assert_eq!(buf.point(), 9);
+    assert_eq!(buf.point_byte(), 9);
 }
 
 // -----------------------------------------------------------------------
