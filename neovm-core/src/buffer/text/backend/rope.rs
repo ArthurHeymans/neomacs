@@ -123,7 +123,7 @@ impl RopeTextBackend {
         TextBackendDebugLayout::Rope(self.metrics())
     }
 
-    pub(in crate::buffer) fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.metrics().emacs_bytes_usize()
     }
 

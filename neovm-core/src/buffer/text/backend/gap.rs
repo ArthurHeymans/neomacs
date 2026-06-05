@@ -52,7 +52,7 @@ impl GapTextBackend {
         }
     }
 
-    pub(in crate::buffer) fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.gap.len()
     }
 
@@ -68,27 +68,27 @@ impl GapTextBackend {
         self.gap.set_multibyte(multibyte);
     }
 
-    pub(in crate::buffer) fn char_count(&self) -> usize {
+    fn char_count(&self) -> usize {
         self.gap.char_count()
     }
 
-    pub(in crate::buffer) fn gpt(&self) -> usize {
+    fn gpt(&self) -> usize {
         self.gap.gpt()
     }
 
-    pub(in crate::buffer) fn z(&self) -> usize {
+    fn z(&self) -> usize {
         self.gap.z()
     }
 
-    pub(in crate::buffer) fn gpt_byte(&self) -> usize {
+    fn gpt_byte(&self) -> usize {
         self.gap.gpt_byte()
     }
 
-    pub(in crate::buffer) fn z_byte(&self) -> usize {
+    fn z_byte(&self) -> usize {
         self.gap.z_byte()
     }
 
-    pub(in crate::buffer) fn gap_size(&self) -> usize {
+    fn gap_size(&self) -> usize {
         self.gap.gap_size()
     }
 
