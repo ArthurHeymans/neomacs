@@ -6,7 +6,7 @@ use super::*;
 
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
-    LispCharPos1, TextChange, TextEditRange, TextExtent,
+    LispCharPos1, TextChange, TextEditRange, TextExtent, TextPositionAnchor,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -1578,11 +1578,12 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .buffers
             .get_mut(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        buffer.remap_text_markers_through(|old_byte| {
+        buffer.remap_text_marker_anchors(|old_position| {
+            let old_byte = old_position.emacs_byte_pos_usize();
             let boundary =
                 lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
             let new_char = lisp_string_byte_to_char(&new_storage, boundary);
-            (boundary, new_char)
+            TextPositionAnchor::from_usize(new_char, boundary)
         });
         buffer.replace_lisp_string_with_text_props(&new_storage, new_props);
     }

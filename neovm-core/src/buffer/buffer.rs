@@ -2534,11 +2534,11 @@ impl Buffer {
         self.text.replace_lisp_string(text, text_props);
     }
 
-    pub fn remap_text_markers_through<F>(&mut self, f: F)
+    pub fn remap_text_marker_anchors<F>(&mut self, f: F)
     where
-        F: FnMut(usize) -> (usize, usize),
+        F: FnMut(TextPositionAnchor) -> TextPositionAnchor,
     {
-        self.text.remap_markers_through(f);
+        self.text.remap_marker_anchors(f);
     }
 
     pub(crate) fn walk_marker_data_for_dump<F: FnMut(&crate::heap_types::LispMarker)>(&self, f: F) {

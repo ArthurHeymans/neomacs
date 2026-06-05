@@ -918,17 +918,14 @@ impl BufferText {
         storage.text_props = text_props;
     }
 
-    /// Walk the intrusive marker chain and remap each marker's (bytepos,
-    /// charpos) through the caller-supplied closure. Used by
-    /// `set-buffer-multibyte` to translate marker positions across a
-    /// wholesale gap-buffer replacement (the boundary arithmetic lives in
-    /// the caller; this helper only handles chain traversal).
-    ///
-    /// The closure receives the marker's current `bytepos` and returns
-    /// the new `(bytepos, charpos)` pair.
-    pub fn remap_markers_through<F>(&self, mut remap: F)
+    /// Walk the intrusive marker chain and remap each marker's cached
+    /// `(charpos, bytepos)` pair through the caller-supplied closure. GNU
+    /// keeps those two coordinates together on `struct Lisp_Marker`; Neomacs
+    /// uses `TextPositionAnchor` at this semantic boundary so callers cannot
+    /// accidentally update one coordinate without the other.
+    pub fn remap_marker_anchors<F>(&self, mut remap: F)
     where
-        F: FnMut(usize) -> (usize, usize),
+        F: FnMut(TextPositionAnchor) -> TextPositionAnchor,
     {
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
@@ -939,31 +936,10 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                let (new_byte, new_char) = remap(data.bytepos);
-                data.bytepos = new_byte;
-                data.charpos = new_char;
-                curr = data.next_marker;
-            }
-        }
-    }
-
-    /// Like [`Self::remap_markers_through`], but exposes both old byte and
-    /// old character positions to the caller.  GNU's `transpose_markers`
-    /// updates these two cached positions independently because text motion is
-    /// byte-based while interval and marker semantics are character-based.
-    pub fn remap_markers_through_byte_char<F>(&self, mut remap: F)
-    where
-        F: FnMut(usize, usize) -> (usize, usize),
-    {
-        let storage = self.storage.borrow();
-        let mut curr = storage.markers_head;
-        // SAFETY: same intrusive-chain invariant as `remap_markers_through`.
-        unsafe {
-            while !curr.is_null() {
-                let data = &mut (*curr).data;
-                let (new_byte, new_char) = remap(data.bytepos, data.charpos);
-                data.bytepos = new_byte;
-                data.charpos = new_char;
+                let new_position =
+                    remap(TextPositionAnchor::from_usize(data.charpos, data.bytepos));
+                data.bytepos = new_position.emacs_byte_pos_usize();
+                data.charpos = new_position.char_pos_usize();
                 curr = data.next_marker;
             }
         }

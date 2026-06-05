@@ -773,25 +773,20 @@ impl Buffer {
             .replace_same_len_measured_range(plan.replacement(), plan.replacement_bytes());
         self.text.text_props_replace(replacement_props);
         if leave_markers {
-            self.text
-                .remap_markers_through_byte_char(|old_byte, old_char| {
-                    if old_byte > start1_byte && old_byte <= end2_byte {
-                        let refreshed = TextPositionAnchor::new(
-                            CharPos0::new(old_char),
-                            emacs_byte_for_char_pos(&self.text, CharPos0::new(old_char)),
-                        );
-                        (refreshed.emacs_byte_pos_usize(), refreshed.char_pos_usize())
-                    } else {
-                        (old_byte, old_char)
-                    }
-                });
+            self.text.remap_marker_anchors(|old_position| {
+                let old_byte = old_position.emacs_byte_pos_usize();
+                if old_byte > start1_byte && old_byte <= end2_byte {
+                    TextPositionAnchor::new(
+                        old_position.char_pos(),
+                        emacs_byte_for_char_pos(&self.text, old_position.char_pos()),
+                    )
+                } else {
+                    old_position
+                }
+            });
         } else {
             self.text
-                .remap_markers_through_byte_char(|old_byte, old_char| {
-                    let moved = transposition
-                        .transpose_anchor(TextPositionAnchor::from_usize(old_char, old_byte));
-                    (moved.emacs_byte_pos_usize(), moved.char_pos_usize())
-                });
+                .remap_marker_anchors(|old_position| transposition.transpose_anchor(old_position));
         }
 
         self.pt_byte = new_point.emacs_byte_pos_usize();

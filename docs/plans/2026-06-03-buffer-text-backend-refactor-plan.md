@@ -509,6 +509,9 @@ Completed so far:
 - Added typed marker-chain registration, lookup, movement, and deletion
   adjustment boundaries using `TextPositionAnchor` / `TextEditRange`, while
   keeping raw wrappers only at Lisp/test compatibility edges.
+- Collapsed marker remapping for `set-buffer-multibyte` and
+  `transpose-regions` to a single `TextPositionAnchor -> TextPositionAnchor`
+  boundary, so marker byte and character caches move as one typed value.
 
 Next work:
 
