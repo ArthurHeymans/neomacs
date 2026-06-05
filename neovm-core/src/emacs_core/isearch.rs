@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
+use super::regex::MatchGroup;
 use super::value::{Value, ValueKind};
 use crate::buffer::{Buffer, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
@@ -416,9 +417,7 @@ fn count_string_regexp_matches(text: &str, pattern: &str, case_fold: bool) -> Re
         .matches
         .into_iter()
         .filter_map(|groups| groups.first().and_then(|group| *group))
-        .filter(|(match_start, match_end)| {
-            !(*match_start == *match_end && *match_start >= text.len())
-        })
+        .filter(|group| !(group.start() == group.end() && group.start() >= text.len()))
         .count() as i64)
 }
 
@@ -810,10 +809,10 @@ impl IsearchManager {
                 case_fold,
             ) {
                 for groups in iterated.matches {
-                    let Some((match_start, match_end)) = groups.first().and_then(|group| *group)
-                    else {
+                    let Some(group) = groups.first().and_then(|group| *group) else {
                         continue;
                     };
+                    let (match_start, match_end) = group.as_pair();
                     if match_start == match_end {
                         continue;
                     }
@@ -1421,10 +1420,12 @@ fn find_match(
                 pattern, text, start, case_fold,
             )
             .ok()?;
-            iterated
-                .matches
-                .into_iter()
-                .find_map(|groups| groups.first().and_then(|group| *group))
+            iterated.matches.into_iter().find_map(|groups| {
+                groups
+                    .first()
+                    .and_then(|group| *group)
+                    .map(MatchGroup::as_pair)
+            })
         } else {
             let end = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
@@ -1437,7 +1438,12 @@ fn find_match(
             iterated
                 .matches
                 .into_iter()
-                .filter_map(|groups| groups.first().and_then(|group| *group))
+                .filter_map(|groups| {
+                    groups
+                        .first()
+                        .and_then(|group| *group)
+                        .map(MatchGroup::as_pair)
+                })
                 .last()
         }
     } else {
@@ -1504,7 +1510,7 @@ fn preserve_case(replacement: &str, matched: &str) -> String {
     super::casefiddle::apply_replace_match_case(replacement, matched)
 }
 
-fn expand_emacs_replacement(rep: &str, groups: &[Option<(usize, usize)>], source: &str) -> String {
+fn expand_emacs_replacement(rep: &str, groups: &[Option<MatchGroup>], source: &str) -> String {
     let mut out = String::with_capacity(rep.len());
     let mut chars = rep.chars().peekable();
 
@@ -1521,16 +1527,16 @@ fn expand_emacs_replacement(rep: &str, groups: &[Option<(usize, usize)>], source
 
         match next {
             '&' => {
-                if let Some(Some((start, end))) = groups.first()
-                    && let Some(text) = source.get(*start..*end)
+                if let Some(Some(group)) = groups.first()
+                    && let Some(text) = source.get(group.start()..group.end())
                 {
                     out.push_str(text);
                 }
             }
             '1'..='9' => {
                 let idx = next.to_digit(10).unwrap() as usize;
-                if let Some(Some((start, end))) = groups.get(idx)
-                    && let Some(text) = source.get(*start..*end)
+                if let Some(Some(group)) = groups.get(idx)
+                    && let Some(text) = source.get(group.start()..group.end())
                 {
                     out.push_str(text);
                 }
@@ -1704,9 +1710,10 @@ fn replace_string_eval_impl(
                 .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
-            let Some((m_start, m_end)) = groups.first().and_then(|group| *group) else {
+            let Some(group) = groups.first().and_then(|group| *group) else {
                 continue;
             };
+            let (m_start, m_end) = group.as_pair();
             if delimited && !is_delimited_match(&source, m_start, m_end) {
                 continue;
             }
@@ -1897,9 +1904,10 @@ fn replace_regexp_eval_impl(
     let mut backward_point: Option<EmacsByteLen> = None;
     let mut query_forward_point: Option<EmacsByteLen> = None;
     for groups in iterated.matches {
-        let Some((match_start, match_end)) = groups.first().and_then(|group| *group) else {
+        let Some(group) = groups.first().and_then(|group| *group) else {
             continue;
         };
+        let (match_start, match_end) = group.as_pair();
         if delimited && !is_delimited_match(&source, match_start, match_end) {
             continue;
         }

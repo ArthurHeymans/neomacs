@@ -1,6 +1,6 @@
 use super::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
-use crate::emacs_core::regex::{char_pos_to_byte, char_pos_to_byte_lisp_string};
+use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 // ===========================================================================
@@ -1174,10 +1174,12 @@ pub(crate) fn builtin_match_string(
         None => return Ok(Value::NIL),
     };
 
-    let (start, end) = match md.groups.get(group) {
-        Some(Some(pair)) => *pair,
+    let group = match md.groups.get(group) {
+        Some(Some(group)) => *group,
         _ => return Ok(Value::NIL),
     };
+    let start = group.start();
+    let end = group.end();
 
     let slice_lisp_string = |string: &crate::heap_types::LispString, use_char_positions: bool| {
         let (byte_start, byte_end) = if use_char_positions {
@@ -1288,22 +1290,23 @@ pub(crate) fn builtin_match_beginning_with_state(
             };
 
             match md.groups.get(group) {
-                Some(Some((start, _end))) => {
+                Some(Some(group)) => {
+                    let start = group.start();
                     if md.searched_string.is_some() {
-                        Ok(Value::fixnum(*start as i64))
+                        Ok(Value::fixnum(start as i64))
                     } else if md.uses_buffer_byte_positions()
                         && let Some(buf) = md
                             .searched_buffer
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
-                        if *start <= buf.total_bytes() {
-                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(*start));
+                        if start <= buf.total_bytes() {
+                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(start));
                             Ok(Value::fixnum(pos))
                         } else {
-                            Ok(Value::fixnum(*start as i64))
+                            Ok(Value::fixnum(start as i64))
                         }
                     } else {
-                        Ok(Value::fixnum(*start as i64))
+                        Ok(Value::fixnum(start as i64))
                     }
                 }
                 Some(None) => Ok(Value::NIL),
@@ -1344,22 +1347,23 @@ pub(crate) fn builtin_match_end_with_state(
             };
 
             match md.groups.get(group) {
-                Some(Some((_start, end))) => {
+                Some(Some(group)) => {
+                    let end = group.end();
                     if md.searched_string.is_some() {
-                        Ok(Value::fixnum(*end as i64))
+                        Ok(Value::fixnum(end as i64))
                     } else if md.uses_buffer_byte_positions()
                         && let Some(buf) = md
                             .searched_buffer
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
-                        if *end <= buf.total_bytes() {
-                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(*end));
+                        if end <= buf.total_bytes() {
+                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(end));
                             Ok(Value::fixnum(pos))
                         } else {
-                            Ok(Value::fixnum(*end as i64))
+                            Ok(Value::fixnum(end as i64))
                         }
                     } else {
-                        Ok(Value::fixnum(*end as i64))
+                        Ok(Value::fixnum(end as i64))
                     }
                 }
                 Some(None) => Ok(Value::NIL),
@@ -1414,10 +1418,12 @@ pub(crate) fn builtin_match_data_with_state(
     let mut flat: Vec<Value> = Vec::with_capacity(trailing * 2);
     for grp in md.groups.iter().take(trailing) {
         match grp {
-            Some((start, end)) => {
+            Some(group) => {
+                let start = group.start();
+                let end = group.end();
                 if md.searched_string.is_some() {
-                    flat.push(Value::fixnum(*start as i64));
-                    flat.push(Value::fixnum(*end as i64));
+                    flat.push(Value::fixnum(start as i64));
+                    flat.push(Value::fixnum(end as i64));
                     continue;
                 }
 
@@ -1425,10 +1431,10 @@ pub(crate) fn builtin_match_data_with_state(
                     searched_buffer_id.and_then(|buffer_id| {
                         buffers.as_deref().and_then(|bufs| {
                             bufs.get(buffer_id).and_then(|buffer| {
-                                if *start <= *end && *end <= buffer.total_bytes() {
+                                if start <= end && end <= buffer.total_bytes() {
                                     Some((
-                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(*start)),
-                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(*end)),
+                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(start)),
+                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(end)),
                                     ))
                                 } else {
                                     None
@@ -1437,7 +1443,7 @@ pub(crate) fn builtin_match_data_with_state(
                         })
                     })
                 } else if searched_buffer_id.is_some() {
-                    Some((*start as i64, *end as i64))
+                    Some((start as i64, end as i64))
                 } else {
                     None
                 };
@@ -1447,8 +1453,8 @@ pub(crate) fn builtin_match_data_with_state(
                         flat.push(Value::fixnum(start_pos));
                         flat.push(Value::fixnum(end_pos));
                     } else {
-                        flat.push(Value::fixnum(*start as i64));
-                        flat.push(Value::fixnum(*end as i64));
+                        flat.push(Value::fixnum(start as i64));
+                        flat.push(Value::fixnum(end as i64));
                     }
                     continue;
                 }
@@ -1465,8 +1471,8 @@ pub(crate) fn builtin_match_data_with_state(
                     continue;
                 }
 
-                flat.push(Value::fixnum(*start as i64));
-                flat.push(Value::fixnum(*end as i64));
+                flat.push(Value::fixnum(start as i64));
+                flat.push(Value::fixnum(end as i64));
             }
             None => {
                 flat.push(Value::NIL);
@@ -1572,7 +1578,7 @@ pub(crate) fn builtin_set_match_data_with_state(
     };
     let pair_len = items.len() - usize::from(explicit_buffer_id.is_some());
 
-    let mut groups: Vec<Option<(usize, usize)>> = Vec::with_capacity(pair_len / 2);
+    let mut groups: Vec<Option<MatchGroup>> = Vec::with_capacity(pair_len / 2);
     let mut searched_buffer = explicit_buffer_id;
     let mut i = 0usize;
     while i + 1 < pair_len {
@@ -1597,7 +1603,7 @@ pub(crate) fn builtin_set_match_data_with_state(
             break;
         }
 
-        groups.push(Some((start as usize, end as usize)));
+        groups.push(Some(MatchGroup::new(start as usize, end as usize)));
         i += 2;
     }
 
@@ -1647,9 +1653,8 @@ pub(crate) fn builtin_set_match_data(
 fn translate_match_data(match_data: &mut Option<super::regex::MatchData>, delta: i64) {
     if let Some(md) = match_data {
         for group in md.groups.iter_mut() {
-            if let Some((start, end)) = group {
-                *start = (*start as i64 + delta).max(0) as usize;
-                *end = (*end as i64 + delta).max(0) as usize;
+            if let Some(group) = group {
+                *group = group.translate_saturating(delta);
             }
         }
     }
@@ -1684,24 +1689,27 @@ fn update_match_data_after_buffer_replace(
 
     let change = newend as i64 - oldend as i64;
     for group in md.groups.iter_mut() {
-        let Some((start, end)) = group.as_mut() else {
+        let Some(match_group) = group.as_mut() else {
             continue;
         };
+        let mut start = match_group.start();
+        let mut end = match_group.end();
 
-        if *start <= oldstart {
+        if start <= oldstart {
             // Keep starts for enclosing groups, matching GNU's optimistic
             // `update_search_regs` heuristic.
-        } else if *start >= oldend {
-            *start = (*start as i64 + change) as usize;
+        } else if start >= oldend {
+            start = (start as i64 + change) as usize;
         } else {
-            *start = oldstart;
+            start = oldstart;
         }
 
-        if *end >= oldend {
-            *end = (*end as i64 + change) as usize;
-        } else if *end > oldstart {
-            *end = oldstart;
+        if end >= oldend {
+            end = (end as i64 + change) as usize;
+        } else if end > oldstart {
+            end = oldstart;
         }
+        *match_group = MatchGroup::new(start, end);
     }
 }
 

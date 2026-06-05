@@ -240,11 +240,11 @@ fn flatten_match_data(md: &super::regex::MatchData) -> Value {
     let mut flat: Vec<Value> = Vec::with_capacity(trailing * 2);
     for grp in md.groups.iter().take(trailing) {
         match grp {
-            Some((start, end)) => {
+            Some(group) => {
                 // For string searches, positions are already character positions.
                 // For buffer searches, positions are byte positions (returned as-is).
-                flat.push(Value::fixnum(*start as i64));
-                flat.push(Value::fixnum(*end as i64));
+                flat.push(Value::fixnum(group.start() as i64));
+                flat.push(Value::fixnum(group.end() as i64));
             }
             None => {
                 flat.push(Value::NIL);
@@ -318,9 +318,8 @@ fn translate_match_data_to_substring(
 ) -> super::regex::MatchData {
     let mut translated = match_data.clone();
     for group in translated.groups.iter_mut() {
-        if let Some((start, end)) = group {
-            *start = (*start as i64 + delta).max(0) as usize;
-            *end = (*end as i64 + delta).max(0) as usize;
+        if let Some(group) = group {
+            *group = group.translate_saturating(delta);
         }
     }
     translated.searched_string = Some(searched_string);
@@ -402,14 +401,17 @@ fn match_group_to_byte_range(
     md: &super::regex::MatchData,
     group: usize,
 ) -> Option<(usize, usize)> {
-    let (start, end) = md.groups.get(group).and_then(|range| *range)?;
+    let range = md.groups.get(group).and_then(|range| *range)?;
     if md.searched_string.is_some() {
         Some((
-            super::regex::char_pos_to_byte_lisp_string(source, start),
-            super::regex::char_pos_to_byte_lisp_string(source, end),
+            super::regex::char_pos_to_byte_lisp_string(source, range.start()),
+            super::regex::char_pos_to_byte_lisp_string(source, range.end()),
         ))
     } else {
-        Some((start.min(source.byte_len()), end.min(source.byte_len())))
+        Some((
+            range.start().min(source.byte_len()),
+            range.end().min(source.byte_len()),
+        ))
     }
 }
 
@@ -634,9 +636,11 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         Some(md) => md,
         None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
     };
-    let Some((match_start, match_end)) = md.groups.get(subexp).and_then(|range| *range) else {
+    let Some(match_group) = md.groups.get(subexp).and_then(|range| *range) else {
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
+    let match_start = match_group.start();
+    let match_end = match_group.end();
 
     let (buffer_start, buffer_end) = if md.searched_string.is_some() {
         (
@@ -662,9 +666,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         && !replacement_match_data.buffer_positions_are_bytes
     {
         for group in &mut replacement_match_data.groups {
-            if let Some((start, end)) = group {
-                *start = start.saturating_sub(1);
-                *end = end.saturating_sub(1);
+            if let Some(group) = group {
+                *group = group.saturating_sub(1);
             }
         }
         replacement_match_data.searched_string =
@@ -688,7 +691,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
             replacement_match_data
                 .groups
                 .get(subexp)
-                .and_then(|range| range.map(|(start, _)| start))
+                .and_then(|range| range.map(|group| group.start()))
                 .unwrap_or(0),
         )
     } else {
@@ -700,7 +703,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
             replacement_match_data
                 .groups
                 .get(subexp)
-                .and_then(|range| range.map(|(_, end)| end))
+                .and_then(|range| range.map(|group| group.end()))
                 .unwrap_or(0),
         )
     } else {
@@ -759,10 +762,11 @@ where
         let Some(current_md) = match_data.clone() else {
             break;
         };
-        let Some((full_start_char, full_end_char)) = current_md.groups.first().and_then(|g| *g)
-        else {
+        let Some(full_group) = current_md.groups.first().and_then(|g| *g) else {
             break;
         };
+        let full_start_char = full_group.start();
+        let full_end_char = full_group.end();
 
         let match_span_end_char = if full_start_char == full_end_char {
             (full_start_char + 1).min(total_chars)
@@ -848,7 +852,7 @@ pub(crate) fn builtin_replace_regexp_in_string(
             // GNU wraps the whole function in `save-match-data`, but each REP
             // callback observes the translated substring-local match data.
             eval.match_data = translated_md.clone();
-            let Some((match_start, match_end)) = translated_md
+            let Some(match_group) = translated_md
                 .as_ref()
                 .and_then(|md| md.groups.first().and_then(|group| *group))
             else {
@@ -860,6 +864,8 @@ pub(crate) fn builtin_replace_regexp_in_string(
                     ],
                 ));
             };
+            let match_start = match_group.start();
+            let match_end = match_group.end();
             let match_start_byte =
                 super::regex::char_pos_to_byte_lisp_string(match_span, match_start);
             let match_end_byte = super::regex::char_pos_to_byte_lisp_string(match_span, match_end);
