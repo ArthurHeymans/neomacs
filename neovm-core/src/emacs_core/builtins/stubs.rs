@@ -1692,7 +1692,7 @@ pub(crate) fn builtin_gap_size(
         ctx.buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-            .gap_size_lisp() as i64,
+            .gap_size_lisp(),
     ))
 }
 

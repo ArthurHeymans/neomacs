@@ -119,7 +119,7 @@ impl GapBuffer {
             "from_emacs_bytes_with_gap_compat_state: gap char position {gap_start_chars} out of range ({total_chars})",
         );
         let gap_start_bytes = emacs_char_to_byte_in_slice(text, gap_start_chars, multibyte);
-        let gap = gap_state.size();
+        let gap = gap_state.byte_len().get();
         let mut buf = Vec::with_capacity(text.len() + gap);
         buf.extend_from_slice(&text[..gap_start_bytes]);
         buf.resize(gap_start_bytes + gap, 0);

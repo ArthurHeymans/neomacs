@@ -2230,7 +2230,7 @@ impl Buffer {
         self.text.gap_position_lisp()
     }
 
-    pub fn gap_size_lisp(&self) -> usize {
+    pub fn gap_size_lisp(&self) -> i64 {
         self.text.gap_size_lisp()
     }
 

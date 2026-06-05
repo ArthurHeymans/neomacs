@@ -224,7 +224,7 @@ fn backend_conversion_to_gap_preserves_virtual_gap_compatibility_state() {
             "{kind:?} virtual gap position should become the real GPT"
         );
         assert_eq!(
-            real_gap.size(),
+            real_gap.lisp_size(),
             virtual_gap_size,
             "{kind:?} virtual gap size should become the real GAP_SIZE"
         );

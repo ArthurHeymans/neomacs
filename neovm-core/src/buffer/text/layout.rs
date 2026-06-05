@@ -4,37 +4,41 @@ use crate::buffer::text::TextMetrics;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GapCompatState {
     pos: CharPos0,
-    size: usize,
+    byte_len: EmacsByteLen,
 }
 
 impl GapCompatState {
-    pub const fn new(pos: CharPos0, size: usize) -> Self {
-        Self { pos, size }
+    pub const fn new(pos: CharPos0, byte_len: EmacsByteLen) -> Self {
+        Self { pos, byte_len }
     }
 
     pub const fn pos(self) -> CharPos0 {
         self.pos
     }
 
-    pub const fn size(self) -> usize {
-        self.size
+    pub const fn byte_len(self) -> EmacsByteLen {
+        self.byte_len
     }
 
     pub fn lisp_position(self) -> i64 {
         self.pos.to_lisp().as_i64()
     }
 
+    pub fn lisp_size(self) -> i64 {
+        self.byte_len.get() as i64
+    }
+
     pub const fn with_pos(self, pos: CharPos0) -> Self {
         Self {
             pos,
-            size: self.size,
+            byte_len: self.byte_len,
         }
     }
 
-    pub const fn with_size(self, size: usize) -> Self {
+    pub const fn with_byte_len(self, byte_len: EmacsByteLen) -> Self {
         Self {
             pos: self.pos,
-            size,
+            byte_len,
         }
     }
 }
@@ -45,12 +49,12 @@ pub struct GapDebugLayout {
     pub z: CharPos0,
     pub gpt_byte: EmacsBytePos,
     pub z_byte: EmacsBytePos,
-    pub gap_size: usize,
+    pub gap_byte_len: EmacsByteLen,
 }
 
 impl GapDebugLayout {
     pub const fn compat_state(self) -> GapCompatState {
-        GapCompatState::new(self.gpt, self.gap_size)
+        GapCompatState::new(self.gpt, self.gap_byte_len)
     }
 }
 
