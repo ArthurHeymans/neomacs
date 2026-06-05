@@ -131,11 +131,9 @@ impl Buffer {
         if edit.is_empty() {
             return edit.insertion();
         }
-        let insert_pos = edit.byte_pos_usize();
-
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(insert_pos, self.pt_byte);
+        self.undo_prepare_change(edit.byte_pos(), EmacsBytePos::new(self.pt_byte));
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_insert(
@@ -286,7 +284,7 @@ impl Buffer {
     }
 
     /// Prepare undo recording for a buffer edit at `beg` with point at `pt`.
-    fn undo_prepare_change(&mut self, beg: usize, pt: usize) {
+    fn undo_prepare_change(&mut self, beg: EmacsBytePos, pt: EmacsBytePos) {
         let ul = self.get_undo_list();
         if undo::undo_list_is_disabled(&ul) {
             return;
@@ -422,7 +420,7 @@ impl Buffer {
         let old_pt = self.pt;
         let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
-        self.undo_prepare_change(start, old_pt_byte);
+        self.undo_prepare_change(EmacsBytePos::new(start), EmacsBytePos::new(old_pt_byte));
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             // GNU `replace_range` records the insertion before the deletion
@@ -491,7 +489,7 @@ impl Buffer {
         let deleted_text = self.buffer_region_lisp_string(range.byte_range());
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(range.byte_start_usize(), self.pt_byte);
+        self.undo_prepare_change(range.byte_start(), EmacsBytePos::new(self.pt_byte));
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             for (marker, adjustment) in self.text.marker_adjustments_for_delete(range) {
@@ -552,7 +550,7 @@ impl Buffer {
         };
 
         if !noundo {
-            self.undo_prepare_change(modified_range.byte_start_usize(), self.pt_byte);
+            self.undo_prepare_change(modified_range.byte_start(), EmacsBytePos::new(self.pt_byte));
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 for changed_range in plan.changed_ranges().iter().copied() {
@@ -688,7 +686,10 @@ impl Buffer {
 
         let plan = TranspositionStoragePlan::new(transposition, &region1, &mid, &region2);
 
-        self.undo_prepare_change(start1_byte, self.pt_byte);
+        self.undo_prepare_change(
+            EmacsBytePos::new(start1_byte),
+            EmacsBytePos::new(self.pt_byte),
+        );
         let mut undo_list = self.get_undo_list();
         if !undo::undo_list_is_disabled(&undo_list) {
             let record_change = |undo_list: &mut crate::emacs_core::value::Value,
