@@ -555,21 +555,6 @@ pub(crate) fn replace_buffer_region_lisp_string_in_manager(
     Ok(())
 }
 
-pub(crate) fn replace_buffer_region_lisp_string(
-    eval: &mut super::eval::Context,
-    buffer_id: crate::buffer::BufferId,
-    start_byte: usize,
-    end_byte: usize,
-    replacement: &crate::heap_types::LispString,
-) -> Result<(), Flow> {
-    replace_buffer_emacs_byte_range_lisp_string(
-        eval,
-        buffer_id,
-        EmacsByteRange::from_usize(start_byte, end_byte),
-        replacement,
-    )
-}
-
 pub(crate) fn replace_buffer_emacs_byte_range_lisp_string(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,

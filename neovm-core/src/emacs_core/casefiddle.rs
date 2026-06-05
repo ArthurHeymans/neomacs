@@ -487,8 +487,7 @@ fn resolve_case_region_in_buffers(
 
 fn replace_current_buffer_region_in_buffers(
     eval: &mut super::eval::Context,
-    beg: usize,
-    end: usize,
+    byte_range: EmacsByteRange,
     replacement: &LispString,
     restore_point: bool,
 ) -> EvalResult {
@@ -507,7 +506,7 @@ fn replace_current_buffer_region_in_buffers(
     super::fns::replace_buffer_emacs_byte_range_lisp_string(
         eval,
         buffer_id,
-        EmacsByteRange::from_usize(beg, end),
+        byte_range,
         replacement,
     )?;
     if restore_point {
@@ -529,7 +528,7 @@ fn casify_region_in_state(
     let beg_val = expect_int(&args[0])?;
     let end_val = expect_int(&args[1])?;
 
-    let (beg, end, text) = {
+    let (byte_range, text) = {
         let buf = eval
             .buffers
             .current_buffer()
@@ -539,10 +538,8 @@ fn casify_region_in_state(
         }
         let byte_range =
             resolve_case_region_in_buffers(&eval.buffers, beg_val, end_val, args.get(2))?;
-        let beg = byte_range.start_usize();
-        let end = byte_range.end_usize();
         let text = buf.buffer_substring_lisp_string_range(byte_range);
-        (beg, end, text)
+        (byte_range, text)
     };
 
     let replacement = transform(&text);
@@ -550,7 +547,7 @@ fn casify_region_in_state(
         return Ok(Value::NIL);
     }
 
-    replace_current_buffer_region_in_buffers(eval, beg, end, &replacement, true)
+    replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, true)
 }
 
 fn casify_word_in_state(
@@ -562,7 +559,7 @@ fn casify_word_in_state(
     expect_args(name, &args, 1)?;
     let n = expect_int(&args[0])?;
 
-    let (beg, end, text, buffer_name, read_only) = {
+    let (byte_range, text, buffer_name, read_only) = {
         let buf = eval
             .buffers
             .current_buffer()
@@ -570,15 +567,10 @@ fn casify_word_in_state(
         let table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
         let pt = buf.point_emacs_byte_pos();
         let target = forward_word(buf, &table, n);
-        let (beg, end) = if target >= pt {
-            (pt, target)
-        } else {
-            (target, pt)
-        };
-        let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::new(beg, end));
+        let byte_range = EmacsByteRange::ordered(pt, target);
+        let text = buf.buffer_substring_lisp_string_range(byte_range);
         (
-            beg.get(),
-            end.get(),
+            byte_range,
             text,
             buf.name_value(),
             super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf),
@@ -593,7 +585,7 @@ fn casify_word_in_state(
         return Err(signal("buffer-read-only", vec![buffer_name]));
     }
 
-    replace_current_buffer_region_in_buffers(eval, beg, end, &replacement, false)
+    replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, false)
 }
 
 // ---------------------------------------------------------------------------

@@ -147,21 +147,26 @@ struct ColumnScan {
 
 fn line_bounds(buf: &Buffer, point: EmacsBytePos) -> EmacsByteRange {
     let accessible = buf.accessible_emacs_byte_region();
-    let begv = accessible.start_usize();
-    let zv = accessible.end_usize();
-    let pt = accessible.clamp(point).get();
+    let begv = accessible.start();
+    let zv = accessible.end();
+    let pt = accessible.clamp(point);
+    let one_byte = EmacsByteLen::new(1);
 
     let mut bol = pt;
-    while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
-        bol -= 1;
+    while bol > begv {
+        let prev = bol.saturating_sub_len(one_byte);
+        if buf.emacs_byte_at_pos(prev) == Some(b'\n') {
+            break;
+        }
+        bol = prev;
     }
 
     let mut eol = pt;
-    while eol < zv && buf.emacs_byte_at_pos(EmacsBytePos::new(eol)) != Some(b'\n') {
-        eol += 1;
+    while eol < zv && buf.emacs_byte_at_pos(eol) != Some(b'\n') {
+        eol = eol.add_len(one_byte);
     }
 
-    EmacsByteRange::from_usize(bol, eol)
+    EmacsByteRange::new(bol, eol)
 }
 
 fn next_column(column: usize, ch: char, tab_width: usize) -> usize {
