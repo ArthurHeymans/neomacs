@@ -796,16 +796,16 @@ pub fn builtin_read_impl(
                     .get(buf_id)
                     .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-                let start = buf.point_byte();
-                let end = buf.accessible_emacs_byte_region().end_usize();
+                let start = buf.point_emacs_byte_pos();
+                let end = buf.accessible_emacs_byte_region().end();
                 if start >= end {
                     return Err(end_of_file_during_parsing_error());
                 }
 
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
                     buf,
-                    start,
-                    end,
+                    start.get(),
+                    end.get(),
                     locate_syms,
                     &ctx.obarray,
                 ) {

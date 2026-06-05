@@ -13,7 +13,7 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 
 #[inline]
 fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: usize) -> usize {
@@ -30,43 +30,41 @@ fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
 #[derive(Clone, Copy)]
 struct BufferSyntaxChar {
     ch: char,
-    start: usize,
-    end: usize,
+    start: EmacsBytePos,
+    end: EmacsBytePos,
 }
 
 impl BufferSyntaxChar {
     #[inline]
-    fn byte_len(self) -> usize {
-        self.end.saturating_sub(self.start).max(1)
+    fn byte_len(self) -> EmacsByteLen {
+        EmacsByteLen::new(self.end.get().saturating_sub(self.start.get()).max(1))
     }
 }
 
 #[inline]
-fn buffer_syntax_char_after(buf: &Buffer, byte_pos: usize) -> Option<BufferSyntaxChar> {
-    let pos = EmacsBytePos::new(byte_pos);
-    let ch = buf.char_after_emacs_byte_pos(pos)?;
+fn buffer_syntax_char_after(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<BufferSyntaxChar> {
+    let ch = buf.char_after_emacs_byte_pos(byte_pos)?;
     let len = buf
-        .char_after_emacs_byte_len(pos)
+        .char_after_emacs_byte_len(byte_pos)
         .map(|len| len.get().max(1))
         .unwrap_or_else(|| ch.len_utf8().max(1));
     Some(BufferSyntaxChar {
         ch,
         start: byte_pos,
-        end: byte_pos.checked_add(len)?,
+        end: byte_pos.add_len(EmacsByteLen::new(len)),
     })
 }
 
 #[inline]
-fn buffer_syntax_char_before(buf: &Buffer, byte_pos: usize) -> Option<BufferSyntaxChar> {
-    let pos = EmacsBytePos::new(byte_pos);
-    let ch = buf.char_before_emacs_byte_pos(pos)?;
+fn buffer_syntax_char_before(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<BufferSyntaxChar> {
+    let ch = buf.char_before_emacs_byte_pos(byte_pos)?;
     let len = buf
-        .char_before_emacs_byte_len(pos)
+        .char_before_emacs_byte_len(byte_pos)
         .map(|len| len.get().max(1))
         .unwrap_or_else(|| ch.len_utf8().max(1));
     Some(BufferSyntaxChar {
         ch,
-        start: byte_pos.checked_sub(len)?,
+        start: byte_pos.saturating_sub_len(EmacsByteLen::new(len)),
         end: byte_pos,
     })
 }
@@ -779,8 +777,11 @@ fn forward_word_with_options(
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
     let accessible_len = accessible_chars.len().get();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
-        .saturating_sub(accessible_char_start);
+    let mut idx = buffer_byte_to_char_pos(
+        buf,
+        accessible_bytes.clamp(buf.point_emacs_byte_pos()).get(),
+    )
+    .saturating_sub(accessible_char_start);
 
     for _ in 0..count {
         // Skip non-word characters
@@ -845,8 +846,11 @@ fn backward_word_with_options(
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
-        .saturating_sub(accessible_char_start);
+    let mut idx = buffer_byte_to_char_pos(
+        buf,
+        accessible_bytes.clamp(buf.point_emacs_byte_pos()).get(),
+    )
+    .saturating_sub(accessible_char_start);
 
     for _ in 0..count {
         // Skip non-word characters backward
@@ -917,8 +921,11 @@ fn skip_syntax_forward_with_options(
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
     let accessible_len = accessible_chars.len().get();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
-        .saturating_sub(accessible_char_start);
+    let mut idx = buffer_byte_to_char_pos(
+        buf,
+        accessible_bytes.clamp(buf.point_emacs_byte_pos()).get(),
+    )
+    .saturating_sub(accessible_char_start);
 
     let char_limit = limit
         .map(|lim| {
@@ -970,8 +977,11 @@ fn skip_syntax_backward_with_options(
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
-        .saturating_sub(accessible_char_start);
+    let mut idx = buffer_byte_to_char_pos(
+        buf,
+        accessible_bytes.clamp(buf.point_emacs_byte_pos()).get(),
+    )
+    .saturating_sub(accessible_char_start);
 
     let char_limit = limit
         .map(|lim| {
@@ -2000,14 +2010,12 @@ fn effective_syntax_entry_for_char_at_byte(
     buf: &Buffer,
     table: &SyntaxTable,
     ch: char,
-    byte_pos: usize,
+    byte_pos: EmacsBytePos,
     honor_properties: bool,
 ) -> SyntaxEntry {
     if honor_properties
-        && let Some(prop) = buf.text_props_get_property_at_emacs_byte_pos(
-            EmacsBytePos::new(byte_pos),
-            Value::symbol("syntax-table"),
-        )
+        && let Some(prop) =
+            buf.text_props_get_property_at_emacs_byte_pos(byte_pos, Value::symbol("syntax-table"))
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
@@ -2026,7 +2034,13 @@ fn effective_syntax_entry_for_abs_char(
     honor_properties: bool,
 ) -> SyntaxEntry {
     let byte_pos = buffer_char_to_byte_pos(buf, abs_char);
-    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties)
+    effective_syntax_entry_for_char_at_byte(
+        buf,
+        table,
+        ch,
+        EmacsBytePos::new(byte_pos),
+        honor_properties,
+    )
 }
 
 fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
@@ -2419,7 +2433,10 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let char_index = pos as usize - 1;
-    let byte_index = buffer_char_to_byte_pos(buf, char_index.min(buf.total_chars()));
+    let byte_index = EmacsBytePos::new(buffer_char_to_byte_pos(
+        buf,
+        char_index.min(buf.total_chars()),
+    ));
     let Some(unit) = buffer_syntax_char_after(buf, byte_index) else {
         return Ok(Value::NIL);
     };
@@ -2496,12 +2513,12 @@ pub(crate) fn builtin_forward_comment_in_buffers(
 fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
-    let max = accessible.end_usize();
+    let max = accessible.end();
 
     while remaining > 0 {
         // Phase 1: skip whitespace (and stray EndComment newlines).
         loop {
-            let pt = buf.point_byte();
+            let pt = buf.point_emacs_byte_pos();
             if pt >= max {
                 return false;
             }
@@ -2518,20 +2535,20 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
             let class = entry.class;
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+                buf.goto_emacs_byte_pos(unit.end);
                 continue;
             }
             // In GNU Emacs, EndComment newline is treated as whitespace
             // for forward scanning.
             if class == SyntaxClass::EndComment && unit.ch == '\n' {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+                buf.goto_emacs_byte_pos(unit.end);
                 continue;
             }
             break;
         }
 
         // Phase 2: detect comment start.
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt >= max {
             return false;
         }
@@ -2552,7 +2569,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         if class == SyntaxClass::Comment {
             let style_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+            buf.goto_emacs_byte_pos(unit.end);
             if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                 return false;
             }
@@ -2562,7 +2579,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
 
         // Comment fence (class `!` = Generic).
         if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+            buf.goto_emacs_byte_pos(unit.end);
             // Scan forward for matching comment fence.
             if !scan_forward_comment_fence(buf, honor_properties) {
                 return false;
@@ -2589,7 +2606,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
                         let style_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                         let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                             || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-                        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
+                        buf.goto_emacs_byte_pos(unit2.end);
                         if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
                             return false;
                         }
@@ -2617,10 +2634,10 @@ fn scan_forward_comment_body(
     honor_properties: bool,
 ) -> bool {
     let mut nesting = 1i32;
-    let max = buf.accessible_emacs_byte_region().end_usize();
+    let max = buf.accessible_emacs_byte_region().end();
 
     loop {
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt >= max {
             return false;
         }
@@ -2639,14 +2656,14 @@ fn scan_forward_comment_body(
 
         // Handle escape / charquote.
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+            buf.goto_emacs_byte_pos(unit.end);
             // Skip the next char too.
-            let pt2 = buf.point_byte();
+            let pt2 = buf.point_emacs_byte_pos();
             if pt2 >= max {
                 return false;
             }
             if let Some(unit2) = buffer_syntax_char_after(buf, pt2) {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
+                buf.goto_emacs_byte_pos(unit2.end);
             }
             continue;
         }
@@ -2657,7 +2674,7 @@ fn scan_forward_comment_body(
                 let sf_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                 if sf_b == style_b {
                     nesting += 1;
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+                    buf.goto_emacs_byte_pos(unit.end);
                     continue;
                 }
             }
@@ -2678,7 +2695,7 @@ fn scan_forward_comment_body(
                             let sf_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
                             if sf_b == style_b {
                                 nesting += 1;
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
+                                buf.goto_emacs_byte_pos(unit2.end);
                                 continue;
                             }
                         }
@@ -2691,7 +2708,7 @@ fn scan_forward_comment_body(
         if class == SyntaxClass::EndComment {
             let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
             if se_b == style_b {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+                buf.goto_emacs_byte_pos(unit.end);
                 nesting -= 1;
                 if nesting <= 0 {
                     return true;
@@ -2702,7 +2719,7 @@ fn scan_forward_comment_body(
 
         // Comment fence end.
         if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+            buf.goto_emacs_byte_pos(unit.end);
             nesting -= 1;
             if nesting <= 0 {
                 return true;
@@ -2726,7 +2743,7 @@ fn scan_forward_comment_body(
                     if flags2.contains(SyntaxFlags::COMMENT_END_SECOND) {
                         let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
                         if se_b == style_b {
-                            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
+                            buf.goto_emacs_byte_pos(unit2.end);
                             nesting -= 1;
                             if nesting <= 0 {
                                 return true;
@@ -2738,15 +2755,15 @@ fn scan_forward_comment_body(
             }
         }
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+        buf.goto_emacs_byte_pos(unit.end);
     }
 }
 
 /// Scan forward for matching comment fence character.
 fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
-    let max = buf.accessible_emacs_byte_region().end_usize();
+    let max = buf.accessible_emacs_byte_region().end();
     loop {
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt >= max {
             return false;
         }
@@ -2763,18 +2780,18 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
         let class = entry.class;
 
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
-            let pt2 = buf.point_byte();
+            buf.goto_emacs_byte_pos(unit.end);
+            let pt2 = buf.point_emacs_byte_pos();
             if pt2 >= max {
                 return false;
             }
             if let Some(unit2) = buffer_syntax_char_after(buf, pt2) {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.end));
+                buf.goto_emacs_byte_pos(unit2.end);
             }
             continue;
         }
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.end));
+        buf.goto_emacs_byte_pos(unit.end);
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -2787,7 +2804,7 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
 fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
-    let min = accessible.start_usize();
+    let min = accessible.start();
 
     // Outer loop: skip `remaining` comments backward.
     while remaining > 0 {
@@ -2798,7 +2815,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
         // backward comment scanning, or (c) gives up on
         // non-comment/non-whitespace.
         loop {
-            let pt = buf.point_byte();
+            let pt = buf.point_emacs_byte_pos();
             if pt <= min {
                 return false;
             }
@@ -2846,7 +2863,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                             nested = nested || flags2.contains(SyntaxFlags::COMMENT_NESTABLE);
                             two_char_end_restore_pos = Some(unit2.end);
                             // Move past both chars of the two-char end.
-                            buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.start));
+                            buf.goto_emacs_byte_pos(unit2.start);
                         }
                     }
                 }
@@ -2854,9 +2871,9 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
 
             // Comment fence backward.
             if code == SyntaxClass::CommentFence {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+                buf.goto_emacs_byte_pos(unit.start);
                 if !scan_backward_comment_fence(buf, honor_properties) {
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
+                    buf.goto_emacs_byte_pos(pt);
                     return false;
                 }
                 // Successfully skipped one comment via fence.
@@ -2866,10 +2883,10 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             if code == SyntaxClass::EndComment {
                 // If we didn't already move point for a two-char end,
                 // move past the single-char end now.
-                if buf.point_byte() == pt {
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+                if buf.point_emacs_byte_pos() == pt {
+                    buf.goto_emacs_byte_pos(unit.start);
                 }
-                let saved = buf.point_byte();
+                let saved = buf.point_emacs_byte_pos();
                 if scan_backward_comment_body(buf, comstyle_b, nested, honor_properties) {
                     // Successfully scanned back through the comment body.
                     break;
@@ -2880,24 +2897,24 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
                     // Treat it like a whitespace."
                     // Restore to just before the newline and continue
                     // the inner loop.
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+                    buf.goto_emacs_byte_pos(unit.start);
                     continue;
                 }
                 // Non-newline EndComment that failed to find a matching
                 // comment start — failure.
                 if class != SyntaxClass::EndComment {
                     // Was a two-char sequence: restore one char forward.
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(
-                        two_char_end_restore_pos.unwrap_or(saved + unit.byte_len()),
-                    ));
+                    buf.goto_emacs_byte_pos(
+                        two_char_end_restore_pos.unwrap_or(saved.add_len(unit.byte_len())),
+                    );
                 } else {
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(pt));
+                    buf.goto_emacs_byte_pos(pt);
                 }
                 return false;
             }
 
             if class == SyntaxClass::Whitespace {
-                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+                buf.goto_emacs_byte_pos(unit.start);
                 continue;
             }
 
@@ -2931,14 +2948,14 @@ fn scan_backward_comment_body(
     honor_properties: bool,
 ) -> bool {
     let mut nesting = 1i32;
-    let min = buf.accessible_emacs_byte_region().start_usize();
+    let min = buf.accessible_emacs_byte_region().start();
 
     // For non-nested comments: record the earliest matching comment-start
     // seen so far.
-    let mut comstart_pos: Option<usize> = None;
+    let mut comstart_pos: Option<EmacsBytePos> = None;
 
     loop {
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt <= min {
             // Reached beginning of accessible region.
             break;
@@ -2966,7 +2983,7 @@ fn scan_backward_comment_body(
             if se_b == style_b {
                 if nested {
                     nesting += 1;
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+                    buf.goto_emacs_byte_pos(unit.start);
                     continue;
                 } else {
                     // Non-nested: this is a same-style comment ender.
@@ -2996,7 +3013,7 @@ fn scan_backward_comment_body(
                         if se_b == style_b {
                             if nested {
                                 nesting += 1;
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(unit2.start));
+                                buf.goto_emacs_byte_pos(unit2.start);
                                 continue;
                             } else {
                                 break;
@@ -3013,7 +3030,7 @@ fn scan_backward_comment_body(
             if sc_b == style_b {
                 let new_pos = unit.start;
                 if nested {
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
+                    buf.goto_emacs_byte_pos(new_pos);
                     nesting -= 1;
                     if nesting <= 0 {
                         return true;
@@ -3023,7 +3040,7 @@ fn scan_backward_comment_body(
                     // Non-nested: record this as the best (earliest)
                     // comment-start candidate and keep scanning.
                     comstart_pos = Some(new_pos);
-                    buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
+                    buf.goto_emacs_byte_pos(new_pos);
                     continue;
                 }
             }
@@ -3032,7 +3049,7 @@ fn scan_backward_comment_body(
         // ── Comment fence ────────────────────────────────────────
         if class == SyntaxClass::CommentFence {
             let new_pos = unit.start;
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
+            buf.goto_emacs_byte_pos(new_pos);
             if nested {
                 nesting -= 1;
                 if nesting <= 0 {
@@ -3065,7 +3082,7 @@ fn scan_backward_comment_body(
                         if sc_b == style_b {
                             let new_pos = unit2.start;
                             if nested {
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
+                                buf.goto_emacs_byte_pos(new_pos);
                                 nesting -= 1;
                                 if nesting <= 0 {
                                     return true;
@@ -3073,7 +3090,7 @@ fn scan_backward_comment_body(
                                 continue;
                             } else {
                                 comstart_pos = Some(new_pos);
-                                buf.goto_emacs_byte_pos(EmacsBytePos::new(new_pos));
+                                buf.goto_emacs_byte_pos(new_pos);
                                 continue;
                             }
                         }
@@ -3083,13 +3100,13 @@ fn scan_backward_comment_body(
         }
 
         // Default: skip this character and continue scanning.
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+        buf.goto_emacs_byte_pos(unit.start);
     }
 
     // For non-nested comments, check if we recorded any comment-start.
     if !nested {
         if let Some(pos) = comstart_pos {
-            buf.goto_emacs_byte_pos(EmacsBytePos::new(pos));
+            buf.goto_emacs_byte_pos(pos);
             return true;
         }
     }
@@ -3099,9 +3116,9 @@ fn scan_backward_comment_body(
 
 /// Scan backward for matching comment fence character.
 fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
-    let min = buf.accessible_emacs_byte_region().start_usize();
+    let min = buf.accessible_emacs_byte_region().start();
     loop {
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt <= min {
             return false;
         }
@@ -3118,7 +3135,7 @@ fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool
         );
         let class = entry.class;
 
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+        buf.goto_emacs_byte_pos(unit.start);
 
         if class == SyntaxClass::CommentFence {
             return true;
@@ -3157,9 +3174,9 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         .get_mut(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let min = buf.accessible_emacs_byte_region().start_usize();
+    let min = buf.accessible_emacs_byte_region().start();
     loop {
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         if pt <= min {
             break;
         }
@@ -3179,7 +3196,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         if !is_prefix {
             break;
         }
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(unit.start));
+        buf.goto_emacs_byte_pos(unit.start);
     }
 
     Ok(Value::NIL)
@@ -3212,7 +3229,7 @@ pub(crate) fn builtin_forward_word(
         let table = SyntaxTable::for_buffer(buf);
         let honor_properties = parse_sexp_lookup_properties_enabled(eval);
         let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
-        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_byte());
+        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_emacs_byte_pos().get());
         let raw_char = buffer_byte_to_lisp_pos(buf, raw_byte);
         (raw_byte, completed, orig_char, raw_char)
     };
@@ -3369,22 +3386,20 @@ pub(crate) fn builtin_forward_sexp(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let from = buf.point_byte();
-    let new_pos = match scan_sexps_with_options(buf, &table, from, count, honor_properties)
+    let from = buf.point_emacs_byte_pos();
+    let new_pos = match scan_sexps_with_options(buf, &table, from.get(), count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?
     {
-        Some(pos) => pos,
-        None if count < 0 => buf.accessible_emacs_byte_region().start_usize(),
-        None => buf.accessible_emacs_byte_region().end_usize(),
+        Some(pos) => EmacsBytePos::new(pos),
+        None if count < 0 => buf.accessible_emacs_byte_region().start(),
+        None => buf.accessible_emacs_byte_region().end(),
     };
 
     let current_id = eval
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
     Ok(Value::NIL)
 }
 
@@ -3422,23 +3437,21 @@ pub(crate) fn builtin_backward_sexp(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let from = buf.point_byte();
+    let from = buf.point_emacs_byte_pos();
     // backward-sexp with positive count => scan_sexps with negative count
-    let new_pos = match scan_sexps_with_options(buf, &table, from, -count, honor_properties)
+    let new_pos = match scan_sexps_with_options(buf, &table, from.get(), -count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?
     {
-        Some(pos) => pos,
-        None if count < 0 => buf.accessible_emacs_byte_region().end_usize(),
-        None => buf.accessible_emacs_byte_region().start_usize(),
+        Some(pos) => EmacsBytePos::new(pos),
+        None if count < 0 => buf.accessible_emacs_byte_region().end(),
+        None => buf.accessible_emacs_byte_region().start(),
     };
 
     let current_id = eval
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
     Ok(Value::NIL)
 }
 
@@ -4424,21 +4437,22 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
     let old_pt = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .point_byte();
+        .point_emacs_byte_pos();
+    let new_pos = EmacsBytePos::new(new_pos);
 
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
 
     // Return number of characters skipped (Emacs convention).
     let buf = buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if new_pos >= old_pt {
-        buffer_byte_char_delta(buf, old_pt, new_pos)
+        buffer_byte_char_delta(buf, old_pt.get(), new_pos.get())
     } else {
-        buffer_byte_char_delta(buf, new_pos, old_pt)
+        buffer_byte_char_delta(buf, new_pos.get(), old_pt.get())
     };
     Ok(Value::fixnum(chars_moved))
 }
@@ -4490,21 +4504,22 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
     let old_pt = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .point_byte();
+        .point_emacs_byte_pos();
+    let new_pos = EmacsBytePos::new(new_pos);
 
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_pos));
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
 
     // Return negative number of characters skipped.
     let buf = buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if old_pt >= new_pos {
-        -buffer_byte_char_delta(buf, new_pos, old_pt)
+        -buffer_byte_char_delta(buf, new_pos.get(), old_pt.get())
     } else {
-        buffer_byte_char_delta(buf, old_pt, new_pos)
+        buffer_byte_char_delta(buf, old_pt.get(), new_pos.get())
     };
     Ok(Value::fixnum(chars_moved))
 }
