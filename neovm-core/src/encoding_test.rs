@@ -798,6 +798,49 @@ fn decode_coding_region_replaces_current_region() {
 }
 
 #[test]
+fn decode_coding_region_into_unibyte_buffer_stores_internal_bytes() {
+    // GNU `decode_coding_object` sets `dst_multibyte` from the destination
+    // buffer's `enable-multibyte-characters` (coding.c:8153).  Decoding into a
+    // *unibyte* buffer must store each decoded character's internal byte
+    // sequence (dst_multibyte = 0), NOT truncate the character to one low byte.
+    // `tit-dic-convert` (LEIM generation) relies on this idiom:
+    //   (set-buffer-multibyte nil) (decode-coding-region ...) (set-buffer-multibyte t)
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .set_buffer_multibyte_flag(current, false)
+        .expect("make current buffer unibyte");
+    // Raw GB2312 bytes for 一 (U+4E00).
+    eval.buffers
+        .insert_lisp_string_into_buffer(
+            current,
+            &crate::heap_types::LispString::from_unibyte(vec![0xd2, 0xbb]),
+        )
+        .expect("insert raw GB2312 bytes");
+
+    builtin_decode_coding_region(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::symbol("euc-china"),
+            Value::NIL,
+        ],
+    )
+    .expect("decode-coding-region should replace the region");
+
+    let buffer = eval.buffers.get(current).expect("current buffer");
+    assert!(!buffer.get_multibyte(), "destination buffer stays unibyte");
+    let len: usize = buffer.total_emacs_byte_len().into();
+    let bytes =
+        buffer.buffer_substring_bytes_range(crate::buffer::EmacsByteRange::from_usize(0, len));
+    // 一 = U+4E00; internal/utf-8 bytes E4 B8 80.  A later `set-buffer-multibyte
+    // t` reinterprets these bytes back into the character.
+    assert_eq!(bytes, vec![0xe4, 0xb8, 0x80]);
+}
+
+#[test]
 fn undecided_write_encoding_preserves_bytes_and_converts_eol() {
     crate::test_utils::init_test_tracing();
 

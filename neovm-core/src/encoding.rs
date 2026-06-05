@@ -1573,6 +1573,34 @@ pub(crate) fn builtin_decode_coding_string_in_context(
     builtin_coding_string_in_context(ctx, args, false)
 }
 
+/// Reconcile a coding result string with the multibyteness of the buffer it is
+/// about to be stored into.  GNU `decode_coding_object`/`encode_coding_object`
+/// set `coding->dst_multibyte` from the destination buffer's
+/// `enable-multibyte-characters` (coding.c:8153): decoding into a *unibyte*
+/// buffer stores each decoded character's internal byte sequence
+/// (`str_as_unibyte`), and encoding into a *multibyte* buffer turns raw bytes
+/// into characters (`str_as_multibyte`).  Storing a multibyte string straight
+/// into a unibyte buffer would otherwise truncate each character to one byte,
+/// which is what breaks the `tit-dic-convert` LEIM idiom
+/// (`set-buffer-multibyte nil` / `decode-coding-region` / `set-buffer-multibyte t`).
+fn coding_result_for_buffer_multibyte(
+    text: &crate::heap_types::LispString,
+    target_multibyte: bool,
+) -> crate::heap_types::LispString {
+    if text.is_multibyte() == target_multibyte {
+        return text.clone();
+    }
+    if target_multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(
+            crate::emacs_core::emacs_char::str_as_multibyte(text.as_bytes()),
+        )
+    } else {
+        crate::heap_types::LispString::from_unibyte(crate::emacs_core::emacs_char::str_as_unibyte(
+            text.as_bytes(),
+        ))
+    }
+}
+
 fn builtin_coding_region(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1616,8 +1644,6 @@ fn builtin_coding_region(
             )
         })?
         .clone();
-    let produced_chars = result_text.schars();
-
     match destination {
         None => {
             ctx.set_variable(
@@ -1632,11 +1658,21 @@ fn builtin_coding_region(
                 &[],
                 &ctx.buffers,
             )?;
+            // GNU sets `coding->dst_multibyte` from the destination buffer, so
+            // the stored text must match the buffer's multibyteness
+            // (coding.c:8153).
+            let target_multibyte = ctx
+                .buffers
+                .get(current_id)
+                .map(|buf| buf.get_multibyte())
+                .unwrap_or(true);
+            let stored = coding_result_for_buffer_multibyte(&result_text, target_multibyte);
+            let produced_chars = stored.schars();
             crate::emacs_core::fns::replace_buffer_emacs_byte_range_lisp_string(
                 ctx,
                 current_id,
                 EmacsByteRange::from_usize(start_byte, end_byte),
-                &result_text,
+                &stored,
             )?;
             ctx.set_variable(
                 "last-coding-system-used",
@@ -1652,7 +1688,14 @@ fn builtin_coding_region(
                     vec![Value::string("Selecting deleted buffer")],
                 ));
             }
-            insert_coding_result(ctx, buffer_id, &result_text, restore_point)?;
+            let target_multibyte = ctx
+                .buffers
+                .get(buffer_id)
+                .map(|buf| buf.get_multibyte())
+                .unwrap_or(true);
+            let stored = coding_result_for_buffer_multibyte(&result_text, target_multibyte);
+            let produced_chars = stored.schars();
+            insert_coding_result(ctx, buffer_id, &stored, restore_point)?;
             ctx.set_variable(
                 "last-coding-system-used",
                 Value::symbol(&canonical_context_coding_name(ctx, &coding)),
