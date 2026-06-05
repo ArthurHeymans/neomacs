@@ -337,7 +337,10 @@ fn next_char_property_change_for_buffer(
     limit: i64,
 ) -> Result<i64, Flow> {
     let byte_pos = textprop::validate_buffer_point(buf, position)?;
-    let overlay_next = buf.overlays.next_boundary_after(byte_pos);
+    let overlay_next = buf
+        .overlays
+        .next_boundary_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get);
     let accessible = buf.accessible_emacs_byte_region();
     let point_max = textprop::byte_to_elisp_pos(buf, accessible.end_usize());
     let mut temp = overlay_next.map_or(point_max, |next| textprop::byte_to_elisp_pos(buf, next));
@@ -363,7 +366,10 @@ fn previous_char_property_change_for_buffer(
     limit: i64,
 ) -> Result<i64, Flow> {
     let byte_pos = textprop::validate_buffer_point(buf, position)?;
-    let overlay_prev = buf.overlays.previous_boundary_before(byte_pos);
+    let overlay_prev = buf
+        .overlays
+        .previous_boundary_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .map(EmacsBytePos::get);
     let accessible = buf.accessible_emacs_byte_region();
     let point_min = textprop::byte_to_elisp_pos(buf, accessible.start_usize());
     let mut temp = overlay_prev.map_or(point_min, |prev| textprop::byte_to_elisp_pos(buf, prev));

@@ -1217,7 +1217,9 @@ pub(crate) fn buffer_overlay_property_at_byte_pos(
     prop: Value,
     window_id: Option<WindowId>,
 ) -> Option<(Value, Value)> {
-    let mut overlays = buf.overlays.overlays_at(byte_pos);
+    let mut overlays = buf
+        .overlays
+        .overlays_at_emacs_byte_pos(EmacsBytePos::new(byte_pos));
     buf.overlays
         .sort_overlay_ids_by_priority_desc(&mut overlays);
     for overlay in overlays {
@@ -2787,7 +2789,7 @@ pub(crate) fn builtin_overlays_at_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
-    let mut ids = buf.overlays.overlays_at(byte_pos.get());
+    let mut ids = buf.overlays.overlays_at_emacs_byte_pos(byte_pos);
     if let Some(sorted) = args.get(1)
         && sorted.is_truthy()
     {
@@ -2827,11 +2829,9 @@ pub(crate) fn builtin_overlays_in_in_buffers(
 
     let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
     let accessible = buf.accessible_emacs_byte_region();
-    let ids = buf.overlays.overlays_in_region(
-        byte_range.start_usize(),
-        byte_range.end_usize(),
-        accessible.end_usize(),
-    );
+    let ids = buf
+        .overlays
+        .overlays_in_accessible_emacs_byte_range(byte_range, accessible.end());
     Ok(Value::list(ids))
 }
 
@@ -2875,7 +2875,7 @@ pub(crate) fn builtin_move_overlay_in_buffers(
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
         let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
         buf.overlays
-            .move_overlay(overlay, byte_range.start_usize(), byte_range.end_usize());
+            .move_overlay_to_emacs_byte_range(overlay, byte_range);
         buf.increment_overlay_modified_tick();
         Ok(args[0])
     } else {

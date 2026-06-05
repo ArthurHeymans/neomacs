@@ -1643,7 +1643,7 @@ fn resolved_face_at_buffer_byte(
     }
 
     let mut overlay_layers = Vec::new();
-    for overlay_id in buffer.overlays.overlays_at(bytepos.get()) {
+    for overlay_id in buffer.overlays.overlays_at_emacs_byte_pos(bytepos) {
         let priority = buffer
             .overlays
             .overlay_get_named(overlay_id, Value::symbol("priority"))

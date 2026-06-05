@@ -17,6 +17,9 @@ use crate::emacs_core::value::{Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::OverlayData;
 
+use super::position::{EmacsBytePos, EmacsByteRange};
+use super::text::{TextEditRange, TextInsertion, TextReplacement};
+
 pub type Overlay = OverlayData;
 
 /// Augmented interval tree node for O(log n + k) overlay queries.
@@ -377,6 +380,10 @@ impl OverlayList {
         }
     }
 
+    pub fn move_overlay_to_emacs_byte_range(&mut self, overlay: Value, range: EmacsByteRange) {
+        self.move_overlay(overlay, range.start_usize(), range.end_usize());
+    }
+
     /// Return all overlays covering `pos`, O(log n + k) via interval tree.
     pub fn overlays_at(&self, pos: usize) -> Vec<Value> {
         let mut overlays = Vec::new();
@@ -384,8 +391,16 @@ impl OverlayList {
         overlays
     }
 
+    pub fn overlays_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Vec<Value> {
+        self.overlays_at(pos.get())
+    }
+
     pub fn overlays_in(&self, start: usize, end: usize) -> Vec<Value> {
         self.overlays_in_region(start, end, end)
+    }
+
+    pub fn overlays_in_emacs_byte_range(&self, range: EmacsByteRange) -> Vec<Value> {
+        self.overlays_in(range.start_usize(), range.end_usize())
     }
 
     pub fn overlays_in_region(
@@ -400,8 +415,24 @@ impl OverlayList {
         overlays
     }
 
+    pub fn overlays_in_accessible_emacs_byte_range(
+        &self,
+        range: EmacsByteRange,
+        accessible_end: EmacsBytePos,
+    ) -> Vec<Value> {
+        self.overlays_in_region(range.start_usize(), range.end_usize(), accessible_end.get())
+    }
+
     pub fn highest_priority_overlay_at(&self, pos: usize, property: Value) -> Option<Value> {
         self.best_overlay_for(property, |overlay| overlay_covers_pos(overlay, pos))
+    }
+
+    pub fn highest_priority_overlay_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property: Value,
+    ) -> Option<Value> {
+        self.highest_priority_overlay_at(pos.get(), property)
     }
 
     pub fn highest_priority_overlay_for_inserted_char(
@@ -462,6 +493,14 @@ impl OverlayList {
         self.rebuild_indexes();
     }
 
+    pub fn adjust_for_inserted_text(&mut self, insertion: TextInsertion, before_markers: bool) {
+        self.adjust_for_insert(
+            insertion.byte_pos_usize(),
+            insertion.extent().emacs_bytes().get(),
+            before_markers,
+        );
+    }
+
     pub fn adjust_for_delete(&mut self, start: usize, end: usize) {
         if start >= end {
             return;
@@ -506,6 +545,10 @@ impl OverlayList {
         self.rebuild_indexes();
     }
 
+    pub fn adjust_for_deleted_text(&mut self, range: TextEditRange) {
+        self.adjust_for_delete(range.byte_start_usize(), range.byte_end_usize());
+    }
+
     pub fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
         if old_len == 0 {
             self.adjust_for_insert(start, new_len, false);
@@ -514,6 +557,14 @@ impl OverlayList {
 
         self.adjust_for_insert(start + old_len, new_len, true);
         self.adjust_for_delete(start, start + old_len);
+    }
+
+    pub fn adjust_for_replaced_text(&mut self, replacement: TextReplacement) {
+        self.adjust_for_replace(
+            replacement.byte_start_usize(),
+            replacement.old_byte_len().get(),
+            replacement.new_byte_len().get(),
+        );
     }
 
     pub fn set_front_advance(&mut self, overlay: Value, advance: bool) {
@@ -546,6 +597,10 @@ impl OverlayList {
         self.next_boundary_after_until(pos, usize::MAX)
     }
 
+    pub fn next_boundary_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<EmacsBytePos> {
+        self.next_boundary_after(pos.get()).map(EmacsBytePos::new)
+    }
+
     pub fn next_boundary_after_until(&self, pos: usize, limit: usize) -> Option<usize> {
         if pos >= limit {
             return None;
@@ -571,6 +626,14 @@ impl OverlayList {
 
     pub fn previous_boundary_before(&self, pos: usize) -> Option<usize> {
         self.previous_boundary_before_since(pos, 0)
+    }
+
+    pub fn previous_boundary_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.previous_boundary_before(pos.get())
+            .map(EmacsBytePos::new)
     }
 
     pub fn previous_boundary_before_since(&self, pos: usize, limit: usize) -> Option<usize> {

@@ -656,7 +656,9 @@ fn collect_overlay_change_hooks(
     // overlays whose endpoints touch the insertion point are included.
     let search_beg = if insertion && beg > 0 { beg - 1 } else { beg };
     let search_end = if insertion { end + 1 } else { end.max(beg) };
-    let overlay_ids = buf.overlays.overlays_in(search_beg, search_end);
+    let overlay_ids = buf
+        .overlays
+        .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(search_beg, search_end));
 
     let mut result = Vec::new();
     for ov_id in overlay_ids {

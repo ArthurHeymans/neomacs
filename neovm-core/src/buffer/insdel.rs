@@ -174,7 +174,6 @@ impl Buffer {
         let insertion = edit.insertion();
         let insert_pos = edit.byte_pos_usize();
         let insert_char_pos = edit.char_pos_usize();
-        let byte_len = edit.byte_len_usize();
         let char_len = edit.char_len_usize();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
@@ -196,11 +195,8 @@ impl Buffer {
             self.text
                 .adjust_text_props_for_insert_at(insertion.char_pos(), insertion.extent().chars());
         }
-        self.overlays.adjust_for_insert(
-            insert_pos,
-            byte_len,
-            edit.marker_placement().before_markers(),
-        );
+        self.overlays
+            .adjust_for_inserted_text(insertion, edit.marker_placement().before_markers());
         self.record_char_modification(char_len);
     }
 
@@ -213,8 +209,6 @@ impl Buffer {
         if edit.is_empty() {
             return;
         }
-        let start = edit.byte_start_usize();
-        let end = edit.byte_end_usize();
         let char_len = edit.char_len_usize();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
@@ -227,7 +221,7 @@ impl Buffer {
             self.text
                 .adjust_text_props_for_delete_range(range.char_range());
         }
-        self.overlays.adjust_for_delete(start, end);
+        self.overlays.adjust_for_deleted_text(range);
         self.record_char_modification(char_len);
     }
 
@@ -257,9 +251,6 @@ impl Buffer {
 
         let replacement = edit.replacement();
         let old_range = replacement.old_range();
-        let start = edit.old_byte_start_usize();
-        let old_byte_len = edit.old_byte_len_usize();
-        let new_byte_len = edit.new_byte_len_usize();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
         if policy.adjust_shared_markers {
@@ -273,8 +264,7 @@ impl Buffer {
                 edit.new_char_len(),
             );
         }
-        self.overlays
-            .adjust_for_replace(start, old_byte_len, new_byte_len);
+        self.overlays.adjust_for_replaced_text(replacement);
         self.record_char_modification(edit.changed_chars_usize());
     }
 
