@@ -521,9 +521,8 @@ fn validate_buffer_property_range(
     end: i64,
     beg0: Value,
     end0: Value,
-) -> Result<Option<(usize, usize)>, Flow> {
+) -> Result<Option<EmacsByteRange>, Flow> {
     validate_buffer_property_emacs_byte_range(buf, beg, end, beg0, end0)
-        .map(|range| range.map(|range| (range.start_usize(), range.end_usize())))
 }
 
 fn validate_buffer_property_emacs_byte_range(
@@ -796,7 +795,21 @@ pub(crate) fn verify_text_read_only_in_state(
     byte_start: usize,
     byte_end: usize,
 ) -> Result<(), Flow> {
-    if byte_start >= byte_end {
+    verify_text_read_only_emacs_byte_range_in_state(
+        obarray,
+        buffers,
+        buf_id,
+        EmacsByteRange::new(EmacsBytePos::new(byte_start), EmacsBytePos::new(byte_end)),
+    )
+}
+
+pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    buf_id: BufferId,
+    byte_range: EmacsByteRange,
+) -> Result<(), Flow> {
+    if byte_range.is_empty() {
         return Ok(());
     }
     let Some(buf) = buffers.get(buf_id) else {
@@ -818,35 +831,32 @@ pub(crate) fn verify_text_read_only_in_state(
     }
     let read_only_sym = Value::symbol("read-only");
     let inhibit_sym = Value::symbol("inhibit-read-only");
-    buf.text_props_try_for_each_interval_in_emacs_byte_range(
-        EmacsByteRange::from_usize(byte_start, byte_end),
-        |_, _, plist| {
-            let read_only = lookup_char_property_from_direct(
-                obarray,
-                buffers,
-                |name| plist_slice_get_value(plist, name),
-                read_only_sym,
-                true,
-            );
-            if read_only.is_nil() {
-                return Ok::<(), Flow>(());
-            }
-            // INTERVAL_EXPRESSLY_WRITABLE_P (intervals.h:217).
-            let express_inhibit = plist_slice_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
-            if !express_inhibit.is_nil() {
-                return Ok(());
-            }
-            if inhibit.is_cons() && value_in_list(read_only, inhibit) {
-                return Ok(());
-            }
-            let args = if read_only.is_string() {
-                vec![read_only]
-            } else {
-                vec![]
-            };
-            Err(signal("text-read-only", args))
-        },
-    )?;
+    buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_, _, plist| {
+        let read_only = lookup_char_property_from_direct(
+            obarray,
+            buffers,
+            |name| plist_slice_get_value(plist, name),
+            read_only_sym,
+            true,
+        );
+        if read_only.is_nil() {
+            return Ok::<(), Flow>(());
+        }
+        // INTERVAL_EXPRESSLY_WRITABLE_P (intervals.h:217).
+        let express_inhibit = plist_slice_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
+        if !express_inhibit.is_nil() {
+            return Ok(());
+        }
+        if inhibit.is_cons() && value_in_list(read_only, inhibit) {
+            return Ok(());
+        }
+        let args = if read_only.is_string() {
+            vec![read_only]
+        } else {
+            vec![]
+        };
+        Err(signal("text-read-only", args))
+    })?;
     Ok(())
 }
 
@@ -879,24 +889,29 @@ fn verify_property_change_read_only(
     let end = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
     let buf_id =
         resolve_text_property_buffer_id_in_buffers(&eval.buffers, args.get(object_arg_idx))?;
-    let (byte_beg, byte_end) = {
+    let byte_range = {
         let buf = eval
             .buffers
             .get(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let Some((a, b)) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
+        let Some(range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
             return Ok(());
         };
-        (a, b)
+        range
     };
-    verify_text_read_only_in_state(&eval.obarray, &eval.buffers, buf_id, byte_beg, byte_end)
+    verify_text_read_only_emacs_byte_range_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        buf_id,
+        byte_range,
+    )
 }
 
 fn buffer_property_range_for_args(
     eval: &super::eval::Context,
     args: &[Value],
     object_arg_idx: usize,
-) -> Result<Option<(BufferId, usize, usize)>, Flow> {
+) -> Result<Option<(BufferId, EmacsByteRange)>, Flow> {
     if is_string_object(args.get(object_arg_idx)).is_some() {
         return Ok(None);
     }
@@ -914,14 +929,13 @@ fn buffer_property_range_for_args(
         ));
     };
     validate_buffer_property_range(buf, beg, end, args[0], args[1])
-        .map(|range| range.map(|(byte_beg, byte_end)| (buf_id, byte_beg, byte_end)))
+        .map(|range| range.map(|byte_range| (buf_id, byte_range)))
 }
 
 fn begin_buffer_text_property_change(
     eval: &mut super::eval::Context,
     buf_id: BufferId,
-    byte_beg: usize,
-    byte_end: usize,
+    byte_range: EmacsByteRange,
 ) -> Result<(Option<BufferId>, crate::buffer::TextChange), Flow> {
     let saved_current = eval.buffers.current_buffer_id();
     if saved_current != Some(buf_id) {
@@ -930,7 +944,7 @@ fn begin_buffer_text_property_change(
     let change = super::editfns::text_change_for_unchanged_extent_in_manager(
         &eval.buffers,
         buf_id,
-        crate::buffer::EmacsByteRange::from_usize(byte_beg, byte_end),
+        byte_range,
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
     Ok((saved_current, change))
@@ -1007,20 +1021,19 @@ pub(crate) fn prepare_interval_modification_for_change(
         let Some(buf) = eval.buffers.get(buf_id) else {
             return Ok(());
         };
-        let start = byte_start.min(byte_end);
-        let end = byte_start.max(byte_end);
+        let byte_range =
+            EmacsByteRange::ordered(EmacsBytePos::new(byte_start), EmacsBytePos::new(byte_end));
         let lisp_start = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.start())
             .as_i64();
         let lisp_end = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.end())
             .as_i64();
         let mod_sym = Value::symbol("modification-hooks");
         let mut prev: Option<Value> = None;
         let mut hooks = Vec::new();
-        let _ = buf.text_props_try_for_each_interval_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            |_, _, plist| {
+        let _ =
+            buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_, _, plist| {
                 let mh = plist_slice_get_value(plist, mod_sym).unwrap_or(Value::NIL);
                 if mh.is_nil() {
                     return Ok::<(), ()>(());
@@ -1033,8 +1046,7 @@ pub(crate) fn prepare_interval_modification_for_change(
                 prev = Some(mh);
                 hooks.push(mh);
                 Ok(())
-            },
-        );
+            });
         (lisp_start, lisp_end, hooks)
     };
 
@@ -1101,19 +1113,14 @@ pub(crate) fn builtin_put_text_property(
     expect_max_args("put-text-property", &args, 5)?;
     verify_property_change_read_only(eval, &args, 4)?;
     let change =
-        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_range)| {
             let buf = eval.buffers.get(buf_id)?;
             let properties = [(args[2], args[3])];
-            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
-                EmacsByteRange::from_usize(byte_beg, byte_end),
-                &properties,
-            ))
-            .then_some((buf_id, byte_beg, byte_end))
+            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(byte_range, &properties))
+                .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1159,13 +1166,17 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let Some((byte_beg, byte_end)) =
-        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
-    else {
+    let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
     if buffers
-        .put_buffer_text_property(buf_id, byte_beg, byte_end, prop, val)
+        .put_buffer_text_property(
+            buf_id,
+            byte_range.start_usize(),
+            byte_range.end_usize(),
+            prop,
+            val,
+        )
         .unwrap_or(false)
     {
         let _ = buffers.record_buffer_text_property_modification(buf_id);
@@ -1341,18 +1352,16 @@ pub(crate) fn builtin_add_text_properties(
     verify_property_change_read_only(eval, &args, 3)?;
     let pairs_for_probe = plist_pairs(&args[2])?;
     let change =
-        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_range)| {
             let buf = eval.buffers.get(buf_id)?;
             (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
-                EmacsByteRange::from_usize(byte_beg, byte_end),
+                byte_range,
                 &pairs_for_probe,
             ))
-            .then_some((buf_id, byte_beg, byte_end))
+            .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1402,15 +1411,19 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let Some((byte_beg, byte_end)) =
-        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
-    else {
+    let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
     let mut any_changed = false;
     for (name, val) in pairs {
         if buffers
-            .put_buffer_text_property(buf_id, byte_beg, byte_end, name, val)
+            .put_buffer_text_property(
+                buf_id,
+                byte_range.start_usize(),
+                byte_range.end_usize(),
+                name,
+                val,
+            )
             .unwrap_or(false)
         {
             any_changed = true;
@@ -1492,21 +1505,19 @@ pub(crate) fn builtin_add_face_text_property(
     expect_max_args("add-face-text-property", &args, 5)?;
     verify_property_change_read_only(eval, &args, 4)?;
     let change =
-        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_range)| {
             let Some(buf) = eval.buffers.get(buf_id) else {
                 return None;
             };
             let new_face = args[2];
             (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
-                EmacsByteRange::from_usize(byte_beg, byte_end),
+                byte_range,
                 &[(Value::symbol("face"), new_face)],
             ))
-            .then_some((buf_id, byte_beg, byte_end))
+            .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1584,17 +1595,15 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let Some((byte_beg, byte_end)) =
-        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
-    else {
+    let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
     // GNU iterates intervals in [beg, end); per interval, fetch its existing
     // face value and merge. Walk the range segment-by-segment to preserve any
     // heterogeneous face properties already present.
     let mut segments: Vec<(usize, usize, Value)> = Vec::new();
-    let byte_end_pos = EmacsBytePos::new(byte_end);
-    let mut seg_start = EmacsBytePos::new(byte_beg);
+    let byte_end_pos = byte_range.end();
+    let mut seg_start = byte_range.start();
     while seg_start < byte_end_pos {
         let seg_end = match buf.text_props_next_change_after_emacs_byte_pos(seg_start) {
             Some(p) if p < byte_end_pos => p,
@@ -1631,18 +1640,16 @@ pub(crate) fn builtin_remove_text_properties(
     verify_property_change_read_only(eval, &args, 3)?;
     let names_for_probe = plist_names_for_remove(args[2]);
     let change =
-        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_range)| {
             let buf = eval.buffers.get(buf_id)?;
             buf.text_props_range_has_any_property_named_in_emacs_byte_range(
-                EmacsByteRange::from_usize(byte_beg, byte_end),
+                byte_range,
                 &names_for_probe,
             )
-            .then_some((buf_id, byte_beg, byte_end))
+            .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1687,15 +1694,18 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let Some((byte_beg, byte_end)) =
-        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
-    else {
+    let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
     let mut any_removed = false;
     for name in names {
         if buffers
-            .remove_buffer_text_property(buf_id, byte_beg, byte_end, name)
+            .remove_buffer_text_property(
+                buf_id,
+                byte_range.start_usize(),
+                byte_range.end_usize(),
+                name,
+            )
             .unwrap_or(false)
         {
             any_removed = true;
@@ -1721,18 +1731,14 @@ pub(crate) fn builtin_set_text_properties(
         plist_pairs(&args[2])?
     };
     let change =
-        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_range)| {
             let buf = eval.buffers.get(buf_id)?;
             (!pairs_for_probe.is_empty()
-                || buf.text_props_range_has_any_interval_in_emacs_byte_range(
-                    EmacsByteRange::from_usize(byte_beg, byte_end),
-                ))
-            .then_some((buf_id, byte_beg, byte_end))
+                || buf.text_props_range_has_any_interval_in_emacs_byte_range(byte_range))
+            .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1790,12 +1796,15 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let Some((byte_beg, byte_end)) =
-        validate_buffer_property_range(buf, beg, end, args[0], args[1])?
-    else {
+    let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
-    let _ = buffers.set_buffer_text_properties(buf_id, byte_beg, byte_end, pairs);
+    let _ = buffers.set_buffer_text_properties(
+        buf_id,
+        byte_range.start_usize(),
+        byte_range.end_usize(),
+        pairs,
+    );
     let _ = buffers.record_buffer_text_property_modification(buf_id);
     Ok(Value::T)
 }
@@ -1810,18 +1819,16 @@ pub(crate) fn builtin_remove_list_of_text_properties(
     verify_property_change_read_only(eval, &args, 3)?;
     let names_for_probe = list_names_for_remove(args[2]);
     let change =
-        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_beg, byte_end)| {
+        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_range)| {
             let buf = eval.buffers.get(buf_id)?;
             buf.text_props_range_has_any_property_named_in_emacs_byte_range(
-                EmacsByteRange::from_usize(byte_beg, byte_end),
+                byte_range,
                 &names_for_probe,
             )
-            .then_some((buf_id, byte_beg, byte_end))
+            .then_some((buf_id, byte_range))
         });
-    let before = if let Some((buf_id, byte_beg, byte_end)) = change {
-        Some(begin_buffer_text_property_change(
-            eval, buf_id, byte_beg, byte_end,
-        )?)
+    let before = if let Some((buf_id, byte_range)) = change {
+        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
     } else {
         None
     };
@@ -1863,7 +1870,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
     }
 
     let buf_id = resolve_text_property_buffer_id_in_buffers(buffers, args.get(3))?;
-    let (byte_beg, byte_end) = {
+    let byte_range = {
         let buf = buffers
             .get(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
@@ -1875,8 +1882,8 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
 
     let mut changed = false;
     for name in names {
-        let byte_end_pos = EmacsBytePos::new(byte_end);
-        let mut cursor = EmacsBytePos::new(byte_beg);
+        let byte_end_pos = byte_range.end();
+        let mut cursor = byte_range.start();
         while cursor < byte_end_pos {
             let Some(buf) = buffers.get(buf_id) else {
                 break;
@@ -1893,7 +1900,12 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
                 _ => break,
             }
         }
-        let _ = buffers.remove_buffer_text_property(buf_id, byte_beg, byte_end, name);
+        let _ = buffers.remove_buffer_text_property(
+            buf_id,
+            byte_range.start_usize(),
+            byte_range.end_usize(),
+            name,
+        );
     }
     if changed {
         let _ = buffers.record_buffer_text_property_modification(buf_id);
