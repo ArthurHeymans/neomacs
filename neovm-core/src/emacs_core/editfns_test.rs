@@ -218,8 +218,8 @@ fn erase_buffer_widens_before_deleting_current_contents() {
     assert_eq!(buf.buffer_string(), "");
     assert_eq!(buf.buffer_size(), 0);
     assert_eq!(buf.point_byte(), 0);
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 0);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 0);
 }
 
 #[test]

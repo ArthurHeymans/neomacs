@@ -119,8 +119,8 @@ fn new_buffer_is_empty() {
     let buf = Buffer::new(BufferId(1), Value::string("*scratch*"));
     assert_eq!(buf.name_value(), Value::string("*scratch*"));
     assert_eq!(buf.point_byte(), 0);
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 0);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 0);
     assert_eq!(buf.buffer_size(), 0);
     assert!(!buf.is_modified());
     assert!(!buf.get_read_only());
@@ -337,8 +337,8 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.point_min(), 4);
-        assert_eq!(indirect.point_max(), 8);
+        assert_eq!(indirect.point_min_byte(), 4);
+        assert_eq!(indirect.point_max_byte(), 8);
         assert_eq!(indirect.point_byte(), 6);
         assert_eq!(indirect.buffer_string(), "cdef");
 
@@ -349,8 +349,8 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.point_min(), 2);
-        assert_eq!(indirect.point_max(), 6);
+        assert_eq!(indirect.point_min_byte(), 2);
+        assert_eq!(indirect.point_max_byte(), 6);
         assert_eq!(indirect.point_byte(), 4);
         assert_eq!(indirect.buffer_string(), "cdef");
     }
@@ -377,12 +377,12 @@ fn cloned_indirect_buffers_do_not_share_base_state_markers() {
     mgr.set_current(base_id);
 
     let base = mgr.get(base_id).expect("base buffer");
-    assert_eq!(base.point_min(), 0);
-    assert_eq!(base.point_max(), base.total_bytes());
+    assert_eq!(base.point_min_byte(), 0);
+    assert_eq!(base.point_max_byte(), base.total_bytes());
 
     let second = mgr.get(second).expect("second indirect buffer");
-    assert_eq!(second.point_min(), 4);
-    assert_eq!(second.point_max(), 7);
+    assert_eq!(second.point_min_byte(), 4);
+    assert_eq!(second.point_max_byte(), 7);
 }
 
 #[test]
@@ -675,7 +675,7 @@ fn goto_char_clamps_to_accessible_region() {
 
     // Past end — clamped to zv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(999));
-    assert_eq!(buf.point_byte(), buf.point_max());
+    assert_eq!(buf.point_byte(), buf.point_max_byte());
 
     // Before start — clamped to begv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -1133,16 +1133,16 @@ fn narrow_and_widen() {
     let mut buf = buf_with_text("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(8));
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(6, 11));
-    assert_eq!(buf.point_min(), 6);
-    assert_eq!(buf.point_max(), 11);
+    assert_eq!(buf.point_min_byte(), 6);
+    assert_eq!(buf.point_max_byte(), 11);
     assert_eq!(buf.buffer_size(), 5);
     assert_eq!(buf.buffer_string(), "world");
     // Point was 8 — still within [6, 11].
     assert_eq!(buf.point_byte(), 8);
 
     buf.widen();
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 11);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 11);
 }
 
 #[test]
@@ -2457,18 +2457,18 @@ fn manager_labeled_widen_uses_innermost_and_without_restriction_reaches_full_buf
 
     let _ = mgr.internal_labeled_narrow_to_region(id, 1, 4, Value::symbol("tag"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 4);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 4);
 
     let _ = mgr.widen_buffer(id);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 4);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 4);
 
     let _ = mgr.internal_labeled_widen(id, &Value::symbol("tag"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 6);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 6);
 }
 
 #[test]
@@ -2488,13 +2488,13 @@ fn manager_save_restriction_state_restores_labeled_stack() {
     mgr.restore_saved_restriction_state(saved);
 
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 5);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 5);
 
     let _ = mgr.widen_buffer(id);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 5);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 5);
 }
 
 #[test]
@@ -2509,23 +2509,23 @@ fn manager_reset_outermost_restrictions_restores_current_innermost_after_mutatio
     let _ = mgr.internal_labeled_narrow_to_region(id, 2, 4, Value::symbol("inner"));
 
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 2);
-    assert_eq!(buf.point_max(), 4);
+    assert_eq!(buf.point_min_byte(), 2);
+    assert_eq!(buf.point_max_byte(), 4);
 
     let saved = mgr.reset_outermost_restrictions();
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 6);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 6);
 
     let _ = mgr.internal_labeled_widen(id, &Value::symbol("inner"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 5);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 5);
 
     mgr.restore_outermost_restrictions(saved);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min(), 1);
-    assert_eq!(buf.point_max(), 5);
+    assert_eq!(buf.point_min_byte(), 1);
+    assert_eq!(buf.point_max_byte(), 5);
 }
 
 // -----------------------------------------------------------------------
@@ -2556,8 +2556,8 @@ fn manager_replace_buffer_contents_resets_narrowing_and_point() {
     let buf = mgr.get(current).unwrap();
     assert_eq!(buf.buffer_string(), "xy");
     assert_eq!(buf.point_byte(), 0);
-    assert_eq!(buf.point_min(), 0);
-    assert_eq!(buf.point_max(), 2);
+    assert_eq!(buf.point_min_byte(), 0);
+    assert_eq!(buf.point_max_byte(), 2);
 }
 
 // -----------------------------------------------------------------------

@@ -5051,7 +5051,7 @@ fn redisplay_restores_current_innermost_labeled_restriction_after_callback_mutat
             .expect("buffer visible during redisplay");
         observed_in_callback
             .borrow_mut()
-            .push((buf.point_min(), buf.point_max()));
+            .push((buf.point_min_byte(), buf.point_max_byte()));
         let _ = ev
             .buffers
             .internal_labeled_widen(buffer_id, &Value::symbol("inner"));
@@ -5061,14 +5061,14 @@ fn redisplay_restores_current_innermost_labeled_restriction_after_callback_mutat
             .expect("buffer after labeled widen");
         observed_in_callback
             .borrow_mut()
-            .push((buf.point_min(), buf.point_max()));
+            .push((buf.point_min_byte(), buf.point_max_byte()));
     }));
 
     eval.redisplay();
 
     assert_eq!(*observed.borrow(), vec![(0, 6), (1, 5)]);
     let buf = eval.buffers.get(buffer_id).expect("buffer after redisplay");
-    assert_eq!((buf.point_min(), buf.point_max()), (1, 5));
+    assert_eq!((buf.point_min_byte(), buf.point_max_byte()), (1, 5));
 }
 
 #[test]

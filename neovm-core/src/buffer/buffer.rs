@@ -2136,12 +2136,6 @@ impl Buffer {
         self.point_min_char_pos().get()
     }
 
-    /// Legacy narrowing accessor retained for tests that assert raw byte state.
-    #[cfg(test)]
-    pub fn point_min(&self) -> usize {
-        self.point_min_byte()
-    }
-
     /// End of the accessible portion (Emacs byte position).
     pub fn point_max_emacs_byte_pos(&self) -> EmacsBytePos {
         EmacsBytePos::new(self.zv_byte)
@@ -2339,12 +2333,6 @@ impl Buffer {
         let clamped_char = char_pos.min(self.total_char_len().get());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
-    }
-
-    /// Legacy narrowing accessor retained for tests that assert raw byte state.
-    #[cfg(test)]
-    pub fn point_max(&self) -> usize {
-        self.point_max_byte()
     }
 
     // -- Point movement ------------------------------------------------------
