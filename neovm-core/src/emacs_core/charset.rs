@@ -1507,8 +1507,8 @@ pub(crate) fn builtin_find_charset_region(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if beg < point_min || beg > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",
@@ -1765,8 +1765,8 @@ pub(crate) fn builtin_charset_after(
 
     let target_byte = if let Some(pos) = args.first() {
         let pos = expect_int_or_marker(pos)?;
-        let point_min = buf.point_min_char() as i64 + 1;
-        let point_max = buf.point_max_char() as i64 + 1;
+        let point_min = buf.point_min_lisp_char_pos().as_i64();
+        let point_max = buf.point_max_lisp_char_pos().as_i64();
         if pos < point_min || pos > point_max {
             return Ok(Value::NIL);
         }

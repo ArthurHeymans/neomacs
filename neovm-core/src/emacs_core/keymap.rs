@@ -1935,7 +1935,7 @@ fn active_map_position(
         buffer_id: buffer.id,
         buffer_object: Value::make_buffer(buffer.id),
         buffer_local_map: buffer.local_map(),
-        char_pos: Some(buffer.point_char() as i64 + 1),
+        char_pos: Some(buffer.point_lisp_char_pos().as_i64()),
     };
 
     let Some(position) = position else {
@@ -1962,7 +1962,7 @@ fn active_map_position(
                 buffer_id,
                 buffer_object: Value::make_buffer(buffer_id),
                 buffer_local_map: target_buffer.local_map(),
-                char_pos: Some(target_buffer.point_char() as i64 + 1),
+                char_pos: Some(target_buffer.point_lisp_char_pos().as_i64()),
             }));
         }
 
@@ -1971,8 +1971,8 @@ fn active_map_position(
 
     if position.is_fixnum() || position.is_char() || position.is_marker() {
         let char_pos = expect_integer_or_marker_in_buffers(buffers, position)?;
-        let point_min = buffer.point_min_char() as i64 + 1;
-        let point_max = buffer.point_max_char() as i64 + 1;
+        let point_min = buffer.point_min_lisp_char_pos().as_i64();
+        let point_max = buffer.point_max_lisp_char_pos().as_i64();
         if char_pos < point_min || char_pos > point_max {
             return Err(signal(
                 "args-out-of-range",
@@ -2015,8 +2015,8 @@ fn active_map_position(
             continue;
         };
         if let Some(char_pos) = char_pos {
-            let point_min = target_buffer.point_min_char() as i64 + 1;
-            let point_max = target_buffer.point_max_char() as i64 + 1;
+            let point_min = target_buffer.point_min_lisp_char_pos().as_i64();
+            let point_max = target_buffer.point_max_lisp_char_pos().as_i64();
             if char_pos < point_min || char_pos > point_max {
                 return Err(signal(
                     "args-out-of-range",

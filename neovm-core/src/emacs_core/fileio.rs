@@ -4690,8 +4690,8 @@ fn write_region_content_in_state(
     let end = end.unwrap_or(&Value::NIL);
     let start = expect_int(start)?;
     let end = expect_int(end)?;
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",

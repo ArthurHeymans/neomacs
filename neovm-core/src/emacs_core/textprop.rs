@@ -403,7 +403,7 @@ fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsByte
 }
 
 fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
-    let max = buf.total_chars() as i64 + 1;
+    let max = buf.z_lisp_char_pos().as_i64();
     let clipped = pos.clamp(1, max);
     elisp_pos_to_byte(buf, clipped)
 }
@@ -416,7 +416,7 @@ fn elisp_range_to_byte_clipped_full(
     if beg > end {
         std::mem::swap(&mut beg, &mut end);
     }
-    let max = buf.total_chars() as i64 + 1;
+    let max = buf.z_lisp_char_pos().as_i64();
     let clipped_beg = beg.clamp(1, max);
     let clipped_end = end.clamp(clipped_beg, max);
     EmacsByteRange::new(
@@ -494,8 +494,8 @@ pub(crate) fn validate_buffer_point_emacs_byte_pos_raw(
     pos: i64,
     _pos0: Value,
 ) -> Result<EmacsBytePos, Flow> {
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point(pos));
     }
@@ -507,8 +507,8 @@ fn validate_buffer_property_point_emacs_byte_pos_raw(
     pos: i64,
     pos0: Value,
 ) -> Result<EmacsBytePos, Flow> {
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point_pair(pos0));
     }
@@ -537,8 +537,8 @@ fn validate_buffer_property_emacs_byte_range(
         return Ok(None);
     }
     let (start, finish) = if beg > end { (end, beg) } else { (beg, end) };
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if !(point_min <= start && start <= finish && finish <= point_max) {
         return Err(args_out_of_range_range(beg0, end0));
     }

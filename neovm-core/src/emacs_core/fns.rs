@@ -496,8 +496,8 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    let point_min_char = buf.point_min_char() as i64 + 1;
-    let point_max_char = buf.point_max_char() as i64 + 1;
+    let point_min_char = buf.point_min_lisp_char_pos().as_i64();
+    let point_max_char = buf.point_max_lisp_char_pos().as_i64();
     let start_raw = require_int_or_marker(start_arg)?;
     let end_raw = require_int_or_marker(end_arg)?;
     if start_raw < point_min_char
@@ -900,8 +900,8 @@ fn hash_slice_for_buffer_in_manager(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
 
     let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
     let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
@@ -935,8 +935,8 @@ fn md5_hex_for_buffer_in_manager(
         let buf = buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-        let point_min = buf.point_min_char() as i64 + 1;
-        let point_max = buf.point_max_char() as i64 + 1;
+        let point_min = buf.point_min_lisp_char_pos().as_i64();
+        let point_max = buf.point_max_lisp_char_pos().as_i64();
         let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
         let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
         let start = normalize_md5_buffer_position(

@@ -10403,7 +10403,7 @@ impl Context {
         let (buffer_id, point) = self
             .buffers
             .current_buffer()
-            .map(|buffer| (buffer.id, buffer.point_char() as i64 + 1))?;
+            .map(|buffer| (buffer.id, buffer.point_lisp_char_pos().as_i64()))?;
         let marker = super::marker::make_registered_buffer_marker(
             &mut self.buffers,
             buffer_id,

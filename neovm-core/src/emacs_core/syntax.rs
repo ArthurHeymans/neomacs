@@ -4297,7 +4297,7 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
     let table = SyntaxTable::for_buffer(buf);
 
     let pos = if args.is_empty() || args[0].is_nil() {
-        buf.point_char() as i64 + 1
+        buf.point_lisp_char_pos().as_i64()
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,

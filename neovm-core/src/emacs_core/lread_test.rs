@@ -289,7 +289,7 @@ fn eval_region_evaluates_forms_in_range() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
 
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]).unwrap();
@@ -318,7 +318,7 @@ fn eval_region_preserves_unibyte_string_literals() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
 
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]).unwrap();
@@ -355,7 +355,7 @@ fn eval_region_nil_or_reversed_bounds_are_noop() {
 
     let point_max = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        buf.total_chars() as i64 + 1
+        buf.z_lisp_char_pos().as_i64()
     };
     let reversed =
         builtin_eval_region(&mut ev, vec![Value::fixnum(point_max), Value::fixnum(1)]).unwrap();
@@ -376,7 +376,7 @@ fn eval_region_reports_type_range_and_arity_errors() {
     }
     let point_max = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        buf.total_chars() as i64 + 1
+        buf.z_lisp_char_pos().as_i64()
     };
 
     let bad_start =
@@ -443,7 +443,7 @@ fn eval_region_keeps_point_stable_without_side_effects() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]).unwrap();
     assert!(result.is_nil());
@@ -466,7 +466,7 @@ fn eval_region_accepts_shebang_reader_prefix() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]).unwrap();
     assert!(result.is_nil());
@@ -486,7 +486,7 @@ fn eval_region_single_line_shebang_signals_end_of_file() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]);
     assert!(matches!(
@@ -505,7 +505,7 @@ fn eval_region_preserves_utf8_bom_reader_error_shape() {
     }
     let end = {
         let buf = ev.buffers.current_buffer().expect("current buffer");
-        Value::fixnum(buf.total_chars() as i64 + 1)
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
     };
     let result = builtin_eval_region(&mut ev, vec![Value::fixnum(1), end]);
     assert!(matches!(

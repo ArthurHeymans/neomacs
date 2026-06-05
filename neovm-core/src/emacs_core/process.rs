@@ -695,7 +695,7 @@ fn update_process_mark(buffers: &mut BufferManager, proc: &mut Process) -> EvalR
     let Some(buffer) = buffers.get(buffer_id) else {
         return super::marker::builtin_set_marker_in_buffers(buffers, vec![proc.mark, Value::NIL]);
     };
-    let position = Value::fixnum(buffer.total_chars() as i64 + 1);
+    let position = Value::fixnum(buffer.z_lisp_char_pos().as_i64());
     super::marker::builtin_set_marker_in_buffers(buffers, vec![proc.mark, position, proc.buffer])
 }
 
@@ -2406,8 +2406,8 @@ pub(crate) fn checked_region_bytes(
     start: i64,
     end: i64,
 ) -> Result<EmacsByteRange, Flow> {
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",

@@ -2062,8 +2062,8 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
         .buffers
         .get(current_buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let beg = buffer.point_min_char() as i64 + 1;
-    let end = buffer.point_max_char() as i64 + 1;
+    let beg = buffer.point_min_lisp_char_pos().as_i64();
+    let end = buffer.point_max_lisp_char_pos().as_i64();
     if !(beg <= pos && pos < end) {
         return Err(signal(
             "args-out-of-range",

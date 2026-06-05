@@ -2104,6 +2104,11 @@ impl Buffer {
         CharPos0::new(self.pt)
     }
 
+    /// Current point as a 1-based Lisp character position.
+    pub fn point_lisp_char_pos(&self) -> LispCharPos1 {
+        self.point_char_pos().to_lisp()
+    }
+
     /// Current point converted to a raw character position.
     pub fn point_char(&self) -> usize {
         self.point_char_pos().get()
@@ -2122,6 +2127,11 @@ impl Buffer {
     /// Beginning of the accessible portion (character position).
     pub fn point_min_char_pos(&self) -> CharPos0 {
         CharPos0::new(self.begv)
+    }
+
+    /// Beginning of the accessible portion as a 1-based Lisp character position.
+    pub fn point_min_lisp_char_pos(&self) -> LispCharPos1 {
+        self.point_min_char_pos().to_lisp()
     }
 
     /// Beginning of the accessible portion as a raw character position.
@@ -2149,6 +2159,11 @@ impl Buffer {
         CharPos0::new(self.zv)
     }
 
+    /// End of the accessible portion as a 1-based Lisp character position.
+    pub fn point_max_lisp_char_pos(&self) -> LispCharPos1 {
+        self.point_max_char_pos().to_lisp()
+    }
+
     /// End of the accessible portion as a raw character position.
     pub fn point_max_char(&self) -> usize {
         self.point_max_char_pos().get()
@@ -2157,6 +2172,11 @@ impl Buffer {
     /// Total number of characters in the buffer text.
     pub fn total_char_len(&self) -> CharLen {
         self.text.char_count()
+    }
+
+    /// GNU `Z` as a 1-based Lisp character position.
+    pub fn z_lisp_char_pos(&self) -> LispCharPos1 {
+        CharPos0::new(self.total_char_len().get()).to_lisp()
     }
 
     /// Total number of Emacs bytes in the buffer text.

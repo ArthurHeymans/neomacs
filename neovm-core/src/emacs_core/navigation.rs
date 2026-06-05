@@ -701,8 +701,8 @@ pub(crate) fn builtin_line_number_at_pos(
                 }
             }
             ValueKind::Fixnum(pos) => {
-                let beg = buf.point_min_char() as i64 + 1;
-                let z = buf.point_max_char() as i64 + 1;
+                let beg = buf.point_min_lisp_char_pos().as_i64();
+                let z = buf.point_max_lisp_char_pos().as_i64();
                 if pos < beg || pos > z {
                     return Err(signal(
                         "args-out-of-range",

@@ -383,7 +383,7 @@ pub(crate) fn signal_after_change(
             let charpos = beg_char + 1; // 1-based, like GNU's PT/charpos.
             let lenins = end_char - beg_char;
             let lendel = old_len as i64;
-            let z = buf.total_chars() as i64 + 1; // 1-based Z.
+            let z = buf.z_lisp_char_pos().as_i64(); // 1-based Z.
             let beg_field = charpos - 1; // charpos - BEG
             let end_field = z - (charpos - lendel + lenins);
             let change = lenins - lendel;
@@ -582,7 +582,7 @@ pub(crate) fn execute_combined_after_change(
                 return Ok(());
             }
         };
-        let z = buf.total_chars() as i64 + 1;
+        let z = buf.z_lisp_char_pos().as_i64();
         let init = z - 1;
         let mut beg = init;
         let mut end = init;
@@ -824,8 +824,8 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
 
     let start = expect_integer_or_marker_in_buffers(buffers, start_arg)?;
     let end = expect_integer_or_marker_in_buffers(buffers, end_arg)?;
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",

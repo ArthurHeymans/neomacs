@@ -3861,8 +3861,8 @@ pub fn ensure_fontified_for_redisplay(
 ) -> Result<(), Flow> {
     let Some((point_min, point_max)) = ctx.buffers.get(buf_id).map(|buffer| {
         (
-            buffer.point_min_char() as i64 + 1,
-            buffer.point_max_char() as i64 + 1,
+            buffer.point_min_lisp_char_pos().as_i64(),
+            buffer.point_max_lisp_char_pos().as_i64(),
         )
     }) else {
         return Ok(());

@@ -2409,7 +2409,7 @@ fn insert_honors_inhibit_read_only_override() {
 
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "ok");
-    assert_eq!(buf.point_char() as i64 + 1, 3);
+    assert_eq!(buf.point_lisp_char_pos().as_i64(), 3);
 }
 
 #[test]
@@ -10148,8 +10148,8 @@ fn internal_labeled_narrow_to_region_clamps_within_current_restriction() {
     assert_eq!(narrowed, Value::NIL);
 
     let buf = eval.buffers.get(buf_id).expect("buffer should stay live");
-    assert_eq!(buf.point_min_char() as i64 + 1, 2);
-    assert_eq!(buf.point_max_char() as i64 + 1, 5);
+    assert_eq!(buf.point_min_lisp_char_pos().as_i64(), 2);
+    assert_eq!(buf.point_max_lisp_char_pos().as_i64(), 5);
 }
 
 #[test]

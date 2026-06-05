@@ -68,7 +68,7 @@ pub(crate) fn builtin_get_pos_property_impl(
         1 => Ok(text_property_value_at_char_pos(
             obarray, buffers, buf, pos, prop,
         )),
-        -1 if pos > buf.point_min_char() as i64 + 1 => Ok(text_property_value_at_char_pos(
+        -1 if pos > buf.point_min_lisp_char_pos().as_i64() => Ok(text_property_value_at_char_pos(
             obarray,
             buffers,
             buf,
@@ -800,7 +800,7 @@ fn text_property_stickiness_in_state(
     pos: i64,
     prop: Value,
 ) -> i8 {
-    let ignore_previous_character = pos <= buf.point_min_char() as i64 + 1;
+    let ignore_previous_character = pos <= buf.point_min_lisp_char_pos().as_i64();
 
     let default_nonsticky =
         buffer_local_or_global_symbol_value(obarray, buf, "text-property-default-nonsticky");
@@ -1108,13 +1108,13 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
     let Some(buf) = ctx.buffers.current_buffer() else {
         return Ok(Value::NIL);
     };
-    let point_min = buf.point_min_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
     let read_only =
         crate::emacs_core::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
     if !read_only {
         return Ok(Value::NIL);
     }
-    let pos = position.unwrap_or_else(|| buf.point_char() as i64 + 1);
+    let pos = position.unwrap_or_else(|| buf.point_lisp_char_pos().as_i64());
     if pos < point_min {
         return Err(signal(
             "args-out-of-range",
@@ -1259,8 +1259,8 @@ fn write_print_output_to_target(
                     vec![Value::string("Output buffer no longer exists")],
                 ));
             };
-            let min_pos = buffer.point_min_char() as i64 + 1;
-            let max_pos = buffer.point_max_char() as i64 + 1;
+            let min_pos = buffer.point_min_lisp_char_pos().as_i64();
+            let max_pos = buffer.point_max_lisp_char_pos().as_i64();
             if marker_pos < min_pos || marker_pos > max_pos {
                 return Err(signal(
                     "error",
@@ -1283,7 +1283,7 @@ fn write_print_output_to_target(
             let new_marker_pos = ctx
                 .buffers
                 .get(buffer_id)
-                .map(|buf| buf.point_char() as i64 + 1)
+                .map(|buf| buf.point_lisp_char_pos().as_i64())
                 .ok_or_else(|| {
                     signal(
                         "error",

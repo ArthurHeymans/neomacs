@@ -119,7 +119,10 @@ pub(crate) fn builtin_compose_region_internal(
     expect_composition_components(components)?;
 
     let (buffer_handle, point_max) = if let Some(buf) = ctx.buffers.current_buffer() {
-        (Value::make_buffer(buf.id), buf.point_max_char() as i64 + 1)
+        (
+            Value::make_buffer(buf.id),
+            buf.point_max_lisp_char_pos().as_i64(),
+        )
     } else {
         (Value::NIL, 1)
     };

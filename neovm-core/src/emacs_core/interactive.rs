@@ -1508,7 +1508,7 @@ fn interactive_point_arg_in_buffers(buffers: &crate::buffer::BufferManager) -> R
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_char = buf.point_char() as i64 + 1;
+    let point_char = buf.point_lisp_char_pos().as_i64();
     Ok(Value::fixnum(point_char))
 }
 
@@ -3497,8 +3497,8 @@ pub(crate) fn builtin_key_binding_impl(
         {
             // Lisp positions are 1-based character positions, so
             // valid range is `[char_min + 1, char_max + 1]`.
-            let lisp_min = buf.point_min_char() as i64 + 1;
-            let lisp_max = buf.point_max_char() as i64 + 1;
+            let lisp_min = buf.point_min_lisp_char_pos().as_i64();
+            let lisp_max = buf.point_max_lisp_char_pos().as_i64();
             if pos_int < lisp_min || pos_int > lisp_max {
                 let buffer_value = Value::make_buffer(buf_id);
                 return Err(signal("args-out-of-range", vec![buffer_value, *position]));

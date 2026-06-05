@@ -1191,8 +1191,8 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
     let Some((current_id, point_min, point_max)) = eval.buffers.current_buffer().map(|buffer| {
         (
             buffer.id,
-            buffer.point_min_char() as i64 + 1,
-            buffer.point_max_char() as i64 + 1,
+            buffer.point_min_lisp_char_pos().as_i64(),
+            buffer.point_max_lisp_char_pos().as_i64(),
         )
     }) else {
         return Ok(Value::fixnum(1));

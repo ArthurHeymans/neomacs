@@ -564,7 +564,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
     let position = match (position, buffer_id) {
         (Some(pos), Some(buf_id)) => {
             if let Some(buf) = buffers.get(buf_id) {
-                let max_pos = buf.total_chars() as i64 + 1;
+                let max_pos = buf.z_lisp_char_pos().as_i64();
                 Some(pos.clamp(1, max_pos))
             } else {
                 Some(pos)
@@ -713,7 +713,7 @@ pub(crate) fn builtin_point_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_char() as i64 + 1; // 1-based
+    let pos = buf.point_lisp_char_pos().as_i64(); // 1-based
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));
@@ -736,7 +736,7 @@ pub(crate) fn builtin_point_min_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_min_char() as i64 + 1; // 1-based
+    let pos = buf.point_min_lisp_char_pos().as_i64(); // 1-based
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));
@@ -759,7 +759,7 @@ pub(crate) fn builtin_point_max_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_max_char() as i64 + 1; // 1-based
+    let pos = buf.point_max_lisp_char_pos().as_i64(); // 1-based
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));

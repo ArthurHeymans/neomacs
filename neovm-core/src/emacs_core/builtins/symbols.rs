@@ -3319,8 +3319,8 @@ pub(crate) fn builtin_transpose_regions(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let point_min = buf.point_min_char() as i64 + 1;
-        let point_max = buf.point_max_char() as i64 + 1;
+        let point_min = buf.point_min_lisp_char_pos().as_i64();
+        let point_max = buf.point_max_lisp_char_pos().as_i64();
         let raw_start1 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         let raw_end1 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
         let raw_start2 = expect_integer_or_marker_in_buffers(&eval.buffers, &args[2])?;

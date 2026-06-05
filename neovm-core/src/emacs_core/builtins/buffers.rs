@@ -143,7 +143,7 @@ pub(crate) fn normalize_narrow_region_in_buffers(
         std::mem::swap(&mut s, &mut e);
     }
     let full_min = 1_i64;
-    let full_max = buf.total_chars() as i64 + 1;
+    let full_max = buf.z_lisp_char_pos().as_i64();
     if s < full_min || s > full_max || e < full_min || e > full_max {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
@@ -760,8 +760,8 @@ pub(crate) fn builtin_buffer_substring(
         .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",
@@ -882,8 +882,8 @@ fn checked_buffer_slice_for_char_region(
         return Ok(String::new());
     };
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
@@ -945,8 +945,8 @@ fn checked_buffer_slice_for_char_region_in_manager(
         return Ok(String::new());
     };
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
@@ -976,8 +976,8 @@ fn checked_buffer_substring_for_char_region_in_manager(
         ));
     };
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
@@ -1118,10 +1118,10 @@ fn replace_region_source_value_in_state(
             checked_buffer_substring_for_char_region_in_manager(
                 buffers,
                 Some(id),
-                buf.point_min_char() as i64 + 1,
-                buf.point_max_char() as i64 + 1,
-                Value::fixnum(buf.point_min_char() as i64 + 1),
-                Value::fixnum(buf.point_max_char() as i64 + 1),
+                buf.point_min_lisp_char_pos().as_i64(),
+                buf.point_max_lisp_char_pos().as_i64(),
+                Value::fixnum(buf.point_min_lisp_char_pos().as_i64()),
+                Value::fixnum(buf.point_max_lisp_char_pos().as_i64()),
             )
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
@@ -1186,8 +1186,8 @@ pub(crate) fn builtin_insert_buffer_substring(
         .and_then(|id| {
             eval.buffers.get(id).map(|buf| {
                 (
-                    buf.point_min_char() as i64 + 1,
-                    buf.point_max_char() as i64 + 1,
+                    buf.point_min_lisp_char_pos().as_i64(),
+                    buf.point_max_lisp_char_pos().as_i64(),
                 )
             })
         })
@@ -1827,28 +1827,44 @@ pub(crate) fn builtin_compare_buffer_substrings_with_case_fold(
 
     let left_start = if args[1].is_nil() {
         left_buffer
-            .and_then(|id| buffers.get(id).map(|buf| buf.point_min_char() as i64 + 1))
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_min_lisp_char_pos().as_i64())
+            })
             .unwrap_or(1)
     } else {
         expect_integer_or_marker_in_buffers(buffers, &args[1])?
     };
     let left_end = if args[2].is_nil() {
         left_buffer
-            .and_then(|id| buffers.get(id).map(|buf| buf.point_max_char() as i64 + 1))
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_max_lisp_char_pos().as_i64())
+            })
             .unwrap_or(1)
     } else {
         expect_integer_or_marker_in_buffers(buffers, &args[2])?
     };
     let right_start = if args[4].is_nil() {
         right_buffer
-            .and_then(|id| buffers.get(id).map(|buf| buf.point_min_char() as i64 + 1))
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_min_lisp_char_pos().as_i64())
+            })
             .unwrap_or(1)
     } else {
         expect_integer_or_marker_in_buffers(buffers, &args[4])?
     };
     let right_end = if args[5].is_nil() {
         right_buffer
-            .and_then(|id| buffers.get(id).map(|buf| buf.point_max_char() as i64 + 1))
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_max_lisp_char_pos().as_i64())
+            })
             .unwrap_or(1)
     } else {
         expect_integer_or_marker_in_buffers(buffers, &args[5])?
@@ -2133,9 +2149,9 @@ pub(crate) fn builtin_constrain_to_field(
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_min = current.point_min_char() as i64 + 1;
+    let point_min = current.point_min_lisp_char_pos().as_i64();
     let orig_point = if args[0].is_nil() {
-        Some(current.point_char() as i64 + 1)
+        Some(current.point_lisp_char_pos().as_i64())
     } else {
         None
     };
@@ -2313,8 +2329,8 @@ fn resolve_field_position_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     let pos = match position_value {
         None => point_char_pos(buf, buf.point_emacs_byte_pos()),
         Some(value) if value.is_nil() => point_char_pos(buf, buf.point_emacs_byte_pos()),
@@ -2580,7 +2596,7 @@ pub(crate) fn builtin_point_0(eval: &mut super::eval::Context) -> EvalResult {
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(Value::fixnum(buf.point_char() as i64 + 1))
+    Ok(Value::fixnum(buf.point_lisp_char_pos().as_i64()))
 }
 
 pub(crate) fn builtin_point_min(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -2593,7 +2609,7 @@ pub(crate) fn builtin_point_min_0(eval: &mut super::eval::Context) -> EvalResult
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(Value::fixnum(buf.point_min_char() as i64 + 1))
+    Ok(Value::fixnum(buf.point_min_lisp_char_pos().as_i64()))
 }
 
 pub(crate) fn builtin_point_max(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -2606,7 +2622,7 @@ pub(crate) fn builtin_point_max_0(eval: &mut super::eval::Context) -> EvalResult
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(Value::fixnum(buf.point_max_char() as i64 + 1))
+    Ok(Value::fixnum(buf.point_max_lisp_char_pos().as_i64()))
 }
 
 pub(crate) fn builtin_goto_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -3464,8 +3480,8 @@ fn subst_char_in_region_scan(
         .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",
@@ -4165,7 +4181,7 @@ pub(crate) fn builtin_position_bytes(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let max_char_pos = buf.total_chars() as i64 + 1;
+    let max_char_pos = buf.z_lisp_char_pos().as_i64();
     if pos <= 0 || pos > max_char_pos {
         return Ok(Value::NIL);
     }
@@ -4229,8 +4245,8 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         buf.point_byte()
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
-        let point_min = buf.point_min_char() as i64 + 1;
-        let point_max = buf.point_max_char() as i64 + 1;
+        let point_min = buf.point_min_lisp_char_pos().as_i64();
+        let point_max = buf.point_max_lisp_char_pos().as_i64();
         if pos < point_min || pos >= point_max {
             return Err(signal(
                 "args-out-of-range",

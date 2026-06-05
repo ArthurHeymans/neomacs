@@ -66,19 +66,19 @@ fn validate_region_byte_bounds(
     };
 
     let start = if args.is_empty() || args[0].is_nil() {
-        buf.point_min_char() as i64 + 1
+        buf.point_min_lisp_char_pos().as_i64()
     } else {
         expect_integer_or_marker(&ctx.buffers, &args[0])?
     };
 
     let end = if args.len() <= 1 || args[1].is_nil() {
-        buf.point_max_char() as i64 + 1
+        buf.point_max_lisp_char_pos().as_i64()
     } else {
         expect_integer_or_marker(&ctx.buffers, &args[1])?
     };
 
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
             "args-out-of-range",

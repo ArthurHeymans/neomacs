@@ -440,8 +440,8 @@ fn preserve_upcase_case_string_payload(code: i64) -> bool {
 }
 
 fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> EmacsByteRange {
-    let point_min = buf.point_min_char() as i64 + 1;
-    let point_max = buf.point_max_char() as i64 + 1;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
 
     let mut a = beg.clamp(point_min, point_max);
     let mut b = end.clamp(point_min, point_max);
