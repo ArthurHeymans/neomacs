@@ -655,14 +655,6 @@ impl Buffer {
         let first = transposition.first();
         let second = transposition.second();
         let byte_span = transposition.byte_span();
-        let start1_byte = first.byte_start_usize();
-        let end1_byte = first.byte_end_usize();
-        let start2_byte = second.byte_start_usize();
-        let end2_byte = second.byte_end_usize();
-        let start1_char = first.char_start_usize();
-        let end1_char = first.char_end_usize();
-        let start2_char = second.char_start_usize();
-        let end2_char = second.char_end_usize();
         let mut region1 = Vec::with_capacity(first.byte_len().get());
         let mut mid = Vec::with_capacity(transposition.middle_byte_range().len().get());
         let mut region2 = Vec::with_capacity(second.byte_len().get());
@@ -677,10 +669,7 @@ impl Buffer {
 
         let plan = TranspositionStoragePlan::new(transposition, &region1, &mid, &region2);
 
-        self.undo_prepare_change(
-            EmacsBytePos::new(start1_byte),
-            EmacsBytePos::new(self.pt_byte),
-        );
+        self.undo_prepare_change(first.byte_start(), self.point_emacs_byte_pos());
         let mut undo_list = self.get_undo_list();
         if !undo::undo_list_is_disabled(&undo_list) {
             let record_change = |undo_list: &mut crate::emacs_core::value::Value,
@@ -697,33 +686,33 @@ impl Buffer {
                 if transposition.adjacent() {
                     record_change(
                         &mut undo_list,
-                        CharPos0::new(start1_char),
+                        first.char_start(),
                         old_span,
-                        CharPos0::new(self.pt),
+                        self.point_char_pos(),
                         self.undo_state.point_before_command_or_undo(),
                     );
                 } else {
                     record_change(
                         &mut undo_list,
-                        CharPos0::new(start1_char),
+                        first.char_start(),
                         self.buffer_region_lisp_string(first.byte_range()),
-                        CharPos0::new(self.pt),
+                        self.point_char_pos(),
                         self.undo_state.point_before_command_or_undo(),
                     );
                     record_change(
                         &mut undo_list,
-                        CharPos0::new(start2_char),
+                        second.char_start(),
                         self.buffer_region_lisp_string(second.byte_range()),
-                        CharPos0::new(self.pt),
+                        self.point_char_pos(),
                         self.undo_state.point_before_command_or_undo(),
                     );
                 }
             } else {
                 record_change(
                     &mut undo_list,
-                    CharPos0::new(start1_char),
+                    first.char_start(),
                     old_span,
-                    CharPos0::new(self.pt),
+                    self.point_char_pos(),
                     self.undo_state.point_before_command_or_undo(),
                 );
             }
@@ -732,10 +721,10 @@ impl Buffer {
 
         let replacement_props = self.transpose_region_properties(transposition);
         if transposition.same_char_len() {
-            self.set_text_properties_with_undo(start1_byte, end1_byte, Vec::new());
-            self.set_text_properties_with_undo(start2_byte, end2_byte, Vec::new());
+            self.set_text_properties_with_undo_range(first.byte_range(), Vec::new());
+            self.set_text_properties_with_undo_range(second.byte_range(), Vec::new());
         } else {
-            self.set_text_properties_with_undo(start1_byte, end2_byte, Vec::new());
+            self.set_text_properties_with_undo_range(transposition.byte_span(), Vec::new());
         }
         let new_point = transposition.transpose_anchor(self.point_anchor());
 
@@ -744,8 +733,8 @@ impl Buffer {
         self.text.text_props_replace(replacement_props);
         if leave_markers {
             self.text.remap_marker_anchors(|old_position| {
-                let old_byte = old_position.emacs_byte_pos_usize();
-                if old_byte > start1_byte && old_byte <= end2_byte {
+                let old_byte = old_position.emacs_byte_pos();
+                if old_byte > first.byte_start() && old_byte <= second.byte_end() {
                     TextPositionAnchor::new(
                         old_position.char_pos(),
                         emacs_byte_for_char_pos(&self.text, old_position.char_pos()),

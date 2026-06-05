@@ -3630,18 +3630,6 @@ impl Buffer {
         )
     }
 
-    pub(crate) fn set_text_properties_with_undo(
-        &mut self,
-        start: usize,
-        end: usize,
-        plist: Vec<(Value, Value)>,
-    ) {
-        self.set_text_properties_with_undo_range(
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            plist,
-        );
-    }
-
     pub(crate) fn set_text_properties_with_undo_range(
         &mut self,
         byte_range: EmacsByteRange,
