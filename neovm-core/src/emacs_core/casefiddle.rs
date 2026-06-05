@@ -466,7 +466,7 @@ fn resolve_case_region_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     if arg.is_some_and(|value| !value.is_nil()) {
-        let mark = buf.mark().ok_or_else(|| {
+        let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
             signal(
                 "error",
                 vec![Value::string(
@@ -474,8 +474,12 @@ fn resolve_case_region_in_buffers(
                 )],
             )
         })?;
-        let pt = buf.point_byte();
-        return Ok(EmacsByteRange::from_usize(pt.min(mark), pt.max(mark)));
+        let pt = buf.point_emacs_byte_pos();
+        return Ok(if pt <= mark {
+            EmacsByteRange::new(pt, mark)
+        } else {
+            EmacsByteRange::new(mark, pt)
+        });
     }
 
     Ok(resolve_region(buf, beg, end))
@@ -564,12 +568,12 @@ fn casify_word_in_state(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
-        let pt = buf.point_byte();
+        let pt = buf.point_emacs_byte_pos();
         let target = forward_word(buf, &table, n);
-        let (beg, end) = if target >= pt {
-            (pt, target)
+        let (beg, end) = if target >= pt.get() {
+            (pt.get(), target)
         } else {
-            (target, pt)
+            (target, pt.get())
         };
         let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(beg, end));
         (

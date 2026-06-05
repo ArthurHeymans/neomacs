@@ -935,15 +935,15 @@ pub(crate) fn builtin_delete_char(
         return ctx.apply(Value::symbol("kill-forward-chars"), vec![args[0]]);
     }
     if let Some(current_id) = ctx.buffers.current_buffer_id() {
-        let Some((start, end)) = ({
+        let Some(byte_range) = ({
             let Some(buf) = ctx.buffers.get(current_id) else {
                 return Ok(Value::NIL);
             };
             let accessible = buf.accessible_emacs_byte_region();
-            let pt = buf.point_byte();
+            let pt = buf.point_emacs_byte_pos();
             if n > 0 {
                 // Delete N characters forward from point.
-                let mut end = pt;
+                let mut end = pt.get();
                 for _ in 0..n {
                     if end >= accessible.end_usize() {
                         return Err(signal("end-of-buffer", vec![]));
@@ -955,10 +955,10 @@ pub(crate) fn builtin_delete_char(
                         }
                     }
                 }
-                Some((pt, end))
+                Some(EmacsByteRange::new(pt, EmacsBytePos::new(end)))
             } else if n < 0 {
                 // Delete |N| characters backward from point.
-                let mut start = pt;
+                let mut start = pt.get();
                 for _ in 0..(-n) {
                     if start <= accessible.start_usize() {
                         return Err(signal("beginning-of-buffer", vec![]));
@@ -970,18 +970,17 @@ pub(crate) fn builtin_delete_char(
                         }
                     }
                 }
-                Some((start, pt))
+                Some(EmacsByteRange::new(EmacsBytePos::new(start), pt))
             } else {
                 None
             }
         }) else {
             return Ok(Value::NIL);
         };
-        let delete_range = buffer_edit_range_for_byte_range_in_manager(
-            &ctx.buffers,
-            current_id,
-            EmacsByteRange::from_usize(start, end),
-        )?;
+        let start = byte_range.start_usize();
+        let end = byte_range.end_usize();
+        let delete_range =
+            buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
         crate::emacs_core::textprop::verify_text_read_only_in_state(
             &ctx.obarray,
             &ctx.buffers,
@@ -1108,22 +1107,19 @@ pub(crate) fn builtin_erase_buffer(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::NIL);
     };
-    let buf_len = ctx
+    let byte_range = ctx
         .buffers
         .get(current_id)
-        .map(|buf| buf.total_bytes())
-        .unwrap_or(0);
-    let delete_range = buffer_edit_range_for_byte_range_in_manager(
-        &ctx.buffers,
-        current_id,
-        EmacsByteRange::from_usize(0, buf_len),
-    )?;
+        .map(|buf| buf.full_emacs_byte_range())
+        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+    let delete_range =
+        buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
     let change = TextChange::deletion(delete_range);
-    if buf_len > 0 {
+    if !byte_range.is_empty() {
         signal_before_text_change(ctx, change)?;
     }
     erase_buffer_impl(&ctx.obarray, &[], &mut ctx.buffers, vec![])?;
-    if buf_len > 0 {
+    if !byte_range.is_empty() {
         signal_after_text_change(ctx, change)?;
     }
     Ok(Value::NIL)
@@ -1151,19 +1147,16 @@ pub(crate) fn erase_buffer_impl(
     }
 
     let _ = buffers.clear_buffer_labeled_restrictions(current_id);
-    let len = {
+    let byte_range = {
         let Some(buf) = buffers.get_mut(current_id) else {
             return Ok(Value::NIL);
         };
         buf.widen();
-        buf.total_bytes()
+        buf.full_emacs_byte_range()
     };
-    if len > 0 {
-        let delete_range = buffer_edit_range_for_byte_range_in_manager(
-            buffers,
-            current_id,
-            EmacsByteRange::from_usize(0, len),
-        )?;
+    if !byte_range.is_empty() {
+        let delete_range =
+            buffer_edit_range_for_byte_range_in_manager(buffers, current_id, byte_range)?;
         let _ = buffers.delete_buffer_measured_region(current_id, delete_range);
     }
     if let Some(buf) = buffers.get_mut(current_id) {

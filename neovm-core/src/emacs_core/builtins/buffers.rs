@@ -1536,8 +1536,8 @@ pub(crate) fn builtin_set_buffer_multibyte(
                         .min(total_bytes.get()),
                 ),
                 mark_old_emacs_byte: buffer
-                    .mark_byte()
-                    .map(|mark| EmacsBytePos::new(mark.min(total_bytes.get()))),
+                    .mark_emacs_byte_pos()
+                    .map(|mark| EmacsBytePos::new(mark.get().min(total_bytes.get()))),
                 last_window_start_old_emacs_byte: buffer
                     .lisp_pos_to_full_buffer_emacs_byte_pos(last_window_start.as_i64()),
                 overlays,

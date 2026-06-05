@@ -2999,10 +2999,15 @@ impl Buffer {
 
     /// Return the mark byte position, None if mark inactive.
     pub fn mark_byte(&self) -> Option<usize> {
+        self.mark_emacs_byte_pos().map(EmacsBytePos::get)
+    }
+
+    /// Return the mark as an Emacs byte position, None if mark inactive.
+    pub fn mark_emacs_byte_pos(&self) -> Option<EmacsBytePos> {
         if self.mark_marker_ptr.is_null() {
             None
         } else {
-            unsafe { Some((*self.mark_marker_ptr).data.bytepos) }
+            unsafe { Some(EmacsBytePos::new((*self.mark_marker_ptr).data.bytepos)) }
         }
     }
 
