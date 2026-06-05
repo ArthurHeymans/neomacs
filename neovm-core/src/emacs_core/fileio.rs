@@ -4415,8 +4415,7 @@ fn replace_accessible_portion_for_insert_file_contents(
     signal_hooks: bool,
 ) -> Result<(), Flow> {
     let (
-        accessible_start,
-        accessible_end,
+        accessible_range,
         accessible_start_char,
         accessible_end_char,
         old_point_char,
@@ -4431,8 +4430,7 @@ fn replace_accessible_portion_for_insert_file_contents(
         let range = accessible.range();
         let edit_range = buf.edit_range_for_emacs_byte_range(range);
         (
-            accessible.start_usize(),
-            accessible.end_usize(),
+            range,
             edit_range.char_start().get(),
             edit_range.char_end().get(),
             buf.pt,
@@ -4464,8 +4462,12 @@ fn replace_accessible_portion_for_insert_file_contents(
         return Ok(());
     }
 
-    let delete_start = accessible_start + prefix;
-    let delete_end = accessible_end - suffix;
+    let delete_range = EmacsByteRange::new(
+        accessible_range.start().add_len(EmacsByteLen::new(prefix)),
+        accessible_range
+            .end()
+            .saturating_sub_len(EmacsByteLen::new(suffix)),
+    );
     let insert_start = prefix;
     let insert_end = new_bytes.len() - suffix;
     let insert_text = text.slice(insert_start, insert_end).ok_or_else(|| {
@@ -4480,16 +4482,11 @@ fn replace_accessible_portion_for_insert_file_contents(
         accessible_end_char - char_count_for_lisp_string_byte_prefix(&old_text, suffix);
     let inserted_chars = insert_text.schars();
 
-    signal_and_delete_file_replace_region(
-        eval,
-        current_id,
-        EmacsByteRange::from_usize(delete_start, delete_end),
-        signal_hooks,
-    )?;
+    signal_and_delete_file_replace_region(eval, current_id, delete_range, signal_hooks)?;
     signal_and_insert_file_replace_text(
         eval,
         current_id,
-        EmacsBytePos::new(delete_start),
+        delete_range.start(),
         &insert_text,
         signal_hooks,
     )?;
@@ -4530,10 +4527,7 @@ fn insert_file_contents_into_current_buffer_in_state(
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(
-                pt_before.emacs_byte_pos_usize(),
-                pt_before.emacs_byte_pos_usize(),
-            ),
+            EmacsByteRange::from_start_len(pt_before.emacs_byte_pos(), EmacsByteLen::ZERO),
             contents,
         )?;
         if signal_hooks && !contents.is_empty() {
@@ -4894,7 +4888,7 @@ fn decide_auto_coding_for_insert_file_contents(
         .buffers
         .get(work_buffer)
         .map(|buf| buf.full_emacs_byte_range())
-        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+        .unwrap_or(EmacsByteRange::EMPTY);
     if !old_range.is_empty() {
         eval.buffers
             .delete_buffer_emacs_byte_range(work_buffer, old_range)
@@ -4957,7 +4951,7 @@ fn restore_empty_buffer_after_auto_coding_probe(
         .buffers
         .get(buffer_id)
         .map(|buf| buf.full_emacs_byte_range())
-        .unwrap_or_else(|| EmacsByteRange::from_usize(0, 0));
+        .unwrap_or(EmacsByteRange::EMPTY);
     if !delete_range.is_empty() {
         let _ = eval
             .buffers
