@@ -2355,11 +2355,6 @@ impl Buffer {
         )
     }
 
-    #[cfg(test)]
-    pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
-        self.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(pos), name)
-    }
-
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -2378,11 +2373,6 @@ impl Buffer {
             .text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(
                 pos.get().min(self.total_bytes()),
             ))
-    }
-
-    #[cfg(test)]
-    pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
-        self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     pub fn text_props_get_properties_plist_value_at_emacs_byte_pos(
@@ -2408,21 +2398,6 @@ impl Buffer {
         )
     }
 
-    #[cfg(test)]
-    pub fn text_props_put_property(
-        &mut self,
-        start: usize,
-        end: usize,
-        name: Value,
-        value: Value,
-    ) -> bool {
-        self.text_props_put_property_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            name,
-            value,
-        )
-    }
-
     pub fn text_props_remove_property_in_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
@@ -2430,14 +2405,6 @@ impl Buffer {
     ) -> bool {
         self.text.text_props_remove_property_in_emacs_byte_range(
             self.clamped_emacs_byte_range(range),
-            name,
-        )
-    }
-
-    #[cfg(test)]
-    pub fn text_props_remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
-        self.text_props_remove_property_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
             name,
         )
     }
@@ -2870,11 +2837,6 @@ impl Buffer {
 
     pub fn has_marker(&self, marker_id: u64) -> bool {
         self.text.has_marker(marker_id)
-    }
-
-    #[cfg(test)]
-    pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
-        self.text.marker_chain_lookup(marker_id)
     }
 
     pub fn marker_chain_anchor_lookup(

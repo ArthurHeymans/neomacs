@@ -894,7 +894,11 @@ fn font_at_eval_returns_font_object_for_multibyte_buffer_face() {
     buffer.insert("a好b");
     let start = buffer_char_pos_to_byte(buffer, 1);
     let end = buffer_char_pos_to_byte(buffer, 2);
-    buffer.text_props_put_property(start, end, Value::symbol("face"), face);
+    buffer.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(start, end),
+        Value::symbol("face"),
+        face,
+    );
 
     let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert!(
@@ -1028,7 +1032,11 @@ fn font_at_eval_reads_source_style_inline_face_keywords() {
     ]);
     let start = buffer_char_pos_to_byte(buffer, 0);
     let end = buffer_char_pos_to_byte(buffer, 3);
-    buffer.text_props_put_property(start, end, Value::symbol("face"), inline_face);
+    buffer.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(start, end),
+        Value::symbol("face"),
+        inline_face,
+    );
 
     let font = builtin_font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
     assert!(
@@ -1080,7 +1088,11 @@ fn font_at_eval_passes_inline_face_weight_and_family_to_display_host() {
     ]);
     let start = buffer_char_pos_to_byte(buffer, 0);
     let end = buffer_char_pos_to_byte(buffer, 2);
-    buffer.text_props_put_property(start, end, Value::symbol("face"), inline_face);
+    buffer.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(start, end),
+        Value::symbol("face"),
+        inline_face,
+    );
 
     let _ = builtin_font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
 
@@ -1131,7 +1143,11 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
     ]);
     let start = buffer_char_pos_to_byte(buffer, 1);
     let end = buffer_char_pos_to_byte(buffer, 2);
-    buffer.text_props_put_property(start, end, Value::symbol("face"), inline_face);
+    buffer.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(start, end),
+        Value::symbol("face"),
+        inline_face,
+    );
 
     let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert_eq!(

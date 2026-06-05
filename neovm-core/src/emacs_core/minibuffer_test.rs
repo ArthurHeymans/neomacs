@@ -966,24 +966,45 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
 
     assert_eq!(prompt_end, "Prompt: ".len());
     assert_eq!(
-        buf.text_props_get_property(0, Value::symbol("field")),
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(0),
+            Value::symbol("field")
+        ),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text_props_get_property(0, Value::symbol("front-sticky")),
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(0),
+            Value::symbol("front-sticky")
+        ),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text_props_get_property(0, Value::symbol("rear-nonsticky")),
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(0),
+            Value::symbol("rear-nonsticky")
+        ),
         Some(Value::T)
     );
     assert_eq!(
-        buf.text_props_get_property(0, Value::symbol("read-only")),
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(0),
+            Value::symbol("read-only")
+        ),
         Some(Value::T)
     );
-    assert_eq!(buf.text_props_get_property(0, Value::symbol("face")), None);
     assert_eq!(
-        buf.text_props_get_property(prompt_end, Value::symbol("read-only")),
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(0),
+            Value::symbol("face")
+        ),
+        None
+    );
+    assert_eq!(
+        buf.text_props_get_property_at_emacs_byte_pos(
+            crate::buffer::EmacsBytePos::new(prompt_end),
+            Value::symbol("read-only")
+        ),
         None
     );
 }
@@ -1001,7 +1022,10 @@ fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() 
             Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
             crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
-        let _ = buf.text_props_remove_property(0, prompt_end, Value::symbol("field"));
+        let _ = buf.text_props_remove_property_in_emacs_byte_range(
+            crate::buffer::EmacsByteRange::from_usize(0, prompt_end),
+            Value::symbol("field"),
+        );
     }
     eval.buffers.set_current(minibuf_id);
     eval.minibuffers

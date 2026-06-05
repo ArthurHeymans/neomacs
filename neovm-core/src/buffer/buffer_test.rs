@@ -69,6 +69,20 @@ fn char_pos_for_byte(buf: &Buffer, byte_pos: usize) -> usize {
         .get()
 }
 
+fn marker_chain_lookup_for_test(
+    buf: &Buffer,
+    marker_id: u64,
+) -> Option<(usize, usize, InsertionType)> {
+    buf.marker_chain_anchor_lookup(marker_id)
+        .map(|(anchor, insertion_type)| {
+            (
+                anchor.emacs_byte_pos_usize(),
+                anchor.char_pos_usize(),
+                insertion_type,
+            )
+        })
+}
+
 /// Test helper: allocate a scratch `MarkerObj` via the tagged heap and
 /// register it on `buf` at `pos`. Keeps the old `buf.register_marker(id, pos, ty)`
 /// call shape used by the pre-chain tests.
@@ -273,7 +287,10 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         assert!(base.shares_text_storage_with(indirect));
         assert!(base.undo_state.shares_with(&indirect.undo_state));
         assert_eq!(
-            indirect.text_props_get_property(1, Value::symbol("face")),
+            indirect.text_props_get_property_at_emacs_byte_pos(
+                crate::buffer::EmacsBytePos::new(1),
+                Value::symbol("face")
+            ),
             Some(Value::symbol("bold"))
         );
     }
@@ -628,14 +645,14 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             assert_eq!(right_marker.as_marker_data().unwrap().buffer, Some(left_id));
             assert_eq!(left_marker.as_marker_data().unwrap().buffer, Some(right_id));
             assert_eq!(
-                left_after.marker_chain_lookup(502).map(|(b, c, _)| (b, c)),
+                marker_chain_lookup_for_test(&left_after, 502).map(|(b, c, _)| (b, c)),
                 Some((
                     right_marker_pos,
                     char_pos_for_byte(left_after, right_marker_pos)
                 ))
             );
             assert_eq!(
-                right_after.marker_chain_lookup(501).map(|(b, c, _)| (b, c)),
+                marker_chain_lookup_for_test(&right_after, 501).map(|(b, c, _)| (b, c)),
                 Some((
                     left_marker_pos,
                     char_pos_for_byte(right_after, left_marker_pos)
@@ -913,7 +930,7 @@ fn delete_region_moves_marker_at_end_to_start() {
     let mut buf = buf_with_text("0123456789ABCDEF");
     register_marker_for_test(&mut buf, 1, 12, InsertionType::Before);
     buf.delete_region(5, 12);
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 5);
     assert_eq!(char_pos, 5);
 }
@@ -1135,7 +1152,7 @@ fn marker_tracks_insertion_after() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     buf.insert("XY");
     // Marker was at 1 with After => advances to 3.
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 3);
     assert_eq!(char_pos, 3);
 }
@@ -1148,7 +1165,7 @@ fn marker_stays_on_insertion_before() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
     buf.insert("XY");
     // Marker was at 1 with Before => stays at 1.
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 1);
     assert_eq!(char_pos, 1);
 }
@@ -1160,7 +1177,7 @@ fn marker_adjusts_on_deletion() {
     register_marker_for_test(&mut buf, 1, 4, InsertionType::After);
     buf.delete_region(1, 3);
     // Marker was at 4 (past deleted range [1,3)), shifts by 2 => 2.
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 2);
 }
@@ -1172,7 +1189,7 @@ fn marker_inside_deleted_range_collapses() {
     register_marker_for_test(&mut buf, 1, 2, InsertionType::After);
     buf.delete_region(1, 5);
     // Marker at 2 inside [1,5) => collapses to 1.
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 1);
     assert_eq!(char_pos, 1);
 }
@@ -1184,12 +1201,12 @@ fn marker_char_pos_tracks_multibyte_edits() {
     register_marker_for_test(&mut buf, 1, 'é'.len_utf8(), InsertionType::After);
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.insert("ß");
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 4);
     assert_eq!(char_pos, 2);
 
     buf.delete_region(2, 4);
-    let (byte_pos, char_pos, _ins) = buf.marker_chain_lookup(1).expect("marker");
+    let (byte_pos, char_pos, _ins) = marker_chain_lookup_for_test(&buf, 1).expect("marker");
     assert_eq!(byte_pos, 2);
     assert_eq!(char_pos, 1);
 }
@@ -1211,7 +1228,11 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
 
     let face = Value::symbol("face");
     let bold = Value::symbol("bold");
-    assert!(buf.text_props_put_property(2, 6, face, bold));
+    assert!(buf.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(2, 6),
+        face,
+        bold
+    ));
     register_marker_for_test(&mut buf, 42, 3, InsertionType::After);
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
 
@@ -1227,9 +1248,8 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let replacement = LispString::from_utf8("Ωx");
     buf.replace_region_lisp_string(replace_start, replace_end, &replacement);
 
-    let marker_position = buf
-        .marker_chain_lookup(42)
-        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position =
+        marker_chain_lookup_for_test(&buf, 42).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
@@ -1249,15 +1269,19 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
     let face = Value::symbol("face");
     let first_face = Value::symbol("first");
     let second_face = Value::symbol("second");
-    assert!(buf.text_props_put_property(
-        byte_pos_for_char(&buf, 0),
-        byte_pos_for_char(&buf, 2),
+    assert!(buf.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(
+            byte_pos_for_char(&buf, 0),
+            byte_pos_for_char(&buf, 2),
+        ),
         face,
         first_face,
     ));
-    assert!(buf.text_props_put_property(
-        byte_pos_for_char(&buf, 4),
-        byte_pos_for_char(&buf, 6),
+    assert!(buf.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(
+            byte_pos_for_char(&buf, 4),
+            byte_pos_for_char(&buf, 6),
+        ),
         face,
         second_face,
     ));
@@ -1272,9 +1296,8 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
     );
     buf.transpose_regions(transposition, false);
 
-    let marker_position = buf
-        .marker_chain_lookup(42)
-        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position =
+        marker_chain_lookup_for_test(&buf, 42).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
@@ -1474,7 +1497,11 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
         buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(&buf, 2)));
         let prop_start = byte_pos_for_char(&buf, 1);
         let prop_end = byte_pos_for_char(&buf, 5);
-        assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
+        assert!(buf.text_props_put_property_in_emacs_byte_range(
+            crate::buffer::EmacsByteRange::from_usize(prop_start, prop_end),
+            face,
+            bold
+        ));
         let marker_pos = byte_pos_for_char(&buf, 4);
         register_marker_for_test(buf, 88, marker_pos, InsertionType::After);
         buf.set_undo_list(Value::NIL);
@@ -1513,9 +1540,8 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
     let undo_before = undo_list_snapshot(mgr.get(id).expect("scratch buffer").get_undo_list());
     let undo_result = mgr.undo_buffer(id, 1).expect("undo result");
     let buf = mgr.get(id).expect("scratch buffer");
-    let marker_position = buf
-        .marker_chain_lookup(88)
-        .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position =
+        marker_chain_lookup_for_test(&buf, 88).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
     assert_eq!(buf.text_backend_kind(), kind);
 
     BackendUndoSnapshot {
@@ -1575,7 +1601,11 @@ fn run_manager_edit_entrypoint_script(
         let prop_start = byte_pos_for_char(buf, 1);
         let prop_end = byte_pos_for_char(buf, 6);
         let marker_pos = byte_pos_for_char(buf, 4);
-        assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
+        assert!(buf.text_props_put_property_in_emacs_byte_range(
+            crate::buffer::EmacsByteRange::from_usize(prop_start, prop_end),
+            face,
+            bold
+        ));
         register_marker_for_test(buf, 99, marker_pos, InsertionType::After);
         buf.set_undo_list(Value::NIL);
     }
@@ -1623,8 +1653,7 @@ fn run_manager_edit_entrypoint_script(
         point_char: buf.point_char(),
         mark_byte: buf.mark(),
         mark_char: buf.mark_char(),
-        marker_position: buf
-            .marker_chain_lookup(99)
+        marker_position: marker_chain_lookup_for_test(&buf, 99)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         text_properties: buffer_text_property_snapshot(buf),
         undo: undo_list_snapshot(buf.get_undo_list()),
@@ -1819,11 +1848,9 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
         indirect_point: (indirect.point_byte(), indirect.point_char()),
         base_mark: (base.mark(), base.mark_char()),
         indirect_mark: (indirect.mark(), indirect.mark_char()),
-        marker_after_position: base
-            .marker_chain_lookup(701)
+        marker_after_position: marker_chain_lookup_for_test(&base, 701)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
-        marker_before_position: indirect
-            .marker_chain_lookup(702)
+        marker_before_position: marker_chain_lookup_for_test(&indirect, 702)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         indirect_overlay_range: (
             indirect.overlays.overlay_start(indirect_overlay),
@@ -1868,7 +1895,11 @@ fn run_backend_migration_script(
     let bold = Value::symbol("bold");
     let prop_start = byte_pos_for_char(&buf, 1);
     let prop_end = byte_pos_for_char(&buf, 5);
-    assert!(buf.text_props_put_property(prop_start, prop_end, face, bold));
+    assert!(buf.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(prop_start, prop_end),
+        face,
+        bold
+    ));
     register_marker_for_test(&mut buf, 77, 4, InsertionType::After);
     let overlay = Value::make_overlay(OverlayData {
         serial: 0,
@@ -1905,8 +1936,7 @@ fn run_backend_migration_script(
         buffer_string: buf.buffer_string(),
         char_to_byte_4,
         byte_to_char_at_char_4: char_pos_for_byte(&buf, char_to_byte_4),
-        marker_position: buf
-            .marker_chain_lookup(77)
+        marker_position: marker_chain_lookup_for_test(&buf, 77)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         overlay_range: (
             buf.overlays.overlay_start(overlay),
