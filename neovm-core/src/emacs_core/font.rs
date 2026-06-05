@@ -3053,21 +3053,41 @@ fn invalid_face_error(face: Value) -> Flow {
     signal("error", data)
 }
 
+/// The `unspecified' symbol used to fill empty Lisp face slots.  GNU keeps it
+/// as the staticpro'd `Qunspecified' and never re-interns it; cache the
+/// interned `SymId' once so realising a face does not re-intern "unspecified"
+/// for every slot.  `make_lisp_face_vector' fills ~30 slots and Doom realises
+/// hundreds of faces, so this was ~5% of startup CPU.  Safe at runtime: the
+/// cache is first populated after the pdump is loaded (same pattern as
+/// `cached_symbol_id!' in eval.rs).
+fn unspecified_face_symbol() -> Value {
+    static ID: OnceLock<SymId> = OnceLock::new();
+    Value::from_sym_id(*ID.get_or_init(|| intern("unspecified")))
+}
+
+/// The leading `face' tag symbol stored in slot 0 of a Lisp face vector.
+fn face_tag_symbol() -> Value {
+    static ID: OnceLock<SymId> = OnceLock::new();
+    Value::from_sym_id(*ID.get_or_init(|| intern("face")))
+}
+
 pub(crate) fn make_lisp_face_vector() -> Value {
+    let unspecified = unspecified_face_symbol();
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
-    values.push(Value::symbol("face"));
-    values.extend((1..LISP_FACE_VECTOR_LEN).map(|_| Value::symbol("unspecified")));
+    values.push(face_tag_symbol());
+    values.extend((1..LISP_FACE_VECTOR_LEN).map(|_| unspecified));
     Value::vector(values)
 }
 
 fn reset_lisp_face_vector(vector: Value) {
+    let unspecified = unspecified_face_symbol();
     let _ = vector.with_vector_data_mut(|slots| {
         if slots.len() != LISP_FACE_VECTOR_LEN {
-            *slots = vec![Value::symbol("unspecified"); LISP_FACE_VECTOR_LEN];
+            *slots = vec![unspecified; LISP_FACE_VECTOR_LEN];
         }
-        slots[0] = Value::symbol("face");
+        slots[0] = face_tag_symbol();
         for slot in slots.iter_mut().take(LISP_FACE_VECTOR_LEN).skip(1) {
-            *slot = Value::symbol("unspecified");
+            *slot = unspecified;
         }
     });
 }
