@@ -2846,7 +2846,24 @@ impl Buffer {
         pos: usize,
         insertion_type: InsertionType,
     ) {
-        let clamped = pos.min(self.total_bytes());
+        let position = self.marker_anchor_for_emacs_byte_pos(EmacsBytePos::new(pos));
+        self.register_marker_at_anchor(marker_ptr, marker_id, position, insertion_type);
+    }
+
+    pub fn register_marker_at_anchor(
+        &mut self,
+        marker_ptr: *mut crate::tagged::header::MarkerObj,
+        marker_id: u64,
+        position: TextPositionAnchor,
+        insertion_type: InsertionType,
+    ) {
+        let position = self.canonical_marker_anchor(position);
+        self.text
+            .register_marker(marker_ptr, self.id, marker_id, position, insertion_type);
+    }
+
+    fn marker_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
+        let clamped = pos.get().min(self.total_bytes());
         let char_pos = if clamped == self.begv_byte {
             self.begv
         } else if clamped == self.zv_byte {
@@ -2856,14 +2873,11 @@ impl Buffer {
                 .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
                 .get()
         };
-        self.text.register_marker(
-            marker_ptr,
-            self.id,
-            marker_id,
-            clamped,
-            char_pos,
-            insertion_type,
-        );
+        TextPositionAnchor::from_usize(char_pos, clamped)
+    }
+
+    fn canonical_marker_anchor(&self, position: TextPositionAnchor) -> TextPositionAnchor {
+        self.marker_anchor_for_emacs_byte_pos(position.emacs_byte_pos())
     }
 
     pub fn remove_marker_entry(&mut self, marker_id: u64) {
@@ -2876,6 +2890,13 @@ impl Buffer {
 
     pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
         self.text.marker_chain_lookup(marker_id)
+    }
+
+    pub fn marker_chain_anchor_lookup(
+        &self,
+        marker_id: u64,
+    ) -> Option<(TextPositionAnchor, InsertionType)> {
+        self.text.marker_chain_anchor_lookup(marker_id)
     }
 
     #[cfg(test)]
@@ -2924,14 +2945,8 @@ impl Buffer {
         self.text.chain_unlink(ptr);
     }
 
-    pub fn move_marker_to_position(
-        &self,
-        marker_id: u64,
-        bytepos: EmacsBytePos,
-        charpos: CharPos0,
-    ) {
-        self.text
-            .move_marker_to_position(marker_id, bytepos, charpos);
+    pub fn move_marker_to_anchor(&self, marker_id: u64, position: TextPositionAnchor) {
+        self.text.move_marker_to_anchor(marker_id, position);
     }
 
     pub fn update_marker_insertion_type(&mut self, marker_id: u64, insertion_type: InsertionType) {
@@ -2946,11 +2961,7 @@ impl Buffer {
 
     /// Set the mark to Emacs-byte position `pos`, creating the marker if needed.
     pub fn set_mark_emacs_byte_pos(&mut self, pos: EmacsBytePos) {
-        let clamped = pos.get().min(self.total_bytes());
-        let char_pos = self
-            .text
-            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
-            .get();
+        let position = self.marker_anchor_for_emacs_byte_pos(pos);
         if self.mark_marker_ptr.is_null() {
             // Create the marker eagerly and register in the chain so it
             // auto-adjusts on edits.
@@ -2959,8 +2970,8 @@ impl Buffer {
                     buffer: Some(self.id),
                     insertion_type: false,
                     marker_id: Some(crate::emacs_core::marker::MARK_MARKER_ID),
-                    bytepos: clamped,
-                    charpos: char_pos,
+                    bytepos: position.emacs_byte_pos_usize(),
+                    charpos: position.char_pos_usize(),
                     last_position_valid: true,
                     next_marker: std::ptr::null_mut(),
                 });
@@ -2972,8 +2983,7 @@ impl Buffer {
                 ptr,
                 self.id,
                 crate::emacs_core::marker::MARK_MARKER_ID,
-                clamped,
-                char_pos,
+                position,
                 super::InsertionType::Before,
             );
             self.mark_marker_ptr = ptr;
@@ -2981,8 +2991,8 @@ impl Buffer {
             // Update existing marker position via the chain
             let ptr = self.mark_marker_ptr;
             unsafe {
-                (*ptr).data.bytepos = clamped;
-                (*ptr).data.charpos = char_pos;
+                (*ptr).data.bytepos = position.emacs_byte_pos_usize();
+                (*ptr).data.charpos = position.char_pos_usize();
             }
         }
     }
@@ -5496,8 +5506,47 @@ impl BufferManager {
         pos: usize,
         insertion_type: InsertionType,
     ) -> (u64, *mut crate::tagged::header::MarkerObj) {
+        self.create_marker_at_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos), insertion_type)
+    }
+
+    pub fn create_marker_at_emacs_byte_pos(
+        &mut self,
+        buffer_id: BufferId,
+        pos: EmacsBytePos,
+        insertion_type: InsertionType,
+    ) -> (u64, *mut crate::tagged::header::MarkerObj) {
         let marker_id = self.next_marker_id;
         self.next_marker_id += 1;
+        let marker_ptr = Self::allocate_marker_node(buffer_id, marker_id, insertion_type);
+        let _ =
+            self.register_marker_id(marker_ptr, buffer_id, marker_id, pos.get(), insertion_type);
+        (marker_id, marker_ptr)
+    }
+
+    pub fn create_marker_at_anchor(
+        &mut self,
+        buffer_id: BufferId,
+        position: TextPositionAnchor,
+        insertion_type: InsertionType,
+    ) -> (u64, *mut crate::tagged::header::MarkerObj) {
+        let marker_id = self.next_marker_id;
+        self.next_marker_id += 1;
+        let marker_ptr = Self::allocate_marker_node(buffer_id, marker_id, insertion_type);
+        let _ = self.register_marker_id_at_anchor(
+            marker_ptr,
+            buffer_id,
+            marker_id,
+            position,
+            insertion_type,
+        );
+        (marker_id, marker_ptr)
+    }
+
+    fn allocate_marker_node(
+        buffer_id: BufferId,
+        marker_id: u64,
+        insertion_type: InsertionType,
+    ) -> *mut crate::tagged::header::MarkerObj {
         // Allocate a backing MarkerObj so the new chain has a valid node.
         // Position fields are overwritten inside register_marker; starting
         // values are placeholders.
@@ -5511,12 +5560,10 @@ impl BufferManager {
                 last_position_valid: true,
                 next_marker: std::ptr::null_mut(),
             });
-        let marker_ptr = marker_value
+        marker_value
             .as_veclike_ptr()
             .expect("freshly allocated marker should have a veclike ptr")
-            as *mut crate::tagged::header::MarkerObj;
-        let _ = self.register_marker_id(marker_ptr, buffer_id, marker_id, pos, insertion_type);
-        (marker_id, marker_ptr)
+            as *mut crate::tagged::header::MarkerObj
     }
 
     /// Register an existing marker id in `buffer_id` at byte position `pos`.
@@ -5533,21 +5580,41 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn register_marker_id_at_anchor(
+        &mut self,
+        marker_ptr: *mut crate::tagged::header::MarkerObj,
+        buffer_id: BufferId,
+        marker_id: u64,
+        position: TextPositionAnchor,
+        insertion_type: InsertionType,
+    ) -> Option<()> {
+        let buf = self.buffers.get_mut(&buffer_id)?;
+        buf.register_marker_at_anchor(marker_ptr, marker_id, position, insertion_type);
+        Some(())
+    }
+
+    pub fn marker_anchor_position(
+        &self,
+        buffer_id: BufferId,
+        marker_id: u64,
+    ) -> Option<TextPositionAnchor> {
+        self.buffers
+            .get(&buffer_id)
+            .and_then(|buf| buf.marker_chain_anchor_lookup(marker_id))
+            .map(|(position, _ins)| position)
+    }
+
     /// Query the current byte position of a marker.
     pub fn marker_position(&self, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
         // T7: walk the chain rather than the deleted Vec<MarkerEntry>.
-        self.buffers
-            .get(&buffer_id)
-            .and_then(|buf| buf.marker_chain_lookup(marker_id))
-            .map(|(bytepos, _charpos, _ins)| bytepos)
+        self.marker_anchor_position(buffer_id, marker_id)
+            .map(TextPositionAnchor::emacs_byte_pos_usize)
     }
 
     /// Query the current character position of a marker.
     pub fn marker_char_position(&self, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
-        self.buffers
-            .get(&buffer_id)
-            .and_then(|buf| buf.marker_chain_lookup(marker_id))
-            .map(|(_bytepos, charpos, _ins)| charpos)
+        self.marker_anchor_position(buffer_id, marker_id)
+            .map(TextPositionAnchor::char_pos_usize)
     }
 
     pub fn marker_value(&self, buffer_id: BufferId, marker_id: u64) -> Option<Value> {
@@ -5565,16 +5632,15 @@ impl BufferManager {
         Some(())
     }
 
-    pub fn move_marker_to_position(
+    pub fn move_marker_to_anchor(
         &mut self,
         buffer_id: BufferId,
         marker_id: u64,
-        bytepos: EmacsBytePos,
-        charpos: CharPos0,
+        position: TextPositionAnchor,
     ) -> Option<()> {
         self.buffers
             .get_mut(&buffer_id)?
-            .move_marker_to_position(marker_id, bytepos, charpos);
+            .move_marker_to_anchor(marker_id, position);
         Some(())
     }
 

@@ -506,6 +506,9 @@ Completed so far:
   `BufferManager` boundary (`EmacsBytePos` / `EmacsByteRange`) and moved
   representative marker, shift-selection, narrowing, indirect-buffer clone,
   and whole-buffer replacement paths onto those typed APIs.
+- Added typed marker-chain registration, lookup, movement, and deletion
+  adjustment boundaries using `TextPositionAnchor` / `TextEditRange`, while
+  keeping raw wrappers only at Lisp/test compatibility edges.
 
 Next work:
 

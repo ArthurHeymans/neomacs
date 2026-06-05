@@ -511,8 +511,6 @@ impl Buffer {
         if range.is_empty() {
             return TextEditRange::default();
         }
-        let start_char = range.char_start();
-        let end_char = range.char_end();
         // Record undo: save the deleted text for restoration.
         let deleted_text = self.buffer_region_lisp_string(range.byte_range());
         // GNU `record_delete` always calls `record_point`, and that path
@@ -520,15 +518,12 @@ impl Buffer {
         self.undo_prepare_change(range.byte_start_usize(), self.pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            for (marker, adjustment) in self
-                .text
-                .marker_adjustments_for_delete(start_char.get(), end_char.get())
-            {
+            for (marker, adjustment) in self.text.marker_adjustments_for_delete(range) {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
             undo::undo_list_record_delete(
                 &mut ul,
-                start_char.get(),
+                range.char_start_usize(),
                 deleted_text,
                 self.pt,
                 self.undo_state.point_before_command_or_undo(),

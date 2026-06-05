@@ -1444,8 +1444,7 @@ impl BufferText {
         marker_ptr: *mut crate::tagged::header::MarkerObj,
         buffer_id: BufferId,
         marker_id: u64,
-        byte_pos: usize,
-        char_pos: usize,
+        position: TextPositionAnchor,
         insertion_type: InsertionType,
     ) {
         // Update LispMarker so its fields are authoritative before the
@@ -1458,8 +1457,8 @@ impl BufferText {
         unsafe {
             (*marker_ptr).data.buffer = Some(buffer_id);
             (*marker_ptr).data.marker_id = Some(marker_id);
-            (*marker_ptr).data.bytepos = byte_pos;
-            (*marker_ptr).data.charpos = char_pos;
+            (*marker_ptr).data.bytepos = position.emacs_byte_pos_usize();
+            (*marker_ptr).data.charpos = position.char_pos_usize();
             (*marker_ptr).data.last_position_valid = true;
             (*marker_ptr).data.insertion_type = insertion_type == InsertionType::After;
         }
@@ -1491,11 +1490,10 @@ impl BufferText {
     /// Lisp character positions are in the deleted range `[from, to]`.
     pub fn marker_adjustments_for_delete(
         &self,
-        from_char: usize,
-        to_char: usize,
+        range: TextEditRange,
     ) -> Vec<(crate::emacs_core::value::Value, i64)> {
-        let from1 = from_char as i64 + 1;
-        let to1 = to_char as i64 + 1;
+        let from1 = range.char_start_usize() as i64 + 1;
+        let to1 = range.char_end_usize() as i64 + 1;
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         let mut adjustments = Vec::new();
@@ -1541,19 +1539,14 @@ impl BufferText {
         }
     }
 
-    pub(crate) fn move_marker_to_position(
-        &self,
-        marker_id: u64,
-        bytepos: EmacsBytePos,
-        charpos: CharPos0,
-    ) {
+    pub(crate) fn move_marker_to_anchor(&self, marker_id: u64, position: TextPositionAnchor) {
         let ptr = self.chain_find_by_id(marker_id);
         if ptr.is_null() {
             return;
         }
         unsafe {
-            (*ptr).data.bytepos = bytepos.get();
-            (*ptr).data.charpos = charpos.get();
+            (*ptr).data.bytepos = position.emacs_byte_pos_usize();
+            (*ptr).data.charpos = position.char_pos_usize();
         }
     }
 
@@ -1586,15 +1579,18 @@ impl BufferText {
         std::ptr::null_mut()
     }
 
-    /// Walk the intrusive chain and return the LispMarker-derived fields
-    /// `(bytepos, charpos, insertion_type)` for the marker with the given
-    /// id, or `None` if no live chain node carries that id.
+    /// Walk the intrusive chain and return the LispMarker-derived position
+    /// anchor and insertion type for the marker with the given id, or `None`
+    /// if no live chain node carries that id.
     ///
     /// Production code should prefer reading `LispMarker` directly off a
     /// Lisp `Value`. This helper exists for internal buffer-manager
     /// callers (e.g. `clone_marker_in_buffer`) that track markers by id
     /// without holding the Lisp value.
-    pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
+    pub fn marker_chain_anchor_lookup(
+        &self,
+        marker_id: u64,
+    ) -> Option<(TextPositionAnchor, InsertionType)> {
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: chain walks live chain-owned MarkerObj pointers until null.
@@ -1607,12 +1603,26 @@ impl BufferText {
                     } else {
                         InsertionType::Before
                     };
-                    return Some((data.bytepos, data.charpos, ins));
+                    return Some((
+                        TextPositionAnchor::from_usize(data.charpos, data.bytepos),
+                        ins,
+                    ));
                 }
                 curr = data.next_marker;
             }
         }
         None
+    }
+
+    pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
+        self.marker_chain_anchor_lookup(marker_id)
+            .map(|(position, insertion_type)| {
+                (
+                    position.emacs_byte_pos_usize(),
+                    position.char_pos_usize(),
+                    insertion_type,
+                )
+            })
     }
 
     pub fn remove_marker(&self, marker_id: u64) {

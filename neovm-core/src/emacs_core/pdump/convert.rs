@@ -11,13 +11,13 @@ use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
-use crate::buffer::EmacsBytePos;
 use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager, InsertionType};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
+use crate::buffer::{EmacsBytePos, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -4492,8 +4492,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             marker_ptr,
             buffer_id,
             marker_id,
-            dump_marker.bytepos,
-            dump_marker.charpos,
+            TextPositionAnchor::from_usize(dump_marker.charpos, dump_marker.bytepos),
             insertion_type,
         );
     }

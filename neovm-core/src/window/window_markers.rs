@@ -68,27 +68,15 @@ pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer
     };
 
     let start = lisp_position_to_restricted_marker_position(bm, buffer_id, *window_start);
-    let (start_mid, _) = bm.create_marker(
-        buffer_id,
-        start.emacs_byte_pos_usize(),
-        START_INSERTION_TYPE,
-    );
+    let (start_mid, _) = bm.create_marker_at_anchor(buffer_id, start, START_INSERTION_TYPE);
     *start_marker_id = Some(start_mid);
 
     let point = lisp_position_to_restricted_marker_position(bm, buffer_id, *point);
-    let (pt_mid, _) = bm.create_marker(
-        buffer_id,
-        point.emacs_byte_pos_usize(),
-        POINT_INSERTION_TYPE,
-    );
+    let (pt_mid, _) = bm.create_marker_at_anchor(buffer_id, point, POINT_INSERTION_TYPE);
     *point_marker_id = Some(pt_mid);
 
     let old_point = lisp_position_to_restricted_marker_position(bm, buffer_id, *old_point);
-    let (op_mid, _) = bm.create_marker(
-        buffer_id,
-        old_point.emacs_byte_pos_usize(),
-        OLD_POINT_INSERTION_TYPE,
-    );
+    let (op_mid, _) = bm.create_marker_at_anchor(buffer_id, old_point, OLD_POINT_INSERTION_TYPE);
     *old_point_marker_id = Some(op_mid);
 }
 
@@ -123,12 +111,7 @@ fn move_marker(
 ) {
     let Some(mid) = marker_id else { return };
     let position = lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
-    let _ = bm.move_marker_to_position(
-        buffer_id,
-        mid,
-        position.emacs_byte_pos(),
-        position.char_pos(),
-    );
+    let _ = bm.move_marker_to_anchor(buffer_id, mid, position);
 }
 
 pub fn set_window_start_with_marker(
