@@ -4054,7 +4054,7 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         }
         Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
     };
-    match byte_pos.and_then(|pos| buf.char_code_after(pos)) {
+    match byte_pos.and_then(|pos| buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos))) {
         Some(code) => Ok(Value::fixnum(code as i64)),
         None => Ok(Value::NIL),
     }
@@ -4083,7 +4083,7 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         }
         Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
     };
-    match byte_pos.and_then(|pos| buf.char_code_before(pos)) {
+    match byte_pos.and_then(|pos| buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(pos))) {
         Some(code) => Ok(Value::fixnum(code as i64)),
         None => Ok(Value::NIL),
     }
@@ -4245,7 +4245,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
     }
 
     if !buf.get_multibyte() {
-        let code = match buf.char_code_after(byte_pos) {
+        let code = match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(byte_pos)) {
             Some(code) => code,
             None => return Ok(Value::fixnum(0)),
         };
@@ -4256,7 +4256,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         return Ok(Value::fixnum(code as i64));
     }
 
-    let code = match buf.char_code_after(byte_pos) {
+    let code = match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(byte_pos)) {
         Some(code) => code,
         None => return Ok(Value::fixnum(0)),
     };

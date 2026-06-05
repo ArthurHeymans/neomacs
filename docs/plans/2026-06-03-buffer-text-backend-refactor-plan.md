@@ -525,6 +525,8 @@ Completed so far:
 - Added typed buffer character query helpers for `EmacsBytePos` /
   `EmacsByteLen` and moved `editfns` character deletion/query paths onto
   those entry points.
+- Moved charset, insert-hook text property, and selected buffer/symbol
+  builtins onto typed buffer character query entry points.
 
 Next work:
 

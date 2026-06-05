@@ -1037,9 +1037,9 @@ fn record_interval_insert_hooks(
     let accessible = buf.accessible_emacs_byte_region();
 
     if byte_pos > accessible.start_usize()
-        && let Some(prev_len) = buf.char_before_emacs_len(byte_pos)
+        && let Some(prev_len) = buf.char_before_emacs_byte_len(EmacsBytePos::new(byte_pos))
     {
-        let prev_byte = byte_pos.saturating_sub(prev_len);
+        let prev_byte = byte_pos.saturating_sub(prev_len.get());
         if let Some(hooks) =
             buf.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(prev_byte), behind_sym)
             && !hooks.is_nil()

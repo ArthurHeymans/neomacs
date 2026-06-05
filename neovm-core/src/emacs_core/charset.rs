@@ -11,7 +11,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -1780,7 +1780,7 @@ pub(crate) fn builtin_charset_after(
         return Ok(Value::NIL);
     }
 
-    let Some(ch) = buf.char_after(target_byte) else {
+    let Some(ch) = buf.char_after_emacs_byte_pos(EmacsBytePos::new(target_byte)) else {
         return Ok(Value::NIL);
     };
     let cp = ch as u32;

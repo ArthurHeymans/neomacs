@@ -1864,7 +1864,9 @@ pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
 }
 
 fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: usize) -> usize {
-    buf.char_after_emacs_len(pos).unwrap_or(1).max(1)
+    buf.char_after_emacs_byte_len(EmacsBytePos::new(pos))
+        .map(|len| len.get().max(1))
+        .unwrap_or(1)
 }
 
 fn next_visible_line_start(
@@ -1887,7 +1889,7 @@ fn next_visible_line_start(
         }
 
         let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after(pos) {
+            Some(buf) => match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos)) {
                 Some(code) => (code, char_len_at(buf, pos)),
                 None => return Ok(None),
             },
@@ -1931,7 +1933,7 @@ fn previous_visible_line_start(
         }
 
         let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after(scan) {
+            Some(buf) => match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(scan)) {
                 Some(code) => (code, char_len_at(buf, scan)),
                 None => break,
             },
