@@ -549,12 +549,8 @@ pub(crate) fn replace_buffer_region_lisp_string_in_manager(
     range: TextEditRange,
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
-    let start_byte = range.byte_start_usize();
     buffers
         .replace_buffer_measured_region_lisp_string(buffer_id, range, replacement)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    buffers
-        .append_buffer_text_properties(buffer_id, replacement.intervals(), start_byte)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     Ok(())
 }

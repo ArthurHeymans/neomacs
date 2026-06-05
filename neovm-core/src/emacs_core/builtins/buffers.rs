@@ -3137,17 +3137,23 @@ fn insert_pieces_in_state(
             if piece.text_props.is_none() {
                 let _ = buffers.merge_adjacent_equal_buffer_text_properties(
                     current_id,
-                    insert_pos,
-                    inserted_end,
+                    EmacsByteRange::from_usize(insert_pos, inserted_end),
                 );
             }
         }
         if let Some(str_table) = piece.text_props {
             if inherit {
-                let _ = buffers
-                    .merge_missing_buffer_text_properties(current_id, &str_table, insert_pos);
+                let _ = buffers.merge_missing_buffer_text_properties(
+                    current_id,
+                    &str_table,
+                    EmacsBytePos::new(insert_pos),
+                );
             } else {
-                let _ = buffers.append_buffer_text_properties(current_id, &str_table, insert_pos);
+                let _ = buffers.append_buffer_text_properties(
+                    current_id,
+                    &str_table,
+                    EmacsBytePos::new(insert_pos),
+                );
             }
         }
     }
@@ -3248,8 +3254,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
         );
         let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
             current_id,
-            insert_pos,
-            insert_pos + text_len,
+            EmacsByteRange::from_usize(insert_pos, insert_pos + text_len),
         );
     }
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3326,8 +3331,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
         );
         let _ = eval.buffers.merge_adjacent_equal_buffer_text_properties(
             current_id,
-            insert_pos,
-            insert_pos + text_len,
+            EmacsByteRange::from_usize(insert_pos, insert_pos + text_len),
         );
     }
     super::editfns::signal_after_text_change(eval, change)?;

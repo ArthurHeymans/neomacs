@@ -59,9 +59,7 @@ impl Buffer {
         let mut bytes = Vec::new();
         self.text.copy_emacs_byte_range_to(range, &mut bytes);
         let mut string = lisp_string_from_buffer_bytes(bytes, self.get_multibyte());
-        let props = self
-            .text
-            .text_props_slice(range.start_usize(), range.end_usize());
+        let props = self.text.text_props_slice_emacs_byte_range(range);
         if !props.is_empty() {
             *string.intervals_mut() = props;
         }
@@ -387,8 +385,10 @@ impl Buffer {
             marker_adjustment,
         );
         if text.has_intervals() {
-            self.text
-                .text_props_append_shifted(text.intervals(), insert_pos);
+            self.text.text_props_append_shifted_at_emacs_byte_pos(
+                text.intervals(),
+                EmacsBytePos::new(insert_pos),
+            );
         }
         insertion
     }
@@ -465,7 +465,10 @@ impl Buffer {
             ReplaceSideEffectPolicy::current_buffer(),
         );
         if text.has_intervals() {
-            self.text.text_props_append_shifted(text.intervals(), start);
+            self.text.text_props_append_shifted_at_emacs_byte_pos(
+                text.intervals(),
+                EmacsBytePos::new(start),
+            );
         } else if new_char_len > 0 {
             self.text.text_props_set_properties_in_emacs_byte_range(
                 EmacsByteRange::from_start_len(replacement.byte_start(), new_extent.emacs_bytes()),
@@ -578,10 +581,9 @@ impl Buffer {
                             .to_vec(),
                         self.get_multibyte(),
                     );
-                    let props = self.text.text_props_slice(
-                        changed_range.byte_start_usize(),
-                        changed_range.byte_end_usize(),
-                    );
+                    let props = self
+                        .text
+                        .text_props_slice_emacs_byte_range(changed_range.byte_range());
                     if !props.is_empty() {
                         *deleted.intervals_mut() = props;
                     }

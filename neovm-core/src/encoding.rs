@@ -1476,19 +1476,6 @@ fn insert_coding_result(
     ctx.buffers
         .insert_lisp_string_into_buffer(buffer_id, text)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    if let Some(table) = (!text.intervals().is_empty()).then(|| text.intervals()) {
-        let byte_offset = restore_point
-            .map(|(pt_byte, _)| pt_byte)
-            .unwrap_or_else(|| {
-                ctx.buffers
-                    .get(buffer_id)
-                    .map(|buf| buf.pt_byte.saturating_sub(text.sbytes()))
-                    .unwrap_or(0)
-            });
-        ctx.buffers
-            .append_buffer_text_properties(buffer_id, table, byte_offset)
-            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    }
     if let Some((pt_byte, pt)) = restore_point
         && let Some(buf) = ctx.buffers.get_mut(buffer_id)
     {
@@ -1651,11 +1638,6 @@ fn builtin_coding_region(
                 end_byte,
                 &result_text,
             )?;
-            if !result_text.intervals().is_empty() {
-                ctx.buffers
-                    .append_buffer_text_properties(current_id, result_text.intervals(), start_byte)
-                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            }
             ctx.set_variable(
                 "last-coding-system-used",
                 Value::symbol(&canonical_context_coding_name(ctx, &coding)),

@@ -1544,6 +1544,73 @@ fn measured_manager_edit_entrypoints_match_raw_wrappers() {
     }
 }
 
+#[test]
+fn lisp_string_insert_into_unibyte_buffer_preserves_gnu_chars_and_properties() {
+    for kind in implemented_text_backends() {
+        let mut buf = buf_with_text_backend("", kind);
+        buf.set_multibyte_value(false);
+
+        let face = Value::symbol("face");
+        let bold = Value::symbol("bold");
+        let mut text = LispString::from_utf8("é日本");
+        assert!(text.intervals_mut().put_property(0, 3, face, bold));
+
+        buf.insert_lisp_string(&text);
+
+        assert_eq!(buf.total_chars(), 3, "backend {kind:?}");
+        assert_eq!(buf.total_bytes(), 3, "backend {kind:?}");
+        assert_eq!(
+            buf.buffer_substring_bytes_range(EmacsByteRange::from_usize(0, 3)),
+            vec![0xE9, 0xE5, 0x2C],
+            "backend {kind:?}"
+        );
+        assert_eq!(
+            buffer_text_property_snapshot(&buf),
+            vec![(0, 3, vec![(face, bold)])],
+            "backend {kind:?}"
+        );
+    }
+}
+
+#[test]
+fn manager_replace_lisp_string_grafts_converted_intervals_once() {
+    for kind in implemented_text_backends() {
+        let mut mgr = manager_with_text_backend(kind);
+        let id = mgr.current_buffer_id().expect("scratch buffer");
+        {
+            let buf = mgr.get_mut(id).expect("scratch buffer");
+            buf.set_multibyte_value(false);
+            buf.insert("AB");
+            buf.widen();
+            buf.goto_byte(0);
+        }
+
+        let face = Value::symbol("face");
+        let bold = Value::symbol("bold");
+        let mut replacement = LispString::from_utf8("é日本");
+        assert!(replacement.intervals_mut().put_property(0, 3, face, bold));
+
+        let range = mgr
+            .edit_range_for_buffer_emacs_byte_range(id, EmacsByteRange::from_usize(0, 1))
+            .expect("replace range");
+        mgr.replace_buffer_measured_region_lisp_string(id, range, &replacement)
+            .expect("replace text");
+
+        let buf = mgr.get(id).expect("scratch buffer");
+        assert_eq!(buf.total_chars(), 4, "backend {kind:?}");
+        assert_eq!(
+            buf.buffer_substring_bytes_range(EmacsByteRange::from_usize(0, 4)),
+            vec![0xE9, 0xE5, 0x2C, b'B'],
+            "backend {kind:?}"
+        );
+        assert_eq!(
+            buffer_text_property_snapshot(buf),
+            vec![(0, 3, vec![(face, bold)])],
+            "backend {kind:?}"
+        );
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct SharedInsertPolicySnapshot {
     base_string: String,

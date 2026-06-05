@@ -1,7 +1,7 @@
 # Buffer Text Backend Refactor Plan
 
 Date: 2026-06-03
-Status: in progress
+Status: in progress, updated 2026-06-05
 Scope: `neovm-core` buffer text storage, edit semantics, text properties,
 markers, backend selection, and backend parity tests
 
@@ -23,7 +23,7 @@ The target design is:
 Buffer / Lisp-visible editor semantics
   -> BufferText semantic layer
     -> private TextBackend enum
-      -> GapBuffer / PieceTree / future Rope
+      -> GapBuffer / PieceTree / Rope
 ```
 
 Neomacs should copy GNU Emacs semantic behavior and semantic ordering. It should
@@ -61,16 +61,19 @@ Neomacs already has the right broad direction:
 - Indirect buffers share text through `BufferText::shared_clone`.
 - Backend kind is selectable through Neomacs-only APIs.
 
-The main weakness is that some names and APIs are still gap-shaped:
+The broad shape is now in place:
 
-- `BufferTextLayout = GapTextLayout`.
-- `gap_layout()` is public on `BufferText`.
-- `TextBackend::primary_anchor()` exposes a `GPT`/`GPT_BYTE`-like concept.
-- `BufferTextBackendLayout` mixes generic metrics with gap-specific layout.
-- Some tests assert gap layout where they should assert backend-neutral metrics.
+- `piece-tree` and `rope` are implemented backend variants.
+- `TextBackendDebugLayout` carries explicit backend-specific debug layout.
+- Production text-position conversion uses backend indexes for indexed
+  backends and GNU-style anchor scans for the gap backend.
+- Text-property interval storage is character-indexed like GNU intervals;
+  `BufferText` owns conversion from Emacs byte ranges at the boundary.
 
-These leaks are manageable now, but they should be cleaned before adding a real
-rope backend or depending on piece-tree in wider editor paths.
+The main remaining weakness is that some edit and property APIs still accept
+raw `usize` positions at higher layers. They should be migrated toward
+`EmacsBytePos`, `EmacsByteRange`, `CharPos0`, and `CharRange` so the compiler
+catches coordinate-system mistakes before they reach backend code.
 
 ## Non-Negotiable Invariants
 
@@ -175,6 +178,16 @@ Migration order:
 
 This should catch many position-class bugs at compile time.
 
+Progress:
+
+- `CharPos0`, `CharRange`, `EmacsBytePos`, `EmacsByteRange`, `CharLen`,
+  `EmacsByteLen`, and display/narrowing wrappers exist.
+- Text-property slice/append/merge APIs at the `BufferText` boundary use typed
+  Emacs byte positions/ranges.
+- Remaining work is to push these types up through `BufferManager`, builtins,
+  file I/O, search, and display so raw `usize` is confined to local algorithms
+  after explicit conversion.
+
 ## Phase 3: Replace Gap-Shaped Layout With Metrics
 
 Remove the general alias:
@@ -192,7 +205,7 @@ pub struct TextMetrics {
 }
 ```
 
-Gap internals should move behind explicit names:
+Gap internals should stay behind explicit names:
 
 ```rust
 pub struct GapDebugLayout {
@@ -216,6 +229,13 @@ Guideline:
 - Backend tests may use backend debug layout.
 - GNU compatibility functions may use gap compatibility layout.
 - Display/search/edit code must not depend on `GapDebugLayout`.
+
+Progress:
+
+- Generic backend debug layout is an enum: gap exposes `GapDebugLayout`, while
+  piece-tree and rope expose backend-neutral `TextMetrics`.
+- `BufferText` exposes gap-compatible layout only for tests/debugging, not as
+  the normal production layout API.
 
 ## Phase 4: Formal Backend Contract
 

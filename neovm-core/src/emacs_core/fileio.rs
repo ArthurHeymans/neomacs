@@ -4347,11 +4347,6 @@ fn restore_point_after_file_replace(
     }
 }
 
-fn lisp_string_text_properties(text: &LispString) -> Option<&TextPropertyTable> {
-    let table = text.intervals();
-    if table.is_empty() { None } else { Some(table) }
-}
-
 fn signal_and_delete_file_replace_region(
     eval: &mut Context,
     current_id: crate::buffer::BufferId,
@@ -4400,11 +4395,6 @@ fn signal_and_insert_file_replace_text(
     eval.buffers
         .insert_lisp_string_into_buffer_for_replace(current_id, text)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    if let Some(table) = lisp_string_text_properties(text) {
-        eval.buffers
-            .append_buffer_text_properties(current_id, table, byte_pos)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    }
     if signal_hooks {
         super::editfns::signal_after_text_change(eval, change)?;
     }
@@ -4542,11 +4532,6 @@ fn insert_file_contents_into_current_buffer_in_state(
         eval.buffers
             .insert_lisp_string_into_buffer(current_id, contents)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        if let Some(table) = lisp_string_text_properties(contents) {
-            eval.buffers
-                .append_buffer_text_properties(current_id, table, pt_before.0)
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        }
         if signal_hooks && !contents.is_empty() {
             super::editfns::signal_after_text_change(eval, change)?;
         }

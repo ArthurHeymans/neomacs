@@ -1272,14 +1272,13 @@ impl BufferText {
         next.map(|next| self.char_pos_to_emacs_byte_pos(CharPos0::new(next)))
     }
 
-    pub fn text_props_first_interval_pos_with_property_eq(
+    pub fn text_props_first_interval_pos_with_property_eq_in_emacs_byte_range(
         &self,
-        start: usize,
-        end: usize,
+        byte_range: EmacsByteRange,
         name: Value,
         value: Value,
-    ) -> Option<usize> {
-        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+    ) -> Option<EmacsBytePos> {
+        let range = self.byte_range_to_char_range(byte_range);
         let pos = self
             .storage
             .borrow()
@@ -1290,7 +1289,7 @@ impl BufferText {
                 name,
                 value,
             )?;
-        Some(self.char_pos_to_emacs_byte_pos(CharPos0::new(pos)).get())
+        Some(self.char_pos_to_emacs_byte_pos(CharPos0::new(pos)))
     }
 
     #[cfg(test)]
@@ -1315,9 +1314,13 @@ impl BufferText {
         prev.map(|prev| self.char_pos_to_emacs_byte_pos(CharPos0::new(prev)))
     }
 
-    pub fn text_props_append_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
+    pub fn text_props_append_shifted_at_emacs_byte_pos(
+        &self,
+        other: &TextPropertyTable,
+        byte_pos: EmacsBytePos,
+    ) {
         let char_offset = self
-            .byte_range_to_char_range(EmacsByteRange::from_usize(byte_offset, byte_offset))
+            .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
             .start_usize();
         self.storage
             .borrow_mut()
@@ -1325,9 +1328,13 @@ impl BufferText {
             .append_shifted(other, char_offset);
     }
 
-    pub fn text_props_merge_missing_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
+    pub fn text_props_merge_missing_shifted_at_emacs_byte_pos(
+        &self,
+        other: &TextPropertyTable,
+        byte_pos: EmacsBytePos,
+    ) {
         let char_offset = self
-            .byte_range_to_char_range(EmacsByteRange::from_usize(byte_offset, byte_offset))
+            .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
             .start_usize();
         self.storage
             .borrow_mut()
@@ -1335,16 +1342,22 @@ impl BufferText {
             .merge_missing_shifted(other, char_offset);
     }
 
-    pub fn text_props_merge_adjacent_equal_around(&self, byte_start: usize, byte_end: usize) {
-        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(byte_start, byte_end));
+    pub fn text_props_merge_adjacent_equal_around_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+    ) {
+        let range = self.byte_range_to_char_range(byte_range);
         self.storage
             .borrow_mut()
             .text_props
             .merge_adjacent_equal_properties_around(range.start_usize(), range.end_usize());
     }
 
-    pub fn text_props_slice(&self, start: usize, end: usize) -> TextPropertyTable {
-        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+    pub fn text_props_slice_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+    ) -> TextPropertyTable {
+        let range = self.byte_range_to_char_range(byte_range);
         self.storage
             .borrow()
             .text_props

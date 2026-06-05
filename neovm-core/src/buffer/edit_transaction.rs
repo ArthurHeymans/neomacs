@@ -72,18 +72,16 @@ pub(in crate::buffer) fn convert_lisp_string_for_buffer_mode(
         return text.clone();
     }
 
-    if !target_multibyte {
-        // GNU: insert_from_gap for unibyte buffers sets nchars=nbytes,
-        // storing each byte of the multibyte internal representation as
-        // a separate character.  Do NOT mask character codes with 0xFF
-        // because that would truncate non-ASCII characters.
-        return lisp_string_from_buffer_bytes(text.as_bytes().to_vec(), false);
-    }
-
     let mut codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
-    for code in &mut codes {
-        if *code > 0x7F {
-            *code = crate::emacs_core::emacs_char::unibyte_to_char(*code as u8);
+    if target_multibyte {
+        for code in &mut codes {
+            if *code > 0x7F {
+                *code = crate::emacs_core::emacs_char::unibyte_to_char(*code as u8);
+            }
+        }
+    } else {
+        for code in &mut codes {
+            *code &= 0xFF;
         }
     }
 
@@ -91,7 +89,14 @@ pub(in crate::buffer) fn convert_lisp_string_for_buffer_mode(
     for code in codes {
         bytes.extend_from_slice(&encode_char_code_for_buffer_bytes(code, target_multibyte));
     }
-    lisp_string_from_buffer_bytes(bytes, target_multibyte)
+    let mut converted = lisp_string_from_buffer_bytes(bytes, target_multibyte);
+    if text.has_intervals() {
+        let intervals = text.intervals().clone();
+        if !intervals.is_empty() {
+            *converted.intervals_mut() = intervals;
+        }
+    }
+    converted
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

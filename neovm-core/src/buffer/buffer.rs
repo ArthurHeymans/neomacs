@@ -2490,8 +2490,7 @@ impl Buffer {
 
     pub fn text_props_slice_emacs_byte_range(&self, range: EmacsByteRange) -> TextPropertyTable {
         let clamped = self.clamped_emacs_byte_range(range);
-        self.text
-            .text_props_slice(clamped.start_usize(), clamped.end_usize())
+        self.text.text_props_slice_emacs_byte_range(clamped)
     }
 
     pub fn replace_lisp_string_with_text_props(
@@ -2611,9 +2610,9 @@ impl Buffer {
         } else {
             crate::heap_types::LispString::from_unibyte(bytes)
         };
-        let start = range.start_usize();
-        let end = range.end_usize();
-        let props = self.text.text_props_slice(start, end);
+        let props = self
+            .text
+            .text_props_slice_emacs_byte_range(self.clamped_emacs_byte_range(range));
         if !props.is_empty() {
             *string.intervals_mut() = props;
         }
@@ -4733,12 +4732,12 @@ impl BufferManager {
         &mut self,
         id: BufferId,
         table: &TextPropertyTable,
-        byte_offset: usize,
+        byte_pos: EmacsBytePos,
     ) -> Option<()> {
         self.buffers
             .get_mut(&id)?
             .text
-            .text_props_append_shifted(table, byte_offset);
+            .text_props_append_shifted_at_emacs_byte_pos(table, byte_pos);
         Some(())
     }
 
@@ -4746,25 +4745,24 @@ impl BufferManager {
         &mut self,
         id: BufferId,
         table: &TextPropertyTable,
-        byte_offset: usize,
+        byte_pos: EmacsBytePos,
     ) -> Option<()> {
         self.buffers
             .get_mut(&id)?
             .text
-            .text_props_merge_missing_shifted(table, byte_offset);
+            .text_props_merge_missing_shifted_at_emacs_byte_pos(table, byte_pos);
         Some(())
     }
 
     pub fn merge_adjacent_equal_buffer_text_properties(
         &mut self,
         id: BufferId,
-        byte_start: usize,
-        byte_end: usize,
+        byte_range: EmacsByteRange,
     ) -> Option<()> {
         self.buffers
             .get_mut(&id)?
             .text
-            .text_props_merge_adjacent_equal_around(byte_start, byte_end);
+            .text_props_merge_adjacent_equal_around_emacs_byte_range(byte_range);
         Some(())
     }
 
