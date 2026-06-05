@@ -20,7 +20,7 @@ pub use layout::GapCompatState;
 #[cfg(test)]
 pub use layout::{GapDebugLayout, TextBackendDebugLayout};
 pub use metrics::TextMetrics;
-pub(in crate::buffer) use snapshot::BufferTextBytesSnapshot;
+pub(crate) use snapshot::BufferTextBytesSnapshot;
 
 #[inline]
 pub(crate) fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> usize {

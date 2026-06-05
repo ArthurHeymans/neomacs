@@ -16,7 +16,9 @@ use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, EmacsByteLen,
     EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
-use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
+use super::text::{
+    BufferTextBackendKind, BufferTextBytesSnapshot, ImplementedBufferTextBackendKind,
+};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
 // in `Buffer::local_var_alist` (for LOCALIZED), `Buffer::slots[]`
 // (for FORWARDED BUFFER_OBJFWD), and `Buffer::keymap` / the
@@ -2211,13 +2213,12 @@ impl Buffer {
     }
 
     #[cfg(test)]
-    pub(crate) fn replace_text_from_dump_for_test(
+    pub(crate) fn replace_text_snapshot_for_test(
         &mut self,
-        text: Vec<u8>,
-        multibyte: bool,
+        snapshot: BufferTextBytesSnapshot,
         kind: ImplementedBufferTextBackendKind,
     ) {
-        self.text = BufferText::from_dump_with_backend_kind(text, multibyte, kind);
+        self.text = BufferText::from_snapshot_with_backend_kind(snapshot, kind);
     }
 
     pub(crate) fn dump_text_backend_kind(&self) -> ImplementedBufferTextBackendKind {

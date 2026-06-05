@@ -1,6 +1,6 @@
 use super::*;
 use crate::buffer::CharRange;
-use crate::buffer::text::ImplementedBufferTextBackendKind;
+use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
@@ -273,9 +273,11 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         let mut dumped = mgr.dump_buffers().clone();
         let independent_indirect = dumped.get(&indirect_id).expect("indirect buffer").clone();
         let indirect = dumped.get_mut(&indirect_id).expect("indirect buffer");
-        indirect.replace_text_from_dump_for_test(
-            independent_indirect.dump_text_bytes(),
-            independent_indirect.get_multibyte(),
+        indirect.replace_text_snapshot_for_test(
+            BufferTextBytesSnapshot::new(
+                independent_indirect.dump_text_bytes(),
+                independent_indirect.get_multibyte(),
+            ),
             independent_indirect.dump_text_backend_kind(),
         );
         indirect.replace_text_props_for_test(independent_indirect.text_props_snapshot());

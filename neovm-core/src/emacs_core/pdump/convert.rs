@@ -15,7 +15,7 @@ use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager, In
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
-use crate::buffer::text::ImplementedBufferTextBackendKind;
+use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
 use crate::buffer::{CharRange, EmacsBytePos, LispCharPos1, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
@@ -4403,9 +4403,8 @@ fn dump_buffer_byte_to_char_pos(text: &BufferText, byte_pos: usize) -> usize {
 }
 
 fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
-    let text = BufferText::from_dump_with_backend_kind(
-        db.text.text.clone(),
-        db.multibyte,
+    let text = BufferText::from_snapshot_with_backend_kind(
+        BufferTextBytesSnapshot::new(db.text.text.clone(), db.multibyte),
         load_buffer_text_backend_kind(db.text.backend_kind),
     );
     let total_chars = text.char_count().get();

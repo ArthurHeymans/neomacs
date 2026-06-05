@@ -695,10 +695,6 @@ impl BufferText {
         self.storage.borrow().backend.snapshot()
     }
 
-    pub(crate) fn from_dump(text: Vec<u8>, multibyte: bool) -> Self {
-        Self::from_snapshot(BufferTextBytesSnapshot::new(text, multibyte))
-    }
-
     pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
         Self::from_backend(TextBackend::from_snapshot(
             snapshot,
@@ -706,15 +702,7 @@ impl BufferText {
         ))
     }
 
-    pub(crate) fn from_dump_with_backend_kind(
-        text: Vec<u8>,
-        multibyte: bool,
-        kind: ImplementedBufferTextBackendKind,
-    ) -> Self {
-        Self::from_snapshot_with_backend_kind(BufferTextBytesSnapshot::new(text, multibyte), kind)
-    }
-
-    pub(in crate::buffer) fn from_snapshot_with_backend_kind(
+    pub(crate) fn from_snapshot_with_backend_kind(
         snapshot: BufferTextBytesSnapshot,
         kind: ImplementedBufferTextBackendKind,
     ) -> Self {
