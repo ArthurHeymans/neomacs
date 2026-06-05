@@ -2366,6 +2366,7 @@ impl Buffer {
         )
     }
 
+    #[cfg(test)]
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
         self.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(pos), name)
     }
@@ -2390,6 +2391,7 @@ impl Buffer {
             ))
     }
 
+    #[cfg(test)]
     pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
         self.text_props_get_properties_ordered_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -2417,6 +2419,7 @@ impl Buffer {
         )
     }
 
+    #[cfg(test)]
     pub fn text_props_put_property(
         &mut self,
         start: usize,
@@ -2442,6 +2445,7 @@ impl Buffer {
         )
     }
 
+    #[cfg(test)]
     pub fn text_props_remove_property(&mut self, start: usize, end: usize, name: Value) -> bool {
         self.text_props_remove_property_in_emacs_byte_range(
             EmacsByteRange::from_usize(start, end),

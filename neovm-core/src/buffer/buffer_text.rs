@@ -945,6 +945,7 @@ impl BufferText {
         }
     }
 
+    #[cfg(test)]
     pub fn text_props_put_property(
         &self,
         start: usize,
@@ -1120,6 +1121,7 @@ impl BufferText {
             .range_has_any_interval(range.start_usize(), range.end_usize())
     }
 
+    #[cfg(test)]
     pub fn text_props_remove_property(&self, start: usize, end: usize, name: Value) -> bool {
         self.text_props_remove_property_in_emacs_byte_range(
             EmacsByteRange::from_usize(start, end),
@@ -1140,6 +1142,7 @@ impl BufferText {
         )
     }
 
+    #[cfg(test)]
     pub fn text_props_remove_all(&self, start: usize, end: usize) {
         self.text_props_remove_all_in_emacs_byte_range(EmacsByteRange::from_usize(start, end));
     }
@@ -1152,6 +1155,7 @@ impl BufferText {
             .remove_all_properties(range.start_usize(), range.end_usize());
     }
 
+    #[cfg(test)]
     pub fn text_props_set_properties(&self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
         self.text_props_set_properties_in_emacs_byte_range(
             EmacsByteRange::from_usize(start, end),

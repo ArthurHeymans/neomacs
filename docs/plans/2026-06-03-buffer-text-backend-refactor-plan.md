@@ -512,6 +512,9 @@ Completed so far:
 - Collapsed marker remapping for `set-buffer-multibyte` and
   `transpose-regions` to a single `TextPositionAnchor -> TextPositionAnchor`
   boundary, so marker byte and character caches move as one typed value.
+- Gated raw text-property convenience wrappers to tests so production callers
+  use typed `EmacsBytePos` / `EmacsByteRange` boundaries while the interval
+  table stays character-indexed like GNU intervals.
 
 Next work:
 
