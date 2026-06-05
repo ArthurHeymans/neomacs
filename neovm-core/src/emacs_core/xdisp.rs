@@ -1935,7 +1935,7 @@ fn expand_mode_line_percent_in_state(
     let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
     let (line_num, col_num) = if let Some(b) = buf {
-        prefix_line_and_column(b, b.pt_byte)
+        prefix_line_and_column(b, b.point_byte())
     } else {
         (1, 0)
     };

@@ -4215,7 +4215,7 @@ pub(crate) fn builtin_internal_default_process_filter(
     };
 
     // Save current point, move point to insert position, insert, then restore.
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.pt_byte);
+    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_byte());
     let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
 
     // Temporarily clear read-only so process output can be inserted.
@@ -4229,11 +4229,11 @@ pub(crate) fn builtin_internal_default_process_filter(
 
     // The new mark is at point after insertion (insert advances point).
     // If the buffer vanished out from under us the fallback uses text.len()
-    // as an approximation — exact byte count comes from buf.pt_byte.
+    // as an approximation — exact byte count comes from buf.point_byte().
     let new_mark = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.pt_byte)
+        .map(|b| b.point_byte())
         .unwrap_or(insert_pos + text.len());
 
     // Restore read-only flag.
@@ -4317,7 +4317,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
             .map(|b| b.total_bytes())
             .unwrap_or(0),
     };
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.pt_byte);
+    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_byte());
     let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
 
     eval.set_current_buffer_unrecorded(buf_id)?;
@@ -4334,7 +4334,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     let new_mark = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.pt_byte)
+        .map(|b| b.point_byte())
         .unwrap_or(insert_pos + text.len());
 
     if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {

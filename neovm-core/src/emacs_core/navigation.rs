@@ -518,7 +518,7 @@ pub(crate) fn builtin_bobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
     expect_args("bobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     Ok(Value::bool_val(
-        buf.pt_byte == buf.accessible_emacs_byte_region().start_usize(),
+        buf.point_byte() == buf.accessible_emacs_byte_region().start_usize(),
     ))
 }
 
@@ -527,7 +527,7 @@ pub(crate) fn builtin_eobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
     expect_args("eobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     Ok(Value::bool_val(
-        buf.pt_byte == buf.accessible_emacs_byte_region().end_usize(),
+        buf.point_byte() == buf.accessible_emacs_byte_region().end_usize(),
     ))
 }
 
@@ -535,11 +535,11 @@ pub(crate) fn builtin_eobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("bolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.pt_byte == buf.accessible_emacs_byte_region().start_usize() {
+    if buf.point_byte() == buf.accessible_emacs_byte_region().start_usize() {
         return Ok(Value::T);
     }
     Ok(Value::bool_val(
-        buf.pt_byte == 0 || buf.char_code_before(buf.pt_byte) == Some('\n' as u32),
+        buf.point_byte() == 0 || buf.char_code_before(buf.point_byte()) == Some('\n' as u32),
     ))
 }
 
@@ -547,10 +547,10 @@ pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 pub(crate) fn builtin_eolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("eolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.pt_byte == buf.accessible_emacs_byte_region().end_usize() {
+    if buf.point_byte() == buf.accessible_emacs_byte_region().end_usize() {
         return Ok(Value::T);
     }
-    match buf.char_code_after(buf.pt_byte) {
+    match buf.char_code_after(buf.point_byte()) {
         Some(code) if code == '\n' as u32 => Ok(Value::T),
         _ => Ok(Value::NIL),
     }
@@ -574,7 +574,7 @@ pub(crate) fn pos_bol_compute(
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start_usize();
     let zv = accessible.end_usize();
-    let mut pos = buf.pt_byte;
+    let mut pos = buf.point_byte();
     let mut moved: i64 = 0;
     if scan_count != 0 {
         let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, scan_count, begv, zv);
@@ -593,7 +593,7 @@ pub(crate) fn pos_bol_compute(
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(bol)),
-        byte_to_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
+        byte_to_char_pos(buf, EmacsBytePos::new(buf.point_byte())),
         moved,
     ))
 }
@@ -610,7 +610,7 @@ pub(crate) fn pos_eol_compute(
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start_usize();
     let zv = accessible.end_usize();
-    let mut pos = buf.pt_byte;
+    let mut pos = buf.point_byte();
     let mut moved = 0;
     let delta = scan_count.saturating_sub(1);
     if delta != 0 {
@@ -625,7 +625,7 @@ pub(crate) fn pos_eol_compute(
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(eol)),
-        byte_to_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
+        byte_to_char_pos(buf, EmacsBytePos::new(buf.point_byte())),
     ))
 }
 
@@ -681,7 +681,7 @@ pub(crate) fn builtin_line_number_at_pos(
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
     let current_buffer_id = buf.id;
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        EmacsBytePos::new(buf.pt_byte)
+        EmacsBytePos::new(buf.point_byte())
     } else {
         match args[0].kind() {
             ValueKind::Veclike(VecLikeType::Marker) => {
@@ -769,7 +769,7 @@ pub(crate) fn builtin_forward_line(
             buffer_bytes(buf),
             accessible.start_usize(),
             accessible.end_usize(),
-            buf.pt_byte,
+            buf.point_byte(),
         )
     };
     let old_byte = pt;
@@ -822,7 +822,7 @@ pub(crate) fn builtin_beginning_of_line(
     };
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        buf.pt_byte
+        buf.point_byte()
     };
     let adjusted = adjust_for_intangible(eval, target_byte, -1);
     let _ = eval
@@ -845,7 +845,7 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        buf.pt_byte
+        buf.point_byte()
     };
     let constrained = builtin_line_end_position(eval, vec![Value::fixnum(n)])?;
     let target_char = match constrained.kind() {
@@ -889,7 +889,7 @@ pub(crate) fn builtin_forward_char(
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (old_byte, cur_char, begv_char, zv_char, new_byte) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        let old_byte = buf.pt_byte;
+        let old_byte = buf.point_byte();
         let cur_char = buf.point_char();
         let begv_char = buf.point_min_char();
         let zv_char = buf.point_max_char();
@@ -1168,8 +1168,8 @@ pub(crate) fn builtin_skip_chars_forward(
         } else {
             accessible.end_usize()
         };
-        let start_pos = buf.pt_byte;
-        let mut pos = buf.pt_byte;
+        let start_pos = buf.point_byte();
+        let mut pos = buf.point_byte();
         let mut moved_chars = 0_i64;
         let limit = lim_byte.min(accessible.end_usize());
 
@@ -1223,8 +1223,8 @@ pub(crate) fn builtin_skip_chars_backward(
         } else {
             accessible.start_usize()
         };
-        let start_pos = buf.pt_byte;
-        let mut pos = buf.pt_byte;
+        let start_pos = buf.point_byte();
+        let mut pos = buf.point_byte();
         let mut moved_chars = 0_i64;
 
         while pos > limit {
@@ -1283,7 +1283,7 @@ pub(crate) fn builtin_region_beginning(
             )],
         )
     })?;
-    let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
+    let pt = clamp_byte_to_accessible(buf, buf.point_byte());
     let mark = clamp_byte_to_accessible(buf, mark);
     let start = pt.min(mark);
     Ok(Value::fixnum(byte_to_char_pos(
@@ -1304,7 +1304,7 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
             )],
         )
     })?;
-    let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
+    let pt = clamp_byte_to_accessible(buf, buf.point_byte());
     let mark = clamp_byte_to_accessible(buf, mark);
     let end = pt.max(mark);
     Ok(Value::fixnum(byte_to_char_pos(buf, EmacsBytePos::new(end))))

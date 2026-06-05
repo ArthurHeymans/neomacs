@@ -1421,7 +1421,7 @@ pub fn search_forward(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let start = buf.pt_byte;
+    let start = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.end_usize())
@@ -1473,7 +1473,7 @@ pub fn search_backward(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let end = buf.pt_byte;
+    let end = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.start_usize())
@@ -1537,7 +1537,7 @@ pub fn re_search_forward_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let start = buf.pt_byte;
+    let start = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.end_usize())
@@ -1626,7 +1626,7 @@ pub fn re_search_backward_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let end = buf.pt_byte;
+    let end = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.start_usize())
@@ -1705,7 +1705,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     // GNU `re-search-forward` on a buffer drives the matcher with raw buffer
     // byte positions (`PT_BYTE`, `BEGV_BYTE`, `ZV_BYTE`), even when the
     // pattern itself is a Lisp string.
-    let start = buf.pt_byte;
+    let start = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.end_usize())
@@ -1759,7 +1759,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
 ) -> Result<Option<usize>, String> {
     // GNU `re-search-backward` likewise uses buffer byte positions
     // throughout, not character positions.
-    let end = buf.pt_byte;
+    let end = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
         .unwrap_or(accessible.start_usize())
@@ -1824,7 +1824,7 @@ pub fn looking_at_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
-    let start = buf.pt_byte;
+    let start = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     if start > accessible.end_usize() {
         return Ok(false);
@@ -1890,7 +1890,7 @@ pub(crate) fn looking_at_lisp_with_posix(
     // byte-based regex engine breaks on any multibyte buffer — the
     // start position lands mid-UTF-8-sequence and the pattern fails
     // to match even when the char at `buf.pt` would have matched.
-    let start = buf.pt_byte;
+    let start = buf.point_byte();
     let accessible = buf.accessible_emacs_byte_region();
     if start > accessible.end_usize() {
         return Ok(false);

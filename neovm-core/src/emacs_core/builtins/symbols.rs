@@ -2018,7 +2018,7 @@ pub(crate) fn builtin_vertical_motion(
         return Ok(Value::fixnum(0));
     };
     let accessible = buf.accessible_emacs_byte_region();
-    let pt = accessible.clamp_usize(buf.pt_byte);
+    let pt = accessible.clamp_usize(buf.point_byte());
     let begv = accessible.start_usize();
 
     if lines == 0 && cols.is_none() {

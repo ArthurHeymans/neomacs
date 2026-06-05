@@ -3419,7 +3419,7 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         let (insert_pos, target_multibyte) = eval
             .buffers
             .get(current_id)
-            .map(|b| (b.pt_byte, b.get_multibyte()))
+            .map(|b| (b.point_byte(), b.get_multibyte()))
             .unwrap_or((0, true));
         tracing::info!(
             "self-insert-command: inserting {:?} at pos {} in buffer {:?}",

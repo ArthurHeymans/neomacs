@@ -938,7 +938,7 @@ pub(crate) fn builtin_delete_char(
                 return Ok(Value::NIL);
             };
             let accessible = buf.accessible_emacs_byte_region();
-            let pt = buf.pt_byte;
+            let pt = buf.point_byte();
             if n > 0 {
                 // Delete N characters forward from point.
                 let mut end = pt;
@@ -1213,8 +1213,8 @@ fn following_char_value(ctx: &crate::emacs_core::eval::Context) -> EvalResult {
     match ctx.buffers.current_buffer() {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
-            match (buf.pt_byte < accessible.end_usize())
-                .then(|| buf.char_code_after(buf.pt_byte))
+            match (buf.point_byte() < accessible.end_usize())
+                .then(|| buf.char_code_after(buf.point_byte()))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),
@@ -1234,8 +1234,8 @@ pub(crate) fn builtin_preceding_char(
     match ctx.buffers.current_buffer() {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
-            match (buf.pt_byte > accessible.start_usize())
-                .then(|| buf.char_code_before(buf.pt_byte))
+            match (buf.point_byte() > accessible.start_usize())
+                .then(|| buf.char_code_before(buf.point_byte()))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),

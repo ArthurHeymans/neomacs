@@ -1049,7 +1049,7 @@ pub(crate) fn builtin_insert_abbrev_table_description(
             let (insert_pos, target_multibyte) = eval
                 .buffers
                 .get(current_id)
-                .map(|b| (b.pt_byte, b.get_multibyte()))
+                .map(|b| (b.point_byte(), b.get_multibyte()))
                 .unwrap_or((0, true));
             let change = super::editfns::text_change_for_replacement_in_manager(
                 &eval.buffers,
@@ -1123,7 +1123,7 @@ pub(crate) fn builtin_insert_abbrev_table_description(
         let (insert_pos, target_multibyte) = eval
             .buffers
             .get(current_id)
-            .map(|b| (b.pt_byte, b.get_multibyte()))
+            .map(|b| (b.point_byte(), b.get_multibyte()))
             .unwrap_or((0, true));
         let change = super::editfns::text_change_for_replacement_in_manager(
             &eval.buffers,

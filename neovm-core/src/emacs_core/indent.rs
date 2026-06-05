@@ -223,7 +223,7 @@ fn scan_for_column(
             .buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (bol, eol) = line_bounds(buf, buf.pt_byte);
+        let (bol, eol) = line_bounds(buf, buf.point_byte());
         (bol, eol, tab_width_in_state(&ctx.obarray, &[], Some(buf)))
     };
     let end = end_byte.min(line_end);
@@ -458,7 +458,7 @@ pub(crate) fn builtin_current_indentation(
     };
 
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
-    let (bol, eol) = line_bounds(buf, buf.pt_byte);
+    let (bol, eol) = line_bounds(buf, buf.point_byte());
     let line = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, eol));
 
     let mut column = 0usize;
@@ -488,7 +488,8 @@ pub(crate) fn builtin_current_column(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(Value::fixnum(0));
         };
-        buf.accessible_emacs_byte_region().clamp_usize(buf.pt_byte)
+        buf.accessible_emacs_byte_region()
+            .clamp_usize(buf.point_byte())
     };
     let scan = scan_for_column(ctx, current_id, point, None)?;
     Ok(Value::fixnum(scan.column as i64))
@@ -515,7 +516,9 @@ pub(crate) fn builtin_move_to_column(
     };
     let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
     let read_only = super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
-    let pt = buf.accessible_emacs_byte_region().clamp_usize(buf.pt_byte);
+    let pt = buf
+        .accessible_emacs_byte_region()
+        .clamp_usize(buf.point_byte());
     let buffer_name = buf.name_value();
 
     if target == 0 {
@@ -592,7 +595,11 @@ pub(crate) fn builtin_move_to_column(
         }
         let use_tabs = indent_tabs_mode_in_state(&ctx.obarray, &[], ctx.buffers.get(current_id));
         let pad = indent_to_column_string(reached, target, tabw, use_tabs);
-        let insert_pos = ctx.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
+        let insert_pos = ctx
+            .buffers
+            .get(current_id)
+            .map(|b| b.point_byte())
+            .unwrap_or(0);
         let pad_len = pad.len();
         let change = super::editfns::text_change_for_replacement_in_manager(
             &ctx.buffers,
@@ -674,7 +681,11 @@ pub(crate) fn builtin_indent_to(
         col += 1;
     }
 
-    let insert_pos = ctx.buffers.get(current_id).map(|b| b.pt_byte).unwrap_or(0);
+    let insert_pos = ctx
+        .buffers
+        .get(current_id)
+        .map(|b| b.point_byte())
+        .unwrap_or(0);
     let indent_len = indent.len();
     if indent_len > 0 {
         let change = super::editfns::text_change_for_replacement_in_manager(

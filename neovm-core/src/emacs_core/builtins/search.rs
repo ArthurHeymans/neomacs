@@ -213,7 +213,7 @@ fn parse_search_options_in_manager(
     let steps = count.unsigned_abs() as usize;
 
     if let Some(limit) = bound_lisp {
-        let point_lisp = buffer_byte_to_lisp_char(buf, buf.pt_byte);
+        let point_lisp = buffer_byte_to_lisp_char(buf, buf.point_byte());
         match direction {
             SearchDirection::Forward if limit < point_lisp => {
                 return Err(signal(
@@ -251,8 +251,8 @@ fn current_search_context_in_manager(
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let opts = parse_search_options_in_manager(buffers, buf, args, kind)?;
-    let start_pt = buf.pt_byte;
-    let start_char = buffer_byte_to_lisp_char(buf, buf.pt_byte);
+    let start_pt = buf.point_byte();
+    let start_char = buffer_byte_to_lisp_char(buf, buf.point_byte());
     Ok((current_id, opts, start_pt, start_char))
 }
 
