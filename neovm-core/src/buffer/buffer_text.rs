@@ -147,6 +147,10 @@ fn multibyte_chunk_contains_char_code(chunk: &[u8], code: u32, carry: &mut Vec<u
     false
 }
 
+fn marker_data_anchor(data: &crate::heap_types::LispMarker) -> TextPositionAnchor {
+    TextPositionAnchor::new(CharPos0::new(data.charpos), EmacsBytePos::new(data.bytepos))
+}
+
 impl Clone for BufferTextStorage {
     fn clone(&self) -> Self {
         Self {
@@ -850,8 +854,7 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                let new_position =
-                    remap(TextPositionAnchor::from_usize(data.charpos, data.bytepos));
+                let new_position = remap(marker_data_anchor(data));
                 data.bytepos = new_position.emacs_byte_pos_usize();
                 data.charpos = new_position.char_pos_usize();
                 curr = data.next_marker;
@@ -1332,10 +1335,7 @@ impl BufferText {
                     } else {
                         InsertionType::Before
                     };
-                    return Some((
-                        TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                        ins,
-                    ));
+                    return Some((marker_data_anchor(data), ins));
                 }
                 curr = data.next_marker;
             }
@@ -1739,10 +1739,7 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                bounds.consider_char_anchor(
-                    target,
-                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                );
+                bounds.consider_char_anchor(target, marker_data_anchor(data));
                 if bounds.char_target_is_near(target, distance) {
                     break;
                 }
@@ -1785,10 +1782,7 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                bounds.consider_byte_anchor(
-                    target,
-                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
-                );
+                bounds.consider_byte_anchor(target, marker_data_anchor(data));
                 if bounds.byte_target_is_near(target, distance) {
                     break;
                 }

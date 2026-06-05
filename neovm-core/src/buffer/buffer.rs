@@ -2882,7 +2882,7 @@ impl Buffer {
                 .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
                 .get()
         };
-        TextPositionAnchor::from_usize(char_pos, clamped)
+        TextPositionAnchor::new(CharPos0::new(char_pos), EmacsBytePos::new(clamped))
     }
 
     fn canonical_marker_anchor(&self, position: TextPositionAnchor) -> TextPositionAnchor {
