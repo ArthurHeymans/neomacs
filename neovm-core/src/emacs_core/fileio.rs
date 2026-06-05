@@ -15,7 +15,9 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::buffer::{EmacsBytePos, EmacsByteRange, text_props::TextPropertyTable};
+use crate::buffer::{
+    CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor, text_props::TextPropertyTable,
+};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -4333,14 +4335,18 @@ fn restore_point_after_file_replace(
             .saturating_add(inserted_chars)
             .saturating_sub(same_at_end_char.saturating_sub(same_at_start_char))
     };
-    let point_byte = buffers
-        .get(current_id)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(new_point_char))
-        .get();
+    let point = {
+        let buf = buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let point_char = CharPos0::new(new_point_char.min(buf.total_chars()));
+        TextPositionAnchor::new(
+            point_char,
+            buf.char_pos_to_emacs_byte_pos_clamped(point_char),
+        )
+    };
     if let Some(buf) = buffers.get_mut(current_id) {
-        buf.pt = new_point_char.min(buf.total_chars());
-        buf.pt_byte = point_byte.min(buf.total_bytes());
+        buf.set_point_anchor(point);
         Ok(())
     } else {
         Err(signal("error", vec![Value::string("No current buffer")]))
@@ -4518,12 +4524,15 @@ fn insert_file_contents_into_current_buffer_in_state(
         let pt_before = eval
             .buffers
             .get(current_id)
-            .map(|b| (b.pt_byte, b.pt))
-            .unwrap_or((0, 0));
+            .map(|b| b.point_anchor())
+            .unwrap_or_else(|| TextPositionAnchor::from_usize(0, 0));
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(pt_before.0, pt_before.0),
+            EmacsByteRange::from_usize(
+                pt_before.emacs_byte_pos_usize(),
+                pt_before.emacs_byte_pos_usize(),
+            ),
             contents,
         )?;
         if signal_hooks && !contents.is_empty() {
@@ -4537,8 +4546,7 @@ fn insert_file_contents_into_current_buffer_in_state(
         }
         // Restore point to before the insertion (matching GNU).
         if let Some(buf) = eval.buffers.get_mut(current_id) {
-            buf.pt_byte = pt_before.0;
-            buf.pt = pt_before.1;
+            buf.set_point_anchor(pt_before);
         }
         Ok(())
     }
@@ -4579,14 +4587,13 @@ fn run_after_insert_file_pipeline(
         return Ok(inserted);
     }
 
-    let (saved_pt, saved_pt_char, accessible_start, chars_modiff_before) = eval
+    let (saved_point, accessible_start, chars_modiff_before) = eval
         .buffers
         .get(current_id)
         .map(|buf| {
             let accessible = buf.accessible_emacs_byte_region();
             (
-                buf.pt_byte,
-                buf.pt,
+                buf.point_anchor(),
                 accessible.start_usize(),
                 buf.chars_modified_tick(),
             )
@@ -4650,8 +4657,7 @@ fn run_after_insert_file_pipeline(
         && chars_modiff_after == chars_modiff_before
         && let Some(buf) = eval.buffers.get_mut(current_id)
     {
-        buf.pt_byte = saved_pt;
-        buf.pt = saved_pt_char;
+        buf.set_point_anchor(saved_point);
     }
     eval.unbind_to(specpdl_count);
 

@@ -2062,6 +2062,30 @@ impl Buffer {
         TextPositionAnchor::from_usize(self.pt, self.pt_byte)
     }
 
+    /// Restore point from a paired character/byte anchor.
+    ///
+    /// This is the Rust-side equivalent of GNU's `SET_PT_BOTH`/
+    /// `TEMP_SET_PT_BOTH`: callers that already preserved both coordinates
+    /// can restore them atomically.  The active text backend still recomputes
+    /// the authoritative character coordinate from the restored byte
+    /// coordinate, and debug builds verify that the saved pair was coherent.
+    pub fn set_point_anchor(&mut self, point: TextPositionAnchor) {
+        let requested_byte = point.emacs_byte_pos_usize();
+        self.pt_byte = requested_byte.clamp(self.begv_byte, self.zv_byte);
+        self.pt = if self.pt_byte == self.begv_byte {
+            self.begv
+        } else if self.pt_byte == self.zv_byte {
+            self.zv
+        } else {
+            self.text
+                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.pt_byte))
+                .get()
+        };
+        if self.pt_byte == requested_byte {
+            debug_assert_eq!(self.pt, point.char_pos_usize().min(self.total_chars()));
+        }
+    }
+
     /// Current point as a raw Emacs byte position.
     pub fn point_byte(&self) -> usize {
         self.point_emacs_byte_pos().get()
