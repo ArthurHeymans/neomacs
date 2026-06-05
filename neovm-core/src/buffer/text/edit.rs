@@ -274,10 +274,14 @@ impl TextReplacement {
         self.new_extent.chars()
     }
 
-    pub const fn changed_chars_usize(self) -> usize {
+    pub const fn changed_chars(self) -> CharLen {
         let old = self.old_char_len().get();
         let new = self.new_char_len().get();
-        if old > new { old } else { new }
+        CharLen::new(if old > new { old } else { new })
+    }
+
+    pub const fn changed_chars_usize(self) -> usize {
+        self.changed_chars().get()
     }
 }
 

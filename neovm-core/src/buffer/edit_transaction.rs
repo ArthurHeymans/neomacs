@@ -13,15 +13,6 @@ use crate::buffer::{
 use crate::heap_types::LispString;
 
 #[inline]
-pub(in crate::buffer) fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
-    if multibyte {
-        crate::emacs_core::emacs_char::chars_in_multibyte(bytes)
-    } else {
-        bytes.len()
-    }
-}
-
-#[inline]
 pub(in crate::buffer) fn lisp_string_from_buffer_bytes(
     bytes: Vec<u8>,
     multibyte: bool,
@@ -291,7 +282,8 @@ pub(in crate::buffer) fn delete_state_after_edit(
 
 /// GNU `modiff` increments logarithmically with edit size, and
 /// `chars_modiff` is reset to the new `modiff` on each character change.
-pub(in crate::buffer) fn modification_tick_delta(changed_chars: usize) -> i64 {
+pub(in crate::buffer) fn modification_tick_delta(changed_chars: CharLen) -> i64 {
+    let changed_chars = changed_chars.get();
     if changed_chars == 0 {
         1
     } else {
@@ -518,6 +510,10 @@ impl MeasuredReplaceEdit {
         self.replacement.new_char_len()
     }
 
+    pub(in crate::buffer) const fn changed_chars(self) -> CharLen {
+        self.replacement.changed_chars()
+    }
+
     pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
         self.replacement.changed_chars_usize()
     }
@@ -576,8 +572,12 @@ impl MeasuredSameLenEdit {
         self.storage_range.is_empty() || self.modified_range.is_empty()
     }
 
+    pub(in crate::buffer) const fn changed_chars(self) -> CharLen {
+        self.modified_range.char_len()
+    }
+
     pub(in crate::buffer) const fn changed_chars_usize(self) -> usize {
-        self.modified_range.char_len().get()
+        self.changed_chars().get()
     }
 }
 
@@ -1064,12 +1064,12 @@ mod tests {
 
     #[test]
     fn modification_tick_delta_is_logarithmic_and_never_zero() {
-        assert_eq!(modification_tick_delta(0), 1);
-        assert_eq!(modification_tick_delta(1), 1);
-        assert_eq!(modification_tick_delta(2), 2);
-        assert_eq!(modification_tick_delta(3), 2);
-        assert_eq!(modification_tick_delta(4), 3);
-        assert_eq!(modification_tick_delta(8), 4);
+        assert_eq!(modification_tick_delta(CharLen::new(0)), 1);
+        assert_eq!(modification_tick_delta(CharLen::new(1)), 1);
+        assert_eq!(modification_tick_delta(CharLen::new(2)), 2);
+        assert_eq!(modification_tick_delta(CharLen::new(3)), 2);
+        assert_eq!(modification_tick_delta(CharLen::new(4)), 3);
+        assert_eq!(modification_tick_delta(CharLen::new(8)), 4);
     }
 
     #[test]

@@ -168,7 +168,7 @@ impl Buffer {
         let insertion = edit.insertion();
         let insert_pos = edit.byte_pos_usize();
         let insert_char_pos = edit.char_pos_usize();
-        let char_len = edit.char_len_usize();
+        let char_len = edit.char_len();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
         if policy.adjust_shared_markers {
@@ -203,7 +203,7 @@ impl Buffer {
         if edit.is_empty() {
             return;
         }
-        let char_len = edit.char_len_usize();
+        let char_len = edit.char_len();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
 
@@ -228,7 +228,7 @@ impl Buffer {
             return;
         }
         let old_state = self.modified_state_value();
-        self.record_char_modification(edit.changed_chars_usize());
+        self.record_char_modification(edit.changed_chars());
         if preserve_modified_state && old_state.is_nil() {
             self.text.set_save_modified_tick(self.text.modified_tick());
         }
@@ -259,10 +259,10 @@ impl Buffer {
             );
         }
         self.overlays.adjust_for_replaced_text(replacement);
-        self.record_char_modification(edit.changed_chars_usize());
+        self.record_char_modification(edit.changed_chars());
     }
 
-    fn record_char_modification(&mut self, changed_chars: usize) {
+    fn record_char_modification(&mut self, changed_chars: CharLen) {
         self.text
             .record_char_modification(modification_tick_delta(changed_chars));
     }
