@@ -115,9 +115,11 @@ fn buffer_text_can_use_non_gap_backends() {
         let layout = match kind {
             BufferTextBackendKind::GapBuffer => unreachable!("filtered above"),
             BufferTextBackendKind::PieceTree => {
-                TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6))
+                TextBackendDebugLayout::PieceTree(TextMetrics::from_usize(5, 6))
             }
-            BufferTextBackendKind::Rope => TextBackendDebugLayout::Rope(TextMetrics::new(5, 6)),
+            BufferTextBackendKind::Rope => {
+                TextBackendDebugLayout::Rope(TextMetrics::from_usize(5, 6))
+            }
         };
         let mut text = BufferText::from_str_with_backend_kind("abécd", implemented_kind(kind));
 
@@ -135,7 +137,7 @@ fn buffer_text_can_use_non_gap_backends() {
         assert_eq!(text.to_string(), "aécd");
         assert_eq!(
             text.backend_debug_layout().metrics(),
-            TextMetrics::new(4, 5)
+            TextMetrics::from_usize(4, 5)
         );
     }
 }
@@ -403,7 +405,7 @@ fn replace_lisp_string_preserves_non_gap_backend() {
         assert_eq!(text.to_string(), "日本");
         assert_eq!(
             text.backend_debug_layout().metrics(),
-            TextMetrics::new(2, 6)
+            TextMetrics::from_usize(2, 6)
         );
     }
 }
@@ -501,7 +503,7 @@ fn deep_clone_keeps_independent_char_count_cache() {
 fn layout_tracks_gnu_style_gap_and_end_positions() {
     crate::test_utils::init_test_tracing();
     let mut text = BufferText::from_str("éz");
-    assert_eq!(text.metrics(), TextMetrics::new(2, 3));
+    assert_eq!(text.metrics(), TextMetrics::from_usize(2, 3));
     let layout = text
         .gap_debug_layout()
         .expect("default backend is a gap buffer");
@@ -515,7 +517,7 @@ fn layout_tracks_gnu_style_gap_and_end_positions() {
     assert_eq!(layout.z_byte.get(), 3);
 
     insert_storage_string(&mut text, emacs_byte_pos('é'.len_utf8()), "x");
-    assert_eq!(text.metrics(), TextMetrics::new(3, 4));
+    assert_eq!(text.metrics(), TextMetrics::from_usize(3, 4));
     let layout = text
         .gap_debug_layout()
         .expect("default backend is a gap buffer");

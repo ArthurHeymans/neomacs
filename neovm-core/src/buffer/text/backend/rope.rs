@@ -1081,7 +1081,7 @@ mod tests {
         let backend = RopeTextBackend::from_str("éz");
         assert_eq!(
             backend.debug_layout(),
-            TextBackendDebugLayout::Rope(TextMetrics::new(2, 3))
+            TextBackendDebugLayout::Rope(TextMetrics::from_usize(2, 3))
         );
         assert_eq!(rope_char_to_byte(&backend, 1), "é".len());
         assert_eq!(rope_byte_to_char(&backend, "é".len()), 1);

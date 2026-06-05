@@ -2,7 +2,8 @@ use std::fmt;
 
 use crate::buffer::gap_buffer::GapBuffer;
 use crate::buffer::position::{
-    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor, TextPositionHint,
+    CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    TextPositionHint,
 };
 #[cfg(test)]
 use crate::buffer::text::GapDebugLayout;
@@ -104,7 +105,10 @@ impl GapTextBackend {
     }
 
     pub(in crate::buffer) fn metrics(&self) -> TextMetrics {
-        TextMetrics::new(self.char_count(), self.len())
+        TextMetrics::from_lengths(
+            CharLen::new(self.char_count()),
+            EmacsByteLen::new(self.len()),
+        )
     }
 
     pub(in crate::buffer) fn storage_position_hint(&self) -> TextPositionHint {

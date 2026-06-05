@@ -19,7 +19,7 @@ impl TextMetrics {
         emacs_bytes: EmacsByteLen::ZERO,
     };
 
-    pub const fn new(chars: usize, emacs_bytes: usize) -> Self {
+    pub(in crate::buffer) const fn from_usize(chars: usize, emacs_bytes: usize) -> Self {
         Self {
             chars: CharLen::new(chars),
             emacs_bytes: EmacsByteLen::new(emacs_bytes),

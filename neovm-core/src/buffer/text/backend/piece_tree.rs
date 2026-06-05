@@ -1012,7 +1012,7 @@ mod tests {
         let backend = PieceTreeTextBackend::from_str("éz");
         assert_eq!(
             backend.debug_layout(),
-            TextBackendDebugLayout::PieceTree(TextMetrics::new(2, 3))
+            TextBackendDebugLayout::PieceTree(TextMetrics::from_usize(2, 3))
         );
         assert_eq!(piece_char_to_byte(&backend, 1), "é".len());
         assert_eq!(piece_byte_to_char(&backend, "é".len()), 1);
