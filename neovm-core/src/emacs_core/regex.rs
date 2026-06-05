@@ -1421,11 +1421,12 @@ pub fn search_forward(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let start = buf.point_byte();
+    let start = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.end_usize())
-        .min(accessible.end_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.end())
+        .min(accessible.end());
 
     if start > limit {
         if noerror {
@@ -1437,14 +1438,15 @@ pub fn search_forward(
     let multibyte = buf.get_multibyte();
     let literal =
         crate::emacs_core::string_escape::storage_string_to_buffer_bytes(pattern, multibyte);
-    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::from_usize(start, limit), |text| {
+    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(start, limit), |text| {
         literal_find_emacs_bytes(text, &literal, multibyte, case_fold)
     });
 
     if let Some((rel_start, rel_end)) = found {
-        let match_start = start + rel_start;
-        let match_end = start + rel_end;
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(match_end));
+        let match_start = start.get() + rel_start;
+        let match_end = start.get() + rel_end;
+        let match_end_pos = EmacsBytePos::new(match_end);
+        buf.goto_emacs_byte_pos(match_end_pos);
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
@@ -1473,11 +1475,12 @@ pub fn search_backward(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let end = buf.point_byte();
+    let end = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.start_usize())
-        .max(accessible.start_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.start())
+        .max(accessible.start());
 
     if end < limit {
         if noerror {
@@ -1489,14 +1492,15 @@ pub fn search_backward(
     let multibyte = buf.get_multibyte();
     let literal =
         crate::emacs_core::string_escape::storage_string_to_buffer_bytes(pattern, multibyte);
-    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::from_usize(limit, end), |text| {
+    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(limit, end), |text| {
         literal_rfind_emacs_bytes(text, &literal, multibyte, case_fold)
     });
 
     if let Some((rel_start, rel_end)) = found {
-        let match_start = limit + rel_start;
-        let match_end = limit + rel_end;
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(match_start));
+        let match_start = limit.get() + rel_start;
+        let match_end = limit.get() + rel_end;
+        let match_start_pos = EmacsBytePos::new(match_start);
+        buf.goto_emacs_byte_pos(match_start_pos);
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some((match_start, match_end))),
             searched_string: None,
@@ -1537,11 +1541,12 @@ pub fn re_search_forward_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let start = buf.point_byte();
+    let start = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.end_usize())
-        .min(accessible.end_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.end())
+        .min(accessible.end());
 
     if start > limit {
         if noerror {
@@ -1550,9 +1555,9 @@ pub fn re_search_forward_with_posix(
         return Err(format!("Search failed: \"{}\"", pattern));
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = start - region_start;
-    let limit_rel = limit - region_start;
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
+    let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
@@ -1570,7 +1575,10 @@ pub fn re_search_forward_with_posix(
                 case_fold,
             )
             .map(|(rel_start, rel_end)| MatchData {
-                groups: gnu_single_group_vec(Some((start + rel_start, start + rel_end))),
+                groups: gnu_single_group_vec(Some((
+                    start.get() + rel_start,
+                    start.get() + rel_end,
+                ))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,
@@ -1580,7 +1588,7 @@ pub fn re_search_forward_with_posix(
             let range = (limit_rel - start_rel) as isize;
             regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
                 |(_pos, regs)| {
-                    let mut md = buffer_match_data_from_registers(&regs, region_start);
+                    let mut md = buffer_match_data_from_registers(&regs, region_start.get());
                     md.searched_buffer = Some(buffer_id);
                     md
                 },
@@ -1626,11 +1634,12 @@ pub fn re_search_backward_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
-    let end = buf.point_byte();
+    let end = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.start_usize())
-        .max(accessible.start_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.start())
+        .max(accessible.start());
 
     if end < limit {
         if noerror {
@@ -1639,9 +1648,9 @@ pub fn re_search_backward_with_posix(
         return Err(format!("Search failed: \"{}\"", pattern));
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = end - region_start;
-    let limit_rel = limit - region_start;
+    let region_start = accessible.start();
+    let start_rel = end.get() - region_start.get();
+    let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
@@ -1660,8 +1669,8 @@ pub fn re_search_backward_with_posix(
             )
             .map(|(rel_start, rel_end)| MatchData {
                 groups: gnu_single_group_vec(Some((
-                    region_start + limit_rel + rel_start,
-                    region_start + limit_rel + rel_end,
+                    region_start.get() + limit_rel + rel_start,
+                    region_start.get() + limit_rel + rel_end,
                 ))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
@@ -1673,7 +1682,7 @@ pub fn re_search_backward_with_posix(
             let range = -((start_rel - limit_rel) as isize);
             regex_emacs::re_search(cp.as_ref(), &text, start_rel, range, &syn, start_rel).map(
                 |(_pos, regs)| {
-                    let mut md = buffer_match_data_from_registers(&regs, region_start);
+                    let mut md = buffer_match_data_from_registers(&regs, region_start.get());
                     md.searched_buffer = Some(buffer_id);
                     md
                 },
@@ -1705,11 +1714,12 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     // GNU `re-search-forward` on a buffer drives the matcher with raw buffer
     // byte positions (`PT_BYTE`, `BEGV_BYTE`, `ZV_BYTE`), even when the
     // pattern itself is a Lisp string.
-    let start = buf.point_byte();
+    let start = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.end_usize())
-        .min(accessible.end_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.end())
+        .min(accessible.end());
 
     if start > limit {
         if noerror {
@@ -1718,9 +1728,9 @@ pub(crate) fn re_search_forward_lisp_with_posix(
         return Err("Search failed".to_string());
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = start - region_start;
-    let limit_rel = limit - region_start;
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
+    let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
     let syn = buffer_syntax_lookup(buf);
@@ -1735,7 +1745,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
             start_rel,
         )
     }) {
-        let mut md = buffer_match_data_from_registers(&regs, region_start);
+        let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
         buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.1));
@@ -1759,11 +1769,12 @@ pub(crate) fn re_search_backward_lisp_with_posix(
 ) -> Result<Option<usize>, String> {
     // GNU `re-search-backward` likewise uses buffer byte positions
     // throughout, not character positions.
-    let end = buf.point_byte();
+    let end = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
     let limit = bound
-        .unwrap_or(accessible.start_usize())
-        .max(accessible.start_usize());
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.start())
+        .max(accessible.start());
 
     if end < limit {
         if noerror {
@@ -1772,9 +1783,9 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         return Err("Search failed".to_string());
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = end - region_start;
-    let limit_rel = limit - region_start;
+    let region_start = accessible.start();
+    let start_rel = end.get() - region_start.get();
+    let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
     let syn = buffer_syntax_lookup(buf);
@@ -1789,7 +1800,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
             start_rel,
         )
     }) {
-        let mut md = buffer_match_data_from_registers(&regs, region_start);
+        let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
         buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.0));
@@ -1824,14 +1835,14 @@ pub fn looking_at_with_posix(
     posix: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
-    let start = buf.point_byte();
+    let start = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
-    if start > accessible.end_usize() {
+    if start > accessible.end() {
         return Ok(false);
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = start - region_start;
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
     let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
@@ -1848,7 +1859,7 @@ pub fn looking_at_with_posix(
             if !matched {
                 return Ok(false);
             }
-            let full_match = (start, start + literal_bytes.len());
+            let full_match = (start.get(), start.get() + literal_bytes.len());
             *match_data = Some(MatchData {
                 groups: gnu_single_group_vec(Some(full_match)),
                 searched_string: None,
@@ -1861,7 +1872,7 @@ pub fn looking_at_with_posix(
             if let Some((_end, regs)) =
                 regex_emacs::re_match(cp.as_ref(), &text, start_rel, text.len(), &syn, start_rel)
             {
-                let mut md = buffer_match_data_from_registers(&regs, region_start);
+                let mut md = buffer_match_data_from_registers(&regs, region_start.get());
                 md.searched_buffer = Some(buffer_id);
                 *match_data = Some(md);
                 Ok(true)
@@ -1890,14 +1901,14 @@ pub(crate) fn looking_at_lisp_with_posix(
     // byte-based regex engine breaks on any multibyte buffer — the
     // start position lands mid-UTF-8-sequence and the pattern fails
     // to match even when the char at `buf.pt` would have matched.
-    let start = buf.point_byte();
+    let start = buf.point_emacs_byte_pos();
     let accessible = buf.accessible_emacs_byte_region();
-    if start > accessible.end_usize() {
+    if start > accessible.end() {
         return Ok(false);
     }
 
-    let region_start = accessible.start_usize();
-    let start_rel = start - region_start;
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
     let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
     let syn = buffer_syntax_lookup(buf);
@@ -1912,7 +1923,7 @@ pub(crate) fn looking_at_lisp_with_posix(
             start_rel,
         )
     }) {
-        let mut md = buffer_match_data_from_registers(&regs, region_start);
+        let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.searched_buffer = Some(buffer_id);
         *match_data = Some(md);
         Ok(true)
