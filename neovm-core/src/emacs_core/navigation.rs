@@ -260,8 +260,8 @@ fn line_end_byte_narrowed(text: &[u8], byte_pos: usize, zv: usize) -> usize {
 
 pub(crate) fn check_point_motion_hooks(
     eval: &mut super::eval::Context,
-    old_byte: usize,
-    new_byte: usize,
+    old_byte: EmacsBytePos,
+    new_byte: EmacsBytePos,
 ) -> Result<(), Flow> {
     if old_byte == new_byte {
         return Ok(());
@@ -283,8 +283,8 @@ pub(crate) fn check_point_motion_hooks(
             Some(b) => b,
             None => return Ok(()),
         };
-        let ol = byte_to_char_pos(buf, EmacsBytePos::new(old_byte));
-        let nl = byte_to_char_pos(buf, EmacsBytePos::new(new_byte));
+        let ol = byte_to_char_pos(buf, old_byte);
+        let nl = byte_to_char_pos(buf, new_byte);
         let leave_before = point_motion_property(
             &eval.obarray,
             &eval.buffers,
@@ -351,25 +351,31 @@ fn point_motion_property(
     obarray: &super::symbol::Obarray,
     buffers: &BufferManager,
     buf: &crate::buffer::Buffer,
-    point_byte: usize,
+    point_byte: EmacsBytePos,
     after_point: bool,
     property: &str,
 ) -> Value {
     let accessible = buf.accessible_emacs_byte_region();
     if after_point {
-        if point_byte >= accessible.end_usize() {
-            return Value::NIL;
-        }
-        lookup_buffer_text_property(obarray, buffers, buf, point_byte, Value::symbol(property))
-    } else {
-        if point_byte <= accessible.start_usize() {
+        if point_byte >= accessible.end() {
             return Value::NIL;
         }
         lookup_buffer_text_property(
             obarray,
             buffers,
             buf,
-            point_byte - 1,
+            point_byte.get(),
+            Value::symbol(property),
+        )
+    } else {
+        if point_byte <= accessible.start() {
+            return Value::NIL;
+        }
+        lookup_buffer_text_property(
+            obarray,
+            buffers,
+            buf,
+            point_byte.get() - 1,
             Value::symbol(property),
         )
     }
@@ -429,9 +435,9 @@ fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -
 
 pub(crate) fn adjust_for_intangible(
     eval: &super::eval::Context,
-    pos: usize,
+    pos: EmacsBytePos,
     direction: i32,
-) -> usize {
+) -> EmacsBytePos {
     let inhibit = eval
         .obarray
         .symbol_value("inhibit-point-motion-hooks")
@@ -453,13 +459,13 @@ pub(crate) fn adjust_for_intangible(
         &eval.obarray,
         &eval.buffers,
         buf,
-        pos,
+        pos.get(),
         Value::symbol("intangible"),
     );
     if !intangible.is_truthy() {
         return pos;
     }
-    let mut cursor = pos;
+    let mut cursor = pos.get();
     if direction >= 0 {
         loop {
             match next_char_property_change(buf, cursor) {
@@ -506,7 +512,7 @@ pub(crate) fn adjust_for_intangible(
             }
         }
     }
-    cursor
+    EmacsBytePos::new(cursor)
 }
 
 // ===========================================================================
@@ -782,7 +788,7 @@ pub(crate) fn builtin_forward_line(
     );
     let new_pos = EmacsBytePos::new(new_pos);
     let direction = if n >= 0 { 1 } else { -1 };
-    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, new_pos.get(), direction));
+    let adjusted = adjust_for_intangible(eval, new_pos, direction);
     let _ = eval
         .buffers
         .goto_buffer_emacs_byte_pos(current_id, adjusted);
@@ -802,7 +808,7 @@ pub(crate) fn builtin_forward_line(
             shortage -= 1;
         }
     }
-    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
+    check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(line_count_result(line_arg, shortage))
 }
 
@@ -835,11 +841,11 @@ pub(crate) fn builtin_beginning_of_line(
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         buf.point_emacs_byte_pos()
     };
-    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, target_byte.get(), -1));
+    let adjusted = adjust_for_intangible(eval, target_byte, -1);
     let _ = eval
         .buffers
         .goto_buffer_emacs_byte_pos(current_id, adjusted);
-    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
+    check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
 }
 
@@ -868,11 +874,11 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
         let zero_based = (target_char - 1).max(0) as usize;
         buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
     };
-    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, target_byte.get(), 1));
+    let adjusted = adjust_for_intangible(eval, target_byte, 1);
     let _ = eval
         .buffers
         .goto_buffer_emacs_byte_pos(current_id, adjusted);
-    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
+    check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
 }
 
@@ -914,7 +920,7 @@ pub(crate) fn builtin_forward_char(
         )
     };
     let direction = if n >= 0 { 1 } else { -1 };
-    let adjusted = EmacsBytePos::new(adjust_for_intangible(eval, new_byte.get(), direction));
+    let adjusted = adjust_for_intangible(eval, new_byte, direction);
     let _ = eval
         .buffers
         .goto_buffer_emacs_byte_pos(current_id, adjusted);
@@ -927,7 +933,7 @@ pub(crate) fn builtin_forward_char(
     if desired > zv_char as i64 {
         return Err(signal("end-of-buffer", vec![]));
     }
-    check_point_motion_hooks(eval, old_byte.get(), adjusted.get())?;
+    check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
 }
 

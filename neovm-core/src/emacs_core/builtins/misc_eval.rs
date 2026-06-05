@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos};
 use crate::emacs_core::symbol::Obarray;
 
 fn runtime_string_value(value: Value) -> String {
@@ -1269,15 +1269,15 @@ fn write_print_output_to_target(
                     )],
                 ));
             }
-            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(marker_pos).get();
+            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(marker_pos);
             let saved_current = ctx.buffers.current_buffer_id();
-            let saved_point =
-                saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_byte()));
+            let saved_point = saved_current
+                .and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_emacs_byte_pos()));
 
             ctx.buffers.switch_current(buffer_id);
             let _ = ctx
                 .buffers
-                .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(marker_byte));
+                .goto_buffer_emacs_byte_pos(buffer_id, marker_byte);
             let _ = ctx.buffers.insert_into_buffer(buffer_id, text);
 
             let new_marker_pos = ctx
@@ -1303,13 +1303,13 @@ fn write_print_output_to_target(
                 ctx.buffers.switch_current(saved_id);
                 if let Some(old_point) = saved_point {
                     let restore_point = if saved_id == buffer_id && old_point >= marker_byte {
-                        old_point + text.len()
+                        old_point.add_len(EmacsByteLen::new(text.len()))
                     } else {
                         old_point
                     };
                     let _ = ctx
                         .buffers
-                        .goto_buffer_emacs_byte_pos(saved_id, EmacsBytePos::new(restore_point));
+                        .goto_buffer_emacs_byte_pos(saved_id, restore_point);
                 }
             }
             Ok(())

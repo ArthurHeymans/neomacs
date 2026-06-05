@@ -2020,12 +2020,12 @@ pub(crate) fn builtin_vertical_motion(
         return Ok(Value::fixnum(0));
     };
     let accessible = buf.accessible_emacs_byte_region();
-    let pt = accessible.clamp_usize(buf.point_byte());
+    let pt = accessible.clamp(buf.point_emacs_byte_pos());
     let begv = accessible.start_usize();
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
-        let mut bol = pt;
+        let mut bol = pt.get();
         while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
             bol -= 1;
         }
@@ -2035,7 +2035,7 @@ pub(crate) fn builtin_vertical_motion(
         return Ok(Value::fixnum(0));
     }
 
-    let mut pos = pt;
+    let mut pos = pt.get();
     let mut moved: i64 = 0;
 
     if lines > 0 {

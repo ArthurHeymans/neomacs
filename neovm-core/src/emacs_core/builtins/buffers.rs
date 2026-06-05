@@ -2654,8 +2654,8 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
-            buf.point_byte(),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get(),
+            buf.point_emacs_byte_pos(),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(pos),
         )
     };
     // Adjust for intangible text property
@@ -2663,7 +2663,7 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
     let adjusted = super::navigation::adjust_for_intangible(eval, byte_pos, direction);
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
+        .goto_buffer_emacs_byte_pos(current_id, adjusted);
     // Run point motion hooks
     super::navigation::check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(arg)

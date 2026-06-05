@@ -1770,17 +1770,17 @@ pub(crate) fn builtin_charset_after(
         if pos < point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
+        buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
     } else {
-        buf.point_byte()
+        buf.point_emacs_byte_pos()
     };
 
-    let point_max_byte = buf.accessible_emacs_byte_region().end_usize();
+    let point_max_byte = buf.accessible_emacs_byte_region().end();
     if target_byte >= point_max_byte {
         return Ok(Value::NIL);
     }
 
-    let Some(ch) = buf.char_after_emacs_byte_pos(EmacsBytePos::new(target_byte)) else {
+    let Some(ch) = buf.char_after_emacs_byte_pos(target_byte) else {
         return Ok(Value::NIL);
     };
     let cp = ch as u32;

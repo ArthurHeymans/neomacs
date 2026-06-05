@@ -1487,16 +1487,13 @@ fn interactive_region_args_in_buffers(
             )],
         )
     })?;
-    let pt = buf.point_byte();
+    let pt = buf.point_emacs_byte_pos();
+    let mark = EmacsBytePos::new(mark);
     let beg = pt.min(mark);
     let end = pt.max(mark);
     // Region-taking builtins use Emacs-style 1-based character positions.
-    let beg_char = buf
-        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
-        .as_i64();
-    let end_char = buf
-        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
-        .as_i64();
+    let beg_char = buf.emacs_byte_pos_to_lisp_char_pos(beg).as_i64();
+    let end_char = buf.emacs_byte_pos_to_lisp_char_pos(end).as_i64();
     Ok(vec![Value::fixnum(beg_char), Value::fixnum(end_char)])
 }
 
@@ -2162,9 +2159,9 @@ fn interactive_apply_shift_selection_prefix_in_state(
     if let Some(current_id) = buffers.current_buffer_id() {
         let point = buffers
             .get(current_id)
-            .map(|buf| buf.point_byte())
-            .unwrap_or(0);
-        let _ = buffers.set_buffer_mark_emacs_byte_pos(current_id, EmacsBytePos::new(point));
+            .map(|buf| buf.point_emacs_byte_pos())
+            .unwrap_or(EmacsBytePos::ZERO);
+        let _ = buffers.set_buffer_mark_emacs_byte_pos(current_id, point);
         let _ = buffers.set_buffer_local_property(current_id, "mark-active", Value::T);
         mark_activated = true;
     }
