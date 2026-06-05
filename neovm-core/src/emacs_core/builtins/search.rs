@@ -22,14 +22,12 @@ fn read_inhibit_changing_match_data(eval: &super::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "inhibit-changing-match-data").is_some_and(|v| !v.is_nil())
 }
 
-fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
-    buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(byte_pos))
-        .as_i64()
+fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
+    buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
-fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
-    buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
-        .get()
+fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> usize {
+    buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get()
 }
 
 pub(crate) fn builtin_search_forward(
@@ -112,7 +110,7 @@ pub(crate) fn builtin_search_forward_with_state(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
+    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -213,7 +211,7 @@ fn parse_search_options_in_manager(
     let steps = count.unsigned_abs() as usize;
 
     if let Some(limit) = bound_lisp {
-        let point_lisp = buffer_byte_to_lisp_char(buf, buf.point_byte());
+        let point_lisp = buffer_byte_to_lisp_char(buf, buf.point_emacs_byte_pos());
         match direction {
             SearchDirection::Forward if limit < point_lisp => {
                 return Err(signal(
@@ -243,7 +241,7 @@ fn current_search_context_in_manager(
     buffers: &crate::buffer::BufferManager,
     args: &[Value],
     kind: SearchKind,
-) -> Result<(crate::buffer::BufferId, SearchOptions, usize, i64), Flow> {
+) -> Result<(crate::buffer::BufferId, SearchOptions, EmacsBytePos, i64), Flow> {
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -251,15 +249,15 @@ fn current_search_context_in_manager(
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let opts = parse_search_options_in_manager(buffers, buf, args, kind)?;
-    let start_pt = buf.point_byte();
-    let start_char = buffer_byte_to_lisp_char(buf, buf.point_byte());
+    let start_pt = buf.point_emacs_byte_pos();
+    let start_char = buffer_byte_to_lisp_char(buf, start_pt);
     Ok((current_id, opts, start_pt, start_char))
 }
 
 fn buffer_byte_to_char_result_in_manager(
     buffers: &crate::buffer::BufferManager,
     buffer_id: crate::buffer::BufferId,
-    byte: usize,
+    byte: EmacsBytePos,
 ) -> EvalResult {
     let buf = buffers
         .get(buffer_id)
@@ -267,13 +265,13 @@ fn buffer_byte_to_char_result_in_manager(
     Ok(Value::fixnum(buffer_byte_to_lisp_char(buf, byte)))
 }
 
-fn search_failure_position(buf: &crate::buffer::Buffer, opts: SearchOptions) -> usize {
+fn search_failure_position(buf: &crate::buffer::Buffer, opts: SearchOptions) -> EmacsBytePos {
     let accessible = buf.accessible_emacs_byte_region();
     match opts.bound {
-        Some(limit) => accessible.clamp_usize(limit.get()),
+        Some(limit) => accessible.clamp(limit),
         None => match opts.direction {
-            SearchDirection::Forward => accessible.end_usize(),
-            SearchDirection::Backward => accessible.start_usize(),
+            SearchDirection::Forward => accessible.end(),
+            SearchDirection::Backward => accessible.start(),
         },
     }
 }
@@ -283,17 +281,17 @@ fn handle_search_failure_in_manager(
     buffer_id: crate::buffer::BufferId,
     pattern: Value,
     opts: SearchOptions,
-    start_pt: usize,
+    start_pt: EmacsBytePos,
     kind: SearchErrorKind,
 ) -> EvalResult {
     match kind {
         SearchErrorKind::NotFound => match opts.noerror_mode {
             SearchNoErrorMode::Signal => {
-                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(start_pt));
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, start_pt);
                 Err(signal("search-failed", vec![pattern]))
             }
             SearchNoErrorMode::KeepPoint => {
-                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(start_pt));
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, start_pt);
                 Ok(Value::NIL)
             }
             SearchNoErrorMode::MoveToBound => {
@@ -301,7 +299,7 @@ fn handle_search_failure_in_manager(
                     .get(buffer_id)
                     .map(|buf| search_failure_position(buf, opts))
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(target));
+                let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, target);
                 Ok(Value::NIL)
             }
         },
@@ -383,7 +381,7 @@ pub(crate) fn builtin_search_backward_with_state(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
+    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
 }
 
 pub(crate) fn builtin_re_search_forward(
@@ -478,7 +476,7 @@ pub(crate) fn re_search_forward_with_state_posix(
                 return Err(signal("search-failed", vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
-                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start_pt));
+                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
             Err(_) => {
@@ -495,7 +493,7 @@ pub(crate) fn re_search_forward_with_state_posix(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
+    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
 }
 
 pub(crate) fn builtin_re_search_backward(
@@ -585,7 +583,7 @@ pub(crate) fn re_search_backward_with_state_posix(
                 return Err(signal("search-failed", vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
-                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start_pt));
+                let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
                 return Err(signal("invalid-regexp", vec![Value::string(msg)]));
             }
             Err(_) => {
@@ -602,7 +600,7 @@ pub(crate) fn re_search_backward_with_state_posix(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
+    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
 }
 
 pub(crate) fn builtin_posix_search_forward(
@@ -1296,7 +1294,7 @@ pub(crate) fn builtin_match_beginning_with_state(
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if *start <= buf.total_bytes() {
-                            let pos = buffer_byte_to_lisp_char(buf, *start);
+                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(*start));
                             Ok(Value::fixnum(pos))
                         } else {
                             Ok(Value::fixnum(*start as i64))
@@ -1352,7 +1350,7 @@ pub(crate) fn builtin_match_end_with_state(
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if *end <= buf.total_bytes() {
-                            let pos = buffer_byte_to_lisp_char(buf, *end);
+                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(*end));
                             Ok(Value::fixnum(pos))
                         } else {
                             Ok(Value::fixnum(*end as i64))
@@ -1426,8 +1424,8 @@ pub(crate) fn builtin_match_data_with_state(
                             bufs.get(buffer_id).and_then(|buffer| {
                                 if *start <= *end && *end <= buffer.total_bytes() {
                                     Some((
-                                        buffer_byte_to_lisp_char(buffer, *start),
-                                        buffer_byte_to_lisp_char(buffer, *end),
+                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(*start)),
+                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(*end)),
                                     ))
                                 } else {
                                     None
@@ -1878,7 +1876,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         && oldstart < newend
         && let Some(buf) = buffers.get_mut(current_id)
     {
-        let start_char = buffer_byte_to_char_pos(buf, oldstart);
+        let start_char = buffer_byte_to_char_pos(buf, EmacsBytePos::new(oldstart));
         let cased_text =
             buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(oldstart, newend));
         let mut undo_list = buf.get_undo_list();
