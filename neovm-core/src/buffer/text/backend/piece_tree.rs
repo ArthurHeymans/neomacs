@@ -125,10 +125,7 @@ impl PieceNode {
     fn refresh(&mut self) {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
-        self.metrics = TextMetrics::new(
-            left.chars_usize() + self.piece.char_len_usize() + right.chars_usize(),
-            left.emacs_bytes_usize() + self.piece.len_usize() + right.emacs_bytes_usize(),
-        );
+        self.metrics = left.add_extent(self.piece.extent).add_metrics(right);
     }
 }
 

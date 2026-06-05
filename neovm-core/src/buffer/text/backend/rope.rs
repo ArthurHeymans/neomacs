@@ -70,10 +70,7 @@ impl RopeNode {
     fn refresh(&mut self) {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
-        self.metrics = TextMetrics::new(
-            left.chars_usize() + self.chunk.char_len() + right.chars_usize(),
-            left.emacs_bytes_usize() + self.chunk.len() + right.emacs_bytes_usize(),
-        );
+        self.metrics = left.add_extent(self.chunk.extent).add_metrics(right);
     }
 }
 
@@ -840,10 +837,7 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
 
     let left = assert_node_invariants(&node.left, multibyte);
     let right = assert_node_invariants(&node.right, multibyte);
-    let expected = TextMetrics::new(
-        left.chars_usize() + node.chunk.char_len() + right.chars_usize(),
-        left.emacs_bytes_usize() + node.chunk.len() + right.emacs_bytes_usize(),
-    );
+    let expected = left.add_extent(node.chunk.extent).add_metrics(right);
     assert_eq!(
         node.metrics, expected,
         "rope cached subtree metrics diverged"

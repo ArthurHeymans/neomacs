@@ -37,6 +37,20 @@ impl TextMetrics {
         }
     }
 
+    pub const fn add_metrics(self, other: Self) -> Self {
+        Self {
+            chars: self.chars.add_len(other.chars),
+            emacs_bytes: self.emacs_bytes.add_len(other.emacs_bytes),
+        }
+    }
+
+    pub const fn add_extent(self, extent: TextExtent) -> Self {
+        Self {
+            chars: self.chars.add_len(extent.chars()),
+            emacs_bytes: self.emacs_bytes.add_len(extent.emacs_bytes()),
+        }
+    }
+
     pub const fn char_len(self) -> CharLen {
         self.chars
     }

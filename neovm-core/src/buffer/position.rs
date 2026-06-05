@@ -422,6 +422,14 @@ impl EmacsByteLen {
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
+
+    pub const fn add_len(self, len: Self) -> Self {
+        Self(self.0 + len.0)
+    }
+
+    pub const fn saturating_sub(self, len: Self) -> Self {
+        Self(self.0.saturating_sub(len.0))
+    }
 }
 
 impl EmacsByteRange {
