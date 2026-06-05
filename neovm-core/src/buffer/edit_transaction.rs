@@ -655,11 +655,10 @@ impl SameLenSubstitutionPlan {
                 );
                 replacement_bytes.extend_from_slice(to_bytes);
                 let char_pos = range.char_start_usize() + char_offset;
-                changed_ranges.push(TextEditRange::from_usize(
-                    start + byte_offset,
-                    start + byte_offset + clen,
-                    char_pos,
-                    char_pos + 1,
+                changed_ranges.push(TextEditRange::from_start_extent(
+                    EmacsBytePos::new(start + byte_offset),
+                    CharPos0::new(char_pos),
+                    TextExtent::from_usize(1, clen),
                 ));
             } else {
                 replacement_bytes.extend_from_slice(&region_bytes[byte_offset..byte_offset + clen]);
@@ -686,11 +685,10 @@ impl SameLenSubstitutionPlan {
             if byte == from_byte {
                 replacement_bytes.push(to_bytes[0]);
                 let char_pos = range.char_start_usize() + index;
-                changed_ranges.push(TextEditRange::from_usize(
-                    start + index,
-                    start + index + 1,
-                    char_pos,
-                    char_pos + 1,
+                changed_ranges.push(TextEditRange::from_start_extent(
+                    EmacsBytePos::new(start + index),
+                    CharPos0::new(char_pos),
+                    TextExtent::from_usize(1, 1),
                 ));
             } else {
                 replacement_bytes.push(byte);

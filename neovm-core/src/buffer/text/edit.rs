@@ -503,6 +503,7 @@ impl TextEditRange {
         }
     }
 
+    #[cfg(test)]
     pub const fn from_usize(
         byte_start: usize,
         byte_end: usize,

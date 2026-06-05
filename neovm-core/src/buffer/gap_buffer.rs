@@ -519,11 +519,10 @@ impl GapBuffer {
         char_len: CharLen,
     ) {
         let start_char = self.emacs_byte_pos_to_char_pos(range.start());
-        self.delete_measured_range(TextEditRange::from_usize(
-            range.start_usize(),
-            range.end_usize(),
-            start_char.get(),
-            start_char.get() + char_len.get(),
+        self.delete_measured_range(TextEditRange::from_start_extent(
+            range.start(),
+            start_char,
+            TextExtent::new(char_len, range.len()),
         ));
     }
 
