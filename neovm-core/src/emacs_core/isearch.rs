@@ -1588,7 +1588,9 @@ fn replace_string_eval_impl(
             .buffers
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let _ = eval.buffers.goto_buffer_byte(current_id, point_max);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(point_max));
         return Ok(Value::NIL);
     }
     let (start, end, source_text, source, read_only, buffer_name) = {
@@ -1654,30 +1656,39 @@ fn replace_string_eval_impl(
         let _ = eval
             .buffers
             .delete_buffer_measured_region(current_id, change.old_range());
-        let _ = eval.buffers.goto_buffer_byte(current_id, start);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &out_text);
         super::editfns::signal_after_text_change(eval, change)?;
         if backward {
             if let Some(first) = units.first() {
+                let _ = eval.buffers.goto_buffer_emacs_byte_pos(
+                    current_id,
+                    EmacsBytePos::new(start + first.logical_byte_len),
+                );
+            } else {
                 let _ = eval
                     .buffers
-                    .goto_buffer_byte(current_id, start + first.logical_byte_len);
-            } else {
-                let _ = eval.buffers.goto_buffer_byte(current_id, start);
+                    .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
             }
         } else if query_style_point {
             if let Some(last) = units.last() {
-                let _ = eval.buffers.goto_buffer_byte(
+                let _ = eval.buffers.goto_buffer_emacs_byte_pos(
                     current_id,
-                    start + new_len.saturating_sub(last.logical_byte_len),
+                    EmacsBytePos::new(start + new_len.saturating_sub(last.logical_byte_len)),
                 );
             } else {
-                let _ = eval.buffers.goto_buffer_byte(current_id, start);
+                let _ = eval
+                    .buffers
+                    .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
             }
         } else {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start + new_len);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
         }
         return Ok(Value::NIL);
     }
@@ -1772,25 +1783,37 @@ fn replace_string_eval_impl(
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
-    let _ = eval.buffers.goto_buffer_byte(current_id, start);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
     super::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
         } else {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
         }
     } else if query_style_point {
         if let Some(pos) = query_forward_point {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
         } else {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
         }
     } else {
-        let _ = eval.buffers.goto_buffer_byte(current_id, start + new_len);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
     }
 
     Ok(Value::NIL)
@@ -1836,7 +1859,9 @@ fn replace_regexp_eval_impl(
             .buffers
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let _ = eval.buffers.goto_buffer_byte(current_id, point_max);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(point_max));
         return Ok(Value::NIL);
     }
 
@@ -1949,25 +1974,37 @@ fn replace_regexp_eval_impl(
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
-    let _ = eval.buffers.goto_buffer_byte(current_id, start);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
     super::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
         } else {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
         }
     } else if query_style_point {
         if let Some(pos) = query_forward_point {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start + pos);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
         } else {
-            let _ = eval.buffers.goto_buffer_byte(current_id, start);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
         }
     } else {
-        let _ = eval.buffers.goto_buffer_byte(current_id, start + new_len);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
     }
 
     Ok(Value::NIL)
@@ -2082,7 +2119,9 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
     if !delete_ranges.is_empty() {
         delete_line_operation_ranges(eval, current_id, delete_ranges)?;
     }
-    let _ = eval.buffers.goto_buffer_byte(current_id, start);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
 
     Ok(Value::NIL)
 }
@@ -2150,7 +2189,9 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
     if !delete_ranges.is_empty() {
         deleted_count = delete_line_operation_ranges(eval, current_id, delete_ranges)?;
     }
-    let _ = eval.buffers.goto_buffer_byte(current_id, start);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
 
     Ok(Value::fixnum(deleted_count as i64))
 }
