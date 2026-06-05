@@ -2869,7 +2869,7 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
-        let accessible_end_lisp_char = buffer.accessible_end_char().saturating_add(1);
+        let accessible_end_lisp_char = buffer.accessible_end_char_pos().get().saturating_add(1);
         let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte_pos().get();
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);

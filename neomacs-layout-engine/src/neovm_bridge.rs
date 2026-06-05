@@ -85,7 +85,7 @@ pub(crate) trait LayoutBufferView {
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value>;
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
-    fn layout_point_max_char(&self) -> usize;
+    fn layout_point_max_char_pos(&self) -> CharPos0;
     fn layout_total_emacs_byte_len(&self) -> EmacsByteLen;
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos;
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0;
@@ -110,7 +110,7 @@ pub(crate) struct LayoutBufferSnapshot {
     text_snapshot: BufferTextSnapshot,
     accessible_start_emacs_byte: EmacsBytePos,
     accessible_end_emacs_byte: EmacsBytePos,
-    accessible_end_char: usize,
+    accessible_end_char: CharPos0,
     local_var_alist: Value,
     slots: [Value; BUFFER_SLOT_COUNT],
     overlays: OverlayList,
@@ -124,7 +124,7 @@ impl LayoutBufferSnapshot {
             text_snapshot: buffer.text_snapshot(),
             accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
             accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
-            accessible_end_char: buffer.point_max_char_pos().get(),
+            accessible_end_char: buffer.point_max_char_pos(),
             local_var_alist: buffer.local_var_alist_value(),
             slots: buffer.slot_values_snapshot(),
             overlays: buffer.overlays().clone(),
@@ -149,7 +149,7 @@ impl LayoutBufferSnapshot {
         &self.name
     }
 
-    pub(crate) fn accessible_end_char(&self) -> usize {
+    pub(crate) fn accessible_end_char_pos(&self) -> CharPos0 {
         self.accessible_end_char
     }
 
@@ -220,8 +220,8 @@ impl LayoutBufferView for Buffer {
         self.point_max_emacs_byte_pos()
     }
 
-    fn layout_point_max_char(&self) -> usize {
-        self.point_max_char_pos().get()
+    fn layout_point_max_char_pos(&self) -> CharPos0 {
+        self.point_max_char_pos()
     }
 
     fn layout_total_emacs_byte_len(&self) -> EmacsByteLen {
@@ -287,7 +287,7 @@ impl LayoutBufferView for LayoutBufferSnapshot {
         self.accessible_end_emacs_byte
     }
 
-    fn layout_point_max_char(&self) -> usize {
+    fn layout_point_max_char_pos(&self) -> CharPos0 {
         self.accessible_end_char
     }
 
@@ -296,8 +296,9 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     }
 
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
-        self.text_snapshot
-            .char_pos_to_emacs_byte_pos(CharPos0::new(charpos.get().min(self.accessible_end_char)))
+        self.text_snapshot.char_pos_to_emacs_byte_pos(CharPos0::new(
+            charpos.get().min(self.accessible_end_char.get()),
+        ))
     }
 
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
@@ -1582,7 +1583,7 @@ fn buffer_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
     charpos: usize,
 ) -> EmacsBytePos {
     buffer.layout_char_pos_to_emacs_byte_pos(CharPos0::new(
-        charpos.min(buffer.layout_point_max_char()),
+        charpos.min(buffer.layout_point_max_char_pos().get()),
     ))
 }
 
@@ -1597,7 +1598,7 @@ fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
                 .min(buffer.layout_point_max_emacs_byte_pos().get()),
         ))
         .get()
-        .min(buffer.layout_point_max_char())
+        .min(buffer.layout_point_max_char_pos().get())
 }
 
 fn invisible_atom_status(prop_atom: Value, spec: Value) -> InvisibleStatus {
@@ -1721,13 +1722,13 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             .buffer
             .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
-            .unwrap_or(self.buffer.layout_point_max_char());
+            .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
         let next_overlay_change = self
             .buffer
             .layout_overlays()
             .next_boundary_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
-            .unwrap_or(self.buffer.layout_point_max_char());
+            .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
         let next_change = next_text_change.min(next_overlay_change);
 
         (status, next_change as i64)
@@ -1747,7 +1748,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             .buffer
             .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
-            .unwrap_or(self.buffer.layout_point_max_char());
+            .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
 
         (display, next_change as i64)
     }
@@ -1884,7 +1885,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         self.buffer
             .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
-            .unwrap_or(self.buffer.layout_point_max_char()) as i64
+            .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get()) as i64
     }
 
     /// Get a specific text property at a position.
@@ -2581,7 +2582,7 @@ impl FaceResolver {
         next_check: &mut usize,
     ) -> ResolvedFace {
         let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, charpos);
-        let mut min_next = buffer.layout_point_max_char();
+        let mut min_next = buffer.layout_point_max_char_pos().get();
         let mut resolved = self.resolve_buffer_default_face(buffer);
         let mut remap_stack = Vec::new();
 
