@@ -1430,18 +1430,16 @@ impl TextPropertyTable {
         name: Value,
         value: Value,
     ) -> bool {
-        self.put_property_raw(range.start_usize(), range.end_usize(), name, value)
+        self.put_property_raw(range, name, value)
     }
 
-    fn put_property_raw(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
-        if start >= end {
+    fn put_property_raw(&mut self, range: CharRange, name: Value, value: Value) -> bool {
+        if range.is_empty() {
             return false;
         }
         let mut changed = false;
 
-        let affected = self
-            .intervals
-            .intervals_overlapping_after_splits(CharRange::from_usize(start, end));
+        let affected = self.intervals.intervals_overlapping_after_splits(range);
         for (_, id) in affected {
             if plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value) {
                 self.intervals.nodes[id.0].refresh_cache();
@@ -1460,37 +1458,29 @@ impl TextPropertyTable {
         name: Value,
         value: Value,
     ) -> bool {
-        self.put_property_for_object_len_raw(
-            range.start_usize(),
-            range.end_usize(),
-            object_len.get(),
-            name,
-            value,
-        )
+        self.put_property_for_object_len_raw(range, object_len, name, value)
     }
 
     fn put_property_for_object_len_raw(
         &mut self,
-        start: usize,
-        end: usize,
-        object_len: usize,
+        range: CharRange,
+        object_len: CharLen,
         name: Value,
         value: Value,
     ) -> bool {
-        if start >= end {
+        if range.is_empty() {
             return false;
         }
+        let start = range.start_usize();
+        let end = range.end_usize();
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.max(end)));
-        self.intervals.split_at(CharPos0::new(start));
-        self.intervals.split_at(CharPos0::new(end));
+            .ensure_cover(CharPos0::new(object_len.get().max(end)));
+        self.intervals.split_at(range.start());
+        self.intervals.split_at(range.end());
 
         let mut changed = false;
-        for (_, id) in self
-            .intervals
-            .ids_overlapping(CharRange::from_usize(start, end))
-        {
+        for (_, id) in self.intervals.ids_overlapping(range) {
             if plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value) {
                 self.intervals.nodes[id.0].refresh_cache();
                 changed = true;
@@ -1637,18 +1627,18 @@ impl TextPropertyTable {
     }
 
     pub fn remove_property_in_char_range(&mut self, range: CharRange, name: Value) -> bool {
-        self.remove_property_raw(range.start_usize(), range.end_usize(), name)
+        self.remove_property_raw(range, name)
     }
 
-    fn remove_property_raw(&mut self, start: usize, end: usize, name: Value) -> bool {
-        if start >= end {
+    fn remove_property_raw(&mut self, range: CharRange, name: Value) -> bool {
+        if range.is_empty() {
             return false;
         }
         let mut changed = false;
 
         let affected = self
             .intervals
-            .existing_intervals_overlapping_after_splits(CharRange::from_usize(start, end));
+            .existing_intervals_overlapping_after_splits(range);
         for (_, id) in affected {
             if plist_value_remove(&mut self.intervals.nodes[id.0].plist, name) {
                 self.intervals.nodes[id.0].refresh_cache();
@@ -1659,17 +1649,17 @@ impl TextPropertyTable {
     }
 
     pub fn remove_all_properties_in_char_range(&mut self, range: CharRange) {
-        self.remove_all_properties_raw(range.start_usize(), range.end_usize());
+        self.remove_all_properties_raw(range);
     }
 
-    fn remove_all_properties_raw(&mut self, start: usize, end: usize) {
-        if start >= end {
+    fn remove_all_properties_raw(&mut self, range: CharRange) {
+        if range.is_empty() {
             return;
         }
 
         let affected = self
             .intervals
-            .existing_intervals_overlapping_after_splits(CharRange::from_usize(start, end));
+            .existing_intervals_overlapping_after_splits(range);
         for (_, id) in affected {
             self.intervals.set_node_plist(id, Value::NIL);
         }
@@ -1677,20 +1667,22 @@ impl TextPropertyTable {
     }
 
     pub fn set_properties_in_char_range(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
-        self.set_properties_raw(range.start_usize(), range.end_usize(), plist);
+        self.set_properties_raw(range, plist);
     }
 
-    fn set_properties_raw(&mut self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
-        if start >= end {
+    fn set_properties_raw(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
+        if range.is_empty() {
             return;
         }
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
+        let start = range.start_usize();
+        let end = range.end_usize();
 
-        self.intervals.ensure_cover(CharPos0::new(end));
-        self.intervals.split_at(CharPos0::new(start));
-        self.intervals.split_at(CharPos0::new(end));
+        self.intervals.ensure_cover(range.end());
+        self.intervals.split_at(range.start());
+        self.intervals.split_at(range.end());
 
         let mut cursor = start;
         let mut first = true;
@@ -1726,32 +1718,28 @@ impl TextPropertyTable {
         object_len: CharLen,
         plist: Vec<(Value, Value)>,
     ) {
-        self.set_properties_for_object_len_raw(
-            range.start_usize(),
-            range.end_usize(),
-            object_len.get(),
-            plist,
-        );
+        self.set_properties_for_object_len_raw(range, object_len, plist);
     }
 
     fn set_properties_for_object_len_raw(
         &mut self,
-        start: usize,
-        end: usize,
-        object_len: usize,
+        range: CharRange,
+        object_len: CharLen,
         plist: Vec<(Value, Value)>,
     ) {
-        if start >= end {
+        if range.is_empty() {
             return;
         }
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
+        let start = range.start_usize();
+        let end = range.end_usize();
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.max(end)));
-        self.intervals.split_at(CharPos0::new(start));
-        self.intervals.split_at(CharPos0::new(end));
+            .ensure_cover(CharPos0::new(object_len.get().max(end)));
+        self.intervals.split_at(range.start());
+        self.intervals.split_at(range.end());
 
         let new_plist = plist_value_from_pairs(&plist);
         let mut cursor = start;
@@ -1860,29 +1848,27 @@ impl TextPropertyTable {
     }
 
     pub fn adjust_for_insert_at_char_pos(&mut self, pos: CharPos0, len: CharLen) {
-        self.adjust_for_insert_raw(pos.get(), len.get());
+        self.adjust_for_insert_raw(pos, len);
     }
 
-    fn adjust_for_insert_raw(&mut self, pos: usize, len: usize) {
-        if len == 0 {
+    fn adjust_for_insert_raw(&mut self, pos: CharPos0, len: CharLen) {
+        if len.is_empty() {
             return;
         }
 
-        self.intervals
-            .insert_default_at(CharPos0::new(pos), CharLen::new(len));
+        self.intervals.insert_default_at(pos, len);
     }
 
     pub fn adjust_for_delete_char_range(&mut self, range: CharRange) {
-        self.adjust_for_delete_raw(range.start_usize(), range.end_usize());
+        self.adjust_for_delete_raw(range);
     }
 
-    fn adjust_for_delete_raw(&mut self, start: usize, end: usize) {
-        if start >= end {
+    fn adjust_for_delete_raw(&mut self, range: CharRange) {
+        if range.is_empty() {
             return;
         }
 
-        self.intervals
-            .delete_range(CharRange::from_usize(start, end));
+        self.intervals.delete_range(range);
     }
 
     pub fn adjust_for_replace_at_char_pos(
@@ -1891,16 +1877,19 @@ impl TextPropertyTable {
         old_len: CharLen,
         new_len: CharLen,
     ) {
-        self.adjust_for_replace_raw(start.get(), old_len.get(), new_len.get());
+        self.adjust_for_replace_raw(start, old_len, new_len);
     }
 
-    fn adjust_for_replace_raw(&mut self, start: usize, old_len: usize, new_len: usize) {
+    fn adjust_for_replace_raw(&mut self, start: CharPos0, old_len: CharLen, new_len: CharLen) {
         match new_len.cmp(&old_len) {
             std::cmp::Ordering::Greater => {
-                self.adjust_for_insert_raw(start, new_len - old_len);
+                self.adjust_for_insert_raw(start, CharLen::new(new_len.get() - old_len.get()));
             }
             std::cmp::Ordering::Less => {
-                self.adjust_for_delete_raw(start, start + old_len - new_len);
+                self.adjust_for_delete_raw(CharRange::from_start_len(
+                    start,
+                    CharLen::new(old_len.get() - new_len.get()),
+                ));
             }
             std::cmp::Ordering::Equal => {}
         }
