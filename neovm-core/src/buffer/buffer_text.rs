@@ -1727,7 +1727,7 @@ impl BufferText {
             bounds.consider_char_anchor(target, anchor);
         }
 
-        let mut distance: usize = POSITION_DISTANCE_BASE;
+        let mut distance = CharLen::new(POSITION_DISTANCE_BASE);
         // T7: marker chain walk. The chain carries the same (char, byte)
         // pairs that the deleted Vec<MarkerEntry> used to.
         //
@@ -1746,7 +1746,7 @@ impl BufferText {
                 if bounds.char_target_is_near(target, distance) {
                     break;
                 }
-                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
+                distance = distance.add_len(CharLen::new(POSITION_DISTANCE_INCR));
                 curr = data.next_marker;
             }
         }
@@ -1778,7 +1778,7 @@ impl BufferText {
             bounds.consider_byte_anchor(target, anchor);
         }
 
-        let mut distance: usize = POSITION_DISTANCE_BASE;
+        let mut distance = EmacsByteLen::new(POSITION_DISTANCE_BASE);
         // T7: marker chain walk. See sibling comment in
         // `char_position_bounds` for the SAFETY rationale.
         let mut curr = storage.markers_head;
@@ -1792,7 +1792,7 @@ impl BufferText {
                 if bounds.byte_target_is_near(target, distance) {
                     break;
                 }
-                distance = distance.saturating_add(POSITION_DISTANCE_INCR);
+                distance = distance.add_len(EmacsByteLen::new(POSITION_DISTANCE_INCR));
                 curr = data.next_marker;
             }
         }
@@ -1841,7 +1841,7 @@ impl BufferText {
         // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
         // walked more than POSITION_ANCHOR_STRIDE positions.
         let walked = bounds.min_char_walk(target);
-        if walked > POSITION_ANCHOR_STRIDE {
+        if walked.get() > POSITION_ANCHOR_STRIDE {
             storage
                 .anchor_cache
                 .borrow_mut()
@@ -1902,7 +1902,7 @@ impl BufferText {
         // Store as (charpos, bytepos) like the char→byte direction to keep
         // anchor_cache entries in one canonical order.
         let walked = bounds.min_byte_walk(target);
-        if walked > POSITION_ANCHOR_STRIDE {
+        if walked.get() > POSITION_ANCHOR_STRIDE {
             storage
                 .anchor_cache
                 .borrow_mut()

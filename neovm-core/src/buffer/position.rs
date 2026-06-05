@@ -220,31 +220,27 @@ impl TextPositionBounds {
         }
     }
 
-    pub fn char_below_distance(self, target: CharPos0) -> usize {
-        target.get().saturating_sub(self.below.char_pos_usize())
+    pub fn char_below_distance(self, target: CharPos0) -> CharLen {
+        target.saturating_offset_from(self.below.char_pos())
     }
 
-    pub fn char_above_distance(self, target: CharPos0) -> usize {
-        self.above.char_pos_usize().saturating_sub(target.get())
+    pub fn char_above_distance(self, target: CharPos0) -> CharLen {
+        self.above.char_pos().saturating_offset_from(target)
     }
 
-    pub fn byte_below_distance(self, target: EmacsBytePos) -> usize {
-        target
-            .get()
-            .saturating_sub(self.below.emacs_byte_pos_usize())
+    pub fn byte_below_distance(self, target: EmacsBytePos) -> EmacsByteLen {
+        target.saturating_offset_from(self.below.emacs_byte_pos())
     }
 
-    pub fn byte_above_distance(self, target: EmacsBytePos) -> usize {
-        self.above
-            .emacs_byte_pos_usize()
-            .saturating_sub(target.get())
+    pub fn byte_above_distance(self, target: EmacsBytePos) -> EmacsByteLen {
+        self.above.emacs_byte_pos().saturating_offset_from(target)
     }
 
-    pub fn char_target_is_near(self, target: CharPos0, distance: usize) -> bool {
+    pub fn char_target_is_near(self, target: CharPos0, distance: CharLen) -> bool {
         self.char_above_distance(target) < distance || self.char_below_distance(target) < distance
     }
 
-    pub fn byte_target_is_near(self, target: EmacsBytePos, distance: usize) -> bool {
+    pub fn byte_target_is_near(self, target: EmacsBytePos, distance: EmacsByteLen) -> bool {
         self.byte_above_distance(target) < distance || self.byte_below_distance(target) < distance
     }
 
@@ -264,12 +260,12 @@ impl TextPositionBounds {
         }
     }
 
-    pub fn min_char_walk(self, target: CharPos0) -> usize {
+    pub fn min_char_walk(self, target: CharPos0) -> CharLen {
         self.char_below_distance(target)
             .min(self.char_above_distance(target))
     }
 
-    pub fn min_byte_walk(self, target: EmacsBytePos) -> usize {
+    pub fn min_byte_walk(self, target: EmacsBytePos) -> EmacsByteLen {
         self.byte_below_distance(target)
             .min(self.byte_above_distance(target))
     }
@@ -747,8 +743,14 @@ mod tests {
 
         assert_eq!(byte_bounds.below(), TextPositionAnchor::from_usize(11, 29));
         assert_eq!(byte_bounds.above(), TextPositionAnchor::from_usize(13, 33));
-        assert_eq!(byte_bounds.byte_below_distance(EmacsBytePos::new(30)), 1);
-        assert_eq!(byte_bounds.byte_above_distance(EmacsBytePos::new(30)), 3);
+        assert_eq!(
+            byte_bounds.byte_below_distance(EmacsBytePos::new(30)),
+            EmacsByteLen::new(1)
+        );
+        assert_eq!(
+            byte_bounds.byte_above_distance(EmacsBytePos::new(30)),
+            EmacsByteLen::new(3)
+        );
         assert_eq!(
             byte_bounds.nearest_byte_anchor(EmacsBytePos::new(30)),
             TextPositionAnchor::from_usize(11, 29)
