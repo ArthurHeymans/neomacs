@@ -4432,9 +4432,9 @@ impl BufferManager {
         Some(killed_ids)
     }
 
-    fn full_buffer_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
+    fn full_buffer_emacs_byte_range(&self, id: BufferId) -> Option<EmacsByteRange> {
         let buf = self.buffers.get(&id)?;
-        Some((0, buf.total_bytes()))
+        Some(buf.full_emacs_byte_range())
     }
 
     fn labeled_restriction_at(&self, id: BufferId, outermost: bool) -> Option<&LabeledRestriction> {
@@ -4446,15 +4446,19 @@ impl BufferManager {
         }
     }
 
-    fn labeled_restriction_bounds(&self, id: BufferId, outermost: bool) -> Option<(usize, usize)> {
+    fn labeled_restriction_emacs_byte_range(
+        &self,
+        id: BufferId,
+        outermost: bool,
+    ) -> Option<EmacsByteRange> {
         let restriction = self.labeled_restriction_at(id, outermost)?;
         let beg = self.marker_emacs_byte_pos(id, restriction.beg_marker)?;
         let end = self.marker_emacs_byte_pos(id, restriction.end_marker)?;
-        Some((beg.get(), end.get()))
+        Some(EmacsByteRange::new(beg, end))
     }
 
-    pub fn current_labeled_restriction_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
-        self.labeled_restriction_bounds(id, false)
+    pub fn current_labeled_restriction_bounds(&self, id: BufferId) -> Option<EmacsByteRange> {
+        self.labeled_restriction_emacs_byte_range(id, false)
     }
 
     pub fn current_labeled_restriction_char_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
@@ -4549,10 +4553,15 @@ impl BufferManager {
     ) -> Option<()> {
         let (begv, zv) = {
             let buf = self.buffers.get(&buffer_id)?;
-            (buf.point_min_byte(), buf.point_max_byte())
+            (
+                buf.point_min_emacs_byte_pos(),
+                buf.point_max_emacs_byte_pos(),
+            )
         };
-        let (beg_marker, _) = self.create_marker(buffer_id, begv, InsertionType::Before);
-        let (end_marker, _) = self.create_marker(buffer_id, zv, InsertionType::After);
+        let (beg_marker, _) =
+            self.create_marker_at_emacs_byte_pos(buffer_id, begv, InsertionType::Before);
+        let (end_marker, _) =
+            self.create_marker_at_emacs_byte_pos(buffer_id, zv, InsertionType::After);
         self.labeled_restrictions
             .entry(buffer_id)
             .or_default()
@@ -4577,8 +4586,8 @@ impl BufferManager {
     }
 
     fn widen_buffer_fully(&mut self, id: BufferId) -> Option<()> {
-        let (begv, zv) = self.full_buffer_bounds(id)?;
-        self.restore_buffer_emacs_byte_restriction(id, EmacsByteRange::from_usize(begv, zv))
+        let range = self.full_buffer_emacs_byte_range(id)?;
+        self.restore_buffer_emacs_byte_restriction(id, range)
     }
 
     fn buffers_sharing_root_ids(&self, root_id: BufferId) -> Vec<BufferId> {
@@ -4666,11 +4675,11 @@ impl BufferManager {
         let Some(restriction) = self.labeled_restriction_at(id, false).copied() else {
             return self.widen_buffer_fully(id);
         };
-        let Some((begv, zv)) = self.labeled_restriction_bounds(id, false) else {
+        let Some(range) = self.labeled_restriction_emacs_byte_range(id, false) else {
             self.replace_labeled_restrictions(id, None);
             return self.widen_buffer_fully(id);
         };
-        self.restore_buffer_emacs_byte_restriction(id, EmacsByteRange::from_usize(begv, zv))?;
+        self.restore_buffer_emacs_byte_restriction(id, range)?;
         if matches!(restriction.label, LabeledRestrictionLabel::Outermost) {
             let _ = self.pop_labeled_restriction(id);
         }
@@ -5082,16 +5091,18 @@ impl BufferManager {
         let (begv, zv, len) = {
             let buffer = self.get(buffer_id)?;
             (
-                buffer.point_min_byte(),
-                buffer.point_max_byte(),
-                buffer.total_bytes(),
+                buffer.point_min_emacs_byte_pos(),
+                buffer.point_max_emacs_byte_pos(),
+                buffer.total_emacs_byte_len(),
             )
         };
-        let restriction = if begv == 0 && zv == len {
+        let restriction = if begv == EmacsBytePos::ZERO && zv.get() == len.get() {
             SavedRestrictionKind::None
         } else {
-            let (beg_marker, _) = self.create_marker(buffer_id, begv, InsertionType::Before);
-            let (end_marker, _) = self.create_marker(buffer_id, zv, InsertionType::After);
+            let (beg_marker, _) =
+                self.create_marker_at_emacs_byte_pos(buffer_id, begv, InsertionType::Before);
+            let (end_marker, _) =
+                self.create_marker_at_emacs_byte_pos(buffer_id, zv, InsertionType::After);
             SavedRestrictionKind::Markers {
                 beg_marker,
                 end_marker,
@@ -5113,15 +5124,12 @@ impl BufferManager {
 
         let mut retained_buffers = Vec::with_capacity(affected_buffers.len());
         for buffer_id in affected_buffers {
-            let Some((begv, zv)) = self.labeled_restriction_bounds(buffer_id, true) else {
+            let Some(range) = self.labeled_restriction_emacs_byte_range(buffer_id, true) else {
                 self.replace_labeled_restrictions(buffer_id, None);
                 continue;
             };
             if self
-                .restore_buffer_emacs_byte_restriction(
-                    buffer_id,
-                    EmacsByteRange::from_usize(begv, zv),
-                )
+                .restore_buffer_emacs_byte_restriction(buffer_id, range)
                 .is_some()
             {
                 retained_buffers.push(buffer_id);
@@ -5138,11 +5146,8 @@ impl BufferManager {
     #[tracing::instrument(level = "trace", skip(self, state))]
     pub fn restore_outermost_restrictions(&mut self, state: OutermostRestrictionResetState) {
         for buffer_id in state.affected_buffers {
-            if let Some((begv, zv)) = self.current_labeled_restriction_bounds(buffer_id) {
-                let _ = self.restore_buffer_emacs_byte_restriction(
-                    buffer_id,
-                    EmacsByteRange::from_usize(begv, zv),
-                );
+            if let Some(range) = self.current_labeled_restriction_bounds(buffer_id) {
+                let _ = self.restore_buffer_emacs_byte_restriction(buffer_id, range);
             } else {
                 self.replace_labeled_restrictions(buffer_id, None);
             }
@@ -5164,27 +5169,23 @@ impl BufferManager {
                 beg_marker,
                 end_marker,
             } => {
-                let beg = self
-                    .marker_emacs_byte_pos(buffer_id, beg_marker)
-                    .map(EmacsBytePos::get);
-                let end = self
-                    .marker_emacs_byte_pos(buffer_id, end_marker)
-                    .map(EmacsBytePos::get);
+                let beg = self.marker_emacs_byte_pos(buffer_id, beg_marker);
+                let end = self.marker_emacs_byte_pos(buffer_id, end_marker);
                 if let (Some(begv), Some(zv), Some(len)) = (
                     beg,
                     end,
                     self.buffers
                         .get(&buffer_id)
-                        .map(|buffer| buffer.total_bytes()),
+                        .map(|buffer| buffer.total_emacs_byte_len()),
                 ) {
-                    let mut restored_begv = begv.min(len);
-                    let mut restored_zv = zv.min(len);
+                    let mut restored_begv = EmacsBytePos::new(begv.get().min(len.get()));
+                    let mut restored_zv = EmacsBytePos::new(zv.get().min(len.get()));
                     if restored_begv > restored_zv {
                         std::mem::swap(&mut restored_begv, &mut restored_zv);
                     }
                     let _ = self.restore_buffer_emacs_byte_restriction(
                         buffer_id,
-                        EmacsByteRange::from_usize(restored_begv, restored_zv),
+                        EmacsByteRange::new(restored_begv, restored_zv),
                     );
                 }
                 self.remove_marker(beg_marker);
