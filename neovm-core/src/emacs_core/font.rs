@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, RwLock};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use strum::{EnumString, IntoStaticStr};
+use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
@@ -2099,7 +2099,16 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
 /// They are distinct from GNU's realized display-cache `enum face_id`.
 #[repr(i64)]
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoPrimitive, IntoStaticStr, TryFromPrimitive,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    EnumString,
+    IntoPrimitive,
+    IntoStaticStr,
+    TryFromPrimitive,
 )]
 #[strum(serialize_all = "kebab-case")]
 enum GnuBootstrapLispFaceId {
@@ -2480,7 +2489,20 @@ const FIRST_DYNAMIC_FACE_ID: i64 = 183;
 
 impl GnuBootstrapLispFaceId {
     fn from_name(name: &str) -> Option<Self> {
-        name.parse().ok()
+        // `name.parse()` (strum `FromStr`) is a linear scan over all ~183
+        // variants.  Doom sets hundreds of mostly-non-builtin faces, so every
+        // lookup scanned -- and failed -- the whole list (a startup hot spot).
+        // Build the name->variant map once and look up in O(1).
+        static BY_NAME: OnceLock<rustc_hash::FxHashMap<&'static str, GnuBootstrapLispFaceId>> =
+            OnceLock::new();
+        BY_NAME
+            .get_or_init(|| {
+                GnuBootstrapLispFaceId::iter()
+                    .map(|variant| (<&'static str>::from(variant), variant))
+                    .collect()
+            })
+            .get(name)
+            .copied()
     }
 
     fn id(self) -> i64 {
