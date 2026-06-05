@@ -2612,7 +2612,10 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     // through trailing blank lines.
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(
-        EmacsByteRange::from_usize(from_pos, to_pos.min(buf.total_bytes())),
+        EmacsByteRange::new(
+            EmacsBytePos::new(from_pos),
+            EmacsBytePos::new(to_pos.min(buf.total_bytes())),
+        ),
         &mut bytes,
     );
     let measured = if args

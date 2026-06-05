@@ -2257,8 +2257,10 @@ pub fn replace_match_buffer_with_syntax(
         case_symbols_as_words,
     )?;
 
-    buf.goto_emacs_byte_pos(EmacsBytePos::new(match_start));
-    buf.delete_emacs_byte_range(EmacsByteRange::from_usize(match_start, match_end));
+    let match_range =
+        EmacsByteRange::new(EmacsBytePos::new(match_start), EmacsBytePos::new(match_end));
+    buf.goto_emacs_byte_pos(match_range.start());
+    buf.delete_emacs_byte_range(match_range);
     buf.insert_lisp_string(&replacement);
     Ok(())
 }

@@ -537,10 +537,10 @@ fn signal_invalid_read_syntax_in_buffer_object(
     message: String,
 ) -> Flow {
     let accessible = buffer.accessible_emacs_byte_region();
-    let start = accessible.start_usize();
-    let end = accessible.clamp_usize(absolute_error_pos);
-    let mut prefix = Vec::with_capacity(end.saturating_sub(start));
-    buffer.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut prefix);
+    let end = accessible.clamp(EmacsBytePos::new(absolute_error_pos));
+    let range = EmacsByteRange::new(accessible.start(), end);
+    let mut prefix = Vec::with_capacity(range.len().get());
+    buffer.copy_emacs_byte_range_to(range, &mut prefix);
     let line = prefix.iter().filter(|&&byte| byte == b'\n').count() as i64 + 1;
     let line_start = prefix
         .iter()

@@ -14,7 +14,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -323,8 +323,7 @@ fn clamped_rect_inputs(
     end: i64,
 ) -> Option<(
     LispString,
-    usize,
-    usize,
+    EmacsByteRange,
     usize,
     usize,
     usize,
@@ -334,13 +333,14 @@ fn clamped_rect_inputs(
 )> {
     let buf = eval.buffers.current_buffer()?;
     let accessible = buf.accessible_emacs_byte_region();
+    let full_range = accessible.range();
     let pmin = accessible.start_usize();
     let pmax = accessible.end_usize();
     let point_min_char = super::textprop::byte_to_elisp_pos(buf, pmin);
     let point_max_char = super::textprop::byte_to_elisp_pos(buf, pmax);
     let clamped_start = start.clamp(point_min_char, point_max_char);
     let clamped_end = end.clamp(point_min_char, point_max_char);
-    let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(pmin, pmax));
+    let text = buf.buffer_substring_lisp_string_range(full_range);
 
     let rel_start = (clamped_start - point_min_char).max(0) as usize;
     let rel_end = (clamped_end - point_min_char).max(0) as usize;
@@ -352,7 +352,7 @@ fn clamped_rect_inputs(
         (end_col, start_col)
     };
     Some((
-        text, pmin, pmax, start_line, start_col, end_line, end_col, left_col, right_col,
+        text, full_range, start_line, start_col, end_line, end_col, left_col, right_col,
     ))
 }
 
@@ -415,7 +415,7 @@ fn delete_extract_rectangle_eval(
     start: i64,
     end: i64,
 ) -> EvalResult {
-    let Some((text, pmin, pmax, start_line, _start_col, end_line, _end_col, left_col, right_col)) =
+    let Some((text, full_range, start_line, _start_col, end_line, _end_col, left_col, right_col)) =
         clamped_rect_inputs(eval, start, end)
     else {
         return Ok(Value::list(Vec::new()));
@@ -428,7 +428,7 @@ fn delete_extract_rectangle_eval(
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(pmin, pmax),
+            full_range,
             &rewritten,
         )?;
         super::editfns::signal_before_text_change(eval, change)?;
@@ -437,7 +437,7 @@ fn delete_extract_rectangle_eval(
             .delete_buffer_measured_region(current_id, change.old_range());
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pmin));
+            .goto_buffer_emacs_byte_pos(current_id, full_range.start());
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &rewritten);

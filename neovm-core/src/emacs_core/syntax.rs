@@ -3878,9 +3878,9 @@ fn parse_state_from_range_with_options(
     let to_char = if to > 0 { to as usize - 1 } else { 0 }.clamp(point_min, point_max);
     let chars = buffer_chars_in_range(
         buf,
-        EmacsByteRange::from_usize(
-            buffer_char_to_byte_pos(buf, from_char),
-            buffer_char_to_byte_pos(buf, to_char),
+        EmacsByteRange::new(
+            buffer_char_to_emacs_byte_pos(buf, from_char),
+            buffer_char_to_emacs_byte_pos(buf, to_char),
         ),
     );
     let to_idx = chars.len();
