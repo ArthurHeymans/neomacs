@@ -79,6 +79,37 @@ fn get_text_property_out_of_range_signal_uses_gnu_point_range_payload() {
 }
 
 #[test]
+fn previous_single_property_change_steps_back_over_multibyte_char() {
+    // Regression: `previous-single-property-change' looked up the property of
+    // the character *before* a boundary by subtracting one BYTE.  In a
+    // multibyte buffer the previous character is several bytes back, so the
+    // byte position landed mid-character and tripped the Emacs-char-boundary
+    // assertion (crash on repeated `j' in a Doom dashboard).  It must step
+    // back one whole character, matching GNU's char-based `position - 1`.
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("a汉b"); // 汉 = U+6C49, 3 internal bytes
+    // face=bold on Lisp positions [1,3): covers 'a' and '汉', but not 'b'.
+    builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ],
+    )
+    .expect("put-text-property");
+    // Scanning back from end (pos 4) must walk over the 3-byte 汉 by a whole
+    // character and report the bold->nil boundary at position 3.
+    let result = builtin_previous_single_property_change(
+        &mut eval,
+        vec![Value::fixnum(4), Value::symbol("face")],
+    )
+    .expect("previous-single-property-change must not panic");
+    assert_eq!(result, Value::fixnum(3));
+}
+
+#[test]
 fn get_text_property_uses_category_symbol_identity() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

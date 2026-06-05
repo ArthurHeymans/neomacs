@@ -2070,6 +2070,24 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     })
 }
 
+/// Byte position of the character immediately preceding `byte_pos`.
+///
+/// GNU's `previous-single-property-change` inspects the property of the
+/// character *before* a position/boundary using a one-*character* step
+/// (`position - 1`, since GNU works in character positions).  In a multibyte
+/// buffer that character can be several bytes back, so a one-*byte* decrement
+/// would land mid-character and trip the Emacs-char-boundary assertion in
+/// `emacs_byte_pos_to_char_pos`.  `byte_pos` must already be a character
+/// boundary (validated points and interval boundaries always are).
+fn emacs_byte_pos_of_preceding_char(buf: &Buffer, byte_pos: EmacsBytePos) -> EmacsBytePos {
+    if byte_pos <= EmacsBytePos::ZERO {
+        return EmacsBytePos::ZERO;
+    }
+    let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get();
+    let prev_char = char_pos.saturating_sub(1);
+    EmacsBytePos::new(buffer_char_to_byte_pos(buf, prev_char))
+}
+
 /// (previous-single-property-change POS PROP &optional OBJECT LIMIT)
 pub(crate) fn builtin_previous_single_property_change(
     eval: &mut super::eval::Context,
@@ -2152,11 +2170,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         _ => (None, None),
     };
 
-    let ref_byte = if byte_pos > EmacsBytePos::ZERO {
-        EmacsBytePos::new(byte_pos.get() - 1)
-    } else {
-        EmacsBytePos::ZERO
-    };
+    let ref_byte = emacs_byte_pos_of_preceding_char(buf, byte_pos);
     let current_val = lookup_buffer_text_property(obarray, buffers, buf, ref_byte.get(), prop);
     let mut cursor = byte_pos;
 
@@ -2171,11 +2185,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
                         });
                     }
                 }
-                let check = if prev > EmacsBytePos::ZERO {
-                    EmacsBytePos::new(prev.get() - 1)
-                } else {
-                    EmacsBytePos::ZERO
-                };
+                let check = emacs_byte_pos_of_preceding_char(buf, prev);
                 let new_val = lookup_buffer_text_property(obarray, buffers, buf, check.get(), prop);
                 let changed = !eq_value(&current_val, &new_val);
                 if changed {
@@ -2187,7 +2197,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
                 cursor = if prev < cursor {
                     prev
                 } else {
-                    EmacsBytePos::new(prev.get() - 1)
+                    emacs_byte_pos_of_preceding_char(buf, prev)
                 };
             }
             None => break,
