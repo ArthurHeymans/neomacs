@@ -341,12 +341,12 @@ pub(crate) fn builtin_point_to_register(
     let marker = match eval
         .buffers
         .current_buffer()
-        .map(|buffer| (buffer.id, buffer.point_byte()))
+        .map(|buffer| (buffer.id, buffer.point_lisp_char_pos()))
     {
         Some((buffer_id, point)) => super::marker::make_registered_buffer_marker(
             &mut eval.buffers,
             buffer_id,
-            point as i64,
+            point.as_i64(),
             false,
         ),
         None => super::marker::make_marker_value(None, None, false),

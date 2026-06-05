@@ -327,6 +327,30 @@ fn test_builtin_point_to_register_stores_marker() {
 }
 
 #[test]
+fn test_builtin_point_to_register_stores_lisp_char_position() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("\u{20AC}x");
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("\u{20AC}".len()));
+        assert_eq!(buffer.point_lisp_char_pos().as_i64(), 2);
+    }
+
+    builtin_point_to_register(&mut eval, vec![Value::char('p')]).expect("point-to-register");
+
+    let stored = builtin_get_register(&mut eval, vec![Value::char('p')]).expect("get-register");
+    assert!(stored.is_marker());
+    assert_eq!(
+        crate::emacs_core::marker::builtin_marker_position_in_buffers(&eval.buffers, vec![stored],)
+            .expect("marker-position"),
+        Value::fixnum(2)
+    );
+}
+
+#[test]
 fn test_builtin_register_to_string() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

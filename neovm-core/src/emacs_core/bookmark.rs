@@ -20,6 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::{Value, ValueKind};
+use crate::buffer::LispCharPos1;
 use crate::heap_types::LispString;
 #[cfg(test)]
 use strum::{EnumString, IntoStaticStr};
@@ -36,7 +37,7 @@ pub struct Bookmark {
     /// The filename of the file the bookmark points to (if any).
     pub filename: Option<LispString>,
     /// The character position in the buffer/file.
-    pub position: usize,
+    pub position: LispCharPos1,
     /// Text after the bookmark position, used for relocating if the file
     /// has changed.
     pub front_context: Option<LispString>,
@@ -203,7 +204,7 @@ impl BookmarkManager {
             out.push('\n');
             out.push_str(&optional_bookmark_string_to_runtime(bm.filename.as_ref()));
             out.push('\n');
-            out.push_str(&bm.position.to_string());
+            out.push_str(&bm.position.as_i64().to_string());
             out.push('\n');
             out.push_str(&optional_bookmark_string_to_runtime(
                 bm.front_context.as_ref(),
@@ -242,7 +243,7 @@ impl BookmarkManager {
             }
             let filename =
                 (!lines[1].is_empty()).then(|| runtime_string_to_bookmark_string(lines[1]));
-            let position = lines[2].parse::<usize>().unwrap_or(1);
+            let position = LispCharPos1::new(lines[2].parse::<i64>().unwrap_or(1).max(1));
             let front_context =
                 (!lines[3].is_empty()).then(|| runtime_string_to_bookmark_string(lines[3]));
             let rear_context =
@@ -399,8 +400,11 @@ pub(crate) fn builtin_bookmark_set(
     let _no_overwrite = args.get(1);
 
     let (position, filename) = match eval.buffers.current_buffer() {
-        Some(buffer) => (buffer.point_byte(), buffer.file_name_lisp_string().cloned()),
-        None => (1, None),
+        Some(buffer) => (
+            buffer.point_lisp_char_pos(),
+            buffer.file_name_lisp_string().cloned(),
+        ),
+        None => (LispCharPos1::new(1), None),
     };
 
     let filename = match filename {
@@ -464,7 +468,7 @@ pub(crate) fn builtin_bookmark_jump(
                 Some(f) => Value::heap_string(f.clone()),
                 None => Value::NIL,
             };
-            let position_val = Value::fixnum(bm.position as i64);
+            let position_val = Value::fixnum(bm.position.as_i64());
             let annotation_val = match &bm.annotation {
                 Some(a) => Value::heap_string(a.clone()),
                 None => Value::NIL,
@@ -662,7 +666,7 @@ pub(crate) fn builtin_bookmark_get_position(
     let position = eval
         .bookmarks
         .get(&name)
-        .map(|bm| Value::fixnum(bm.position as i64))
+        .map(|bm| Value::fixnum(bm.position.as_i64()))
         .unwrap_or(Value::NIL);
     Ok(position)
 }

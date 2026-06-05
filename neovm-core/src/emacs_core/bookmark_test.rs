@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 use crate::heap_types::LispString;
 
 // -----------------------------------------------------------------------
@@ -21,7 +22,7 @@ fn set_get_delete() {
     let bm = Bookmark {
         name: bm_str("test"),
         filename: Some(bm_str("/tmp/test.txt")),
-        position: 42,
+        position: LispCharPos1::new(42),
         front_context: Some(bm_str("after")),
         rear_context: Some(bm_str("before")),
         annotation: None,
@@ -30,7 +31,10 @@ fn set_get_delete() {
 
     mgr.set(bm_str("test"), bm);
     assert!(mgr.get(&bm_str("test")).is_some());
-    assert_eq!(mgr.get(&bm_str("test")).unwrap().position, 42);
+    assert_eq!(
+        mgr.get(&bm_str("test")).unwrap().position,
+        LispCharPos1::new(42)
+    );
     assert_eq!(
         bm_runtime(mgr.get(&bm_str("test")).unwrap().filename.as_ref()).as_deref(),
         Some("/tmp/test.txt"),
@@ -49,7 +53,7 @@ fn rename() {
     let bm = Bookmark {
         name: bm_str("old"),
         filename: None,
-        position: 10,
+        position: LispCharPos1::new(10),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -60,7 +64,10 @@ fn rename() {
     assert!(mgr.rename(&bm_str("old"), bm_str("new")));
     assert!(mgr.get(&bm_str("old")).is_none());
     assert!(mgr.get(&bm_str("new")).is_some());
-    assert_eq!(mgr.get(&bm_str("new")).unwrap().position, 10);
+    assert_eq!(
+        mgr.get(&bm_str("new")).unwrap().position,
+        LispCharPos1::new(10)
+    );
 }
 
 #[test]
@@ -77,7 +84,7 @@ fn rename_collision() {
     let bm1 = Bookmark {
         name: bm_str("a"),
         filename: None,
-        position: 1,
+        position: LispCharPos1::new(1),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -86,7 +93,7 @@ fn rename_collision() {
     let bm2 = Bookmark {
         name: bm_str("b"),
         filename: None,
-        position: 2,
+        position: LispCharPos1::new(2),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -111,7 +118,7 @@ fn all_names_sorted() {
         let bm = Bookmark {
             name: bm_str(name),
             filename: None,
-            position: 1,
+            position: LispCharPos1::new(1),
             front_context: None,
             rear_context: None,
             annotation: None,
@@ -136,7 +143,7 @@ fn most_recent_tracking() {
         let bm = Bookmark {
             name: bm_str(name),
             filename: None,
-            position: 1,
+            position: LispCharPos1::new(1),
             front_context: None,
             rear_context: None,
             annotation: None,
@@ -154,7 +161,7 @@ fn most_recent_tracking() {
     let bm = Bookmark {
         name: bm_str("first"),
         filename: None,
-        position: 99,
+        position: LispCharPos1::new(99),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -172,7 +179,7 @@ fn serialize_deserialize() {
     let bm1 = Bookmark {
         name: bm_str("alpha"),
         filename: Some(bm_str("/home/test/file.el")),
-        position: 100,
+        position: LispCharPos1::new(100),
         front_context: Some(bm_str("(defun")),
         rear_context: Some(bm_str(";;")),
         annotation: Some(bm_str("Important function")),
@@ -181,7 +188,7 @@ fn serialize_deserialize() {
     let bm2 = Bookmark {
         name: bm_str("beta"),
         filename: None,
-        position: 1,
+        position: LispCharPos1::new(1),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -201,7 +208,7 @@ fn serialize_deserialize() {
     assert_eq!(names, vec![bm_str("alpha"), bm_str("beta")]);
 
     let a = mgr2.get(&bm_str("alpha")).unwrap();
-    assert_eq!(a.position, 100);
+    assert_eq!(a.position, LispCharPos1::new(100));
     assert_eq!(
         bm_runtime(a.filename.as_ref()).as_deref(),
         Some("/home/test/file.el")
@@ -218,7 +225,7 @@ fn serialize_deserialize() {
     assert!(a.handler.is_none());
 
     let b = mgr2.get(&bm_str("beta")).unwrap();
-    assert_eq!(b.position, 1);
+    assert_eq!(b.position, LispCharPos1::new(1));
     assert!(b.filename.is_none());
     assert_eq!(
         bm_runtime(b.handler.as_ref()).as_deref(),
@@ -233,7 +240,7 @@ fn load_empty_string() {
     let bm = Bookmark {
         name: bm_str("test"),
         filename: None,
-        position: 1,
+        position: LispCharPos1::new(1),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -254,7 +261,7 @@ fn modified_flag() {
     let bm = Bookmark {
         name: bm_str("test"),
         filename: None,
-        position: 1,
+        position: LispCharPos1::new(1),
         front_context: None,
         rear_context: None,
         annotation: None,
@@ -490,10 +497,31 @@ fn test_builtin_bookmark_get_position() {
     builtin_bookmark_set(&mut eval, vec![Value::string("at-point")]).unwrap();
 
     let found = builtin_bookmark_get_position(&mut eval, vec![Value::string("at-point")]).unwrap();
-    assert_eq!(found.as_int(), Some(0));
+    assert_eq!(found.as_int(), Some(1));
 
     let missing = builtin_bookmark_get_position(&mut eval, vec![Value::string("missing")]).unwrap();
     assert!(missing.is_nil());
+}
+
+#[test]
+fn test_builtin_bookmark_set_stores_lisp_char_position() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    set_current_buffer_file(&mut eval, "/tmp/multibyte-position.el");
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("\u{20AC}x");
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("\u{20AC}".len()));
+        assert_eq!(buffer.point_lisp_char_pos().as_i64(), 2);
+    }
+
+    builtin_bookmark_set(&mut eval, vec![Value::string("multibyte")]).unwrap();
+
+    let found = builtin_bookmark_get_position(&mut eval, vec![Value::string("multibyte")])
+        .expect("bookmark-get-position");
+    assert_eq!(found.as_int(), Some(2));
 }
 
 #[test]

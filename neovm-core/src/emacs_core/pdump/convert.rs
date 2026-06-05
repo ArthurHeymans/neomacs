@@ -17,7 +17,7 @@ use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
-use crate::buffer::{CharRange, EmacsBytePos, TextPositionAnchor};
+use crate::buffer::{CharRange, EmacsBytePos, LispCharPos1, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -3572,7 +3572,7 @@ pub(crate) fn dump_bookmark_manager(bm: &BookmarkManager) -> DumpBookmarkManager
                             .filename
                             .as_ref()
                             .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
-                        position: b.position,
+                        position: b.position.as_i64().max(1) as usize,
                         front_context: b
                             .front_context
                             .as_ref()
@@ -5788,7 +5788,7 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                             filename: b.filename.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
-                            position: b.position,
+                            position: LispCharPos1::new((b.position.max(1)) as i64),
                             front_context: b.front_context.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
@@ -5818,7 +5818,7 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                             filename: b.filename.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
-                            position: b.position,
+                            position: LispCharPos1::new((b.position.max(1)) as i64),
                             front_context: b.front_context.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
