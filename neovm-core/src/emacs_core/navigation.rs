@@ -1272,11 +1272,8 @@ pub(crate) fn builtin_skip_chars_backward(
 pub(crate) fn builtin_mark_nav(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let _force = args.first().is_some_and(|v| v.is_truthy());
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    match buf.mark() {
-        Some(byte_pos) => Ok(Value::fixnum(byte_to_char_pos(
-            buf,
-            EmacsBytePos::new(byte_pos),
-        ))),
+    match buf.mark_emacs_byte_pos() {
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_char_pos(buf, byte_pos))),
         None => Ok(Value::NIL),
     }
 }
@@ -1288,7 +1285,7 @@ pub(crate) fn builtin_region_beginning(
 ) -> EvalResult {
     expect_args("region-beginning", &args, 0)?;
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    let mark = buf.mark().ok_or_else(|| {
+    let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
         signal(
             "error",
             vec![Value::string(
@@ -1297,7 +1294,7 @@ pub(crate) fn builtin_region_beginning(
         )
     })?;
     let pt = clamp_byte_to_accessible(buf, buf.point_emacs_byte_pos());
-    let mark = clamp_byte_to_accessible(buf, EmacsBytePos::new(mark));
+    let mark = clamp_byte_to_accessible(buf, mark);
     let start = pt.min(mark);
     Ok(Value::fixnum(byte_to_char_pos(buf, start)))
 }
@@ -1306,7 +1303,7 @@ pub(crate) fn builtin_region_beginning(
 pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("region-end", &args, 0)?;
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    let mark = buf.mark().ok_or_else(|| {
+    let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
         signal(
             "error",
             vec![Value::string(
@@ -1315,7 +1312,7 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
         )
     })?;
     let pt = clamp_byte_to_accessible(buf, buf.point_emacs_byte_pos());
-    let mark = clamp_byte_to_accessible(buf, EmacsBytePos::new(mark));
+    let mark = clamp_byte_to_accessible(buf, mark);
     let end = pt.max(mark);
     Ok(Value::fixnum(byte_to_char_pos(buf, end)))
 }

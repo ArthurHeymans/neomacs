@@ -1479,7 +1479,7 @@ fn interactive_region_args_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let mark = buf.mark().ok_or_else(|| {
+    let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
         signal(
             missing_mark_signal,
             vec![Value::string(
@@ -1488,7 +1488,6 @@ fn interactive_region_args_in_buffers(
         )
     })?;
     let pt = buf.point_emacs_byte_pos();
-    let mark = EmacsBytePos::new(mark);
     let beg = pt.min(mark);
     let end = pt.max(mark);
     // Region-taking builtins use Emacs-style 1-based character positions.
@@ -1517,7 +1516,7 @@ fn interactive_mark_arg_in_buffers(buffers: &crate::buffer::BufferManager) -> Re
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    buf.mark()
+    buf.mark_emacs_byte_pos()
         .ok_or_else(|| signal("error", vec![Value::string("The mark is not set now")]))?;
     let mark_char = buf.mark_char().expect("mark byte/char stay in sync") as i64 + 1;
     Ok(Value::fixnum(mark_char))

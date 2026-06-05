@@ -2737,7 +2737,7 @@ fn bootstrap_buffers(
         // curly-quote conversion via text-quoting-style. Hardcoding
         // the content in Rust bypassed both of those, producing bare
         // "C-x C-f" instead of quoted "'C-x C-f'".
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(buf.point_max()));
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
     }
 
     // Set *scratch* as the current buffer

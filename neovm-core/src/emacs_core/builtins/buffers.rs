@@ -5,8 +5,8 @@ use super::*;
 // ===========================================================================
 
 use crate::buffer::{
-    Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
-    LispCharPos1, TextChange, TextEditRange, TextExtent, TextPositionAnchor,
+    Buffer, BufferId, BufferManager, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
+    EmacsByteRange, LispCharPos1, TextChange, TextEditRange, TextExtent, TextPositionAnchor,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -3158,16 +3158,22 @@ fn insert_pieces_in_state(
         if piece.text.is_empty() {
             continue;
         }
-        let insert_pos = buffers.get(current_id).map(Buffer::point_byte).unwrap_or(0);
+        let insert_pos = buffers
+            .get(current_id)
+            .map(Buffer::point_emacs_byte_pos)
+            .unwrap_or(EmacsBytePos::ZERO);
         if before_markers {
             let _ = buffers.insert_lisp_string_into_buffer_before_markers(current_id, &piece.text);
         } else {
             let _ = buffers.insert_lisp_string_into_buffer(current_id, &piece.text);
         }
-        let inserted_end = insert_pos + piece.text.sbytes();
+        let inserted_end = insert_pos.add_len(EmacsByteLen::new(piece.text.sbytes()));
         if !inherit && piece.text_props.is_none() {
-            let _ =
-                buffers.clear_inserted_plain_text_properties(current_id, insert_pos, inserted_end);
+            let _ = buffers.clear_inserted_plain_text_properties(
+                current_id,
+                insert_pos.get(),
+                inserted_end.get(),
+            );
         }
         if inherit {
             apply_inherited_text_properties(
@@ -3175,29 +3181,22 @@ fn insert_pieces_in_state(
                 dynamic,
                 buffers,
                 current_id,
-                insert_pos,
+                insert_pos.get(),
                 piece.text.sbytes(),
             );
             if piece.text_props.is_none() {
                 let _ = buffers.merge_adjacent_equal_buffer_text_properties(
                     current_id,
-                    EmacsByteRange::from_usize(insert_pos, inserted_end),
+                    EmacsByteRange::new(insert_pos, inserted_end),
                 );
             }
         }
         if let Some(str_table) = piece.text_props {
             if inherit {
-                let _ = buffers.merge_missing_buffer_text_properties(
-                    current_id,
-                    &str_table,
-                    EmacsBytePos::new(insert_pos),
-                );
+                let _ = buffers
+                    .merge_missing_buffer_text_properties(current_id, &str_table, insert_pos);
             } else {
-                let _ = buffers.append_buffer_text_properties(
-                    current_id,
-                    &str_table,
-                    EmacsBytePos::new(insert_pos),
-                );
+                let _ = buffers.append_buffer_text_properties(current_id, &str_table, insert_pos);
             }
         }
     }

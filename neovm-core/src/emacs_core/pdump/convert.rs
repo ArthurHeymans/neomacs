@@ -2795,7 +2795,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         },
         pt: buf.point_emacs_byte_pos().get(),
         pt_char: Some(buf.point_char_pos().get()),
-        mark: buf.mark_byte(),
+        mark: buf.mark_emacs_byte_pos().map(EmacsBytePos::get),
         mark_char: buf.mark_char(),
         begv: buf.point_min_emacs_byte_pos().get(),
         begv_char: Some(buf.point_min_char_pos().get()),

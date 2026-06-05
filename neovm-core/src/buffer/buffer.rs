@@ -2090,11 +2090,13 @@ impl Buffer {
     }
 
     /// Current point as a raw Emacs byte position.
+    #[cfg(test)]
     pub fn point_byte(&self) -> usize {
         self.point_emacs_byte_pos().get()
     }
 
-    /// Legacy point accessor retained while buffer internals are byte-only.
+    /// Legacy point accessor retained for tests that assert raw byte state.
+    #[cfg(test)]
     pub fn point(&self) -> usize {
         self.point_byte()
     }
@@ -2120,6 +2122,7 @@ impl Buffer {
     }
 
     /// Beginning of the accessible portion as a raw Emacs byte position.
+    #[cfg(test)]
     pub fn point_min_byte(&self) -> usize {
         self.point_min_emacs_byte_pos().get()
     }
@@ -2139,7 +2142,8 @@ impl Buffer {
         self.point_min_char_pos().get()
     }
 
-    /// Legacy narrowing accessor retained while buffer internals are byte-only.
+    /// Legacy narrowing accessor retained for tests that assert raw byte state.
+    #[cfg(test)]
     pub fn point_min(&self) -> usize {
         self.point_min_byte()
     }
@@ -2150,6 +2154,7 @@ impl Buffer {
     }
 
     /// End of the accessible portion as a raw Emacs byte position.
+    #[cfg(test)]
     pub fn point_max_byte(&self) -> usize {
         self.point_max_emacs_byte_pos().get()
     }
@@ -2342,7 +2347,8 @@ impl Buffer {
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
     }
 
-    /// Legacy narrowing accessor retained for Lisp-facing callers.
+    /// Legacy narrowing accessor retained for tests that assert raw byte state.
+    #[cfg(test)]
     pub fn point_max(&self) -> usize {
         self.point_max_byte()
     }
@@ -2998,6 +3004,7 @@ impl Buffer {
     }
 
     /// Return the mark byte position, None if mark inactive.
+    #[cfg(test)]
     pub fn mark_byte(&self) -> Option<usize> {
         self.mark_emacs_byte_pos().map(EmacsBytePos::get)
     }
@@ -3020,7 +3027,8 @@ impl Buffer {
         }
     }
 
-    /// Legacy mark accessor — returns byte position.
+    /// Legacy mark accessor retained for tests that assert raw byte state.
+    #[cfg(test)]
     pub fn mark(&self) -> Option<usize> {
         self.mark_byte()
     }
@@ -4050,7 +4058,11 @@ impl BufferManager {
         let id = BufferId(self.next_id);
         self.next_id += 1;
 
-        let root_mark_byte = if clone { root.mark_byte() } else { None };
+        let root_mark = if clone {
+            root.mark_emacs_byte_pos()
+        } else {
+            None
+        };
 
         let mut indirect = if clone {
             let mut cloned = root.clone();
@@ -4100,10 +4112,8 @@ impl BufferManager {
         self.buffer_order.push(id);
         let _ = self.ensure_buffer_state_markers(root_id);
         let _ = self.ensure_buffer_state_markers(id);
-        if let Some(mark_byte) = root_mark_byte {
-            self.buffers
-                .get_mut(&id)?
-                .set_mark_emacs_byte_pos(EmacsBytePos::new(mark_byte));
+        if let Some(mark) = root_mark {
+            self.buffers.get_mut(&id)?.set_mark_emacs_byte_pos(mark);
         }
         Some(id)
     }

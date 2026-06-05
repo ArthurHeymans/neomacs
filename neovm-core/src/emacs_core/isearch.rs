@@ -140,7 +140,7 @@ fn replacement_region_bounds(
 ) -> Result<(usize, usize), Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     if region_noncontiguous {
-        let mark = buf.mark().ok_or_else(|| {
+        let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
             signal(
                 "error",
                 vec![Value::string(
@@ -149,7 +149,6 @@ fn replacement_region_bounds(
             )
         })?;
         let pt = buf.point_emacs_byte_pos();
-        let mark = EmacsBytePos::new(mark);
         return Ok((pt.min(mark).get(), pt.max(mark).get()));
     }
 
@@ -1575,7 +1574,7 @@ fn replace_string_eval_impl(
                 .buffers
                 .current_buffer()
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            if buf.mark().is_none() {
+            if buf.mark_emacs_byte_pos().is_none() {
                 return Err(signal(
                     "error",
                     vec![Value::string(
@@ -1846,7 +1845,7 @@ fn replace_regexp_eval_impl(
                 .buffers
                 .current_buffer()
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            if buf.mark().is_none() {
+            if buf.mark_emacs_byte_pos().is_none() {
                 return Err(signal(
                     "error",
                     vec![Value::string(
