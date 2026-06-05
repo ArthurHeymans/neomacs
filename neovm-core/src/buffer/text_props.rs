@@ -311,6 +311,10 @@ impl IntervalRun {
         Self::new_in_char_range(CharRange::from_usize(start, end), plist)
     }
 
+    fn default_in_char_range(range: CharRange) -> Self {
+        Self::new_in_char_range(range, Value::NIL)
+    }
+
     fn new_in_char_range(range: CharRange, plist: IntervalPlist) -> Self {
         let (front_sticky, rear_sticky, write_protect, visible) =
             IntervalNode::extract_cached(plist);
@@ -324,10 +328,6 @@ impl IntervalRun {
         }
     }
 
-    fn default(start: usize, end: usize) -> Self {
-        Self::new(start, end, Value::NIL)
-    }
-
     fn from_node(start: CharPos0, node: &IntervalNode, length: CharLen) -> Self {
         Self {
             range: CharRange::from_start_len(start, length),
@@ -339,24 +339,32 @@ impl IntervalRun {
         }
     }
 
-    fn start(&self) -> usize {
+    fn start(&self) -> CharPos0 {
+        self.range.start()
+    }
+
+    fn end(&self) -> CharPos0 {
+        self.range.end()
+    }
+
+    fn start_usize(&self) -> usize {
         self.range.start_usize()
     }
 
-    fn end(&self) -> usize {
+    fn end_usize(&self) -> usize {
         self.range.end_usize()
     }
 
-    fn set_start(&mut self, start: usize) {
-        self.range = CharRange::from_usize(start, self.end());
+    fn set_start(&mut self, start: CharPos0) {
+        self.range = CharRange::new(start, self.end());
     }
 
-    fn set_end(&mut self, end: usize) {
-        self.range = CharRange::from_usize(self.start(), end);
+    fn set_end(&mut self, end: CharPos0) {
+        self.range = CharRange::new(self.start(), end);
     }
 
-    fn shift_by(&mut self, offset: usize) {
-        self.range = CharRange::from_usize(self.start() + offset, self.end() + offset);
+    fn shift_by(&mut self, offset: CharLen) {
+        self.range = CharRange::new(self.start().add_len(offset), self.end().add_len(offset));
     }
 
     fn len(&self) -> CharLen {
@@ -431,7 +439,7 @@ impl IntervalTree {
         runs.sort_by_key(|run| run.start());
 
         let mut normalized = Vec::new();
-        let mut cursor = 0;
+        let mut cursor = CharPos0::ZERO;
         for mut run in runs.drain(..) {
             if run.end() <= cursor {
                 continue;
@@ -440,7 +448,10 @@ impl IntervalTree {
                 run.set_start(cursor);
             }
             if cursor < run.start() {
-                normalized.push(IntervalRun::default(cursor, run.start()));
+                normalized.push(IntervalRun::default_in_char_range(CharRange::new(
+                    cursor,
+                    run.start(),
+                )));
             }
             cursor = run.end();
             normalized.push(run);
@@ -483,7 +494,7 @@ impl IntervalTree {
         node.right = right;
         node.parent = parent;
         node.total_length = CharLen::new(left_len.get() + node_len + right_len.get());
-        node.position = CharPos0::new(runs[mid].start());
+        node.position = runs[mid].start();
 
         Some(id)
     }
@@ -554,8 +565,8 @@ impl IntervalTree {
         None
     }
 
-    fn interval_end(&self, start: usize, id: IntervalId) -> usize {
-        start + self.node_len(id).get()
+    fn interval_end(&self, start: CharPos0, id: IntervalId) -> CharPos0 {
+        start.add_len(self.node_len(id))
     }
 
     fn add_length_to_ancestors(&mut self, mut id: Option<IntervalId>, delta: isize) {
@@ -698,8 +709,6 @@ impl IntervalTree {
         if range.is_empty() {
             return;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
 
         if self.root.is_none() {
             let root = self.push_node(IntervalNode::new(range.len(), range.start(), Value::NIL));
@@ -711,14 +720,14 @@ impl IntervalTree {
         let id = self.push_node(IntervalNode::new(range.len(), range.start(), Value::NIL));
         self.nodes[id.0].parent = Some(rightmost);
         self.nodes[rightmost.0].right = Some(id);
-        self.add_length_to_ancestors(Some(rightmost), (end - start) as isize);
+        self.add_length_to_ancestors(Some(rightmost), range.len().get() as isize);
         self.balance_upwards(Some(rightmost));
     }
 
     fn ensure_cover(&mut self, end: CharPos0) {
-        let current_end = self.len().get();
-        if current_end < end.get() {
-            self.append_default_interval(CharRange::from_usize(current_end, end.get()));
+        let current_end = CharPos0::new(self.len().get());
+        if current_end < end {
+            self.append_default_interval(CharRange::new(current_end, end));
         }
     }
 
@@ -726,16 +735,18 @@ impl IntervalTree {
         if len.is_empty() || self.root.is_none() {
             return;
         }
-        let pos = pos.get();
-        let len = len.get();
 
         let mut runs = self.runs();
-        let tree_len = self.len().get();
+        let tree_len = CharPos0::new(self.len().get());
         if pos >= tree_len {
             if tree_len < pos {
-                runs.push(IntervalRun::default(tree_len, pos));
+                runs.push(IntervalRun::default_in_char_range(CharRange::new(
+                    tree_len, pos,
+                )));
             }
-            runs.push(IntervalRun::default(pos, pos + len));
+            runs.push(IntervalRun::default_in_char_range(
+                CharRange::from_start_len(pos, len),
+            ));
             *self = Self::from_runs_preserving_shape(runs);
             return;
         }
@@ -751,7 +762,9 @@ impl IntervalTree {
 
             if run.start() >= pos {
                 if !inserted {
-                    adjusted.push(IntervalRun::default(pos, pos + len));
+                    adjusted.push(IntervalRun::default_in_char_range(
+                        CharRange::from_start_len(pos, len),
+                    ));
                     let mut shifted = run;
                     shifted.shift_by(len);
                     adjusted.push(shifted);
@@ -766,16 +779,17 @@ impl IntervalTree {
 
             if run.is_empty_plist() {
                 let mut extended = run;
-                extended.set_end(extended.end() + len);
+                extended.set_end(extended.end().add_len(len));
                 adjusted.push(extended);
             } else {
                 let right_plist = plist_value_from_pairs(&plist_pairs(run.plist));
                 let mut left = run.clone();
                 left.set_end(pos);
-                let inserted_run = IntervalRun::default(pos, pos + len);
+                let inserted_run =
+                    IntervalRun::default_in_char_range(CharRange::from_start_len(pos, len));
                 let mut right = run;
-                right.set_start(pos + len);
-                right.set_end(right.end() + len);
+                right.set_start(pos.add_len(len));
+                right.set_end(right.end().add_len(len));
                 right.plist = right_plist;
                 right.refresh_cache();
                 adjusted.push(left);
@@ -789,22 +803,21 @@ impl IntervalTree {
     }
 
     fn split_at(&mut self, pos: CharPos0) -> Option<IntervalId> {
-        let raw_pos = pos.get();
-        if raw_pos == 0 {
+        if pos == CharPos0::ZERO {
             return self.find_id(CharPos0::ZERO).map(|(_, id)| id);
         }
 
         let (start, id) = self.find_id(pos)?;
-        let len = self.node_len(id).get();
-        if raw_pos == start {
+        let len = self.node_len(id);
+        if pos == start {
             return Some(id);
         }
-        if raw_pos >= start + len {
+        if pos >= start.add_len(len) {
             return self.next_id(id);
         }
 
-        let offset = raw_pos - start;
-        let new_len = len - offset;
+        let offset = pos.get() - start.get();
+        let new_len = len.get() - offset;
         let old_right = self.nodes[id.0].right;
         let plist = plist_value_from_pairs(&plist_pairs(self.nodes[id.0].plist));
         let mut new = IntervalNode::with_cached(
@@ -829,7 +842,10 @@ impl IntervalTree {
         self.find_id(pos).map(|(_, id)| id)
     }
 
-    fn intervals_overlapping_after_splits(&mut self, range: CharRange) -> Vec<(usize, IntervalId)> {
+    fn intervals_overlapping_after_splits(
+        &mut self,
+        range: CharRange,
+    ) -> Vec<(CharPos0, IntervalId)> {
         if range.is_empty() {
             return Vec::new();
         }
@@ -844,7 +860,7 @@ impl IntervalTree {
     fn existing_intervals_overlapping_after_splits(
         &mut self,
         range: CharRange,
-    ) -> Vec<(usize, IntervalId)> {
+    ) -> Vec<(CharPos0, IntervalId)> {
         if range.is_empty() || self.root.is_none() {
             return Vec::new();
         }
@@ -1032,7 +1048,7 @@ impl IntervalTree {
         None
     }
 
-    fn remove_rightmost_interval(&mut self) -> Option<usize> {
+    fn remove_rightmost_interval(&mut self) -> Option<CharLen> {
         let root = self.root?;
         let id = self.rightmost_id(root);
         let removed_len = self.node_len(id);
@@ -1054,7 +1070,7 @@ impl IntervalTree {
             }
         }
 
-        Some(removed_len.get())
+        Some(removed_len)
     }
 
     fn prune_trailing_empty_intervals(&mut self) {
@@ -1082,85 +1098,81 @@ impl IntervalTree {
 
     fn runs(&self) -> Vec<IntervalRun> {
         let mut runs = Vec::new();
-        self.push_runs(self.root, 0, &mut runs);
+        self.push_runs(self.root, CharPos0::ZERO, &mut runs);
         runs
     }
 
-    fn push_runs(&self, id: Option<IntervalId>, base: usize, runs: &mut Vec<IntervalRun>) -> usize {
+    fn push_runs(
+        &self,
+        id: Option<IntervalId>,
+        base: CharPos0,
+        runs: &mut Vec<IntervalRun>,
+    ) -> CharPos0 {
         let Some(id) = id else {
             return base;
         };
         let node = &self.nodes[id.0];
         let after_left = self.push_runs(node.left, base, runs);
         let length = self.node_len(id);
-        runs.push(IntervalRun::from_node(
-            CharPos0::new(after_left),
-            node,
-            length,
-        ));
-        self.push_runs(node.right, after_left + length.get(), runs)
+        runs.push(IntervalRun::from_node(after_left, node, length));
+        self.push_runs(node.right, after_left.add_len(length), runs)
     }
 
-    fn find(&self, pos: CharPos0) -> Option<(usize, &IntervalNode)> {
+    fn find(&self, pos: CharPos0) -> Option<(CharPos0, &IntervalNode)> {
         let (start, id) = self.find_id(pos)?;
         Some((start, &self.nodes[id.0]))
     }
 
-    fn find_id(&self, pos: CharPos0) -> Option<(usize, IntervalId)> {
-        let pos = pos.get();
+    fn find_id(&self, pos: CharPos0) -> Option<(CharPos0, IntervalId)> {
         let mut id = self.root?;
-        let mut base = 0;
+        let mut base = CharPos0::ZERO;
         loop {
             let node = &self.nodes[id.0];
-            let left_len = self.subtree_len(node.left).get();
-            let node_start = base + left_len;
-            let node_len = self.node_len(id).get();
+            let left_len = self.subtree_len(node.left);
+            let node_start = base.add_len(left_len);
+            let node_len = self.node_len(id);
             if pos < node_start {
                 id = node.left?;
-            } else if pos < node_start + node_len {
+            } else if pos < node_start.add_len(node_len) {
                 return Some((node_start, id));
             } else {
-                base = node_start + node_len;
+                base = node_start.add_len(node_len);
                 id = node.right?;
             }
         }
     }
 
-    fn first_id_after(&self, current: CharPos0) -> Option<(usize, IntervalId)> {
+    fn first_id_after(&self, current: CharPos0) -> Option<(CharPos0, IntervalId)> {
         let mut best = None;
-        self.find_first_id_after(self.root, 0, current.get(), &mut best);
+        self.find_first_id_after(self.root, CharPos0::ZERO, current, &mut best);
         best
     }
 
-    fn first_start_after(&self, current: CharPos0) -> Option<usize> {
+    fn first_start_after(&self, current: CharPos0) -> Option<CharPos0> {
         self.first_id_after(current).map(|(start, _)| start)
     }
 
-    fn first_id_overlapping(&self, range: CharRange) -> Option<(usize, IntervalId)> {
+    fn first_id_overlapping(&self, range: CharRange) -> Option<(CharPos0, IntervalId)> {
         if range.is_empty() {
             return None;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
         if let Some((interval_start, id)) = self.find_id(range.start())
-            && self.interval_end(interval_start, id) > start
+            && self.interval_end(interval_start, id) > range.start()
         {
             return Some((interval_start, id));
         }
         self.first_id_after(range.start())
-            .filter(|(next_start, _)| *next_start < end)
+            .filter(|(next_start, _)| *next_start < range.end())
     }
 
-    fn ids_overlapping(&self, range: CharRange) -> Vec<(usize, IntervalId)> {
+    fn ids_overlapping(&self, range: CharRange) -> Vec<(CharPos0, IntervalId)> {
         let mut result = Vec::new();
-        let start = range.start_usize();
-        let end = range.end_usize();
         let Some((mut node_start, mut id)) = self.first_id_overlapping(range) else {
             return result;
         };
-        while node_start < end {
+        while node_start < range.end() {
             let node_end = self.interval_end(node_start, id);
-            if node_end > start {
+            if node_end > range.start() {
                 result.push((node_start, id));
             }
             let Some(next_id) = self.next_id(id) else {
@@ -1175,17 +1187,17 @@ impl IntervalTree {
     fn find_first_id_after(
         &self,
         id: Option<IntervalId>,
-        base: usize,
-        current: usize,
-        best: &mut Option<(usize, IntervalId)>,
+        base: CharPos0,
+        current: CharPos0,
+        best: &mut Option<(CharPos0, IntervalId)>,
     ) {
         let Some(id) = id else {
             return;
         };
         let node = &self.nodes[id.0];
-        let left_len = self.subtree_len(node.left).get();
-        let node_start = base + left_len;
-        let node_len = self.node_len(id).get();
+        let left_len = self.subtree_len(node.left);
+        let node_start = base.add_len(left_len);
+        let node_len = self.node_len(id);
         if node_start > current {
             let replace = best.is_none_or(|(old_start, _)| node_start < old_start);
             if replace {
@@ -1193,7 +1205,7 @@ impl IntervalTree {
             }
             self.find_first_id_after(node.left, base, current, best);
         } else {
-            self.find_first_id_after(node.right, node_start + node_len, current, best);
+            self.find_first_id_after(node.right, node_start.add_len(node_len), current, best);
         }
     }
 }
@@ -1264,12 +1276,12 @@ impl TextPropertyTable {
     // -- Query helpers -------------------------------------------------------
 
     /// Find the interval containing `pos`, returning its (start, node) pair.
-    fn find_interval(&self, pos: CharPos0) -> Option<(usize, &IntervalNode)> {
+    fn find_interval(&self, pos: CharPos0) -> Option<(CharPos0, &IntervalNode)> {
         self.intervals.find(pos)
     }
 
     /// Find the interval containing `pos`, returning mutable (start, node).
-    fn find_interval_mut(&mut self, pos: CharPos0) -> Option<(usize, &mut IntervalNode)> {
+    fn find_interval_mut(&mut self, pos: CharPos0) -> Option<(CharPos0, &mut IntervalNode)> {
         let (start, id) = self.intervals.find_id(pos)?;
         Some((start, &mut self.intervals.nodes[id.0]))
     }
@@ -1280,7 +1292,7 @@ impl TextPropertyTable {
     /// with `next_interval`; they don't scan from the beginning of the object.
     /// Keep that traversal shape centralized so callers follow GNU's
     /// interval-access path instead of depending on the tree representation.
-    fn first_interval_overlapping(&self, range: CharRange) -> Option<(usize, IntervalId)> {
+    fn first_interval_overlapping(&self, range: CharRange) -> Option<(CharPos0, IntervalId)> {
         self.intervals.first_id_overlapping(range)
     }
 
@@ -1289,19 +1301,17 @@ impl TextPropertyTable {
         range: CharRange,
         mut f: impl FnMut(usize, usize, &IntervalNode),
     ) {
-        let start = range.start_usize();
-        let end = range.end_usize();
         let Some((mut node_start, mut id)) = self.first_interval_overlapping(range) else {
             return;
         };
         loop {
-            if node_start >= end {
+            if node_start >= range.end() {
                 break;
             }
             let node_end = self.intervals.interval_end(node_start, id);
-            if node_end > start {
+            if node_end > range.start() {
                 let node = &self.intervals.nodes[id.0];
-                f(node_start, node_end, node);
+                f(node_start.get(), node_end.get(), node);
             }
             let Some(next_id) = self.intervals.next_id(id) else {
                 break;
@@ -1316,18 +1326,16 @@ impl TextPropertyTable {
         range: CharRange,
         mut predicate: impl FnMut(usize, &IntervalNode) -> bool,
     ) -> bool {
-        let start = range.start_usize();
-        let end = range.end_usize();
         let Some((mut node_start, mut id)) = self.first_interval_overlapping(range) else {
             return false;
         };
         loop {
-            if node_start >= end {
+            if node_start >= range.end() {
                 return false;
             }
             let node_end = self.intervals.interval_end(node_start, id);
             let node = &self.intervals.nodes[id.0];
-            if node_end > start && predicate(node_start, node) {
+            if node_end > range.start() && predicate(node_start.get(), node) {
                 return true;
             }
             let Some(next_id) = self.intervals.next_id(id) else {
@@ -1343,19 +1351,17 @@ impl TextPropertyTable {
         range: CharRange,
         mut f: impl FnMut(usize, usize, &IntervalNode) -> Result<(), E>,
     ) -> Result<(), E> {
-        let start = range.start_usize();
-        let end = range.end_usize();
         let Some((mut node_start, mut id)) = self.first_interval_overlapping(range) else {
             return Ok(());
         };
         loop {
-            if node_start >= end {
+            if node_start >= range.end() {
                 break;
             }
             let node_end = self.intervals.interval_end(node_start, id);
-            if node_end > start {
+            if node_end > range.start() {
                 let node = &self.intervals.nodes[id.0];
-                f(node_start, node_end, node)?;
+                f(node_start.get(), node_end.get(), node)?;
             }
             let Some(next_id) = self.intervals.next_id(id) else {
                 break;
@@ -1386,8 +1392,8 @@ impl TextPropertyTable {
         self.intervals = IntervalTree::from_runs_preserving_shape(runs);
     }
 
-    fn split_runs_at(runs: &mut Vec<IntervalRun>, pos: usize) {
-        if pos == 0 {
+    fn split_runs_at(runs: &mut Vec<IntervalRun>, pos: CharPos0) {
+        if pos == CharPos0::ZERO {
             return;
         }
         let Some(index) = runs
@@ -1406,10 +1412,13 @@ impl TextPropertyTable {
         runs.insert(index + 1, right);
     }
 
-    fn ensure_runs_cover(runs: &mut Vec<IntervalRun>, end: usize) {
-        let current_end = runs.last().map(IntervalRun::end).unwrap_or(0);
+    fn ensure_runs_cover(runs: &mut Vec<IntervalRun>, end: CharPos0) {
+        let current_end = runs.last().map(IntervalRun::end).unwrap_or(CharPos0::ZERO);
         if current_end < end {
-            runs.push(IntervalRun::default(current_end, end));
+            runs.push(IntervalRun::default_in_char_range(CharRange::new(
+                current_end,
+                end,
+            )));
         }
     }
 
@@ -1473,11 +1482,9 @@ impl TextPropertyTable {
         if range.is_empty() {
             return false;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(end)));
+            .ensure_cover(CharPos0::new(object_len.get().max(range.end_usize())));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
@@ -1521,7 +1528,7 @@ impl TextPropertyTable {
         };
         let node = &self.intervals.nodes[id.0];
         let end = self.intervals.interval_end(start, id);
-        PropertyInterval::from_plist(start, end, &plist_pairs(node.plist)).properties
+        PropertyInterval::from_plist(start.get(), end.get(), &plist_pairs(node.plist)).properties
     }
 
     pub fn get_properties_ordered_at_char_pos(&self, pos: CharPos0) -> Vec<(Value, Value)> {
@@ -1562,14 +1569,12 @@ impl TextPropertyTable {
         if range.is_empty() || properties.is_empty() {
             return true;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
 
         let Some((mut interval_start, mut id)) = self.intervals.find_id(range.start()) else {
             return false;
         };
-        let mut cursor = start;
-        while cursor < end {
+        let mut cursor = range.start();
+        while cursor < range.end() {
             let node = &self.intervals.nodes[id.0];
             for (name, value) in properties {
                 let Some(existing) = plist_value_get(node.plist, *name) else {
@@ -1583,8 +1588,8 @@ impl TextPropertyTable {
             if node_end <= cursor {
                 return false;
             }
-            cursor = node_end.min(end);
-            if cursor < end {
+            cursor = node_end.min(range.end());
+            if cursor < range.end() {
                 let Some(next_id) = self.intervals.next_id(id) else {
                     return false;
                 };
@@ -1679,21 +1684,18 @@ impl TextPropertyTable {
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
 
         self.intervals.ensure_cover(range.end());
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
-        let mut cursor = start;
+        let mut cursor = range.start();
         let mut first = true;
-        while cursor < end {
-            let Some((node_start, id)) = self.intervals.find_id(CharPos0::new(cursor)) else {
+        while cursor < range.end() {
+            let Some((node_start, id)) = self.intervals.find_id(cursor) else {
                 break;
             };
-            let node_len = self.intervals.node_len(id);
-            let node_end = node_start + node_len.get();
+            let node_end = self.intervals.interval_end(node_start, id);
             self.intervals
                 .set_node_plist(id, plist_value_from_pairs(&plist));
             if first {
@@ -1735,22 +1737,20 @@ impl TextPropertyTable {
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(end)));
+            .ensure_cover(CharPos0::new(object_len.get().max(range.end_usize())));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
         let new_plist = plist_value_from_pairs(&plist);
-        let mut cursor = start;
+        let mut cursor = range.start();
         let mut first = true;
-        while cursor < end {
-            let Some((node_start, id)) = self.intervals.find_id(CharPos0::new(cursor)) else {
+        while cursor < range.end() {
+            let Some((node_start, id)) = self.intervals.find_id(cursor) else {
                 break;
             };
-            let node_end = node_start + self.intervals.node_len(id).get();
+            let node_end = self.intervals.interval_end(node_start, id);
             self.intervals.set_node_plist(id, new_plist);
             if first {
                 first = false;
@@ -1825,10 +1825,10 @@ impl TextPropertyTable {
 
     fn next_interval_boundary_raw(&self, pos: CharPos0) -> Option<CharPos0> {
         if let Some((start, id)) = self.intervals.find_id(pos) {
-            return Some(CharPos0::new(start + self.intervals.node_len(id).get()));
+            return Some(self.intervals.interval_end(start, id));
         }
 
-        self.intervals.first_start_after(pos).map(CharPos0::new)
+        self.intervals.first_start_after(pos)
     }
 
     /// Return the previous raw interval boundary before `pos`.
@@ -1843,7 +1843,7 @@ impl TextPropertyTable {
 
         let scan_pos = CharPos0::new(pos.get() - 1);
         if let Some((start, _)) = self.intervals.find_id(scan_pos) {
-            return Some(CharPos0::new(start));
+            return Some(start);
         }
 
         let tree_len = self.intervals.len().get();
@@ -1904,7 +1904,11 @@ impl TextPropertyTable {
             .into_iter()
             .filter(|run| !run.is_empty_plist())
             .map(|run| {
-                PropertyInterval::from_plist(run.start(), run.end(), &plist_pairs(run.plist))
+                PropertyInterval::from_plist(
+                    run.start_usize(),
+                    run.end_usize(),
+                    &plist_pairs(run.plist),
+                )
             })
             .collect()
     }
@@ -1948,8 +1952,8 @@ impl TextPropertyTable {
         let mut runs = Vec::new();
         let mut cursor = 0;
         for run in self.intervals.runs() {
-            let start = run.start().min(len);
-            let end = run.end().min(len);
+            let start = run.start_usize().min(len);
+            let end = run.end_usize().min(len);
             if cursor < start {
                 runs.push((cursor, start, Value::NIL));
             }
@@ -1982,16 +1986,14 @@ impl TextPropertyTable {
         if range.is_empty() {
             return None;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
         let (mut key, mut id) = self.first_interval_overlapping(range)?;
         loop {
-            if key >= end {
+            if key >= range.end() {
                 return None;
             }
             let node = &self.intervals.nodes[id.0];
             if plist_value_get(node.plist, name).is_some_and(|found| eq_value(&found, &value)) {
-                return Some(CharPos0::new(key.max(start)));
+                return Some(key.max(range.start()));
             }
             let next_key = self.intervals.interval_end(key, id);
             let Some(next_id) = self.intervals.next_id(id) else {
@@ -2037,14 +2039,10 @@ impl TextPropertyTable {
         let containing_end = self
             .intervals
             .find_id(pos)
-            .map(|(start, id)| CharPos0::new(start + self.intervals.node_len(id).get()))
-            .or_else(|| self.intervals.first_start_after(pos).map(CharPos0::new))
+            .map(|(start, id)| self.intervals.interval_end(start, id))
+            .or_else(|| self.intervals.first_start_after(pos))
             .unwrap_or(end);
-        let next_start = self
-            .intervals
-            .first_start_after(pos)
-            .map(CharPos0::new)
-            .unwrap_or(end);
+        let next_start = self.intervals.first_start_after(pos).unwrap_or(end);
         containing_end.min(next_start).min(end)
     }
 
@@ -2140,7 +2138,6 @@ impl TextPropertyTable {
     }
 
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
-        let offset = offset.get();
         let mut runs = self.intervals.runs();
         for mut run in other.intervals.runs() {
             run.shift_by(offset);
@@ -2162,14 +2159,13 @@ impl TextPropertyTable {
         other: &TextPropertyTable,
         offset: CharLen,
     ) {
-        let offset = offset.get();
         for run in other.intervals.runs() {
             if run.is_empty_plist() {
                 continue;
             }
             for (name, value) in plist_pairs(run.plist) {
                 self.put_property_in_char_range(
-                    CharRange::from_usize(run.start() + offset, run.end() + offset),
+                    CharRange::new(run.start().add_len(offset), run.end().add_len(offset)),
                     name,
                     value,
                 );
@@ -2186,14 +2182,13 @@ impl TextPropertyTable {
     }
 
     fn merge_missing_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
-        let offset = offset.get();
         let mut target_runs = self.intervals.runs();
         for source in other.intervals.runs() {
             if source.is_empty_plist() {
                 continue;
             }
-            let shifted_start = source.start() + offset;
-            let shifted_end = source.end() + offset;
+            let shifted_start = source.start().add_len(offset);
+            let shifted_end = source.end().add_len(offset);
 
             Self::ensure_runs_cover(&mut target_runs, shifted_end);
             Self::split_runs_at(&mut target_runs, shifted_start);
@@ -2219,8 +2214,8 @@ impl TextPropertyTable {
 
     fn merge_adjacent_equal_properties_around(&mut self, range: CharRange) {
         let mut runs = self.intervals.runs();
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start();
+        let end = range.end();
         if start > end || runs.len() < 2 {
             return;
         }
@@ -2268,7 +2263,7 @@ impl TextPropertyTable {
         self.intervals
             .runs()
             .into_iter()
-            .map(|run| (run.start(), run.end(), run.is_empty_plist()))
+            .map(|run| (run.start_usize(), run.end_usize(), run.is_empty_plist()))
             .collect()
     }
 
