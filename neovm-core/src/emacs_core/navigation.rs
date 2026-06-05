@@ -518,7 +518,7 @@ pub(crate) fn builtin_bobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
     expect_args("bobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     Ok(Value::bool_val(
-        buf.point_byte() == buf.accessible_emacs_byte_region().start_usize(),
+        buf.point_emacs_byte_pos() == buf.accessible_emacs_byte_region().start(),
     ))
 }
 
@@ -527,7 +527,7 @@ pub(crate) fn builtin_eobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
     expect_args("eobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     Ok(Value::bool_val(
-        buf.point_byte() == buf.accessible_emacs_byte_region().end_usize(),
+        buf.point_emacs_byte_pos() == buf.accessible_emacs_byte_region().end(),
     ))
 }
 
@@ -535,13 +535,13 @@ pub(crate) fn builtin_eobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("bolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.point_byte() == buf.accessible_emacs_byte_region().start_usize() {
+    let point = buf.point_emacs_byte_pos();
+    if point == buf.accessible_emacs_byte_region().start() {
         return Ok(Value::T);
     }
     Ok(Value::bool_val(
-        buf.point_byte() == 0
-            || buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(buf.point_byte()))
-                == Some('\n' as u32),
+        point == EmacsBytePos::ZERO
+            || buf.char_code_before_emacs_byte_pos(point) == Some('\n' as u32),
     ))
 }
 
@@ -549,10 +549,11 @@ pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 pub(crate) fn builtin_eolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("eolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.point_byte() == buf.accessible_emacs_byte_region().end_usize() {
+    let point = buf.point_emacs_byte_pos();
+    if point == buf.accessible_emacs_byte_region().end() {
         return Ok(Value::T);
     }
-    match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())) {
+    match buf.char_code_after_emacs_byte_pos(point) {
         Some(code) if code == '\n' as u32 => Ok(Value::T),
         _ => Ok(Value::NIL),
     }
@@ -576,7 +577,8 @@ pub(crate) fn pos_bol_compute(
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start_usize();
     let zv = accessible.end_usize();
-    let mut pos = buf.point_byte();
+    let point = buf.point_emacs_byte_pos();
+    let mut pos = point.get();
     let mut moved: i64 = 0;
     if scan_count != 0 {
         let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, scan_count, begv, zv);
@@ -595,7 +597,7 @@ pub(crate) fn pos_bol_compute(
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(bol)),
-        byte_to_char_pos(buf, EmacsBytePos::new(buf.point_byte())),
+        byte_to_char_pos(buf, point),
         moved,
     ))
 }
@@ -612,7 +614,8 @@ pub(crate) fn pos_eol_compute(
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start_usize();
     let zv = accessible.end_usize();
-    let mut pos = buf.point_byte();
+    let point = buf.point_emacs_byte_pos();
+    let mut pos = point.get();
     let mut moved = 0;
     let delta = scan_count.saturating_sub(1);
     if delta != 0 {
@@ -627,7 +630,7 @@ pub(crate) fn pos_eol_compute(
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(eol)),
-        byte_to_char_pos(buf, EmacsBytePos::new(buf.point_byte())),
+        byte_to_char_pos(buf, point),
     ))
 }
 
@@ -683,7 +686,7 @@ pub(crate) fn builtin_line_number_at_pos(
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
     let current_buffer_id = buf.id;
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        EmacsBytePos::new(buf.point_byte())
+        buf.point_emacs_byte_pos()
     } else {
         match args[0].kind() {
             ValueKind::Veclike(VecLikeType::Marker) => {

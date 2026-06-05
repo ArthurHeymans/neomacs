@@ -1215,8 +1215,9 @@ fn following_char_value(ctx: &crate::emacs_core::eval::Context) -> EvalResult {
     match ctx.buffers.current_buffer() {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
-            match (buf.point_byte() < accessible.end_usize())
-                .then(|| buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())))
+            let point = buf.point_emacs_byte_pos();
+            match (point < accessible.end())
+                .then(|| buf.char_code_after_emacs_byte_pos(point))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),
@@ -1236,8 +1237,9 @@ pub(crate) fn builtin_preceding_char(
     match ctx.buffers.current_buffer() {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
-            match (buf.point_byte() > accessible.start_usize())
-                .then(|| buf.char_code_before_emacs_byte_pos(EmacsBytePos::new(buf.point_byte())))
+            let point = buf.point_emacs_byte_pos();
+            match (point > accessible.start())
+                .then(|| buf.char_code_before_emacs_byte_pos(point))
                 .flatten()
             {
                 Some(code) => Ok(Value::fixnum(code as i64)),
