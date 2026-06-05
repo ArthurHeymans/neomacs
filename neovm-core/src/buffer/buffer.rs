@@ -2059,7 +2059,7 @@ impl Buffer {
 
     /// Current point as a paired character/byte anchor.
     pub fn point_anchor(&self) -> TextPositionAnchor {
-        TextPositionAnchor::from_usize(self.pt, self.pt_byte)
+        TextPositionAnchor::new(self.point_char_pos(), self.point_emacs_byte_pos())
     }
 
     /// Restore point from a paired character/byte anchor.
@@ -2234,7 +2234,10 @@ impl Buffer {
 
     /// Accessible buffer range in Emacs bytes, respecting narrowing.
     pub fn accessible_emacs_byte_range(&self) -> EmacsByteRange {
-        EmacsByteRange::from_usize(self.begv_byte, self.zv_byte)
+        EmacsByteRange::new(
+            self.point_min_emacs_byte_pos(),
+            self.point_max_emacs_byte_pos(),
+        )
     }
 
     /// Accessible buffer bounds in Emacs bytes, preserving the narrowing
@@ -2795,9 +2798,9 @@ impl Buffer {
     pub fn accessible_region_snapshot(&self) -> AccessibleBufferRegionSnapshot {
         AccessibleBufferRegionSnapshot {
             start_char: self.point_min_char_pos(),
-            start_emacs_byte: EmacsBytePos::new(self.begv_byte),
+            start_emacs_byte: self.point_min_emacs_byte_pos(),
             end_char: self.point_max_char_pos(),
-            end_emacs_byte: EmacsBytePos::new(self.zv_byte),
+            end_emacs_byte: self.point_max_emacs_byte_pos(),
         }
     }
 
