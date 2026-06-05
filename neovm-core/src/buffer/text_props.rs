@@ -39,26 +39,26 @@ pub struct PropertyInterval {
 }
 
 impl PropertyInterval {
-    fn new(start: usize, end: usize) -> Self {
+    fn new(range: CharRange) -> Self {
         Self {
-            start,
-            end,
+            start: range.start_usize(),
+            end: range.end_usize(),
             properties: HashMap::new(),
             key_order: Vec::new(),
         }
     }
 
-    pub fn with_properties(start: usize, end: usize, properties: HashMap<Value, Value>) -> Self {
+    pub fn with_properties(range: CharRange, properties: HashMap<Value, Value>) -> Self {
         let key_order: Vec<Value> = properties.keys().copied().collect();
         Self {
-            start,
-            end,
+            start: range.start_usize(),
+            end: range.end_usize(),
             properties,
             key_order,
         }
     }
 
-    fn from_plist(start: usize, end: usize, plist: &[(Value, Value)]) -> Self {
+    fn from_plist(range: CharRange, plist: &[(Value, Value)]) -> Self {
         let mut properties = HashMap::new();
         for (key, value) in plist.iter().rev() {
             properties.insert(*key, *value);
@@ -70,8 +70,8 @@ impl PropertyInterval {
             }
         }
         Self {
-            start,
-            end,
+            start: range.start_usize(),
+            end: range.end_usize(),
             properties,
             key_order,
         }
@@ -99,6 +99,28 @@ impl PropertyInterval {
         self.key_order
             .iter()
             .filter_map(move |key| self.properties.get(key).map(|value| (*key, value)))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TextPropertyPlistRun {
+    range: CharRange,
+    plist: Vec<(Value, Value)>,
+}
+
+impl TextPropertyPlistRun {
+    pub(crate) fn new(range: CharRange, plist: Vec<(Value, Value)>) -> Self {
+        Self { range, plist }
+    }
+
+    pub(crate) fn range(&self) -> CharRange {
+        self.range
+    }
+
+    fn into_interval_run(self) -> Option<IntervalRun> {
+        (!self.range.is_empty()).then(|| {
+            IntervalRun::new_in_char_range(self.range, plist_value_from_pairs(&self.plist))
+        })
     }
 }
 
@@ -307,10 +329,6 @@ struct IntervalRun {
 }
 
 impl IntervalRun {
-    fn new(start: usize, end: usize, plist: IntervalPlist) -> Self {
-        Self::new_in_char_range(CharRange::from_usize(start, end), plist)
-    }
-
     fn default_in_char_range(range: CharRange) -> Self {
         Self::new_in_char_range(range, Value::NIL)
     }
@@ -1494,13 +1512,10 @@ impl TextPropertyTable {
         changed
     }
 
-    pub(crate) fn from_plist_runs(runs: Vec<(usize, usize, Vec<(Value, Value)>)>) -> Self {
+    pub(crate) fn from_plist_runs(runs: Vec<TextPropertyPlistRun>) -> Self {
         Self::from_interval_runs_preserving_shape(
             runs.into_iter()
-                .filter(|(start, end, _)| start < end)
-                .map(|(start, end, plist)| {
-                    IntervalRun::new(start, end, plist_value_from_pairs(&plist))
-                })
+                .filter_map(TextPropertyPlistRun::into_interval_run)
                 .collect(),
         )
     }
@@ -1524,7 +1539,8 @@ impl TextPropertyTable {
         };
         let node = &self.intervals.nodes[id.0];
         let end = self.intervals.interval_end(start, id);
-        PropertyInterval::from_plist(start.get(), end.get(), &plist_pairs(node.plist)).properties
+        PropertyInterval::from_plist(CharRange::new(start, end), &plist_pairs(node.plist))
+            .properties
     }
 
     pub fn get_properties_ordered_at_char_pos(&self, pos: CharPos0) -> Vec<(Value, Value)> {
@@ -1901,8 +1917,7 @@ impl TextPropertyTable {
             .filter(|run| !run.is_empty_plist())
             .map(|run| {
                 PropertyInterval::from_plist(
-                    run.start_usize(),
-                    run.end_usize(),
+                    CharRange::from_usize(run.start_usize(), run.end_usize()),
                     &plist_pairs(run.plist),
                 )
             })
@@ -2088,12 +2103,15 @@ impl TextPropertyTable {
         let start = range.start_usize();
         let end = range.end_usize();
 
-        let mut runs: Vec<(usize, usize, Vec<(Value, Value)>)> = Vec::new();
+        let mut runs = Vec::new();
         self.for_each_interval_overlapping(range, |interval_start, node_end, node| {
             let new_start = interval_start.max(start) - start;
             let new_end = node_end.min(end) - start;
             if new_start < new_end {
-                runs.push((new_start, new_end, plist_pairs(node.plist)));
+                runs.push(TextPropertyPlistRun::new(
+                    CharRange::from_usize(new_start, new_end),
+                    plist_pairs(node.plist),
+                ));
             }
         });
 
@@ -2269,9 +2287,8 @@ impl TextPropertyTable {
                 .into_iter()
                 .filter(|interval| interval.start < interval.end)
                 .map(|interval| {
-                    IntervalRun::new(
-                        interval.start,
-                        interval.end,
+                    IntervalRun::new_in_char_range(
+                        CharRange::from_usize(interval.start, interval.end),
                         plist_value_from_pairs(&interval.into_plist()),
                     )
                 })

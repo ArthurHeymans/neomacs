@@ -25,7 +25,8 @@ use strum::{EnumString, IntoStaticStr};
 
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
-use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
+use crate::buffer::CharRange;
+use crate::buffer::text_props::{PropertyInterval, TextPropertyPlistRun, TextPropertyTable};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
@@ -355,7 +356,10 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
                 }
             }
         }
-        plist_runs.push((run.start, run.end, plist));
+        plist_runs.push(TextPropertyPlistRun::new(
+            CharRange::from_usize(run.start, run.end),
+            plist,
+        ));
     }
 
     if plist_runs.is_empty() {
@@ -364,7 +368,10 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
 
     let mut sorted_bounds: Vec<(usize, usize)> = plist_runs
         .iter()
-        .map(|(start, end, _)| (*start, *end))
+        .map(|run| {
+            let range = run.range();
+            (range.start_usize(), range.end_usize())
+        })
         .collect();
     sorted_bounds.sort_unstable();
     if sorted_bounds
