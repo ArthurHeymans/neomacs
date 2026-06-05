@@ -586,21 +586,8 @@ impl OverlayList {
         self.overlays.is_empty()
     }
 
-    pub fn next_boundary_after(&self, pos: usize) -> Option<usize> {
-        self.next_boundary_after_emacs_byte_pos(EmacsBytePos::new(pos))
-            .map(EmacsBytePos::get)
-    }
-
     pub fn next_boundary_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<EmacsBytePos> {
         self.next_boundary_after_until_emacs_byte_pos(pos, EmacsBytePos::new(usize::MAX))
-    }
-
-    pub fn next_boundary_after_until(&self, pos: usize, limit: usize) -> Option<usize> {
-        self.next_boundary_after_until_emacs_byte_pos(
-            EmacsBytePos::new(pos),
-            EmacsBytePos::new(limit),
-        )
-        .map(EmacsBytePos::get)
     }
 
     pub fn next_boundary_after_until_emacs_byte_pos(
@@ -630,24 +617,11 @@ impl OverlayList {
         boundary.filter(|boundary| *boundary <= limit)
     }
 
-    pub fn previous_boundary_before(&self, pos: usize) -> Option<usize> {
-        self.previous_boundary_before_emacs_byte_pos(EmacsBytePos::new(pos))
-            .map(EmacsBytePos::get)
-    }
-
     pub fn previous_boundary_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
         self.previous_boundary_before_since_emacs_byte_pos(pos, EmacsBytePos::ZERO)
-    }
-
-    pub fn previous_boundary_before_since(&self, pos: usize, limit: usize) -> Option<usize> {
-        self.previous_boundary_before_since_emacs_byte_pos(
-            EmacsBytePos::new(pos),
-            EmacsBytePos::new(limit),
-        )
-        .map(EmacsBytePos::get)
     }
 
     pub fn previous_boundary_before_since_emacs_byte_pos(

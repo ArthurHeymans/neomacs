@@ -401,13 +401,15 @@ fn lookup_buffer_char_property(
 
 fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
     let accessible = buf.accessible_emacs_byte_region();
+    let byte_pos = EmacsBytePos::new(byte_pos);
     let text_next = buf
-        .text_props_next_change_after_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .text_props_next_change_after_emacs_byte_pos(byte_pos)
         .map(EmacsBytePos::get)
         .filter(|next| *next <= accessible.end_usize());
     let overlay_next = buf
         .overlays
-        .next_boundary_after_until(byte_pos, accessible.end_usize());
+        .next_boundary_after_until_emacs_byte_pos(byte_pos, accessible.end())
+        .map(EmacsBytePos::get);
     match (text_next, overlay_next) {
         (Some(text), Some(overlay)) => Some(text.min(overlay)),
         (Some(text), None) => Some(text),
@@ -418,13 +420,15 @@ fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Op
 
 fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
     let accessible = buf.accessible_emacs_byte_region();
+    let byte_pos = EmacsBytePos::new(byte_pos);
     let text_prev = buf
-        .text_props_previous_change_before_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+        .text_props_previous_change_before_emacs_byte_pos(byte_pos)
         .map(EmacsBytePos::get)
         .filter(|prev| *prev >= accessible.start_usize());
     let overlay_prev = buf
         .overlays
-        .previous_boundary_before_since(byte_pos, accessible.start_usize());
+        .previous_boundary_before_since_emacs_byte_pos(byte_pos, accessible.start())
+        .map(EmacsBytePos::get);
     match (text_prev, overlay_prev) {
         (Some(text), Some(overlay)) => Some(text.max(overlay)),
         (Some(text), None) => Some(text),

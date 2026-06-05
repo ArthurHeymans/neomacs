@@ -301,7 +301,7 @@ fn insert_fragmented_current_buffer_text(eval: &mut Context, text: &str) {
         if let Some(pos) = text.find(marker) {
             buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
             buffer.insert("tmp");
-            buffer.delete_region(pos, pos + "tmp".len());
+            buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(pos, pos + "tmp".len()));
         }
     }
 
@@ -655,9 +655,7 @@ fn multiline_overlay_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
                 Value::symbol("after-string"),
                 Value::string("A\nB"),
             );
-            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(
-                buffer.point_max_byte(),
-            ));
+            buffer.goto_emacs_byte_pos(buffer.point_max_emacs_byte_pos());
         },
     )
 }
@@ -882,7 +880,7 @@ fn edit_redisplay_backend_layout_trace(
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
-        buffer.delete_region(start, end);
+        buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
@@ -973,7 +971,7 @@ fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> Fontificatio
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
-        buffer.delete_region(start, end);
+        buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
@@ -6138,7 +6136,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
-        let eob = buf.point_max_byte();
+        let eob = buf.point_max_emacs_byte_pos().get();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
             serial: 0,
             plist: Value::NIL,
@@ -6200,7 +6198,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
         .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        let eob = buf.point_max_byte();
+        let eob = buf.point_max_emacs_byte_pos().get();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
             serial: 0,
             plist: Value::NIL,
@@ -6307,7 +6305,7 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
             .get_mut(minibuf_id)
             .expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
-        let eob = buf.point_max_byte();
+        let eob = buf.point_max_emacs_byte_pos().get();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
             serial: 0,
             plist: Value::NIL,

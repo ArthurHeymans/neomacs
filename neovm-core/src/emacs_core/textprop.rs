@@ -2616,9 +2616,9 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
     let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
-        .next_boundary_after_until(byte_pos.get(), accessible.end_usize())
+        .next_boundary_after_until_emacs_byte_pos(byte_pos, accessible.end())
     {
-        Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
+        Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next.get()))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(
             buf,
             accessible.end_usize(),
@@ -2649,9 +2649,9 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
     let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
-        .previous_boundary_before_since(byte_pos.get(), accessible.start_usize())
+        .previous_boundary_before_since_emacs_byte_pos(byte_pos, accessible.start())
     {
-        Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
+        Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev.get()))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(
             buf,
             accessible.start_usize(),

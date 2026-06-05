@@ -953,7 +953,7 @@ fn test_layout_buffer_snapshot_preserves_byte_bounds_for_multibyte_text() {
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     assert_eq!(buf.point_max_char(), 5);
-    assert_eq!(buf.point_max_byte(), 9);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 9);
 
     let snapshot = LayoutBufferSnapshot::from_buffer(buf);
     let access = RustBufferAccess::new(&snapshot);
@@ -1047,7 +1047,7 @@ fn fragmented_snapshot_backend_trace(kind: BufferTextBackendKind) -> LayoutSnaps
         let pos = text.find(marker).expect("marker");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
         buf.insert("tmp");
-        buf.delete_region(pos, pos + "tmp".len());
+        buf.delete_emacs_byte_range(EmacsByteRange::from_usize(pos, pos + "tmp".len()));
     }
     assert_eq!(buf.buffer_string(), text);
 
@@ -1356,7 +1356,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
             )
             .unwrap();
 
-        let eob = buf.point_max_byte();
+        let eob = buf.point_max_emacs_byte_pos().get();
         let eob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
             serial: 0,
             plist: Value::NIL,
@@ -1416,7 +1416,7 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
     {
         let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
         buf.insert("prompt");
-        let eob = buf.point_max_byte();
+        let eob = buf.point_max_emacs_byte_pos().get();
 
         for (window_id, text) in [
             (Some(1_u64), "LOCAL"),

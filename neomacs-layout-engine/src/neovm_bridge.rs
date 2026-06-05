@@ -1724,8 +1724,8 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let next_overlay_change = self
             .buffer
             .layout_overlays()
-            .next_boundary_after(bytepos.get())
-            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(next)))
+            .next_boundary_after_emacs_byte_pos(bytepos)
+            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or(self.buffer.layout_point_max_char());
         let next_change = next_text_change.min(next_overlay_change);
 
@@ -2649,11 +2649,11 @@ impl FaceResolver {
 
         // Also consider overlay boundaries so next_check doesn't skip past
         // positions where an overlay starts or ends.
-        if let Some(nb) = buffer.layout_overlays().next_boundary_after(bytepos.get()) {
-            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(
-                buffer,
-                EmacsBytePos::new(nb),
-            ));
+        if let Some(nb) = buffer
+            .layout_overlays()
+            .next_boundary_after_emacs_byte_pos(bytepos)
+        {
+            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nb));
         }
 
         *next_check = min_next;
