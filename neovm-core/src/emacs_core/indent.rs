@@ -255,10 +255,14 @@ fn scan_for_column(
                 .buffers
                 .get(buffer_id)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            let Some(code) = buf.char_code_after(scan) else {
+            let scan_pos = EmacsBytePos::new(scan);
+            let Some(code) = buf.char_code_after_emacs_byte_pos(scan_pos) else {
                 break;
             };
-            let char_len = buf.char_after_emacs_len(scan).unwrap_or(1).max(1);
+            let char_len = buf
+                .char_after_emacs_byte_len(scan_pos)
+                .map(|len| len.get().max(1))
+                .unwrap_or(1);
             let width = buffer_char_display_width(buf, scan, code);
             (code, char_len, width)
         };
@@ -393,25 +397,33 @@ fn delete_horizontal_space_at_point(
 
     let mut left = pt;
     while left > pmin {
-        let Some(ch) = buf.char_before(left) else {
+        let left_pos = EmacsBytePos::new(left);
+        let Some(ch) = buf.char_before_emacs_byte_pos(left_pos) else {
             break;
         };
         if !is_horizontal_space(ch) {
             break;
         }
-        left -= ch.len_utf8();
+        let Some(char_len) = buf.char_before_emacs_byte_len(left_pos) else {
+            break;
+        };
+        left = left.saturating_sub(char_len.get().max(1));
     }
 
     let mut right = pt;
     if !backward_only {
         while right < pmax {
-            let Some(ch) = buf.char_after(right) else {
+            let right_pos = EmacsBytePos::new(right);
+            let Some(ch) = buf.char_after_emacs_byte_pos(right_pos) else {
                 break;
             };
             if !is_horizontal_space(ch) {
                 break;
             }
-            right += ch.len_utf8();
+            let Some(char_len) = buf.char_after_emacs_byte_len(right_pos) else {
+                break;
+            };
+            right += char_len.get().max(1);
         }
     }
 

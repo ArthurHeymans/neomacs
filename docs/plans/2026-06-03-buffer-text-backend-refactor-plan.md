@@ -527,6 +527,8 @@ Completed so far:
   those entry points.
 - Moved charset, insert-hook text property, and selected buffer/symbol
   builtins onto typed buffer character query entry points.
+- Moved indentation column scanning and horizontal-space deletion onto typed
+  buffer character query entry points.
 
 Next work:
 
