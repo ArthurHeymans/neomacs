@@ -535,6 +535,8 @@ Completed so far:
 - Moved syntax scanning and comment/prefix motion onto typed syntax-character
   units that carry Emacs byte start/end positions, eliminating direct
   production use of raw buffer character query helpers in `emacs_core`.
+- Moved dependent layout tests to typed character query APIs and gated raw
+  buffer `usize` character query wrappers to `neovm-core` tests.
 
 Next work:
 

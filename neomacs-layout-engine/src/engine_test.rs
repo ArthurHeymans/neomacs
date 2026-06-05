@@ -299,7 +299,7 @@ fn insert_fragmented_current_buffer_text(eval: &mut Context, text: &str) {
 
     for marker in ["\n", "日本", "Ω"] {
         if let Some(pos) = text.find(marker) {
-            buffer.goto_byte(pos);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
             buffer.insert("tmp");
             buffer.delete_region(pos, pos + "tmp".len());
         }
@@ -586,7 +586,7 @@ fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
         180,
         |buffer, _buf_id, text| {
             let omega_byte = text.find('Ω').expect("omega");
-            buffer.goto_byte(omega_byte);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(omega_byte));
             buffer.set_buffer_local("display-line-numbers", Value::T);
         },
     )
@@ -609,7 +609,7 @@ fn display_replacement_backend_layout_trace(kind: BufferTextBackendKind) -> Back
                 Value::symbol("display"),
                 Value::string("R")
             ));
-            buffer.goto_byte(start + 1);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start + 1));
         },
     )
 }
@@ -626,7 +626,7 @@ fn invisible_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutT
             let start = text.find("hidden").expect("hidden start");
             let end = start + "hidden".len();
             assert!(buffer.put_text_property(start, end, Value::symbol("invisible"), Value::T));
-            buffer.goto_byte(start + 2);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start + 2));
         },
     )
 }
@@ -655,7 +655,9 @@ fn multiline_overlay_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
                 Value::symbol("after-string"),
                 Value::string("A\nB"),
             );
-            buffer.goto_byte(buffer.point_max_byte());
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(
+                buffer.point_max_byte(),
+            ));
         },
     )
 }
@@ -670,7 +672,7 @@ fn bidi_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace 
         140,
         |buffer, _buf_id, text| {
             let alef_byte = text.find('א').expect("alef");
-            buffer.goto_byte(alef_byte);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(alef_byte));
         },
     )
 }
@@ -685,7 +687,7 @@ fn selective_display_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
         180,
         |buffer, _buf_id, _text| {
             buffer.set_buffer_local("selective-display", Value::fixnum(1));
-            buffer.goto_byte(2);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(2));
         },
     )
 }
@@ -700,7 +702,7 @@ fn glyphless_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutT
         140,
         |buffer, _buf_id, text| {
             let c1_byte = text.find('\u{0080}').expect("C1 control");
-            buffer.goto_byte(c1_byte);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(c1_byte));
         },
     )
 }
@@ -715,7 +717,7 @@ fn composition_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayou
         140,
         |buffer, _buf_id, text| {
             let cjk_byte = text.find('中').expect("CJK base char");
-            buffer.goto_byte(cjk_byte);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(cjk_byte));
         },
     )
 }
@@ -739,7 +741,7 @@ fn wrapped_retry_backend_layout_trace(kind: BufferTextBackendKind) -> (BackendLa
         80,
         192,
         |buffer, _buf_id, _text| {
-            buffer.goto_byte(target_pos - 1);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(target_pos - 1));
             buffer.set_buffer_local("word-wrap", Value::T);
         },
         |window| {
@@ -770,7 +772,7 @@ fn point_line_tail_backend_layout_trace(
         80,
         256,
         |buffer, _buf_id, _text| {
-            buffer.goto_byte(point - 1);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
             buffer.set_buffer_local("word-wrap", Value::T);
         },
         |window| {
@@ -802,7 +804,7 @@ fn mode_line_geometry_backend_layout_trace(
         96,
         |buffer, _buf_id, _text| {
             buffer.set_buffer_local("mode-line-format", Value::string("%o|%p|%P"));
-            buffer.goto_byte(point - 1);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
         },
         |window| {
             if let neovm_core::window::Window::Leaf {
@@ -825,7 +827,7 @@ fn hscroll_cursor_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLa
         160,
         120,
         |buffer, _buf_id, _text| {
-            buffer.goto_byte(1);
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
             buffer.set_buffer_local("truncate-lines", Value::T);
         },
         |window| {
@@ -850,7 +852,7 @@ fn edit_redisplay_backend_layout_trace(
     {
         insert_fragmented_current_buffer_text(&mut eval, "alpha beta gamma\n");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.goto_byte(0);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         assert_eq!(buffer.text_backend_kind(), kind);
     }
 
@@ -881,9 +883,9 @@ fn edit_redisplay_backend_layout_trace(
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
         buffer.delete_region(start, end);
-        buffer.goto_byte(start);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
-        buffer.goto_byte(0);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         assert_eq!(buffer.buffer_string(), "alpha BETA gamma\n");
     }
 
@@ -918,7 +920,7 @@ fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> Fontificatio
     {
         insert_fragmented_current_buffer_text(&mut eval, "alpha beta gamma\n");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.goto_byte(0);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         assert_eq!(buffer.text_backend_kind(), kind);
     }
 
@@ -972,9 +974,9 @@ fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> Fontificatio
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
         buffer.delete_region(start, end);
-        buffer.goto_byte(start);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
-        buffer.goto_byte(0);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         assert_eq!(buffer.buffer_string(), "alpha BETA gamma\n");
     }
 
@@ -1251,7 +1253,7 @@ fn layout_frame_rust_publishes_increasing_display_positions() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcd\n");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
     }
     let frame_id = eval
         .frame_manager_mut()
@@ -1308,7 +1310,7 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a好好b\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
     let frame_id = eval
         .frame_manager_mut()
@@ -1820,7 +1822,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
             Value::symbol("extra-bold"),
         ]);
         buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
     let frame_id = eval
         .frame_manager_mut()
@@ -1978,7 +1980,7 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
             Value::symbol("regular"),
         ]);
         buf.put_text_property(0, buf.total_bytes(), Value::symbol("face"), plist);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id = eval.frame_manager_mut().create_frame(
@@ -2059,7 +2061,7 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(newline_byte);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(newline_byte));
     }
 
     let frame_id = eval
@@ -2116,7 +2118,7 @@ fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("alpha\nbeta\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         let visual_cursor = Value::list(vec![
             Value::keyword(":position"),
             Value::fixnum(3),
@@ -2184,7 +2186,7 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
             Value::string("#00ff00"),
         ]);
         buf.set_buffer_local("neomacs-visual-cursors", Value::list(vec![visual_cursor]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id = eval.frame_manager_mut().create_frame(
@@ -2286,7 +2288,7 @@ fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
             Value::string("#00ff00"),
         ]);
         buf.set_buffer_local("neomacs-visual-cursors", Value::list(vec![visual_cursor]));
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id = eval.frame_manager_mut().create_frame(
@@ -2337,7 +2339,7 @@ fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("plain text row\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
     let frame_id =
         eval.frame_manager_mut()
@@ -2385,7 +2387,7 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(point_pos - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_pos - 1));
         buf.put_text_property(
             hidden_byte_start,
             hidden_byte_end,
@@ -2445,7 +2447,7 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdef");
-        buf.goto_byte(2);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(2));
     }
 
     let frame_id =
@@ -2505,7 +2507,7 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(point_pos - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_pos - 1));
         buf.put_text_property(
             repl_byte_start,
             repl_byte_end,
@@ -2681,7 +2683,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             1,
             2,
@@ -2745,7 +2747,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aVb");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             1,
             2,
@@ -2807,7 +2809,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aWb");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             1,
             2,
@@ -2871,7 +2873,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aXb");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             1,
             2,
@@ -2915,7 +2917,7 @@ fn layout_frame_rust_captures_cursor_inside_hscroll_skipped_text_without_rescan(
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.set_buffer_local("truncate-lines", Value::T);
     }
 
@@ -2968,7 +2970,7 @@ fn assert_layout_frame_rust_tab_cursor_width(x_stretch_cursor: bool, cursor_type
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("a\tb");
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.set_buffer_local("cursor-type", cursor_type);
     }
     eval.set_variable(
@@ -3718,7 +3720,7 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             space_byte_start,
             space_byte_end,
@@ -3804,7 +3806,7 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
         buf.put_text_property(
             space_byte_start,
             space_byte_end,
@@ -3964,7 +3966,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
             Value::symbol("face"),
             plist,
         );
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id = eval
@@ -4098,7 +4100,7 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
             Value::symbol("face"),
             plist,
         );
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.set_buffer_local("truncate-lines", Value::T);
     }
 
@@ -4209,7 +4211,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         let byte_pos = buffer
             .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
             .get();
-        buffer.char_after(byte_pos)
+        buffer.char_after_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(byte_pos))
     }
 
     let mut eval = Context::new();
@@ -4265,7 +4267,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 });
             }
         }
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id =
@@ -4430,7 +4432,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
         let byte_pos = buffer
             .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
             .get();
-        buffer.char_after(byte_pos)
+        buffer.char_after_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(byte_pos))
     }
 
     let mut eval = Context::new();
@@ -4499,7 +4501,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             }
             buf.insert("\n");
         }
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
 
     let frame_id =
@@ -4686,7 +4688,7 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
         let byte_pos = buffer
             .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
             .get();
-        buffer.char_after(byte_pos)
+        buffer.char_after_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(byte_pos))
     }
 
     let mut eval = Context::new();
@@ -4698,7 +4700,7 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("aaaa bbbb cccc dddd\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.set_buffer_local("word-wrap", Value::T);
     }
     let frame_id = eval
@@ -4768,7 +4770,7 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&text);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.set_buffer_local("truncate-lines", Value::T);
     }
     let frame_id = eval
@@ -4791,7 +4793,7 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
         // Selected-window point lives in the buffer; keep pt_char in
         // sync with the target point so redisplay retries read the same
         // location the leaf window advertises.
-        buf.goto_byte(target_pos - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(target_pos - 1));
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
@@ -4849,7 +4851,7 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
         // window.c:window_point. Set buffer pt_char to
         // target_pos so window_params_from_neovm reads it as
         // params.point.
-        buf.goto_byte(target_pos - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(target_pos - 1));
     }
     let frame_id = eval
         .frame_manager_mut()
@@ -5027,7 +5029,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abcdefghijklmnopqrstuvwxyz\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.point_max_char() as i64
     };
     let access = {
@@ -5124,7 +5126,7 @@ fn next_window_start_for_point_line_continuation_ignores_newline_terminated_rows
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("needle target\nfiller line 06\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.point_max_char() as i64
     };
     let access = {
@@ -5162,7 +5164,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
     let buffer_size = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\n");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.point_max_char() as i64
     };
     let access = {
@@ -5318,7 +5320,7 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
         let byte_pos = buffer
             .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
             .get();
-        buffer.char_after(byte_pos)
+        buffer.char_after_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(byte_pos))
     }
 
     let mut eval = Context::new();
@@ -5347,7 +5349,7 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
         // assignment below would be shadowed by buffer.pt_char
         // during window_params_from_neovm and layout would
         // never see the target.
-        buf.goto_byte(target_pos - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(target_pos - 1));
         buf.set_buffer_local("word-wrap", Value::T);
     }
     let frame_id = eval
@@ -5426,7 +5428,7 @@ fn layout_frame_rust_converges_visibility_for_point_line_tail_clipping() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&text);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.set_buffer_local("word-wrap", Value::T);
     }
     let frame_id = eval
@@ -5480,7 +5482,7 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
     let point = {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
         buf.point_max_char() + 1
     };
     let frame_id = eval
@@ -5547,7 +5549,7 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
         let point = buf.point_max_char() + 1;
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
         point
     };
     let frame_id =
@@ -5618,7 +5620,7 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
         let point = buf.point_max_char() + 1;
         // Selected-window point lives in the buffer; see
         // window.c:window_point.
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
         point
     };
     let frame_id =
@@ -5830,7 +5832,7 @@ fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("body line\n");
         let point = buf.point_max_char() + 1;
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
         eval.frame_manager_mut()
@@ -5916,7 +5918,7 @@ fn layout_frame_rust_uses_full_window_row_space_for_header_text_and_mode_line() 
         buf.insert("body line\n");
         buf.set_buffer_local("header-line-format", Value::string("LEFT HEADER"));
         let point = buf.point_max_char() + 1;
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
         eval.frame_manager_mut()
@@ -5974,7 +5976,7 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
         buf.insert("body line\n");
         buf.set_buffer_local("tab-line-format", Value::string("TAB ROW"));
         let point = buf.point_max_char() + 1;
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
     let frame_id =
         eval.frame_manager_mut()
@@ -6046,7 +6048,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
             Value::string("A\nB"),
         );
         let point = buf.point_max_char() + 1;
-        buf.goto_byte(point - 1);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point - 1));
     }
 
     let frame_id =
@@ -6148,7 +6150,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
             Value::symbol("before-string"),
             Value::string("\ninit.el\nconfig.el"),
         );
-        buf.goto_byte(eob);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
     }
 
     let frame_id =
@@ -6227,7 +6229,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
         let _ =
             buf.overlays_mut()
                 .overlay_put(overlay, Value::symbol("before-string"), display_space);
-        buf.goto_byte(eob);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
     }
 
     let frame_id = eval.frame_manager_mut().create_frame(
@@ -6317,7 +6319,7 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
             Value::symbol("before-string"),
             Value::string("\ninit.el\nconfig.el"),
         );
-        buf.goto_byte(eob);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
     }
 
     let frame_id = eval.frame_manager_mut().create_frame(

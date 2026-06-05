@@ -22,7 +22,7 @@ fn test_buffer_with_backend(id: u64, name: &str, kind: BufferTextBackendKind) ->
 fn set_buffer_text(buf: &mut Buffer, text: &str) {
     buf.insert(text);
     buf.widen();
-    buf.goto_byte(0);
+    buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
 }
 
 trait BufferTextPropertyTestExt {
@@ -325,7 +325,7 @@ fn test_window_params_nonselected_reads_window_point() {
     {
         let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
         buf.insert("abcdef");
-        buf.goto_byte(0);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
     }
     let frame_id = evaluator
         .frame_manager_mut()
@@ -1045,7 +1045,7 @@ fn fragmented_snapshot_backend_trace(kind: BufferTextBackendKind) -> LayoutSnaps
 
     for marker in ["é", "日本", "Ω"] {
         let pos = text.find(marker).expect("marker");
-        buf.goto_byte(pos);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
         buf.insert("tmp");
         buf.delete_region(pos, pos + "tmp".len());
     }

@@ -2694,6 +2694,7 @@ impl Buffer {
     }
 
     /// Character at raw Emacs byte position `pos`, or `None` if out of range.
+    #[cfg(test)]
     pub fn char_after(&self, pos: usize) -> Option<char> {
         self.char_after_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -2709,6 +2710,7 @@ impl Buffer {
     }
 
     /// Emacs character code at raw Emacs byte position `pos`, or `None` if out of range.
+    #[cfg(test)]
     pub fn char_code_after(&self, pos: usize) -> Option<u32> {
         self.char_code_after_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -2720,6 +2722,7 @@ impl Buffer {
     }
 
     /// Character immediately before raw Emacs byte position `pos`, or `None`.
+    #[cfg(test)]
     pub fn char_before(&self, pos: usize) -> Option<char> {
         self.char_before_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -2746,6 +2749,7 @@ impl Buffer {
     }
 
     /// Emacs character code immediately before raw Emacs byte position `pos`, or `None`.
+    #[cfg(test)]
     pub fn char_code_before(&self, pos: usize) -> Option<u32> {
         self.char_code_before_emacs_byte_pos(EmacsBytePos::new(pos))
     }
@@ -2769,6 +2773,7 @@ impl Buffer {
     }
 
     /// Raw Emacs-byte width of the character starting at `pos`.
+    #[cfg(test)]
     pub fn char_after_emacs_len(&self, pos: usize) -> Option<usize> {
         self.char_after_emacs_byte_len(EmacsBytePos::new(pos))
             .map(EmacsByteLen::get)
@@ -2795,6 +2800,7 @@ impl Buffer {
     }
 
     /// Raw Emacs-byte width of the character ending at `pos`.
+    #[cfg(test)]
     pub fn char_before_emacs_len(&self, pos: usize) -> Option<usize> {
         self.char_before_emacs_byte_len(EmacsBytePos::new(pos))
             .map(EmacsByteLen::get)
