@@ -82,7 +82,7 @@ use super::threads::ThreadManager;
 use super::value::{
     StringTextPropertyRun, Value, ValueKind, VecLikeType, equal_value, list_to_vec, next_float_id,
 };
-use crate::buffer::{BufferManager, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{BufferId, BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::window::FrameManager;
@@ -4171,6 +4171,35 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
     }
 }
 
+fn process_mark_insert_emacs_byte_pos(
+    buffers: &BufferManager,
+    buf_id: BufferId,
+    mark: Value,
+) -> EmacsBytePos {
+    match super::marker::marker_position_as_int_with_buffers(buffers, &mark) {
+        Ok(pos) => buffers
+            .get(buf_id)
+            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos))
+            .unwrap_or(EmacsBytePos::ZERO),
+        Err(_) => buffers
+            .get(buf_id)
+            .map(|b| b.full_emacs_byte_range().end())
+            .unwrap_or(EmacsBytePos::ZERO),
+    }
+}
+
+fn adjusted_process_output_point(
+    old_point: EmacsBytePos,
+    insert_pos: EmacsBytePos,
+    inserted_len: EmacsByteLen,
+) -> EmacsBytePos {
+    if old_point >= insert_pos {
+        old_point.add_len(inserted_len)
+    } else {
+        old_point
+    }
+}
+
 /// (internal-default-process-filter PROCESS STRING) -> nil
 ///
 /// When no custom filter is set, insert output into the process's associated
@@ -4200,28 +4229,16 @@ pub(crate) fn builtin_internal_default_process_filter(
     }
 
     // Get mark position or end of buffer (ZV in GNU terms).
-    let insert_pos = match super::marker::marker_position_as_int_with_buffers(&eval.buffers, &mark)
-    {
-        Ok(pos) => eval
-            .buffers
-            .get(buf_id)
-            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos).get())
-            .unwrap_or(0),
-        Err(_) => eval
-            .buffers
-            .get(buf_id)
-            .map(|b| b.total_bytes())
-            .unwrap_or(0),
-    };
+    let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buf_id, mark);
 
     // Save current point, move point to insert position, insert, then restore.
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_byte());
+    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_emacs_byte_pos());
     let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
 
     // Temporarily clear read-only so process output can be inserted.
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(insert_pos));
+        buf.goto_emacs_byte_pos(insert_pos);
     }
 
     // Insert text at point (which is now at the mark position).
@@ -4229,12 +4246,13 @@ pub(crate) fn builtin_internal_default_process_filter(
 
     // The new mark is at point after insertion (insert advances point).
     // If the buffer vanished out from under us the fallback uses text.len()
-    // as an approximation — exact byte count comes from buf.point_byte().
+    // as an approximation; the live buffer path reads the exact Emacs byte
+    // position after insertion.
     let new_mark = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.point_byte())
-        .unwrap_or(insert_pos + text.len());
+        .map(|b| b.point_emacs_byte_pos())
+        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.len())));
 
     // Restore read-only flag.
     if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
@@ -4242,14 +4260,10 @@ pub(crate) fn builtin_internal_default_process_filter(
     }
 
     // Restore original point, adjusted for the insertion.
-    let text_byte_len = new_mark.saturating_sub(insert_pos);
+    let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
     if let (Some(buf), Some(old_pt)) = (eval.buffers.get_mut(buf_id), saved_pt) {
-        let adjusted_pt = if old_pt >= insert_pos {
-            old_pt + text_byte_len
-        } else {
-            old_pt
-        };
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(adjusted_pt));
+        let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
+        buf.goto_emacs_byte_pos(adjusted_pt);
     }
 
     // Advance the stored process marker.
@@ -4257,12 +4271,7 @@ pub(crate) fn builtin_internal_default_process_filter(
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| {
-                Value::fixnum(
-                    b.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(new_mark))
-                        .as_i64(),
-                )
-            })
+            .map(|b| Value::fixnum(b.emacs_byte_pos_to_lisp_char_pos(new_mark).as_i64()))
             .unwrap_or(Value::NIL);
         let _ = super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,
@@ -4304,26 +4313,14 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     }
 
     let saved_current = eval.buffers.current_buffer_id();
-    let insert_pos = match super::marker::marker_position_as_int_with_buffers(&eval.buffers, &mark)
-    {
-        Ok(pos) => eval
-            .buffers
-            .get(buf_id)
-            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos).get())
-            .unwrap_or(0),
-        Err(_) => eval
-            .buffers
-            .get(buf_id)
-            .map(|b| b.total_bytes())
-            .unwrap_or(0),
-    };
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_byte());
+    let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buf_id, mark);
+    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_emacs_byte_pos());
     let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
 
     eval.set_current_buffer_unrecorded(buf_id)?;
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(insert_pos));
+        buf.goto_emacs_byte_pos(insert_pos);
     }
 
     let text = format!("\nProcess {name} {msg}");
@@ -4334,33 +4331,24 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     let new_mark = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.point_byte())
-        .unwrap_or(insert_pos + text.len());
+        .map(|b| b.point_emacs_byte_pos())
+        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.len())));
 
     if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
         buf.set_read_only_value(ro);
     }
 
-    let text_byte_len = new_mark.saturating_sub(insert_pos);
+    let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
     if let (Some(buf), Some(old_pt)) = (eval.buffers.get_mut(buf_id), saved_pt) {
-        let adjusted_pt = if old_pt >= insert_pos {
-            old_pt + text_byte_len
-        } else {
-            old_pt
-        };
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(adjusted_pt));
+        let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
+        buf.goto_emacs_byte_pos(adjusted_pt);
     }
 
     if let Some(proc) = eval.processes.get_any_mut(id) {
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| {
-                Value::fixnum(
-                    b.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(new_mark))
-                        .as_i64(),
-                )
-            })
+            .map(|b| Value::fixnum(b.emacs_byte_pos_to_lisp_char_pos(new_mark).as_i64()))
             .unwrap_or(Value::NIL);
         super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,
