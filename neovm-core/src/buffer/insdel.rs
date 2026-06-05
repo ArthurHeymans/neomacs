@@ -392,7 +392,10 @@ impl Buffer {
         if start > end {
             return TextReplacement::default();
         }
-        self.replace_emacs_byte_range_lisp_string(EmacsByteRange::from_usize(start, end), text)
+        self.replace_emacs_byte_range_lisp_string(
+            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
+            text,
+        )
     }
 
     pub fn replace_emacs_byte_range_lisp_string(
@@ -493,7 +496,10 @@ impl Buffer {
         if start >= end {
             return TextEditRange::default();
         }
-        self.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+        self.delete_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::new(start),
+            EmacsBytePos::new(end),
+        ))
     }
 
     /// Delete an Emacs-byte range.
@@ -1056,7 +1062,7 @@ impl BufferManager {
         }
         self.replace_buffer_emacs_byte_range_lisp_string(
             id,
-            EmacsByteRange::from_usize(start, end),
+            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
             text,
         )
     }

@@ -167,7 +167,10 @@ impl GapBuffer {
         }
         self.multibyte = multibyte;
         let mut logical = Vec::with_capacity(self.len());
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, self.len()), &mut logical);
+        self.copy_emacs_byte_range_to(
+            EmacsByteRange::new(EmacsBytePos::ZERO, EmacsBytePos::new(self.len())),
+            &mut logical,
+        );
         self.gap_start_chars = emacs_char_count_bytes(&logical[..self.gap_start], self.multibyte);
         self.total_chars = emacs_char_count_bytes(&logical, self.multibyte);
         self.gap_start_bytes = self.gap_start;
@@ -927,7 +930,10 @@ impl Default for GapBuffer {
 
 impl fmt::Display for GapBuffer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::from_usize(0, self.len())))
+        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::ZERO,
+            EmacsBytePos::new(self.len()),
+        )))
     }
 }
 

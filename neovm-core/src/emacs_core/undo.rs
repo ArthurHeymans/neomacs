@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos};
+use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -413,21 +413,24 @@ fn primitive_undo_inner(
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
                                                 (b - 1) as usize,
                                             ))
-                                            .get()
                                         } else {
-                                            accessible_start.get()
+                                            accessible_start
                                         };
                                         let byte_end = if e > 0 {
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
                                                 (e - 1) as usize,
                                             ))
-                                            .get()
                                         } else {
-                                            accessible_start.get()
+                                            accessible_start
                                         };
-                                        let _ = ctx.buffers.put_buffer_text_property(
-                                            buf_id, byte_beg, byte_end, prop, val,
-                                        );
+                                        let _ = ctx
+                                            .buffers
+                                            .put_buffer_text_property_in_emacs_byte_range(
+                                                buf_id,
+                                                EmacsByteRange::new(byte_beg, byte_end),
+                                                prop,
+                                                val,
+                                            );
                                     }
                                 }
                             }

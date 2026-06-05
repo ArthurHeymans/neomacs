@@ -1170,13 +1170,7 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         return Ok(Value::NIL);
     };
     if buffers
-        .put_buffer_text_property(
-            buf_id,
-            byte_range.start_usize(),
-            byte_range.end_usize(),
-            prop,
-            val,
-        )
+        .put_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, prop, val)
         .unwrap_or(false)
     {
         let _ = buffers.record_buffer_text_property_modification(buf_id);
@@ -1417,13 +1411,7 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
     let mut any_changed = false;
     for (name, val) in pairs {
         if buffers
-            .put_buffer_text_property(
-                buf_id,
-                byte_range.start_usize(),
-                byte_range.end_usize(),
-                name,
-                val,
-            )
+            .put_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name, val)
             .unwrap_or(false)
         {
             any_changed = true;
@@ -1601,7 +1589,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
     // GNU iterates intervals in [beg, end); per interval, fetch its existing
     // face value and merge. Walk the range segment-by-segment to preserve any
     // heterogeneous face properties already present.
-    let mut segments: Vec<(usize, usize, Value)> = Vec::new();
+    let mut segments: Vec<(EmacsByteRange, Value)> = Vec::new();
     let byte_end_pos = byte_range.end();
     let mut seg_start = byte_range.start();
     while seg_start < byte_end_pos {
@@ -1612,13 +1600,18 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         let existing =
             buf.text_props_get_property_at_emacs_byte_pos(seg_start, Value::symbol("face"));
         let merged = merge_face_property(existing, new_face, append)?;
-        segments.push((seg_start.get(), seg_end.get(), merged));
+        segments.push((EmacsByteRange::new(seg_start, seg_end), merged));
         seg_start = seg_end;
     }
     let mut any_changed = false;
-    for (s, e, merged) in segments {
+    for (byte_range, merged) in segments {
         if buffers
-            .put_buffer_text_property(buf_id, s, e, Value::symbol("face"), merged)
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                byte_range,
+                Value::symbol("face"),
+                merged,
+            )
             .unwrap_or(false)
         {
             any_changed = true;
@@ -1700,12 +1693,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
     let mut any_removed = false;
     for name in names {
         if buffers
-            .remove_buffer_text_property(
-                buf_id,
-                byte_range.start_usize(),
-                byte_range.end_usize(),
-                name,
-            )
+            .remove_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name)
             .unwrap_or(false)
         {
             any_removed = true;
@@ -1799,12 +1787,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
     let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
-    let _ = buffers.set_buffer_text_properties(
-        buf_id,
-        byte_range.start_usize(),
-        byte_range.end_usize(),
-        pairs,
-    );
+    let _ = buffers.set_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, pairs);
     let _ = buffers.record_buffer_text_property_modification(buf_id);
     Ok(Value::T)
 }
@@ -1900,12 +1883,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
                 _ => break,
             }
         }
-        let _ = buffers.remove_buffer_text_property(
-            buf_id,
-            byte_range.start_usize(),
-            byte_range.end_usize(),
-            name,
-        );
+        let _ = buffers.remove_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name);
     }
     if changed {
         let _ = buffers.record_buffer_text_property_modification(buf_id);

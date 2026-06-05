@@ -2062,7 +2062,10 @@ fn scan_forward(
         return EmacsBytePos::new(bp + target.get() - cp);
     }
 
-    let range = EmacsByteRange::from_usize(bp, backend.metrics().emacs_bytes());
+    let range = EmacsByteRange::new(
+        EmacsBytePos::new(bp),
+        EmacsBytePos::new(backend.metrics().emacs_bytes()),
+    );
     let mut scan = ForwardMultibytePositionScan::new(anchor);
     match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
         scan.consume_chunk_until_char(chunk, target)
@@ -2114,7 +2117,10 @@ fn scan_forward_bytes(
         return CharPos0::new(cp + target.get() - bp);
     }
 
-    let range = EmacsByteRange::from_usize(bp, backend.metrics().emacs_bytes());
+    let range = EmacsByteRange::new(
+        EmacsBytePos::new(bp),
+        EmacsBytePos::new(backend.metrics().emacs_bytes()),
+    );
     let mut scan = ForwardMultibytePositionScan::new(anchor);
     match backend.for_each_emacs_byte_range_chunk(range, |chunk| {
         scan.consume_chunk_until_byte(chunk, target)

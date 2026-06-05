@@ -2986,9 +2986,11 @@ pub(crate) fn apply_inherited_text_properties(
 
     // put_property prepends new properties to interval order, so apply the
     // merged GNU plist in reverse to preserve the final plist shape.
+    let byte_range =
+        EmacsByteRange::from_start_len(EmacsBytePos::new(old_pt), EmacsByteLen::new(text_len));
     for (name, value) in props.iter().rev() {
-        let _ =
-            buffers.put_buffer_text_property(current_id, old_pt, old_pt + text_len, *name, *value);
+        let _ = buffers
+            .put_buffer_text_property_in_emacs_byte_range(current_id, byte_range, *name, *value);
     }
 }
 
@@ -3153,10 +3155,9 @@ fn insert_pieces_in_state(
         }
         let inserted_end = insert_pos.add_len(EmacsByteLen::new(piece.text.sbytes()));
         if !inherit && piece.text_props.is_none() {
-            let _ = buffers.clear_inserted_plain_text_properties(
+            let _ = buffers.clear_inserted_plain_text_properties_in_emacs_byte_range(
                 current_id,
-                insert_pos.get(),
-                inserted_end.get(),
+                EmacsByteRange::new(insert_pos, inserted_end),
             );
         }
         if inherit {

@@ -157,7 +157,7 @@ impl PieceTreeTextBackend {
         let available = (self.len() - pos).min(tmp.len());
         let mut written = 0;
         self.for_each_emacs_byte_range_chunk(
-            EmacsByteRange::from_usize(pos, pos + available),
+            EmacsByteRange::new(EmacsBytePos::new(pos), EmacsBytePos::new(pos + available)),
             |chunk| {
                 let take = (available - written).min(chunk.len());
                 tmp[written..written + take].copy_from_slice(&chunk[..take]);
@@ -438,7 +438,10 @@ impl PieceTreeTextBackend {
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.len());
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, self.len()), &mut out);
+        self.copy_emacs_byte_range_to(
+            EmacsByteRange::new(EmacsBytePos::ZERO, EmacsBytePos::new(self.len())),
+            &mut out,
+        );
         out
     }
 
@@ -696,7 +699,10 @@ impl PieceTreeTextBackend {
 
 impl fmt::Display for PieceTreeTextBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::from_usize(0, self.len())))
+        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::ZERO,
+            EmacsBytePos::new(self.len()),
+        )))
     }
 }
 

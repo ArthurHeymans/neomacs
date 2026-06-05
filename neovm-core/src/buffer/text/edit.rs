@@ -500,7 +500,10 @@ impl TextEditRange {
         char_end: usize,
     ) -> Self {
         Self {
-            byte_range: EmacsByteRange::from_usize(byte_start, byte_end),
+            byte_range: EmacsByteRange::new(
+                EmacsBytePos::new(byte_start),
+                EmacsBytePos::new(byte_end),
+            ),
             char_start: CharPos0::new(char_start),
             char_end: CharPos0::new(char_end),
         }
