@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::{Value, ValueKind};
-use crate::buffer::{Buffer, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -131,13 +131,17 @@ fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, raw: i64) -> EmacsBytePos {
     buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
 }
 
+fn ordered_emacs_byte_range(start: EmacsBytePos, end: EmacsBytePos) -> EmacsByteRange {
+    EmacsByteRange::new(start.min(end), start.max(end))
+}
+
 fn replacement_region_bounds(
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
     end_arg: Option<&Value>,
     backward: bool,
     region_noncontiguous: bool,
-) -> Result<(usize, usize), Flow> {
+) -> Result<EmacsByteRange, Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     if region_noncontiguous {
         let mark = buf.mark_emacs_byte_pos().ok_or_else(|| {
@@ -149,7 +153,7 @@ fn replacement_region_bounds(
             )
         })?;
         let pt = buf.point_emacs_byte_pos();
-        return Ok((pt.min(mark).get(), pt.max(mark).get()));
+        return Ok(ordered_emacs_byte_range(pt, mark));
     }
 
     let start = match start_arg {
@@ -162,18 +166,14 @@ fn replacement_region_bounds(
         _ if backward => buf.point_emacs_byte_pos(),
         _ => accessible.end(),
     };
-    if start <= end {
-        Ok((start.get(), end.get()))
-    } else {
-        Ok((end.get(), start.get()))
-    }
+    Ok(ordered_emacs_byte_range(start, end))
 }
 
 fn line_operation_region_bounds(
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
     end_arg: Option<&Value>,
-) -> Result<(usize, usize), Flow> {
+) -> Result<EmacsByteRange, Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
@@ -183,11 +183,7 @@ fn line_operation_region_bounds(
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
         _ => accessible.end(),
     };
-    if start <= end {
-        Ok((start.get(), end.get()))
-    } else {
-        Ok((end.get(), start.get()))
-    }
+    Ok(ordered_emacs_byte_range(start, end))
 }
 
 fn line_start_at_or_before(source: &str, at: usize) -> usize {
@@ -208,10 +204,9 @@ fn lisp_string_from_buffer_bytes(bytes: Vec<u8>, multibyte: bool) -> crate::heap
 
 fn buffer_region_storage_string(
     buf: &Buffer,
-    start: usize,
-    end: usize,
+    range: EmacsByteRange,
 ) -> (crate::heap_types::LispString, String) {
-    let text = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, end));
+    let text = buf.buffer_substring_lisp_string_range(range);
     let storage = crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
         text.as_bytes(),
         text.is_multibyte(),
@@ -359,10 +354,9 @@ fn string_matches_regexp(text: &str, pattern: &str, case_fold: bool) -> Result<b
 fn delete_line_operation_byte_range(
     eval: &mut super::eval::Context,
     current_id: crate::buffer::BufferId,
-    start: usize,
-    end: usize,
+    range: EmacsByteRange,
 ) -> Result<(), Flow> {
-    if start == end {
+    if range.is_empty() {
         return Ok(());
     }
 
@@ -383,15 +377,12 @@ fn delete_line_operation_byte_range(
         &eval.obarray,
         &eval.buffers,
         current_id,
-        start,
-        end,
+        range.start_usize(),
+        range.end_usize(),
     )?;
 
-    let change = super::editfns::text_change_for_deletion_in_manager(
-        &eval.buffers,
-        current_id,
-        EmacsByteRange::from_usize(start, end),
-    )?;
+    let change =
+        super::editfns::text_change_for_deletion_in_manager(&eval.buffers, current_id, range)?;
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
@@ -402,18 +393,21 @@ fn delete_line_operation_byte_range(
 fn delete_line_operation_ranges(
     eval: &mut super::eval::Context,
     current_id: crate::buffer::BufferId,
-    delete_ranges: Vec<(usize, usize)>,
+    delete_ranges: Vec<EmacsByteRange>,
 ) -> Result<usize, Flow> {
     let mut deleted_so_far = 0usize;
     let mut deleted_ranges = 0usize;
-    for (original_start, original_end) in delete_ranges {
-        if original_start == original_end {
+    for original in delete_ranges {
+        if original.is_empty() {
             continue;
         }
-        let start = original_start.saturating_sub(deleted_so_far);
-        let end = original_end.saturating_sub(deleted_so_far);
-        delete_line_operation_byte_range(eval, current_id, start, end)?;
-        deleted_so_far = deleted_so_far.saturating_add(original_end - original_start);
+        let deleted_len = EmacsByteLen::new(deleted_so_far);
+        let shifted = EmacsByteRange::new(
+            original.start().saturating_sub_len(deleted_len),
+            original.end().saturating_sub_len(deleted_len),
+        );
+        delete_line_operation_byte_range(eval, current_id, shifted)?;
+        deleted_so_far = deleted_so_far.saturating_add(original.len().get());
         deleted_ranges += 1;
     }
     Ok(deleted_ranges)
@@ -1593,28 +1587,28 @@ fn replace_string_eval_impl(
             .goto_buffer_emacs_byte_pos(current_id, point_max);
         return Ok(Value::NIL);
     }
-    let (start, end, source_text, source, read_only, buffer_name) = {
+    let (range, source_text, source, read_only, buffer_name) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = replacement_region_bounds(
+        let range = replacement_region_bounds(
             buf,
             args.get(3),
             args.get(4),
             backward,
             region_noncontiguous,
         )?;
-        let (source_text, source) = buffer_region_storage_string(buf, start, end);
+        let (source_text, source) = buffer_region_storage_string(buf, range);
         (
-            start,
-            end,
+            range,
             source_text,
             source,
             buffer_read_only_active(eval, buf),
             buf.name_value(),
         )
     };
+    let range_start = range.start();
     let source_multibyte = source_text.is_multibyte();
 
     if from.is_empty() {
@@ -1648,17 +1642,17 @@ fn replace_string_eval_impl(
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
-            EmacsByteRange::from_usize(start, end),
+            range,
             &out_text,
         )?;
-        let new_len = change.new_extent().emacs_bytes().get();
+        let new_len = change.new_extent().emacs_bytes();
         super::editfns::signal_before_text_change(eval, change)?;
         let _ = eval
             .buffers
             .delete_buffer_measured_region(current_id, change.old_range());
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+            .goto_buffer_emacs_byte_pos(current_id, range_start);
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &out_text);
@@ -1667,28 +1661,30 @@ fn replace_string_eval_impl(
             if let Some(first) = units.first() {
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(
                     current_id,
-                    EmacsBytePos::new(start + first.logical_byte_len),
+                    range_start.add_len(EmacsByteLen::new(first.logical_byte_len)),
                 );
             } else {
                 let _ = eval
                     .buffers
-                    .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                    .goto_buffer_emacs_byte_pos(current_id, range_start);
             }
         } else if query_style_point {
             if let Some(last) = units.last() {
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(
                     current_id,
-                    EmacsBytePos::new(start + new_len.saturating_sub(last.logical_byte_len)),
+                    range_start.add_len(EmacsByteLen::new(
+                        new_len.get().saturating_sub(last.logical_byte_len),
+                    )),
                 );
             } else {
                 let _ = eval
                     .buffers
-                    .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                    .goto_buffer_emacs_byte_pos(current_id, range_start);
             }
         } else {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
+                .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(new_len));
         }
         return Ok(Value::NIL);
     }
@@ -1702,8 +1698,8 @@ fn replace_string_eval_impl(
     };
     let mut out = String::with_capacity(source.len());
     let mut replaced = 0usize;
-    let mut backward_point: Option<usize> = None;
-    let mut query_forward_point: Option<usize> = None;
+    let mut backward_point: Option<EmacsByteLen> = None;
+    let mut query_forward_point: Option<EmacsByteLen> = None;
 
     if let Some(whitespace_regex) = lax_whitespace_regex {
         let pattern = build_lax_whitespace_pattern(&from, &whitespace_regex);
@@ -1725,9 +1721,11 @@ fn replace_string_eval_impl(
             } else {
                 out.push_str(&to);
             }
-            query_forward_point = Some(storage_string_byte_len(&out));
+            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
             if backward && backward_point.is_none() {
-                backward_point = Some(storage_offset_to_region_byte(&source, m_start));
+                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source, m_start,
+                )));
             }
             replaced += 1;
             last = m_end;
@@ -1750,9 +1748,11 @@ fn replace_string_eval_impl(
             } else {
                 out.push_str(&to);
             }
-            query_forward_point = Some(storage_string_byte_len(&out));
+            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
             if backward && backward_point.is_none() {
-                backward_point = Some(storage_offset_to_region_byte(&source, m_start));
+                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source, m_start,
+                )));
             }
             replaced += 1;
             cursor = m_end;
@@ -1775,17 +1775,17 @@ fn replace_string_eval_impl(
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(start, end),
+        range,
         &out_text,
     )?;
-    let new_len = change.new_extent().emacs_bytes().get();
+    let new_len = change.new_extent().emacs_bytes();
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+        .goto_buffer_emacs_byte_pos(current_id, range_start);
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
@@ -1794,26 +1794,26 @@ fn replace_string_eval_impl(
         if let Some(pos) = backward_point {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
+                .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(pos));
         } else {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                .goto_buffer_emacs_byte_pos(current_id, range_start);
         }
     } else if query_style_point {
         if let Some(pos) = query_forward_point {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
+                .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(pos));
         } else {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                .goto_buffer_emacs_byte_pos(current_id, range_start);
         }
     } else {
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
+            .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(new_len));
     }
 
     Ok(Value::NIL)
@@ -1865,28 +1865,28 @@ fn replace_regexp_eval_impl(
         return Ok(Value::NIL);
     }
 
-    let (start, end, source_text, source, read_only, buffer_name) = {
+    let (range, source_text, source, read_only, buffer_name) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = replacement_region_bounds(
+        let range = replacement_region_bounds(
             buf,
             args.get(3),
             args.get(4),
             backward,
             region_noncontiguous,
         )?;
-        let (source_text, source) = buffer_region_storage_string(buf, start, end);
+        let (source_text, source) = buffer_region_storage_string(buf, range);
         (
-            start,
-            end,
+            range,
             source_text,
             source,
             buffer_read_only_active(eval, buf),
             buf.name_value(),
         )
     };
+    let range_start = range.start();
     let source_multibyte = source_text.is_multibyte();
 
     let case_fold = case_fold_for_pattern(eval, &from);
@@ -1898,8 +1898,8 @@ fn replace_regexp_eval_impl(
     let mut out = String::with_capacity(source.len());
     let mut last = 0usize;
     let mut replaced = 0usize;
-    let mut backward_point: Option<usize> = None;
-    let mut query_forward_point: Option<usize> = None;
+    let mut backward_point: Option<EmacsByteLen> = None;
+    let mut query_forward_point: Option<EmacsByteLen> = None;
     for groups in iterated.matches {
         let Some((match_start, match_end)) = groups.first().and_then(|group| *group) else {
             continue;
@@ -1926,10 +1926,13 @@ fn replace_regexp_eval_impl(
             } else {
                 out.push_str(&expanded);
             }
-            query_forward_point = Some(storage_string_byte_len(&out));
+            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
             last = match_start;
             if backward && backward_point.is_none() {
-                backward_point = Some(storage_offset_to_region_byte(&source, match_start));
+                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source,
+                    match_start,
+                )));
             }
             replaced += 1;
             continue;
@@ -1942,10 +1945,13 @@ fn replace_regexp_eval_impl(
         } else {
             out.push_str(&expanded);
         }
-        query_forward_point = Some(storage_string_byte_len(&out));
+        query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
         last = match_end;
         if backward && backward_point.is_none() {
-            backward_point = Some(storage_offset_to_region_byte(&source, match_start));
+            backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
+                &source,
+                match_start,
+            )));
         }
         replaced += 1;
     }
@@ -1966,17 +1972,17 @@ fn replace_regexp_eval_impl(
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(start, end),
+        range,
         &out_text,
     )?;
-    let new_len = change.new_extent().emacs_bytes().get();
+    let new_len = change.new_extent().emacs_bytes();
     super::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+        .goto_buffer_emacs_byte_pos(current_id, range_start);
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
@@ -1985,26 +1991,26 @@ fn replace_regexp_eval_impl(
         if let Some(pos) = backward_point {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
+                .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(pos));
         } else {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                .goto_buffer_emacs_byte_pos(current_id, range_start);
         }
     } else if query_style_point {
         if let Some(pos) = query_forward_point {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + pos));
+                .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(pos));
         } else {
             let _ = eval
                 .buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+                .goto_buffer_emacs_byte_pos(current_id, range_start);
         }
     } else {
         let _ = eval
             .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start + new_len));
+            .goto_buffer_emacs_byte_pos(current_id, range_start.add_len(new_len));
     }
 
     Ok(Value::NIL)
@@ -2056,31 +2062,41 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
     expect_min_max_args("keep-lines", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
 
-    let (point_min, start, end, source_text, source) = {
+    let (point_min, range, source_text, source) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
-        let (source_text, source) =
-            buffer_region_storage_string(buf, accessible.start_usize(), accessible.end_usize());
-        (accessible.start_usize(), start, end, source_text, source)
+        let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
+        (accessible.start(), range, source_text, source)
     };
     let source_byte_len = source_text.sbytes();
 
     let case_fold = case_fold_for_pattern(eval, &regexp);
 
-    let rel_start = start.saturating_sub(point_min).min(source_byte_len);
-    let rel_end = end.saturating_sub(point_min).min(source_byte_len);
+    let rel_start = range
+        .start()
+        .saturating_offset_from(point_min)
+        .get()
+        .min(source_byte_len);
+    let rel_end = range
+        .end()
+        .saturating_offset_from(point_min)
+        .get()
+        .min(source_byte_len);
+    let end_pos = point_min.add_len(EmacsByteLen::new(rel_end));
     let rel_start_storage =
         crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(&source, rel_start);
     let mut rel_cursor = line_start_at_or_before(&source, rel_start_storage);
-    let mut delete_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut delete_ranges: Vec<EmacsByteRange> = Vec::new();
 
     while rel_cursor < source.len() {
-        let abs_line_start = point_min + storage_offset_to_region_byte(&source, rel_cursor);
-        if abs_line_start >= point_min + rel_end {
+        let abs_line_start = point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+            &source, rel_cursor,
+        )));
+        if abs_line_start >= end_pos {
             break;
         }
 
@@ -2104,9 +2120,14 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
             Err(err) => return Err(err),
         };
         if !keep_line {
-            delete_ranges.push((
-                point_min + storage_offset_to_region_byte(&source, rel_cursor),
-                point_min + storage_offset_to_region_byte(&source, rel_line_end),
+            delete_ranges.push(EmacsByteRange::new(
+                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source, rel_cursor,
+                ))),
+                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source,
+                    rel_line_end,
+                ))),
             ));
         }
         rel_cursor = rel_line_end;
@@ -2121,7 +2142,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
     }
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+        .goto_buffer_emacs_byte_pos(current_id, range.start());
 
     Ok(Value::NIL)
 }
@@ -2132,31 +2153,41 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
     expect_min_max_args("flush-lines", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
 
-    let (point_min, start, end, source_text, source) = {
+    let (point_min, range, source_text, source) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
-        let (source_text, source) =
-            buffer_region_storage_string(buf, accessible.start_usize(), accessible.end_usize());
-        (accessible.start_usize(), start, end, source_text, source)
+        let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
+        (accessible.start(), range, source_text, source)
     };
     let source_byte_len = source_text.sbytes();
 
     let case_fold = case_fold_for_pattern(eval, &regexp);
 
-    let rel_start = start.saturating_sub(point_min).min(source_byte_len);
-    let rel_end = end.saturating_sub(point_min).min(source_byte_len);
+    let rel_start = range
+        .start()
+        .saturating_offset_from(point_min)
+        .get()
+        .min(source_byte_len);
+    let rel_end = range
+        .end()
+        .saturating_offset_from(point_min)
+        .get()
+        .min(source_byte_len);
+    let end_pos = point_min.add_len(EmacsByteLen::new(rel_end));
     let rel_start_storage =
         crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(&source, rel_start);
     let mut rel_cursor = line_start_at_or_before(&source, rel_start_storage);
-    let mut delete_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut delete_ranges: Vec<EmacsByteRange> = Vec::new();
 
     while rel_cursor < source.len() {
-        let abs_line_start = point_min + storage_offset_to_region_byte(&source, rel_cursor);
-        if abs_line_start >= point_min + rel_end {
+        let abs_line_start = point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+            &source, rel_cursor,
+        )));
+        if abs_line_start >= end_pos {
             break;
         }
 
@@ -2173,9 +2204,14 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
         };
 
         if string_matches_regexp(line, &regexp, case_fold)? {
-            delete_ranges.push((
-                point_min + storage_offset_to_region_byte(&source, rel_cursor),
-                point_min + storage_offset_to_region_byte(&source, rel_line_end),
+            delete_ranges.push(EmacsByteRange::new(
+                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source, rel_cursor,
+                ))),
+                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
+                    &source,
+                    rel_line_end,
+                ))),
             ));
         }
         rel_cursor = rel_line_end;
@@ -2191,7 +2227,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
     }
     let _ = eval
         .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(start));
+        .goto_buffer_emacs_byte_pos(current_id, range.start());
 
     Ok(Value::fixnum(deleted_count as i64))
 }
@@ -2207,8 +2243,8 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
-        buffer_region_storage_string(buf, start, end)
+        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        buffer_region_storage_string(buf, range)
     };
 
     if regexp.is_empty() {
@@ -2235,8 +2271,8 @@ pub(crate) fn builtin_count_matches(
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
-        buffer_region_storage_string(buf, start, end)
+        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        buffer_region_storage_string(buf, range)
     };
 
     if regexp.is_empty() {
