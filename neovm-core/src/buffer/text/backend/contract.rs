@@ -1,6 +1,8 @@
 use std::fmt;
 
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionHint};
+use crate::buffer::position::{
+    CharPos0, EmacsBytePos, EmacsByteRange, TextPositionHint, TextPositionLookup,
+};
 #[cfg(test)]
 use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, TextReplacement};
@@ -13,6 +15,7 @@ macro_rules! impl_physical_text_backend {
     (
         $backend:ty,
         debug_layout = $debug_layout:expr
+        $(, position_lookup = $position_lookup:expr)?
         $(, storage_position_hint = $storage_position_hint:expr)?
     ) => {
         impl PhysicalTextBackend for $backend {
@@ -24,6 +27,12 @@ macro_rules! impl_physical_text_backend {
             fn debug_layout(&self) -> TextBackendDebugLayout {
                 ($debug_layout)(self)
             }
+
+            $(
+                fn position_lookup(&self) -> TextPositionLookup {
+                    ($position_lookup)(self)
+                }
+            )?
 
             $(
                 fn storage_position_hint(&self) -> TextPositionHint {
@@ -135,6 +144,10 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
     #[cfg(test)]
     fn debug_layout(&self) -> TextBackendDebugLayout;
 
+    fn position_lookup(&self) -> TextPositionLookup {
+        TextPositionLookup::AnchorScan
+    }
+
     fn storage_position_hint(&self) -> TextPositionHint {
         TextPositionHint::none()
     }
@@ -174,10 +187,12 @@ impl_physical_text_backend!(
 
 impl_physical_text_backend!(
     PieceTreeTextBackend,
-    debug_layout = |backend: &PieceTreeTextBackend| PieceTreeTextBackend::debug_layout(backend)
+    debug_layout = |backend: &PieceTreeTextBackend| PieceTreeTextBackend::debug_layout(backend),
+    position_lookup = |_backend: &PieceTreeTextBackend| TextPositionLookup::BackendIndex
 );
 
 impl_physical_text_backend!(
     RopeTextBackend,
-    debug_layout = |backend: &RopeTextBackend| RopeTextBackend::debug_layout(backend)
+    debug_layout = |backend: &RopeTextBackend| RopeTextBackend::debug_layout(backend),
+    position_lookup = |_backend: &RopeTextBackend| TextPositionLookup::BackendIndex
 );

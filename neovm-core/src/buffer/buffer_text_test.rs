@@ -299,6 +299,28 @@ fn non_gap_position_conversion_forward_scan_crosses_backend_chunks() {
 }
 
 #[test]
+fn non_gap_position_conversion_uses_backend_index_without_anchor_scan() {
+    crate::test_utils::init_test_tracing();
+    let mut s = String::new();
+    for _ in 0..20_000 {
+        s.push_str("日");
+    }
+
+    for kind in BufferTextBackendKind::non_gap_implemented_variants() {
+        let text = BufferText::from_str_with_backend_kind(&s, implemented_kind(kind));
+        assert_eq!(text.anchor_cache_len(), 0, "{kind:?}");
+
+        let byte_pos = text.buf_charpos_to_bytepos(10_000);
+        assert_eq!(byte_pos, "日".len() * 10_000, "{kind:?}");
+        assert_eq!(text.anchor_cache_len(), 0, "{kind:?}");
+
+        let char_pos = text.buf_bytepos_to_charpos(byte_pos);
+        assert_eq!(char_pos, 10_000, "{kind:?}");
+        assert_eq!(text.anchor_cache_len(), 0, "{kind:?}");
+    }
+}
+
+#[test]
 fn non_gap_lisp_string_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::non_gap_implemented_variants() {
@@ -352,10 +374,18 @@ fn same_size_replacement_invalidates_position_caches() {
         let mut text = BufferText::from_str_with_backend_kind(&original, implemented_kind(kind));
 
         assert_eq!(text.buf_charpos_to_bytepos(target_char), target_char);
-        assert!(
-            text.anchor_cache_len() > 0,
-            "{kind:?} should cache the long char/byte walk before replacement"
-        );
+        if kind.is_gap_buffer() {
+            assert!(
+                text.anchor_cache_len() > 0,
+                "{kind:?} should cache the long char/byte walk before replacement"
+            );
+        } else {
+            assert_eq!(
+                text.anchor_cache_len(),
+                0,
+                "{kind:?} should use backend-indexed position lookup"
+            );
+        }
 
         text.replace_same_len_emacs_bytes(0, original.len(), replacement.as_bytes());
 

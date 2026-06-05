@@ -2078,6 +2078,15 @@ impl BufferText {
             return EmacsBytePos::new(target.get());
         }
 
+        if storage.backend.position_lookup().uses_backend_index() {
+            let result = storage.backend.char_pos_to_emacs_byte_pos(target);
+            storage.pos_cache.set(PositionCache {
+                epoch: content_epoch,
+                anchor: TextPositionAnchor::new(target, result),
+            });
+            return result;
+        }
+
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);
         let bounds = Self::char_position_bounds(&storage, target);
 
@@ -2121,6 +2130,20 @@ impl BufferText {
         // Unibyte fast path: char == byte, no scan needed.
         if total_chars == total_bytes {
             return CharPos0::new(target.get());
+        }
+
+        if storage.backend.position_lookup().uses_backend_index()
+            && storage
+                .backend
+                .emacs_byte_at_pos(target)
+                .is_none_or(|byte| (byte & 0xC0) != 0x80)
+        {
+            let result = storage.backend.emacs_byte_pos_to_char_pos(target);
+            storage.pos_cache.set(PositionCache {
+                epoch: content_epoch,
+                anchor: TextPositionAnchor::new(result, target),
+            });
+            return result;
         }
 
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);

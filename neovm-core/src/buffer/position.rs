@@ -97,6 +97,19 @@ pub struct TextPositionHint {
     anchor: Option<TextPositionAnchor>,
 }
 
+/// How a physical backend wants generic text code to translate positions.
+///
+/// GNU's gap buffer benefits from the marker.c-style anchor scan because the
+/// gap and marker chain provide nearby `(char, byte)` pairs. Indexed storage
+/// such as piece trees and ropes should answer from their own subtree metrics
+/// instead of forcing the semantic layer to scan chunks linearly.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TextPositionLookup {
+    #[default]
+    AnchorScan,
+    BackendIndex,
+}
+
 impl TextPositionAnchor {
     pub const fn new(char_pos: CharPos0, emacs_byte_pos: EmacsBytePos) -> Self {
         Self {
@@ -150,6 +163,12 @@ impl TextPositionHint {
         if let Some(anchor) = self.anchor {
             bounds.consider_byte_anchor(target, anchor);
         }
+    }
+}
+
+impl TextPositionLookup {
+    pub const fn uses_backend_index(self) -> bool {
+        matches!(self, Self::BackendIndex)
     }
 }
 
