@@ -13,21 +13,25 @@ const MAX_LEAF_BYTES: usize = 1024;
 #[derive(Clone)]
 struct RopeChunk {
     bytes: Vec<u8>,
-    chars: usize,
+    extent: TextExtent,
 }
 
 impl RopeChunk {
     fn new(bytes: Vec<u8>, multibyte: bool) -> Self {
-        let chars = emacs_char_count_bytes(&bytes, multibyte);
-        Self { bytes, chars }
+        let extent = TextExtent::from_usize(emacs_char_count_bytes(&bytes, multibyte), bytes.len());
+        Self { bytes, extent }
     }
 
     fn len(&self) -> usize {
-        self.bytes.len()
+        self.extent.emacs_bytes().get()
+    }
+
+    fn char_len(&self) -> usize {
+        self.extent.chars().get()
     }
 
     fn metrics(&self) -> TextMetrics {
-        TextMetrics::new(self.chars, self.len())
+        TextMetrics::new(self.char_len(), self.len())
     }
 
     fn split_at(&self, byte_pos: usize, multibyte: bool) -> (Self, Self) {
@@ -67,7 +71,7 @@ impl RopeNode {
         let left = node_metrics(&self.left);
         let right = node_metrics(&self.right);
         self.metrics = TextMetrics::new(
-            left.chars() + self.chunk.chars + right.chars(),
+            left.chars() + self.chunk.char_len() + right.chars(),
             left.emacs_bytes() + self.chunk.len() + right.emacs_bytes(),
         );
     }
@@ -617,7 +621,7 @@ impl RopeTextBackend {
         }
 
         left.chars()
-            + node.chunk.chars
+            + node.chunk.char_len()
             + self.byte_to_char_in_node(&node.right, after_left - node.chunk.len())
     }
 
@@ -632,14 +636,14 @@ impl RopeTextBackend {
         }
 
         let after_left = char_pos - left.chars();
-        if after_left <= node.chunk.chars {
+        if after_left <= node.chunk.char_len() {
             return left.emacs_bytes()
                 + emacs_char_to_byte_in_slice(&node.chunk.bytes, after_left, self.multibyte);
         }
 
         left.emacs_bytes()
             + node.chunk.len()
-            + self.char_to_byte_in_node(&node.right, after_left - node.chunk.chars)
+            + self.char_to_byte_in_node(&node.right, after_left - node.chunk.char_len())
     }
 
     fn for_each_range<E>(
@@ -817,7 +821,7 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
         node.chunk.len()
     );
     assert_eq!(
-        node.chunk.chars,
+        node.chunk.char_len(),
         emacs_char_count_bytes(&node.chunk.bytes, multibyte),
         "rope leaf cached char count diverged"
     );
@@ -837,7 +841,7 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
     let left = assert_node_invariants(&node.left, multibyte);
     let right = assert_node_invariants(&node.right, multibyte);
     let expected = TextMetrics::new(
-        left.chars() + node.chunk.chars + right.chars(),
+        left.chars() + node.chunk.char_len() + right.chars(),
         left.emacs_bytes() + node.chunk.len() + right.emacs_bytes(),
     );
     assert_eq!(
