@@ -2836,6 +2836,7 @@ impl Buffer {
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
+    #[cfg(test)]
     pub fn register_marker(
         &mut self,
         marker_ptr: *mut crate::tagged::header::MarkerObj,
@@ -2844,6 +2845,17 @@ impl Buffer {
         insertion_type: InsertionType,
     ) {
         let position = self.marker_anchor_for_emacs_byte_pos(EmacsBytePos::new(pos));
+        self.register_marker_at_anchor(marker_ptr, marker_id, position, insertion_type);
+    }
+
+    pub fn register_marker_at_emacs_byte_pos(
+        &mut self,
+        marker_ptr: *mut crate::tagged::header::MarkerObj,
+        marker_id: u64,
+        pos: EmacsBytePos,
+        insertion_type: InsertionType,
+    ) {
+        let position = self.marker_anchor_for_emacs_byte_pos(pos);
         self.register_marker_at_anchor(marker_ptr, marker_id, position, insertion_type);
     }
 
@@ -5567,12 +5579,13 @@ impl BufferManager {
     /// any MarkerObj that isn't marked by the mark phase, so Lisp-side
     /// code must keep a live `Value` reference (or an explicit root —
     /// see `BufferStateMarkers` for the pt/begv/zv case) for the
-    /// marker to survive GC. Callers that need to
-    /// re-register this marker later (e.g. state-marker buffer switch
-    /// plumbing) should retain the returned pointer and pass it to
-    /// `register_marker_id` after first calling `chain_unlink` on the
+    /// marker to survive GC. Callers that need to re-register this marker
+    /// later (e.g. state-marker buffer switch plumbing) should retain the
+    /// returned pointer and pass it to `register_marker_id_at_emacs_byte_pos`
+    /// after first calling `chain_unlink` on the
     /// owning buffer's `BufferText` to satisfy the
     /// `chain_splice_at_head` precondition.
+    #[cfg(test)]
     pub fn create_marker(
         &mut self,
         buffer_id: BufferId,
@@ -5591,8 +5604,13 @@ impl BufferManager {
         let marker_id = self.next_marker_id;
         self.next_marker_id += 1;
         let marker_ptr = Self::allocate_marker_node(buffer_id, marker_id, insertion_type);
-        let _ =
-            self.register_marker_id(marker_ptr, buffer_id, marker_id, pos.get(), insertion_type);
+        let _ = self.register_marker_id_at_emacs_byte_pos(
+            marker_ptr,
+            buffer_id,
+            marker_id,
+            pos,
+            insertion_type,
+        );
         (marker_id, marker_ptr)
     }
 
@@ -5639,20 +5657,6 @@ impl BufferManager {
             as *mut crate::tagged::header::MarkerObj
     }
 
-    /// Register an existing marker id in `buffer_id` at byte position `pos`.
-    pub fn register_marker_id(
-        &mut self,
-        marker_ptr: *mut crate::tagged::header::MarkerObj,
-        buffer_id: BufferId,
-        marker_id: u64,
-        pos: usize,
-        insertion_type: InsertionType,
-    ) -> Option<()> {
-        let buf = self.buffers.get_mut(&buffer_id)?;
-        buf.register_marker(marker_ptr, marker_id, pos, insertion_type);
-        Some(())
-    }
-
     pub fn register_marker_id_at_emacs_byte_pos(
         &mut self,
         marker_ptr: *mut crate::tagged::header::MarkerObj,
@@ -5661,7 +5665,9 @@ impl BufferManager {
         pos: EmacsBytePos,
         insertion_type: InsertionType,
     ) -> Option<()> {
-        self.register_marker_id(marker_ptr, buffer_id, marker_id, pos.get(), insertion_type)
+        let buf = self.buffers.get_mut(&buffer_id)?;
+        buf.register_marker_at_emacs_byte_pos(marker_ptr, marker_id, pos, insertion_type);
+        Some(())
     }
 
     pub fn register_marker_id_at_anchor(
