@@ -3383,34 +3383,10 @@ pub(crate) fn builtin_subst_char_in_region(
         ));
     }
 
-    let (range, changed_range) = {
-        let buf = eval
-            .buffers
-            .get(current_id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let point_min = buf.point_min_char() as i64 + 1;
-        let point_max = buf.point_max_char() as i64 + 1;
-        if start < point_min || start > point_max || end < point_min || end > point_max {
-            return Err(signal(
-                "args-out-of-range",
-                vec![Value::make_buffer(buf.id), args[0], args[1]],
-            ));
-        }
-
-        let lo = start.min(end) as usize;
-        let hi = start.max(end) as usize;
-        let range = buf.edit_range_for_char_range(CharRange::from_usize(
-            lo.saturating_sub(1),
-            hi.saturating_sub(1),
-        ));
-        let changed_range = if from_code != to_code {
-            buf.subst_char_changed_range(range, from_code as u32, &to_bytes)
-        } else {
-            None
-        };
-        (range, changed_range)
-    };
-    let Some(changed_range) = changed_range else {
+    let Some((range, changed_range)) = subst_char_in_region_scan(
+        eval, current_id, start, end, from_code, to_code, &to_bytes, &args,
+    )?
+    else {
         return Ok(Value::NIL);
     };
 
@@ -3434,16 +3410,74 @@ pub(crate) fn builtin_subst_char_in_region(
     );
     let change = TextChange::unchanged_extent_with_after_range(before_range, changed_range);
     super::editfns::signal_before_text_change(eval, change)?;
-    let _ = eval.buffers.subst_char_in_buffer_region(
+
+    // GNU `subst-char-in-region` restarts after `modify_text` because
+    // `before-change-functions` may move the gap or alter the buffer.  It does
+    // not run before-change hooks a second time; it simply rescans the same
+    // Lisp range in the current buffer and either performs the substitutions
+    // found there or returns without an after-change signal.
+    let Some((range, changed_range)) = subst_char_in_region_scan(
+        eval, current_id, start, end, from_code, to_code, &to_bytes, &args,
+    )?
+    else {
+        return Ok(Value::NIL);
+    };
+    let changed_range_through_end = TextEditRange::new(
+        EmacsByteRange::new(changed_range.byte_start(), range.byte_end()),
+        changed_range.char_start(),
+        range.char_end(),
+    );
+    let after_change =
+        TextChange::unchanged_extent_with_after_range(changed_range_through_end, changed_range);
+    let changed = eval.buffers.subst_char_in_buffer_region(
         current_id,
         range,
-        before_range,
+        changed_range_through_end,
         from_code as u32,
         &to_bytes,
         noundo,
     );
-    super::editfns::signal_after_text_change(eval, change)?;
+    if changed == Some(true) {
+        super::editfns::signal_after_text_change(eval, after_change)?;
+    }
     Ok(Value::NIL)
+}
+
+fn subst_char_in_region_scan(
+    eval: &super::eval::Context,
+    current_id: BufferId,
+    start: i64,
+    end: i64,
+    from_code: i64,
+    to_code: i64,
+    to_bytes: &[u8],
+    args: &[Value],
+) -> Result<Option<(TextEditRange, TextEditRange)>, Flow> {
+    let buf = eval
+        .buffers
+        .get(current_id)
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if start < point_min || start > point_max || end < point_min || end > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        ));
+    }
+
+    let lo = start.min(end) as usize;
+    let hi = start.max(end) as usize;
+    let range = buf.edit_range_for_char_range(CharRange::from_usize(
+        lo.saturating_sub(1),
+        hi.saturating_sub(1),
+    ));
+    if from_code == to_code {
+        return Ok(None);
+    }
+    Ok(buf
+        .subst_char_changed_range(range, from_code as u32, to_bytes)
+        .map(|changed_range| (range, changed_range)))
 }
 
 pub(crate) fn builtin_buffer_enable_undo(

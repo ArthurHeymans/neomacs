@@ -9093,6 +9093,70 @@ fn subst_char_in_region_records_per_character_undo_like_gnu() {
 }
 
 #[test]
+fn subst_char_in_region_restarts_after_before_change_hook_removes_match_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (erase-buffer)
+           (insert \"xa\")
+           (let ((n 0) (events nil))
+             (setq before-change-functions
+                   (list (lambda (beg end)
+                           (setq events
+                                 (cons (list :before beg end (buffer-string))
+                                       events))
+                           (if (= n 0)
+                               (progn
+                                 (setq n 1)
+                                 (goto-char 2)
+                                 (delete-region 2 3)
+                                 (insert \"c\"))))))
+             (setq after-change-functions
+                   (list (lambda (beg end old-len)
+                           (setq events
+                                 (cons (list :after beg end old-len
+                                             (buffer-string))
+                                       events)))))
+             (subst-char-in-region 1 (point-max) ?a ?b)
+             (list (buffer-string) (nreverse events))))",
+    );
+    assert_eq!(result, r#"OK ("xc" ((:before 2 3 "xa")))"#);
+}
+
+#[test]
+fn subst_char_in_region_restarts_after_before_change_hook_inserts_earlier_match_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (erase-buffer)
+           (insert \"xa\")
+           (let ((n 0) (events nil))
+             (setq before-change-functions
+                   (list (lambda (beg end)
+                           (setq events
+                                 (cons (list :before beg end (buffer-string))
+                                       events))
+                           (if (= n 0)
+                               (progn
+                                 (setq n 1)
+                                 (goto-char 1)
+                                 (insert \"a\"))))))
+             (setq after-change-functions
+                   (list (lambda (beg end old-len)
+                           (setq events
+                                 (cons (list :after beg end old-len
+                                             (buffer-string))
+                                       events)))))
+             (subst-char-in-region 1 (point-max) ?a ?b)
+             (list (buffer-string) (nreverse events))))",
+    );
+    assert_eq!(
+        result,
+        r#"OK ("bxa" ((:before 2 3 "xa") (:after 1 2 1 "bxa")))"#
+    );
+}
+
+#[test]
 fn text_property_modification_hooks_run_before_text_delete() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
