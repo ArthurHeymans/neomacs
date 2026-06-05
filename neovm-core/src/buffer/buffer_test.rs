@@ -1264,7 +1264,10 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
     let replace_start = byte_pos_for_char(&buf, 1);
     let replace_end = byte_pos_for_char(&buf, 3);
     let replacement = LispString::from_utf8("Ωx");
-    buf.replace_region_lisp_string(replace_start, replace_end, &replacement);
+    buf.replace_emacs_byte_range_lisp_string(
+        crate::buffer::EmacsByteRange::from_usize(replace_start, replace_end),
+        &replacement,
+    );
 
     let marker_position =
         marker_chain_lookup_for_test(&buf, 42).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));

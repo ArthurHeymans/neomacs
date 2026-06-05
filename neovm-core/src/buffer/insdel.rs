@@ -379,22 +379,6 @@ impl Buffer {
         insertion
     }
 
-    #[cfg(test)]
-    pub fn replace_region_lisp_string(
-        &mut self,
-        start: usize,
-        end: usize,
-        text: &LispString,
-    ) -> TextReplacement {
-        if start > end {
-            return TextReplacement::default();
-        }
-        self.replace_emacs_byte_range_lisp_string(
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            text,
-        )
-    }
-
     pub fn replace_emacs_byte_range_lisp_string(
         &mut self,
         byte_range: EmacsByteRange,
