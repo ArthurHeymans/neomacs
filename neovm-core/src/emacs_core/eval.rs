@@ -12465,7 +12465,9 @@ impl Context {
                 } => {
                     self.restore_current_buffer_if_live(buffer_id);
                     if let Some(saved_pt) = self.buffers.marker_position(buffer_id, marker_id) {
-                        let _ = self.buffers.goto_buffer_byte(buffer_id, saved_pt);
+                        let _ = self
+                            .buffers
+                            .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(saved_pt));
                     }
                     self.buffers.remove_marker(marker_id);
                 }

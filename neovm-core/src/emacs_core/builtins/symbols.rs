@@ -2027,7 +2027,9 @@ pub(crate) fn builtin_vertical_motion(
         while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
             bol -= 1;
         }
-        let _ = eval.buffers.goto_buffer_byte(current_id, bol);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(bol));
         return Ok(Value::fixnum(0));
     }
 
@@ -2071,7 +2073,9 @@ pub(crate) fn builtin_vertical_motion(
 
     // Now pos is at beginning of target line.
     // If COLS was specified, advance to that column.
-    let _ = eval.buffers.goto_buffer_byte(current_id, pos);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
     if let Some(target_col) = cols {
         let _ = indent::builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
     }

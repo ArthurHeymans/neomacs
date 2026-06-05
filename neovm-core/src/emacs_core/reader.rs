@@ -7,7 +7,7 @@ use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use std::io::Write;
 use std::time::Duration;
 use strum::{EnumString, IntoStaticStr};
@@ -814,7 +814,9 @@ pub fn builtin_read_impl(
                 }
             };
 
-            let _ = &mut ctx.buffers.goto_buffer_byte(buf_id, new_pt);
+            let _ = &mut ctx
+                .buffers
+                .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(new_pt));
             let value = maybe_value.ok_or_else(end_of_file_during_parsing_error)?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)

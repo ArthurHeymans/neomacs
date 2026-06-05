@@ -5273,8 +5273,8 @@ impl BufferManager {
                     let byte_pos = self
                         .buffers
                         .get(&id)
-                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1).get())?;
-                    self.goto_buffer_byte(id, byte_pos)?;
+                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1))?;
+                    self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
                 } else if entry.is_cons() {
                     let car = entry.cons_car();
                     let cdr = entry.cons_cdr();
@@ -5308,10 +5308,10 @@ impl BufferManager {
                                 }
                                 undo_char_pos1_to_byte_clamped(buffer, apos1).get()
                             };
-                            self.goto_buffer_byte(id, byte_pos)?;
+                            self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(byte_pos))?;
                             self.insert_into_buffer(id, &text)?;
                             if pos1 > 0 {
-                                self.goto_buffer_byte(id, byte_pos)?;
+                                self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(byte_pos))?;
                             }
                         }
                         (ValueKind::T, ValueKind::Fixnum(_)) => {

@@ -520,7 +520,9 @@ pub(crate) fn builtin_move_to_column(
 
     if target == 0 {
         let (bol, _) = current_buffer_line_bounds(ctx, current_id, pt)?;
-        let _ = ctx.buffers.goto_buffer_byte(current_id, bol);
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(bol));
         return Ok(Value::fixnum(0));
     }
 
@@ -542,7 +544,9 @@ pub(crate) fn builtin_move_to_column(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
-        let _ = ctx.buffers.goto_buffer_byte(current_id, tab_byte);
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(tab_byte));
         let pad = spaces_to_column(col_before_tab, target);
         let insert_pos = tab_byte;
         let pad_len = pad.len();
@@ -568,13 +572,19 @@ pub(crate) fn builtin_move_to_column(
             .delete_buffer_measured_region(current_id, delete_range);
         super::editfns::signal_after_text_change(ctx, delete_change)?;
         let goal_point = tab_after_pad;
-        let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(goal_point));
         let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
-        let _ = ctx.buffers.goto_buffer_byte(current_id, goal_point);
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(goal_point));
         return Ok(Value::fixnum(target as i64));
     }
 
-    let _ = ctx.buffers.goto_buffer_byte(current_id, dest_byte);
+    let _ = ctx
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(dest_byte));
 
     if force_is_t && reached < target {
         if read_only {

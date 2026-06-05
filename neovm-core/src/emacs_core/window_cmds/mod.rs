@@ -5478,7 +5478,7 @@ fn scroll_by_lines_in_state(
     let point_lisp = buf
         .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos))
         .as_i64() as usize;
-    let _ = buffers.goto_buffer_byte(buffer_id, pos);
+    let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos));
     if let Some(window) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))

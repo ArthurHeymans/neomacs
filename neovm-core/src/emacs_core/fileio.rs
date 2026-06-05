@@ -15,7 +15,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::buffer::{EmacsByteRange, text_props::TextPropertyTable};
+use crate::buffer::{EmacsBytePos, EmacsByteRange, text_props::TextPropertyTable};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -4381,7 +4381,7 @@ fn signal_and_insert_file_replace_text(
         return Ok(());
     }
     eval.buffers
-        .goto_buffer_byte(current_id, byte_pos)
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(byte_pos))
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
@@ -4600,7 +4600,7 @@ fn run_after_insert_file_pipeline(
     let pipeline_result = (|| -> Result<i64, Flow> {
         if replace_requested {
             eval.buffers
-                .goto_buffer_byte(current_id, accessible_start)
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(accessible_start))
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         }
 
@@ -5485,7 +5485,9 @@ pub(crate) fn builtin_find_file_noselect(
                 eval,
                 vec![Value::heap_string(abs_path.clone()), Value::T],
             )?;
-            let _ = eval.buffers.goto_buffer_byte(buf_id, 0);
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(0));
             Value::NIL
         } else {
             Value::T

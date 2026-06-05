@@ -14,7 +14,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -435,7 +435,9 @@ fn delete_extract_rectangle_eval(
         let _ = eval
             .buffers
             .delete_buffer_measured_region(current_id, change.old_range());
-        let _ = eval.buffers.goto_buffer_byte(current_id, pmin);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pmin));
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &rewritten);

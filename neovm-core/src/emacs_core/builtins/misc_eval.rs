@@ -1262,7 +1262,9 @@ fn write_print_output_to_target(
                 saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point()));
 
             ctx.buffers.switch_current(buffer_id);
-            let _ = ctx.buffers.goto_buffer_byte(buffer_id, marker_byte);
+            let _ = ctx
+                .buffers
+                .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(marker_byte));
             let _ = ctx.buffers.insert_into_buffer(buffer_id, text);
 
             let new_marker_pos = ctx
@@ -1292,7 +1294,9 @@ fn write_print_output_to_target(
                     } else {
                         old_point
                     };
-                    let _ = ctx.buffers.goto_buffer_byte(saved_id, restore_point);
+                    let _ = ctx
+                        .buffers
+                        .goto_buffer_emacs_byte_pos(saved_id, EmacsBytePos::new(restore_point));
                 }
             }
             Ok(())

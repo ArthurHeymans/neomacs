@@ -1105,7 +1105,7 @@ impl BufferManager {
         text: &LispString,
     ) -> Option<()> {
         if range.is_empty() {
-            self.goto_buffer_byte(id, range.byte_start_usize())?;
+            self.goto_buffer_emacs_byte_pos(id, range.byte_start())?;
             return self.insert_lisp_string_into_buffer(id, text);
         }
 

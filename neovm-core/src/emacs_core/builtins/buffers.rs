@@ -1408,7 +1408,9 @@ pub(crate) fn builtin_replace_region_contents(
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, old_range);
-    let _ = eval.buffers.goto_buffer_byte(current_id, lo);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(lo));
     // The insert builtins already call signal hooks internally, but the
     // surrounding before/after pair covers the whole replace operation.
     // To avoid double-firing, we use insert_pieces_in_state directly.
@@ -2267,7 +2269,9 @@ pub(crate) fn builtin_constrain_to_field(
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let byte_pos = buf.lisp_pos_to_emacs_byte_pos(new_pos);
-        let _ = eval.buffers.goto_buffer_byte(current_id, byte_pos.get());
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, byte_pos);
     }
 
     Ok(Value::fixnum(new_pos))
@@ -2632,7 +2636,9 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
     // Adjust for intangible text property
     let direction = if byte_pos >= old_byte { 1 } else { -1 };
     let adjusted = super::navigation::adjust_for_intangible(eval, byte_pos, direction);
-    let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(adjusted));
     // Run point motion hooks
     super::navigation::check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(arg)

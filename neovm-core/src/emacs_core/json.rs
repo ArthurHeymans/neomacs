@@ -21,7 +21,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteRange, TextExtent};
+use crate::buffer::{BufferManager, EmacsBytePos, EmacsByteRange, TextExtent};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -1334,7 +1334,9 @@ pub(crate) fn builtin_json_parse_buffer(
     let result = parser.parse_value()?;
     let new_point = point_base + parser.pos;
     if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let _ = eval.buffers.goto_buffer_byte(current_id, new_point);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(new_point));
     }
     Ok(result)
 }

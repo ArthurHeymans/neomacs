@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{Buffer, CharPos0, CharRange};
+use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -233,7 +233,8 @@ fn primitive_undo_inner(
             if let Some(pos1) = entry.as_fixnum() {
                 if let Some(buf) = ctx.buffers.get(buf_id) {
                     let byte = char_pos1_to_byte_clamped(buf, pos1);
-                    ctx.buffers.goto_buffer_byte(buf_id, byte);
+                    ctx.buffers
+                        .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(byte));
                 }
                 continue;
             }
@@ -309,7 +310,8 @@ fn primitive_undo_inner(
 
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         let clamped = char_pos1_to_byte_clamped(buf, apos1);
-                        ctx.buffers.goto_buffer_byte(buf_id, clamped);
+                        ctx.buffers
+                            .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(clamped));
                         super::builtins::insert_string_value_in_current_buffer(
                             &ctx.obarray,
                             &[],
@@ -322,7 +324,8 @@ fn primitive_undo_inner(
                         // inserted text (which insert_into_buffer already does).
                         // If positive, move point back to start of insertion.
                         if pos1 > 0 {
-                            ctx.buffers.goto_buffer_byte(buf_id, clamped);
+                            ctx.buffers
+                                .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(clamped));
                         }
                     }
 
@@ -383,7 +386,7 @@ fn primitive_undo_inner(
                     };
                     if let Some(range) = delete_range {
                         ctx.buffers
-                            .goto_buffer_byte(buf_id, range.byte_start_usize());
+                            .goto_buffer_emacs_byte_pos(buf_id, range.byte_start());
                         let _ = ctx.buffers.delete_buffer_measured_region(buf_id, range);
                     }
                 }
