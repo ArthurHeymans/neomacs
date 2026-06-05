@@ -294,6 +294,14 @@ impl CharPos0 {
     pub const fn add_len(self, len: CharLen) -> Self {
         Self(self.0 + len.get())
     }
+
+    pub const fn saturating_sub_len(self, len: CharLen) -> Self {
+        Self(self.0.saturating_sub(len.get()))
+    }
+
+    pub const fn saturating_offset_from(self, start: Self) -> CharLen {
+        CharLen::new(self.0.saturating_sub(start.0))
+    }
 }
 
 impl EmacsBytePos {
@@ -345,6 +353,14 @@ impl CharLen {
 
     pub const fn is_empty(self) -> bool {
         self.0 == 0
+    }
+
+    pub const fn add_len(self, len: Self) -> Self {
+        Self(self.0 + len.0)
+    }
+
+    pub const fn saturating_sub(self, len: Self) -> Self {
+        Self(self.0.saturating_sub(len.0))
     }
 }
 

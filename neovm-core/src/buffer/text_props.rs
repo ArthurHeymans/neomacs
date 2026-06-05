@@ -816,12 +816,12 @@ impl IntervalTree {
             return self.next_id(id);
         }
 
-        let offset = pos.get() - start.get();
-        let new_len = len.get() - offset;
+        let offset = pos.saturating_offset_from(start);
+        let new_len = len.saturating_sub(offset);
         let old_right = self.nodes[id.0].right;
         let plist = plist_value_from_pairs(&plist_pairs(self.nodes[id.0].plist));
         let mut new = IntervalNode::with_cached(
-            CharLen::new(new_len),
+            new_len,
             pos,
             self.nodes[id.0].front_sticky,
             self.nodes[id.0].rear_sticky,
@@ -886,14 +886,14 @@ impl IntervalTree {
             (Some(left), None) => Some(left),
             (None, Some(right)) => Some(right),
             (Some(migrate), Some(right)) => {
-                let migrate_len = self.nodes[migrate.0].total_length.get();
+                let migrate_len = self.nodes[migrate.0].total_length;
                 let mut cursor = right;
                 self.nodes[cursor.0].total_length =
-                    CharLen::new(self.nodes[cursor.0].total_length.get() + migrate_len);
+                    self.nodes[cursor.0].total_length.add_len(migrate_len);
                 while let Some(left) = self.nodes[cursor.0].left {
                     cursor = left;
                     self.nodes[cursor.0].total_length =
-                        CharLen::new(self.nodes[cursor.0].total_length.get() + migrate_len);
+                        self.nodes[cursor.0].total_length.add_len(migrate_len);
                 }
                 self.nodes[cursor.0].left = Some(migrate);
                 self.nodes[migrate.0].parent = Some(cursor);
@@ -936,44 +936,39 @@ impl IntervalTree {
     fn interval_deletion_adjustment(
         &mut self,
         id: IntervalId,
-        from: usize,
-        amount: usize,
-    ) -> usize {
-        if amount == 0 {
-            return 0;
+        from: CharLen,
+        amount: CharLen,
+    ) -> CharLen {
+        if amount.is_empty() {
+            return CharLen::ZERO;
         }
 
-        let left_len = self.subtree_len(self.nodes[id.0].left).get();
+        let left_len = self.subtree_len(self.nodes[id.0].left);
         if from < left_len {
             let left = self.nodes[id.0]
                 .left
                 .expect("left branch length requires a left child");
             let subtract = self.interval_deletion_adjustment(left, from, amount);
-            self.nodes[id.0].total_length =
-                CharLen::new(self.nodes[id.0].total_length.get() - subtract);
+            self.nodes[id.0].total_length = self.nodes[id.0].total_length.saturating_sub(subtract);
             return subtract;
         }
 
-        let total_len = self.nodes[id.0].total_length.get();
-        let right_len = self.subtree_len(self.nodes[id.0].right).get();
-        let right_start = total_len - right_len;
+        let total_len = self.nodes[id.0].total_length;
+        let right_len = self.subtree_len(self.nodes[id.0].right);
+        let right_start = total_len.saturating_sub(right_len);
         if from >= right_start {
             let right = self.nodes[id.0]
                 .right
                 .expect("right branch length requires a right child");
-            let subtract = self.interval_deletion_adjustment(right, from - right_start, amount);
-            self.nodes[id.0].total_length =
-                CharLen::new(self.nodes[id.0].total_length.get() - subtract);
+            let subtract =
+                self.interval_deletion_adjustment(right, from.saturating_sub(right_start), amount);
+            self.nodes[id.0].total_length = self.nodes[id.0].total_length.saturating_sub(subtract);
             return subtract;
         }
 
-        let mut subtract = right_start - from;
-        if amount < subtract {
-            subtract = amount;
-        }
+        let subtract = right_start.saturating_sub(from).min(amount);
 
-        self.nodes[id.0].total_length =
-            CharLen::new(self.nodes[id.0].total_length.get() - subtract);
+        self.nodes[id.0].total_length = self.nodes[id.0].total_length.saturating_sub(subtract);
         if self.node_len(id).is_empty() {
             self.delete_zero_length_interval(id);
         }
@@ -984,39 +979,39 @@ impl IntervalTree {
         if range.is_empty() || self.root.is_none() {
             return;
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().saturating_offset_from(CharPos0::ZERO);
+        let end = range.end().saturating_offset_from(CharPos0::ZERO);
 
-        let tree_len = self.len().get();
+        let tree_len = self.len();
         if start >= tree_len {
             return;
         }
 
-        let mut left_to_delete = end.min(tree_len) - start;
+        let mut left_to_delete = end.min(tree_len).saturating_sub(start);
         if left_to_delete == tree_len {
             self.root = None;
             return;
         }
 
-        while left_to_delete > 0 {
+        while !left_to_delete.is_empty() {
             let Some(root) = self.root else {
                 return;
             };
-            if left_to_delete == self.nodes[root.0].total_length.get() {
+            if left_to_delete == self.nodes[root.0].total_length {
                 self.root = None;
                 return;
             }
             let deleted = self.interval_deletion_adjustment(root, start, left_to_delete);
-            if deleted == 0 {
+            if deleted.is_empty() {
                 break;
             }
-            left_to_delete -= deleted;
+            left_to_delete = left_to_delete.saturating_sub(deleted);
         }
     }
 
     fn merge_interval_left(&mut self, id: IntervalId) -> Option<IntervalId> {
-        let absorb = self.node_len(id).get();
-        if absorb == 0 {
+        let absorb = self.node_len(id);
+        if absorb.is_empty() {
             return None;
         }
 
@@ -1024,16 +1019,16 @@ impl IntervalTree {
             let mut predecessor = left;
             while let Some(right) = self.nodes[predecessor.0].right {
                 self.nodes[predecessor.0].total_length =
-                    CharLen::new(self.nodes[predecessor.0].total_length.get() + absorb);
+                    self.nodes[predecessor.0].total_length.add_len(absorb);
                 predecessor = right;
             }
             self.nodes[predecessor.0].total_length =
-                CharLen::new(self.nodes[predecessor.0].total_length.get() + absorb);
+                self.nodes[predecessor.0].total_length.add_len(absorb);
             self.delete_zero_length_interval(id);
             return Some(predecessor);
         }
 
-        self.nodes[id.0].total_length = CharLen::new(self.nodes[id.0].total_length.get() - absorb);
+        self.nodes[id.0].total_length = self.nodes[id.0].total_length.saturating_sub(absorb);
         let mut predecessor = id;
         while let Some(parent) = self.nodes[predecessor.0].parent {
             if self.nodes[parent.0].right == Some(predecessor) {
@@ -1041,8 +1036,9 @@ impl IntervalTree {
                 return Some(parent);
             }
             predecessor = parent;
-            self.nodes[predecessor.0].total_length =
-                CharLen::new(self.nodes[predecessor.0].total_length.get() - absorb);
+            self.nodes[predecessor.0].total_length = self.nodes[predecessor.0]
+                .total_length
+                .saturating_sub(absorb);
         }
 
         None
