@@ -399,7 +399,7 @@ pub(crate) fn builtin_bookmark_set(
     let _no_overwrite = args.get(1);
 
     let (position, filename) = match eval.buffers.current_buffer() {
-        Some(buffer) => (buffer.point(), buffer.file_name_lisp_string().cloned()),
+        Some(buffer) => (buffer.point_byte(), buffer.file_name_lisp_string().cloned()),
         None => (1, None),
     };
 

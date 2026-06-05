@@ -1315,10 +1315,10 @@ pub(crate) fn builtin_json_parse_buffer(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let accessible = buf.accessible_emacs_byte_region();
         let input = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
-            buf.point(),
+            buf.point_byte(),
             accessible.end_usize(),
         ));
-        (input, buf.point())
+        (input, buf.point_byte())
     };
 
     let mut parser = JsonParser::new(input.as_bytes(), input.is_multibyte(), opts);

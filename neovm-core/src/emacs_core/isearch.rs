@@ -148,18 +148,18 @@ fn replacement_region_bounds(
                 )],
             )
         })?;
-        let pt = buf.point();
+        let pt = buf.point_byte();
         return Ok((pt.min(mark), pt.max(mark)));
     }
 
     let start = match start_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ if backward => accessible.start_usize(),
-        _ => buf.point(),
+        _ => buf.point_byte(),
     };
     let end = match end_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ if backward => buf.point(),
+        _ if backward => buf.point_byte(),
         _ => accessible.end_usize(),
     };
     if start <= end {
@@ -177,7 +177,7 @@ fn line_operation_region_bounds(
     let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ => buf.point(),
+        _ => buf.point_byte(),
     };
     let end = match end_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),

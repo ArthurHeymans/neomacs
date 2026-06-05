@@ -474,7 +474,7 @@ fn resolve_case_region_in_buffers(
                 )],
             )
         })?;
-        let pt = buf.point();
+        let pt = buf.point_byte();
         return Ok(EmacsByteRange::from_usize(pt.min(mark), pt.max(mark)));
     }
 
@@ -564,7 +564,7 @@ fn casify_word_in_state(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
-        let pt = buf.point();
+        let pt = buf.point_byte();
         let target = forward_word(buf, &table, n);
         let (beg, end) = if target >= pt {
             (pt, target)

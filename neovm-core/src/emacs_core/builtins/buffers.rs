@@ -4043,8 +4043,8 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
     let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
         accessible
-            .contains_usize(buf.point())
-            .then_some(buf.point())
+            .contains_usize(buf.point_byte())
+            .then_some(buf.point_byte())
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
@@ -4072,8 +4072,8 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
     let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
         accessible
-            .contains_preceding_char_boundary_usize(buf.point())
-            .then_some(buf.point())
+            .contains_preceding_char_boundary_usize(buf.point_byte())
+            .then_some(buf.point_byte())
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
@@ -4229,7 +4229,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        buf.point()
+        buf.point_byte()
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         let point_min = buf.point_min_char() as i64 + 1;

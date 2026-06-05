@@ -735,7 +735,7 @@ fn forward_word_with_options(
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
     let accessible_len = accessible_chars.len().get();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point()))
+    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
         .saturating_sub(accessible_char_start);
 
     for _ in 0..count {
@@ -801,7 +801,7 @@ fn backward_word_with_options(
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point()))
+    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
         .saturating_sub(accessible_char_start);
 
     for _ in 0..count {
@@ -873,7 +873,7 @@ fn skip_syntax_forward_with_options(
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
     let accessible_len = accessible_chars.len().get();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point()))
+    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
         .saturating_sub(accessible_char_start);
 
     let char_limit = limit
@@ -926,7 +926,7 @@ fn skip_syntax_backward_with_options(
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
     let accessible_char_start = accessible_chars.start_usize();
-    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point()))
+    let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp_usize(buf.point_byte()))
         .saturating_sub(accessible_char_start);
 
     let char_limit = limit
@@ -2457,7 +2457,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
     while remaining > 0 {
         // Phase 1: skip whitespace (and stray EndComment newlines).
         loop {
-            let pt = buf.point();
+            let pt = buf.point_byte();
             if pt >= max {
                 return false;
             }
@@ -2487,7 +2487,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
         }
 
         // Phase 2: detect comment start.
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt >= max {
             return false;
         }
@@ -2576,7 +2576,7 @@ fn scan_forward_comment_body(
     let max = buf.accessible_emacs_byte_region().end_usize();
 
     loop {
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt >= max {
             return false;
         }
@@ -2597,7 +2597,7 @@ fn scan_forward_comment_body(
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
             buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
             // Skip the next char too.
-            let pt2 = buf.point();
+            let pt2 = buf.point_byte();
             if pt2 >= max {
                 return false;
             }
@@ -2704,7 +2704,7 @@ fn scan_forward_comment_body(
 fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
     let max = buf.accessible_emacs_byte_region().end_usize();
     loop {
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt >= max {
             return false;
         }
@@ -2722,7 +2722,7 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
 
         if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
             buf.goto_emacs_byte_pos(EmacsBytePos::new(pt + ch.len_utf8()));
-            let pt2 = buf.point();
+            let pt2 = buf.point_byte();
             if pt2 >= max {
                 return false;
             }
@@ -2756,7 +2756,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
         // backward comment scanning, or (c) gives up on
         // non-comment/non-whitespace.
         loop {
-            let pt = buf.point();
+            let pt = buf.point_byte();
             if pt <= min {
                 return false;
             }
@@ -2822,10 +2822,10 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
             if code == SyntaxClass::EndComment {
                 // If we didn't already move point for a two-char end,
                 // move past the single-char end now.
-                if buf.point() == pt {
+                if buf.point_byte() == pt {
                     buf.goto_emacs_byte_pos(EmacsBytePos::new(pt - ch.len_utf8()));
                 }
-                let saved = buf.point();
+                let saved = buf.point_byte();
                 if scan_backward_comment_body(buf, comstyle_b, nested, honor_properties) {
                     // Successfully scanned back through the comment body.
                     break;
@@ -2892,7 +2892,7 @@ fn scan_backward_comment_body(
     let mut comstart_pos: Option<usize> = None;
 
     loop {
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt <= min {
             // Reached beginning of accessible region.
             break;
@@ -3057,7 +3057,7 @@ fn scan_backward_comment_body(
 fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
     let min = buf.accessible_emacs_byte_region().start_usize();
     loop {
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt <= min {
             return false;
         }
@@ -3115,7 +3115,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
 
     let min = buf.accessible_emacs_byte_region().start_usize();
     loop {
-        let pt = buf.point();
+        let pt = buf.point_byte();
         if pt <= min {
             break;
         }
@@ -3168,7 +3168,7 @@ pub(crate) fn builtin_forward_word(
         let table = SyntaxTable::for_buffer(buf);
         let honor_properties = parse_sexp_lookup_properties_enabled(eval);
         let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
-        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point());
+        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_byte());
         let raw_char = buffer_byte_to_lisp_pos(buf, raw_byte);
         (raw_byte, completed, orig_char, raw_char)
     };
@@ -3325,7 +3325,7 @@ pub(crate) fn builtin_forward_sexp(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let from = buf.point();
+    let from = buf.point_byte();
     let new_pos = match scan_sexps_with_options(buf, &table, from, count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?
     {
@@ -3378,7 +3378,7 @@ pub(crate) fn builtin_backward_sexp(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let from = buf.point();
+    let from = buf.point_byte();
     // backward-sexp with positive count => scan_sexps with negative count
     let new_pos = match scan_sexps_with_options(buf, &table, from, -count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?
@@ -4380,7 +4380,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
     let old_pt = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .point();
+        .point_byte();
 
     let current_id = buffers
         .current_buffer_id()
@@ -4446,7 +4446,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
     let old_pt = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .point();
+        .point_byte();
 
     let current_id = buffers
         .current_buffer_id()

@@ -1487,7 +1487,7 @@ fn interactive_region_args_in_buffers(
             )],
         )
     })?;
-    let pt = buf.point();
+    let pt = buf.point_byte();
     let beg = pt.min(mark);
     let end = pt.max(mark);
     // Region-taking builtins use Emacs-style 1-based character positions.
@@ -2160,7 +2160,10 @@ fn interactive_apply_shift_selection_prefix_in_state(
 
     let mut mark_activated = false;
     if let Some(current_id) = buffers.current_buffer_id() {
-        let point = buffers.get(current_id).map(|buf| buf.point()).unwrap_or(0);
+        let point = buffers
+            .get(current_id)
+            .map(|buf| buf.point_byte())
+            .unwrap_or(0);
         let _ = buffers.set_buffer_mark_emacs_byte_pos(current_id, EmacsBytePos::new(point));
         let _ = buffers.set_buffer_local_property(current_id, "mark-active", Value::T);
         mark_activated = true;

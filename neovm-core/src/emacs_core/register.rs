@@ -341,7 +341,7 @@ pub(crate) fn builtin_point_to_register(
     let marker = match eval
         .buffers
         .current_buffer()
-        .map(|buffer| (buffer.id, buffer.point()))
+        .map(|buffer| (buffer.id, buffer.point_byte()))
     {
         Some((buffer_id, point)) => super::marker::make_registered_buffer_marker(
             &mut eval.buffers,

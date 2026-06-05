@@ -1259,7 +1259,7 @@ fn write_print_output_to_target(
             let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(marker_pos).get();
             let saved_current = ctx.buffers.current_buffer_id();
             let saved_point =
-                saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point()));
+                saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_byte()));
 
             ctx.buffers.switch_current(buffer_id);
             let _ = ctx

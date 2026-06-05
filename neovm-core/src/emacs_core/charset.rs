@@ -1772,7 +1772,7 @@ pub(crate) fn builtin_charset_after(
         }
         buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
     } else {
-        buf.point()
+        buf.point_byte()
     };
 
     let point_max_byte = buf.accessible_emacs_byte_region().end_usize();

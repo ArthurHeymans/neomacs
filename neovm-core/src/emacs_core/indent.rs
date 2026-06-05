@@ -389,7 +389,7 @@ fn delete_horizontal_space_at_point(
     let accessible = buf.accessible_emacs_byte_region();
     let pmin = accessible.start_usize();
     let pmax = accessible.end_usize();
-    let pt = buf.point();
+    let pt = buf.point_byte();
 
     let mut left = pt;
     while left > pmin {
@@ -634,7 +634,7 @@ pub(crate) fn builtin_indent_to(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let pt = buf.point();
+    let pt = buf.point_byte();
     let pmin = buf.accessible_emacs_byte_region().start_usize();
     let (bol, _) = line_bounds(buf, pt);
     let line_prefix = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(bol, pt));
