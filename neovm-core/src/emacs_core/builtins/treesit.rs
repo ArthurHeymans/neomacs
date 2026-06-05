@@ -566,8 +566,10 @@ fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
     if pos < min || pos > max {
         return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
     }
-    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
-        - buf.accessible_emacs_byte_region().start_usize())
+    Ok(buf
+        .lisp_pos_to_accessible_emacs_byte_pos(pos)
+        .saturating_offset_from(buf.accessible_emacs_byte_region().start())
+        .get())
 }
 
 fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize) -> Value {

@@ -326,6 +326,10 @@ impl EmacsBytePos {
     pub const fn saturating_sub_len(self, len: EmacsByteLen) -> Self {
         Self(self.0.saturating_sub(len.get()))
     }
+
+    pub const fn saturating_offset_from(self, start: Self) -> EmacsByteLen {
+        EmacsByteLen::new(self.0.saturating_sub(start.0))
+    }
 }
 
 impl CharLen {
