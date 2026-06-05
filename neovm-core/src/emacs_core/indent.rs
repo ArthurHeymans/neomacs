@@ -400,39 +400,37 @@ fn delete_horizontal_space_at_point(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let accessible = buf.accessible_emacs_byte_region();
-    let pmin = accessible.start_usize();
-    let pmax = accessible.end_usize();
-    let pt = buf.point_emacs_byte_pos().get();
+    let pmin = accessible.start();
+    let pmax = accessible.end();
+    let pt = buf.point_emacs_byte_pos();
 
     let mut left = pt;
     while left > pmin {
-        let left_pos = EmacsBytePos::new(left);
-        let Some(ch) = buf.char_before_emacs_byte_pos(left_pos) else {
+        let Some(ch) = buf.char_before_emacs_byte_pos(left) else {
             break;
         };
         if !is_horizontal_space(ch) {
             break;
         }
-        let Some(char_len) = buf.char_before_emacs_byte_len(left_pos) else {
+        let Some(char_len) = buf.char_before_emacs_byte_len(left) else {
             break;
         };
-        left = left.saturating_sub(char_len.get().max(1));
+        left = left.saturating_sub_len(EmacsByteLen::new(char_len.get().max(1)));
     }
 
     let mut right = pt;
     if !backward_only {
         while right < pmax {
-            let right_pos = EmacsBytePos::new(right);
-            let Some(ch) = buf.char_after_emacs_byte_pos(right_pos) else {
+            let Some(ch) = buf.char_after_emacs_byte_pos(right) else {
                 break;
             };
             if !is_horizontal_space(ch) {
                 break;
             }
-            let Some(char_len) = buf.char_after_emacs_byte_len(right_pos) else {
+            let Some(char_len) = buf.char_after_emacs_byte_len(right) else {
                 break;
             };
-            right += char_len.get().max(1);
+            right = right.add_len(EmacsByteLen::new(char_len.get().max(1)));
         }
     }
 
@@ -451,7 +449,7 @@ fn delete_horizontal_space_at_point(
     let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
         &eval.buffers,
         current_id,
-        EmacsByteRange::from_usize(left, right),
+        EmacsByteRange::new(left, right),
     )?;
     let change = crate::buffer::TextChange::deletion(delete_range);
     super::editfns::signal_before_text_change(eval, change)?;
