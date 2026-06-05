@@ -3662,11 +3662,31 @@ pub struct BufferManager {
 
 #[derive(Clone)]
 struct TextPropertyUndoRun {
-    char_start: usize,
-    char_end: usize,
-    source_start: usize,
-    source_end: usize,
+    range: CharRange,
+    source_range: CharRange,
     plist: Vec<(Value, Value)>,
+}
+
+impl TextPropertyUndoRun {
+    fn covers_full_source_range(&self) -> bool {
+        self.range == self.source_range
+    }
+}
+
+struct TextPropertyUndoEntry {
+    name: Value,
+    old_value: Value,
+    range: CharRange,
+}
+
+impl TextPropertyUndoEntry {
+    fn new(name: Value, old_value: Value, range: CharRange) -> Self {
+        Self {
+            name,
+            old_value,
+            range,
+        }
+    }
 }
 
 fn plist_get_eq(plist: &[(Value, Value)], name: Value) -> Option<Value> {
@@ -3680,65 +3700,56 @@ fn buffer_text_property_undo_runs(
     buf: &Buffer,
     byte_range: EmacsByteRange,
 ) -> Vec<TextPropertyUndoRun> {
-    let start = byte_range.start_usize();
-    let end = byte_range.end_usize();
-    if start >= end {
+    if byte_range.is_empty() {
         return Vec::new();
     }
     if undo::undo_list_is_disabled(&buf.get_undo_list()) {
         return Vec::new();
     }
 
-    let char_start = buf
-        .text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
-        .get();
-    let char_end = buf
-        .text
-        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
-        .get();
-    if char_start >= char_end {
+    let changed_range = CharRange::new(
+        buf.text.emacs_byte_pos_to_char_pos(byte_range.start()),
+        buf.text.emacs_byte_pos_to_char_pos(byte_range.end()),
+    );
+    if changed_range.is_empty() {
         return Vec::new();
     }
 
     let mut runs = Vec::new();
-    let mut cursor = char_start;
+    let mut cursor = changed_range.start();
     let _ = buf
         .text
         .text_props_try_for_each_interval_in_emacs_byte_range(
             byte_range,
             |interval_start, interval_end, plist| {
-                let clipped_start = interval_start.max(char_start);
-                let clipped_end = interval_end.min(char_end);
-                if clipped_start >= clipped_end {
+                let source_range = CharRange::from_usize(interval_start, interval_end);
+                let clipped_range = CharRange::new(
+                    source_range.start().max(changed_range.start()),
+                    source_range.end().min(changed_range.end()),
+                );
+                if clipped_range.is_empty() {
                     return Ok::<(), ()>(());
                 }
-                if cursor < clipped_start {
+                if cursor < clipped_range.start() {
                     runs.push(TextPropertyUndoRun {
-                        char_start: cursor,
-                        char_end: clipped_start,
-                        source_start: cursor,
-                        source_end: clipped_start,
+                        range: CharRange::new(cursor, clipped_range.start()),
+                        source_range: CharRange::new(cursor, clipped_range.start()),
                         plist: Vec::new(),
                     });
                 }
                 runs.push(TextPropertyUndoRun {
-                    char_start: clipped_start,
-                    char_end: clipped_end,
-                    source_start: interval_start,
-                    source_end: interval_end,
+                    range: clipped_range,
+                    source_range,
                     plist: plist.to_vec(),
                 });
-                cursor = clipped_end;
+                cursor = clipped_range.end();
                 Ok(())
             },
         );
-    if cursor < char_end {
+    if cursor < changed_range.end() {
         runs.push(TextPropertyUndoRun {
-            char_start: cursor,
-            char_end,
-            source_start: cursor,
-            source_end: char_end,
+            range: CharRange::new(cursor, changed_range.end()),
+            source_range: CharRange::new(cursor, changed_range.end()),
             plist: Vec::new(),
         });
     }
@@ -3759,10 +3770,7 @@ fn record_text_property_first_change(buf: &mut Buffer, undo_list: &mut Value) {
     buf.undo_state.set_recorded_first_change(true);
 }
 
-fn record_buffer_text_property_undo_entries(
-    buf: &mut Buffer,
-    entries: Vec<(Value, Value, usize, usize)>,
-) {
+fn record_buffer_text_property_undo_entries(buf: &mut Buffer, entries: Vec<TextPropertyUndoEntry>) {
     if entries.is_empty() {
         return;
     }
@@ -3771,13 +3779,8 @@ fn record_buffer_text_property_undo_entries(
         return;
     }
     record_text_property_first_change(buf, &mut ul);
-    for (name, old_value, char_start, char_end) in entries {
-        undo::undo_list_record_property_change(
-            &mut ul,
-            name,
-            old_value,
-            CharRange::from_usize(char_start, char_end),
-        );
+    for entry in entries {
+        undo::undo_list_record_property_change(&mut ul, entry.name, entry.old_value, entry.range);
     }
     buf.set_undo_list(ul);
 }
@@ -3786,28 +3789,27 @@ fn text_properties_set_undo_entries(
     buf: &Buffer,
     byte_range: EmacsByteRange,
     plist: &[(Value, Value)],
-) -> Vec<(Value, Value, usize, usize)> {
+) -> Vec<TextPropertyUndoEntry> {
     let mut entries = Vec::new();
     for run in buffer_text_property_undo_runs(buf, byte_range) {
         // GNU's set_text_properties_1 calls split_interval_right/left without
         // copying properties into the changed split interval except for the
         // untouched remainder.  Therefore set_properties sees a nil old plist
         // for partial source intervals and records nil in undo.
-        let old_plist: &[(Value, Value)] =
-            if run.char_start == run.source_start && run.char_end == run.source_end {
-                &run.plist
-            } else {
-                &[]
-            };
+        let old_plist: &[(Value, Value)] = if run.covers_full_source_range() {
+            &run.plist
+        } else {
+            &[]
+        };
         for (old_name, old_value) in old_plist {
             match plist_get_eq(plist, *old_name) {
                 Some(new_value) if eq_value(&new_value, old_value) => {}
-                _ => entries.push((*old_name, *old_value, run.char_start, run.char_end)),
+                _ => entries.push(TextPropertyUndoEntry::new(*old_name, *old_value, run.range)),
             }
         }
         for (new_name, _) in plist {
             if plist_get_eq(old_plist, *new_name).is_none() {
-                entries.push((*new_name, Value::NIL, run.char_start, run.char_end));
+                entries.push(TextPropertyUndoEntry::new(*new_name, Value::NIL, run.range));
             }
         }
     }
@@ -4815,11 +4817,10 @@ impl BufferManager {
                 if old_value.is_some_and(|old_value| eq_value(&old_value, &value)) {
                     None
                 } else {
-                    Some((
+                    Some(TextPropertyUndoEntry::new(
                         name,
                         old_value.unwrap_or(Value::NIL),
-                        run.char_start,
-                        run.char_end,
+                        run.range,
                     ))
                 }
             })
@@ -4892,7 +4893,7 @@ impl BufferManager {
             .into_iter()
             .filter_map(|run| {
                 plist_get_eq(&run.plist, name)
-                    .map(|old_value| (name, old_value, run.char_start, run.char_end))
+                    .map(|old_value| TextPropertyUndoEntry::new(name, old_value, run.range))
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
