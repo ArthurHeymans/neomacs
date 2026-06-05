@@ -128,7 +128,7 @@ impl TextPositionAnchor {
         }
     }
 
-    pub const fn from_usize(char_pos: usize, emacs_byte_pos: usize) -> Self {
+    pub(in crate::buffer) const fn from_usize(char_pos: usize, emacs_byte_pos: usize) -> Self {
         Self {
             char_pos: CharPos0::new(char_pos),
             emacs_byte_pos: EmacsBytePos::new(emacs_byte_pos),

@@ -1578,7 +1578,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
             let boundary =
                 lisp_string_advance_byte_to_boundary(&new_storage, old_byte.min(new_total_bytes));
             let new_char = lisp_string_byte_to_char(&new_storage, boundary);
-            TextPositionAnchor::from_usize(new_char, boundary)
+            TextPositionAnchor::new(CharPos0::new(new_char), EmacsBytePos::new(boundary))
         });
         buffer.replace_lisp_string_with_text_props(&new_storage, new_props);
     }

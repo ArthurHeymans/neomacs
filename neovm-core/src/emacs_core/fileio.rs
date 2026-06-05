@@ -4523,7 +4523,7 @@ fn insert_file_contents_into_current_buffer_in_state(
             .buffers
             .get(current_id)
             .map(|b| b.point_anchor())
-            .unwrap_or_else(|| TextPositionAnchor::from_usize(0, 0));
+            .unwrap_or_else(|| TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO));
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,

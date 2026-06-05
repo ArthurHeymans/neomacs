@@ -17,7 +17,7 @@ use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
-use crate::buffer::{CharRange, EmacsBytePos, LispCharPos1, TextPositionAnchor};
+use crate::buffer::{CharPos0, CharRange, EmacsBytePos, LispCharPos1, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -4491,7 +4491,10 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             marker_ptr,
             buffer_id,
             marker_id,
-            TextPositionAnchor::from_usize(dump_marker.charpos, dump_marker.bytepos),
+            TextPositionAnchor::new(
+                CharPos0::new(dump_marker.charpos),
+                EmacsBytePos::new(dump_marker.bytepos),
+            ),
             insertion_type,
         );
     }
