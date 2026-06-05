@@ -2499,7 +2499,7 @@ pub(crate) fn zero_width_invisible_run_end_byte(
         if byte_pos >= buf.accessible_emacs_byte_region().end() {
             return Ok(None);
         }
-        super::textprop::byte_to_elisp_pos(buf, byte_pos.get())
+        super::textprop::byte_to_elisp_pos(buf, byte_pos)
     };
 
     if invisible_status_for_value(eval, Value::fixnum(lisp_pos))? != 1 {

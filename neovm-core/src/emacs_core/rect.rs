@@ -334,8 +334,8 @@ fn clamped_rect_inputs(
     let buf = eval.buffers.current_buffer()?;
     let accessible = buf.accessible_emacs_byte_region();
     let full_range = accessible.range();
-    let pmin = accessible.start_usize();
-    let pmax = accessible.end_usize();
+    let pmin = accessible.start();
+    let pmax = accessible.end();
     let point_min_char = super::textprop::byte_to_elisp_pos(buf, pmin);
     let point_max_char = super::textprop::byte_to_elisp_pos(buf, pmax);
     let clamped_start = start.clamp(point_min_char, point_max_char);

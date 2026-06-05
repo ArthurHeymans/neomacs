@@ -137,11 +137,6 @@ fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flo
     ensure_current_buffer_writable_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
-pub(crate) fn byte_span_char_len(buf: &crate::buffer::Buffer, beg: usize, end: usize) -> usize {
-    let range = EmacsByteRange::ordered(EmacsBytePos::new(beg), EmacsBytePos::new(end));
-    buf.edit_range_for_emacs_byte_range(range).char_len().get()
-}
-
 pub(crate) fn buffer_edit_range_for_byte_range_in_manager(
     buffers: &BufferManager,
     buffer_id: crate::buffer::BufferId,
