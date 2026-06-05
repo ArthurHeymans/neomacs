@@ -1247,7 +1247,10 @@ pub(crate) fn builtin_match_string(
     };
     if md.uses_buffer_byte_positions() {
         if end <= buf.total_bytes() {
-            return Ok(buf.buffer_substring_value_range(EmacsByteRange::from_usize(start, end)));
+            return Ok(buf.buffer_substring_value_range(EmacsByteRange::new(
+                EmacsBytePos::new(start),
+                EmacsBytePos::new(end),
+            )));
         }
         return Ok(Value::NIL);
     }
@@ -1825,7 +1828,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (oldstart, oldend, replacement, case_action) = {
+    let (old_byte_range, replacement, case_action) = {
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -1847,22 +1850,27 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         let case_action = if fixedcase {
             crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
         } else {
-            let matched = buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(
-                replacement.0,
-                replacement.1,
-            ));
+            let matched_range = EmacsByteRange::new(
+                EmacsBytePos::new(replacement.0),
+                EmacsBytePos::new(replacement.1),
+            );
+            let matched = buf.buffer_substring_lisp_string_range(matched_range);
             crate::emacs_core::casefiddle::replace_match_case_action(
                 &crate::emacs_core::search::storage_string_from_lisp_string(&matched),
             )
         };
-        (replacement.0, replacement.1, replacement.2, case_action)
+        (
+            EmacsByteRange::new(
+                EmacsBytePos::new(replacement.0),
+                EmacsBytePos::new(replacement.1),
+            ),
+            replacement.2,
+            case_action,
+        )
     };
     let replacement_len = replacement.sbytes();
     let old_range = buffers
-        .edit_range_for_buffer_emacs_byte_range(
-            current_id,
-            EmacsByteRange::from_usize(oldstart, oldend),
-        )
+        .edit_range_for_buffer_emacs_byte_range(current_id, old_byte_range)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     super::super::fns::replace_buffer_region_lisp_string_in_manager(
@@ -1871,14 +1879,21 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         old_range,
         &replacement,
     )?;
-    let newend = oldstart + replacement_len;
+    let oldstart = old_byte_range.start_usize();
+    let oldend = old_byte_range.end_usize();
+    let replacement_byte_range = EmacsByteRange::new(
+        old_byte_range.start(),
+        old_byte_range
+            .start()
+            .add_len(crate::buffer::EmacsByteLen::new(replacement_len)),
+    );
+    let newend = replacement_byte_range.end_usize();
     if case_action != crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
         && oldstart < newend
         && let Some(buf) = buffers.get_mut(current_id)
     {
-        let start_char = buffer_byte_to_char_pos(buf, EmacsBytePos::new(oldstart));
-        let cased_text =
-            buf.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(oldstart, newend));
+        let start_char = buffer_byte_to_char_pos(buf, replacement_byte_range.start());
+        let cased_text = buf.buffer_substring_lisp_string_range(replacement_byte_range);
         let mut undo_list = buf.get_undo_list();
         if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
             crate::buffer::undo::undo_list_record_delete(
@@ -1902,7 +1917,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     // replacement text.  Lisp parsers such as `xml-parse-string` depend on
     // this to continue after an expanded entity rather than re-reading the
     // replacement from its beginning.
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(newend));
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, replacement_byte_range.end());
     update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
     Ok(Value::NIL)
 }
@@ -1979,7 +1994,10 @@ pub(crate) fn builtin_replace_match(
                             super::editfns::text_change_for_lisp_string_replacement_in_manager(
                                 &eval.buffers,
                                 current_id,
-                                EmacsByteRange::from_usize(oldstart, oldend),
+                                EmacsByteRange::new(
+                                    EmacsBytePos::new(oldstart),
+                                    EmacsBytePos::new(oldend),
+                                ),
                                 &replacement,
                             )?;
                         change
