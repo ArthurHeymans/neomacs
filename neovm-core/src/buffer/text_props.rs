@@ -222,11 +222,11 @@ struct IntervalNode {
 }
 
 impl IntervalNode {
-    fn new(length: usize, position: usize, plist: IntervalPlist) -> Self {
+    fn new(length: CharLen, position: CharPos0, plist: IntervalPlist) -> Self {
         let (front_sticky, rear_sticky, write_protect, visible) = Self::extract_cached(plist);
         Self {
-            total_length: CharLen::new(length),
-            position: CharPos0::new(position),
+            total_length: length,
+            position,
             left: None,
             right: None,
             parent: None,
@@ -239,8 +239,8 @@ impl IntervalNode {
     }
 
     fn with_cached(
-        length: usize,
-        position: usize,
+        length: CharLen,
+        position: CharPos0,
         front_sticky: bool,
         rear_sticky: bool,
         write_protect: bool,
@@ -248,8 +248,8 @@ impl IntervalNode {
         plist: IntervalPlist,
     ) -> Self {
         Self {
-            total_length: CharLen::new(length),
-            position: CharPos0::new(position),
+            total_length: length,
+            position,
             left: None,
             right: None,
             parent: None,
@@ -328,9 +328,9 @@ impl IntervalRun {
         Self::new(start, end, Value::NIL)
     }
 
-    fn from_node(start: usize, node: &IntervalNode, length: usize) -> Self {
+    fn from_node(start: CharPos0, node: &IntervalNode, length: CharLen) -> Self {
         Self {
-            range: CharRange::from_start_len(CharPos0::new(start), CharLen::new(length)),
+            range: CharRange::from_start_len(start, length),
             front_sticky: node.front_sticky,
             rear_sticky: node.rear_sticky,
             write_protect: node.write_protect,
@@ -359,8 +359,8 @@ impl IntervalRun {
         self.range = CharRange::from_usize(self.start() + offset, self.end() + offset);
     }
 
-    fn len(&self) -> usize {
-        self.range.len().get()
+    fn len(&self) -> CharLen {
+        self.range.len()
     }
 
     fn is_empty_plist(&self) -> bool {
@@ -378,7 +378,7 @@ impl IntervalRun {
     fn to_node(&self) -> IntervalNode {
         IntervalNode::with_cached(
             self.len(),
-            self.start(),
+            self.range.start(),
             self.front_sticky,
             self.rear_sticky,
             self.write_protect,
@@ -481,7 +481,7 @@ impl IntervalTree {
         let right_len = right
             .map(|child| self.nodes[child.0].total_length.get())
             .unwrap_or(0);
-        let node_len = runs[mid].len();
+        let node_len = runs[mid].len().get();
         let node = &mut self.nodes[id.0];
         node.left = left;
         node.right = right;
@@ -700,13 +700,21 @@ impl IntervalTree {
         }
 
         if self.root.is_none() {
-            let root = self.push_node(IntervalNode::new(end - start, start, Value::NIL));
+            let root = self.push_node(IntervalNode::new(
+                CharLen::new(end - start),
+                CharPos0::new(start),
+                Value::NIL,
+            ));
             self.root = Some(root);
             return;
         }
 
         let rightmost = self.rightmost_id(self.root.expect("root checked above"));
-        let id = self.push_node(IntervalNode::new(end - start, start, Value::NIL));
+        let id = self.push_node(IntervalNode::new(
+            CharLen::new(end - start),
+            CharPos0::new(start),
+            Value::NIL,
+        ));
         self.nodes[id.0].parent = Some(rightmost);
         self.nodes[rightmost.0].right = Some(id);
         self.add_length_to_ancestors(Some(rightmost), (end - start) as isize);
@@ -803,8 +811,8 @@ impl IntervalTree {
         let old_right = self.nodes[id.0].right;
         let plist = plist_value_from_pairs(&plist_pairs(self.nodes[id.0].plist));
         let mut new = IntervalNode::with_cached(
-            new_len,
-            pos,
+            CharLen::new(new_len),
+            CharPos0::new(pos),
             self.nodes[id.0].front_sticky,
             self.nodes[id.0].rear_sticky,
             self.nodes[id.0].write_protect,
@@ -1091,7 +1099,11 @@ impl IntervalTree {
         let node = &self.nodes[id.0];
         let after_left = self.push_runs(node.left, base, runs);
         let length = self.node_len(id);
-        runs.push(IntervalRun::from_node(after_left, node, length));
+        runs.push(IntervalRun::from_node(
+            CharPos0::new(after_left),
+            node,
+            CharLen::new(length),
+        ));
         self.push_runs(node.right, after_left + length, runs)
     }
 
