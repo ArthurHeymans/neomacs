@@ -49,8 +49,8 @@ fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> TextPosi
 }
 
 fn marker_lisp_position(bm: &BufferManager, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
-    bm.marker_char_position(buffer_id, marker_id)
-        .map(|char_pos| char_pos.saturating_add(1).max(1))
+    bm.marker_char_pos(buffer_id, marker_id)
+        .map(|char_pos| char_pos.get().saturating_add(1).max(1))
 }
 
 pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer_id: BufferId) {

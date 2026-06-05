@@ -1261,26 +1261,6 @@ impl BufferText {
         adjustments
     }
 
-    /// Read the byte position of a marker by id.
-    pub fn marker_bytepos(&self, marker_id: u64) -> usize {
-        let ptr = self.chain_find_by_id(marker_id);
-        if ptr.is_null() {
-            0
-        } else {
-            unsafe { (*ptr).data.bytepos }
-        }
-    }
-
-    /// Read the char position of a marker by id.
-    pub fn marker_charpos(&self, marker_id: u64) -> usize {
-        let ptr = self.chain_find_by_id(marker_id);
-        if ptr.is_null() {
-            0
-        } else {
-            unsafe { (*ptr).data.charpos }
-        }
-    }
-
     pub(crate) fn move_marker_to_anchor(&self, marker_id: u64, position: TextPositionAnchor) {
         let ptr = self.chain_find_by_id(marker_id);
         if ptr.is_null() {
@@ -1354,18 +1334,6 @@ impl BufferText {
             }
         }
         None
-    }
-
-    #[cfg(test)]
-    pub fn marker_chain_lookup(&self, marker_id: u64) -> Option<(usize, usize, InsertionType)> {
-        self.marker_chain_anchor_lookup(marker_id)
-            .map(|(position, insertion_type)| {
-                (
-                    position.emacs_byte_pos_usize(),
-                    position.char_pos_usize(),
-                    insertion_type,
-                )
-            })
     }
 
     pub fn remove_marker(&self, marker_id: u64) {

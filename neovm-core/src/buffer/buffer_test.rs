@@ -2403,8 +2403,11 @@ fn manager_create_and_query_marker() {
     mgr.insert_into_buffer(id, "abcdef").expect("insert text");
 
     let (mid, _) = mgr.create_marker(id, 3, InsertionType::After);
-    assert_eq!(mgr.marker_position(id, mid), Some(3));
-    assert_eq!(mgr.marker_char_position(id, mid), Some(3));
+    assert_eq!(
+        mgr.marker_emacs_byte_pos(id, mid).map(EmacsBytePos::get),
+        Some(3)
+    );
+    assert_eq!(mgr.marker_char_pos(id, mid).map(CharPos0::get), Some(3));
 }
 
 #[test]
@@ -2414,15 +2417,18 @@ fn manager_marker_clamped_to_buffer_len() {
     let id = mgr.create_buffer("m");
     // Buffer is empty (len = 0), marker at 100 should be clamped.
     let (mid, _) = mgr.create_marker(id, 100, InsertionType::Before);
-    assert_eq!(mgr.marker_position(id, mid), Some(0));
-    assert_eq!(mgr.marker_char_position(id, mid), Some(0));
+    assert_eq!(
+        mgr.marker_emacs_byte_pos(id, mid).map(EmacsBytePos::get),
+        Some(0)
+    );
+    assert_eq!(mgr.marker_char_pos(id, mid).map(CharPos0::get), Some(0));
 }
 
 #[test]
 fn manager_marker_nonexistent_buffer() {
     crate::test_utils::init_test_tracing();
     let mgr = BufferManager::new();
-    let pos = mgr.marker_position(BufferId(9999), 1);
+    let pos = mgr.marker_emacs_byte_pos(BufferId(9999), 1);
     assert_eq!(pos, None);
 }
 

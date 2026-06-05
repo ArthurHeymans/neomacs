@@ -692,9 +692,9 @@ pub(crate) fn builtin_line_number_at_pos(
                     marker
                         .marker_id
                         .and_then(|marker_id| {
-                            eval.buffers.marker_position(current_buffer_id, marker_id)
+                            eval.buffers
+                                .marker_emacs_byte_pos(current_buffer_id, marker_id)
                         })
-                        .map(EmacsBytePos::new)
                         .unwrap_or_else(|| char_pos_to_byte(buf, marker.charpos as i64 + 1))
                 } else {
                     char_pos_to_byte(buf, marker.charpos as i64 + 1)

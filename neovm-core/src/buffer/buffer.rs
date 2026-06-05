@@ -4226,14 +4226,11 @@ impl BufferManager {
 
     fn fetch_buffer_state_markers(&mut self, buffer_id: BufferId) -> Option<()> {
         let markers = self.buffers.get(&buffer_id)?.state_markers?;
-        let pt = self.marker_position(buffer_id, markers.pt_marker)?;
-        let begv = self.marker_position(buffer_id, markers.begv_marker)?;
-        let zv = self.marker_position(buffer_id, markers.zv_marker)?;
+        let pt = self.marker_emacs_byte_pos(buffer_id, markers.pt_marker)?;
+        let begv = self.marker_emacs_byte_pos(buffer_id, markers.begv_marker)?;
+        let zv = self.marker_emacs_byte_pos(buffer_id, markers.zv_marker)?;
         let buffer = self.buffers.get_mut(&buffer_id)?;
-        buffer.set_accessible_region_and_point_from_emacs_bytes(
-            EmacsByteRange::from_usize(begv, zv),
-            EmacsBytePos::new(pt),
-        );
+        buffer.set_accessible_region_and_point_from_emacs_bytes(EmacsByteRange::new(begv, zv), pt);
         Some(())
     }
 
@@ -4418,9 +4415,9 @@ impl BufferManager {
 
     fn labeled_restriction_bounds(&self, id: BufferId, outermost: bool) -> Option<(usize, usize)> {
         let restriction = self.labeled_restriction_at(id, outermost)?;
-        let beg = self.marker_position(id, restriction.beg_marker)?;
-        let end = self.marker_position(id, restriction.end_marker)?;
-        Some((beg, end))
+        let beg = self.marker_emacs_byte_pos(id, restriction.beg_marker)?;
+        let end = self.marker_emacs_byte_pos(id, restriction.end_marker)?;
+        Some((beg.get(), end.get()))
     }
 
     pub fn current_labeled_restriction_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
@@ -4429,9 +4426,9 @@ impl BufferManager {
 
     pub fn current_labeled_restriction_char_bounds(&self, id: BufferId) -> Option<(usize, usize)> {
         let restriction = self.labeled_restriction_at(id, false)?;
-        let beg = self.marker_char_position(id, restriction.beg_marker)?;
-        let end = self.marker_char_position(id, restriction.end_marker)?;
-        Some((beg, end))
+        let beg = self.marker_char_pos(id, restriction.beg_marker)?;
+        let end = self.marker_char_pos(id, restriction.end_marker)?;
+        Some((beg.get(), end.get()))
     }
 
     pub fn current_labeled_restriction_matches_label(&self, id: BufferId, label: &Value) -> bool {
@@ -5134,8 +5131,12 @@ impl BufferManager {
                 beg_marker,
                 end_marker,
             } => {
-                let beg = self.marker_position(buffer_id, beg_marker);
-                let end = self.marker_position(buffer_id, end_marker);
+                let beg = self
+                    .marker_emacs_byte_pos(buffer_id, beg_marker)
+                    .map(EmacsBytePos::get);
+                let end = self
+                    .marker_emacs_byte_pos(buffer_id, end_marker)
+                    .map(EmacsBytePos::get);
                 if let (Some(begv), Some(zv), Some(len)) = (
                     beg,
                     end,
@@ -5530,17 +5531,18 @@ impl BufferManager {
             .map(|(position, _ins)| position)
     }
 
-    /// Query the current byte position of a marker.
-    pub fn marker_position(&self, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
-        // T7: walk the chain rather than the deleted Vec<MarkerEntry>.
+    pub fn marker_emacs_byte_pos(
+        &self,
+        buffer_id: BufferId,
+        marker_id: u64,
+    ) -> Option<EmacsBytePos> {
         self.marker_anchor_position(buffer_id, marker_id)
-            .map(TextPositionAnchor::emacs_byte_pos_usize)
+            .map(TextPositionAnchor::emacs_byte_pos)
     }
 
-    /// Query the current character position of a marker.
-    pub fn marker_char_position(&self, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
+    pub fn marker_char_pos(&self, buffer_id: BufferId, marker_id: u64) -> Option<CharPos0> {
         self.marker_anchor_position(buffer_id, marker_id)
-            .map(TextPositionAnchor::char_pos_usize)
+            .map(TextPositionAnchor::char_pos)
     }
 
     pub fn marker_value(&self, buffer_id: BufferId, marker_id: u64) -> Option<Value> {
