@@ -804,8 +804,7 @@ pub fn builtin_read_impl(
 
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
                     buf,
-                    start.get(),
-                    end.get(),
+                    EmacsByteRange::new(start, end),
                     locate_syms,
                     &ctx.obarray,
                 ) {
@@ -814,9 +813,7 @@ pub fn builtin_read_impl(
                 }
             };
 
-            let _ = &mut ctx
-                .buffers
-                .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(new_pt));
+            let _ = &mut ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, new_pt);
             let value = maybe_value.ok_or_else(end_of_file_during_parsing_error)?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)

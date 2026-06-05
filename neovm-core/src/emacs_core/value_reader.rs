@@ -140,18 +140,17 @@ pub fn read_one_with_locate_syms(
 /// reads, such as `unidata-gen.el`, advance through the original buffer.
 pub fn read_one_from_buffer_with_locate_syms(
     buffer: &Buffer,
-    start: usize,
-    end: usize,
+    range: EmacsByteRange,
     locate_syms: bool,
     obarray: &super::symbol::Obarray,
-) -> Result<(Option<Value>, usize), ReadError> {
-    let mut reader = Reader::new_buffer(buffer, start, end, obarray);
+) -> Result<(Option<Value>, EmacsBytePos), ReadError> {
+    let mut reader = Reader::new_buffer(buffer, range, obarray);
     reader.locate_syms = locate_syms;
     if !reader.skip_ws_and_comments() {
-        return Ok((None, reader.pos));
+        return Ok((None, EmacsBytePos::new(reader.pos)));
     }
     let value = reader.read_form()?;
-    Ok((Some(value), reader.pos))
+    Ok((Some(value), EmacsBytePos::new(reader.pos)))
 }
 
 /// Reader source wrapper for Lisp strings.
@@ -404,10 +403,11 @@ impl<'a> Reader<'a> {
 
     fn new_buffer(
         input: &'a Buffer,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         obarray: &'a super::symbol::Obarray,
     ) -> Self {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(start <= end, "invalid buffer reader range: {start}..{end}");
         assert!(
             end <= input.total_bytes(),
@@ -2289,7 +2289,10 @@ impl<'a> Reader<'a> {
             }
             ReaderSource::Buffer(input) => {
                 let mut bytes = Vec::with_capacity(end - start);
-                input.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
+                input.copy_emacs_byte_range_to(
+                    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
+                    &mut bytes,
+                );
                 let slice = if input.get_multibyte() {
                     crate::heap_types::LispString::from_emacs_bytes(bytes)
                 } else {
