@@ -298,8 +298,7 @@ impl IntervalNode {
 
 #[derive(Clone, Debug)]
 struct IntervalRun {
-    start: usize,
-    end: usize,
+    range: CharRange,
     front_sticky: bool,
     rear_sticky: bool,
     write_protect: bool,
@@ -309,11 +308,14 @@ struct IntervalRun {
 
 impl IntervalRun {
     fn new(start: usize, end: usize, plist: IntervalPlist) -> Self {
+        Self::new_in_char_range(CharRange::from_usize(start, end), plist)
+    }
+
+    fn new_in_char_range(range: CharRange, plist: IntervalPlist) -> Self {
         let (front_sticky, rear_sticky, write_protect, visible) =
             IntervalNode::extract_cached(plist);
         Self {
-            start,
-            end,
+            range,
             front_sticky,
             rear_sticky,
             write_protect,
@@ -328,8 +330,7 @@ impl IntervalRun {
 
     fn from_node(start: usize, node: &IntervalNode, length: usize) -> Self {
         Self {
-            start,
-            end: start + length,
+            range: CharRange::from_start_len(CharPos0::new(start), CharLen::new(length)),
             front_sticky: node.front_sticky,
             rear_sticky: node.rear_sticky,
             write_protect: node.write_protect,
@@ -338,8 +339,28 @@ impl IntervalRun {
         }
     }
 
+    fn start(&self) -> usize {
+        self.range.start_usize()
+    }
+
+    fn end(&self) -> usize {
+        self.range.end_usize()
+    }
+
+    fn set_start(&mut self, start: usize) {
+        self.range = CharRange::from_usize(start, self.end());
+    }
+
+    fn set_end(&mut self, end: usize) {
+        self.range = CharRange::from_usize(self.start(), end);
+    }
+
+    fn shift_by(&mut self, offset: usize) {
+        self.range = CharRange::from_usize(self.start() + offset, self.end() + offset);
+    }
+
     fn len(&self) -> usize {
-        self.end.saturating_sub(self.start)
+        self.range.len().get()
     }
 
     fn is_empty_plist(&self) -> bool {
@@ -357,7 +378,7 @@ impl IntervalRun {
     fn to_node(&self) -> IntervalNode {
         IntervalNode::with_cached(
             self.len(),
-            self.start,
+            self.start(),
             self.front_sticky,
             self.rear_sticky,
             self.write_protect,
@@ -406,22 +427,22 @@ impl IntervalTree {
     }
 
     fn normalize_runs_impl(runs: &mut Vec<IntervalRun>, preserve_empty: bool) -> Vec<IntervalRun> {
-        runs.retain(|run| run.start < run.end);
-        runs.sort_by_key(|run| run.start);
+        runs.retain(|run| run.start() < run.end());
+        runs.sort_by_key(|run| run.start());
 
         let mut normalized = Vec::new();
         let mut cursor = 0;
         for mut run in runs.drain(..) {
-            if run.end <= cursor {
+            if run.end() <= cursor {
                 continue;
             }
-            if run.start < cursor {
-                run.start = cursor;
+            if run.start() < cursor {
+                run.set_start(cursor);
             }
-            if cursor < run.start {
-                normalized.push(IntervalRun::default(cursor, run.start));
+            if cursor < run.start() {
+                normalized.push(IntervalRun::default(cursor, run.start()));
             }
-            cursor = run.end;
+            cursor = run.end();
             normalized.push(run);
         }
 
@@ -466,7 +487,7 @@ impl IntervalTree {
         node.right = right;
         node.parent = parent;
         node.total_length = left_len + node_len + right_len;
-        node.position = runs[mid].start;
+        node.position = runs[mid].start();
 
         Some(id)
     }
@@ -716,23 +737,21 @@ impl IntervalTree {
         let mut inserted = false;
 
         for run in runs {
-            if run.end <= pos {
+            if run.end() <= pos {
                 adjusted.push(run);
                 continue;
             }
 
-            if run.start >= pos {
+            if run.start() >= pos {
                 if !inserted {
                     adjusted.push(IntervalRun::default(pos, pos + len));
                     let mut shifted = run;
-                    shifted.start += len;
-                    shifted.end += len;
+                    shifted.shift_by(len);
                     adjusted.push(shifted);
                     inserted = true;
                 } else {
                     let mut shifted = run;
-                    shifted.start += len;
-                    shifted.end += len;
+                    shifted.shift_by(len);
                     adjusted.push(shifted);
                 }
                 continue;
@@ -740,16 +759,16 @@ impl IntervalTree {
 
             if run.is_empty_plist() {
                 let mut extended = run;
-                extended.end += len;
+                extended.set_end(extended.end() + len);
                 adjusted.push(extended);
             } else {
                 let right_plist = plist_value_from_pairs(&plist_pairs(run.plist));
                 let mut left = run.clone();
-                left.end = pos;
+                left.set_end(pos);
                 let inserted_run = IntervalRun::default(pos, pos + len);
                 let mut right = run;
-                right.start = pos + len;
-                right.end += len;
+                right.set_start(pos + len);
+                right.set_end(right.end() + len);
                 right.plist = right_plist;
                 right.refresh_cache();
                 adjusted.push(left);
@@ -1346,34 +1365,37 @@ impl TextPropertyTable {
         if pos == 0 {
             return;
         }
-        let Some(index) = runs.iter().position(|run| run.start < pos && pos < run.end) else {
+        let Some(index) = runs
+            .iter()
+            .position(|run| run.start() < pos && pos < run.end())
+        else {
             return;
         };
 
         let right_plist = plist_value_from_pairs(&plist_pairs(runs[index].plist));
         let mut right = runs[index].clone();
-        right.start = pos;
+        right.set_start(pos);
         right.plist = right_plist;
         right.refresh_cache();
-        runs[index].end = pos;
+        runs[index].set_end(pos);
         runs.insert(index + 1, right);
     }
 
     fn ensure_runs_cover(runs: &mut Vec<IntervalRun>, end: usize) {
-        let current_end = runs.last().map(|run| run.end).unwrap_or(0);
+        let current_end = runs.last().map(IntervalRun::end).unwrap_or(0);
         if current_end < end {
             runs.push(IntervalRun::default(current_end, end));
         }
     }
 
     fn splice_interval_run(runs: &mut Vec<IntervalRun>, run: IntervalRun) {
-        if run.start >= run.end {
+        if run.start() >= run.end() {
             return;
         }
-        Self::ensure_runs_cover(runs, run.end);
-        Self::split_runs_at(runs, run.start);
-        Self::split_runs_at(runs, run.end);
-        runs.retain(|existing| !(existing.start < run.end && existing.end > run.start));
+        Self::ensure_runs_cover(runs, run.end());
+        Self::split_runs_at(runs, run.start());
+        Self::split_runs_at(runs, run.end());
+        runs.retain(|existing| !(existing.start() < run.end() && existing.end() > run.start()));
         runs.push(run);
     }
 
@@ -1858,7 +1880,9 @@ impl TextPropertyTable {
             .runs()
             .into_iter()
             .filter(|run| !run.is_empty_plist())
-            .map(|run| PropertyInterval::from_plist(run.start, run.end, &plist_pairs(run.plist)))
+            .map(|run| {
+                PropertyInterval::from_plist(run.start(), run.end(), &plist_pairs(run.plist))
+            })
             .collect()
     }
 
@@ -1901,8 +1925,8 @@ impl TextPropertyTable {
         let mut runs = Vec::new();
         let mut cursor = 0;
         for run in self.intervals.runs() {
-            let start = run.start.min(len);
-            let end = run.end.min(len);
+            let start = run.start().min(len);
+            let end = run.end().min(len);
             if cursor < start {
                 runs.push((cursor, start, Value::NIL));
             }
@@ -2092,8 +2116,7 @@ impl TextPropertyTable {
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: usize) {
         let mut runs = self.intervals.runs();
         for mut run in other.intervals.runs() {
-            run.start += offset;
-            run.end += offset;
+            run.shift_by(offset);
             Self::splice_interval_run(&mut runs, run);
         }
         self.replace_runs_preserving_shape(runs);
@@ -2118,7 +2141,7 @@ impl TextPropertyTable {
             }
             for (name, value) in plist_pairs(run.plist) {
                 self.put_property_in_char_range(
-                    CharRange::from_usize(run.start + offset, run.end + offset),
+                    CharRange::from_usize(run.start() + offset, run.end() + offset),
                     name,
                     value,
                 );
@@ -2140,15 +2163,15 @@ impl TextPropertyTable {
             if source.is_empty_plist() {
                 continue;
             }
-            let shifted_start = source.start + offset;
-            let shifted_end = source.end + offset;
+            let shifted_start = source.start() + offset;
+            let shifted_end = source.end() + offset;
 
             Self::ensure_runs_cover(&mut target_runs, shifted_end);
             Self::split_runs_at(&mut target_runs, shifted_start);
             Self::split_runs_at(&mut target_runs, shifted_end);
 
             for target in &mut target_runs {
-                if target.start < shifted_end && target.end > shifted_start {
+                if target.start() < shifted_end && target.end() > shifted_start {
                     for (name, value) in plist_pairs(source.plist) {
                         if plist_value_get(target.plist, name).is_none() {
                             target.plist = plist_value_prepend_pair(target.plist, name, value);
@@ -2175,8 +2198,8 @@ impl TextPropertyTable {
             let mut merged = false;
             let mut idx = 0;
             while idx + 1 < runs.len() {
-                let left_end = runs[idx].end;
-                let right_start = runs[idx + 1].start;
+                let left_end = runs[idx].end();
+                let right_start = runs[idx + 1].start();
                 if left_end != right_start
                     || runs[idx].plist.is_nil()
                     || !plists_equal_eq(
@@ -2190,8 +2213,8 @@ impl TextPropertyTable {
                     continue;
                 }
 
-                let right_end = runs[idx + 1].end;
-                runs[idx].end = right_end;
+                let right_end = runs[idx + 1].end();
+                runs[idx].set_end(right_end);
                 runs[idx].refresh_cache();
                 runs.remove(idx + 1);
                 merged = true;
@@ -2214,7 +2237,7 @@ impl TextPropertyTable {
         self.intervals
             .runs()
             .into_iter()
-            .map(|run| (run.start, run.end, run.is_empty_plist()))
+            .map(|run| (run.start(), run.end(), run.is_empty_plist()))
             .collect()
     }
 
