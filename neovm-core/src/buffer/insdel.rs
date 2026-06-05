@@ -616,41 +616,35 @@ impl Buffer {
     fn transpose_region_properties(&self, transposition: TextTransposition) -> TextPropertyTable {
         let first = transposition.first();
         let second = transposition.second();
-        let start1_char = first.char_start_usize();
-        let end1_char = first.char_end_usize();
-        let start2_char = second.char_start_usize();
-        let end2_char = second.char_end_usize();
-        let len1 = transposition.first_char_len().get();
-        let len2 = transposition.second_char_len().get();
         let props1 = self
             .text
             .text_props_snapshot()
-            .slice_char_range(CharRange::from_usize(start1_char, end1_char));
+            .slice_char_range(first.char_range());
         let props2 = self
             .text
             .text_props_snapshot()
-            .slice_char_range(CharRange::from_usize(start2_char, end2_char));
-        let props_mid = if len1 == len2 {
+            .slice_char_range(second.char_range());
+        let props_mid = if transposition.same_char_len() {
             TextPropertyTable::new()
         } else {
             self.text
                 .text_props_snapshot()
-                .slice_char_range(CharRange::from_usize(end1_char, start2_char))
+                .slice_char_range(transposition.middle_char_range())
         };
 
         let mut props = self.text.text_props_snapshot();
-        if len1 == len2 {
-            props
-                .remove_all_properties_in_char_range(CharRange::from_usize(start1_char, end1_char));
-            props
-                .remove_all_properties_in_char_range(CharRange::from_usize(start2_char, end2_char));
+        if transposition.same_char_len() {
+            props.remove_all_properties_in_char_range(first.char_range());
+            props.remove_all_properties_in_char_range(second.char_range());
         } else {
-            props
-                .remove_all_properties_in_char_range(CharRange::from_usize(start1_char, end2_char));
-            props.append_shifted_at_char_offset(&props_mid, CharLen::new(start1_char + len2));
+            props.remove_all_properties_in_char_range(transposition.char_span());
+            props.append_shifted_at_char_pos(
+                &props_mid,
+                transposition.middle_destination_char_start(),
+            );
         }
-        props.append_shifted_at_char_offset(&props1, CharLen::new(end2_char - len1));
-        props.append_shifted_at_char_offset(&props2, CharLen::new(start1_char));
+        props.append_shifted_at_char_pos(&props1, transposition.first_destination_char_start());
+        props.append_shifted_at_char_pos(&props2, transposition.second_destination_char_start());
         props
     }
 

@@ -1085,13 +1085,13 @@ impl BufferText {
         other: &TextPropertyTable,
         byte_pos: EmacsBytePos,
     ) {
-        let char_offset = self
+        let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
-            .start_usize();
+            .start();
         self.storage
             .borrow_mut()
             .text_props
-            .append_shifted_at_char_offset(other, CharLen::new(char_offset));
+            .append_shifted_at_char_pos(other, char_pos);
     }
 
     pub fn text_props_merge_missing_shifted_at_emacs_byte_pos(

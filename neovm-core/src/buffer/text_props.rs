@@ -2151,6 +2151,10 @@ impl TextPropertyTable {
         self.append_shifted_raw(other, offset);
     }
 
+    pub fn append_shifted_at_char_pos(&mut self, other: &TextPropertyTable, pos: CharPos0) {
+        self.append_shifted_raw(other, CharLen::new(pos.get()));
+    }
+
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
         let mut runs = self.intervals.runs();
         for mut run in other.intervals.runs() {

@@ -436,6 +436,24 @@ impl TextTransposition {
         EmacsByteRange::new(self.first.byte_end(), self.second.byte_start())
     }
 
+    pub const fn middle_char_range(self) -> CharRange {
+        CharRange::new(self.first.char_end(), self.second.char_start())
+    }
+
+    pub const fn second_destination_char_start(self) -> CharPos0 {
+        self.first.char_start()
+    }
+
+    pub const fn middle_destination_char_start(self) -> CharPos0 {
+        self.first.char_start().add_len(self.second_char_len())
+    }
+
+    pub const fn first_destination_char_start(self) -> CharPos0 {
+        self.second
+            .char_end()
+            .saturating_sub_len(self.first_char_len())
+    }
+
     pub const fn first_char_len(self) -> CharLen {
         self.first.char_len()
     }
