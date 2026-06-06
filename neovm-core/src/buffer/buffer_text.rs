@@ -22,8 +22,8 @@ use super::position::{
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, BufferTextBytesSnapshot, GapCompatState,
-    ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextInsertion, TextMetrics,
-    TextReplacement,
+    ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextExtentDelta, TextInsertion,
+    TextMetrics, TextReplacement,
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
@@ -149,6 +149,19 @@ fn multibyte_chunk_contains_char_code(chunk: &[u8], code: u32, carry: &mut Vec<u
 
 fn marker_data_anchor(data: &crate::heap_types::LispMarker) -> TextPositionAnchor {
     TextPositionAnchor::new(CharPos0::new(data.charpos), EmacsBytePos::new(data.bytepos))
+}
+
+fn marker_data_byte_pos(data: &crate::heap_types::LispMarker) -> EmacsBytePos {
+    EmacsBytePos::new(data.bytepos)
+}
+
+fn set_marker_data_anchor(data: &mut crate::heap_types::LispMarker, anchor: TextPositionAnchor) {
+    data.bytepos = anchor.emacs_byte_pos_usize();
+    data.charpos = anchor.char_pos_usize();
+}
+
+fn apply_marker_data_delta(data: &mut crate::heap_types::LispMarker, delta: TextExtentDelta) {
+    set_marker_data_anchor(data, delta.apply_to_anchor(marker_data_anchor(data)));
 }
 
 impl Clone for BufferTextStorage {
@@ -1435,12 +1448,10 @@ impl BufferText {
         insert_pos: EmacsBytePos,
         extent: TextExtent,
     ) {
-        let byte_len = extent.emacs_bytes().get();
-        if byte_len == 0 {
+        if extent.emacs_bytes().is_empty() {
             return;
         }
-        let insert_pos = insert_pos.get();
-        let char_len = extent.chars().get();
+        let insert_delta = TextExtentDelta::insertion(extent);
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: `curr` walks live chain-owned MarkerObj pointers from
@@ -1450,13 +1461,12 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                if data.bytepos > insert_pos {
-                    data.bytepos += byte_len;
-                    data.charpos += char_len;
-                } else if data.bytepos == insert_pos && data.insertion_type {
+                let marker_byte_pos = marker_data_byte_pos(data);
+                if marker_byte_pos > insert_pos {
+                    apply_marker_data_delta(data, insert_delta);
+                } else if marker_byte_pos == insert_pos && data.insertion_type {
                     // insertion_type == true means "after" in GNU terms.
-                    data.bytepos += byte_len;
-                    data.charpos += char_len;
+                    apply_marker_data_delta(data, insert_delta);
                 }
                 curr = data.next_marker;
             }
@@ -1473,21 +1483,18 @@ impl BufferText {
         insert_pos: EmacsBytePos,
         extent: TextExtent,
     ) {
-        let byte_len = extent.emacs_bytes().get();
-        if byte_len == 0 {
+        if extent.emacs_bytes().is_empty() {
             return;
         }
-        let insert_pos = insert_pos.get();
-        let char_len = extent.chars().get();
+        let insert_delta = TextExtentDelta::insertion(extent);
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                if data.bytepos > insert_pos {
-                    data.bytepos += byte_len;
-                    data.charpos += char_len;
+                if marker_data_byte_pos(data) > insert_pos {
+                    apply_marker_data_delta(data, insert_delta);
                 }
                 curr = data.next_marker;
             }
@@ -1498,23 +1505,18 @@ impl BufferText {
         if range.is_empty() {
             return;
         }
-        let start = range.byte_start_usize();
-        let end = range.byte_end_usize();
-        let start_char = range.char_start_usize();
-        let byte_len = range.byte_len().get();
-        let char_len = range.char_len().get();
+        let delete_delta = TextExtentDelta::deletion(range.extent());
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                if data.bytepos >= end {
-                    data.bytepos -= byte_len;
-                    data.charpos -= char_len;
-                } else if data.bytepos > start {
-                    data.bytepos = start;
-                    data.charpos = start_char;
+                let marker_byte_pos = marker_data_byte_pos(data);
+                if marker_byte_pos >= range.byte_end() {
+                    apply_marker_data_delta(data, delete_delta);
+                } else if marker_byte_pos > range.byte_start() {
+                    set_marker_data_anchor(data, range.start_anchor());
                 }
                 curr = data.next_marker;
             }
@@ -1526,30 +1528,23 @@ impl BufferText {
         old_range: TextEditRange,
         new_extent: TextExtent,
     ) {
-        let new_byte_len = new_extent.emacs_bytes().get();
-        let new_char_len = new_extent.chars().get();
         if old_range.is_empty() {
             self.adjust_markers_for_insert_extent(old_range.byte_start(), new_extent);
             return;
         }
 
-        let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
-        let start_char = old_range.char_start_usize();
-        let old_byte_len = old_range.byte_len().get();
-        let old_char_len = old_range.char_len().get();
+        let replace_delta = TextExtentDelta::replacement(old_range.extent(), new_extent);
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                if data.bytepos >= end {
-                    data.bytepos = data.bytepos + new_byte_len - old_byte_len;
-                    data.charpos = data.charpos + new_char_len - old_char_len;
-                } else if data.bytepos > start {
-                    data.bytepos = start;
-                    data.charpos = start_char;
+                let marker_byte_pos = marker_data_byte_pos(data);
+                if marker_byte_pos >= old_range.byte_end() {
+                    apply_marker_data_delta(data, replace_delta);
+                } else if marker_byte_pos > old_range.byte_start() {
+                    set_marker_data_anchor(data, old_range.start_anchor());
                 }
                 curr = data.next_marker;
             }
@@ -1557,21 +1552,18 @@ impl BufferText {
     }
 
     pub(crate) fn advance_markers_at_position(&self, pos: EmacsBytePos, extent: TextExtent) {
-        let byte_len = extent.emacs_bytes().get();
-        if byte_len == 0 {
+        if extent.emacs_bytes().is_empty() {
             return;
         }
-        let pos = pos.get();
-        let char_len = extent.chars().get();
+        let insert_delta = TextExtentDelta::insertion(extent);
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
         unsafe {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
-                if data.bytepos == pos {
-                    data.bytepos += byte_len;
-                    data.charpos += char_len;
+                if marker_data_byte_pos(data) == pos {
+                    apply_marker_data_delta(data, insert_delta);
                 }
                 curr = data.next_marker;
             }
