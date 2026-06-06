@@ -191,7 +191,13 @@ fn join_lisp_string_lines(lines: &[LispString], multibyte: bool) -> LispString {
     super::builtins::lisp_string_from_buffer_bytes(out, multibyte)
 }
 
-fn line_col_for_char_index(text: &LispString, target: usize) -> (usize, usize) {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LineColumn {
+    line: usize,
+    column: usize,
+}
+
+fn line_col_for_char_index(text: &LispString, target: usize) -> LineColumn {
     let mut line = 0usize;
     let mut col = 0usize;
     for (idx, ch) in super::builtins::lisp_string_char_codes(text)
@@ -199,7 +205,7 @@ fn line_col_for_char_index(text: &LispString, target: usize) -> (usize, usize) {
         .enumerate()
     {
         if idx == target {
-            return (line, col);
+            return LineColumn { line, column: col };
         }
         if ch == b'\n' as u32 {
             line += 1;
@@ -208,7 +214,7 @@ fn line_col_for_char_index(text: &LispString, target: usize) -> (usize, usize) {
             col += 1;
         }
     }
-    (line, col)
+    LineColumn { line, column: col }
 }
 
 fn extract_line_columns(line: &LispString, start_col: usize, end_col: usize) -> LispString {
@@ -344,15 +350,22 @@ fn clamped_rect_inputs(
 
     let rel_start = (clamped_start - point_min_char).max(0) as usize;
     let rel_end = (clamped_end - point_min_char).max(0) as usize;
-    let (start_line, start_col) = line_col_for_char_index(&text, rel_start);
-    let (end_line, end_col) = line_col_for_char_index(&text, rel_end);
-    let (left_col, right_col) = if start_col <= end_col {
-        (start_col, end_col)
+    let start_position = line_col_for_char_index(&text, rel_start);
+    let end_position = line_col_for_char_index(&text, rel_end);
+    let (left_col, right_col) = if start_position.column <= end_position.column {
+        (start_position.column, end_position.column)
     } else {
-        (end_col, start_col)
+        (end_position.column, start_position.column)
     };
     Some((
-        text, full_range, start_line, start_col, end_line, end_col, left_col, right_col,
+        text,
+        full_range,
+        start_position.line,
+        start_position.column,
+        end_position.line,
+        end_position.column,
+        left_col,
+        right_col,
     ))
 }
 
