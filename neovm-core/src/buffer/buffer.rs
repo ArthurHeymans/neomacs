@@ -2386,6 +2386,14 @@ impl Buffer {
             .char_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
+    /// Emacs character *code* (u32, including codes outside the Unicode range
+    /// for raw bytes) at a byte position.  Unlike `char_at_emacs_byte_pos` this
+    /// does not lose raw-byte chars to Rust's `char` range.
+    pub fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        self.text
+            .char_code_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
+    }
+
     pub fn text_props_get_property_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

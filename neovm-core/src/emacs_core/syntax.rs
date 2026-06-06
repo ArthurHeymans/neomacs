@@ -730,42 +730,31 @@ fn syntax_char_from_code(code: u32) -> char {
     super::builtins::character_code_to_rust_char(code as i64).unwrap_or('\u{FFFD}')
 }
 
-fn syntax_chars_from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Vec<char> {
-    if !multibyte {
-        return bytes
-            .iter()
-            .map(|&byte| syntax_char_from_code(byte as u32))
-            .collect();
-    }
-
-    let mut chars = Vec::with_capacity(bytes.len());
-    let mut pos = 0;
-    while pos < bytes.len() {
-        let byte = bytes[pos];
-        if byte < 0x80 {
-            chars.push(byte as char);
-            pos += 1;
-            continue;
-        }
-
-        let (code, len) = super::emacs_char::string_char_unchecked(&bytes[pos..]);
-        chars.push(syntax_char_from_code(code));
-        pos += len;
-    }
-    chars
+/// On-demand syntax-char accessor over a buffer.
+///
+/// Replaces decoding the whole (accessible) buffer into a `Vec<char>` on every
+/// syntax call -- which was O(buffer) per call and O(n^2) across a font-lock
+/// pass.  Reading a char on demand is now cheap because byte<->char conversion
+/// is cached (`gap_buffer`).  `char_at(idx)` returns the syntax char at logical
+/// char position `base_char + idx`, so each caller keeps its existing
+/// (range-relative or absolute) index convention; the base absorbs the
+/// difference.
+struct BufferChars<'a> {
+    buf: &'a Buffer,
+    base_char: usize,
 }
 
-fn buffer_chars_in_range(buf: &Buffer, range: EmacsByteRange) -> Vec<char> {
-    let multibyte = buf.get_multibyte();
-    if let Some(chars) = buf.with_contiguous_emacs_byte_range(range, |bytes| {
-        syntax_chars_from_emacs_bytes(bytes, multibyte)
-    }) {
-        return chars;
+impl<'a> BufferChars<'a> {
+    fn new(buf: &'a Buffer, base_char: usize) -> Self {
+        Self { buf, base_char }
     }
 
-    let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(range, &mut bytes);
-    syntax_chars_from_emacs_bytes(&bytes, multibyte)
+    #[inline]
+    fn char_at(&self, idx: usize) -> char {
+        let byte_pos = buffer_char_to_emacs_byte_pos(self.buf, CharPos0::new(self.base_char + idx));
+        let code = self.buf.char_code_at_emacs_byte_pos(byte_pos).unwrap_or(0);
+        syntax_char_from_code(code)
+    }
 }
 
 fn forward_word_with_options(
@@ -780,7 +769,7 @@ fn forward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = buffer_chars_in_range(buf, accessible_bytes.range());
+    let chars = BufferChars::new(buf, accessible_chars.start().get());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -793,7 +782,7 @@ fn forward_word_with_options(
                 effective_syntax_entry_for_abs_char(
                     buf,
                     table,
-                    chars[idx],
+                    chars.char_at(idx),
                     accessible_char_start + idx,
                     honor_properties,
                 )
@@ -816,7 +805,7 @@ fn forward_word_with_options(
                 effective_syntax_entry_for_abs_char(
                     buf,
                     table,
-                    chars[idx],
+                    chars.char_at(idx),
                     accessible_char_start + idx,
                     honor_properties,
                 )
@@ -853,7 +842,7 @@ fn backward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = buffer_chars_in_range(buf, accessible_bytes.range());
+    let chars = BufferChars::new(buf, accessible_chars.start().get());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -865,7 +854,7 @@ fn backward_word_with_options(
                 effective_syntax_entry_for_abs_char(
                     buf,
                     table,
-                    chars[idx - 1],
+                    chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
                     honor_properties,
                 )
@@ -888,7 +877,7 @@ fn backward_word_with_options(
                 effective_syntax_entry_for_abs_char(
                     buf,
                     table,
-                    chars[idx - 1],
+                    chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
                     honor_properties,
                 )
@@ -930,7 +919,7 @@ fn skip_syntax_forward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = buffer_chars_in_range(buf, accessible_bytes.range());
+    let chars = BufferChars::new(buf, accessible_chars.start().get());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -947,7 +936,7 @@ fn skip_syntax_forward_with_options(
         let syn = effective_syntax_entry_for_abs_char(
             buf,
             table,
-            chars[idx],
+            chars.char_at(idx),
             accessible_char_start + idx,
             honor_properties,
         )
@@ -984,7 +973,7 @@ fn skip_syntax_backward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = buffer_chars_in_range(buf, accessible_bytes.range());
+    let chars = BufferChars::new(buf, accessible_chars.start().get());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -1000,7 +989,7 @@ fn skip_syntax_backward_with_options(
         let syn = effective_syntax_entry_for_abs_char(
             buf,
             table,
-            chars[idx - 1],
+            chars.char_at(idx - 1),
             accessible_char_start + idx - 1,
             honor_properties,
         )
@@ -1053,7 +1042,7 @@ fn scan_sexps_with_options(
         return Ok(Some(from));
     }
 
-    let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
+    let chars = BufferChars::new(buf, 0);
     let accessible_chars = buf.accessible_char_region();
     let start_bound = accessible_chars.start().get();
     let stop_bound = accessible_chars.end().get();
@@ -1099,7 +1088,7 @@ fn is_sexp_ignored_syntax(class: SyntaxClass) -> bool {
 
 fn skip_sexp_ignored_forward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1107,8 +1096,14 @@ fn skip_sexp_ignored_forward(
 ) -> usize {
     while idx < stop
         && is_sexp_ignored_syntax(
-            effective_syntax_entry_for_abs_char(buf, table, chars[idx], idx, honor_properties)
-                .class,
+            effective_syntax_entry_for_abs_char(
+                buf,
+                table,
+                chars.char_at(idx),
+                idx,
+                honor_properties,
+            )
+            .class,
         )
     {
         idx += 1;
@@ -1118,7 +1113,7 @@ fn skip_sexp_ignored_forward(
 
 fn skip_sexp_ignored_backward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     mut idx: usize,
     start: usize,
     table: &SyntaxTable,
@@ -1129,7 +1124,7 @@ fn skip_sexp_ignored_backward(
             effective_syntax_entry_for_abs_char(
                 buf,
                 table,
-                chars[idx - 1],
+                chars.char_at(idx - 1),
                 idx - 1,
                 honor_properties,
             )
@@ -1143,7 +1138,7 @@ fn skip_sexp_ignored_backward(
 
 fn skip_string_forward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1152,7 +1147,7 @@ fn skip_string_forward(
     delimiter_class: SyntaxClass,
 ) -> Result<usize, String> {
     while idx < stop {
-        let c = chars[idx];
+        let c = chars.char_at(idx);
         let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
@@ -1170,7 +1165,7 @@ fn skip_string_forward(
 
 fn skip_string_backward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1180,7 +1175,7 @@ fn skip_string_backward(
 ) -> Result<usize, String> {
     while idx > stop {
         idx -= 1;
-        let c = chars[idx];
+        let c = chars.char_at(idx);
         let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
@@ -1200,7 +1195,7 @@ fn scan_lists_with_options(
     initial_depth: i64,
     honor_properties: bool,
 ) -> Result<Option<usize>, ScanListError> {
-    let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
+    let chars = BufferChars::new(buf, 0);
     let mut idx = from;
     let accessible_chars = buf.accessible_char_region();
     let start = accessible_chars.start().get();
@@ -1214,7 +1209,7 @@ fn scan_lists_with_options(
         while remaining > 0 {
             let mut found = false;
             while idx < stop {
-                let ch = chars[idx];
+                let ch = chars.char_at(idx);
                 let class =
                     effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties)
                         .class;
@@ -1279,7 +1274,7 @@ fn scan_lists_with_options(
             let mut found = false;
             while idx > start {
                 idx -= 1;
-                let ch = chars[idx];
+                let ch = chars.char_at(idx);
                 let class =
                     effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties)
                         .class;
@@ -1372,7 +1367,7 @@ impl ScanListError {
 /// Scan one sexp forward from char index `start`.
 fn scan_sexp_forward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     len: usize,
     start: usize,
     table: &SyntaxTable,
@@ -1383,8 +1378,14 @@ fn scan_sexp_forward(
     // Skip whitespace and comments
     while idx < len
         && matches!(
-            effective_syntax_entry_for_abs_char(buf, table, chars[idx], idx, honor_properties)
-                .class,
+            effective_syntax_entry_for_abs_char(
+                buf,
+                table,
+                chars.char_at(idx),
+                idx,
+                honor_properties
+            )
+            .class,
             SyntaxClass::Whitespace
                 | SyntaxClass::Comment
                 | SyntaxClass::EndComment
@@ -1399,7 +1400,7 @@ fn scan_sexp_forward(
         return Err(ScanListError::unbalanced(start, idx));
     }
 
-    let ch = chars[idx];
+    let ch = chars.char_at(idx);
     let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
     let syn = syn_entry.class;
 
@@ -1409,7 +1410,7 @@ fn scan_sexp_forward(
             let mut depth = 1i32;
             idx += 1;
             while idx < len && depth > 0 {
-                let c = chars[idx];
+                let c = chars.char_at(idx);
                 let s =
                     effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
                 match s {
@@ -1427,13 +1428,13 @@ fn scan_sexp_forward(
                             let sc = effective_syntax_entry_for_abs_char(
                                 buf,
                                 table,
-                                chars[idx],
+                                chars.char_at(idx),
                                 idx,
                                 honor_properties,
                             )
                             .class;
                             if sc == delim_class
-                                && (s == SyntaxClass::StringFence || chars[idx] == c)
+                                && (s == SyntaxClass::StringFence || chars.char_at(idx) == c)
                             {
                                 break;
                             }
@@ -1463,7 +1464,7 @@ fn scan_sexp_forward(
             let delim_class = syn;
             idx += 1;
             while idx < len {
-                let c = chars[idx];
+                let c = chars.char_at(idx);
                 let s =
                     effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
@@ -1486,7 +1487,7 @@ fn scan_sexp_forward(
                     effective_syntax_entry_for_abs_char(
                         buf,
                         table,
-                        chars[idx],
+                        chars.char_at(idx),
                         idx,
                         honor_properties,
                     )
@@ -1510,7 +1511,7 @@ fn scan_sexp_forward(
             // Scan to matching math delimiter.
             let delim = ch;
             idx += 1;
-            while idx < len && chars[idx] != delim {
+            while idx < len && chars.char_at(idx) != delim {
                 idx += 1;
             }
             if idx >= len {
@@ -1528,7 +1529,7 @@ fn scan_sexp_forward(
 /// Scan one sexp backward from char index `start`.
 fn scan_sexp_backward(
     buf: &Buffer,
-    chars: &[char],
+    chars: &BufferChars,
     start: usize,
     start_bound: usize,
     table: &SyntaxTable,
@@ -1542,7 +1543,7 @@ fn scan_sexp_backward(
             effective_syntax_entry_for_abs_char(
                 buf,
                 table,
-                chars[idx - 1],
+                chars.char_at(idx - 1),
                 idx - 1,
                 honor_properties
             )
@@ -1562,7 +1563,7 @@ fn scan_sexp_backward(
     }
 
     idx -= 1; // move to the character we're examining
-    let ch = chars[idx];
+    let ch = chars.char_at(idx);
     let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
     let syn = syn_entry.class;
 
@@ -1572,7 +1573,7 @@ fn scan_sexp_backward(
             let mut depth = 1i32;
             while idx > start_bound && depth > 0 {
                 idx -= 1;
-                let c = chars[idx];
+                let c = chars.char_at(idx);
                 let s =
                     effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
                 match s {
@@ -1591,13 +1592,13 @@ fn scan_sexp_backward(
                                 let sc = effective_syntax_entry_for_abs_char(
                                     buf,
                                     table,
-                                    chars[idx],
+                                    chars.char_at(idx),
                                     idx,
                                     honor_properties,
                                 )
                                 .class;
                                 if sc == delim_class
-                                    && (s == SyntaxClass::StringFence || chars[idx] == c)
+                                    && (s == SyntaxClass::StringFence || chars.char_at(idx) == c)
                                 {
                                     break;
                                 }
@@ -1623,7 +1624,7 @@ fn scan_sexp_backward(
             }
             idx -= 1;
             while idx > start_bound {
-                let c = chars[idx];
+                let c = chars.char_at(idx);
                 let s =
                     effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
@@ -1631,7 +1632,7 @@ fn scan_sexp_backward(
                 }
                 idx -= 1;
             }
-            let c = chars[idx];
+            let c = chars.char_at(idx);
             let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
             if !(s == delim_class && (syn == SyntaxClass::StringFence || c == ch)) {
                 return Err(ScanListError::unbalanced(idx, start));
@@ -1645,7 +1646,7 @@ fn scan_sexp_backward(
                     effective_syntax_entry_for_abs_char(
                         buf,
                         table,
-                        chars[idx - 1],
+                        chars.char_at(idx - 1),
                         idx - 1,
                         honor_properties,
                     )
@@ -1667,10 +1668,10 @@ fn scan_sexp_backward(
                 return Err(ScanListError::unbalanced(idx, start));
             }
             idx -= 1;
-            while idx > start_bound && chars[idx] != delim {
+            while idx > start_bound && chars.char_at(idx) != delim {
                 idx -= 1;
             }
-            if chars[idx] != delim {
+            if chars.char_at(idx) != delim {
                 return Err(ScanListError::unbalanced(idx, start));
             }
             Ok(idx)
@@ -3883,14 +3884,8 @@ fn parse_state_from_range_with_options(
         .to_char_pos()
         .get()
         .clamp(point_min, point_max);
-    let chars = buffer_chars_in_range(
-        buf,
-        EmacsByteRange::new(
-            buffer_char_to_emacs_byte_pos(buf, CharPos0::new(from_char)),
-            buffer_char_to_emacs_byte_pos(buf, CharPos0::new(to_char)),
-        ),
-    );
-    let to_idx = chars.len();
+    let chars = BufferChars::new(buf, from_char);
+    let to_idx = to_char - from_char;
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
@@ -3905,7 +3900,7 @@ fn parse_state_from_range_with_options(
     while idx < to_idx {
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
-        let ch = chars[idx];
+        let ch = chars.char_at(idx);
         let (class, flags) = syntax_class_and_flags(buf, table, ch, abs_char, honor_properties);
 
         if state.quoted {
@@ -4012,7 +4007,7 @@ fn parse_state_from_range_with_options(
                             let (_, next_flags) = syntax_class_and_flags(
                                 buf,
                                 table,
-                                chars[idx + 1],
+                                chars.char_at(idx + 1),
                                 abs_char + 1,
                                 honor_properties,
                             );
@@ -4055,7 +4050,7 @@ fn parse_state_from_range_with_options(
                         let (_, next_flags) = syntax_class_and_flags(
                             buf,
                             table,
-                            chars[idx + 1],
+                            chars.char_at(idx + 1),
                             abs_char + 1,
                             honor_properties,
                         );
@@ -4110,8 +4105,13 @@ fn parse_state_from_range_with_options(
         }
 
         if flags.contains(SyntaxFlags::COMMENT_START_FIRST) && idx + 1 < to_idx {
-            let (_, next_flags) =
-                syntax_class_and_flags(buf, table, chars[idx + 1], abs_char + 1, honor_properties);
+            let (_, next_flags) = syntax_class_and_flags(
+                buf,
+                table,
+                chars.char_at(idx + 1),
+                abs_char + 1,
+                honor_properties,
+            );
             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
                 state.in_comment = Some(ParseCommentState::Syntax {
                     depth: 1,
