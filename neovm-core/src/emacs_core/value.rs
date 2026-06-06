@@ -370,7 +370,7 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
         .iter()
         .map(|run| {
             let range = run.range();
-            (range.start_usize(), range.end_usize())
+            (range.start().get(), range.end().get())
         })
         .collect();
     sorted_bounds.sort_unstable();

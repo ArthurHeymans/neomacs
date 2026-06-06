@@ -420,8 +420,8 @@ impl<'a> Reader<'a> {
         range: EmacsByteRange,
         obarray: &'a super::symbol::Obarray,
     ) -> Self {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(start <= end, "invalid buffer reader range: {start}..{end}");
         let input_len = input.total_emacs_byte_len().get();
         assert!(

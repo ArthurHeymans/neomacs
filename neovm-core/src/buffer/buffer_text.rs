@@ -1133,7 +1133,8 @@ impl BufferText {
     ) {
         let char_offset = self
             .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
-            .start_usize();
+            .start()
+            .get();
         self.storage
             .borrow_mut()
             .text_props
