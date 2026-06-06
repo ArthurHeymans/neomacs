@@ -13,7 +13,9 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{
+    Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+};
 
 #[inline]
 fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: EmacsBytePos) -> usize {
@@ -2428,7 +2430,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let char_index = pos as usize - 1;
+    let char_index = LispCharPos1::new(pos).to_char_pos().get();
     let byte_index = buffer_char_to_emacs_byte_pos(
         buf,
         CharPos0::new(char_index.min(buf.total_char_len().get())),
@@ -3511,7 +3513,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let point_min = accessible_chars.start_usize() as i64 + 1;
     let point_max = accessible_chars.end_usize() as i64 + 1;
     let clipped_from = from.clamp(point_min, point_max);
-    let from_char = (clipped_from - 1) as usize;
+    let from_char = LispCharPos1::new(clipped_from).to_char_pos().get();
 
     match scan_lists_with_options(buf, &table, from_char, count, depth, honor_properties) {
         Ok(Some(new_char)) => Ok(Value::fixnum(new_char as i64 + 1)),
@@ -3567,7 +3569,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
 
-    let from_char = if from > 0 { from as usize - 1 } else { 0 };
+    let from_char = LispCharPos1::new(from).to_char_pos().get();
     let from_byte = buffer_char_to_emacs_byte_pos(
         buf,
         CharPos0::new(from_char.min(buf.total_char_len().get())),
@@ -3868,8 +3870,14 @@ fn parse_state_from_range_with_options(
     let accessible_chars = buf.accessible_char_region();
     let point_min = accessible_chars.start_usize();
     let point_max = accessible_chars.end_usize();
-    let from_char = if from > 0 { from as usize - 1 } else { 0 }.clamp(point_min, point_max);
-    let to_char = if to > 0 { to as usize - 1 } else { 0 }.clamp(point_min, point_max);
+    let from_char = LispCharPos1::new(from)
+        .to_char_pos()
+        .get()
+        .clamp(point_min, point_max);
+    let to_char = LispCharPos1::new(to)
+        .to_char_pos()
+        .get()
+        .clamp(point_min, point_max);
     let chars = buffer_chars_in_range(
         buf,
         EmacsByteRange::new(
