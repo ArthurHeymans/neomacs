@@ -574,7 +574,7 @@ fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
 
 fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize) -> Value {
     let char_offset = byte_to_char_pos(source.as_bytes(), byte_offset) as i64;
-    Value::fixnum(buf.accessible_char_region().start_usize() as i64 + char_offset + 1)
+    Value::fixnum(buf.accessible_char_region().start_lisp().as_i64() + char_offset)
 }
 
 fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Result<(), Flow> {
