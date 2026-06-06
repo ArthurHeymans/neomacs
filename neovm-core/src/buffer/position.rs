@@ -47,6 +47,11 @@ pub struct CharRange {
 #[repr(transparent)]
 pub struct LispCharPos1(i64);
 
+/// 1-based Lisp byte position (first byte = 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct LispBytePos1(i64);
+
 /// Display column coordinate. This is not a buffer character position.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -647,6 +652,21 @@ impl LispCharPos1 {
     }
 
     /// The raw i64 value.
+    pub fn as_i64(self) -> i64 {
+        self.0
+    }
+}
+
+impl LispBytePos1 {
+    pub const fn new(pos: i64) -> Self {
+        Self(pos)
+    }
+
+    /// Convert to a 0-based internal Emacs byte position.
+    pub fn to_emacs_byte_pos(self) -> EmacsBytePos {
+        EmacsBytePos::new((self.0 - 1).max(0) as usize)
+    }
+
     pub fn as_i64(self) -> i64 {
         self.0
     }

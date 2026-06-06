@@ -6,7 +6,8 @@ use super::*;
 
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
-    EmacsByteRange, LispCharPos1, TextChange, TextEditRange, TextExtent, TextPositionAnchor,
+    EmacsByteRange, LispBytePos1, LispCharPos1, TextChange, TextEditRange, TextExtent,
+    TextPositionAnchor,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -4174,12 +4175,12 @@ pub(crate) fn builtin_byte_to_position(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let byte_len = buf.total_emacs_byte_len();
-    let byte_pos0 = (byte_pos - 1) as usize;
-    if byte_pos0 > byte_len.get() {
+    let byte_pos0 = LispBytePos1::new(byte_pos).to_emacs_byte_pos();
+    if byte_pos0.get() > byte_len.get() {
         return Ok(Value::NIL);
     }
 
-    let mut boundary = byte_pos0;
+    let mut boundary = byte_pos0.get();
     if buf.get_multibyte() && boundary < byte_len.get() {
         while boundary > 0
             && buf
