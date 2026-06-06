@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{
-    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
+    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
     text_props::TextPropertyTable,
 };
 use crate::heap_types::LispString;
@@ -4683,17 +4683,21 @@ fn write_region_content_in_state(
     }
 
     let end = end.unwrap_or(&Value::NIL);
-    let start = expect_int(start)?;
-    let end = expect_int(end)?;
+    let start = LispCharPos1::new(expect_int(start)?);
+    let end = LispCharPos1::new(expect_int(end)?);
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal(
             "args-out-of-range",
             vec![
                 Value::make_buffer(buf.id),
-                Value::fixnum(start),
-                Value::fixnum(end),
+                Value::fixnum(start.as_i64()),
+                Value::fixnum(end.as_i64()),
             ],
         ));
     }
@@ -4703,8 +4707,8 @@ fn write_region_content_in_state(
         (end, start)
     };
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_start)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_end)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_start),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_end),
     );
     Ok(buf.buffer_substring_lisp_string_range(byte_range))
 }
