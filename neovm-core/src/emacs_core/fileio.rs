@@ -4589,7 +4589,7 @@ fn run_after_insert_file_pipeline(
             let accessible = buf.accessible_emacs_byte_region();
             (
                 buf.point_anchor(),
-                accessible.start_usize(),
+                accessible.start(),
                 buf.chars_modified_tick(),
             )
         })
@@ -4602,7 +4602,7 @@ fn run_after_insert_file_pipeline(
     let pipeline_result = (|| -> Result<i64, Flow> {
         if replace_requested {
             eval.buffers
-                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(accessible_start))
+                .goto_buffer_emacs_byte_pos(current_id, accessible_start)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         }
 
