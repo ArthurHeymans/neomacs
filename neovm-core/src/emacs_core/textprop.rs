@@ -1558,8 +1558,8 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
-        let char_beg = char_range.start_usize();
-        let char_end = char_range.end_usize();
+        let char_beg = char_range.start().get();
+        let char_end = char_range.end().get();
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         // GNU iterates intervals in [beg, end); per interval, fetch its existing
         // face value and merge. Walk the range segment-by-segment.
@@ -2337,8 +2337,8 @@ pub(crate) fn builtin_text_property_any_in_state(
         let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
-        let char_beg = char_range.start_usize();
-        let char_end = char_range.end_usize();
+        let char_beg = char_range.start().get();
+        let char_end = char_range.end().get();
         let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
             return Ok(if val.is_nil() {
                 if char_beg < char_end {
@@ -2468,8 +2468,8 @@ pub(crate) fn builtin_text_property_not_all_in_state(
         let Some(char_range) = validate_string_range(s, beg, end, args[0], args[1])? else {
             return Ok(Value::NIL);
         };
-        let char_beg = char_range.start_usize();
-        let char_end = char_range.end_usize();
+        let char_beg = char_range.start().get();
+        let char_end = char_range.end().get();
         let Some(table) = get_string_text_properties_interval_table_for_value(str_val) else {
             return Ok(if val.is_nil() {
                 Value::NIL
@@ -2721,8 +2721,8 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         serial: 0,
         plist: Value::NIL,
         buffer: Some(buf_id),
-        start: byte_range.start_usize(),
-        end: byte_range.end_usize(),
+        start: byte_range.start().get(),
+        end: byte_range.end().get(),
         front_advance,
         rear_advance,
     });
@@ -2960,8 +2960,8 @@ pub(crate) fn builtin_move_overlay_in_buffers(
         let byte_range = elisp_range_to_byte_clipped_full(new_buf, beg, end);
         let _ = overlay.with_overlay_data_mut(|object| {
             object.buffer = Some(new_buf_id);
-            object.start = byte_range.start_usize();
-            object.end = byte_range.end_usize();
+            object.start = byte_range.start().get();
+            object.end = byte_range.end().get();
         });
         new_buf.overlays.insert_overlay(overlay);
         new_buf.increment_overlay_modified_tick();
