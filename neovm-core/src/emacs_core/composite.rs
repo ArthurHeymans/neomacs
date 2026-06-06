@@ -174,11 +174,14 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
             vec![args[0], Value::fixnum(start), Value::fixnum(end)],
         ));
     }
+    let char_start = usize::try_from(start).expect("validated non-negative string start");
+    let char_end = usize::try_from(end).expect("validated non-negative string end");
+    let char_len = usize::try_from(len).expect("string character length fits usize");
     let prop = composition_property(start, end, components, modification_func);
     let mut table = get_string_text_properties_table_for_value(args[0]).unwrap_or_default();
     table.put_property_for_object_char_len(
-        CharRange::new(CharPos0::new(start as usize), CharPos0::new(end as usize)),
-        CharLen::new(len as usize),
+        CharRange::new(CharPos0::new(char_start), CharPos0::new(char_end)),
+        CharLen::new(char_len),
         Value::symbol("composition"),
         prop,
     );
