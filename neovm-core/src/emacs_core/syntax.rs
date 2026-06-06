@@ -781,7 +781,7 @@ fn forward_word_with_options(
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
-    let accessible_char_start = accessible_chars.start_usize();
+    let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -854,7 +854,7 @@ fn backward_word_with_options(
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
-    let accessible_char_start = accessible_chars.start_usize();
+    let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
 
@@ -931,7 +931,7 @@ fn skip_syntax_forward_with_options(
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
-    let accessible_char_start = accessible_chars.start_usize();
+    let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -985,7 +985,7 @@ fn skip_syntax_backward_with_options(
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
     let chars = buffer_chars_in_range(buf, accessible_bytes.range());
-    let accessible_char_start = accessible_chars.start_usize();
+    let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
 
@@ -1055,8 +1055,8 @@ fn scan_sexps_with_options(
 
     let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
     let accessible_chars = buf.accessible_char_region();
-    let start_bound = accessible_chars.start_usize();
-    let stop_bound = accessible_chars.end_usize();
+    let start_bound = accessible_chars.start().get();
+    let stop_bound = accessible_chars.end().get();
 
     // Convert byte position to char index.
     let mut idx =
@@ -1203,8 +1203,8 @@ fn scan_lists_with_options(
     let chars = buffer_chars_in_range(buf, buf.full_emacs_byte_range());
     let mut idx = from;
     let accessible_chars = buf.accessible_char_region();
-    let start = accessible_chars.start_usize();
-    let stop = accessible_chars.end_usize();
+    let start = accessible_chars.start().get();
+    let stop = accessible_chars.end().get();
     let mut depth = initial_depth;
     let min_depth = if depth > 0 { 0 } else { depth };
     let mut last_good = from;
@@ -3378,7 +3378,7 @@ pub(crate) fn builtin_forward_sexp(
         let target = eval
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end_usize().saturating_add(1))
+            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(eval, target)?;
     }
@@ -3429,7 +3429,7 @@ pub(crate) fn builtin_backward_sexp(
         let target = eval
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end_usize().saturating_add(1))
+            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(eval, target)?;
     }
@@ -3503,7 +3503,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         let target = ctx
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end_usize().saturating_add(1))
+            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
@@ -3563,7 +3563,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         let target = ctx
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end_usize().saturating_add(1))
+            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
@@ -3873,8 +3873,8 @@ fn parse_state_from_range_with_options(
     honor_properties: bool,
 ) -> (Value, i64) {
     let accessible_chars = buf.accessible_char_region();
-    let point_min = accessible_chars.start_usize();
-    let point_max = accessible_chars.end_usize();
+    let point_min = accessible_chars.start().get();
+    let point_max = accessible_chars.end().get();
     let from_char = LispCharPos1::new(from)
         .to_char_pos()
         .get()
