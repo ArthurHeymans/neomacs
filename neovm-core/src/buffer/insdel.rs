@@ -25,6 +25,17 @@ struct SharedTextEditScope {
     buffer_ids: Vec<BufferId>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SharedTextEditMetadata {
+    Insert(MeasuredInsertEdit),
+    Delete(MeasuredDeleteEdit),
+    Replace(MeasuredReplaceEdit),
+    SameLen {
+        edit: MeasuredSameLenEdit,
+        preserve_modified_state: bool,
+    },
+}
+
 impl SharedTextEditScope {
     fn siblings(&self) -> impl Iterator<Item = BufferId> + '_ {
         self.buffer_ids
@@ -775,6 +786,31 @@ impl BufferManager {
         self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id)
     }
 
+    fn apply_shared_text_edit_metadata(
+        buf: &mut Buffer,
+        edit: SharedTextEditMetadata,
+        update_state_fields: bool,
+    ) {
+        match edit {
+            SharedTextEditMetadata::Insert(edit) => buf.apply_byte_insert_side_effects(
+                edit,
+                InsertSideEffectPolicy::shared_buffer(update_state_fields),
+            ),
+            SharedTextEditMetadata::Delete(edit) => buf.apply_byte_delete_side_effects(
+                edit,
+                DeleteSideEffectPolicy::shared_buffer(update_state_fields),
+            ),
+            SharedTextEditMetadata::Replace(edit) => buf.apply_replace_side_effects(
+                edit,
+                ReplaceSideEffectPolicy::shared_buffer(update_state_fields),
+            ),
+            SharedTextEditMetadata::SameLen {
+                edit,
+                preserve_modified_state,
+            } => buf.apply_same_len_edit_side_effects(edit, preserve_modified_state),
+        }
+    }
+
     fn apply_shared_text_edit_to_siblings<F>(
         &mut self,
         scope: SharedTextEditScope,
@@ -792,47 +828,6 @@ impl BufferManager {
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())
-    }
-
-    fn adjust_shared_insert_metadata(
-        buf: &mut Buffer,
-        edit: MeasuredInsertEdit,
-        update_state_fields: bool,
-    ) {
-        buf.apply_byte_insert_side_effects(
-            edit,
-            InsertSideEffectPolicy::shared_buffer(update_state_fields),
-        );
-    }
-
-    fn adjust_shared_delete_metadata(
-        buf: &mut Buffer,
-        edit: MeasuredDeleteEdit,
-        update_state_fields: bool,
-    ) {
-        buf.apply_byte_delete_side_effects(
-            edit,
-            DeleteSideEffectPolicy::shared_buffer(update_state_fields),
-        );
-    }
-
-    fn adjust_shared_replace_metadata(
-        buf: &mut Buffer,
-        edit: MeasuredReplaceEdit,
-        update_state_fields: bool,
-    ) {
-        buf.apply_replace_side_effects(
-            edit,
-            ReplaceSideEffectPolicy::shared_buffer(update_state_fields),
-        );
-    }
-
-    fn adjust_shared_same_len_edit_metadata(
-        buf: &mut Buffer,
-        edit: MeasuredSameLenEdit,
-        preserve_modified_state: bool,
-    ) {
-        buf.apply_same_len_edit_side_effects(edit, preserve_modified_state);
     }
 
     fn refresh_shared_buffer_state_cache(
@@ -856,7 +851,11 @@ impl BufferManager {
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::AfterMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Insert(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -906,7 +905,11 @@ impl BufferManager {
         );
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Insert(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -920,7 +923,11 @@ impl BufferManager {
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Insert(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -942,7 +949,11 @@ impl BufferManager {
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_insert_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Insert(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -982,7 +993,11 @@ impl BufferManager {
             .delete_measured_region_edit(range);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_delete_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Delete(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -1035,7 +1050,11 @@ impl BufferManager {
             .replace_measured_region_lisp_string_edit(range, text);
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::adjust_shared_replace_metadata(sibling, edit, update_state_fields);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::Replace(edit),
+                update_state_fields,
+            );
         })
     }
 
@@ -1067,7 +1086,14 @@ impl BufferManager {
 
         for sibling_id in scope.siblings() {
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_same_len_edit_metadata(sibling, edit, false);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::SameLen {
+                    edit,
+                    preserve_modified_state: false,
+                },
+                false,
+            );
         }
         Some(true)
     }
@@ -1090,7 +1116,14 @@ impl BufferManager {
                 let point = transposition.transpose_anchor(sibling.point_anchor());
                 sibling.set_point_anchor_unchecked(point);
             }
-            Self::adjust_shared_same_len_edit_metadata(sibling, edit, false);
+            Self::apply_shared_text_edit_metadata(
+                sibling,
+                SharedTextEditMetadata::SameLen {
+                    edit,
+                    preserve_modified_state: false,
+                },
+                update_state_fields,
+            );
         })
     }
 }

@@ -654,6 +654,9 @@ Completed so far:
   shared typed helper, so piece-tree and rope no longer carry duplicated
   balancing seed logic while remaining separate physical storage
   implementations behind the same `TextBackend` contract.
+- Collapsed shared-buffer edit metadata propagation onto a single typed edit
+  enum for insert/delete/replace/same-length edits, reducing manager-level
+  dispatch duplication while preserving the existing GNU-shaped edit ordering.
 
 Next work:
 
