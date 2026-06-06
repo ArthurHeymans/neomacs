@@ -27,6 +27,11 @@ fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: CharPos0) -> EmacsByteP
     buf.char_pos_to_emacs_byte_pos_clamped(char_pos)
 }
 
+#[inline]
+fn char_pos_to_lisp_i64(char_pos: usize) -> i64 {
+    CharPos0::new(char_pos).to_lisp().as_i64()
+}
+
 #[derive(Clone, Copy)]
 struct BufferSyntaxChar {
     ch: char,
@@ -1358,8 +1363,8 @@ impl ScanListError {
     fn signal_data(&self) -> Vec<Value> {
         vec![
             Value::string(&self.message),
-            Value::fixnum(self.last_good as i64 + 1),
-            Value::fixnum(self.at as i64 + 1),
+            Value::fixnum(char_pos_to_lisp_i64(self.last_good)),
+            Value::fixnum(char_pos_to_lisp_i64(self.at)),
         ]
     }
 }
@@ -3516,7 +3521,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let from_char = LispCharPos1::new(clipped_from).to_char_pos().get();
 
     match scan_lists_with_options(buf, &table, from_char, count, depth, honor_properties) {
-        Ok(Some(new_char)) => Ok(Value::fixnum(new_char as i64 + 1)),
+        Ok(Some(new_char)) => Ok(Value::fixnum(char_pos_to_lisp_i64(new_char))),
         Ok(None) => Ok(Value::NIL),
         Err(err) => Err(signal("scan-error", err.signal_data())),
     }
@@ -4203,7 +4208,7 @@ fn parse_state_from_range_with_options(
 
     finish_atom(&mut state, &mut atom_start);
 
-    (state.into_value(), (from_char + idx) as i64 + 1)
+    (state.into_value(), char_pos_to_lisp_i64(from_char + idx))
 }
 
 fn parse_state_from_range(buf: &Buffer, table: &SyntaxTable, from: i64, to: i64) -> Value {
