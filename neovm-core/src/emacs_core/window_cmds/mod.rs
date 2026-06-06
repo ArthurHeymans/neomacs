@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
     Window, WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
@@ -2274,9 +2274,9 @@ pub(crate) fn builtin_set_window_point(
                             {
                                 buffer_to_move = Some((
                                     buffer_id,
-                                    buffer.lisp_pos_to_emacs_byte_pos(
-                                        crate::buffer::LispCharPos1::new(clamped as i64),
-                                    ),
+                                    buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(
+                                        clamped as i64,
+                                    )),
                                 ));
                             }
                         }
@@ -2318,9 +2318,8 @@ pub(crate) fn builtin_set_window_point(
                         {
                             buffer_to_move = Some((
                                 buffer_id,
-                                buffer.lisp_pos_to_emacs_byte_pos(
-                                    crate::buffer::LispCharPos1::new(clamped as i64),
-                                ),
+                                buffer
+                                    .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(clamped as i64)),
                             ));
                         }
                     }
@@ -4050,8 +4049,7 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     // `record_buffer`.  Selection/display primitives record explicitly.
     buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
-        let byte_pos =
-            buffer.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(point as i64));
+        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(point as i64));
         let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
     }
 }
@@ -4385,9 +4383,8 @@ pub(crate) fn builtin_set_window_buffer(
             }
             if old_buffer_id != buf_id {
                 let old_buffer_value = Value::make_buffer(old_buffer_id);
-                let old_window_start_pos =
-                    crate::buffer::LispCharPos1::new(old_window_start.max(1) as i64);
-                let old_point_pos = crate::buffer::LispCharPos1::new(old_point.max(1) as i64);
+                let old_window_start_pos = LispCharPos1::new(old_window_start.max(1) as i64);
+                let old_point_pos = LispCharPos1::new(old_point.max(1) as i64);
                 let history_entry = Value::list(vec![
                     old_buffer_value,
                     super::marker::make_marker_value(
@@ -5442,7 +5439,7 @@ fn scroll_by_lines_in_state(
     let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible
-        .clamp(buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(window_point)))
+        .clamp(buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(window_point)))
         .get();
     let bytes = text.as_bytes();
     let begv = accessible.start().get();
@@ -5562,7 +5559,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let text = buf.full_text_string();
         let accessible = buf.accessible_emacs_byte_region();
         let pt = accessible
-            .clamp(buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(window_point)))
+            .clamp(buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(window_point)))
             .get();
         let bytes = text.as_bytes();
         let begv = accessible.start().get();

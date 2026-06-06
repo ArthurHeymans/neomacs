@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferManager, LispCharPos1};
 use crate::emacs_core::display;
 use crate::emacs_core::fontset;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
@@ -1182,8 +1182,8 @@ pub(crate) fn builtin_internal_labeled_narrow_to_region_in_buffers(
     let byte_range = super::buffers::normalize_narrow_region_in_buffers(
         buffers,
         current_id,
-        crate::buffer::LispCharPos1::new(start),
-        crate::buffer::LispCharPos1::new(end),
+        LispCharPos1::new(start),
+        LispCharPos1::new(end),
         args[0],
         args[1],
     )?;

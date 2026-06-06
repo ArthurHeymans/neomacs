@@ -3097,7 +3097,7 @@ pub(crate) fn builtin_move_to_window_line(
     let byte_pos = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_pos)))
+        .map(|b| b.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(lisp_pos)))
         .unwrap_or(crate::buffer::EmacsBytePos::ZERO);
     let current_id = eval
         .buffers

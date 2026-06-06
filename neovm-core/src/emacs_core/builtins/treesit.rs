@@ -9,7 +9,7 @@ use tree_sitter::{
 };
 use tree_sitter_language::LanguageFn;
 
-use crate::buffer::{Buffer, BufferId};
+use crate::buffer::{Buffer, BufferId, LispCharPos1};
 use crate::emacs_core::builtins::buffers::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{SymId, resolve_sym};
@@ -567,7 +567,7 @@ fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
         return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
     }
     Ok(buf
-        .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
+        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos))
         .saturating_offset_from(buf.accessible_emacs_byte_region().start())
         .get())
 }

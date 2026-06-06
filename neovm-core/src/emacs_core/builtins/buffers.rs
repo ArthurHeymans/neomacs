@@ -1410,8 +1410,8 @@ pub(crate) fn builtin_replace_region_contents(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let start_byte = buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(start));
-        let end_byte = buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(end));
+        let start_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(start));
+        let end_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(end));
         let byte_range = if start_byte <= end_byte {
             EmacsByteRange::new(start_byte, end_byte)
         } else {
@@ -2313,7 +2313,7 @@ pub(crate) fn builtin_constrain_to_field(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let byte_pos = buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(new_pos));
+        let byte_pos = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(new_pos));
         let _ = eval
             .buffers
             .goto_buffer_emacs_byte_pos(current_id, byte_pos);
@@ -2675,7 +2675,7 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
             buf.point_emacs_byte_pos(),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos)),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos)),
         )
     };
     // Adjust for intangible text property
@@ -4114,7 +4114,7 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         if pos < point_min || pos >= point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos)))
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos)))
     };
     match byte_pos.and_then(|pos| buf.char_code_after_emacs_byte_pos(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
@@ -4144,7 +4144,7 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         if pos <= point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos)))
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos)))
     };
     match byte_pos.and_then(|pos| buf.char_code_before_emacs_byte_pos(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
@@ -4300,7 +4300,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
                 vec![args[0], Value::fixnum(point_min), Value::fixnum(point_max)],
             ));
         }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
+        buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos))
     };
 
     if byte_pos.get() >= buf.total_emacs_byte_len().get() {
