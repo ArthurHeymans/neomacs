@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos};
+use crate::buffer::{CharLen, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -3344,12 +3344,12 @@ pub(crate) fn builtin_transpose_regions(
         }
         (
             CharRange::new(
-                CharPos0::new(raw_start1.min(raw_end1) as usize - 1),
-                CharPos0::new(raw_start1.max(raw_end1) as usize - 1),
+                LispCharPos1::new(raw_start1.min(raw_end1)).to_char_pos(),
+                LispCharPos1::new(raw_start1.max(raw_end1)).to_char_pos(),
             ),
             CharRange::new(
-                CharPos0::new(raw_start2.min(raw_end2) as usize - 1),
-                CharPos0::new(raw_start2.max(raw_end2) as usize - 1),
+                LispCharPos1::new(raw_start2.min(raw_end2)).to_char_pos(),
+                LispCharPos1::new(raw_start2.max(raw_end2)).to_char_pos(),
             ),
         )
     };
