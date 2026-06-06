@@ -230,6 +230,17 @@ Progress:
   visibility, narrowing normalization, tree-sitter position checks, and
   syntax cache lower bounds no longer recompute `BEGV`/`ZV` with raw `usize`
   arithmetic at their semantic boundaries.
+- Text-property interval internals use typed `CharRange` endpoints at their
+  semantic split/merge boundaries, and backend storage call sites no longer
+  depend on broad `*_usize` endpoint helpers.
+- Lisp marker raw storage is converted through one buffer-local
+  `marker_data` helper module, so marker chain adjustment, mark marker storage,
+  and marker-position reads share one typed `TextPositionAnchor` boundary.
+- Point, narrowing, and edit-state paired writes now route through typed
+  anchor setters in `Buffer`. Raw `PT`/`PT_BYTE`, `BEGV`/`BEGV_BYTE`, and
+  `ZV`/`ZV_BYTE` assignment is isolated to those setters, while full-buffer
+  marker anchors are derived from current text metrics to avoid stale endpoint
+  shortcuts after representation changes such as `set-buffer-multibyte`.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
