@@ -1066,6 +1066,15 @@ fn record_interval_insert_hooks(
     let Some(buf) = eval.buffers.get(buf_id) else {
         return;
     };
+    // With no text properties anywhere, no `insert-in-front-hooks' /
+    // `insert-behind-hooks' can exist, so skip the per-insert property lookups
+    // -- each of which does a byte->char conversion.  This is the hot path for
+    // inserts into property-free buffers (byte-compilation output, batch work).
+    // The hook fields were already reset to nil by the caller, so leaving them
+    // is correct.
+    if buf.text_props_is_empty() {
+        return;
+    }
     let behind_sym = Value::symbol("insert-behind-hooks");
     let front_sym = Value::symbol("insert-in-front-hooks");
     let accessible = buf.accessible_emacs_byte_region();
