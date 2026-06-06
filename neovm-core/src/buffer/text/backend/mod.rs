@@ -4,6 +4,7 @@ mod contract;
 mod gap;
 mod piece_tree;
 mod rope;
+mod treap;
 
 use std::fmt;
 

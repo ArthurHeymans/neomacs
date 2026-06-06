@@ -650,6 +650,10 @@ Completed so far:
   `LispCharPos1` / `LispBytePos1` boundary conversions.  The display fix also
   adds multibyte range coverage so character positions are not accidentally
   treated as byte offsets when measuring a window region.
+- Centralized the indexed-backend treap priority/serial generator behind a
+  shared typed helper, so piece-tree and rope no longer carry duplicated
+  balancing seed logic while remaining separate physical storage
+  implementations behind the same `TextBackend` contract.
 
 Next work:
 
