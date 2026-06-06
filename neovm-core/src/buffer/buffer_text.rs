@@ -323,30 +323,32 @@ impl BufferText {
         let old_range = replacement.old_range();
         let gap_byte = storage
             .backend
-            .char_pos_to_emacs_byte_pos(storage.virtual_gap.pos())
-            .get();
-        let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
-        let before_gap_len = if start < gap_byte {
-            end.min(gap_byte) - start
+            .char_pos_to_emacs_byte_pos(storage.virtual_gap.pos());
+        let before_gap_len = if old_range.byte_start() < gap_byte {
+            old_range
+                .byte_end()
+                .min(gap_byte)
+                .saturating_offset_from(old_range.byte_start())
         } else {
-            0
+            EmacsByteLen::ZERO
         };
-        if before_gap_len == 0 {
+        if before_gap_len.is_empty() {
             return;
         }
 
-        let split_char = if before_gap_len == old_range.byte_len().get() {
+        let split_char = if before_gap_len == old_range.byte_len() {
             old_range.char_end()
         } else {
             storage
                 .backend
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start + before_gap_len))
+                .emacs_byte_pos_to_char_pos(old_range.byte_start().add_len(before_gap_len))
         };
         let old_before_chars = split_char.saturating_offset_from(old_range.char_start());
-        let new_before_chars =
-            TextExtent::from_emacs_bytes(&bytes[..before_gap_len], storage.backend.is_multibyte())
-                .chars();
+        let new_before_chars = TextExtent::from_emacs_bytes(
+            &bytes[..before_gap_len.get()],
+            storage.backend.is_multibyte(),
+        )
+        .chars();
         if old_before_chars != new_before_chars {
             let delta = new_before_chars.get() as isize - old_before_chars.get() as isize;
             let pos = storage.virtual_gap.pos().get().saturating_add_signed(delta);
