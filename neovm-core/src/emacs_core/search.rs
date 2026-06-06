@@ -14,6 +14,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
+use super::regex::MatchGroup;
 use super::value::*;
 use crate::buffer::CharPos0;
 use crate::emacs_core::value::ValueKind;
@@ -400,15 +401,15 @@ fn match_group_to_byte_range(
     source: &crate::heap_types::LispString,
     md: &super::regex::MatchData,
     group: usize,
-) -> Option<(usize, usize)> {
+) -> Option<MatchGroup> {
     let range = md.groups.get(group).and_then(|range| *range)?;
     if md.searched_string.is_some() {
-        Some((
+        Some(MatchGroup::new(
             super::regex::char_pos_to_byte_lisp_string(source, range.start()),
             super::regex::char_pos_to_byte_lisp_string(source, range.end()),
         ))
     } else {
-        Some((
+        Some(MatchGroup::new(
             range.start().min(source.byte_len()),
             range.end().min(source.byte_len()),
         ))
@@ -463,12 +464,12 @@ fn build_replacement_lisp_string(
                         .expect("validated replacement literal slice"),
                     );
                 }
-                if let Some((start, end)) = match_group_to_byte_range(source, md, 0) {
+                if let Some(range) = match_group_to_byte_range(source, md, 0) {
                     pieces.push(
                         lisp_string_slice_for_replace_match(
                             source,
-                            start,
-                            end,
+                            range.start(),
+                            range.end(),
                             preserve_substitution_properties,
                         )
                         .expect("validated whole-match replacement slice"),
@@ -489,12 +490,12 @@ fn build_replacement_lisp_string(
                     );
                 }
                 let group = (c as u8 - b'0') as usize;
-                if let Some((start, end)) = match_group_to_byte_range(source, md, group) {
+                if let Some(range) = match_group_to_byte_range(source, md, group) {
                     pieces.push(
                         lisp_string_slice_for_replace_match(
                             source,
-                            start,
-                            end,
+                            range.start(),
+                            range.end(),
                             preserve_substitution_properties,
                         )
                         .expect("validated submatch replacement slice"),
@@ -582,9 +583,11 @@ fn replace_match_lisp_string_with_syntax_and_properties(
         Some(md) => md,
         None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
     };
-    let Some((byte_start, byte_end)) = match_group_to_byte_range(source, md, subexp) else {
+    let Some(byte_range) = match_group_to_byte_range(source, md, subexp) else {
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
+    let byte_start = byte_range.start();
+    let byte_end = byte_range.end();
     if byte_end > source.byte_len() || byte_start > byte_end {
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
     }
