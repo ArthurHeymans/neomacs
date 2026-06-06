@@ -870,8 +870,7 @@ impl BufferText {
             while !curr.is_null() {
                 let data = &mut (*curr).data;
                 let new_position = remap(marker_data_anchor(data));
-                data.bytepos = new_position.emacs_byte_pos_usize();
-                data.charpos = new_position.char_pos_usize();
+                set_marker_data_anchor(data, new_position);
                 curr = data.next_marker;
             }
         }
@@ -1242,8 +1241,7 @@ impl BufferText {
         unsafe {
             (*marker_ptr).data.buffer = Some(buffer_id);
             (*marker_ptr).data.marker_id = Some(marker_id);
-            (*marker_ptr).data.bytepos = position.emacs_byte_pos_usize();
-            (*marker_ptr).data.charpos = position.char_pos_usize();
+            set_marker_data_anchor(&mut (*marker_ptr).data, position);
             (*marker_ptr).data.last_position_valid = true;
             (*marker_ptr).data.insertion_type = insertion_type == InsertionType::After;
         }
@@ -1310,8 +1308,7 @@ impl BufferText {
             return;
         }
         unsafe {
-            (*ptr).data.bytepos = position.emacs_byte_pos_usize();
-            (*ptr).data.charpos = position.char_pos_usize();
+            set_marker_data_anchor(&mut (*ptr).data, position);
         }
     }
 
