@@ -10,7 +10,7 @@ use super::intern::resolve_sym;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteRange, TextEditRange};
+use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1, TextEditRange};
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use std::borrow::Cow;
@@ -498,12 +498,12 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
 
     let point_min_char = buf.point_min_lisp_char_pos().as_i64();
     let point_max_char = buf.point_max_lisp_char_pos().as_i64();
-    let start_raw = require_int_or_marker(start_arg)?;
-    let end_raw = require_int_or_marker(end_arg)?;
-    if start_raw < point_min_char
-        || start_raw > point_max_char
-        || end_raw < point_min_char
-        || end_raw > point_max_char
+    let start = LispCharPos1::new(require_int_or_marker(start_arg)?);
+    let end = LispCharPos1::new(require_int_or_marker(end_arg)?);
+    if start.as_i64() < point_min_char
+        || start.as_i64() > point_max_char
+        || end.as_i64() < point_min_char
+        || end.as_i64() > point_max_char
     {
         return Err(signal(
             "args-out-of-range",
@@ -511,17 +511,24 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
         ));
     }
 
-    let (lo, hi) = if start_raw <= end_raw {
-        (start_raw, end_raw)
-    } else {
-        (end_raw, start_raw)
-    };
-
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
-    );
+    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
     Ok((buffer_id, byte_range))
+}
+
+fn lisp_range_to_accessible_byte_range(
+    buf: &crate::buffer::Buffer,
+    start: LispCharPos1,
+    end: LispCharPos1,
+) -> EmacsByteRange {
+    let (lo, hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+    )
 }
 
 fn normalize_current_buffer_region_bounds(
@@ -890,22 +897,14 @@ fn hash_slice_for_buffer_in_manager(
 
     let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
     let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
-    let start = normalize_md5_buffer_position(
+    let start = LispCharPos1::new(normalize_md5_buffer_position(
         start_raw, point_min, point_min, point_max, &start_arg, &end_arg,
-    )?;
-    let end = normalize_md5_buffer_position(
+    )?);
+    let end = LispCharPos1::new(normalize_md5_buffer_position(
         end_raw, point_max, point_min, point_max, &start_arg, &end_arg,
-    )?;
+    )?);
 
-    let (lo, hi) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
-    );
+    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
     Ok(buf.buffer_substring_bytes_range(byte_range))
 }
 
@@ -924,21 +923,13 @@ fn md5_hex_for_buffer_in_manager(
         let point_max = buf.point_max_lisp_char_pos().as_i64();
         let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
         let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
-        let start = normalize_md5_buffer_position(
+        let start = LispCharPos1::new(normalize_md5_buffer_position(
             start_raw, point_min, point_min, point_max, &start_arg, &end_arg,
-        )?;
-        let end = normalize_md5_buffer_position(
+        )?);
+        let end = LispCharPos1::new(normalize_md5_buffer_position(
             end_raw, point_max, point_min, point_max, &start_arg, &end_arg,
-        )?;
-        let (lo, hi) = if start <= end {
-            (start, end)
-        } else {
-            (end, start)
-        };
-        let byte_range = EmacsByteRange::new(
-            buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
-        );
+        )?);
+        let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
         let text = buf.buffer_substring_lisp_string_range(byte_range);
         if text.is_multibyte() {
             return Ok(md5_hash(&crate::encoding::encode_lisp_string(
