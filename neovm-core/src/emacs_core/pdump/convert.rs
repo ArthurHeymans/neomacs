@@ -23,7 +23,7 @@ use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
 use crate::emacs_core::autoload::{AutoloadEntry, AutoloadManager, AutoloadType};
 use crate::emacs_core::bookmark::{Bookmark, BookmarkManager};
-use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
+use crate::emacs_core::bytecode::chunk::{ByteCodeFunction, GnuByteOffsetMapEntry};
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::charset::{
     CharsetInfoSnapshot, CharsetMethodSnapshot, CharsetRegistrySnapshot, restore_charset_registry,
@@ -2300,7 +2300,7 @@ pub(crate) fn dump_bytecode(
         env: encoder.dump_opt_value(&bc.env),
         gnu_byte_offset_map: bc.gnu_byte_offset_map.as_ref().map(|map| {
             map.iter()
-                .map(|(byte_off, instr_idx)| (*byte_off as u32, *instr_idx as u32))
+                .map(|entry| (entry.byte_offset as u32, entry.instruction_index as u32))
                 .collect()
         }),
         gnu_bytecode_bytes: bc.gnu_bytecode_bytes.clone(),
@@ -3950,15 +3950,17 @@ fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
     }
 }
 
-fn load_byte_offset_map<I>(pairs: I) -> Vec<(usize, usize)>
+fn load_byte_offset_map<I>(pairs: I) -> Vec<GnuByteOffsetMapEntry>
 where
     I: IntoIterator<Item = (u32, u32)>,
 {
     let mut pairs: Vec<_> = pairs
         .into_iter()
-        .map(|(byte_off, instr_idx)| (byte_off as usize, instr_idx as usize))
+        .map(|(byte_off, instr_idx)| {
+            GnuByteOffsetMapEntry::new(byte_off as usize, instr_idx as usize)
+        })
         .collect();
-    pairs.sort_unstable_by_key(|(byte_off, _)| *byte_off);
+    pairs.sort_unstable_by_key(|entry| entry.byte_offset);
     pairs
 }
 

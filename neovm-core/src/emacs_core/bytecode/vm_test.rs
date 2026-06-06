@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::LispCharPos1;
+use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, Context, GuiFrameHostSize, ResumeTarget};
 use crate::emacs_core::value::HashTableTest;
@@ -2095,7 +2096,7 @@ fn vm_switch_branches_using_hash_table_jump_table() {
         arglist: Value::NIL,
         lexical: false,
         env: None,
-        gnu_byte_offset_map: Some(vec![(8usize, 5usize)]),
+        gnu_byte_offset_map: Some(vec![GnuByteOffsetMapEntry::new(8, 5)]),
         gnu_bytecode_bytes: None,
         docstring: None,
         doc_form: None,

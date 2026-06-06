@@ -62,7 +62,7 @@ fn trace_invalid_bytecode_site(
 
     let gnu_byte_offset = func.gnu_byte_offset_map.as_ref().and_then(|map| {
         map.iter()
-            .find_map(|(byte_offset, op_index)| (*op_index == pc).then_some(*byte_offset))
+            .find_map(|entry| (entry.instruction_index == pc).then_some(entry.byte_offset))
     });
     let op_window_start = pc.saturating_sub(8);
     let op_window_end = (pc + 8).min(func.ops.len());
@@ -5628,8 +5628,8 @@ fn resolve_switch_target(func: &ByteCodeFunction, raw_addr: i64) -> Result<usize
 
     if let Some(offset_map) = &func.gnu_byte_offset_map {
         offset_map
-            .binary_search_by_key(&raw_addr, |(byte_offset, _)| *byte_offset)
-            .map(|index| offset_map[index].1)
+            .binary_search_by_key(&raw_addr, |entry| entry.byte_offset)
+            .map(|index| offset_map[index].instruction_index)
             .map_err(|_| {
                 signal(
                     "error",

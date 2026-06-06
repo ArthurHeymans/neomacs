@@ -7,6 +7,21 @@ use super::opcode::Op;
 use crate::emacs_core::value::{LambdaParams, Value, ValueKind};
 use crate::heap_types::LispString;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct GnuByteOffsetMapEntry {
+    pub byte_offset: usize,
+    pub instruction_index: usize,
+}
+
+impl GnuByteOffsetMapEntry {
+    pub const fn new(byte_offset: usize, instruction_index: usize) -> Self {
+        Self {
+            byte_offset,
+            instruction_index,
+        }
+    }
+}
+
 fn arglist_value_from_params(params: &LambdaParams) -> Value {
     let mut elements = Vec::new();
     for sym in &params.required {
@@ -53,7 +68,7 @@ pub struct ByteCodeFunction {
     /// GNU does not allocate a hash table for this: it executes directly from
     /// the byte string.  Keep Neomacs' bridge representation compact and cheap
     /// to restore; `Bswitch` is the only runtime user.
-    pub gnu_byte_offset_map: Option<Vec<(usize, usize)>>,
+    pub gnu_byte_offset_map: Option<Vec<GnuByteOffsetMapEntry>>,
     /// Original GNU-format bytecode bytes from the .elc file or `make-byte-code`
     /// call.  NeoVM normally executes from `ops` (decoded IR), but elisp code
     /// like `byte-compile-make-closure` does `(aref FUN 1)` to read the raw

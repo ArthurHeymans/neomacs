@@ -326,7 +326,7 @@ fn determine_fsi_level(classes: &[BidiClass], start: usize) -> u8 {
 /// connected by isolate initiator/PDI pairs.
 struct RunSequence {
     /// Indices into the character array, in logical order.
-    runs: Vec<(usize, usize)>, // (start, end_exclusive)
+    runs: Vec<BidiRun>,
     /// Level of this sequence.
     level: u8,
     /// Start-of-sequence type (sos).
@@ -339,13 +339,26 @@ impl RunSequence {
     /// Iterate over character indices in this sequence.
     fn indices(&self) -> Vec<usize> {
         let mut result = Vec::new();
-        for &(start, end) in &self.runs {
-            for i in start..end {
+        for run in &self.runs {
+            for i in run.start..run.end {
                 result.push(i);
             }
         }
         result
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BidiRun {
+    start: usize,
+    end: usize,
+    level: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BracketPair {
+    open_seq: usize,
+    close_seq: usize,
 }
 
 /// Find level runs and group them into isolating run sequences (X10).
@@ -360,11 +373,15 @@ fn find_run_sequences(
     }
 
     // Find level runs: maximal subsequences at same level
-    let mut runs: Vec<(usize, usize, u8)> = Vec::new(); // (start, end, level)
+    let mut runs: Vec<BidiRun> = Vec::new();
     let mut run_start = 0;
     for i in 1..=n {
         if i == n || levels[i] != levels[run_start] {
-            runs.push((run_start, i, levels[run_start]));
+            runs.push(BidiRun {
+                start: run_start,
+                end: i,
+                level: levels[run_start],
+            });
             if i < n {
                 run_start = i;
             }
@@ -375,37 +392,37 @@ fn find_run_sequences(
     // Full UAX#9 groups runs connected by isolate initiator/PDI pairs,
     // but for most practical text this simpler approach works correctly.
     let mut sequences = Vec::new();
-    for (idx, &(start, end, level)) in runs.iter().enumerate() {
+    for (idx, run) in runs.iter().enumerate() {
         // Determine sos: max(level, preceding level)
-        let prev_level = if start == 0 {
+        let prev_level = if run.start == 0 {
             paragraph_level
         } else {
-            levels[start - 1]
+            levels[run.start - 1]
         };
-        let sos = if level.max(prev_level) % 2 == 0 {
+        let sos = if run.level.max(prev_level) % 2 == 0 {
             BidiClass::L
         } else {
             BidiClass::R
         };
 
         // Determine eos: max(level, following level)
-        let next_level = if end >= n {
+        let next_level = if run.end >= n {
             paragraph_level
         } else {
-            levels[end]
+            levels[run.end]
         };
-        let eos = if level.max(next_level) % 2 == 0 {
+        let eos = if run.level.max(next_level) % 2 == 0 {
             BidiClass::L
         } else {
             BidiClass::R
         };
 
         // Skip runs that are entirely X9-removed characters
-        let has_content = (start..end).any(|i| !classes[i].is_removed_by_x9());
+        let has_content = (run.start..run.end).any(|i| !classes[i].is_removed_by_x9());
         if has_content || idx == runs.len() - 1 {
             sequences.push(RunSequence {
-                runs: vec![(start, end)],
-                level,
+                runs: vec![*run],
+                level: run.level,
                 sos,
                 eos,
             });
@@ -557,8 +574,7 @@ fn resolve_brackets(
 
     // BPA stack: (index_in_indices, canonical_closing_bracket)
     let mut stack: Vec<(usize, char)> = Vec::new();
-    // Pairs found: (open_idx_in_indices, close_idx_in_indices)
-    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    let mut pairs: Vec<BracketPair> = Vec::new();
 
     for (seq_idx, &char_idx) in indices.iter().enumerate() {
         let ch = canonical_bracket(chars[char_idx]);
@@ -579,7 +595,10 @@ fn resolve_brackets(
                     }
                 }
                 if let Some(j) = found {
-                    pairs.push((stack[j].0, seq_idx));
+                    pairs.push(BracketPair {
+                        open_seq: stack[j].0,
+                        close_seq: seq_idx,
+                    });
                     stack.truncate(j); // Pop everything above
                 }
             }
@@ -588,7 +607,7 @@ fn resolve_brackets(
     }
 
     // Sort pairs by opening position
-    pairs.sort_by_key(|&(open, _)| open);
+    pairs.sort_by_key(|pair| pair.open_seq);
 
     // Resolve each pair per N0b-d
     let embedding_dir = if seq.level % 2 == 0 {
@@ -597,7 +616,9 @@ fn resolve_brackets(
         BidiClass::R
     };
 
-    for &(open_seq, close_seq) in &pairs {
+    for pair in &pairs {
+        let open_seq = pair.open_seq;
+        let close_seq = pair.close_seq;
         let open_idx = indices[open_seq];
         let close_idx = indices[close_seq];
 

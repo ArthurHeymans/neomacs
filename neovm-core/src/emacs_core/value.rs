@@ -366,17 +366,11 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
         return Some(TextPropertyTable::new());
     }
 
-    let mut sorted_bounds: Vec<(usize, usize)> = plist_runs
-        .iter()
-        .map(|run| {
-            let range = run.range();
-            (range.start().get(), range.end().get())
-        })
-        .collect();
-    sorted_bounds.sort_unstable();
+    let mut sorted_bounds: Vec<CharRange> = plist_runs.iter().map(|run| run.range()).collect();
+    sorted_bounds.sort_unstable_by_key(|range| (range.start_usize(), range.end_usize()));
     if sorted_bounds
         .windows(2)
-        .any(|window| window[1].0 < window[0].1)
+        .any(|window| window[1].start_usize() < window[0].end_usize())
     {
         return None;
     }
@@ -2436,11 +2430,26 @@ enum EqualKind {
     IncludingProperties,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct EqualSeenPair {
+    left_bits: usize,
+    right_bits: usize,
+}
+
+impl EqualSeenPair {
+    fn new(left: Value, right: Value) -> Self {
+        Self {
+            left_bits: left.bits(),
+            right_bits: right.bits(),
+        }
+    }
+}
+
 fn equal_value_inner(
     left: &Value,
     right: &Value,
     depth: usize,
-    seen: &mut Option<HashSet<(usize, usize)>>,
+    seen: &mut Option<HashSet<EqualSeenPair>>,
     symbols_with_pos_enabled: bool,
     kind: EqualKind,
 ) -> bool {
@@ -2495,7 +2504,7 @@ fn equal_value_inner(
             return false;
         }
         if depth > 10 {
-            let pair = (left.bits(), right.bits());
+            let pair = EqualSeenPair::new(left, right);
             if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                 return true;
             }
@@ -2564,7 +2573,7 @@ fn equal_value_inner(
         }
         VecLikeType::Vector | VecLikeType::Record => {
             if depth > 10 {
-                let pair = (left.bits(), right.bits());
+                let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return true;
                 }
@@ -2586,7 +2595,7 @@ fn equal_value_inner(
         VecLikeType::HashTable => false,
         VecLikeType::Lambda => {
             if depth > 10 {
-                let pair = (left.bits(), right.bits());
+                let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return true;
                 }
@@ -2649,7 +2658,7 @@ fn try_equal_value_inner(
     left: &Value,
     right: &Value,
     depth: usize,
-    seen: &mut Option<HashSet<(usize, usize)>>,
+    seen: &mut Option<HashSet<EqualSeenPair>>,
     symbols_with_pos_enabled: bool,
     kind: EqualKind,
 ) -> Result<bool, Flow> {
@@ -2786,7 +2795,7 @@ fn try_equal_value_inner(
         }
         VecLikeType::Vector | VecLikeType::Record => {
             if depth > 10 {
-                let pair = (left.bits(), right.bits());
+                let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return Ok(true);
                 }
@@ -2818,7 +2827,7 @@ fn try_equal_value_inner(
         VecLikeType::HashTable => Ok(false),
         VecLikeType::Lambda => {
             if depth > 10 {
-                let pair = (left.bits(), right.bits());
+                let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return Ok(true);
                 }
@@ -2910,7 +2919,7 @@ fn closure_equal(
     left: &Value,
     right: &Value,
     depth: usize,
-    seen: &mut Option<HashSet<(usize, usize)>>,
+    seen: &mut Option<HashSet<EqualSeenPair>>,
     symbols_with_pos_enabled: bool,
     kind: EqualKind,
 ) -> bool {
@@ -2968,7 +2977,7 @@ fn try_closure_equal(
     left: &Value,
     right: &Value,
     depth: usize,
-    seen: &mut Option<HashSet<(usize, usize)>>,
+    seen: &mut Option<HashSet<EqualSeenPair>>,
     symbols_with_pos_enabled: bool,
     kind: EqualKind,
 ) -> Result<bool, Flow> {

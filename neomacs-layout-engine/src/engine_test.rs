@@ -3,7 +3,7 @@ use crate::neovm_bridge::RustBufferAccess;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
-use neovm_core::buffer::{BufferId, BufferTextBackendKind, EmacsByteRange};
+use neovm_core::buffer::{BufferId, BufferTextBackendKind, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -447,10 +447,26 @@ struct BackendLayoutTrace {
     points: Vec<DisplayPointSnapshot>,
     output_rows: Vec<DisplayRowSnapshot>,
     phys_cursor: Option<WindowCursorSnapshot>,
-    visible_span: Option<(usize, usize)>,
+    visible_span: Option<VisibleSpan>,
     window_start: usize,
     window_point: usize,
     hit: Option<WindowHitTrace>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct VisibleSpan {
+    start: usize,
+    end: usize,
+}
+
+impl VisibleSpan {
+    const fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+}
+
+fn visible_span_from_pair(pair: Option<(usize, usize)>) -> Option<VisibleSpan> {
+    pair.map(|(start, end)| VisibleSpan::new(start, end))
 }
 
 fn selected_window_layout_trace(
@@ -503,7 +519,7 @@ fn selected_window_layout_trace(
         points: display_snapshot.points.clone(),
         output_rows: display_snapshot.rows.clone(),
         phys_cursor: display_snapshot.phys_cursor.clone(),
-        visible_span: display_snapshot.visible_buffer_span(),
+        visible_span: visible_span_from_pair(display_snapshot.visible_buffer_span()),
         window_start,
         window_point,
         hit,
@@ -1708,7 +1724,7 @@ fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
     );
     assert_eq!(
         baseline.visible_span,
-        Some((4, 7)),
+        Some(VisibleSpan::new(4, 7)),
         "baseline should publish the visible hscrolled buffer span"
     );
     assert!(
@@ -4315,7 +4331,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
             buffer
-                .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
+                .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(target.line_beg as i64))
                 .get()
         };
         let _ = eval
@@ -4551,7 +4567,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
             buffer
-                .lisp_pos_to_emacs_byte_pos(target.line_beg as i64)
+                .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(target.line_beg as i64))
                 .get()
         };
         let _ = eval
@@ -4574,17 +4590,19 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             .window_display_snapshot(selected_window)
             .expect("display snapshot");
         let all_points = snapshot.points.clone();
-        let visible_span = snapshot
-            .rows
-            .iter()
-            .find_map(|row| row.start_buffer_pos)
-            .zip(
-                snapshot
-                    .rows
-                    .iter()
-                    .rev()
-                    .find_map(|row| row.end_buffer_pos),
-            );
+        let visible_span = visible_span_from_pair(
+            snapshot
+                .rows
+                .iter()
+                .find_map(|row| row.start_buffer_pos)
+                .zip(
+                    snapshot
+                        .rows
+                        .iter()
+                        .rev()
+                        .find_map(|row| row.end_buffer_pos),
+                ),
+        );
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
         let sample_chars = [
             (

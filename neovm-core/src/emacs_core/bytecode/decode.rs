@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use super::chunk::GnuByteOffsetMapEntry;
 use super::opcode::Op;
 use crate::emacs_core::value::{Value, ValueKind};
 
@@ -21,7 +22,10 @@ pub enum DecodeError {
     /// Premature end of bytecode stream while reading operand.
     UnexpectedEnd(usize),
     /// Jump target byte offset not found in the offset map.
-    InvalidJumpTarget(usize, usize),
+    InvalidJumpTarget {
+        target_byte_offset: usize,
+        source_byte_offset: usize,
+    },
     /// Obsolete opcode that should not appear in modern .elc files.
     ObsoleteOpcode(u8, usize),
 }
@@ -39,11 +43,14 @@ impl fmt::Display for DecodeError {
             DecodeError::UnexpectedEnd(off) => {
                 write!(f, "unexpected end of bytecode at offset {}", off)
             }
-            DecodeError::InvalidJumpTarget(target, off) => {
+            DecodeError::InvalidJumpTarget {
+                target_byte_offset,
+                source_byte_offset,
+            } => {
                 write!(
                     f,
                     "jump target byte offset {} not found (from instruction at byte {})",
-                    target, off
+                    target_byte_offset, source_byte_offset
                 )
             }
             DecodeError::ObsoleteOpcode(byte, off) => {
@@ -93,12 +100,20 @@ pub fn decode_gnu_bytecode(
 pub fn decode_gnu_bytecode_with_offset_map(
     bytecodes: &[u8],
     constants: &mut Vec<Value>,
-) -> Result<(Vec<Op>, Vec<(usize, usize)>), DecodeError> {
+) -> Result<(Vec<Op>, Vec<GnuByteOffsetMapEntry>), DecodeError> {
     let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, constants)?;
     let ops = patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?;
     let mut offset_pairs: Vec<_> = offset_map.into_iter().collect();
     offset_pairs.sort_unstable_by_key(|(byte_offset, _)| *byte_offset);
-    Ok((ops, offset_pairs))
+    Ok((
+        ops,
+        offset_pairs
+            .into_iter()
+            .map(|(byte_offset, instruction_index)| {
+                GnuByteOffsetMapEntry::new(byte_offset, instruction_index)
+            })
+            .collect(),
+    ))
 }
 
 /// Intermediate instruction that may contain raw byte-offset jump targets.
@@ -529,10 +544,10 @@ fn patch_jumps(
             if byte_target == bytecode_len {
                 ops.len()
             } else {
-                return Err(DecodeError::InvalidJumpTarget(
-                    byte_target,
-                    patch.source_byte,
-                ));
+                return Err(DecodeError::InvalidJumpTarget {
+                    target_byte_offset: byte_target,
+                    source_byte_offset: patch.source_byte,
+                });
             }
         };
 
