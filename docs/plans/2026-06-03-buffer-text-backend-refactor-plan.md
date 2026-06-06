@@ -215,6 +215,12 @@ Progress:
 - Rope and piece-tree split helpers distinguish backend-local byte offsets from
   byte lengths and character lengths, so backend-local physical mutation is
   harder to confuse with global Emacs byte positions.
+- Text-property validation now crosses explicit `LispCharPos1`/`CharPos0`
+  boundaries before converting to Emacs bytes, and production string
+  text-property slicing, mode-line property rendering, composition ranges,
+  undo yank deletion, pdump interval load, and set-buffer-multibyte overlay
+  remapping now construct typed `CharRange`/`EmacsByteRange` values at their
+  semantic boundaries.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
