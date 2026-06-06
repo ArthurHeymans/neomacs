@@ -533,6 +533,17 @@ impl MeasuredSameLenEdit {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum SharedTextEditMetadata {
+    Insert(MeasuredInsertEdit),
+    Delete(MeasuredDeleteEdit),
+    Replace(MeasuredReplaceEdit),
+    SameLen {
+        edit: MeasuredSameLenEdit,
+        preserve_modified_state: bool,
+    },
+}
+
 /// Backend-neutral plan for GNU `subst-char-in-region`.
 ///
 /// GNU scans the buffer once to find each single-character replacement, records

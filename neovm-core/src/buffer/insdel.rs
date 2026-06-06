@@ -8,7 +8,7 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
     TranspositionStoragePlan, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
     emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
 };
@@ -23,17 +23,6 @@ use crate::heap_types::LispString;
 struct SharedTextEditScope {
     edited_id: BufferId,
     buffer_ids: Vec<BufferId>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SharedTextEditMetadata {
-    Insert(MeasuredInsertEdit),
-    Delete(MeasuredDeleteEdit),
-    Replace(MeasuredReplaceEdit),
-    SameLen {
-        edit: MeasuredSameLenEdit,
-        preserve_modified_state: bool,
-    },
 }
 
 impl SharedTextEditScope {
