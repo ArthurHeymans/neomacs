@@ -369,9 +369,9 @@ fn primitive_undo_inner(
                             if accessible.contains_boundary_usize(del_start_char)
                                 && accessible.contains_boundary_usize(del_end_char)
                             {
-                                Some(buf.edit_range_for_char_range(CharRange::from_usize(
-                                    del_start_char,
-                                    del_end_char,
+                                Some(buf.edit_range_for_char_range(CharRange::new(
+                                    CharPos0::new(del_start_char),
+                                    CharPos0::new(del_end_char),
                                 )))
                             } else {
                                 None

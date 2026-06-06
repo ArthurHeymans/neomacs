@@ -4,7 +4,7 @@
 //! dump/load code share the same payload structs without reviving old heap
 //! module boundaries.
 
-use crate::buffer::{BufferId, CharLen, CharRange, TextPropertyTable};
+use crate::buffer::{BufferId, CharLen, CharPos0, CharRange, TextPropertyTable};
 use crate::emacs_core::emacs_char;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -633,9 +633,10 @@ impl LispString {
         } else {
             (start, end)
         };
-        let intervals = self
-            .intervals()
-            .slice_char_range(CharRange::from_usize(char_start, char_end));
+        let intervals = self.intervals().slice_char_range(CharRange::new(
+            CharPos0::new(char_start),
+            CharPos0::new(char_end),
+        ));
         if !intervals.is_empty() {
             *result.intervals_mut() = intervals;
         }

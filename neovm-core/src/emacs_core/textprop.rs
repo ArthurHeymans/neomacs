@@ -1577,7 +1577,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
                 table.get_property_at_char_pos(string_char_pos(seg_start), Value::symbol("face"));
             let merged = merge_face_property(existing, new_face, append)?;
             table.put_property_for_object_char_len(
-                CharRange::from_usize(seg_start, seg_end),
+                CharRange::new(CharPos0::new(seg_start), CharPos0::new(seg_end)),
                 string_char_len(s.schars()),
                 Value::symbol("face"),
                 merged,
