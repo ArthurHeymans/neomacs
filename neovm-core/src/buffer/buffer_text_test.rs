@@ -5,6 +5,7 @@ use crate::buffer::{
     BufferTextBackendKind, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
     EmacsByteRange, TextEditRange, TextExtent, TextMetrics,
 };
+use crate::emacs_core::value::Value;
 
 use super::BufferText;
 
@@ -407,6 +408,89 @@ fn replace_lisp_string_preserves_non_gap_backend() {
             text.backend_debug_layout().metrics(),
             TextMetrics::from_usize(2, 6)
         );
+    }
+}
+
+#[test]
+fn backend_conversion_preserves_text_side_data_after_edits() {
+    crate::test_utils::init_test_tracing();
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+
+    for source_kind in BufferTextBackendKind::implemented_variants() {
+        let mut text =
+            BufferText::from_str_with_backend_kind("aé\n🙂z", implemented_kind(source_kind));
+        insert_storage_string(&mut text, emacs_byte_pos(1), "Ω");
+        let prop_start = char_pos_to_byte_pos(&text, 1);
+        let prop_end = char_pos_to_byte_pos(&text, 5);
+        assert!(text.text_props_put_property_in_emacs_byte_range(
+            emacs_byte_range(prop_start, prop_end),
+            face,
+            bold,
+        ));
+        text.set_save_modified_tick(77);
+
+        let expected_text = text.to_string();
+        let expected_metrics = text.metrics();
+        let expected_modified_tick = text.modified_tick();
+        let expected_chars_modified_tick = text.chars_modified_tick();
+        let expected_save_modified_tick = text.save_modified_tick();
+        let expected_gap_position = text.gap_position_lisp();
+        let expected_gap_size = text.gap_size_lisp();
+        let inside_prop = emacs_byte_pos(char_pos_to_byte_pos(&text, 3));
+        let outside_prop = emacs_byte_pos(0);
+
+        for target_kind in BufferTextBackendKind::implemented_variants() {
+            text.try_convert_backend_kind(target_kind)
+                .expect("backend should be implemented");
+
+            assert_eq!(text.backend_kind(), target_kind);
+            assert_eq!(
+                text.to_string(),
+                expected_text,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.metrics(),
+                expected_metrics,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.modified_tick(),
+                expected_modified_tick,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.chars_modified_tick(),
+                expected_chars_modified_tick,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.save_modified_tick(),
+                expected_save_modified_tick,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.gap_position_lisp(),
+                expected_gap_position,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.gap_size_lisp(),
+                expected_gap_size,
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.text_props_get_property_at_emacs_byte_pos(inside_prop, face),
+                Some(bold),
+                "{source_kind:?}->{target_kind:?}"
+            );
+            assert_eq!(
+                text.text_props_get_property_at_emacs_byte_pos(outside_prop, face),
+                None,
+                "{source_kind:?}->{target_kind:?}"
+            );
+        }
     }
 }
 
