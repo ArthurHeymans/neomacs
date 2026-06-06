@@ -1463,36 +1463,26 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// Uses backend-neutral Emacs byte ranges so layout is independent of
     /// the concrete buffer storage.
     pub fn copy_text(&self, byte_from: i64, byte_to: i64, out: &mut Vec<u8>) {
-        let text_len = self.buffer.layout_total_emacs_byte_len().get();
-        let from = (byte_from as usize).min(text_len);
-        let to = (byte_to as usize).min(text_len);
-        if from >= to {
+        let Some(range) = clamped_layout_emacs_byte_range(self.buffer, byte_from, byte_to) else {
             out.clear();
             return;
-        }
-        self.buffer
-            .layout_copy_emacs_byte_range_to(EmacsByteRange::from_usize(from, to), out);
+        };
+        self.buffer.layout_copy_emacs_byte_range_to(range, out);
     }
 
     /// Count the number of newlines in `[byte_from, byte_to)`.
     ///
     /// Used for line number display.
     pub fn count_lines(&self, byte_from: i64, byte_to: i64) -> i64 {
-        let text_len = self.buffer.layout_total_emacs_byte_len().get();
-        let from = (byte_from as usize).min(text_len);
-        let to = (byte_to as usize).min(text_len);
-        if from >= to {
+        let Some(range) = clamped_layout_emacs_byte_range(self.buffer, byte_from, byte_to) else {
             return 0;
-        }
+        };
         let mut count: i64 = 0;
         self.buffer
-            .layout_try_for_each_emacs_byte_range_chunk(
-                EmacsByteRange::from_usize(from, to),
-                |chunk| {
-                    count += chunk.iter().filter(|byte| **byte == b'\n').count() as i64;
-                    Ok::<(), std::convert::Infallible>(())
-                },
-            )
+            .layout_try_for_each_emacs_byte_range_chunk(range, |chunk| {
+                count += chunk.iter().filter(|byte| **byte == b'\n').count() as i64;
+                Ok::<(), std::convert::Infallible>(())
+            })
             .expect("newline counting is infallible");
         count
     }
@@ -1599,6 +1589,25 @@ fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
         ))
         .get()
         .min(buffer.layout_point_max_char_pos().get())
+}
+
+fn clamped_layout_emacs_byte_pos<B: LayoutBufferView>(
+    buffer: &B,
+    bytepos: i64,
+) -> Option<EmacsBytePos> {
+    (bytepos >= 0).then(|| {
+        EmacsBytePos::new((bytepos as usize).min(buffer.layout_total_emacs_byte_len().get()))
+    })
+}
+
+fn clamped_layout_emacs_byte_range<B: LayoutBufferView>(
+    buffer: &B,
+    byte_from: i64,
+    byte_to: i64,
+) -> Option<EmacsByteRange> {
+    let from = clamped_layout_emacs_byte_pos(buffer, byte_from)?;
+    let to = clamped_layout_emacs_byte_pos(buffer, byte_to)?;
+    (from < to).then(|| EmacsByteRange::new(from, to))
 }
 
 fn invisible_atom_status(prop_atom: Value, spec: Value) -> InvisibleStatus {
@@ -1798,13 +1807,14 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         // the position.  Zero-length completion overlays sit at point/EOB and
         // carry their displayed candidates in `before-string', so `overlays_at'
         // would miss exactly the strings redisplay must show.
-        let mut overlay_ids =
-            self.buffer
-                .layout_overlays()
-                .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(
-                    bytepos.get().saturating_sub(1),
-                    bytepos.get().saturating_add(1),
-                ));
+        let scan_range = EmacsByteRange::new(
+            bytepos.saturating_sub_len(EmacsByteLen::new(1)),
+            bytepos.add_len(EmacsByteLen::new(1)),
+        );
+        let mut overlay_ids = self
+            .buffer
+            .layout_overlays()
+            .overlays_in_emacs_byte_range(scan_range);
         overlay_ids.sort();
         overlay_ids.dedup();
 
