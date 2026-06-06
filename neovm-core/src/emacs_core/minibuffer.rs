@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -1217,8 +1217,8 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
             .buffers
             .get(current_id)
             .expect("current minibuffer must remain available");
-        let point_min_byte = buffer
-            .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(point_min));
+        let point_min_byte =
+            buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(point_min));
         if buffer
             .text_props_get_property_at_emacs_byte_pos(point_min_byte, Value::symbol("field"))
             .is_none()
@@ -1458,8 +1458,7 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
         .buffers
         .get(current_id)
         .expect("current buffer must remain available");
-    let start = buffer
-        .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(prompt_end_pos));
+    let start = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(prompt_end_pos));
     Ok(buffer.buffer_substring_lisp_string_range(EmacsByteRange::new(start, point_max)))
 }
 
