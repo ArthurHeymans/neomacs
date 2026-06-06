@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -79,29 +79,29 @@ fn expect_list_like(value: &Value) -> Result<(), Flow> {
     }
 }
 
-fn char_pos1_to_char0(pos1: i64) -> usize {
-    (pos1 - 1).max(0) as usize
+fn char_pos1_to_char0(pos1: LispCharPos1) -> CharPos0 {
+    pos1.to_char_pos()
 }
 
-fn char_pos1_to_byte_clamped(buf: &crate::buffer::Buffer, pos1: i64) -> usize {
-    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos1_to_char0(pos1)))
-        .get()
+fn char_pos1_to_byte_clamped(buf: &Buffer, pos1: LispCharPos1) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(char_pos1_to_char0(pos1))
 }
 
-fn accessible_lisp_char_bounds(buf: &Buffer) -> (i64, i64) {
+fn accessible_lisp_char_bounds(buf: &Buffer) -> (LispCharPos1, LispCharPos1) {
     let accessible = buf.accessible_char_region();
-    (
-        accessible.start_usize() as i64 + 1,
-        accessible.end_usize() as i64 + 1,
-    )
+    (accessible.start().to_lisp(), accessible.end().to_lisp())
 }
 
-fn lisp_char_position_is_visible(buf: &Buffer, pos: i64) -> bool {
+fn lisp_char_position_is_visible(buf: &Buffer, pos: LispCharPos1) -> bool {
     let (point_min, point_max) = accessible_lisp_char_bounds(buf);
     point_min <= pos && pos <= point_max
 }
 
-fn ensure_undo_lisp_range_is_visible(buf: &Buffer, beg: i64, end: i64) -> Result<(), Flow> {
+fn ensure_undo_lisp_range_is_visible(
+    buf: &Buffer,
+    beg: LispCharPos1,
+    end: LispCharPos1,
+) -> Result<(), Flow> {
     let (point_min, point_max) = accessible_lisp_char_bounds(buf);
     if beg < point_min || end > point_max {
         return Err(signal(
@@ -232,9 +232,8 @@ fn primitive_undo_inner(
             // Integer POS: goto-char
             if let Some(pos1) = entry.as_fixnum() {
                 if let Some(buf) = ctx.buffers.get(buf_id) {
-                    let byte = char_pos1_to_byte_clamped(buf, pos1);
-                    ctx.buffers
-                        .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(byte));
+                    let byte = char_pos1_to_byte_clamped(buf, LispCharPos1::new(pos1));
+                    ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, byte);
                 }
                 continue;
             }
@@ -250,11 +249,13 @@ fn primitive_undo_inner(
             match (car.kind(), cdr.kind()) {
                 // (BEG . END) both integers — undo an insertion by deleting.
                 (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
+                    let beg_pos = LispCharPos1::new(beg1);
+                    let end_pos = LispCharPos1::new(end1);
                     let delete_range = if let Some(buf) = ctx.buffers.get(buf_id) {
-                        ensure_undo_lisp_range_is_visible(buf, beg1, end1)?;
-                        Some(buf.edit_range_for_char_range(CharRange::from_usize(
-                            char_pos1_to_char0(beg1),
-                            char_pos1_to_char0(end1),
+                        ensure_undo_lisp_range_is_visible(buf, beg_pos, end_pos)?;
+                        Some(buf.edit_range_for_char_range(CharRange::new(
+                            char_pos1_to_char0(beg_pos),
+                            char_pos1_to_char0(end_pos),
                         )))
                     } else {
                         None
@@ -265,8 +266,8 @@ fn primitive_undo_inner(
                 }
                 // (TEXT . POS) string + int — undo a deletion by re-inserting.
                 (ValueKind::String, ValueKind::Fixnum(pos1)) => {
+                    let apos1 = LispCharPos1::new(pos1.abs());
                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                        let apos1 = pos1.abs();
                         if !lisp_char_position_is_visible(buf, apos1) {
                             return Err(signal(
                                 "error",
@@ -277,7 +278,6 @@ fn primitive_undo_inner(
                         }
                     }
 
-                    let apos1 = pos1.abs();
                     let mut valid_marker_adjustments = Vec::new();
                     while list.is_cons() {
                         let marker_adj = list.cons_car();
@@ -302,7 +302,7 @@ fn primitive_undo_inner(
                                 &ctx.buffers,
                                 &marker,
                             )
-                            .is_ok_and(|pos| pos == apos1);
+                            .is_ok_and(|pos| pos == apos1.as_i64());
                         if marker_in_current_buffer && marker_at_undo_position {
                             valid_marker_adjustments.push((marker, offset));
                         }
@@ -310,8 +310,7 @@ fn primitive_undo_inner(
 
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         let clamped = char_pos1_to_byte_clamped(buf, apos1);
-                        ctx.buffers
-                            .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(clamped));
+                        ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, clamped);
                         super::builtins::insert_string_value_in_current_buffer(
                             &ctx.obarray,
                             &[],
@@ -324,8 +323,7 @@ fn primitive_undo_inner(
                         // inserted text (which insert_into_buffer already does).
                         // If positive, move point back to start of insertion.
                         if pos1 > 0 {
-                            ctx.buffers
-                                .goto_buffer_emacs_byte_pos(buf_id, EmacsBytePos::new(clamped));
+                            ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, clamped);
                         }
                     }
 
@@ -405,21 +403,19 @@ fn primitive_undo_inner(
                                 if let (Some(b), Some(e)) =
                                     (beg_val.as_fixnum(), end_val.as_fixnum())
                                 {
+                                    let beg_pos = LispCharPos1::new(b);
+                                    let end_pos = LispCharPos1::new(e);
                                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                                        ensure_undo_lisp_range_is_visible(buf, b, e)?;
+                                        ensure_undo_lisp_range_is_visible(buf, beg_pos, end_pos)?;
                                         let accessible_start =
                                             buf.accessible_emacs_byte_region().start();
                                         let byte_beg = if b > 0 {
-                                            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
-                                                (b - 1) as usize,
-                                            ))
+                                            char_pos1_to_byte_clamped(buf, beg_pos)
                                         } else {
                                             accessible_start
                                         };
                                         let byte_end = if e > 0 {
-                                            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
-                                                (e - 1) as usize,
-                                            ))
+                                            char_pos1_to_byte_clamped(buf, end_pos)
                                         } else {
                                             accessible_start
                                         };
@@ -463,8 +459,10 @@ fn primitive_undo_inner(
                             if let (Some(start1), Some(end1)) =
                                 (start_v.as_fixnum(), end_v.as_fixnum())
                             {
+                                let start_pos = LispCharPos1::new(start1);
+                                let end_pos = LispCharPos1::new(end1);
                                 if let Some(buf) = ctx.buffers.get(buf_id) {
-                                    ensure_undo_lisp_range_is_visible(buf, start1, end1)?;
+                                    ensure_undo_lisp_range_is_visible(buf, start_pos, end_pos)?;
                                 }
                             }
                             if !rest3.is_cons() {
