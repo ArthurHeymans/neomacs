@@ -130,7 +130,7 @@ impl Buffer {
         }
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(edit.byte_pos(), EmacsBytePos::new(self.pt_byte));
+        self.undo_prepare_change(edit.byte_pos(), self.point_emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_insert(
@@ -480,7 +480,7 @@ impl Buffer {
         let deleted_text = self.buffer_region_lisp_string(range.byte_range());
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(range.byte_start(), EmacsBytePos::new(self.pt_byte));
+        self.undo_prepare_change(range.byte_start(), self.point_emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             for (marker, adjustment) in self.text.marker_adjustments_for_delete(range) {
@@ -490,7 +490,7 @@ impl Buffer {
                 &mut ul,
                 range.char_start(),
                 deleted_text,
-                CharPos0::new(self.pt),
+                self.point_char_pos(),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
