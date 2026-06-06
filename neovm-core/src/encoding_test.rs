@@ -482,7 +482,7 @@ fn encode_coding_string_buffer_destination_inserts_without_moving_point() {
     );
     let buf = eval.buffers.get(dest).expect("destination buffer");
     assert_eq!(buf.buffer_string(), "Xa\r\nY");
-    assert_eq!(buf.point_byte(), 1);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 1);
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn decode_coding_string_buffer_destination_inserts_without_moving_point() {
     );
     let buf = eval.buffers.get(dest).expect("destination buffer");
     assert_eq!(buf.buffer_string(), "a\nb");
-    assert_eq!(buf.point_byte(), 0);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 0);
 }
 
 #[test]
@@ -793,8 +793,8 @@ fn decode_coding_region_replaces_current_region() {
 
     let buffer = eval.buffers.get(current).expect("current buffer");
     assert_eq!(buffer.buffer_string(), "a\nb");
-    assert_eq!(buffer.point_min_char(), 0);
-    assert_eq!(buffer.point_max_char(), 3);
+    assert_eq!(buffer.point_min_char_pos().get(), 0);
+    assert_eq!(buffer.point_max_char_pos().get(), 3);
 }
 
 #[test]

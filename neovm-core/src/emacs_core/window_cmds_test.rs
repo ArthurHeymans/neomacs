@@ -682,7 +682,8 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
         .buffer_manager()
         .get(buffer_id)
         .expect("selected buffer")
-        .point_char()
+        .point_char_pos()
+        .get()
         + 1;
     assert_eq!(pre_buffer_point, 5);
 
@@ -710,7 +711,8 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
         .buffer_manager()
         .get(buffer_id)
         .expect("selected buffer")
-        .point_char()
+        .point_char_pos()
+        .get()
         + 1;
 
     assert_eq!(selected_point, 5);
@@ -5396,7 +5398,8 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
         .buffers
         .get(buf)
         .expect("scratch buffer")
-        .point_max_char();
+        .point_max_char_pos()
+        .get();
 
     {
         let frame = ev.frames.get_mut(fid).expect("frame");

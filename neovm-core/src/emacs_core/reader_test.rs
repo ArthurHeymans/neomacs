@@ -1105,7 +1105,8 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .buffer_manager()
         .get(active_buffer)
         .expect("active minibuffer buffer")
-        .point_char()
+        .point_char_pos()
+        .get()
         + 1;
     assert_eq!(pre_buffer_point, 14);
 
@@ -1133,7 +1134,8 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .buffer_manager()
         .get(active_buffer)
         .expect("active minibuffer buffer")
-        .point_char()
+        .point_char_pos()
+        .get()
         + 1;
 
     assert_eq!(window_point, 14);
@@ -4021,7 +4023,14 @@ fn read_from_unibyte_buffer_preserves_unibyte_string_literals() {
         .expect("reader should return a string object");
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
-    assert_eq!(ev.buffers.get(buf_id).expect("buffer").point_byte(), 3);
+    assert_eq!(
+        ev.buffers
+            .get(buf_id)
+            .expect("buffer")
+            .point_emacs_byte_pos()
+            .get(),
+        3
+    );
 }
 
 #[test]

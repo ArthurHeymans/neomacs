@@ -1061,7 +1061,7 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         first_prompt_end,
         crate::buffer::EmacsBytePos::new("Prompt: ".len())
     );
-    assert_eq!(buf.point_byte(), "Prompt: stale".len());
+    assert_eq!(buf.point_emacs_byte_pos().get(), "Prompt: stale".len());
 
     let second_prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
         buf,
@@ -1075,7 +1075,10 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         crate::buffer::EmacsBytePos::new("Switch to buffer: ".len())
     );
     assert_eq!(buf.buffer_string(), "Switch to buffer: *Messages*");
-    assert_eq!(buf.point_byte(), "Switch to buffer: *Messages*".len());
+    assert_eq!(
+        buf.point_emacs_byte_pos().get(),
+        "Switch to buffer: *Messages*".len()
+    );
 }
 
 #[test]

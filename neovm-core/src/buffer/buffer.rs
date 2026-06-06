@@ -2102,12 +2102,6 @@ impl Buffer {
         }
     }
 
-    /// Current point as a raw Emacs byte position.
-    #[cfg(test)]
-    pub fn point_byte(&self) -> usize {
-        self.point_emacs_byte_pos().get()
-    }
-
     /// Current point converted to a character position.
     pub fn point_char_pos(&self) -> CharPos0 {
         CharPos0::new(self.pt)
@@ -2118,21 +2112,9 @@ impl Buffer {
         self.point_char_pos().to_lisp()
     }
 
-    /// Current point converted to a raw character position.
-    #[cfg(test)]
-    pub fn point_char(&self) -> usize {
-        self.point_char_pos().get()
-    }
-
     /// Beginning of the accessible portion (Emacs byte position).
     pub fn point_min_emacs_byte_pos(&self) -> EmacsBytePos {
         EmacsBytePos::new(self.begv_byte)
-    }
-
-    /// Beginning of the accessible portion as a raw Emacs byte position.
-    #[cfg(test)]
-    pub fn point_min_byte(&self) -> usize {
-        self.point_min_emacs_byte_pos().get()
     }
 
     /// Beginning of the accessible portion (character position).
@@ -2145,21 +2127,9 @@ impl Buffer {
         self.point_min_char_pos().to_lisp()
     }
 
-    /// Beginning of the accessible portion as a raw character position.
-    #[cfg(test)]
-    pub fn point_min_char(&self) -> usize {
-        self.point_min_char_pos().get()
-    }
-
     /// End of the accessible portion (Emacs byte position).
     pub fn point_max_emacs_byte_pos(&self) -> EmacsBytePos {
         EmacsBytePos::new(self.zv_byte)
-    }
-
-    /// End of the accessible portion as a raw Emacs byte position.
-    #[cfg(test)]
-    pub fn point_max_byte(&self) -> usize {
-        self.point_max_emacs_byte_pos().get()
     }
 
     /// End of the accessible portion (character position).
@@ -2170,12 +2140,6 @@ impl Buffer {
     /// End of the accessible portion as a 1-based Lisp character position.
     pub fn point_max_lisp_char_pos(&self) -> LispCharPos1 {
         self.point_max_char_pos().to_lisp()
-    }
-
-    /// End of the accessible portion as a raw character position.
-    #[cfg(test)]
-    pub fn point_max_char(&self) -> usize {
-        self.point_max_char_pos().get()
     }
 
     /// Total number of characters in the buffer text.
@@ -3006,12 +2970,6 @@ impl Buffer {
         }
     }
 
-    /// Return the mark byte position, None if mark inactive.
-    #[cfg(test)]
-    pub fn mark_byte(&self) -> Option<usize> {
-        self.mark_emacs_byte_pos().map(EmacsBytePos::get)
-    }
-
     /// Return the mark as an Emacs byte position, None if mark inactive.
     pub fn mark_emacs_byte_pos(&self) -> Option<EmacsBytePos> {
         if self.mark_marker_ptr.is_null() {
@@ -3028,12 +2986,6 @@ impl Buffer {
         } else {
             unsafe { Some(marker_data_anchor(&(*self.mark_marker_ptr).data).char_pos()) }
         }
-    }
-
-    /// Return the mark as a raw character position, None if mark inactive.
-    #[cfg(test)]
-    pub fn mark_char(&self) -> Option<usize> {
-        self.mark_char_pos().map(CharPos0::get)
     }
 
     /// Deactivate the mark.

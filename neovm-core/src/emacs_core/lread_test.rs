@@ -451,7 +451,8 @@ fn eval_region_keeps_point_stable_without_side_effects() {
         .buffers
         .current_buffer()
         .expect("current buffer")
-        .point_char() as i64
+        .point_char_pos()
+        .get() as i64
         + 1;
     assert_eq!(point, 1);
 }

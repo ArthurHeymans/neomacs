@@ -266,7 +266,7 @@ fn move_to_column_handles_unibyte_raw_byte_display_width() {
     assert_eq!(reached, Value::fixnum(12));
 
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.point_byte(), 3);
+    assert_eq!(buffer.point_emacs_byte_pos().get(), 3);
     let current_column = builtin_current_column(&mut ev, vec![]).expect("current-column");
     assert_eq!(current_column, Value::fixnum(12));
 }
@@ -304,7 +304,7 @@ fn eval_move_to_column_force_subset() {
         builtin_move_to_column(&mut ev, vec![Value::fixnum(10), Value::T]).expect("force eol");
     assert_eq!(first, Value::fixnum(10));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.point_byte(), 6);
+    assert_eq!(buffer.point_emacs_byte_pos().get(), 6);
     assert_eq!(buffer.buffer_string(), "abc\t  ");
 
     ev.buffers
@@ -329,7 +329,7 @@ fn eval_move_to_column_force_subset() {
         builtin_move_to_column(&mut ev, vec![Value::fixnum(5), Value::T]).expect("split tab");
     assert_eq!(second, Value::fixnum(5));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.point_byte(), 5);
+    assert_eq!(buffer.point_emacs_byte_pos().get(), 5);
     assert_eq!(buffer.buffer_string(), "a    \tb");
 
     ev.buffers
@@ -358,7 +358,7 @@ fn eval_move_to_column_force_subset() {
         .expect("split tab with spaces");
     assert_eq!(third, Value::fixnum(4));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.point_byte(), 4);
+    assert_eq!(buffer.point_emacs_byte_pos().get(), 4);
     assert_eq!(buffer.buffer_string(), "a       b\n");
 }
 

@@ -1367,10 +1367,10 @@ fn test_format_mode_line_percent_specs_use_window_buffer_and_completed_window_en
             crate::window::Window::Leaf { window_start, .. } => {
                 *window_start = 20;
                 window.set_window_end_from_positions(
-                    target.point_max_char().saturating_add(1),
-                    target.point_max_byte(),
-                    target.point_max_char(),
-                    target.point_max_byte(),
+                    target.point_max_char_pos().get().saturating_add(1),
+                    target.point_max_emacs_byte_pos().get(),
+                    target.point_max_char_pos().get(),
+                    target.point_max_emacs_byte_pos().get(),
                     0,
                 );
             }

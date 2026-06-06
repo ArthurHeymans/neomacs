@@ -3263,14 +3263,14 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
             second.text_backend_kind(),
             crate::buffer::BufferTextBackendKind::GapBuffer
         );
-        assert_eq!(first.point_byte(), 5);
-        assert_eq!(first.point_min_byte(), 0);
-        assert_eq!(first.point_max_byte(), 6);
-        assert_eq!(first.mark_byte(), Some(1));
-        assert_eq!(second.point_byte(), 2);
-        assert_eq!(second.point_min_byte(), 1);
-        assert_eq!(second.point_max_byte(), 4);
-        assert_eq!(second.mark_byte(), Some(3));
+        assert_eq!(first.point_emacs_byte_pos().get(), 5);
+        assert_eq!(first.point_min_emacs_byte_pos().get(), 0);
+        assert_eq!(first.point_max_emacs_byte_pos().get(), 6);
+        assert_eq!(first.mark_emacs_byte_pos().map(|pos| pos.get()), Some(1));
+        assert_eq!(second.point_emacs_byte_pos().get(), 2);
+        assert_eq!(second.point_min_emacs_byte_pos().get(), 1);
+        assert_eq!(second.point_max_emacs_byte_pos().get(), 4);
+        assert_eq!(second.mark_emacs_byte_pos().map(|pos| pos.get()), Some(3));
         assert_eq!(
             first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
             Value::NIL
@@ -12022,7 +12022,7 @@ fn message_log_appends_after_full_messages_buffer_when_narrowed() {
 
     let messages = eval.buffers.get(messages_id).expect("*Messages* buffer");
     assert_eq!(messages.buffer_string(), "ke");
-    assert_eq!(messages.point_byte(), 2);
+    assert_eq!(messages.point_emacs_byte_pos().get(), 2);
     assert_eq!(
         messages.buffer_substring_range(messages.full_emacs_byte_range()),
         "keephello\n"

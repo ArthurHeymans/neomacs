@@ -351,8 +351,8 @@ fn json_parse_buffer_advances_point_after_value() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_byte(),
-            buf.point_max_byte(),
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
         ));
         buf.insert(" 42 trailing");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -364,7 +364,8 @@ fn json_parse_buffer_advances_point_after_value() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point_byte(),
+            .point_emacs_byte_pos()
+            .get(),
         3
     );
 }
@@ -392,8 +393,8 @@ fn json_parse_buffer_invalid_utf8_does_not_advance_point() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_byte(),
-            buf.point_max_byte(),
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
         ));
         buf.set_multibyte_value(false);
         buf.insert_lisp_string(&LispString::from_unibyte(vec![
@@ -416,7 +417,8 @@ fn json_parse_buffer_invalid_utf8_does_not_advance_point() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point_byte(),
+            .point_emacs_byte_pos()
+            .get(),
         0
     );
 }
@@ -428,8 +430,8 @@ fn json_parse_buffer_end_of_file_uses_gnu_signal_shape() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_byte(),
-            buf.point_max_byte(),
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
         ));
         buf.insert(" ");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -449,7 +451,8 @@ fn json_parse_buffer_end_of_file_uses_gnu_signal_shape() {
         eval.buffers
             .current_buffer()
             .expect("current buffer")
-            .point_byte(),
+            .point_emacs_byte_pos()
+            .get(),
         0
     );
 }
@@ -461,8 +464,8 @@ fn json_insert_writes_at_point_and_advances() {
     {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_byte(),
-            buf.point_max_byte(),
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
         ));
         buf.insert("ab");
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
@@ -476,7 +479,7 @@ fn json_insert_writes_at_point_and_advances() {
 
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_eq!(buf.buffer_string(), "a[1,true]b");
-    assert_eq!(buf.point_byte(), 9);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 9);
 }
 
 // -----------------------------------------------------------------------

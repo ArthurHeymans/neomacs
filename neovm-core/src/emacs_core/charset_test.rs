@@ -1203,7 +1203,9 @@ fn charset_after_default_returns_unicode() {
             .current_buffer_mut()
             .expect("current buffer must exist");
         buf.insert("😀");
-        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buf.point_min_byte()));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
+            buf.point_min_emacs_byte_pos().get(),
+        ));
     }
     let r = builtin_charset_after(&mut eval, vec![]).unwrap();
     assert!(r.is_symbol_named("unicode"));

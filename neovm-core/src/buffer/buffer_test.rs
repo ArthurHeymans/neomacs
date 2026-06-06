@@ -130,15 +130,15 @@ fn new_buffer_is_empty() {
     crate::test_utils::init_test_tracing();
     let buf = Buffer::new(BufferId(1), Value::string("*scratch*"));
     assert_eq!(buf.name_value(), Value::string("*scratch*"));
-    assert_eq!(buf.point_byte(), 0);
-    assert_eq!(buf.point_min_byte(), 0);
-    assert_eq!(buf.point_max_byte(), 0);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 0);
     assert_eq!(buf.total_char_len().get(), 0);
     assert!(!buf.is_modified());
     assert!(!buf.get_read_only());
     assert!(buf.get_multibyte());
     assert!(buf.file_name_value().is_nil());
-    assert!(buf.mark_byte().is_none());
+    assert!(buf.mark_emacs_byte_pos().map(|pos| pos.get()).is_none());
 }
 
 #[test]
@@ -351,9 +351,9 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.point_min_byte(), 4);
-        assert_eq!(indirect.point_max_byte(), 8);
-        assert_eq!(indirect.point_byte(), 6);
+        assert_eq!(indirect.point_min_emacs_byte_pos().get(), 4);
+        assert_eq!(indirect.point_max_emacs_byte_pos().get(), 8);
+        assert_eq!(indirect.point_emacs_byte_pos().get(), 6);
         assert_eq!(indirect.buffer_string(), "cdef");
 
         let _ = mgr.delete_buffer_emacs_byte_range(
@@ -363,9 +363,9 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
 
         let indirect = mgr.get(indirect_id).expect("indirect buffer");
         assert_eq!(indirect.text_backend_kind(), kind);
-        assert_eq!(indirect.point_min_byte(), 2);
-        assert_eq!(indirect.point_max_byte(), 6);
-        assert_eq!(indirect.point_byte(), 4);
+        assert_eq!(indirect.point_min_emacs_byte_pos().get(), 2);
+        assert_eq!(indirect.point_max_emacs_byte_pos().get(), 6);
+        assert_eq!(indirect.point_emacs_byte_pos().get(), 4);
         assert_eq!(indirect.buffer_string(), "cdef");
     }
 }
@@ -391,12 +391,15 @@ fn cloned_indirect_buffers_do_not_share_base_state_markers() {
     mgr.set_current(base_id);
 
     let base = mgr.get(base_id).expect("base buffer");
-    assert_eq!(base.point_min_byte(), 0);
-    assert_eq!(base.point_max_byte(), base.total_emacs_byte_len().get());
+    assert_eq!(base.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(
+        base.point_max_emacs_byte_pos().get(),
+        base.total_emacs_byte_len().get()
+    );
 
     let second = mgr.get(second).expect("second indirect buffer");
-    assert_eq!(second.point_min_byte(), 4);
-    assert_eq!(second.point_max_byte(), 7);
+    assert_eq!(second.point_min_emacs_byte_pos().get(), 4);
+    assert_eq!(second.point_max_emacs_byte_pos().get(), 7);
 }
 
 #[test]
@@ -416,9 +419,18 @@ fn cloned_indirect_buffers_do_not_share_base_mark_marker() {
         .expect("indirect buffer")
         .set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
 
-    assert_eq!(mgr.get(base_id).expect("base buffer").mark_byte(), Some(2));
     assert_eq!(
-        mgr.get(indirect).expect("indirect buffer").mark_byte(),
+        mgr.get(base_id)
+            .expect("base buffer")
+            .mark_emacs_byte_pos()
+            .map(|pos| pos.get()),
+        Some(2)
+    );
+    assert_eq!(
+        mgr.get(indirect)
+            .expect("indirect buffer")
+            .mark_emacs_byte_pos()
+            .map(|pos| pos.get()),
         Some(5)
     );
 }
@@ -489,10 +501,10 @@ fn buffer_swap_payload_snapshot(buf: &Buffer) -> BufferSwapPayloadSnapshot {
     BufferSwapPayloadSnapshot {
         backend_kind: buf.text_backend_kind(),
         buffer_string: buf.buffer_string(),
-        point_byte: buf.point_byte(),
-        point_min_byte: buf.point_min_byte(),
-        point_max_byte: buf.point_max_byte(),
-        mark_byte: buf.mark_byte(),
+        point_byte: buf.point_emacs_byte_pos().get(),
+        point_min_byte: buf.point_min_emacs_byte_pos().get(),
+        point_max_byte: buf.point_max_emacs_byte_pos().get(),
+        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
         undo_list: buf.get_undo_list(),
         text_properties: buffer_text_property_snapshot(buf),
     }
@@ -685,20 +697,23 @@ fn goto_char_clamps_to_accessible_region() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("hello");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
-    assert_eq!(buf.point_byte(), 3);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 3);
 
     // Past end — clamped to zv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(999));
-    assert_eq!(buf.point_byte(), buf.point_max_byte());
+    assert_eq!(
+        buf.point_emacs_byte_pos().get(),
+        buf.point_max_emacs_byte_pos().get()
+    );
 
     // Before start — clamped to begv.
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
         2,
-        buf.point_max_byte(),
+        buf.point_max_emacs_byte_pos().get(),
     ));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
-    assert_eq!(buf.point_byte(), 2);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 2);
 }
 
 #[test]
@@ -707,7 +722,7 @@ fn point_char_converts_byte_to_char_pos() {
     // "cafe\u{0301}" — 'e' + combining acute = 5 bytes, 5 chars in UTF-8
     let mut buf = buf_with_text("hello");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
-    assert_eq!(buf.point_char(), 3);
+    assert_eq!(buf.point_char_pos().get(), 3);
 }
 
 #[test]
@@ -728,8 +743,8 @@ fn gnu_style_buffer_fields_track_char_and_byte_positions() {
         buf.mark_emacs_byte_pos(),
         Some(crate::buffer::EmacsBytePos::new(3))
     );
-    assert_eq!(buf.mark_byte(), Some(3));
-    assert_eq!(buf.mark_char(), Some(2));
+    assert_eq!(buf.mark_emacs_byte_pos().map(|pos| pos.get()), Some(3));
+    assert_eq!(buf.mark_char_pos().map(|pos| pos.get()), Some(2));
 }
 
 #[test]
@@ -774,11 +789,11 @@ fn accessible_region_snapshot_restores_saved_bounds() {
         buf.insert("Z");
         buf.restore_accessible_region(saved);
 
-        assert_eq!(buf.point_min_byte(), 1);
-        assert_eq!(buf.point_max_byte(), 4);
-        assert_eq!(buf.point_min_char(), 1);
-        assert_eq!(buf.point_max_char(), 3);
-        assert_eq!(buf.point_byte(), 4);
+        assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+        assert_eq!(buf.point_max_emacs_byte_pos().get(), 4);
+        assert_eq!(buf.point_min_char_pos().get(), 1);
+        assert_eq!(buf.point_max_char_pos().get(), 3);
+        assert_eq!(buf.point_emacs_byte_pos().get(), 4);
     }
 }
 
@@ -800,11 +815,17 @@ fn accessible_region_snapshot_can_restore_end_to_current_full_buffer() {
         buf.insert("Z");
         buf.restore_accessible_region_with_current_full_end(saved);
 
-        assert_eq!(buf.point_min_byte(), 1);
-        assert_eq!(buf.point_max_byte(), buf.total_emacs_byte_len().get());
-        assert_eq!(buf.point_min_char(), 1);
-        assert_eq!(buf.point_max_char(), buf.total_char_len().get());
-        assert_eq!(buf.point_byte(), buf.total_emacs_byte_len().get());
+        assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+        assert_eq!(
+            buf.point_max_emacs_byte_pos().get(),
+            buf.total_emacs_byte_len().get()
+        );
+        assert_eq!(buf.point_min_char_pos().get(), 1);
+        assert_eq!(buf.point_max_char_pos().get(), buf.total_char_len().get());
+        assert_eq!(
+            buf.point_emacs_byte_pos().get(),
+            buf.total_emacs_byte_len().get()
+        );
     }
 }
 
@@ -812,27 +833,27 @@ fn accessible_region_snapshot_can_restore_end_to_current_full_buffer() {
 fn cached_char_positions_track_multibyte_edits_and_narrowing() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
-    assert_eq!(buf.point_max_char(), 3);
+    assert_eq!(buf.point_max_char_pos().get(), 3);
 
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
-    assert_eq!(buf.point_char(), 1);
+    assert_eq!(buf.point_char_pos().get(), 1);
 
     buf.insert("ß");
-    assert_eq!(buf.point_byte(), 4);
-    assert_eq!(buf.point_char(), 2);
-    assert_eq!(buf.point_max_char(), 4);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 4);
+    assert_eq!(buf.point_char_pos().get(), 2);
+    assert_eq!(buf.point_max_char_pos().get(), 4);
 
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
         'é'.len_utf8(),
-        buf.point_max_byte(),
+        buf.point_max_emacs_byte_pos().get(),
     ));
-    assert_eq!(buf.point_min_char(), 1);
-    assert_eq!(buf.point_max_char(), 4);
+    assert_eq!(buf.point_min_char_pos().get(), 1);
+    assert_eq!(buf.point_max_char_pos().get(), 4);
 
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
-    assert_eq!(buf.point_byte(), 2);
-    assert_eq!(buf.point_char(), 1);
-    assert_eq!(buf.point_max_char(), 3);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 2);
+    assert_eq!(buf.point_char_pos().get(), 1);
+    assert_eq!(buf.point_max_char_pos().get(), 3);
     assert_eq!(buf.buffer_string(), "éz");
 }
 
@@ -855,8 +876,8 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
         'é'.len_utf8(),
         "ééz".len(),
     ));
-    assert_eq!(buf.point_min_char(), 1);
-    assert_eq!(buf.point_max_char(), 3);
+    assert_eq!(buf.point_min_char_pos().get(), 1);
+    assert_eq!(buf.point_max_char_pos().get(), 3);
     assert_eq!(
         buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(1))
             .get(),
@@ -879,7 +900,7 @@ fn insert_at_point_advances_point() {
     let mut buf = Buffer::new(BufferId(1), Value::string("test"));
     // zv starts at 0 for an empty buffer; insert should extend it.
     buf.insert("hello");
-    assert_eq!(buf.point_byte(), 5);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 5);
     assert_eq!(buf.buffer_string(), "hello");
     assert_eq!(buf.accessible_char_len().get(), 5);
     assert!(buf.is_modified());
@@ -892,7 +913,7 @@ fn insert_in_middle() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     buf.insert("l");
     assert_eq!(buf.buffer_string(), "hello");
-    assert_eq!(buf.point_byte(), 4);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 4);
 }
 
 #[test]
@@ -903,8 +924,8 @@ fn insert_adjusts_mark() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     buf.insert("X");
     // Mark was at 1, insert at 0 pushes it to 2.
-    assert_eq!(buf.mark_byte(), Some(2));
-    assert_eq!(buf.mark_char(), Some(2));
+    assert_eq!(buf.mark_emacs_byte_pos().map(|pos| pos.get()), Some(2));
+    assert_eq!(buf.mark_char_pos().map(|pos| pos.get()), Some(2));
 }
 
 #[test]
@@ -928,7 +949,7 @@ fn delete_region_basic() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // at end
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 11));
     assert_eq!(buf.buffer_string(), "hello");
-    assert_eq!(buf.point_byte(), 5); // was past deleted range
+    assert_eq!(buf.point_emacs_byte_pos().get(), 5); // was past deleted range
 }
 
 #[test]
@@ -937,7 +958,7 @@ fn delete_region_adjusts_point_inside() {
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // in middle of deleted range
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
-    assert_eq!(buf.point_byte(), 1); // collapsed to start of deletion
+    assert_eq!(buf.point_emacs_byte_pos().get(), 1); // collapsed to start of deletion
     assert_eq!(buf.buffer_string(), "af");
 }
 
@@ -947,8 +968,8 @@ fn delete_region_adjusts_point_at_end_boundary() {
     let mut buf = buf_with_text("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 5));
-    assert_eq!(buf.point_byte(), 1);
-    assert_eq!(buf.point_char(), 1);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_char_pos().get(), 1);
 }
 
 #[test]
@@ -958,8 +979,8 @@ fn delete_region_adjusts_mark() {
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4));
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 3));
     // mark was at 4, past deleted range end (3), so shifts by 2
-    assert_eq!(buf.mark_byte(), Some(2));
-    assert_eq!(buf.mark_char(), Some(2));
+    assert_eq!(buf.mark_emacs_byte_pos().map(|pos| pos.get()), Some(2));
+    assert_eq!(buf.mark_char_pos().map(|pos| pos.get()), Some(2));
 }
 
 #[test]
@@ -980,12 +1001,12 @@ fn mark_char_tracks_multibyte_edits() {
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
     buf.insert("ß");
-    assert_eq!(buf.mark_byte(), Some(2));
-    assert_eq!(buf.mark_char(), Some(1));
+    assert_eq!(buf.mark_emacs_byte_pos().map(|pos| pos.get()), Some(2));
+    assert_eq!(buf.mark_char_pos().map(|pos| pos.get()), Some(1));
 
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(0, 2));
-    assert_eq!(buf.mark_byte(), Some(0));
-    assert_eq!(buf.mark_char(), Some(0));
+    assert_eq!(buf.mark_emacs_byte_pos().map(|pos| pos.get()), Some(0));
+    assert_eq!(buf.mark_char_pos().map(|pos| pos.get()), Some(0));
 }
 
 #[test]
@@ -1156,16 +1177,16 @@ fn narrow_and_widen() {
     let mut buf = buf_with_text("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(8));
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(6, 11));
-    assert_eq!(buf.point_min_byte(), 6);
-    assert_eq!(buf.point_max_byte(), 11);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 6);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 11);
     assert_eq!(buf.accessible_char_len().get(), 5);
     assert_eq!(buf.buffer_string(), "world");
     // Point was 8 — still within [6, 11].
-    assert_eq!(buf.point_byte(), 8);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 8);
 
     buf.widen();
-    assert_eq!(buf.point_min_byte(), 0);
-    assert_eq!(buf.point_max_byte(), 11);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 11);
 }
 
 #[test]
@@ -1175,7 +1196,7 @@ fn narrow_clamps_point() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(5, 11));
     // Point 2 < begv 5 => clamped to 5.
-    assert_eq!(buf.point_byte(), 5);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 5);
 }
 
 // -----------------------------------------------------------------------
@@ -1297,10 +1318,10 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
-        point_byte: buf.point_byte(),
-        point_char: buf.point_char(),
-        mark_byte: buf.mark_byte(),
-        mark_char: buf.mark_char(),
+        point_byte: buf.point_emacs_byte_pos().get(),
+        point_char: buf.point_char_pos().get(),
+        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
+        mark_char: buf.mark_char_pos().map(|pos| pos.get()),
         marker_position,
         text_properties: buffer_text_property_snapshot(&buf),
     }
@@ -1345,10 +1366,10 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
-        point_byte: buf.point_byte(),
-        point_char: buf.point_char(),
-        mark_byte: buf.mark_byte(),
-        mark_char: buf.mark_char(),
+        point_byte: buf.point_emacs_byte_pos().get(),
+        point_char: buf.point_char_pos().get(),
+        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
+        mark_char: buf.mark_char_pos().map(|pos| pos.get()),
         marker_position,
         text_properties: buffer_text_property_snapshot(&buf),
     }
@@ -1593,10 +1614,10 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
         undo_result,
         undo_after: undo_list_snapshot(buf.get_undo_list()),
         buffer_string: buf.buffer_string(),
-        point_byte: buf.point_byte(),
-        point_char: buf.point_char(),
-        mark_byte: buf.mark_byte(),
-        mark_char: buf.mark_char(),
+        point_byte: buf.point_emacs_byte_pos().get(),
+        point_char: buf.point_char_pos().get(),
+        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
+        mark_char: buf.mark_char_pos().map(|pos| pos.get()),
         marker_position,
         text_properties: buffer_text_property_snapshot(buf),
     }
@@ -1693,10 +1714,10 @@ fn run_manager_edit_entrypoint_script(
     let buf = mgr.get(id).expect("scratch buffer");
     ManagerEditEntrypointSnapshot {
         buffer_string: buf.buffer_string(),
-        point_byte: buf.point_byte(),
-        point_char: buf.point_char(),
-        mark_byte: buf.mark_byte(),
-        mark_char: buf.mark_char(),
+        point_byte: buf.point_emacs_byte_pos().get(),
+        point_char: buf.point_char_pos().get(),
+        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
+        mark_char: buf.mark_char_pos().map(|pos| pos.get()),
         marker_position: marker_chain_lookup_for_test(&buf, 99)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         text_properties: buffer_text_property_snapshot(buf),
@@ -1896,10 +1917,22 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
     SharedInsertPolicySnapshot {
         base_string: base.buffer_string(),
         indirect_string: indirect.buffer_string(),
-        base_point: (base.point_byte(), base.point_char()),
-        indirect_point: (indirect.point_byte(), indirect.point_char()),
-        base_mark: (base.mark_byte(), base.mark_char()),
-        indirect_mark: (indirect.mark_byte(), indirect.mark_char()),
+        base_point: (
+            base.point_emacs_byte_pos().get(),
+            base.point_char_pos().get(),
+        ),
+        indirect_point: (
+            indirect.point_emacs_byte_pos().get(),
+            indirect.point_char_pos().get(),
+        ),
+        base_mark: (
+            base.mark_emacs_byte_pos().map(|pos| pos.get()),
+            base.mark_char_pos().map(|pos| pos.get()),
+        ),
+        indirect_mark: (
+            indirect.mark_emacs_byte_pos().map(|pos| pos.get()),
+            indirect.mark_char_pos().map(|pos| pos.get()),
+        ),
         marker_after_position: marker_chain_lookup_for_test(&base, 701)
             .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
         marker_before_position: marker_chain_lookup_for_test(&indirect, 702)
@@ -2489,18 +2522,18 @@ fn manager_labeled_widen_uses_innermost_and_without_restriction_reaches_full_buf
 
     let _ = mgr.internal_labeled_narrow_to_region(id, 1, 4, Value::symbol("tag"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 4);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 4);
 
     let _ = mgr.widen_buffer(id);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 4);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 4);
 
     let _ = mgr.internal_labeled_widen(id, &Value::symbol("tag"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 0);
-    assert_eq!(buf.point_max_byte(), 6);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 6);
 }
 
 #[test]
@@ -2520,13 +2553,13 @@ fn manager_save_restriction_state_restores_labeled_stack() {
     mgr.restore_saved_restriction_state(saved);
 
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 5);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 5);
 
     let _ = mgr.widen_buffer(id);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 5);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 5);
 }
 
 #[test]
@@ -2541,23 +2574,23 @@ fn manager_reset_outermost_restrictions_restores_current_innermost_after_mutatio
     let _ = mgr.internal_labeled_narrow_to_region(id, 2, 4, Value::symbol("inner"));
 
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 2);
-    assert_eq!(buf.point_max_byte(), 4);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 2);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 4);
 
     let saved = mgr.reset_outermost_restrictions();
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 0);
-    assert_eq!(buf.point_max_byte(), 6);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 6);
 
     let _ = mgr.internal_labeled_widen(id, &Value::symbol("inner"));
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 5);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 5);
 
     mgr.restore_outermost_restrictions(saved);
     let buf = mgr.get(id).unwrap();
-    assert_eq!(buf.point_min_byte(), 1);
-    assert_eq!(buf.point_max_byte(), 5);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 5);
 }
 
 // -----------------------------------------------------------------------
@@ -2587,9 +2620,9 @@ fn manager_replace_buffer_contents_resets_narrowing_and_point() {
 
     let buf = mgr.get(current).unwrap();
     assert_eq!(buf.buffer_string(), "xy");
-    assert_eq!(buf.point_byte(), 0);
-    assert_eq!(buf.point_min_byte(), 0);
-    assert_eq!(buf.point_max_byte(), 2);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 2);
 }
 
 // -----------------------------------------------------------------------
