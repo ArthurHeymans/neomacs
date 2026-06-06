@@ -364,14 +364,6 @@ impl MeasuredInsertEdit {
         self.insertion.byte_pos()
     }
 
-    pub(in crate::buffer) const fn byte_pos_usize(self) -> usize {
-        self.insertion.byte_pos_usize()
-    }
-
-    pub(in crate::buffer) const fn char_pos_usize(self) -> usize {
-        self.insertion.char_pos_usize()
-    }
-
     pub(in crate::buffer) const fn char_pos(self) -> CharPos0 {
         self.insertion.char_pos()
     }
