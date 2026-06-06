@@ -104,10 +104,7 @@ fn replace_chars_at(table: &mut TextPropertyTable, start: usize, old_len: usize,
     table.adjust_for_replace_at_char_pos(char_pos(start), char_len(old_len), char_len(new_len));
 }
 
-fn object_runs_for_char_len(
-    table: &TextPropertyTable,
-    len: usize,
-) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+fn object_runs_for_char_len(table: &TextPropertyTable, len: usize) -> Vec<ObjectIntervalRun> {
     table.object_interval_runs_for_char_len(char_len(len))
 }
 

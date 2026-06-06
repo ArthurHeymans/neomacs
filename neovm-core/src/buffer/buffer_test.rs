@@ -83,7 +83,7 @@ fn manager_with_text_backend(kind: BufferTextBackendKind) -> BufferManager {
     mgr
 }
 
-fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<ObjectIntervalRun> {
     buf.text_props_intervals_snapshot_for_test()
         .into_iter()
         .map(|interval| {
@@ -93,7 +93,11 @@ fn buffer_text_property_snapshot(buf: &Buffer) -> Vec<(usize, usize, Vec<(Value,
                 .copied()
                 .map(|key| (key, interval.properties[&key]))
                 .collect();
-            (interval.start, interval.end, properties)
+            ObjectIntervalRun::new(
+                CharPos0::new(interval.start),
+                CharPos0::new(interval.end),
+                properties,
+            )
         })
         .collect()
 }
@@ -537,7 +541,7 @@ struct BufferSwapPayloadSnapshot {
     point_max_byte: usize,
     mark_byte: Option<usize>,
     undo_list: Value,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
 }
 
 fn buffer_swap_payload_snapshot(buf: &Buffer) -> BufferSwapPayloadSnapshot {
@@ -1337,7 +1341,7 @@ struct BackendEditSnapshot {
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
     marker_position: Option<TextPositionAnchor>,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
 }
 
 fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
@@ -1601,7 +1605,7 @@ struct BackendUndoSnapshot {
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
     marker_position: Option<TextPositionAnchor>,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
 }
 
 fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
@@ -1705,7 +1709,7 @@ struct ManagerEditEntrypointSnapshot {
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
     marker_position: Option<TextPositionAnchor>,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
     undo: Vec<UndoEntrySnapshot>,
 }
 
@@ -1883,7 +1887,7 @@ struct SharedInsertPolicySnapshot {
     marker_after_position: Option<TextPositionAnchor>,
     marker_before_position: Option<TextPositionAnchor>,
     indirect_overlay_range: OptionalEmacsByteRangeSnapshot,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
 }
 
 fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertPolicySnapshot {
@@ -2026,7 +2030,7 @@ struct BackendMigrationSnapshot {
     byte_to_char_at_char_4: usize,
     marker_position: Option<TextPositionAnchor>,
     overlay_range: OptionalEmacsByteRangeSnapshot,
-    text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
+    text_properties: Vec<ObjectIntervalRun>,
 }
 
 fn run_backend_migration_script(

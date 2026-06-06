@@ -38,6 +38,75 @@ pub struct PropertyInterval {
     pub(crate) key_order: Vec<Value>,
 }
 
+/// GNU `object-intervals` shaped run for the complete object partition.
+///
+/// Bounds are character positions.  Unlike [`PropertyInterval`], this also
+/// represents nil-property gaps once an interval tree exists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectIntervalRun {
+    start: CharPos0,
+    end: CharPos0,
+    properties: Vec<(Value, Value)>,
+}
+
+impl ObjectIntervalRun {
+    pub fn new(start: CharPos0, end: CharPos0, properties: Vec<(Value, Value)>) -> Self {
+        Self {
+            start,
+            end,
+            properties,
+        }
+    }
+
+    pub fn start(&self) -> CharPos0 {
+        self.start
+    }
+
+    pub fn end(&self) -> CharPos0 {
+        self.end
+    }
+
+    pub fn properties(&self) -> &[(Value, Value)] {
+        &self.properties
+    }
+
+    pub fn into_parts(self) -> (CharPos0, CharPos0, Vec<(Value, Value)>) {
+        (self.start, self.end, self.properties)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ObjectIntervalPlistRun {
+    start: CharPos0,
+    end: CharPos0,
+    plist: Value,
+}
+
+impl ObjectIntervalPlistRun {
+    pub fn new(start: CharPos0, end: CharPos0, plist: Value) -> Self {
+        debug_assert!(start.get() <= end.get());
+        Self { start, end, plist }
+    }
+
+    pub fn start(&self) -> CharPos0 {
+        self.start
+    }
+
+    pub fn end(&self) -> CharPos0 {
+        self.end
+    }
+
+    pub fn plist(&self) -> Value {
+        self.plist
+    }
+}
+
+impl PartialEq<(usize, usize, Vec<(Value, Value)>)> for ObjectIntervalRun {
+    fn eq(&self, other: &(usize, usize, Vec<(Value, Value)>)) -> bool {
+        self.start.get() == other.0 && self.end.get() == other.1 && self.properties == other.2
+    }
+}
+
 impl PropertyInterval {
     fn new(range: CharRange) -> Self {
         Self {
@@ -1945,17 +2014,14 @@ impl TextPropertyTable {
     /// Unlike `intervals_snapshot', this keeps nil-property gaps once an
     /// interval tree exists.  GNU reports those gaps so callers can observe the
     /// complete interval partition of the string.
-    pub fn object_interval_runs_for_char_len(
-        &self,
-        len: CharLen,
-    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    pub fn object_interval_runs_for_char_len(&self, len: CharLen) -> Vec<ObjectIntervalRun> {
         self.object_interval_runs_raw(len.get())
     }
 
-    fn object_interval_runs_raw(&self, len: usize) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    fn object_interval_runs_raw(&self, len: usize) -> Vec<ObjectIntervalRun> {
         self.object_interval_plist_runs_raw(len)
             .into_iter()
-            .map(|(start, end, plist)| (start, end, plist_pairs(plist)))
+            .map(|run| ObjectIntervalRun::new(run.start(), run.end(), plist_pairs(run.plist())))
             .collect()
     }
 
@@ -1967,11 +2033,11 @@ impl TextPropertyTable {
     pub fn object_interval_plist_runs_for_char_len(
         &self,
         len: CharLen,
-    ) -> Vec<(usize, usize, Value)> {
+    ) -> Vec<ObjectIntervalPlistRun> {
         self.object_interval_plist_runs_raw(len.get())
     }
 
-    fn object_interval_plist_runs_raw(&self, len: usize) -> Vec<(usize, usize, Value)> {
+    fn object_interval_plist_runs_raw(&self, len: usize) -> Vec<ObjectIntervalPlistRun> {
         if self.intervals.is_empty() {
             return Vec::new();
         }
@@ -1982,15 +2048,27 @@ impl TextPropertyTable {
             let start = run.start().get().min(len);
             let end = run.end().get().min(len);
             if cursor < start {
-                runs.push((cursor, start, Value::NIL));
+                runs.push(ObjectIntervalPlistRun::new(
+                    CharPos0::new(cursor),
+                    CharPos0::new(start),
+                    Value::NIL,
+                ));
             }
             if start < end {
-                runs.push((start, end, run.plist));
+                runs.push(ObjectIntervalPlistRun::new(
+                    CharPos0::new(start),
+                    CharPos0::new(end),
+                    run.plist,
+                ));
                 cursor = end;
             }
         }
         if cursor < len {
-            runs.push((cursor, len, Value::NIL));
+            runs.push(ObjectIntervalPlistRun::new(
+                CharPos0::new(cursor),
+                CharPos0::new(len),
+                Value::NIL,
+            ));
         }
         runs
     }

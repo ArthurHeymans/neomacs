@@ -2666,11 +2666,11 @@ pub(crate) fn builtin_object_intervals(
         let intervals = table
             .object_interval_plist_runs_for_char_len(CharLen::new(len))
             .into_iter()
-            .map(|(start, end, plist)| {
+            .map(|run| {
                 Value::list(vec![
-                    Value::fixnum(start as i64),
-                    Value::fixnum(end as i64),
-                    plist,
+                    Value::fixnum(run.start().get() as i64),
+                    Value::fixnum(run.end().get() as i64),
+                    run.plist(),
                 ])
             })
             .collect();
@@ -2685,15 +2685,15 @@ pub(crate) fn builtin_object_intervals(
         let intervals = buf
             .text_props_object_interval_runs()
             .into_iter()
-            .map(|(start, end, plist)| {
-                let mut plist_values = Vec::with_capacity(plist.len() * 2);
-                for (key, value) in plist {
-                    plist_values.push(key);
-                    plist_values.push(value);
+            .map(|run| {
+                let mut plist_values = Vec::with_capacity(run.properties().len() * 2);
+                for (key, value) in run.properties() {
+                    plist_values.push(*key);
+                    plist_values.push(*value);
                 }
                 Value::list(vec![
-                    Value::fixnum(start as i64),
-                    Value::fixnum(end as i64),
+                    Value::fixnum(run.start().get() as i64),
+                    Value::fixnum(run.end().get() as i64),
                     Value::list(plist_values),
                 ])
             })

@@ -30,7 +30,7 @@ use super::text::{
 };
 #[cfg(test)]
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
-use super::text_props::{PropertyInterval, TextPropertyTable};
+use super::text_props::{ObjectIntervalRun, PropertyInterval, TextPropertyTable};
 
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
 /// buffer text has not changed since the entry was stored. Mirrors GNU
@@ -1166,10 +1166,7 @@ impl BufferText {
         self.storage.borrow().text_props.intervals_snapshot()
     }
 
-    pub fn text_props_object_interval_runs(
-        &self,
-        len: CharLen,
-    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    pub fn text_props_object_interval_runs(&self, len: CharLen) -> Vec<ObjectIntervalRun> {
         self.storage
             .borrow()
             .text_props

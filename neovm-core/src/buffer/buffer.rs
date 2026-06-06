@@ -28,7 +28,7 @@ use super::text::{
 // buffer.h:330-462.
 use super::overlay::OverlayList;
 use super::shared::SharedUndoState;
-use super::text_props::TextPropertyTable;
+use super::text_props::{ObjectIntervalRun, TextPropertyTable};
 use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
@@ -2477,9 +2477,7 @@ impl Buffer {
         self.text.text_props_snapshot()
     }
 
-    pub(crate) fn text_props_object_interval_runs(
-        &self,
-    ) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+    pub(crate) fn text_props_object_interval_runs(&self) -> Vec<ObjectIntervalRun> {
         self.text
             .text_props_object_interval_runs(self.total_char_len())
     }

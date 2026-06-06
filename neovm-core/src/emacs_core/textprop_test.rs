@@ -229,7 +229,13 @@ fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
         .intervals()
         .object_interval_runs_for_char_len(CharLen::new(text.schars()))
         .into_iter()
-        .map(|(start, end, plist)| (start, end, plist.is_empty()))
+        .map(|run| {
+            (
+                run.start().get(),
+                run.end().get(),
+                run.properties().is_empty(),
+            )
+        })
         .collect();
 
     assert_eq!(text.as_utf8_str(), Some("C-uX rest"));
@@ -272,7 +278,13 @@ fn plain_insert_splits_inserted_nil_interval_like_gnu_graft() {
     let shape: Vec<_> = buffer
         .text_props_object_interval_runs()
         .into_iter()
-        .map(|(start, end, plist)| (start, end, plist.is_empty()))
+        .map(|run| {
+            (
+                run.start().get(),
+                run.end().get(),
+                run.properties().is_empty(),
+            )
+        })
         .collect();
 
     assert_eq!(

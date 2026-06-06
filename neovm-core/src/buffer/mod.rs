@@ -25,7 +25,7 @@ pub use text::{
     BufferTextBackendKind, TextChange, TextEditRange, TextExtent, TextInsertion, TextMetrics,
     TextReplacement, TextTransposition,
 };
-pub use text_props::TextPropertyTable;
+pub use text_props::{ObjectIntervalPlistRun, ObjectIntervalRun, TextPropertyTable};
 pub use undo::{
     truncate_undo_list, undo_list_boundary, undo_list_contains_boundary,
     undo_list_has_trailing_boundary, undo_list_is_disabled, undo_list_is_empty,
