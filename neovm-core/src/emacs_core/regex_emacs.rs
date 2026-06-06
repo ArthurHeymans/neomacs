@@ -276,10 +276,21 @@ pub struct CaseTranslation {
 
 impl CaseTranslation {
     pub(crate) fn standard() -> Self {
-        let mut byte = [0u32; 256];
-        for i in 0..=255u32 {
-            byte[i as usize] = Self::canonicalize_char(i);
+        // The canonicalization of bytes 0..256 is a constant
+        // (`downcase_char_code_emacs_compat`), but a case-insensitive regex is
+        // recompiled on every `re-search-forward`, and recomputing this table
+        // via Unicode case folding each time was ~15% of a search.  GNU keeps
+        // its case-canon table precomputed; build it once per thread and copy.
+        thread_local! {
+            static STANDARD_BYTE: [u32; 256] = {
+                let mut byte = [0u32; 256];
+                for i in 0..=255u32 {
+                    byte[i as usize] = CaseTranslation::canonicalize_char(i);
+                }
+                byte
+            };
         }
+        let byte = STANDARD_BYTE.with(|b| *b);
         Self { byte, table: None }
     }
 
