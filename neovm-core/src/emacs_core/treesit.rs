@@ -43,6 +43,26 @@ pub(crate) struct LineColCache {
     pub(crate) bytepos: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SourceByteRange {
+    start: usize,
+    end: usize,
+}
+
+impl SourceByteRange {
+    pub(crate) const fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub(crate) const fn start(self) -> usize {
+        self.start
+    }
+
+    pub(crate) const fn end(self) -> usize {
+        self.end
+    }
+}
+
 pub(crate) struct ParserEntry {
     pub(crate) value: Value,
     pub(crate) orig_buffer_id: BufferId,
@@ -56,7 +76,7 @@ pub(crate) struct ParserEntry {
     pub(crate) need_to_gc_buffer: bool,
     pub(crate) deleted: bool,
     pub(crate) tracking_linecol: bool,
-    pub(crate) last_changed_ranges: Vec<(usize, usize)>,
+    pub(crate) last_changed_ranges: Vec<SourceByteRange>,
 }
 
 pub(crate) struct NodeEntry {

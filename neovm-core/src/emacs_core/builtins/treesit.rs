@@ -659,7 +659,7 @@ fn ensure_query_compiled(eval: &mut super::eval::Context, query: Value) -> Resul
 fn ensure_parser_parsed_with_changes(
     eval: &mut super::eval::Context,
     parser_id: u64,
-) -> Result<Option<Vec<(usize, usize)>>, Flow> {
+) -> Result<Option<Vec<runtime::SourceByteRange>>, Flow> {
     let (parser_value, orig_buffer_id) = {
         let parser = eval
             .treesit
@@ -700,12 +700,12 @@ fn ensure_parser_parsed_with_changes(
         let ranges = if let Some(old_tree) = old_tree.as_ref() {
             old_tree
                 .changed_ranges(&tree)
-                .map(|range| (range.start_byte, range.end_byte))
+                .map(|range| runtime::SourceByteRange::new(range.start_byte, range.end_byte))
                 .collect::<Vec<_>>()
         } else if source.as_bytes().is_empty() {
             Vec::new()
         } else {
-            vec![(0, source.as_bytes().len())]
+            vec![runtime::SourceByteRange::new(0, source.as_bytes().len())]
         };
         parser.tree = Some(tree);
         parser.last_source = Some(source);
@@ -853,7 +853,7 @@ fn query_range_bytes(
 fn changed_ranges_to_lisp(
     eval: &super::eval::Context,
     parser_id: u64,
-    changed_ranges: &[(usize, usize)],
+    changed_ranges: &[runtime::SourceByteRange],
 ) -> Result<Value, Flow> {
     let parser = eval
         .treesit
@@ -872,10 +872,10 @@ fn changed_ranges_to_lisp(
     Ok(Value::list(
         changed_ranges
             .iter()
-            .map(|(start, end)| {
+            .map(|range| {
                 Value::cons(
-                    byte_offset_to_lisp_pos(buf, source, *start),
-                    byte_offset_to_lisp_pos(buf, source, *end),
+                    byte_offset_to_lisp_pos(buf, source, range.start()),
+                    byte_offset_to_lisp_pos(buf, source, range.end()),
                 )
             })
             .collect(),
