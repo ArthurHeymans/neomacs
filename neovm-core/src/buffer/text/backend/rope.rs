@@ -902,6 +902,10 @@ mod tests {
     use crate::buffer::gap_buffer::GapBuffer;
     use proptest::prelude::*;
 
+    fn byte_range(start: usize, end: usize) -> EmacsByteRange {
+        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+    }
+
     fn assert_matches_gap(rope: &RopeTextBackend, gap: &GapBuffer) {
         rope.assert_invariants();
         assert_eq!(rope.len(), gap.len());
@@ -910,8 +914,8 @@ mod tests {
 
         let mut rope_bytes = Vec::new();
         let mut gap_bytes = Vec::new();
-        rope.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, rope.len()), &mut rope_bytes);
-        gap.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, gap.len()), &mut gap_bytes);
+        rope.copy_emacs_byte_range_to(byte_range(0, rope.len()), &mut rope_bytes);
+        gap.copy_emacs_byte_range_to(byte_range(0, gap.len()), &mut gap_bytes);
         assert_eq!(rope_bytes, gap_bytes);
 
         for byte_pos in 0..rope.len() {
@@ -975,13 +979,13 @@ mod tests {
 
     fn delete_gap_range_both(gap: &mut GapBuffer, start: usize, end: usize, nchars: usize) {
         gap.delete_emacs_byte_range_with_char_len(
-            EmacsByteRange::from_usize(start, end),
+            byte_range(start, end),
             crate::buffer::CharLen::new(nchars),
         );
     }
 
     fn replace_gap_same_len(gap: &mut GapBuffer, start: usize, end: usize, replacement: &[u8]) {
-        gap.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+        gap.replace_same_len_emacs_byte_range(byte_range(start, end), replacement);
     }
 
     fn rope_byte_to_char(rope: &RopeTextBackend, byte_pos: usize) -> usize {
@@ -1042,7 +1046,7 @@ mod tests {
         end: usize,
         replacement: &[u8],
     ) {
-        let range = EmacsByteRange::from_usize(start, end);
+        let range = byte_range(start, end);
         let edit_range = TextEditRange::new(
             range,
             rope.emacs_byte_pos_to_char_pos(range.start()),
@@ -1112,13 +1116,10 @@ mod tests {
         backend.assert_invariants();
         let mut chunks = Vec::new();
         backend
-            .for_each_emacs_byte_range_chunk(
-                EmacsByteRange::from_usize(0, backend.len()),
-                |chunk| {
-                    chunks.push(chunk.len());
-                    Ok::<(), ()>(())
-                },
-            )
+            .for_each_emacs_byte_range_chunk(byte_range(0, backend.len()), |chunk| {
+                chunks.push(chunk.len());
+                Ok::<(), ()>(())
+            })
             .unwrap();
         assert!(
             chunks.len() > 1,
@@ -1177,7 +1178,7 @@ mod tests {
         assert_eq!(rope_char_to_byte(&backend, 4), 4);
 
         let mut bytes = Vec::new();
-        backend.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, backend.len()), &mut bytes);
+        backend.copy_emacs_byte_range_to(byte_range(0, backend.len()), &mut bytes);
         assert_eq!(bytes, vec![0xFF, b'\n', b'A', 0x80]);
     }
 

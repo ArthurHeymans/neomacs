@@ -819,6 +819,10 @@ mod tests {
     use crate::buffer::gap_buffer::GapBuffer;
     use proptest::prelude::*;
 
+    fn byte_range(start: usize, end: usize) -> EmacsByteRange {
+        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+    }
+
     fn assert_matches_gap(piece: &PieceTreeTextBackend, gap: &GapBuffer) {
         assert_eq!(piece.len(), gap.len());
         assert_eq!(piece.metrics().chars_usize(), gap.char_count());
@@ -827,7 +831,7 @@ mod tests {
         let mut piece_bytes = Vec::new();
         let mut gap_bytes = Vec::new();
         copy_piece_bytes(piece, 0, piece.len(), &mut piece_bytes);
-        gap.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, gap.len()), &mut gap_bytes);
+        gap.copy_emacs_byte_range_to(byte_range(0, gap.len()), &mut gap_bytes);
         assert_eq!(piece_bytes, gap_bytes);
 
         for byte_pos in 0..piece.len() {
@@ -891,13 +895,13 @@ mod tests {
 
     fn delete_gap_range_both(gap: &mut GapBuffer, start: usize, end: usize, nchars: usize) {
         gap.delete_emacs_byte_range_with_char_len(
-            EmacsByteRange::from_usize(start, end),
+            byte_range(start, end),
             crate::buffer::CharLen::new(nchars),
         );
     }
 
     fn replace_gap_same_len(gap: &mut GapBuffer, start: usize, end: usize, replacement: &[u8]) {
-        gap.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+        gap.replace_same_len_emacs_byte_range(byte_range(start, end), replacement);
     }
 
     fn sample_insert(seed: u8) -> &'static str {
@@ -962,7 +966,7 @@ mod tests {
     }
 
     fn copy_piece_bytes(piece: &PieceTreeTextBackend, start: usize, end: usize, out: &mut Vec<u8>) {
-        piece.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+        piece.copy_emacs_byte_range_to(byte_range(start, end), out);
     }
 
     fn insert_piece_str(piece: &mut PieceTreeTextBackend, byte_pos: usize, text: &str) {
@@ -1006,7 +1010,7 @@ mod tests {
         end: usize,
         replacement: &[u8],
     ) {
-        let range = EmacsByteRange::from_usize(start, end);
+        let range = byte_range(start, end);
         let edit_range = TextEditRange::new(
             range,
             piece.emacs_byte_pos_to_char_pos(range.start()),
@@ -1065,7 +1069,7 @@ mod tests {
 
         let mut chunks = Vec::new();
         backend
-            .for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(1, 7), |chunk| {
+            .for_each_emacs_byte_range_chunk(byte_range(1, 7), |chunk| {
                 chunks.push(chunk.to_vec());
                 Ok::<(), ()>(())
             })

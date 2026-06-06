@@ -5,6 +5,10 @@ use crate::buffer::text::{
 };
 use proptest::prelude::*;
 
+fn byte_range(start: usize, end: usize) -> EmacsByteRange {
+    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+}
+
 #[track_caller]
 fn assert_backend_matches_gap(
     kind: ImplementedBufferTextBackendKind,
@@ -40,7 +44,7 @@ fn assert_backend_matches_gap(
         "{kind:?} dump bytes diverged"
     );
 
-    let full = EmacsByteRange::from_usize(0, backend_len);
+    let full = byte_range(0, backend_len);
     assert_eq!(
         copied_range(backend, full),
         copied_range(gap, full),
@@ -99,7 +103,7 @@ fn assert_backend_matches_gap(
 
     for &start in &char_boundaries {
         for &end in char_boundaries.iter().filter(|&&end| start <= end) {
-            let range = EmacsByteRange::from_usize(start, end);
+            let range = byte_range(start, end);
             assert_eq!(
                 copied_range(backend, range),
                 copied_range(gap, range),
@@ -225,7 +229,7 @@ fn replace_byte_range(backend: &mut TextBackend, start: usize, end: usize, bytes
 
 fn replace_same_len(backend: &mut TextBackend, start: usize, end: usize, bytes: &[u8]) {
     assert_eq!(end - start, bytes.len());
-    let byte_range = EmacsByteRange::from_usize(start, end);
+    let byte_range = byte_range(start, end);
     let old_range = TextEditRange::new(
         byte_range,
         backend.emacs_byte_pos_to_char_pos(byte_range.start()),
