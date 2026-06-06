@@ -364,28 +364,12 @@ impl TextChange {
             .add_len(self.after_new_extent.emacs_bytes())
     }
 
+    pub const fn after_byte_range(self) -> EmacsByteRange {
+        EmacsByteRange::new(self.after_start_byte(), self.after_end_byte())
+    }
+
     pub const fn old_char_len(self) -> CharLen {
         self.after_old_char_len
-    }
-
-    pub const fn before_start_byte_usize(self) -> usize {
-        self.before_start_byte().get()
-    }
-
-    pub const fn before_end_byte_usize(self) -> usize {
-        self.before_end_byte().get()
-    }
-
-    pub const fn after_start_byte_usize(self) -> usize {
-        self.after_start_byte().get()
-    }
-
-    pub const fn after_end_byte_usize(self) -> usize {
-        self.after_end_byte().get()
-    }
-
-    pub const fn old_char_len_usize(self) -> usize {
-        self.old_char_len().get()
     }
 }
 

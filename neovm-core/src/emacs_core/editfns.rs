@@ -263,12 +263,11 @@ fn run_named_hook_without_reset(
 /// GNU `signal_before_change(beg, end)` — run `before-change-functions` and
 /// overlay `modification-hooks` before a buffer modification.
 ///
-/// `beg` and `end` are **byte positions** (0-based).  They are converted to
-/// 1-based character positions for the Lisp hooks.
+/// `byte_range` is a 0-based Emacs-byte range.  It is converted to 1-based
+/// character positions for the Lisp hooks.
 pub(crate) fn signal_before_change(
     ctx: &mut crate::emacs_core::eval::Context,
-    beg: usize,
-    end: usize,
+    byte_range: EmacsByteRange,
 ) -> Result<(), Flow> {
     if let Some(current_id) = ctx.buffers.current_buffer_id() {
         let undo_enabled = ctx
@@ -287,6 +286,8 @@ pub(crate) fn signal_before_change(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(());
     };
+    let beg = byte_range.start_usize();
+    let end = byte_range.end_usize();
 
     if ctx.treesit.has_editable_tree(current_id)
         && let Some(buf) = ctx.buffers.get(current_id)
@@ -306,10 +307,10 @@ pub(crate) fn signal_before_change(
             return Ok(());
         };
         let beg_char = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.start())
             .as_i64();
         let end_char = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.end())
             .as_i64();
         (beg_char, end_char)
     };
@@ -327,8 +328,12 @@ pub(crate) fn signal_before_change(
         }
         run_named_hook_reset_on_error(ctx, "before-change-functions", &hook_args)?;
 
-        ctx.last_overlay_modification_hooks =
-            collect_overlay_change_hooks(ctx, beg, end, beg == end);
+        ctx.last_overlay_modification_hooks = collect_overlay_change_hooks(
+            ctx,
+            byte_range.start_usize(),
+            byte_range.end_usize(),
+            byte_range.is_empty(),
+        );
         run_recorded_overlay_change_hooks(ctx, Value::NIL, lisp_beg, lisp_end, None)?;
 
         Ok(())
@@ -341,23 +346,18 @@ pub(crate) fn signal_before_text_change(
     ctx: &mut crate::emacs_core::eval::Context,
     change: TextChange,
 ) -> Result<(), Flow> {
-    signal_before_change(
-        ctx,
-        change.before_start_byte_usize(),
-        change.before_end_byte_usize(),
-    )
+    signal_before_change(ctx, change.before_byte_range())
 }
 
 /// GNU `signal_after_change(beg, end, old_len)` — run `after-change-functions`
 /// and overlay hooks after a buffer modification.
 ///
-/// `beg` and `end` are **byte positions** (0-based, in the *new* buffer state).
+/// `byte_range` is a 0-based Emacs-byte range in the new buffer state.
 /// `old_len` is the character length of the old text that was replaced.
 pub(crate) fn signal_after_change(
     ctx: &mut crate::emacs_core::eval::Context,
-    beg: usize,
-    end: usize,
-    old_len: usize,
+    byte_range: EmacsByteRange,
+    old_len: CharLen,
 ) -> Result<(), Flow> {
     if inhibit_modification_hooks(ctx) {
         return Ok(());
@@ -367,7 +367,12 @@ pub(crate) fn signal_after_change(
         return Ok(());
     };
 
-    finish_treesit_after_buffer_change(ctx, current_id, beg, end);
+    finish_treesit_after_buffer_change(
+        ctx,
+        current_id,
+        byte_range.start_usize(),
+        byte_range.end_usize(),
+    );
 
     // GNU `signal_after_change` (insdel.c:2390) defers `after-change-functions`
     // to `combine-after-change-execute` when:
@@ -388,13 +393,13 @@ pub(crate) fn signal_after_change(
         }
 
         if let Some(buf) = ctx.buffers.get(current_id) {
-            let beg_char = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(beg));
-            let end_char = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(end));
+            let beg_char = buf.emacs_byte_pos_to_char_pos_clamped(byte_range.start());
+            let end_char = buf.emacs_byte_pos_to_char_pos_clamped(byte_range.end());
             let beg_char = beg_char.get() as i64;
             let end_char = end_char.get() as i64;
             let charpos = beg_char + 1; // 1-based, like GNU's PT/charpos.
             let lenins = end_char - beg_char;
-            let lendel = old_len as i64;
+            let lendel = old_len.get() as i64;
             let z = buf.z_lisp_char_pos().as_i64(); // 1-based Z.
             let beg_field = charpos - 1; // charpos - BEG
             let end_field = z - (charpos - lendel + lenins);
@@ -418,12 +423,12 @@ pub(crate) fn signal_after_change(
             return Ok(());
         };
         let beg_char = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(beg))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.start())
             .as_i64();
         let end_char = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+            .emacs_byte_pos_to_lisp_char_pos(byte_range.end())
             .as_i64();
-        (beg_char, end_char, old_len as i64)
+        (beg_char, end_char, old_len.get() as i64)
     };
 
     let hook_args = vec![
@@ -446,7 +451,14 @@ pub(crate) fn signal_after_change(
         // insert-in-front-hooks: overlays whose start == beg
         // insert-behind-hooks:   overlays whose end == beg (before insertion point)
         // modification-hooks:    overlays covering [beg, end)
-        run_overlay_after_change_hooks(ctx, beg, end, lisp_beg, lisp_end, lisp_old_len)?;
+        run_overlay_after_change_hooks(
+            ctx,
+            byte_range.start_usize(),
+            byte_range.end_usize(),
+            lisp_beg,
+            lisp_end,
+            lisp_old_len,
+        )?;
 
         if lisp_old_len == 0 {
             crate::emacs_core::textprop::report_interval_modification(ctx, lisp_beg, lisp_end)?;
@@ -462,12 +474,7 @@ pub(crate) fn signal_after_text_change(
     ctx: &mut crate::emacs_core::eval::Context,
     change: TextChange,
 ) -> Result<(), Flow> {
-    signal_after_change(
-        ctx,
-        change.after_start_byte_usize(),
-        change.after_end_byte_usize(),
-        change.old_char_len_usize(),
-    )
+    signal_after_change(ctx, change.after_byte_range(), change.old_char_len())
 }
 
 fn finish_treesit_after_buffer_change(
@@ -619,21 +626,19 @@ pub(crate) fn execute_combined_after_change(
     let _ = list_len;
 
     // Convert merged 1-based char range back into byte positions for our
-    // signal_after_change which speaks bytes.
-    let (beg_byte, end_byte) = {
+    // signal_after_change typed byte range.
+    let byte_range = {
         let buf = ctx.buffers.get(target_id).expect("target buffer");
         let beg_char_zero = (begpos - 1).max(0) as usize;
         let end_char_zero = (endpos - 1).max(0) as usize;
-        (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(beg_char_zero))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char_zero))
-                .get(),
+        EmacsByteRange::new(
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(beg_char_zero)),
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char_zero)),
         )
     };
-    let old_len = (endpos - begpos - change_total).max(0) as usize;
+    let old_len = CharLen::new((endpos - begpos - change_total).max(0) as usize);
 
-    let result = signal_after_change(ctx, beg_byte, end_byte, old_len);
+    let result = signal_after_change(ctx, byte_range, old_len);
 
     if let Some(prev) = saved_buffer
         && prev != target_id

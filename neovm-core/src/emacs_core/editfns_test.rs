@@ -243,7 +243,8 @@ fn combine_after_change_still_updates_treesit_linecol_cache() {
     eval.obarray
         .set_symbol_value("combine-after-change-calls", Value::T);
 
-    signal_after_change(&mut eval, 1, 2, 0).expect("after-change signal");
+    signal_after_change(&mut eval, EmacsByteRange::from_usize(1, 2), CharLen::ZERO)
+        .expect("after-change signal");
 
     let cache = eval
         .treesit
