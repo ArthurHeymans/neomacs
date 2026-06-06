@@ -1047,8 +1047,8 @@ pub struct QueryReplaceState {
     pub region_start: Option<usize>,
     /// Optional region restriction (end byte).
     pub region_end: Option<usize>,
-    /// Current match being presented to the user: `(start, end)`.
-    pub current_match: Option<(usize, usize)>,
+    /// Current match being presented to the user.
+    pub current_match: Option<MatchGroup>,
     /// Number of replacements made so far.
     pub replaced_count: usize,
     /// Number of matches skipped so far.
@@ -1157,7 +1157,7 @@ impl QueryReplaceManager {
 
         if let Some(range) = result {
             if range.end() <= limit {
-                state.current_match = Some(range.as_pair());
+                state.current_match = Some(range);
                 return Some(range);
             }
         }
@@ -1180,7 +1180,9 @@ impl QueryReplaceManager {
 
         match response {
             QueryReplaceResponse::Yes => {
-                if let Some((start, end)) = state.current_match {
+                if let Some(current_match) = state.current_match {
+                    let start = current_match.start();
+                    let end = current_match.end();
                     let matched_text = empty_lisp_string(state.from_string.is_multibyte()); // caller fills this in
                     let replacement = state.to_string.clone();
                     let replacement = if state.preserve_case {
@@ -1212,7 +1214,9 @@ impl QueryReplaceManager {
                 // Signal the caller to replace the current match and all
                 // remaining ones.  We handle the *current* match here; the
                 // caller should loop `find_next` + `respond(Yes)` for the rest.
-                if let Some((start, end)) = state.current_match {
+                if let Some(current_match) = state.current_match {
+                    let start = current_match.start();
+                    let end = current_match.end();
                     let replacement = state.to_string.clone();
                     state.replaced_count += 1;
                     state.undo_stack.push(QueryReplaceUndo {
@@ -1236,7 +1240,9 @@ impl QueryReplaceManager {
             }
             QueryReplaceResponse::Edit => QueryReplaceAction::NeedInput,
             QueryReplaceResponse::Delete => {
-                if let Some((start, end)) = state.current_match {
+                if let Some(current_match) = state.current_match {
+                    let start = current_match.start();
+                    let end = current_match.end();
                     state.replaced_count += 1;
                     state.undo_stack.push(QueryReplaceUndo {
                         position: start,

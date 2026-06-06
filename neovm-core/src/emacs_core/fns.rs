@@ -10,7 +10,7 @@ use super::intern::resolve_sym;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1, TextEditRange};
+use crate::buffer::{BufferManager, CharRange, EmacsByteRange, LispCharPos1, TextEditRange};
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use std::borrow::Cow;
@@ -1364,15 +1364,13 @@ pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
 
     let end1_arg = compare_strings_clamp_too_large_end(args[2], chars1.len());
     let end2_arg = compare_strings_clamp_too_large_end(args[5], chars2.len());
-    let (start1, end1) =
-        validate_compare_strings_subarray(args[0], args[1], end1_arg, chars1.len())?;
-    let (start2, end2) =
-        validate_compare_strings_subarray(args[3], args[4], end2_arg, chars2.len())?;
+    let range1 = validate_compare_strings_subarray(args[0], args[1], end1_arg, chars1.len())?;
+    let range2 = validate_compare_strings_subarray(args[3], args[4], end2_arg, chars2.len())?;
 
     let ignore_case = args.get(6).is_some_and(|v| v.is_truthy());
 
-    let sub1 = &chars1[start1..end1];
-    let sub2 = &chars2[start2..end2];
+    let sub1 = &chars1[range1.start_usize()..range1.end_usize()];
+    let sub2 = &chars2[range2.start_usize()..range2.end_usize()];
 
     let len = sub1.len().min(sub2.len());
     for i in 0..len {
@@ -1417,7 +1415,7 @@ fn validate_compare_strings_subarray(
     from: Value,
     to: Value,
     size: usize,
-) -> Result<(usize, usize), Flow> {
+) -> Result<CharRange, Flow> {
     let size_i64 = size as i64;
     let from_index = match from.kind() {
         ValueKind::Fixnum(n) => {
@@ -1456,7 +1454,10 @@ fn validate_compare_strings_subarray(
         return Err(signal("args-out-of-range", vec![array, from, to]));
     }
 
-    Ok((from_index as usize, to_index as usize))
+    Ok(CharRange::from_usize(
+        from_index as usize,
+        to_index as usize,
+    ))
 }
 
 fn compare_strings_upcase_char(ch: char) -> char {

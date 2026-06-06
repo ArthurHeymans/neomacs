@@ -276,7 +276,7 @@ pub(crate) fn builtin_regexp_quote(args: Vec<Value>) -> EvalResult {
 fn parse_replace_regexp_subexp_start_lisp(
     args: &[Value],
     string: &crate::heap_types::LispString,
-) -> Result<(usize, usize), Flow> {
+) -> Result<ReplaceRegexpSubexpStart, Flow> {
     let subexp = match args.get(5) {
         Some(v) if v.is_nil() => 0i64,
         None => 0i64,
@@ -293,7 +293,16 @@ fn parse_replace_regexp_subexp_start_lisp(
         ));
     }
     let start = normalize_lisp_string_start_arg(string, args.get(6))?;
-    Ok((subexp as usize, start))
+    Ok(ReplaceRegexpSubexpStart {
+        subexp: subexp as usize,
+        start,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ReplaceRegexpSubexpStart {
+    subexp: usize,
+    start: usize,
 }
 
 pub(crate) fn storage_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
@@ -737,7 +746,8 @@ where
 {
     let pattern = expect_lisp_string(&args[0])?;
     let source = expect_lisp_string(&args[2])?;
-    let (_, start) = parse_replace_regexp_subexp_start_lisp(args, source)?;
+    let parsed = parse_replace_regexp_subexp_start_lisp(args, source)?;
+    let start = parsed.start;
     let mut cursor = start;
     let mut search_at = start;
     let mut pieces = Vec::new();
@@ -829,7 +839,8 @@ pub(crate) fn builtin_replace_regexp_in_string(
 
     let fixedcase = args.get(3).is_some_and(|v| v.is_truthy());
     let literal = args.get(4).is_some_and(|v| v.is_truthy());
-    let (subexp, _) = parse_replace_regexp_subexp_start_lisp(&args, expect_lisp_string(&args[2])?)?;
+    let parsed = parse_replace_regexp_subexp_start_lisp(&args, expect_lisp_string(&args[2])?)?;
+    let subexp = parsed.subexp;
 
     if args[1].is_string() {
         let replacement = expect_lisp_string(&args[1])?.clone();
