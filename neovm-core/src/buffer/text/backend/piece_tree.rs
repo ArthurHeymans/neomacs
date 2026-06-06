@@ -220,21 +220,20 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
-        let byte_pos = pos;
-        let pos = byte_pos.get();
-        if pos >= self.len() {
+        let pos_usize = pos.get();
+        if pos_usize >= self.len() {
             return None;
         }
-        self.emacs_byte_pos_to_char_pos(byte_pos);
+        self.emacs_byte_pos_to_char_pos(pos);
         if !self.multibyte {
-            return Some(self.byte_at_emacs_byte_pos(byte_pos) as u32);
+            return Some(self.byte_at_emacs_byte_pos(pos) as u32);
         }
 
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (self.len() - pos).min(tmp.len());
+        let available = (self.len() - pos_usize).min(tmp.len());
         let mut written = 0;
         self.for_each_emacs_byte_range_chunk(
-            EmacsByteRange::new(EmacsBytePos::new(pos), EmacsBytePos::new(pos + available)),
+            EmacsByteRange::from_start_len(pos, EmacsByteLen::new(available)),
             |chunk| {
                 let take = (available - written).min(chunk.len());
                 tmp[written..written + take].copy_from_slice(&chunk[..take]);
@@ -372,8 +371,8 @@ impl PieceTreeTextBackend {
         bytes: &[u8],
         extent: TextExtent,
     ) {
-        let pos = pos.get();
-        let nchars = extent.chars().get();
+        let byte_pos = pos;
+        let pos = byte_pos.get();
         assert!(
             pos <= self.len(),
             "insert_emacs_bytes_both: position {pos} out of range (len {})",
@@ -388,18 +387,18 @@ impl PieceTreeTextBackend {
             "insert_emacs_bytes_both: caller-supplied byte count mismatches actual"
         );
         debug_assert_eq!(
-            CharLen::new(nchars),
+            extent.chars(),
             emacs_char_count_bytes(bytes, self.multibyte),
             "insert_emacs_bytes_both: caller-supplied nchars mismatches actual"
         );
-        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
+        self.emacs_byte_pos_to_char_pos(byte_pos);
 
         let add_start = self.add.len();
         self.add.extend_from_slice(bytes);
         let piece = self.node_for_piece(Piece::new(
             PieceSource::Add,
             SourceBytePos::new(add_start),
-            TextExtent::new(CharLen::new(nchars), EmacsByteLen::new(bytes.len())),
+            extent,
         ));
         let root = self.root.take();
         let (left, right) = self.split_at_byte(root, pos);
