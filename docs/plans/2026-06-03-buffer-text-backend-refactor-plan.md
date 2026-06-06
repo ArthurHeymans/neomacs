@@ -576,6 +576,20 @@ Completed so far:
   buffer `usize` character query wrappers to `neovm-core` tests.
 - Moved dependent layout, binary, and backend benchmark point movement callers
   off raw `goto_byte` and onto typed `EmacsBytePos` entry points.
+- Moved `position-bytes` and selected text-property/string interval paths onto
+  explicit Lisp-position to `CharPos0`/`EmacsBytePos` conversion, keeping
+  GNU's character-indexed interval model visible at the semantic boundary.
+- Replaced remaining production `CharRange::from_usize` /
+  `EmacsByteRange::from_usize` construction in composition, pdump interval
+  load, `set-buffer-multibyte` overlay remapping, mode-line property slicing,
+  primitive-undo yank deletion, and string property slicing with typed range
+  constructors.
+- Typed backend conformance and edit-range test expectations so the backend
+  matrix now validates byte/character range boundaries through
+  `EmacsBytePos`/`CharPos0` even in test helpers.
+- Aligned pdump backend tags with the runtime `BufferTextBackendKind`
+  `num_enum` tags and added a round-trip test so serialized backend kind drift
+  fails at test time instead of becoming a silent image compatibility bug.
 
 Next work:
 
