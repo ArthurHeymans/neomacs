@@ -5,7 +5,7 @@ use tree_sitter::{InputEdit, Language, Parser, Point, Query, Tree};
 
 use super::intern::SymId;
 use super::value::Value;
-use crate::buffer::BufferId;
+use crate::buffer::{BufferId, EmacsBytePos};
 use crate::heap_types::LispString;
 
 pub(crate) const TREESIT_PARSER_TAG: &str = "treesit-parser";
@@ -296,7 +296,8 @@ impl TreeSitterManager {
         }
     }
 
-    pub(crate) fn note_buffer_change(&mut self, buffer_id: BufferId, start_byte: usize) {
+    pub(crate) fn note_buffer_change(&mut self, buffer_id: BufferId, start_byte: EmacsBytePos) {
+        let start_byte = start_byte.get();
         if let Some(cache) = self.linecol_caches.get_mut(&buffer_id)
             && cache.bytepos > start_byte
         {

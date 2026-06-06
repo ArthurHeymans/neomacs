@@ -367,12 +367,7 @@ pub(crate) fn signal_after_change(
         return Ok(());
     };
 
-    finish_treesit_after_buffer_change(
-        ctx,
-        current_id,
-        byte_range.start_usize(),
-        byte_range.end_usize(),
-    );
+    finish_treesit_after_buffer_change(ctx, current_id, byte_range.start(), byte_range.end());
 
     // GNU `signal_after_change` (insdel.c:2390) defers `after-change-functions`
     // to `combine-after-change-execute` when:
@@ -480,15 +475,16 @@ pub(crate) fn signal_after_text_change(
 fn finish_treesit_after_buffer_change(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    beg: usize,
-    end: usize,
+    beg: EmacsBytePos,
+    end: EmacsBytePos,
 ) {
     ctx.treesit.note_buffer_change(buffer_id, beg);
     if ctx.treesit.has_pending_edit(buffer_id)
         && let Some(buf) = ctx.buffers.get(buffer_id)
     {
         let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
-        ctx.treesit.finish_buffer_edit(buffer_id, &source, end);
+        ctx.treesit
+            .finish_buffer_edit(buffer_id, &source, end.get());
     }
 }
 
