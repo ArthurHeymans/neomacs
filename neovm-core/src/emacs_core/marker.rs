@@ -15,7 +15,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, InsertionType};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, InsertionType, LispCharPos1};
 
 // ---------------------------------------------------------------------------
 // Marker struct (for documentation / internal helpers)
@@ -85,10 +85,9 @@ pub(crate) fn make_marker_value_with_id(
     // Markers that later get registered via register_marker have their
     // charpos/bytepos overwritten through the chain path, so this only
     // matters for unregistered/synthesized markers.
-    let charpos = match position {
-        Some(p) if p > 0 => (p - 1) as usize,
-        _ => 0,
-    };
+    let charpos = position
+        .map(|p| LispCharPos1::new(p).to_char_pos().get())
+        .unwrap_or(0);
     let last_position_valid = matches!(position, Some(p) if p > 0) || buffer_id.is_some();
     Value::make_marker(crate::heap_types::LispMarker {
         buffer: buffer_id,
