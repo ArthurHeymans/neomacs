@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::{LambdaData, LambdaParams, ValueKind, next_float_id};
 use crate::test_utils::runtime_startup_eval_all;
@@ -295,12 +296,12 @@ fn assoc_string_and_car_less_than_car_semantics() {
     );
     let left_marker = crate::emacs_core::marker::make_marker_value(
         Some(crate::buffer::BufferId(1)),
-        Some(crate::buffer::LispCharPos1::new(3)),
+        Some(LispCharPos1::new(3)),
         false,
     );
     let right_marker = crate::emacs_core::marker::make_marker_value(
         Some(crate::buffer::BufferId(1)),
-        Some(crate::buffer::LispCharPos1::new(8)),
+        Some(LispCharPos1::new(8)),
         false,
     );
     assert!(

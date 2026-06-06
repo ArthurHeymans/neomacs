@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::{BufferId, LispCharPos1};
 use crate::heap_types::LispString;
 
 // -----------------------------------------------------------------------
@@ -84,10 +85,10 @@ fn append_to_non_text_replaces() {
 fn marker_storage() {
     crate::test_utils::init_test_tracing();
     let mut mgr = RegisterManager::new();
-    let buffer_id = crate::buffer::BufferId(7);
+    let buffer_id = BufferId(7);
     let marker = crate::emacs_core::marker::make_marker_value(
         Some(buffer_id),
-        Some(crate::buffer::LispCharPos1::new(42)),
+        Some(LispCharPos1::new(42)),
         false,
     );
     mgr.set('p', RegisterContent::Marker(marker));
@@ -95,8 +96,8 @@ fn marker_storage() {
         Some(RegisterContent::Marker(stored)) => {
             let (buffer_id, point, insertion_type) =
                 crate::emacs_core::marker::marker_logical_fields(stored).expect("marker");
-            assert_eq!(buffer_id, Some(crate::buffer::BufferId(7)));
-            assert_eq!(point, Some(crate::buffer::LispCharPos1::new(42)));
+            assert_eq!(buffer_id, Some(BufferId(7)));
+            assert_eq!(point, Some(LispCharPos1::new(42)));
             assert!(!insertion_type);
         }
         other => panic!("Expected Marker, got {:?}", other),

@@ -1,6 +1,6 @@
 use super::*;
-use crate::buffer::CharPos0;
 use crate::buffer::buffer::{Buffer, BufferId};
+use crate::buffer::{CharPos0, LispCharPos1};
 use crate::emacs_core::value::eq_value;
 
 /// Helper: create a buffer with given text, point at start, full accessible range.
@@ -1697,13 +1697,13 @@ fn parse_partial_sexp_accepts_marker_positions_like_gnu() {
     let from = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        crate::buffer::LispCharPos1::new(1),
+        LispCharPos1::new(1),
         false,
     );
     let to = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        crate::buffer::LispCharPos1::new(4),
+        LispCharPos1::new(4),
         false,
     );
 

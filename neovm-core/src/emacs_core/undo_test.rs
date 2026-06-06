@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::CharRange;
+use crate::buffer::{CharRange, LispCharPos1};
 
 #[test]
 fn undo_entry_head_domain_matches_gnu_apply_marker() {
@@ -177,7 +177,7 @@ fn test_primitive_undo_restores_marker_adjustments_after_deletion() {
     let marker = marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buf_id,
-        crate::buffer::LispCharPos1::new(2),
+        LispCharPos1::new(2),
         false,
     );
     let delete_record = Value::cons(Value::string("bcd"), Value::fixnum(2));

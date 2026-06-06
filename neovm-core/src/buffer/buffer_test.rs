@@ -1,6 +1,6 @@
 use super::*;
-use crate::buffer::CharRange;
 use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
+use crate::buffer::{CharRange, LispCharPos1};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
@@ -847,8 +847,7 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
         "ééz".len()
     );
     assert_eq!(
-        buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(99))
-            .get(),
+        buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(99)).get(),
         "ééz".len()
     );
 
@@ -859,12 +858,12 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
     assert_eq!(buf.point_min_char(), 1);
     assert_eq!(buf.point_max_char(), 3);
     assert_eq!(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(1))
+        buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(1))
             .get(),
         'é'.len_utf8()
     );
     assert_eq!(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(99))
+        buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(99))
             .get(),
         "ééz".len()
     );

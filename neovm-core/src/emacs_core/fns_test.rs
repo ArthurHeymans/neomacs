@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::{print, string_escape};
@@ -969,7 +970,7 @@ fn secure_hash_eval_buffer_marker_range() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         id,
-        crate::buffer::LispCharPos1::new(2),
+        LispCharPos1::new(2),
         false,
     );
     let r = builtin_secure_hash(

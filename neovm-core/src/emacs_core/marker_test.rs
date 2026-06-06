@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 
 // Test helpers keep Context alive in a thread_local so the heap
 // objects in the returned Value survive until the next call.
@@ -51,7 +52,7 @@ fn call_copy_marker(args: Vec<Value>) -> EvalResult {
 #[test]
 fn make_marker_creates_heap_marker() {
     crate::test_utils::init_test_tracing();
-    let m = make_marker_value(None, Some(crate::buffer::LispCharPos1::new(42)), false);
+    let m = make_marker_value(None, Some(LispCharPos1::new(42)), false);
     assert!(is_marker(&m));
 }
 
@@ -85,12 +86,8 @@ fn builtin_marker_position_returns_position() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
-    let m = make_registered_buffer_marker(
-        &mut eval.buffers,
-        buffer_id,
-        crate::buffer::LispCharPos1::new(10),
-        false,
-    );
+    let m =
+        make_registered_buffer_marker(&mut eval.buffers, buffer_id, LispCharPos1::new(10), false);
     let pos = builtin_marker_position(&mut eval, vec![m]).unwrap();
     assert!(pos.is_fixnum());
 }
@@ -108,11 +105,7 @@ fn builtin_marker_buffer_returns_live_buffer() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
-    let marker = make_marker_value(
-        Some(buffer_id),
-        Some(crate::buffer::LispCharPos1::new(1)),
-        false,
-    );
+    let marker = make_marker_value(Some(buffer_id), Some(LispCharPos1::new(1)), false);
     let buf = builtin_marker_buffer(&mut eval, vec![marker]).unwrap();
     assert_eq!(buf, Value::make_buffer(buffer_id));
 }
@@ -132,12 +125,7 @@ fn builtin_copy_marker_from_marker() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
-    let m = make_registered_buffer_marker(
-        &mut eval.buffers,
-        buffer_id,
-        crate::buffer::LispCharPos1::new(5),
-        true,
-    );
+    let m = make_registered_buffer_marker(&mut eval.buffers, buffer_id, LispCharPos1::new(5), true);
     let copy = builtin_copy_marker(&mut eval, vec![m]).unwrap();
     assert!(is_marker(&copy));
     assert!(marker_position_value(&copy).is_fixnum());

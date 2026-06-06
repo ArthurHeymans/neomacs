@@ -1,6 +1,7 @@
 use super::super::intern::{intern, intern_uninterned, intern_uninterned_lisp_string};
 use super::super::marker::make_marker_value;
 use super::*;
+use crate::buffer::LispCharPos1;
 use crate::emacs_core::builtins::{builtin_puthash, builtin_remhash};
 use crate::emacs_core::value::{
     HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, next_float_id,
@@ -646,11 +647,7 @@ fn print_markers_use_gnu_style_handles() {
     let buffer_id = buffers
         .find_buffer_by_name("*scratch*")
         .expect("scratch buffer");
-    let marker = make_marker_value(
-        Some(buffer_id),
-        Some(crate::buffer::LispCharPos1::new(3)),
-        false,
-    );
+    let marker = make_marker_value(Some(buffer_id), Some(LispCharPos1::new(3)), false);
     assert_eq!(
         print_value_with_buffers(&marker, &buffers),
         "#<marker at 3 in *scratch*>"
