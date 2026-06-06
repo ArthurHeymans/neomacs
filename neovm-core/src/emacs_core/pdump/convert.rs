@@ -4744,7 +4744,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             let mut s =
                 [crate::emacs_core::value::Value::NIL; crate::buffer::buffer::BUFFER_SLOT_COUNT];
             for info in crate::buffer::buffer::BUFFER_SLOT_INFO {
-                s[info.offset] = info.default.to_value();
+                s[info.offset.index()] = info.default.to_value();
             }
             for (idx, dumped) in db.slots.iter().enumerate() {
                 if idx >= crate::buffer::buffer::BUFFER_SLOT_COUNT {

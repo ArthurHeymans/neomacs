@@ -4014,7 +4014,7 @@ fn finalize_cached_bootstrap_eval(
                 intern(info.predicate)
             };
             let fwd = alloc_buffer_objfwd(
-                info.offset as u16,
+                info.offset.as_u16(),
                 info.local_flags_idx,
                 predicate,
                 info.default.to_value(),

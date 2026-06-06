@@ -4465,7 +4465,7 @@ impl Context {
                         intern(info.predicate)
                     };
                     let fwd = alloc_buffer_objfwd(
-                        info.offset as u16,
+                        info.offset.as_u16(),
                         info.local_flags_idx,
                         predicate,
                         info.default.to_value(),
@@ -12763,7 +12763,7 @@ pub(crate) fn set_runtime_binding(
     {
         let has_local = buffers
             .get(current_id)
-            .map(|buf| info.local_flags_idx < 0 || buf.slot_local_flag(info.offset))
+            .map(|buf| info.local_flags_idx < 0 || buf.slot_local_flag(info.offset.index()))
             .unwrap_or(false);
         if has_local {
             let _ = buffers.set_buffer_local_property_by_sym_id(current_id, sym_id, value);

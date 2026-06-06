@@ -2157,7 +2157,7 @@ pub(crate) fn builtin_set_buffer_major_mode(
         eval.visible_variable_value_or_nil("initial-major-mode")
     } else {
         crate::buffer::buffer::lookup_buffer_slot("major-mode")
-            .map(|info| eval.buffers.buffer_defaults[info.offset])
+            .map(|info| eval.buffers.buffer_defaults[info.offset.index()])
             .unwrap_or(Value::NIL)
     };
 

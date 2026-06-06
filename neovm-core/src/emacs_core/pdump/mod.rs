@@ -761,7 +761,7 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
                 intern(info.predicate)
             };
             let fwd = alloc_buffer_objfwd(
-                info.offset as u16,
+                info.offset.as_u16(),
                 info.local_flags_idx,
                 predicate,
                 info.default.to_value(),

@@ -91,7 +91,7 @@ fn dynamic_buffer_or_global_symbol_value(
     if let Some(buf) = buf
         && let Some(info) = crate::buffer::buffer::lookup_buffer_slot(name)
     {
-        return Some(buf.slots[info.offset]);
+        return Some(buf.slots[info.offset.index()]);
     }
     if let Some(buf) = buf
         && let Some(value) = buf.get_buffer_local(name)

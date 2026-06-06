@@ -1985,7 +1985,7 @@ pub(crate) fn builtin_compute_motion(
     let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
-        .map(|info| buf.slots[info.offset])
+        .map(|info| buf.slots[info.offset.index()])
         .or_else(|| buf.get_buffer_local("tab-width"))
         .or_else(|| obarray.symbol_value("tab-width").copied())
         .and_then(|value: Value| match value.kind() {
@@ -4386,7 +4386,7 @@ pub(crate) fn builtin_buffer_local_value(
         None if let Some(info) =
             crate::buffer::buffer::lookup_buffer_slot_by_sym_id(resolved_id) =>
         {
-            Ok(buf.slots[info.offset])
+            Ok(buf.slots[info.offset.index()])
         }
         None if resolved_id == intern("nil") => Ok(Value::NIL),
         None if resolved_id == intern("t") => Ok(Value::T),

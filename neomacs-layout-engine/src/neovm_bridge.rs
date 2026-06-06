@@ -271,7 +271,7 @@ impl LayoutBufferView for Buffer {
 impl LayoutBufferView for LayoutBufferSnapshot {
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value> {
         if let Some(info) = lookup_buffer_slot(name) {
-            return Some(self.slots[info.offset]);
+            return Some(self.slots[info.offset.index()]);
         }
         let key = Value::from_sym_id(intern::intern(name));
         find_layout_local_var_alist_entry(self.local_var_alist, key)
