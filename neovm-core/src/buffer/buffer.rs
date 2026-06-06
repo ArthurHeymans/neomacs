@@ -2279,7 +2279,8 @@ impl Buffer {
 
     pub fn is_narrowed(&self) -> bool {
         let accessible = self.accessible_emacs_byte_region();
-        accessible.start_usize() > 0 || accessible.end_usize() < self.total_emacs_byte_len().get()
+        accessible.start() > EmacsBytePos::ZERO
+            || accessible.end() < EmacsBytePos::new(self.total_emacs_byte_len().get())
     }
 
     /// Convert a 0-based character position to an Emacs byte position,
@@ -2373,8 +2374,8 @@ impl Buffer {
 
     fn clamped_emacs_byte_range(&self, range: EmacsByteRange) -> EmacsByteRange {
         let total = self.total_emacs_byte_len().get();
-        let start = range.start_usize().min(total);
-        let end = range.end_usize().max(start).min(total);
+        let start = range.start().get().min(total);
+        let end = range.end().get().max(start).min(total);
         EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
     }
 
@@ -2756,8 +2757,8 @@ impl Buffer {
     /// Restrict the accessible portion to the Emacs-byte range.
     pub fn narrow_to_emacs_byte_range(&mut self, range: EmacsByteRange) {
         let total = self.total_emacs_byte_len().get();
-        let s = range.start_usize().min(total);
-        let e = range.end_usize().clamp(s, total);
+        let s = range.start().get().min(total);
+        let e = range.end().get().clamp(s, total);
         let total_chars = self.total_char_len().get();
         self.begv_byte = s;
         self.begv = self

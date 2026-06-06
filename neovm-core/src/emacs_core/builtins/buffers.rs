@@ -991,8 +991,8 @@ fn checked_buffer_substring_for_char_region_in_manager(
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(buffer_slice_value(
         buf,
-        byte_range.start_usize(),
-        byte_range.end_usize(),
+        byte_range.start().get(),
+        byte_range.end().get(),
     ))
 }
 
@@ -2044,7 +2044,7 @@ pub(crate) fn builtin_compute_motion(
     }
 
     // Convert byte pos back to 1-based char position.
-    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(accessible.end_usize())));
+    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(accessible.end().get())));
 
     Ok(Value::list(vec![
         Value::fixnum(final_charpos),
