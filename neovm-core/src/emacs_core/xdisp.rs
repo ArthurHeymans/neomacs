@@ -84,7 +84,19 @@ fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
     }
 }
 
-fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> (usize, usize) {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LineColumn {
+    line: usize,
+    column: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RegionTextMetrics {
+    lines: usize,
+    max_columns: usize,
+}
+
+fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(
         EmacsByteRange::new(
@@ -99,12 +111,15 @@ fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> (usize, usize
         None => &bytes[..],
     };
     let col = emacs_char_count(tail, buf.get_multibyte());
-    (line, col)
+    LineColumn { line, column: col }
 }
 
-fn region_text_metrics(bytes: &[u8], multibyte: bool) -> (usize, usize) {
+fn region_text_metrics(bytes: &[u8], multibyte: bool) -> RegionTextMetrics {
     if bytes.is_empty() {
-        return (0, 0);
+        return RegionTextMetrics {
+            lines: 0,
+            max_columns: 0,
+        };
     }
 
     let mut max_cols = 0usize;
@@ -140,7 +155,10 @@ fn region_text_metrics(bytes: &[u8], multibyte: bool) -> (usize, usize) {
         lines = lines.saturating_sub(1);
     }
 
-    (lines, max_cols.max(cur_col))
+    RegionTextMetrics {
+        lines,
+        max_columns: max_cols.max(cur_col),
+    }
 }
 
 fn trim_window_text_to_non_empty_line_end(bytes: &[u8]) -> &[u8] {
@@ -1964,11 +1982,13 @@ fn expand_mode_line_percent_in_state(
     });
     let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
-    let (line_num, col_num) = if let Some(b) = buf {
+    let point_line_column = if let Some(b) = buf {
         prefix_line_and_column(b, b.point_emacs_byte_pos())
     } else {
-        (1, 0)
+        LineColumn { line: 1, column: 0 }
     };
+    let line_num = point_line_column.line;
+    let col_num = point_line_column.column;
 
     let chars: Vec<char> = fmt_str.chars().collect();
     let mut index = 0;
@@ -2645,15 +2665,15 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     } else {
         &bytes
     };
-    let (lines, max_cols) = region_text_metrics(measured, buf.get_multibyte());
+    let text_metrics = region_text_metrics(measured, buf.get_multibyte());
 
-    let width = (max_cols as f32 * char_w).ceil() as i64;
+    let width = (text_metrics.max_columns as f32 * char_w).ceil() as i64;
     let mode_line_rows = if window_text_pixel_size_includes_mode_line(args.get(5)) {
         1.0
     } else {
         0.0
     };
-    let height = ((lines as f32 + mode_line_rows) * char_h).ceil() as i64;
+    let height = ((text_metrics.lines as f32 + mode_line_rows) * char_h).ceil() as i64;
 
     Ok(Value::cons(Value::fixnum(width), Value::fixnum(height)))
 }
