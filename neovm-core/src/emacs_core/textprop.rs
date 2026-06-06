@@ -1019,8 +1019,8 @@ fn call_text_property_hook_lists(
 pub(crate) fn prepare_interval_modification_for_change(
     eval: &mut super::eval::Context,
     buf_id: BufferId,
-    byte_start: usize,
-    byte_end: usize,
+    byte_start: EmacsBytePos,
+    byte_end: EmacsBytePos,
 ) -> Result<(), Flow> {
     eval.interval_insert_behind_hooks = Value::NIL;
     eval.interval_insert_in_front_hooks = Value::NIL;
@@ -1038,8 +1038,7 @@ pub(crate) fn prepare_interval_modification_for_change(
         let Some(buf) = eval.buffers.get(buf_id) else {
             return Ok(());
         };
-        let byte_range =
-            EmacsByteRange::ordered(EmacsBytePos::new(byte_start), EmacsBytePos::new(byte_end));
+        let byte_range = EmacsByteRange::ordered(byte_start, byte_end);
         let lisp_start = buf
             .emacs_byte_pos_to_lisp_char_pos(byte_range.start())
             .as_i64();
@@ -1075,7 +1074,7 @@ pub(crate) fn prepare_interval_modification_for_change(
 fn record_interval_insert_hooks(
     eval: &mut super::eval::Context,
     buf_id: BufferId,
-    byte_pos: usize,
+    byte_pos: EmacsBytePos,
 ) {
     let Some(buf) = eval.buffers.get(buf_id) else {
         return;
@@ -1093,21 +1092,19 @@ fn record_interval_insert_hooks(
     let front_sym = Value::symbol("insert-in-front-hooks");
     let accessible = buf.accessible_emacs_byte_region();
 
-    if byte_pos > accessible.start_usize()
-        && let Some(prev_len) = buf.char_before_emacs_byte_len(EmacsBytePos::new(byte_pos))
+    if byte_pos > accessible.start()
+        && let Some(prev_len) = buf.char_before_emacs_byte_len(byte_pos)
     {
-        let prev_byte = byte_pos.saturating_sub(prev_len.get());
-        if let Some(hooks) =
-            buf.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(prev_byte), behind_sym)
+        let prev_byte = byte_pos.saturating_sub_len(prev_len);
+        if let Some(hooks) = buf.text_props_get_property_at_emacs_byte_pos(prev_byte, behind_sym)
             && !hooks.is_nil()
         {
             eval.interval_insert_behind_hooks = hooks;
         }
     }
 
-    if byte_pos < accessible.end_usize()
-        && let Some(hooks) =
-            buf.text_props_get_property_at_emacs_byte_pos(EmacsBytePos::new(byte_pos), front_sym)
+    if byte_pos < accessible.end()
+        && let Some(hooks) = buf.text_props_get_property_at_emacs_byte_pos(byte_pos, front_sym)
         && !hooks.is_nil()
     {
         eval.interval_insert_in_front_hooks = hooks;

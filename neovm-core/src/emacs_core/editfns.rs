@@ -286,15 +286,19 @@ pub(crate) fn signal_before_change(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(());
     };
-    let beg = byte_range.start_usize();
-    let end = byte_range.end_usize();
+    let beg = byte_range.start();
+    let end = byte_range.end();
 
     if ctx.treesit.has_editable_tree(current_id)
         && let Some(buf) = ctx.buffers.get(current_id)
     {
         let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
-        ctx.treesit
-            .begin_buffer_edit(current_id, &source, beg.min(end), beg.max(end));
+        ctx.treesit.begin_buffer_edit(
+            current_id,
+            &source,
+            beg.get().min(end.get()),
+            beg.get().max(end.get()),
+        );
     }
 
     crate::emacs_core::textprop::prepare_interval_modification_for_change(
