@@ -148,15 +148,16 @@ fn strong_clock_in_out_duration() {
   (require 'org-clock)
   (let ((org-mode-hook nil))
     (with-temp-buffer (org-mode)
-      (insert "* Task\nBody")
-      (goto-char (point-min))
-      (org-clock-in)
-      (org-clock-out)
-      (let* ((tree (org-element-parse-buffer))
-             (clock (car (org-element-map tree 'clock #'identity))))
-        (list (org-element-property :status clock)
-              (org-element-property :duration clock)
-              (buffer-string))))))"##,
+      (let ((clock-time (encode-time 0 50 18 6 6 2026)))
+        (insert "* Task\nBody")
+        (goto-char (point-min))
+        (org-clock-in nil clock-time)
+        (org-clock-out nil nil clock-time)
+        (let* ((tree (org-element-parse-buffer))
+               (clock (car (org-element-map tree 'clock #'identity))))
+          (list (org-element-property :status clock)
+                (org-element-property :duration clock)
+                (buffer-string)))))))"##,
     );
 }
 
