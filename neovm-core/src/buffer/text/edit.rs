@@ -600,6 +600,19 @@ impl TextEditRange {
         self.byte_start().get() - base_start..self.byte_end().get() - base_start
     }
 
+    pub(in crate::buffer) const fn subrange_from_start_offsets(
+        self,
+        byte_offset: EmacsByteLen,
+        char_offset: CharLen,
+        extent: TextExtent,
+    ) -> Self {
+        Self::from_start_extent(
+            self.byte_start().add_len(byte_offset),
+            self.char_start().add_len(char_offset),
+            extent,
+        )
+    }
+
     pub const fn char_len(self) -> CharLen {
         CharLen::new(self.char_end.get().saturating_sub(self.char_start.get()))
     }
@@ -677,6 +690,18 @@ mod tests {
         let inner = TextEditRange::from_usize(25, 32, 15, 22);
 
         assert_eq!(inner.byte_index_range_relative_to(base), 5..12);
+    }
+
+    #[test]
+    fn text_edit_range_builds_typed_subrange_from_offsets() {
+        let base = TextEditRange::from_usize(20, 40, 10, 30);
+        let subrange = base.subrange_from_start_offsets(
+            EmacsByteLen::new(5),
+            CharLen::new(3),
+            TextExtent::from_usize(2, 7),
+        );
+
+        assert_eq!(subrange, TextEditRange::from_usize(25, 32, 13, 15));
     }
 
     #[test]

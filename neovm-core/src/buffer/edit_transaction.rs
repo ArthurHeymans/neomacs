@@ -602,7 +602,6 @@ impl SameLenSubstitutionPlan {
         replacement_bytes: &mut Vec<u8>,
         changed_ranges: &mut Vec<TextEditRange>,
     ) {
-        let start = range.byte_start_usize();
         let mut byte_offset = 0;
         let mut char_offset = 0;
         while byte_offset < region_bytes.len() {
@@ -618,10 +617,9 @@ impl SameLenSubstitutionPlan {
                     to_bytes.len()
                 );
                 replacement_bytes.extend_from_slice(to_bytes);
-                let char_pos = range.char_start_usize() + char_offset;
-                changed_ranges.push(TextEditRange::from_start_extent(
-                    EmacsBytePos::new(start + byte_offset),
-                    CharPos0::new(char_pos),
+                changed_ranges.push(range.subrange_from_start_offsets(
+                    EmacsByteLen::new(byte_offset),
+                    CharLen::new(char_offset),
                     TextExtent::new(CharLen::new(1), EmacsByteLen::new(clen)),
                 ));
             } else {
@@ -643,15 +641,13 @@ impl SameLenSubstitutionPlan {
         if from_code > 0xFF || to_bytes.len() != 1 {
             return None;
         }
-        let start = range.byte_start_usize();
         let from_byte = from_code as u8;
         for (index, &byte) in region_bytes.iter().enumerate() {
             if byte == from_byte {
                 replacement_bytes.push(to_bytes[0]);
-                let char_pos = range.char_start_usize() + index;
-                changed_ranges.push(TextEditRange::from_start_extent(
-                    EmacsBytePos::new(start + index),
-                    CharPos0::new(char_pos),
+                changed_ranges.push(range.subrange_from_start_offsets(
+                    EmacsByteLen::new(index),
+                    CharLen::new(index),
                     TextExtent::new(CharLen::new(1), EmacsByteLen::new(1)),
                 ));
             } else {
