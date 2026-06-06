@@ -1717,7 +1717,8 @@ fn replace_string_eval_impl(
             let Some(group) = groups.first().and_then(|group| *group) else {
                 continue;
             };
-            let (m_start, m_end) = group.as_pair();
+            let m_start = group.start();
+            let m_end = group.end();
             if delimited && !is_delimited_match(&source, m_start, m_end) {
                 continue;
             }
@@ -1741,7 +1742,8 @@ fn replace_string_eval_impl(
     } else {
         let mut cursor = 0usize;
         while let Some(range) = find_match(&source, &from, cursor, true, false, case_fold) {
-            let (m_start, m_end) = range.as_pair();
+            let m_start = range.start();
+            let m_end = range.end();
             if delimited && !is_delimited_match(&source, m_start, m_end) {
                 out.push_str(&source[cursor..m_end]);
                 cursor = m_end;
@@ -1910,7 +1912,8 @@ fn replace_regexp_eval_impl(
         let Some(group) = groups.first().and_then(|group| *group) else {
             continue;
         };
-        let (match_start, match_end) = group.as_pair();
+        let match_start = group.start();
+        let match_end = group.end();
         if delimited && !is_delimited_match(&source, match_start, match_end) {
             continue;
         }

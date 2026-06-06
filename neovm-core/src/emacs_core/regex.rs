@@ -244,10 +244,6 @@ impl MatchGroup {
         self.end
     }
 
-    pub const fn as_pair(self) -> (usize, usize) {
-        (self.start, self.end)
-    }
-
     pub const fn string_char_range(self) -> CharRange {
         CharRange::new(CharPos0::new(self.start), CharPos0::new(self.end))
     }
@@ -281,24 +277,6 @@ impl MatchGroup {
                 self.end.saturating_sub(delta),
             )
         }
-    }
-}
-
-impl From<(usize, usize)> for MatchGroup {
-    fn from((start, end): (usize, usize)) -> Self {
-        Self::new(start, end)
-    }
-}
-
-impl PartialEq<(usize, usize)> for MatchGroup {
-    fn eq(&self, other: &(usize, usize)) -> bool {
-        self.as_pair() == *other
-    }
-}
-
-impl PartialEq<MatchGroup> for (usize, usize) {
-    fn eq(&self, other: &MatchGroup) -> bool {
-        *self == other.as_pair()
     }
 }
 
@@ -2366,23 +2344,26 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
     let Some(match_group) = md.groups.get(subexp).and_then(|group| *group) else {
         return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
-    let (match_start, match_end) = match_group.as_pair();
     let (buffer_start, buffer_end) = if md.searched_string.is_some() {
         (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_start))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_group.start()))
                 .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_end))
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_group.end()))
                 .get(),
         )
     } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
         (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_start.saturating_sub(1)))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_end.saturating_sub(1)))
-                .get(),
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                match_group.start().saturating_sub(1),
+            ))
+            .get(),
+            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                match_group.end().saturating_sub(1),
+            ))
+            .get(),
         )
     } else {
-        (match_start, match_end)
+        (match_group.start(), match_group.end())
     };
 
     let (_storage_start, _storage_end, replacement) = compute_replacement_with_syntax(
@@ -2518,8 +2499,6 @@ fn compute_replacement_with_syntax(
     let Some(match_group) = md.groups.get(subexp).and_then(|group| *group) else {
         return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
-    let (match_start, match_end) = match_group.as_pair();
-
     // String searches, and GNU-style `set-match-data` restores on buffers,
     // expose character positions. Engine-produced buffer match data stays on
     // Emacs byte positions until the Lisp boundary.
@@ -2529,29 +2508,30 @@ fn compute_replacement_with_syntax(
     let uses_buffer_byte_positions = md.uses_buffer_byte_positions();
     let (byte_start, byte_end) = if string_positions_are_chars {
         (
-            char_pos_to_byte(source, match_start),
-            char_pos_to_byte(source, match_end),
+            char_pos_to_byte(source, match_group.start()),
+            char_pos_to_byte(source, match_group.end()),
         )
     } else if buffer_positions_are_lisp_chars {
         // `set-match-data` restores buffer positions in Lisp character
         // coordinates, which are 1-based. Convert them back to 0-based
         // character offsets before slicing the storage string.
         (
-            char_pos_to_byte(source, match_start.saturating_sub(1)),
-            char_pos_to_byte(source, match_end.saturating_sub(1)),
+            char_pos_to_byte(source, match_group.start().saturating_sub(1)),
+            char_pos_to_byte(source, match_group.end().saturating_sub(1)),
         )
     } else if uses_buffer_byte_positions {
         (
             crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(
                 source,
-                match_start,
+                match_group.start(),
             ),
             crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(
-                source, match_end,
+                source,
+                match_group.end(),
             ),
         )
     } else {
-        (match_start, match_end)
+        (match_group.start(), match_group.end())
     };
 
     if byte_end > source.len() || byte_start > byte_end {

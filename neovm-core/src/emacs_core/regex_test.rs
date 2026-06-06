@@ -1,10 +1,14 @@
 use super::*;
-use crate::buffer::{Buffer, BufferId, BufferTextBackendKind};
+use crate::buffer::{Buffer, BufferId, BufferTextBackendKind, EmacsByteRange};
 use crate::emacs_core::value::Value;
 use crate::heap_types::LispString;
 
-fn group_pair(group: Option<MatchGroup>) -> Option<(usize, usize)> {
-    group.map(MatchGroup::as_pair)
+fn match_group(group: Option<MatchGroup>) -> Option<MatchGroup> {
+    group
+}
+
+fn match_group_byte_range(group: MatchGroup) -> EmacsByteRange {
+    EmacsByteRange::from_usize(group.start(), group.end())
 }
 
 fn extract_heap_match_string(md: &MatchData, group: usize) -> Option<String> {
@@ -12,10 +16,10 @@ fn extract_heap_match_string(md: &MatchData, group: usize) -> Option<String> {
         SearchedString::Heap(val) => SearchedString::Heap(*val),
         SearchedString::Owned(text) => SearchedString::Owned(text.clone()),
     };
-    let (start, end) = md.groups.get(group).and_then(|group| group_pair(*group))?;
+    let group = md.groups.get(group).and_then(|group| match_group(*group))?;
     let string = searched.as_lisp_string()?;
-    let byte_start = char_pos_to_byte_lisp_string(string, start);
-    let byte_end = char_pos_to_byte_lisp_string(string, end);
+    let byte_start = char_pos_to_byte_lisp_string(string, group.start());
+    let byte_end = char_pos_to_byte_lisp_string(string, group.end());
     string
         .slice(byte_start, byte_end)
         .and_then(|slice| slice.as_utf8_str().map(str::to_owned))
@@ -260,9 +264,9 @@ fn string_match_supported_capture_pattern_uses_backref_engine_semantics() {
         string_match_full_with_case_fold("\\([a-z]+\\)-\\([0-9]+\\)", "foo-123", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 7)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 3)));
-    assert_eq!(group_pair(md.groups[2]), Some((4, 7)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 7)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 3)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(4, 7)));
 }
 
 #[test]
@@ -273,7 +277,7 @@ fn string_match_noncapturing_group_pattern_uses_backref_engine_semantics() {
         string_match_full_with_case_fold("\\(?:foo\\|bar\\)+", "foobar", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 6)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 6)));
     assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
 }
 
@@ -284,12 +288,18 @@ fn string_match_postfix_repeats_whole_shy_group_with_multi_char_exactn() {
     let mut md = None;
     let result = string_match_full_with_case_fold("\\(?:ab\\)?c", "c", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 
     let mut md = None;
     let result = string_match_full_with_case_fold("\\(?:ab\\)*c", "abababc", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 7)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 7))
+    );
 
     let mut md = None;
     let result = string_match_full_with_case_fold("\\(?:ab\\)+c", "c", 0, false, &mut md);
@@ -310,8 +320,8 @@ fn string_match_org_list_item_optional_counter_clause_can_be_absent() {
     assert_eq!(result, Ok(Some(0)));
 
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 2)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 2)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 2)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 2)));
     assert_eq!(md.groups[2], None);
 }
 
@@ -328,9 +338,9 @@ fn string_match_syntax_class_pattern_uses_backref_engine_semantics() {
     );
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 10)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 6)));
-    assert_eq!(group_pair(md.groups[2]), Some((7, 10)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 10)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 6)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(7, 10)));
 }
 
 #[test]
@@ -340,7 +350,7 @@ fn string_match_word_syntax_class_pattern_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("\\sw+", "foo_bar", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -350,7 +360,7 @@ fn string_match_category_escape_pattern_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("\\c|.", "éx", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 2)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 2)));
 }
 
 #[test]
@@ -387,7 +397,7 @@ fn string_match_digit_escape_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("\\d+", "dddx", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -397,7 +407,7 @@ fn string_match_control_escape_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("a\\tb", "atb", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 // Regex audit #6: `\cX` category-spec covers the common Unicode
@@ -483,8 +493,8 @@ fn string_match_alternation_takes_leftmost_first_without_posix() {
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
     assert_eq!(
-        group_pair(md.groups[0]),
-        Some((0, 1)),
+        match_group(md.groups[0]),
+        Some(MatchGroup::new(0, 1)),
         "non-POSIX picks first alternative"
     );
 }
@@ -498,8 +508,8 @@ fn string_match_alternation_prefers_longest_under_posix_like_gnu() {
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
     assert_eq!(
-        group_pair(md.groups[0]),
-        Some((0, 3)),
+        match_group(md.groups[0]),
+        Some(MatchGroup::new(0, 3)),
         "POSIX picks the longest alternative"
     );
 }
@@ -511,8 +521,8 @@ fn string_match_grouped_alternation_leftmost_first_without_posix() {
     let result = string_match_full("\\(a\\|ab\\|abc\\)", "abcdef", 0, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 1)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 1)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 1)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 1)));
 }
 
 #[test]
@@ -529,8 +539,8 @@ fn string_match_grouped_alternation_longest_under_posix_like_gnu() {
     );
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -543,7 +553,10 @@ fn posix_longest_match_returns_match_when_non_posix_path_would_also_match() {
     let mut md = None;
     let result = string_match_full_with_case_fold_and_posix("foo", "foo", 0, false, true, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((0, 3)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 3))
+    );
 }
 
 // Regex audit #10: backslash is LITERAL inside a bracket expression
@@ -568,7 +581,7 @@ fn string_match_backslash_w_in_charset_is_literal_like_gnu() {
     let result = string_match_full_with_case_fold("[\\w-]+", "foo-bar!", 0, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((3, 4)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(3, 4)));
 }
 
 #[test]
@@ -609,7 +622,7 @@ fn string_match_posix_word_class_with_dash_range_matches_identifiers() {
     let result = string_match_full_with_case_fold("[[:word:]-]+", "foo-bar!", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 7)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 7)));
 }
 
 #[test]
@@ -619,7 +632,7 @@ fn string_match_posix_space_class_with_dash_range_matches_whitespace_runs() {
     let result = string_match_full_with_case_fold("[[:space:]-]+", " \tfoo", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 2)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 2)));
 }
 
 #[test]
@@ -628,7 +641,10 @@ fn string_match_leading_dash_before_posix_class_is_literal_like_gnu() {
     let mut md = None;
     let result = string_match_full_with_case_fold("[-[:alnum:]]", "-", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 }
 
 #[test]
@@ -637,12 +653,18 @@ fn string_match_literal_before_posix_class_is_not_dropped() {
     let mut md = None;
     let result = string_match_full_with_case_fold("[a[:digit:]]", "a", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 
     let mut md = None;
     let result = string_match_full_with_case_fold("[a[:digit:]]", "5", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 }
 
 #[test]
@@ -658,9 +680,9 @@ fn string_match_optional_lazy_posix_class_keeps_leftmost_match() {
     );
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 12)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 4)));
-    assert_eq!(group_pair(md.groups[2]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 12)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 4)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -676,10 +698,10 @@ fn string_match_loaddefs_prefixed_autoload_regexp_matches_gnu() {
     );
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 18)));
-    assert_eq!(group_pair(md.groups[1]), Some((6, 10)));
-    assert_eq!(group_pair(md.groups[2]), Some((6, 9)));
-    assert_eq!(group_pair(md.groups[3]), Some((10, 18)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 18)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(6, 10)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(6, 9)));
+    assert_eq!(match_group(md.groups[3]), Some(MatchGroup::new(10, 18)));
 }
 
 #[test]
@@ -689,7 +711,7 @@ fn string_match_lazy_quantifier_preserves_fallback_semantics() {
     let result = string_match_full_with_case_fold("a.*?b", "aXXbYYb", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 4)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 4)));
 }
 
 #[test]
@@ -699,7 +721,7 @@ fn string_match_lazy_plus_quantifier_prefers_shorter_match() {
     let result = string_match_full_with_case_fold("a.+?b", "aXXbYYb", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 4)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 4)));
 }
 
 #[test]
@@ -709,7 +731,7 @@ fn string_match_lazy_optional_quantifier_prefers_zero_width_choice() {
     let result = string_match_full_with_case_fold("ab??c", "abc", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -719,7 +741,7 @@ fn string_match_lazy_counted_quantifier_prefers_shorter_match() {
     let result = string_match_full_with_case_fold("a\\{2,4\\}?b", "aaaab", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 5)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 5)));
 }
 
 #[test]
@@ -729,7 +751,7 @@ fn string_match_open_interval_quantifier_matches_gnu_semantics() {
     let result = string_match_full_with_case_fold("a\\{,2\\}b", "aab", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -754,7 +776,7 @@ fn string_match_interval_question_suffix_uses_gnu_postfix_semantics() {
     let result = string_match_full_with_case_fold("a\\{2,4\\}?a", "aaaa", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 4)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 4)));
 }
 
 #[test]
@@ -764,12 +786,18 @@ fn string_match_interval_repeats_only_trailing_literal_like_gnu() {
     let mut md = None;
     let result = string_match_full_with_case_fold("ab\\{0,1\\}", "a", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 
     let mut md = None;
     let result = string_match_full_with_case_fold("ab\\{0\\}", "ab", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
-    assert_eq!(group_pair(md.expect("match data").groups[0]), Some((0, 1)));
+    assert_eq!(
+        match_group(md.expect("match data").groups[0]),
+        Some(MatchGroup::new(0, 1))
+    );
 }
 
 #[test]
@@ -780,9 +808,9 @@ fn string_match_explicit_numbered_group_preserves_group_slot() {
     assert_eq!(result, Ok(Some(2)));
     let md = md.expect("match data");
     assert_eq!(md.groups.len(), 10);
-    assert_eq!(group_pair(md.groups[0]), Some((2, 5)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(2, 5)));
     assert!(md.groups[1..9].iter().all(Option::is_none));
-    assert_eq!(group_pair(md.groups[9]), Some((2, 5)));
+    assert_eq!(match_group(md.groups[9]), Some(MatchGroup::new(2, 5)));
 }
 
 #[test]
@@ -792,7 +820,7 @@ fn string_match_symbol_boundary_pattern_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("\\_<foo\\_>", "x foo y", 0, false, &mut md);
     assert_eq!(result, Ok(Some(2)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((2, 5)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(2, 5)));
 }
 
 #[test]
@@ -803,7 +831,7 @@ fn string_match_posix_upper_class_folds_to_alpha_under_case_fold() {
         string_match_full_with_case_fold("[[:upper:]]+", "helloWORLDfoo", 0, true, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 13)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 13)));
 }
 
 #[test]
@@ -821,7 +849,7 @@ fn string_match_posix_upper_class_folds_to_alpha_on_lisp_string() {
     );
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 13)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 13)));
 }
 
 // Regex audit #7: the 4 previously missing POSIX classes
@@ -861,8 +889,8 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     assert!(matched, "[[:word:]]+ should match `foo_bar`");
     let md = md.unwrap();
     assert_eq!(
-        group_pair(md.groups[0]),
-        Some((0, 7)),
+        match_group(md.groups[0]),
+        Some(MatchGroup::new(0, 7)),
         "match should cover the whole `foo_bar`"
     );
 
@@ -874,8 +902,8 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     let matched = looking_at(&buf2, "[[:word:]]+", false, &mut md).expect("compile ok");
     assert!(matched);
     assert_eq!(
-        group_pair(md.unwrap().groups[0]),
-        Some((0, 3)),
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 3)),
         "without override, match stops at `_`"
     );
 }
@@ -891,12 +919,18 @@ fn posix_class_word_matches_ascii_letters_and_digits_but_not_punct() {
     let mut md = None;
     let r = string_match_full("[[:word:]]+", "foo42bar", 0, &mut md);
     assert_eq!(r, Ok(Some(0)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((0, 8)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 8))
+    );
 
     let mut md = None;
     let r = string_match_full("[[:word:]]+", "!!!abc!!!", 0, &mut md);
     assert_eq!(r, Ok(Some(3)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((3, 6)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(3, 6))
+    );
 
     // `_` is symbol, not word, in the standard table -> does not match.
     let mut md = None;
@@ -911,12 +945,18 @@ fn posix_class_alnum_and_alpha_match_multibyte_letters_like_gnu() {
     let mut md = None;
     let r = string_match_full("[[:alnum:]]+", "标签:tail", 0, &mut md);
     assert_eq!(r, Ok(Some(0)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((0, 2)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 2))
+    );
 
     let mut md = None;
     let r = string_match_full("[[:alpha:]]+", "任务42", 0, &mut md);
     assert_eq!(r, Ok(Some(0)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((0, 2)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 2))
+    );
 }
 
 #[test]
@@ -927,7 +967,10 @@ fn posix_class_nonascii_matches_only_chars_at_or_above_u0080() {
     assert_eq!(r, Ok(Some(3)));
     // `é` occupies one character slot (md positions are char indices
     // for string search).
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((3, 4)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(3, 4))
+    );
 
     // Pure ASCII input -> no match.
     let mut md = None;
@@ -941,7 +984,10 @@ fn posix_class_multibyte_matches_only_non_ascii_chars() {
     let mut md = None;
     let r = string_match_full("[[:multibyte:]]+", "abcé", 0, &mut md);
     assert_eq!(r, Ok(Some(3)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((3, 4)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(3, 4))
+    );
 
     let mut md = None;
     let r = string_match_full("[[:multibyte:]]", "x", 0, &mut md);
@@ -954,7 +1000,10 @@ fn posix_class_unibyte_matches_every_ascii_char() {
     let mut md = None;
     let r = string_match_full("[[:unibyte:]]+", "abc", 0, &mut md);
     assert_eq!(r, Ok(Some(0)));
-    assert_eq!(group_pair(md.unwrap().groups[0]), Some((0, 3)));
+    assert_eq!(
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(0, 3))
+    );
 }
 
 #[test]
@@ -1063,9 +1112,9 @@ fn owned_raw_unibyte_match_data_preserves_bytes() {
     let md = md.expect("match data");
     let searched = md.searched_string.expect("searched string");
     let string = searched.as_lisp_string().expect("lisp string");
-    let (start, end) = md.groups[0].expect("full match").as_pair();
-    let byte_start = char_pos_to_byte_lisp_string(string, start);
-    let byte_end = char_pos_to_byte_lisp_string(string, end);
+    let group = md.groups[0].expect("full match");
+    let byte_start = char_pos_to_byte_lisp_string(string, group.start());
+    let byte_end = char_pos_to_byte_lisp_string(string, group.end());
     let slice = string.slice(byte_start, byte_end).expect("slice");
     assert!(!slice.is_multibyte());
     assert_eq!(slice.as_bytes(), &[0xFF]);
@@ -1177,8 +1226,8 @@ fn string_match_bracket_section_anchor_pattern_matches_whole_string() {
         string_match_full_with_case_fold("\\`\\[\\([^]]+\\)\\]\\'", "[database]", 0, true, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 10)));
-    assert_eq!(group_pair(md.groups[1]), Some((1, 9)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 10)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(1, 9)));
 }
 
 #[test]
@@ -1188,7 +1237,7 @@ fn string_match_line_anchor_pattern_uses_backref_engine_semantics() {
     let result = string_match_full_with_case_fold("^foo$", "foo", 0, false, &mut md);
     assert_eq!(result, Ok(Some(0)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -1198,7 +1247,7 @@ fn string_match_line_anchor_pattern_respects_multiline_semantics() {
     let result = string_match_full_with_case_fold("^foo$", "a\nfoo\nb", 0, false, &mut md);
     assert_eq!(result, Ok(Some(2)));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((2, 5)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(2, 5)));
 }
 
 #[test]
@@ -1284,7 +1333,7 @@ fn string_match_basic() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((0, 5)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 5)));
     assert_eq!(md.searched_string_text(), Some("hello world".to_string()));
 }
 
@@ -1298,9 +1347,9 @@ fn string_match_with_groups() {
     assert_eq!(result.unwrap(), Some(0));
     let md = md.unwrap();
     assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
-    assert_eq!(group_pair(md.groups[0]), Some((0, 9)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 4))); // "user"
-    assert_eq!(group_pair(md.groups[2]), Some((5, 9))); // "host"
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 9)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 4))); // "user"
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(5, 9))); // "host"
 }
 
 #[test]
@@ -1311,8 +1360,8 @@ fn string_match_with_multibyte_group_literal() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(1));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((1, 2))); // "é" in character positions
-    assert_eq!(group_pair(md.groups[1]), Some((1, 2))); // capture group
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(1, 2))); // "é" in character positions
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(1, 2))); // capture group
 }
 
 #[test]
@@ -1332,7 +1381,7 @@ fn string_match_with_multibyte_literal_repetition() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(1));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((1, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(1, 3)));
 }
 
 #[test]
@@ -1343,7 +1392,7 @@ fn string_match_trivial_escaped_literal_uses_character_positions() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(1));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((1, 2)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(1, 2)));
 }
 
 #[test]
@@ -1354,8 +1403,8 @@ fn string_match_backreference_reuses_captured_text() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(2));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((2, 6)));
-    assert_eq!(group_pair(md.groups[1]), Some((2, 4)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(2, 6)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(2, 4)));
 }
 
 #[test]
@@ -1365,8 +1414,8 @@ fn looking_at_string_backreference_matches_at_start() {
     let matched = looking_at_string("\\(x\\)\\1\\1", "xxx!", false, &mut md).unwrap();
     assert!(matched);
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((0, 3)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 1)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 3)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 1)));
 }
 
 #[test]
@@ -1385,8 +1434,8 @@ fn re_search_forward_backreference_word_boundary() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(7));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((0, 7)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 7)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -1397,8 +1446,8 @@ fn string_match_backreference_with_char_class_group() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((0, 7)));
-    assert_eq!(group_pair(md.groups[1]), Some((0, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 7)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 3)));
 }
 
 #[test]
@@ -1408,8 +1457,8 @@ fn string_match_template_interpolation_pattern() {
     let result = string_match_full(r"{{\([^}]+\)}}", "x {{name}} y", 0, &mut md).unwrap();
     assert_eq!(result, Some(2));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((2, 10)));
-    assert_eq!(group_pair(md.groups[1]), Some((4, 8)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(2, 10)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(4, 8)));
 }
 
 #[test]
@@ -1425,9 +1474,9 @@ fn string_match_template_foreach_pattern() {
     .unwrap();
     assert_eq!(result, Some(7));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[1]), Some((17, 18)));
-    assert_eq!(group_pair(md.groups[2]), Some((22, 27)));
-    assert_eq!(group_pair(md.groups[3]), Some((29, 37)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(17, 18)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(22, 27)));
+    assert_eq!(match_group(md.groups[3]), Some(MatchGroup::new(29, 37)));
 }
 
 #[test]
@@ -1443,9 +1492,9 @@ fn string_match_template_conditional_pattern() {
     .unwrap();
     assert_eq!(result, Some(0));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[1]), Some((5, 10)));
-    assert_eq!(group_pair(md.groups[2]), Some((12, 19)));
-    assert_eq!(group_pair(md.groups[3]), Some((27, 33)));
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(5, 10)));
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(12, 19)));
+    assert_eq!(match_group(md.groups[3]), Some(MatchGroup::new(27, 33)));
 }
 
 #[test]
@@ -1476,7 +1525,7 @@ fn string_match_emacs_alternation() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(5));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[1]), Some((5, 8))); // "bar"
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(5, 8))); // "bar"
 }
 
 // -----------------------------------------------------------------------
@@ -1797,7 +1846,7 @@ fn search_forward_basic() {
     assert_eq!(result.unwrap(), Some(11)); // end of "world"
     assert_eq!(buf.pt, 11);
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((6, 11)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(6, 11)));
 }
 
 #[test]
@@ -1868,8 +1917,11 @@ fn search_forward_case_fold_true_ascii_literal_in_non_ascii_buffer() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some("α GENERATED-AUTOLOAD-FILE".len()));
     assert_eq!(
-        group_pair(md.unwrap().groups[0]),
-        Some(("α ".len(), "α GENERATED-AUTOLOAD-FILE".len()))
+        match_group(md.unwrap().groups[0]),
+        Some(MatchGroup::new(
+            "α ".len(),
+            "α GENERATED-AUTOLOAD-FILE".len(),
+        ))
     );
 }
 
@@ -1893,7 +1945,7 @@ fn re_search_forward_trivial_regexp_follows_literal_case_fold_path() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(2));
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((0, 2)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 2)));
 }
 
 #[test]
@@ -1985,7 +2037,7 @@ fn re_search_forward_basic() {
     assert_eq!(result.unwrap(), Some(7)); // end of "123"
     assert_eq!(buf.pt, 7);
     let md = md.unwrap();
-    assert_eq!(group_pair(md.groups[0]), Some((4, 7)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(4, 7)));
 }
 
 #[test]
@@ -2005,8 +2057,8 @@ fn re_search_forward_with_groups() {
     assert!(result.is_ok());
     let md = md.unwrap();
     assert_eq!(md.groups.len(), GNU_SEARCH_REGS_BASE_CAPACITY);
-    assert_eq!(group_pair(md.groups[1]), Some((0, 4))); // "name"
-    assert_eq!(group_pair(md.groups[2]), Some((6, 10))); // "John"
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 4))); // "name"
+    assert_eq!(match_group(md.groups[2]), Some(MatchGroup::new(6, 10))); // "John"
 }
 
 #[test]
@@ -2026,9 +2078,8 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     .expect("first search should succeed");
     assert_eq!(first, Some("alpha=1".len()));
     let first_md = md.as_ref().expect("match data for first search");
-    let (s1, e1) = first_md.groups[1].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        buf.buffer_substring_range(match_group_byte_range(first_md.groups[1].unwrap())),
         "alpha"
     );
 
@@ -2043,14 +2094,12 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     .expect("second search should succeed");
     assert_eq!(second, Some("alpha=1\nbeta=2".len()));
     let second_md = md.as_ref().expect("match data for second search");
-    let (s1, e1) = second_md.groups[1].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        buf.buffer_substring_range(match_group_byte_range(second_md.groups[1].unwrap())),
         "beta"
     );
-    let (s2, e2) = second_md.groups[2].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s2, e2)),
+        buf.buffer_substring_range(match_group_byte_range(second_md.groups[2].unwrap())),
         "2"
     );
 }
@@ -2114,7 +2163,7 @@ fn re_search_backward_finds_nullable_match_at_point() {
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.pt, 3);
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((3, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(3, 3)));
 }
 
 #[test]
@@ -2135,15 +2184,18 @@ fn re_search_backward_log_line_loop_progresses() {
         else {
             break;
         };
-        positions.push((pos, md.as_ref().and_then(|data| group_pair(data.groups[0]))));
+        positions.push((
+            pos,
+            md.as_ref().and_then(|data| match_group(data.groups[0])),
+        ));
     }
 
     assert_eq!(
         positions,
         vec![
-            (74, Some((74, 117))),
-            (32, Some((32, 73))),
-            (0, Some((0, 31)))
+            (74, Some(MatchGroup::new(74, 117))),
+            (32, Some(MatchGroup::new(32, 73))),
+            (0, Some(MatchGroup::new(0, 31)))
         ]
     );
 }
@@ -2158,7 +2210,7 @@ fn re_search_forward_finds_nullable_match_at_buffer_end() {
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.pt, 3);
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((3, 3)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(3, 3)));
 }
 
 // -----------------------------------------------------------------------
@@ -2246,7 +2298,7 @@ fn looking_at_character_class_backslash_range_like_gnu() {
     let result = looking_at(&buf, "[+\\-*/=<>]", false, &mut md);
     assert_eq!(result, Ok(true));
     let md = md.expect("match data");
-    assert_eq!(group_pair(md.groups[0]), Some((0, 1)));
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 1)));
 
     let mut md = None;
     let buf = make_test_buffer("*");
@@ -2447,23 +2499,20 @@ fn search_forward_then_match_string() {
     let md = md.as_ref().unwrap();
 
     // match-string 0 = "quick brown"
-    let (s0, e0) = md.groups[0].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s0, e0)),
+        buf.buffer_substring_range(match_group_byte_range(md.groups[0].unwrap())),
         "quick brown"
     );
 
     // match-string 1 = "quick"
-    let (s1, e1) = md.groups[1].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s1, e1)),
+        buf.buffer_substring_range(match_group_byte_range(md.groups[1].unwrap())),
         "quick"
     );
 
     // match-string 2 = "brown"
-    let (s2, e2) = md.groups[2].unwrap().as_pair();
     assert_eq!(
-        buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(s2, e2)),
+        buf.buffer_substring_range(match_group_byte_range(md.groups[2].unwrap())),
         "brown"
     );
 }
@@ -2477,16 +2526,16 @@ fn string_match_then_match_data() {
     let string = md.searched_string_text().unwrap();
 
     // match-beginning 0
-    let (s0, _e0) = md.groups[0].unwrap().as_pair();
-    assert_eq!(s0, 6); // "2024-01"
+    let group0 = md.groups[0].unwrap();
+    assert_eq!(group0.start(), 6); // "2024-01"
 
     // Group 1: "2024"
-    let (s1, e1) = md.groups[1].unwrap().as_pair();
-    assert_eq!(&string[s1..e1], "2024");
+    let group1 = md.groups[1].unwrap();
+    assert_eq!(&string[group1.start()..group1.end()], "2024");
 
     // Group 2: "01"
-    let (s2, e2) = md.groups[2].unwrap().as_pair();
-    assert_eq!(&string[s2..e2], "01");
+    let group2 = md.groups[2].unwrap();
+    assert_eq!(&string[group2.start()..group2.end()], "01");
 }
 
 #[test]
@@ -2496,7 +2545,7 @@ fn string_match_optional_group() {
     // Pattern with an optional group: \(foo\)\(bar\)?
     let _ = string_match_full("\\(foo\\)\\(bar\\)?", "fooXYZ", 0, &mut md);
     let md = md.as_ref().unwrap();
-    assert_eq!(group_pair(md.groups[1]), Some((0, 3))); // "foo"
+    assert_eq!(match_group(md.groups[1]), Some(MatchGroup::new(0, 3))); // "foo"
     assert_eq!(md.groups[2], None); // optional group didn't match
 }
 
@@ -2512,7 +2561,9 @@ fn string_match_start_offset_respects_real_line_start() {
 
     let md = md.as_ref().expect("match data");
     let searched = md.searched_string_text().expect("searched string");
-    let (s1, e1) = md.groups[1].unwrap().as_pair();
+    let group1 = md.groups[1].unwrap();
+    let s1 = group1.start();
+    let e1 = group1.end();
     let byte_s1 = searched
         .char_indices()
         .nth(s1)

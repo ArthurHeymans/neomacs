@@ -7924,13 +7924,8 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
     builtin_set_match_data(&mut eval, vec![saved]).expect("restore GNU-style buffer positions");
     let restored = eval.match_data.as_ref().expect("restored match data");
     assert_eq!(
-        restored
-            .groups
-            .first()
-            .copied()
-            .flatten()
-            .map(crate::emacs_core::regex::MatchGroup::as_pair),
-        Some((1, 6))
+        restored.groups.first().copied().flatten(),
+        Some(crate::emacs_core::regex::MatchGroup::new(1, 6))
     );
     assert!(restored.searched_buffer.is_some());
     assert!(!restored.buffer_positions_are_bytes);

@@ -251,7 +251,7 @@ fn isearch_forward_search_update_finds_match() {
     mgr.begin_search(SearchDirection::Forward, false, 0);
     mgr.set_string(utf8_ls("world"));
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((6, 11)));
+    assert_eq!(result, Some(MatchGroup::new(6, 11)));
     assert!(mgr.state().unwrap().success);
 }
 
@@ -277,11 +277,11 @@ fn isearch_forward_search_next_advances() {
 
     // First search_update finds first occurrence
     let r1 = mgr.search_update(text);
-    assert_eq!(r1.map(MatchGroup::as_pair), Some((0, 3)));
+    assert_eq!(r1, Some(MatchGroup::new(0, 3)));
 
     // search_next moves to next occurrence
     let r2 = mgr.search_next(text);
-    assert_eq!(r2.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(r2, Some(MatchGroup::new(8, 11)));
 }
 
 // -----------------------------------------------------------------------
@@ -297,7 +297,7 @@ fn isearch_backward_search_update() {
     mgr.set_string(utf8_ls("aaa"));
     let result = mgr.search_update(text);
     // Backward from origin=11, should find last "aaa" at 8
-    assert_eq!(result.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(result, Some(MatchGroup::new(8, 11)));
 }
 
 #[test]
@@ -309,11 +309,11 @@ fn isearch_backward_search_next() {
     mgr.set_string(utf8_ls("aaa"));
 
     let r1 = mgr.search_update(text);
-    assert_eq!(r1.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(r1, Some(MatchGroup::new(8, 11)));
 
     // search_next backward should find the earlier "aaa"
     let r2 = mgr.search_next(text);
-    assert_eq!(r2.map(MatchGroup::as_pair), Some((0, 3)));
+    assert_eq!(r2, Some(MatchGroup::new(0, 3)));
 }
 
 // -----------------------------------------------------------------------
@@ -331,7 +331,7 @@ fn isearch_forward_wraps() {
 
     // search_update: forward from origin=8, no "aaa" after 8, wraps to find at 0
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((0, 3)));
+    assert_eq!(result, Some(MatchGroup::new(0, 3)));
     assert!(mgr.state().unwrap().wrapped);
 }
 
@@ -345,7 +345,7 @@ fn isearch_backward_wraps() {
     mgr.set_string(utf8_ls("ccc"));
 
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(result, Some(MatchGroup::new(8, 11)));
     assert!(mgr.state().unwrap().wrapped);
 }
 
@@ -387,7 +387,7 @@ fn isearch_case_fold_auto() {
     mgr.set_string(utf8_ls("hello"));
     let result = mgr.search_update(text);
     // Should find "Hello" at 0 (case-folded)
-    assert_eq!(result.map(MatchGroup::as_pair), Some((0, 5)));
+    assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
 #[test]
@@ -399,7 +399,7 @@ fn isearch_case_fold_auto_uppercase_exact() {
     // Uppercase letter in search — should NOT fold
     mgr.set_string(utf8_ls("Hello"));
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((12, 17)));
+    assert_eq!(result, Some(MatchGroup::new(12, 17)));
 }
 
 // -----------------------------------------------------------------------
@@ -414,7 +414,7 @@ fn isearch_regexp_forward() {
     mgr.begin_search(SearchDirection::Forward, true, 0);
     mgr.set_string(utf8_ls("[0-9]+"));
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((4, 7)));
+    assert_eq!(result, Some(MatchGroup::new(4, 7)));
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn isearch_regexp_backward() {
     mgr.begin_search(SearchDirection::Backward, true, text.len());
     mgr.set_string(utf8_ls("[0-9]+"));
     let result = mgr.search_update(text);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((12, 15)));
+    assert_eq!(result, Some(MatchGroup::new(12, 15)));
 }
 
 // -----------------------------------------------------------------------
@@ -442,9 +442,9 @@ fn compute_lazy_matches_literal() {
     mgr.compute_lazy_matches(text, 0, text.len());
     let matches = &mgr.state().unwrap().lazy_matches;
     assert_eq!(matches.len(), 3);
-    assert_eq!(matches[0], (0, 2));
-    assert_eq!(matches[1], (6, 8));
-    assert_eq!(matches[2], (12, 14));
+    assert_eq!(matches[0], MatchGroup::new(0, 2));
+    assert_eq!(matches[1], MatchGroup::new(6, 8));
+    assert_eq!(matches[2], MatchGroup::new(12, 14));
 }
 
 #[test]
@@ -457,8 +457,8 @@ fn compute_lazy_matches_regexp() {
     mgr.compute_lazy_matches(text, 0, text.len());
     let matches = &mgr.state().unwrap().lazy_matches;
     assert_eq!(matches.len(), 2);
-    assert_eq!(matches[0], (4, 7));
-    assert_eq!(matches[1], (12, 15));
+    assert_eq!(matches[0], MatchGroup::new(4, 7));
+    assert_eq!(matches[1], MatchGroup::new(12, 15));
 }
 
 #[test]
@@ -472,7 +472,7 @@ fn compute_lazy_matches_visible_region() {
     mgr.compute_lazy_matches(text, 4, 15);
     let matches = &mgr.state().unwrap().lazy_matches;
     assert_eq!(matches.len(), 1);
-    assert_eq!(matches[0], (8, 11));
+    assert_eq!(matches[0], MatchGroup::new(8, 11));
 }
 
 #[test]
@@ -643,13 +643,13 @@ fn query_replace_find_next_basic() {
     mgr.begin(utf8_ls("foo"), utf8_ls("qux"), false);
 
     let r1 = mgr.find_next(text, 0);
-    assert_eq!(r1.map(MatchGroup::as_pair), Some((0, 3)));
+    assert_eq!(r1, Some(MatchGroup::new(0, 3)));
 
     let r2 = mgr.find_next(text, 3);
-    assert_eq!(r2.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(r2, Some(MatchGroup::new(8, 11)));
 
     let r3 = mgr.find_next(text, 11);
-    assert_eq!(r3.map(MatchGroup::as_pair), Some((16, 19)));
+    assert_eq!(r3, Some(MatchGroup::new(16, 19)));
 
     let r4 = mgr.find_next(text, 19);
     assert!(r4.is_none());
@@ -663,7 +663,7 @@ fn query_replace_find_next_in_region() {
     mgr.begin_in_region(utf8_ls("foo"), utf8_ls("qux"), false, 4, 15);
 
     let r1 = mgr.find_next(text, 0);
-    assert_eq!(r1.map(MatchGroup::as_pair), Some((8, 11)));
+    assert_eq!(r1, Some(MatchGroup::new(8, 11)));
 
     // Next "foo" is at 16 which is beyond region_end=15
     let r2 = mgr.find_next(text, 11);
@@ -678,10 +678,10 @@ fn query_replace_find_next_regexp() {
     mgr.begin(utf8_ls("[0-9]+"), utf8_ls("NUM"), true);
 
     let r1 = mgr.find_next(text, 0);
-    assert_eq!(r1.map(MatchGroup::as_pair), Some((4, 7)));
+    assert_eq!(r1, Some(MatchGroup::new(4, 7)));
 
     let r2 = mgr.find_next(text, 7);
-    assert_eq!(r2.map(MatchGroup::as_pair), Some((12, 15)));
+    assert_eq!(r2, Some(MatchGroup::new(12, 15)));
 }
 
 // -----------------------------------------------------------------------
@@ -927,7 +927,7 @@ fn find_match_literal_forward() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
     let result = find_match(text, "hello", 0, true, false, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((0, 5)));
+    assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
 #[test]
@@ -935,7 +935,7 @@ fn find_match_literal_forward_from_offset() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
     let result = find_match(text, "hello", 1, true, false, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((12, 17)));
+    assert_eq!(result, Some(MatchGroup::new(12, 17)));
 }
 
 #[test]
@@ -943,7 +943,7 @@ fn find_match_literal_backward() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
     let result = find_match(text, "hello", text.len(), false, false, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((12, 17)));
+    assert_eq!(result, Some(MatchGroup::new(12, 17)));
 }
 
 #[test]
@@ -951,7 +951,7 @@ fn find_match_literal_backward_from_middle() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
     let result = find_match(text, "hello", 10, false, false, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((0, 5)));
+    assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
 #[test]
@@ -959,7 +959,7 @@ fn find_match_case_fold() {
     crate::test_utils::init_test_tracing();
     let text = "Hello World";
     let result = find_match(text, "hello", 0, true, false, true);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((0, 5)));
+    assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
 #[test]
@@ -975,7 +975,7 @@ fn find_match_regexp_forward() {
     crate::test_utils::init_test_tracing();
     let text = "foo 123 bar";
     let result = find_match(text, "[0-9]+", 0, true, true, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((4, 7)));
+    assert_eq!(result, Some(MatchGroup::new(4, 7)));
 }
 
 #[test]
@@ -983,7 +983,7 @@ fn find_match_regexp_backward() {
     crate::test_utils::init_test_tracing();
     let text = "foo 123 bar 456";
     let result = find_match(text, "[0-9]+", text.len(), false, true, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((12, 15)));
+    assert_eq!(result, Some(MatchGroup::new(12, 15)));
 }
 
 #[test]
@@ -1005,7 +1005,7 @@ fn find_match_at_boundary() {
     crate::test_utils::init_test_tracing();
     let text = "abcdef";
     let result = find_match(text, "def", 3, true, false, false);
-    assert_eq!(result.map(MatchGroup::as_pair), Some((3, 6)));
+    assert_eq!(result, Some(MatchGroup::new(3, 6)));
 }
 
 #[test]
