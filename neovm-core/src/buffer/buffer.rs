@@ -1665,10 +1665,8 @@ pub struct Buffer {
     pub(crate) base_buffer: Option<BufferId>,
     /// The underlying text storage.
     text: BufferText,
-    /// Point — the current cursor character position.
-    pub(crate) pt: usize,
-    /// Point — the current cursor byte position.
-    pub(crate) pt_byte: usize,
+    /// Point — paired character and Emacs-byte cursor position.
+    pub(crate) point: TextPositionAnchor,
     /// GNU `BVAR(buf, mark)` — a real Lisp_Marker.  This IS the mark;
     /// there are no separate mark position fields (matching GNU's design).
     /// The marker tracks its own position through the chain; read it via
@@ -1677,14 +1675,10 @@ pub struct Buffer {
     /// Cached raw pointer to the mark MarkerObj, for fast position reads
     /// and GC root tracing (mirrors BufferStateMarkers pointers).
     pub(crate) mark_marker_ptr: *mut crate::tagged::header::MarkerObj,
-    /// Beginning of accessible (narrowed) portion (char pos, inclusive).
-    pub(crate) begv: usize,
-    /// Beginning of accessible (narrowed) portion (byte pos, inclusive).
-    pub(crate) begv_byte: usize,
-    /// End of accessible (narrowed) portion (char pos, exclusive).
-    pub(crate) zv: usize,
-    /// End of accessible (narrowed) portion (byte pos, exclusive).
-    pub(crate) zv_byte: usize,
+    /// Beginning of accessible (narrowed) portion, inclusive.
+    pub(crate) accessible_start: TextPositionAnchor,
+    /// End of accessible (narrowed) portion, exclusive.
+    pub(crate) accessible_end: TextPositionAnchor,
     /// GNU `BUF_AUTOSAVE_MODIFF`: recent auto-save state is
     /// `save_modiff < autosave_modified_tick`.
     pub(crate) autosave_modified_tick: i64,
@@ -1771,12 +1765,9 @@ impl Buffer {
 
     fn swap_owned_text_state_with(&mut self, other: &mut Self) {
         mem::swap(&mut self.text, &mut other.text);
-        mem::swap(&mut self.pt, &mut other.pt);
-        mem::swap(&mut self.pt_byte, &mut other.pt_byte);
-        mem::swap(&mut self.begv, &mut other.begv);
-        mem::swap(&mut self.begv_byte, &mut other.begv_byte);
-        mem::swap(&mut self.zv, &mut other.zv);
-        mem::swap(&mut self.zv_byte, &mut other.zv_byte);
+        mem::swap(&mut self.point, &mut other.point);
+        mem::swap(&mut self.accessible_start, &mut other.accessible_start);
+        mem::swap(&mut self.accessible_end, &mut other.accessible_end);
         mem::swap(&mut self.mark_marker_id, &mut other.mark_marker_id);
         mem::swap(&mut self.mark_marker_ptr, &mut other.mark_marker_ptr);
         mem::swap(&mut self.state_markers, &mut other.state_markers);
@@ -1829,14 +1820,11 @@ impl Buffer {
             last_name: Value::NIL,
             base_buffer: None,
             text: BufferText::new_with_backend_kind(text_backend_kind),
-            pt: 0,
-            pt_byte: 0,
+            point: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
             mark_marker_id: None,
             mark_marker_ptr: std::ptr::null_mut(),
-            begv: 0,
-            begv_byte: 0,
-            zv: 0,
-            zv_byte: 0,
+            accessible_start: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
+            accessible_end: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
             autosave_modified_tick: 1,
             last_window_start: 1,
             last_selected_window: None,
@@ -1876,14 +1864,20 @@ impl Buffer {
             last_name: parts.last_name,
             base_buffer: parts.base_buffer,
             text: parts.text,
-            pt: parts.pt,
-            pt_byte: parts.pt_byte,
+            point: TextPositionAnchor::new(
+                CharPos0::new(parts.pt),
+                EmacsBytePos::new(parts.pt_byte),
+            ),
             mark_marker_id: parts.mark_marker_id,
             mark_marker_ptr: parts.mark_marker_ptr,
-            begv: parts.begv,
-            begv_byte: parts.begv_byte,
-            zv: parts.zv,
-            zv_byte: parts.zv_byte,
+            accessible_start: TextPositionAnchor::new(
+                CharPos0::new(parts.begv),
+                EmacsBytePos::new(parts.begv_byte),
+            ),
+            accessible_end: TextPositionAnchor::new(
+                CharPos0::new(parts.zv),
+                EmacsBytePos::new(parts.zv_byte),
+            ),
             autosave_modified_tick: parts.autosave_modified_tick,
             last_window_start: parts.last_window_start,
             last_selected_window: parts.last_selected_window,
@@ -2100,12 +2094,12 @@ impl Buffer {
 
     /// Current point as an Emacs byte position.
     pub fn point_emacs_byte_pos(&self) -> EmacsBytePos {
-        EmacsBytePos::new(self.pt_byte)
+        self.point.emacs_byte_pos()
     }
 
     /// Current point as a paired character/byte anchor.
     pub fn point_anchor(&self) -> TextPositionAnchor {
-        TextPositionAnchor::new(self.point_char_pos(), self.point_emacs_byte_pos())
+        self.point
     }
 
     /// Beginning of the accessible portion as a paired character/byte anchor.
@@ -2139,7 +2133,7 @@ impl Buffer {
 
     /// Current point converted to a character position.
     pub fn point_char_pos(&self) -> CharPos0 {
-        CharPos0::new(self.pt)
+        self.point.char_pos()
     }
 
     /// Current point as a 1-based Lisp character position.
@@ -2149,12 +2143,12 @@ impl Buffer {
 
     /// Beginning of the accessible portion (Emacs byte position).
     pub fn point_min_emacs_byte_pos(&self) -> EmacsBytePos {
-        EmacsBytePos::new(self.begv_byte)
+        self.accessible_start.emacs_byte_pos()
     }
 
     /// Beginning of the accessible portion (character position).
     pub fn point_min_char_pos(&self) -> CharPos0 {
-        CharPos0::new(self.begv)
+        self.accessible_start.char_pos()
     }
 
     /// Beginning of the accessible portion as a 1-based Lisp character position.
@@ -2164,12 +2158,12 @@ impl Buffer {
 
     /// End of the accessible portion (Emacs byte position).
     pub fn point_max_emacs_byte_pos(&self) -> EmacsBytePos {
-        EmacsBytePos::new(self.zv_byte)
+        self.accessible_end.emacs_byte_pos()
     }
 
     /// End of the accessible portion (character position).
     pub fn point_max_char_pos(&self) -> CharPos0 {
-        CharPos0::new(self.zv)
+        self.accessible_end.char_pos()
     }
 
     /// End of the accessible portion as a 1-based Lisp character position.
@@ -2771,7 +2765,7 @@ impl Buffer {
         let end = self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(e));
         self.set_accessible_region_anchors_unchecked(start, end);
         // Clamp point into the new accessible region.
-        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
+        self.goto_emacs_byte_pos(self.point_emacs_byte_pos());
     }
 
     /// Set the accessible byte range and point as one coherent buffer state.
@@ -2808,7 +2802,7 @@ impl Buffer {
             snapshot.start_anchor(),
             snapshot.end_anchor(),
         );
-        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
+        self.goto_emacs_byte_pos(self.point_emacs_byte_pos());
     }
 
     pub fn restore_accessible_region_with_current_full_end(
@@ -2821,7 +2815,7 @@ impl Buffer {
                 self.total_emacs_byte_len().get(),
             )),
         );
-        self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
+        self.goto_emacs_byte_pos(self.point_emacs_byte_pos());
     }
 
     pub fn register_marker_at_emacs_byte_pos(
@@ -2864,10 +2858,13 @@ impl Buffer {
     }
 
     fn accessible_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
-        let clamped = pos.get().clamp(self.begv_byte, self.zv_byte);
-        if clamped == self.begv_byte {
+        let clamped = pos.get().clamp(
+            self.point_min_emacs_byte_pos().get(),
+            self.point_max_emacs_byte_pos().get(),
+        );
+        if clamped == self.point_min_emacs_byte_pos().get() {
             self.point_min_anchor()
-        } else if clamped == self.zv_byte {
+        } else if clamped == self.point_max_emacs_byte_pos().get() {
             self.point_max_anchor()
         } else {
             self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(clamped))
@@ -2875,8 +2872,7 @@ impl Buffer {
     }
 
     fn set_point_anchor_unchecked(&mut self, anchor: TextPositionAnchor) {
-        self.pt_byte = anchor.emacs_byte_pos_usize();
-        self.pt = anchor.char_pos_usize();
+        self.point = anchor;
     }
 
     fn set_accessible_region_anchors_unchecked(
@@ -2884,10 +2880,8 @@ impl Buffer {
         start: TextPositionAnchor,
         end: TextPositionAnchor,
     ) {
-        self.begv_byte = start.emacs_byte_pos_usize();
-        self.begv = start.char_pos_usize();
-        self.zv_byte = end.emacs_byte_pos_usize();
-        self.zv = end.char_pos_usize();
+        self.accessible_start = start;
+        self.accessible_end = end;
     }
 
     fn canonical_marker_anchor(&self, position: TextPositionAnchor) -> TextPositionAnchor {
@@ -4084,7 +4078,7 @@ impl BufferManager {
         indirect.text = shared_text;
         indirect.undo_state = root.undo_state.clone();
         indirect.narrow_to_emacs_byte_range(root.accessible_emacs_byte_range());
-        indirect.goto_emacs_byte_pos(EmacsBytePos::new(root.pt_byte));
+        indirect.goto_emacs_byte_pos(root.point_emacs_byte_pos());
         indirect.set_multibyte_value(root.get_multibyte());
         indirect.autosave_modified_tick = root.autosave_modified_tick;
         indirect.slots[BUFFER_SLOT_FILE_NAME] = Value::NIL;
@@ -5069,14 +5063,14 @@ impl BufferManager {
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
         buf.undo_state
-            .set_point_before_command_or_undo(Some(CharPos0::new(buf.pt)));
+            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.undo_state
-            .set_point_before_command_or_undo(Some(CharPos0::new(buf.pt)));
+            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
         Some(())
     }
 

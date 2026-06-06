@@ -1742,7 +1742,11 @@ fn vm_unbind_restores_saved_excursion_point() {
             buffer.insert("abcdef");
             buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2));
         }
-        let saved_point = buffers.get(buffer_id).expect("buffer").pt;
+        let saved_point = buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .point_char_pos()
+            .get();
 
         let mut func = ByteCodeFunction::new(LambdaParams {
             required: vec![],
@@ -1769,7 +1773,14 @@ fn vm_unbind_restores_saved_excursion_point() {
         buffers.current_buffer().map(|buffer| buffer.id),
         Some(buffer_id)
     );
-    assert_eq!(buffers.get(buffer_id).expect("buffer").pt, saved_point);
+    assert_eq!(
+        buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .point_char_pos()
+            .get(),
+        saved_point
+    );
 }
 
 #[test]
@@ -1834,7 +1845,11 @@ fn vm_unbind_restores_saved_restriction() {
             buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
         }
         let buffer = buffers.get(buffer_id).expect("buffer");
-        let saved = (buffer_id, buffer.begv, buffer.zv);
+        let saved = (
+            buffer_id,
+            buffer.point_min_char_pos().get(),
+            buffer.point_max_char_pos().get(),
+        );
 
         let mut func = ByteCodeFunction::new(LambdaParams {
             required: vec![],
@@ -1860,8 +1875,8 @@ fn vm_unbind_restores_saved_restriction() {
 
     assert_eq!(result, Value::NIL);
     let buffer = buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.begv, saved_begv);
-    assert_eq!(buffer.zv, saved_zv);
+    assert_eq!(buffer.point_min_char_pos().get(), saved_begv);
+    assert_eq!(buffer.point_max_char_pos().get(), saved_zv);
 }
 
 #[test]
@@ -4273,7 +4288,7 @@ fn vm_navigation_predicates_and_line_positions_use_shared_narrowed_buffer_state(
                 buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
                     start, end,
                 ));
-                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buffer.begv));
+                buffer.goto_emacs_byte_pos(buffer.point_min_emacs_byte_pos());
             },
         ),
         "OK ((t nil t nil 4 6) (nil t nil t 4 6))"
@@ -7912,7 +7927,7 @@ fn vm_char_primitives_and_buffer_substring_use_narrowed_current_buffer_state() {
                 buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
                     start, end,
                 ));
-                buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(buffer.begv));
+                buffer.goto_emacs_byte_pos(buffer.point_min_emacs_byte_pos());
             },
         ),
         r#"OK (108 0 "llo, " "llo, " args-out-of-range)"#

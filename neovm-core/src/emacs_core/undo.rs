@@ -362,9 +362,10 @@ fn primitive_undo_inner(
                 (ValueKind::Nil, ValueKind::Fixnum(len1)) => {
                     let len = len1.max(0) as usize;
                     let delete_range = if let Some(buf) = ctx.buffers.get(buf_id) {
-                        if buf.pt >= len {
-                            let del_start_char = buf.pt - len;
-                            let del_end_char = buf.pt;
+                        let point = buf.point_char_pos().get();
+                        if point >= len {
+                            let del_start_char = point - len;
+                            let del_end_char = point;
                             let accessible = buf.accessible_char_region();
                             if accessible.contains_boundary_usize(del_start_char)
                                 && accessible.contains_boundary_usize(del_end_char)

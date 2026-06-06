@@ -1480,8 +1480,7 @@ fn insert_coding_result(
     if let Some(point) = restore_point
         && let Some(buf) = ctx.buffers.get_mut(buffer_id)
     {
-        buf.pt_byte = point.emacs_byte_pos().get();
-        buf.pt = point.char_pos().get();
+        buf.set_point_anchor(point);
     }
     Ok(())
 }
@@ -1548,10 +1547,7 @@ fn builtin_coding_string_in_context(
     let Some(buffer_id) = destination else {
         return Ok(result);
     };
-    let restore_point = ctx
-        .buffers
-        .get(buffer_id)
-        .map(|buf| TextPositionAnchor::new(CharPos0::new(buf.pt), EmacsBytePos::new(buf.pt_byte)));
+    let restore_point = ctx.buffers.get(buffer_id).map(|buf| buf.point_anchor());
     if restore_point.is_none() {
         return Err(signal(
             "error",
@@ -1684,9 +1680,7 @@ fn builtin_coding_region(
             Ok(Value::fixnum(produced_chars as i64))
         }
         Some(Some(buffer_id)) => {
-            let restore_point = ctx.buffers.get(buffer_id).map(|buf| {
-                TextPositionAnchor::new(CharPos0::new(buf.pt), EmacsBytePos::new(buf.pt_byte))
-            });
+            let restore_point = ctx.buffers.get(buffer_id).map(|buf| buf.point_anchor());
             if restore_point.is_none() {
                 return Err(signal(
                     "error",

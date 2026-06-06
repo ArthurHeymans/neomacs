@@ -792,14 +792,14 @@ fn point_char_converts_byte_to_char_pos() {
 fn gnu_style_buffer_fields_track_char_and_byte_positions() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("éz");
-    assert_eq!(buf.begv, 0);
-    assert_eq!(buf.begv_byte, 0);
-    assert_eq!(buf.zv, 2);
-    assert_eq!(buf.zv_byte, 3);
+    assert_eq!(buf.point_min_char_pos().get(), 0);
+    assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
+    assert_eq!(buf.point_max_char_pos().get(), 2);
+    assert_eq!(buf.point_max_emacs_byte_pos().get(), 3);
 
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new('é'.len_utf8()));
-    assert_eq!(buf.pt, 1);
-    assert_eq!(buf.pt_byte, 2);
+    assert_eq!(buf.point_char_pos().get(), 1);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 2);
 
     buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     assert_eq!(
@@ -1076,9 +1076,9 @@ fn mark_char_tracks_multibyte_edits() {
 fn delete_region_adjusts_zv() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
-    assert_eq!(buf.zv, 6);
+    assert_eq!(buf.point_max_char_pos().get(), 6);
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
-    assert_eq!(buf.zv, 4);
+    assert_eq!(buf.point_max_char_pos().get(), 4);
 }
 
 #[test]

@@ -4433,7 +4433,7 @@ fn replace_accessible_portion_for_insert_file_contents(
             range,
             edit_range.char_start().get(),
             edit_range.char_end().get(),
-            buf.pt,
+            buf.point_char_pos().get(),
             buf.get_multibyte(),
             buf.buffer_substring_lisp_string_range(range),
         )

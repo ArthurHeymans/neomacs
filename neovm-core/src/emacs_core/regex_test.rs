@@ -1612,8 +1612,8 @@ fn buffer_search_snapshot<T>(
     buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut full_bytes);
     BufferSearchSnapshot {
         result,
-        pt_byte: buf.pt_byte,
-        pt: buf.pt,
+        pt_byte: buf.point_emacs_byte_pos().get(),
+        pt: buf.point_char_pos().get(),
         full_bytes,
         multibyte: buf.get_multibyte(),
         match_data: match_data_snapshot(match_data),
@@ -1844,7 +1844,7 @@ fn search_forward_basic() {
     let result = search_forward(&mut buf, "world", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(11)); // end of "world"
-    assert_eq!(buf.pt, 11);
+    assert_eq!(buf.point_char_pos().get(), 11);
     let md = md.unwrap();
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(6, 11)));
 }
@@ -1857,7 +1857,7 @@ fn search_forward_not_found_noerror() {
     let result = search_forward(&mut buf, "xyz", None, true, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
-    assert_eq!(buf.pt, 0); // point unchanged
+    assert_eq!(buf.point_char_pos().get(), 0); // point unchanged
 }
 
 #[test]
@@ -1983,7 +1983,7 @@ fn search_backward_basic() {
     let result = search_backward(&mut buf, "hello", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0)); // beginning of "hello"
-    assert_eq!(buf.pt, 0);
+    assert_eq!(buf.point_char_pos().get(), 0);
 }
 
 #[test]
@@ -2007,7 +2007,7 @@ fn search_backward_finds_last_occurrence() {
     assert!(result.is_ok());
     // Should find the LAST "aaa" (at position 8)
     assert_eq!(result.unwrap(), Some(8));
-    assert_eq!(buf.pt, 8);
+    assert_eq!(buf.point_char_pos().get(), 8);
 }
 
 #[test]
@@ -2019,8 +2019,8 @@ fn search_backward_case_fold_true_unicode_literal() {
     let result = search_backward(&mut buf, "ä", None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some('Ä'.len_utf8()));
-    assert_eq!(buf.pt_byte, 'Ä'.len_utf8());
-    assert_eq!(buf.pt, 1);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 'Ä'.len_utf8());
+    assert_eq!(buf.point_char_pos().get(), 1);
 }
 
 // -----------------------------------------------------------------------
@@ -2035,7 +2035,7 @@ fn re_search_forward_basic() {
     let result = re_search_forward(&mut buf, "[0-9]+", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(7)); // end of "123"
-    assert_eq!(buf.pt, 7);
+    assert_eq!(buf.point_char_pos().get(), 7);
     let md = md.unwrap();
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(4, 7)));
 }
@@ -2118,7 +2118,7 @@ fn re_search_forward_bound_is_not_artificial_line_end() {
     let result = re_search_forward(&mut buf, "^[ \t]*$", Some(31), true, false, &mut md);
 
     assert_eq!(result, Ok(None));
-    assert_eq!(buf.pt_byte, 30);
+    assert_eq!(buf.point_emacs_byte_pos().get(), 30);
     assert!(md.is_none());
 }
 
@@ -2138,7 +2138,7 @@ fn re_search_backward_basic() {
     // first position where the regex succeeds.  From point-max (15/0-indexed=14),
     // position 14 is '6' which matches [0-9]+.  So match-beginning is 14.
     assert_eq!(result.unwrap(), Some(14));
-    assert_eq!(buf.pt, 14);
+    assert_eq!(buf.point_char_pos().get(), 14);
 }
 
 #[test]
@@ -2150,7 +2150,7 @@ fn re_search_backward_rejects_match_extending_past_point() {
     let result = re_search_backward(&mut buf, "[0-9]+", Some(0), true, false, &mut md);
     assert_eq!(result, Ok(None));
     assert!(md.is_none());
-    assert_eq!(buf.pt, 2);
+    assert_eq!(buf.point_char_pos().get(), 2);
 }
 
 #[test]
@@ -2161,7 +2161,7 @@ fn re_search_backward_finds_nullable_match_at_point() {
     let mut md = None;
     let result = re_search_backward(&mut buf, "\\(?:$\\)\\=", Some(0), true, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
-    assert_eq!(buf.pt, 3);
+    assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(3, 3)));
 }
@@ -2208,7 +2208,7 @@ fn re_search_forward_finds_nullable_match_at_buffer_end() {
     let mut md = None;
     let result = re_search_forward(&mut buf, "\\=", None, true, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
-    assert_eq!(buf.pt, 3);
+    assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(3, 3)));
 }

@@ -3974,12 +3974,22 @@ fn read_from_buffer_advances_point_across_multiple_forms() {
 
     let first = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("first form");
     ev.eval_value(&first).expect("first eval");
-    let after_first = ev.buffers.get(buf_id).expect("buffer").pt;
+    let after_first = ev
+        .buffers
+        .get(buf_id)
+        .expect("buffer")
+        .point_char_pos()
+        .get();
     assert!(after_first > 0, "first read should advance point");
 
     let second = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("second form");
     ev.eval_value(&second).expect("second eval");
-    let after_second = ev.buffers.get(buf_id).expect("buffer").pt;
+    let after_second = ev
+        .buffers
+        .get(buf_id)
+        .expect("buffer")
+        .point_char_pos()
+        .get();
     assert_eq!(
         after_second,
         source.len() - 1,
@@ -3989,7 +3999,11 @@ fn read_from_buffer_advances_point_across_multiple_forms() {
     let eof = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
     assert!(matches!(eof, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
     assert_eq!(
-        ev.buffers.get(buf_id).expect("buffer").pt,
+        ev.buffers
+            .get(buf_id)
+            .expect("buffer")
+            .point_char_pos()
+            .get(),
         source.len(),
         "EOF read should consume trailing whitespace like GNU Emacs"
     );
