@@ -1522,7 +1522,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     })
                 })
                 .collect();
-            let last_window_start = LispCharPos1::new(buffer.last_window_start.max(1) as i64);
+            let last_window_start = LispCharPos1::from_one_based_usize(buffer.last_window_start);
             let total_bytes = buffer.total_emacs_byte_len();
             let total_end = EmacsBytePos::new(total_bytes.get());
             snapshots.push(BufferSnapshot {

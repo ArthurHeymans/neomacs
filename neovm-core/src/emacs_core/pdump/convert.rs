@@ -5818,7 +5818,7 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                             filename: b.filename.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
-                            position: LispCharPos1::new((b.position.max(1)) as i64),
+                            position: LispCharPos1::from_one_based_usize(b.position),
                             front_context: b.front_context.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
@@ -5848,7 +5848,7 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                             filename: b.filename.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),
-                            position: LispCharPos1::new((b.position.max(1)) as i64),
+                            position: LispCharPos1::from_one_based_usize(b.position),
                             front_context: b.front_context.as_deref().map(|s| {
                                 crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
                             }),

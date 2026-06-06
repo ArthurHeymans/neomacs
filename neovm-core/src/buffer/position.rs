@@ -662,6 +662,10 @@ impl LispCharPos1 {
         Self(pos)
     }
 
+    pub fn from_one_based_usize(pos: usize) -> Self {
+        Self(i64::try_from(pos.max(1)).expect("Lisp character position fits i64"))
+    }
+
     /// Convert to 0-based internal char position.
     pub fn to_char_pos(self) -> CharPos0 {
         CharPos0::from_lisp(self)
