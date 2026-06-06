@@ -14,8 +14,9 @@
 //!   `internal-set-alternative-font-family-alist`,
 //!   `internal-set-alternative-font-registry-alist`
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::{OnceLock, RwLock};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -2694,6 +2695,20 @@ thread_local! {
     static CREATED_FACE_IDS: RefCell<HashMap<SymId, i64>> = RefCell::new(HashMap::new());
     static NEXT_CREATED_FACE_ID: RefCell<i64> = RefCell::new(FIRST_DYNAMIC_FACE_ID);
     static FACE_ATTR_STATE: RefCell<FaceAttrState> = RefCell::new(FaceAttrState::default());
+    /// Generation counter bumped whenever the defined-face set
+    /// (`CREATED_LISP_FACES`) changes.  Keys `FACE_NAME_LIST_CACHE`.
+    static FACE_SET_GENERATION: Cell<u64> = Cell::new(0);
+    /// Cached sorted face-name list, valid while `FACE_SET_GENERATION` is
+    /// unchanged.  Doom calls `face-list` and seeds face tables hundreds of
+    /// times during startup with an unchanging face set; recomputing the sort
+    /// (with a per-comparison `face_id_for_name`) each time dominated the face
+    /// path in the startup profile.
+    static FACE_NAME_LIST_CACHE: RefCell<Option<(u64, Rc<[String]>)>> = RefCell::new(None);
+}
+
+/// Invalidate the cached face-name list after the defined-face set changes.
+fn bump_face_set_generation() {
+    FACE_SET_GENERATION.with(|generation| generation.set(generation.get().wrapping_add(1)));
 }
 
 fn face_symbol_id(name: &str) -> SymId {
@@ -2709,6 +2724,7 @@ pub(crate) fn clear_font_cache_state() {
     CREATED_FACE_IDS.with(|slot| slot.borrow_mut().clear());
     NEXT_CREATED_FACE_ID.with(|slot| *slot.borrow_mut() = FIRST_DYNAMIC_FACE_ID);
     FACE_ATTR_STATE.with(|slot| *slot.borrow_mut() = FaceAttrState::default());
+    bump_face_set_generation();
 }
 
 /// Collect GC roots from face attribute overrides.
@@ -2740,12 +2756,14 @@ pub(crate) fn restore_created_faces_from_table(face_names: &[String]) {
             }
         }
     });
+    bump_face_set_generation();
 }
 
 fn mark_created_lisp_face(name: &str) {
     let inserted = CREATED_LISP_FACES.with(|slot| slot.borrow_mut().insert(face_symbol_id(name)));
     if inserted {
         ensure_dynamic_face_id(name);
+        bump_face_set_generation();
     }
 }
 
@@ -2793,25 +2811,57 @@ pub(crate) fn face_id_for_name(name: &str) -> Option<i64> {
     dynamic_face_id(name)
 }
 
-pub(crate) fn all_defined_face_names_sorted_by_id_desc() -> Vec<String> {
-    let mut names: Vec<String> = GNU_BOOTSTRAP_LISP_FACES
-        .iter()
-        .map(|face| face.name().to_string())
-        .collect();
+pub(crate) fn all_defined_face_names_sorted_by_id_desc() -> Rc<[String]> {
+    let generation = FACE_SET_GENERATION.with(|generation| generation.get());
+    if let Some(cached) = FACE_NAME_LIST_CACHE.with(|cache| {
+        cache
+            .borrow()
+            .as_ref()
+            .filter(|(cached_generation, _)| *cached_generation == generation)
+            .map(|(_, names)| Rc::clone(names))
+    }) {
+        return cached;
+    }
+
+    let names: Rc<[String]> = Rc::from(compute_face_names_sorted_by_id_desc());
+    FACE_NAME_LIST_CACHE.with(|cache| {
+        *cache.borrow_mut() = Some((generation, Rc::clone(&names)));
+    });
+    names
+}
+
+fn compute_face_names_sorted_by_id_desc() -> Vec<String> {
+    // Dedup by interned symbol id (O(n)) rather than a linear string scan
+    // (O(n^2)).  Bootstrap and created faces share the global obarray, so equal
+    // names map to the same `SymId`.
+    let mut seen: HashSet<SymId> = HashSet::new();
+    let mut names: Vec<String> = Vec::new();
+    for face in GNU_BOOTSTRAP_LISP_FACES.iter() {
+        let name = face.name();
+        if seen.insert(face_symbol_id(name)) {
+            names.push(name.to_string());
+        }
+    }
     CREATED_LISP_FACES.with(|slot| {
         for symbol in slot.borrow().iter() {
-            let name = resolve_sym(*symbol);
-            if !names.iter().any(|known| known == name) {
-                names.push(name.to_string());
+            if seen.insert(*symbol) {
+                names.push(resolve_sym(*symbol).to_string());
             }
         }
     });
-    names.sort_by(|left, right| {
-        let left_id = face_id_for_name(left).unwrap_or(i64::MAX);
-        let right_id = face_id_for_name(right).unwrap_or(i64::MAX);
-        right_id.cmp(&left_id).then_with(|| left.cmp(right))
+    // Decorate-sort-undecorate: resolve each face id once (O(n)) instead of
+    // inside the comparator (O(n log n) `face_id_for_name` lookups, which
+    // dominated the face path in the startup profile).
+    let mut keyed: Vec<(i64, String)> = names
+        .into_iter()
+        .map(|name| (face_id_for_name(&name).unwrap_or(i64::MAX), name))
+        .collect();
+    keyed.sort_by(|(left_id, left_name), (right_id, right_name)| {
+        right_id
+            .cmp(left_id)
+            .then_with(|| left_name.cmp(right_name))
     });
-    names
+    keyed.into_iter().map(|(_, name)| name).collect()
 }
 
 fn is_selected_created_lisp_face(name: &str) -> bool {
@@ -5023,8 +5073,8 @@ pub(crate) fn builtin_face_list(args: Vec<Value>) -> EvalResult {
     expect_max_args("face-list", &args, 1)?;
     Ok(Value::list(
         all_defined_face_names_sorted_by_id_desc()
-            .into_iter()
-            .map(Value::symbol)
+            .iter()
+            .map(|name| Value::symbol(name.as_str()))
             .collect(),
     ))
 }

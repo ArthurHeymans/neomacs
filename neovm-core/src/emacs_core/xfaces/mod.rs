@@ -133,11 +133,11 @@ pub(crate) fn mirror_runtime_face_into_frame(
 
 pub(crate) fn init_frame_lisp_faces(frame: &mut crate::window::Frame) {
     let table = frame.face_hash_table();
-    for face_name in crate::emacs_core::font::all_defined_face_names_sorted_by_id_desc() {
+    for face_name in crate::emacs_core::font::all_defined_face_names_sorted_by_id_desc().iter() {
         insert_frame_face_hash_entry_if_absent(
             table,
             Value::symbol(face_name.as_str()),
-            crate::emacs_core::font::make_lisp_face_vector_for_frame(&face_name),
+            crate::emacs_core::font::make_lisp_face_vector_for_frame(face_name.as_str()),
         );
     }
 }
@@ -145,9 +145,9 @@ pub(crate) fn init_frame_lisp_faces(frame: &mut crate::window::Frame) {
 pub(crate) fn seed_face_new_frame_defaults_table(table: Value) {
     let face_names = crate::emacs_core::font::all_defined_face_names_sorted_by_id_desc();
     let face_entries: Vec<(Value, Value)> = face_names
-        .into_iter()
+        .iter()
         .filter_map(|face_name| {
-            let face_id = crate::emacs_core::font::face_id_for_name(&face_name)?;
+            let face_id = crate::emacs_core::font::face_id_for_name(face_name.as_str())?;
             Some((
                 Value::symbol(face_name.as_str()),
                 Value::cons(
