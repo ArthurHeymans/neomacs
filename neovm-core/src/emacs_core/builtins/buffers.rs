@@ -155,8 +155,8 @@ pub(crate) fn normalize_narrow_region_in_buffers(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
     if let Some(labeled) = buffers.current_labeled_restriction_char_bounds(current_id) {
-        let labeled_min = labeled.start_usize() as i64 + 1;
-        let labeled_max = labeled.end_usize() as i64 + 1;
+        let labeled_min = labeled.start_lisp().as_i64();
+        let labeled_max = labeled.end_lisp().as_i64();
         s = s.clamp(labeled_min, labeled_max);
         e = e.clamp(labeled_min, labeled_max);
     }

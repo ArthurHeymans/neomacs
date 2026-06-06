@@ -3510,8 +3510,8 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let table = SyntaxTable::for_buffer(buf);
 
     let accessible_chars = buf.accessible_char_region();
-    let point_min = accessible_chars.start_usize() as i64 + 1;
-    let point_max = accessible_chars.end_usize() as i64 + 1;
+    let point_min = accessible_chars.start_lisp().as_i64();
+    let point_max = accessible_chars.end_lisp().as_i64();
     let clipped_from = from.clamp(point_min, point_max);
     let from_char = LispCharPos1::new(clipped_from).to_char_pos().get();
 
@@ -4252,8 +4252,8 @@ pub(crate) fn builtin_parse_partial_sexp(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let accessible_chars = buf.accessible_char_region();
-    let point_min = accessible_chars.start_usize() as i64 + 1;
-    let point_max = accessible_chars.end_usize() as i64 + 1;
+    let point_min = accessible_chars.start_lisp().as_i64();
+    let point_max = accessible_chars.end_lisp().as_i64();
     if from < point_min || from > point_max || to < point_min || to > point_max {
         return Err(signal(
             "args-out-of-range",
@@ -4337,8 +4337,8 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
         (last.buffer_id == current_id
             && last.modified_tick == modified_tick
             && last.pos <= pos
-            && last.pos >= buf.accessible_char_region().start_usize() as i64 + 1)
-            .then_some((last.pos, last.state))
+            && last.pos >= buf.accessible_char_region().start_lisp().as_i64())
+        .then_some((last.pos, last.state))
     });
     let (from, oldstate) = old
         .map(|(old_pos, state)| (old_pos, Some(state)))

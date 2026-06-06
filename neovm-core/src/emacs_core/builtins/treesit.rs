@@ -561,8 +561,8 @@ fn make_node_value_for_parser(
 
 fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
     let accessible_chars = buf.accessible_char_region();
-    let min = accessible_chars.start_usize() as i64 + 1;
-    let max = accessible_chars.end_usize() as i64 + 1;
+    let min = accessible_chars.start_lisp().as_i64();
+    let max = accessible_chars.end_lisp().as_i64();
     if pos < min || pos > max {
         return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
     }

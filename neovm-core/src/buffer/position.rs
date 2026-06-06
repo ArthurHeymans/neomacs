@@ -410,6 +410,14 @@ impl CharRange {
         self.end.get()
     }
 
+    pub fn start_lisp(self) -> LispCharPos1 {
+        self.start.to_lisp()
+    }
+
+    pub fn end_lisp(self) -> LispCharPos1 {
+        self.end.to_lisp()
+    }
+
     pub const fn len(self) -> CharLen {
         CharLen::new(self.end.get().saturating_sub(self.start.get()))
     }
@@ -613,6 +621,14 @@ impl AccessibleCharRange {
 
     pub const fn end_usize(self) -> usize {
         self.range.end_usize()
+    }
+
+    pub fn start_lisp(self) -> LispCharPos1 {
+        self.range.start_lisp()
+    }
+
+    pub fn end_lisp(self) -> LispCharPos1 {
+        self.range.end_lisp()
     }
 
     pub const fn len(self) -> CharLen {

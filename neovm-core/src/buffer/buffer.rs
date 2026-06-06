@@ -3845,16 +3845,16 @@ fn undo_char_pos1_to_byte_clamped(buf: &Buffer, pos1: LispCharPos1) -> EmacsByte
 
 fn undo_lisp_char_position_is_visible(buf: &Buffer, pos1: LispCharPos1) -> bool {
     let accessible = buf.accessible_char_region();
-    let point_min = accessible.start_usize() as i64 + 1;
-    let point_max = accessible.end_usize() as i64 + 1;
+    let point_min = accessible.start_lisp().as_i64();
+    let point_max = accessible.end_lisp().as_i64();
     let pos1 = pos1.as_i64();
     point_min <= pos1 && pos1 <= point_max
 }
 
 fn undo_lisp_range_is_visible(buf: &Buffer, beg1: LispCharPos1, end1: LispCharPos1) -> bool {
     let accessible = buf.accessible_char_region();
-    let point_min = accessible.start_usize() as i64 + 1;
-    let point_max = accessible.end_usize() as i64 + 1;
+    let point_min = accessible.start_lisp().as_i64();
+    let point_max = accessible.end_lisp().as_i64();
     let beg1 = beg1.as_i64();
     let end1 = end1.as_i64();
     beg1 >= point_min && end1 <= point_max
