@@ -166,8 +166,8 @@ fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Op
 
 /// Convert a 1-based Emacs char position to a 0-based byte position in the
 /// current buffer.  Clamps to valid range.
-fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> EmacsBytePos {
-    buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
+fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: LispCharPos1) -> EmacsBytePos {
+    buf.lisp_pos_to_emacs_byte_pos(pos)
 }
 
 /// Convert a 0-based byte position to a 1-based Emacs char position.
@@ -709,10 +709,10 @@ pub(crate) fn builtin_line_number_at_pos(
                                 .marker_emacs_byte_pos(current_buffer_id, marker_id)
                         })
                         .unwrap_or_else(|| {
-                            char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp().as_i64())
+                            char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp())
                         })
                 } else {
-                    char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp().as_i64())
+                    char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp())
                 }
             }
             ValueKind::Fixnum(pos) => {
@@ -724,7 +724,7 @@ pub(crate) fn builtin_line_number_at_pos(
                         vec![args[0], Value::fixnum(beg), Value::fixnum(z)],
                     ));
                 }
-                char_pos_to_byte(buf, pos)
+                char_pos_to_byte(buf, LispCharPos1::new(pos))
             }
             _ => {
                 return Err(signal(
@@ -753,8 +753,8 @@ pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Val
     let beg = expect_int(&args[0])?;
     let end = expect_int(&args[1])?;
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    let byte_beg = char_pos_to_byte(buf, beg);
-    let byte_end = char_pos_to_byte(buf, end);
+    let byte_beg = char_pos_to_byte(buf, LispCharPos1::new(beg));
+    let byte_end = char_pos_to_byte(buf, LispCharPos1::new(end));
     let (s, e) = if byte_beg <= byte_end {
         (byte_beg, byte_end)
     } else {
@@ -1183,7 +1183,7 @@ pub(crate) fn builtin_skip_chars_forward(
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
         let lim_byte = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?)
+            char_pos_to_byte(buf, LispCharPos1::new(expect_int(&args[1])?))
         } else {
             accessible.end()
         };
@@ -1237,7 +1237,7 @@ pub(crate) fn builtin_skip_chars_backward(
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
         let limit = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?)
+            char_pos_to_byte(buf, LispCharPos1::new(expect_int(&args[1])?))
         } else {
             accessible.start()
         };
