@@ -294,7 +294,7 @@ fn sxhash_equal_including_properties_emacs_uint(value: &Value) -> u64 {
         let _ = table.try_for_each_interval_in_char_range(
             CharRange::from_start_len(CharPos0::ZERO, CharLen::new(string.schars())),
             |range, plist| {
-                hash = sxhash_combine(hash, range.start_usize() as u64);
+                hash = sxhash_combine(hash, range.start().get() as u64);
                 hash = sxhash_combine(hash, range.len().get() as u64);
                 let plist_value = plist_pairs_to_value(plist);
                 hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&plist_value, 0));

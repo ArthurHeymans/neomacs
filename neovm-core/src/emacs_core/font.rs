@@ -2022,13 +2022,14 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
             if !has_window_system {
                 return Ok(Value::NIL);
             }
+            let char_pos = usize::try_from(pos).expect("validated non-negative string position");
             let bytepos = if string.is_multibyte() {
-                crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), pos as usize)
+                crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), char_pos)
             } else {
-                pos as usize
+                char_pos
             };
             let face =
-                resolved_face_at_string_char_pos(eval, *string_value, CharPos0::new(pos as usize));
+                resolved_face_at_string_char_pos(eval, *string_value, CharPos0::new(char_pos));
             let code = if string.is_multibyte() {
                 crate::emacs_core::emacs_char::string_char(&string.as_bytes()[bytepos..]).0
             } else {

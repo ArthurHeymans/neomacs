@@ -232,8 +232,8 @@ fn scan_for_column(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let line = line_bounds(buf, buf.point_emacs_byte_pos());
         (
-            line.start_usize(),
-            line.end_usize(),
+            line.start().get(),
+            line.end().get(),
             tab_width_in_state(&ctx.obarray, &[], Some(buf)),
         )
     };
