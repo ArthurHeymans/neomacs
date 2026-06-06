@@ -249,6 +249,27 @@ const CONS_MARK_WORDS: usize = cons_mark_words(CONS_BLOCK_SIZE);
 const CONS_CELLS_BYTES: usize = CONS_BLOCK_SIZE * size_of::<ConsCell>();
 const CONS_MARKS_OFFSET: usize = CONS_CELLS_BYTES;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ConsMarkBit {
+    word_index: usize,
+    mask: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ConsBlockCacheEntry {
+    block_base: usize,
+    block_index: usize,
+}
+
+impl ConsBlockCacheEntry {
+    fn new(block_base: usize, block_index: usize) -> Self {
+        Self {
+            block_base,
+            block_index,
+        }
+    }
+}
+
 /// A GNU-shaped cons block with cells at the front of a fixed-size aligned
 /// storage area, followed by packed mark bits.
 struct ConsBlock {
@@ -312,10 +333,13 @@ impl ConsBlock {
     }
 
     #[inline]
-    fn mark_bit(index: usize) -> (usize, usize) {
+    fn mark_bit(index: usize) -> ConsMarkBit {
         let word = index / CONS_MARK_BITS_PER_WORD;
         let bit = index % CONS_MARK_BITS_PER_WORD;
-        (word, 1usize << bit)
+        ConsMarkBit {
+            word_index: word,
+            mask: 1usize << bit,
+        }
     }
 
     #[inline]
@@ -326,18 +350,18 @@ impl ConsBlock {
     #[inline]
     fn is_marked_ptr(&self, ptr: *const ConsCell) -> bool {
         let index = Self::index_of_ptr(ptr);
-        let (word, mask) = Self::mark_bit(index);
-        debug_assert!(word < CONS_MARK_WORDS);
-        unsafe { (*self.mark_words_ptr().add(word) & mask) != 0 }
+        let mark = Self::mark_bit(index);
+        debug_assert!(mark.word_index < CONS_MARK_WORDS);
+        unsafe { (*self.mark_words_ptr().add(mark.word_index) & mark.mask) != 0 }
     }
 
     #[inline]
     fn mark_ptr(&mut self, ptr: *const ConsCell) {
         let index = Self::index_of_ptr(ptr);
-        let (word, mask) = Self::mark_bit(index);
-        debug_assert!(word < CONS_MARK_WORDS);
+        let mark = Self::mark_bit(index);
+        debug_assert!(mark.word_index < CONS_MARK_WORDS);
         unsafe {
-            *self.mark_words_ptr().add(word) |= mask;
+            *self.mark_words_ptr().add(mark.word_index) |= mark.mask;
         }
     }
 
@@ -377,8 +401,8 @@ impl ConsBlock {
         // cells themselves instead of rebuilding an external index vector.
         for i in (0..self.next_index as usize).rev() {
             let cell = unsafe { self.cells_ptr().add(i) };
-            let (word, mask) = Self::mark_bit(i);
-            let marked = unsafe { (*self.mark_words_ptr().add(word) & mask) != 0 };
+            let mark = Self::mark_bit(i);
+            let marked = unsafe { (*self.mark_words_ptr().add(mark.word_index) & mark.mask) != 0 };
             if marked {
                 live += 1;
             } else {
@@ -433,15 +457,15 @@ impl MappedConsRange {
     #[inline]
     fn is_marked_ptr(&self, ptr: *const ConsCell) -> bool {
         let index = self.index_of_ptr(ptr);
-        let (word, mask) = ConsBlock::mark_bit(index);
-        (self.mark_bits[word] & mask) != 0
+        let mark = ConsBlock::mark_bit(index);
+        (self.mark_bits[mark.word_index] & mark.mask) != 0
     }
 
     #[inline]
     fn mark_ptr(&mut self, ptr: *const ConsCell) {
         let index = self.index_of_ptr(ptr);
-        let (word, mask) = ConsBlock::mark_bit(index);
-        self.mark_bits[word] |= mask;
+        let mark = ConsBlock::mark_bit(index);
+        self.mark_bits[mark.word_index] |= mark.mask;
     }
 
     fn clear_marks(&mut self) {
@@ -500,15 +524,15 @@ impl MappedFloatRange {
     #[inline]
     fn is_marked_ptr(&self, ptr: *const FloatObj) -> bool {
         let index = self.index_of_ptr(ptr);
-        let (word, mask) = ConsBlock::mark_bit(index);
-        (self.mark_bits[word] & mask) != 0
+        let mark = ConsBlock::mark_bit(index);
+        (self.mark_bits[mark.word_index] & mark.mask) != 0
     }
 
     #[inline]
     fn mark_ptr(&mut self, ptr: *const FloatObj) {
         let index = self.index_of_ptr(ptr);
-        let (word, mask) = ConsBlock::mark_bit(index);
-        self.mark_bits[word] |= mask;
+        let mark = ConsBlock::mark_bit(index);
+        self.mark_bits[mark.word_index] |= mark.mask;
     }
 
     fn clear_marks(&mut self) {
@@ -587,7 +611,7 @@ pub struct TaggedHeap {
     /// special fast path for successive list cells.  Keep Neomacs's explicit
     /// ownership map, but avoid probing it repeatedly while the mark queue is
     /// walking cells from the same block.
-    mark_cons_block_cache: Option<(usize, usize)>,
+    mark_cons_block_cache: Option<ConsBlockCacheEntry>,
 
     /// Intrusive linked list of all non-cons heap objects.
     /// Points to the GcHeader of the first object; follow `next` to traverse.
@@ -1928,12 +1952,13 @@ impl TaggedHeap {
         }
         let block_base = ConsBlock::block_base_for_ptr(ptr);
         let block_index = match self.mark_cons_block_cache {
-            Some((cached_base, cached_index)) if cached_base == block_base => cached_index,
+            Some(cache) if cache.block_base == block_base => cache.block_index,
             _ => {
                 let Some(&block_index) = self.cons_block_index_by_base.get(&block_base) else {
                     return self.mark_mapped_cons(ptr);
                 };
-                self.mark_cons_block_cache = Some((block_base, block_index));
+                self.mark_cons_block_cache =
+                    Some(ConsBlockCacheEntry::new(block_base, block_index));
                 block_index
             }
         };
