@@ -12,12 +12,10 @@
 //! boundary. The underlying bytes are Emacs internal bytes, not
 //! sentinel-encoded Rust strings.
 
+use std::cell::Cell;
 use std::fmt;
 
-use crate::buffer::text::{
-    GapCompatState, emacs_byte_to_char_in_slice, emacs_char_count_bytes,
-    emacs_char_to_byte_in_slice,
-};
+use crate::buffer::text::{GapCompatState, emacs_char_count_bytes, emacs_char_to_byte_in_slice};
 use crate::buffer::{
     CharLen, CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextPositionAnchor,
     TextReplacement,
@@ -62,6 +60,13 @@ pub struct GapBuffer {
     gap_start_bytes: usize,
     /// Number of logical Emacs bytes in the buffer.
     total_bytes: usize,
+    /// One-entry cache of a known `(logical_bytepos, logical_charpos)`
+    /// correspondence (GNU `marker.c`'s `cached_bytepos`/`cached_charpos`).
+    /// Used as an extra anchor so sequential position conversions (e.g.
+    /// font-lock walking the buffer) scan O(distance between calls) instead of
+    /// O(buffer) from the start.  Reset to `(0, 0)` whenever the logical text
+    /// length changes; `(0, 0)` is always a valid anchor.
+    byte_char_cache: Cell<(usize, usize)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +89,7 @@ impl GapBuffer {
             total_chars: 0,
             gap_start_bytes: 0,
             total_bytes: 0,
+            byte_char_cache: Cell::new((0, 0)),
         }
     }
 
@@ -104,6 +110,7 @@ impl GapBuffer {
             total_chars: char_count,
             gap_start_bytes: byte_count,
             total_bytes: byte_count,
+            byte_char_cache: Cell::new((0, 0)),
         }
     }
 
@@ -133,6 +140,7 @@ impl GapBuffer {
             total_chars,
             gap_start_bytes,
             total_bytes: text.len(),
+            byte_char_cache: Cell::new((0, 0)),
         }
     }
 
@@ -177,6 +185,7 @@ impl GapBuffer {
         self.total_chars = emacs_char_count_bytes(&logical, self.multibyte).get();
         self.gap_start_bytes = self.gap_start;
         self.total_bytes = logical.len();
+        self.byte_char_cache.set((0, 0));
     }
 
     /// Number of logical Emacs characters in the buffer storage.
@@ -480,6 +489,7 @@ impl GapBuffer {
         self.total_chars += nchars;
         self.gap_start_bytes += inserted_bytes;
         self.total_bytes += inserted_bytes;
+        self.byte_char_cache.set((0, 0));
     }
 
     pub(crate) fn insert_storage_string_at_emacs_byte_pos(&mut self, pos: EmacsBytePos, s: &str) {
@@ -569,6 +579,7 @@ impl GapBuffer {
         self.gap_end += deleted_bytes;
         self.total_chars -= nchars;
         self.total_bytes -= deleted_bytes;
+        self.byte_char_cache.set((0, 0));
     }
 
     pub(crate) fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
@@ -707,6 +718,10 @@ impl GapBuffer {
             let delta = new_chars as isize - old_chars as isize;
             self.total_chars = self.total_chars.saturating_add_signed(delta);
         }
+        // An in-place replacement can shift char boundaries inside the replaced
+        // range even when the total counts are unchanged, so invalidate the
+        // position cache unconditionally.
+        self.byte_char_cache.set((0, 0));
     }
 
     // -----------------------------------------------------------------------
@@ -820,25 +835,70 @@ impl GapBuffer {
             "byte_to_char: byte_pos ({byte_pos}) > len ({})",
             self.len()
         );
-        if byte_pos <= self.gap_start {
-            return CharPos0::new(emacs_byte_to_char_in_slice(
-                &self.buf[..self.gap_start],
-                byte_pos,
-                self.multibyte,
-                "byte_to_char pre-gap",
-            ));
+        // GNU marker.c fast path (`if (Z == Z_byte) return bytepos`): when the
+        // buffer has as many characters as bytes, every character is one byte,
+        // so the char position equals the byte position.  Covers unibyte and
+        // all-ASCII multibyte buffers in O(1) instead of scanning and decoding
+        // from the buffer start.
+        if self.total_chars == self.total_bytes {
+            return CharPos0::new(byte_pos);
         }
+        let (cache_byte, cache_char) = self.byte_char_cache.get();
+        let cache = (cache_byte <= self.total_bytes && cache_char <= self.total_chars)
+            .then_some((cache_byte, cache_char));
+        let result = self.char_pos_from_byte_anchors(byte_pos, cache);
+        // The cache must never change the answer: validate against the
+        // cache-free computation in debug/test builds so any missed
+        // invalidation fails loudly.
+        debug_assert_eq!(
+            result,
+            self.char_pos_from_byte_anchors(byte_pos, None),
+            "stale byte->char position cache at byte {byte_pos}"
+        );
+        self.byte_char_cache.set((byte_pos, result));
+        CharPos0::new(result)
+    }
 
-        let rel_pos = byte_pos - self.gap_start;
-        CharPos0::new(
-            self.gap_start_chars
-                + emacs_byte_to_char_in_slice(
-                    &self.buf[self.gap_end..],
-                    rel_pos,
-                    self.multibyte,
-                    "byte_to_char post-gap",
-                ),
-        )
+    /// Char position for logical byte `target`, scanning from the nearest of
+    /// the structural anchors `{0, gap, end}` plus an optional extra anchor
+    /// (the cache).  Mirrors GNU `marker.c`'s nearest-anchor scan, so
+    /// sequential conversions cost O(distance between calls), not O(buffer).
+    fn char_pos_from_byte_anchors(&self, target: usize, extra: Option<(usize, usize)>) -> usize {
+        let mut below = (0usize, 0usize);
+        let mut above = (self.total_bytes, self.total_chars);
+        for (b, c) in std::iter::once((self.gap_start_bytes, self.gap_start_chars)).chain(extra) {
+            if b <= target && b > below.0 {
+                below = (b, c);
+            }
+            if b >= target && b < above.0 {
+                above = (b, c);
+            }
+        }
+        if target - below.0 <= above.0 - target {
+            below.1 + self.count_chars_in_logical_byte_range(below.0, target)
+        } else {
+            above.1 - self.count_chars_in_logical_byte_range(target, above.0)
+        }
+    }
+
+    /// Count Emacs characters in the logical byte range `[lo, hi)`, mapping
+    /// logical positions through the gap.  Both ends must be char boundaries
+    /// (callers only pass known correspondences and the gap split, which are
+    /// all char-aligned).
+    fn count_chars_in_logical_byte_range(&self, lo: usize, hi: usize) -> usize {
+        debug_assert!(lo <= hi && hi <= self.total_bytes);
+        let mut chars = 0;
+        if lo < self.gap_start_bytes {
+            let pre_hi = hi.min(self.gap_start_bytes);
+            chars += emacs_char_count_bytes(&self.buf[lo..pre_hi], self.multibyte).get();
+        }
+        if hi > self.gap_start_bytes {
+            let post_lo = lo.max(self.gap_start_bytes);
+            let phys_lo = self.gap_end + (post_lo - self.gap_start_bytes);
+            let phys_hi = self.gap_end + (hi - self.gap_start_bytes);
+            chars += emacs_char_count_bytes(&self.buf[phys_lo..phys_hi], self.multibyte).get();
+        }
+        chars
     }
 
     /// Convert a char position to a logical Emacs byte position.
@@ -850,33 +910,72 @@ impl GapBuffer {
         if char_pos == 0 {
             return EmacsBytePos::new(0);
         }
-
-        if char_pos <= self.gap_start_chars {
-            return EmacsBytePos::new(emacs_char_to_byte_in_slice(
-                &self.buf[..self.gap_start],
-                char_pos,
-                self.multibyte,
-            ));
-        }
-
-        if char_pos <= self.total_chars {
-            return EmacsBytePos::new(
-                self.gap_start
-                    + emacs_char_to_byte_in_slice(
-                        &self.buf[self.gap_end..],
-                        char_pos - self.gap_start_chars,
-                        self.multibyte,
-                    ),
+        if char_pos > self.total_chars {
+            // Clamp to end of buffer instead of panicking — this can happen
+            // when window_start / point are stale after buffer modification.
+            // Must precede the fast path below, which would otherwise return
+            // the unclamped position for an all-single-byte buffer.
+            tracing::debug!(
+                "char_to_byte: char_pos ({char_pos}) exceeds char_count ({}), clamping",
+                self.total_chars
             );
+            return EmacsBytePos::new(self.total_bytes);
         }
-
-        // Clamp to end of buffer instead of panicking — this can happen
-        // when window_start / point are stale after buffer modification.
-        tracing::debug!(
-            "char_to_byte: char_pos ({char_pos}) exceeds char_count ({}), clamping",
-            self.total_chars
+        // GNU marker.c fast path: as many characters as bytes => every
+        // character is one byte, so byte position equals char position.
+        if self.total_chars == self.total_bytes {
+            return EmacsBytePos::new(char_pos);
+        }
+        let (cache_byte, cache_char) = self.byte_char_cache.get();
+        let cache = (cache_byte <= self.total_bytes && cache_char <= self.total_chars)
+            .then_some((cache_byte, cache_char));
+        let result = self.byte_pos_from_char_anchors(char_pos, cache);
+        debug_assert_eq!(
+            result,
+            self.byte_pos_from_char_anchors(char_pos, None),
+            "stale char->byte position cache at char {char_pos}"
         );
-        EmacsBytePos::new(self.len())
+        self.byte_char_cache.set((result, char_pos));
+        EmacsBytePos::new(result)
+    }
+
+    /// Byte position for char `target` (must be `<= total_chars`), scanning
+    /// forward from the nearest known char anchor at or below it (structural
+    /// anchors `{0, gap}` plus the optional cache).  Shares GNU `marker.c`'s
+    /// cached correspondence with `char_pos_from_byte_anchors`.
+    fn byte_pos_from_char_anchors(&self, target: usize, extra: Option<(usize, usize)>) -> usize {
+        let mut below = (0usize, 0usize); // (byte, char)
+        for (b, c) in std::iter::once((self.gap_start_bytes, self.gap_start_chars)).chain(extra) {
+            if c <= target && c > below.1 {
+                below = (b, c);
+            }
+        }
+        below.0 + self.bytes_for_n_chars_from_logical_byte(below.0, target - below.1)
+    }
+
+    /// Logical byte span covering the next `nchars` characters starting at
+    /// logical byte `start_byte` (a char boundary), mapped through the gap.
+    fn bytes_for_n_chars_from_logical_byte(&self, start_byte: usize, nchars: usize) -> usize {
+        if nchars == 0 {
+            return 0;
+        }
+        let mut remaining = nchars;
+        let mut consumed = 0;
+        if start_byte < self.gap_start_bytes {
+            let slice = &self.buf[start_byte..self.gap_start];
+            let avail = emacs_char_count_bytes(slice, self.multibyte).get();
+            if remaining <= avail {
+                return emacs_char_to_byte_in_slice(slice, remaining, self.multibyte);
+            }
+            remaining -= avail;
+            consumed = slice.len();
+        }
+        let post_phys = if start_byte >= self.gap_start_bytes {
+            self.gap_end + (start_byte - self.gap_start_bytes)
+        } else {
+            self.gap_end
+        };
+        consumed + emacs_char_to_byte_in_slice(&self.buf[post_phys..], remaining, self.multibyte)
     }
 
     // -----------------------------------------------------------------------
@@ -918,6 +1017,7 @@ impl GapBuffer {
             total_chars: char_count,
             gap_start_bytes: byte_count,
             total_bytes: byte_count,
+            byte_char_cache: Cell::new((0, 0)),
         }
     }
 }
