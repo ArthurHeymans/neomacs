@@ -9,12 +9,26 @@ use crate::buffer::text::{
     is_emacs_char_boundary,
 };
 
-const MAX_LEAF_BYTES: usize = 1024;
+const MAX_LEAF_BYTES: EmacsByteLen = EmacsByteLen::new(1024);
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct ChunkByteOffset(usize);
 
 #[derive(Clone)]
 struct RopeChunk {
     bytes: Vec<u8>,
     extent: TextExtent,
+}
+
+impl ChunkByteOffset {
+    const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    const fn get(self) -> usize {
+        self.0
+    }
 }
 
 impl RopeChunk {
@@ -43,7 +57,8 @@ impl RopeChunk {
         TextMetrics::from_extent(self.extent)
     }
 
-    fn split_at(&self, byte_pos: usize, multibyte: bool) -> (Self, Self) {
+    fn split_at(&self, byte_pos: ChunkByteOffset, multibyte: bool) -> (Self, Self) {
+        let byte_pos = byte_pos.get();
         debug_assert!(byte_pos > 0 && byte_pos < self.len_usize());
         assert!(
             is_emacs_char_boundary(&self.bytes, byte_pos, multibyte),
@@ -492,7 +507,7 @@ impl RopeTextBackend {
         let mut tree = None;
         let mut rest = bytes;
         while !rest.is_empty() {
-            let take = split_leaf_len(rest, self.multibyte);
+            let take = split_leaf_len(rest, self.multibyte).get();
             let chunk = RopeChunk::new(rest[..take].to_vec(), self.multibyte);
             let node = Some(RopeNode::new(chunk, self.next_priority()));
             tree = self.merge_adjacent(tree, node);
@@ -554,7 +569,9 @@ impl RopeTextBackend {
             return (Some(node), right);
         }
 
-        let (left_chunk, right_chunk) = node.chunk.split_at(local, self.multibyte);
+        let (left_chunk, right_chunk) = node
+            .chunk
+            .split_at(ChunkByteOffset::new(local), self.multibyte);
         let left_node = Some(RopeNode::new(left_chunk, self.next_priority()));
         let right_node = Some(RopeNode::new(right_chunk, self.next_priority()));
         let left_tree = self.merge_adjacent(node.left.take(), left_node);
@@ -571,7 +588,8 @@ impl RopeTextBackend {
             (None, right) => right,
             (left, None) => left,
             (Some(left), Some(right)) => {
-                if rightmost_chunk_len(&left) + leftmost_chunk_len(&right) <= MAX_LEAF_BYTES {
+                if rightmost_chunk_len(&left).add_len(leftmost_chunk_len(&right)) <= MAX_LEAF_BYTES
+                {
                     let (left, left_chunk) = pop_rightmost(Some(left));
                     let (right_chunk, right) = pop_leftmost(Some(right));
                     let mut bytes = left_chunk.bytes;
@@ -762,18 +780,18 @@ fn node_metrics(node: &Option<Box<RopeNode>>) -> TextMetrics {
     node.as_ref().map(|node| node.metrics).unwrap_or_default()
 }
 
-fn leftmost_chunk_len(node: &RopeNode) -> usize {
+fn leftmost_chunk_len(node: &RopeNode) -> EmacsByteLen {
     if node.left.is_some() {
         return leftmost_chunk_len(node.left.as_ref().expect("left child"));
     }
-    node.chunk.len_usize()
+    node.chunk.emacs_byte_len()
 }
 
-fn rightmost_chunk_len(node: &RopeNode) -> usize {
+fn rightmost_chunk_len(node: &RopeNode) -> EmacsByteLen {
     if node.right.is_some() {
         return rightmost_chunk_len(node.right.as_ref().expect("right child"));
     }
-    node.chunk.len_usize()
+    node.chunk.emacs_byte_len()
 }
 
 fn pop_leftmost(mut tree: Option<Box<RopeNode>>) -> (RopeChunk, Option<Box<RopeNode>>) {
@@ -822,9 +840,10 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
 
     assert!(!node.chunk.bytes.is_empty(), "rope leaf must not be empty");
     assert!(
-        node.chunk.len_usize() <= MAX_LEAF_BYTES,
-        "rope leaf length {} exceeds max {MAX_LEAF_BYTES}",
-        node.chunk.len_usize()
+        node.chunk.emacs_byte_len() <= MAX_LEAF_BYTES,
+        "rope leaf length {} exceeds max {}",
+        node.chunk.len_usize(),
+        MAX_LEAF_BYTES.get()
     );
     assert_eq!(
         node.chunk.char_len(),
@@ -854,20 +873,20 @@ fn assert_node_invariants(node: &Option<Box<RopeNode>>, multibyte: bool) -> Text
     expected
 }
 
-fn split_leaf_len(bytes: &[u8], multibyte: bool) -> usize {
-    if bytes.len() <= MAX_LEAF_BYTES {
-        return bytes.len();
+fn split_leaf_len(bytes: &[u8], multibyte: bool) -> EmacsByteLen {
+    if bytes.len() <= MAX_LEAF_BYTES.get() {
+        return EmacsByteLen::new(bytes.len());
     }
     if !multibyte {
         return MAX_LEAF_BYTES;
     }
 
-    let mut end = MAX_LEAF_BYTES;
+    let mut end = MAX_LEAF_BYTES.get();
     while end > 0 && !is_emacs_char_boundary(bytes, end, multibyte) {
         end -= 1;
     }
     assert!(end > 0, "Emacs multibyte character exceeds rope leaf size");
-    end
+    EmacsByteLen::new(end)
 }
 
 fn splitmix64(mut x: u64) -> u64 {
@@ -1088,7 +1107,7 @@ mod tests {
 
     #[test]
     fn rope_large_initial_text_uses_multiple_chunks_and_preserves_text() {
-        let text = "a".repeat(MAX_LEAF_BYTES * 2 + 17);
+        let text = "a".repeat(MAX_LEAF_BYTES.get() * 2 + 17);
         let backend = RopeTextBackend::from_str(&text);
         backend.assert_invariants();
         let mut chunks = Vec::new();
