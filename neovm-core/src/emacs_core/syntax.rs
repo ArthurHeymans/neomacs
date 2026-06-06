@@ -4400,7 +4400,7 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
 }
 
 fn lisp_pos_to_byte(buf: &Buffer, raw: i64) -> EmacsBytePos {
-    buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
+    buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw))
 }
 
 /// `(skip-syntax-forward SYNTAX &optional LIMIT)` — skip forward over chars

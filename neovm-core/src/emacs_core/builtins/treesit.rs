@@ -567,7 +567,7 @@ fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
         return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
     }
     Ok(buf
-        .lisp_pos_to_accessible_emacs_byte_pos(pos)
+        .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
         .saturating_offset_from(buf.accessible_emacs_byte_region().start())
         .get())
 }

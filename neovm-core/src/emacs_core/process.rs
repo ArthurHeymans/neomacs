@@ -2419,8 +2419,9 @@ pub(crate) fn checked_region_bytes(
         ));
     }
 
-    let start_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(start);
-    let end_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(end);
+    let start_byte =
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(start));
+    let end_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(end));
     Ok(if start_byte <= end_byte {
         EmacsByteRange::new(start_byte, end_byte)
     } else {
@@ -4179,7 +4180,9 @@ fn process_mark_insert_emacs_byte_pos(
     match super::marker::marker_position_as_int_with_buffers(buffers, &mark) {
         Ok(pos) => buffers
             .get(buf_id)
-            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(pos))
+            .map(|b| {
+                b.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
+            })
             .unwrap_or(EmacsBytePos::ZERO),
         Err(_) => buffers
             .get(buf_id)

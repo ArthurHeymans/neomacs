@@ -2546,8 +2546,8 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
     }
 
     let byte_range = crate::buffer::EmacsByteRange::new(
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(start),
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(end),
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(start)),
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(end)),
     );
     let text = {
         let string = buffer.buffer_substring_lisp_string_range(byte_range);

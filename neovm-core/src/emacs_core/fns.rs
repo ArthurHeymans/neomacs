@@ -518,8 +518,8 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
     };
 
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
     );
     Ok((buffer_id, byte_range))
 }
@@ -903,8 +903,8 @@ fn hash_slice_for_buffer_in_manager(
         (end, start)
     };
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
     );
     Ok(buf.buffer_substring_bytes_range(byte_range))
 }
@@ -936,8 +936,8 @@ fn md5_hex_for_buffer_in_manager(
             (end, start)
         };
         let byte_range = EmacsByteRange::new(
-            buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lo)),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(hi)),
         );
         let text = buf.buffer_substring_lisp_string_range(byte_range);
         if text.is_multibyte() {

@@ -92,8 +92,8 @@ fn validate_region_byte_bounds(
         (end, start)
     };
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
     );
 
     Ok(Some((buf.id, byte_range)))

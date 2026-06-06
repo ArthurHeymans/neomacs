@@ -167,7 +167,7 @@ fn search_bound_to_byte_in_manager(
     value: &Value,
 ) -> Result<EmacsBytePos, Flow> {
     let pos = super::buffers::expect_integer_or_marker_in_buffers(buffers, value)?;
-    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos))
+    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos)))
 }
 
 fn parse_search_options_in_manager(
@@ -1257,8 +1257,8 @@ pub(crate) fn builtin_match_string(
         return Ok(Value::NIL);
     }
 
-    let start_byte = buf.lisp_pos_to_emacs_byte_pos(start as i64);
-    let end_byte = buf.lisp_pos_to_emacs_byte_pos(end as i64);
+    let start_byte = buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(start as i64));
+    let end_byte = buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(end as i64));
     if end_byte.get() <= buf.total_emacs_byte_len().get() && start_byte <= end_byte {
         Ok(buf.buffer_substring_value_range(EmacsByteRange::new(start_byte, end_byte)))
     } else {

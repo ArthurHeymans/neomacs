@@ -335,7 +335,7 @@ fn marker_buffer_id(v: &Value) -> Option<BufferId> {
 
 fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: LispCharPos1) -> EmacsBytePos {
     // GNU Emacs: set-marker clamps to the full buffer, not the narrowed region.
-    buf.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos.as_i64())
+    buf.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos)
 }
 
 fn marker_targets_current_mark(marker: &Value) -> bool {

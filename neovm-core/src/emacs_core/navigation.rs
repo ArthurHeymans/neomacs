@@ -167,7 +167,7 @@ fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Op
 /// Convert a 1-based Emacs char position to a 0-based byte position in the
 /// current buffer.  Clamps to valid range.
 fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> EmacsBytePos {
-    buf.lisp_pos_to_emacs_byte_pos(pos)
+    buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
 }
 
 /// Convert a 0-based byte position to a 1-based Emacs char position.

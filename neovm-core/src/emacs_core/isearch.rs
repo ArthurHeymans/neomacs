@@ -129,7 +129,7 @@ fn expect_sequence_string(val: &Value) -> Result<String, Flow> {
 }
 
 fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, raw: i64) -> EmacsBytePos {
-    buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
+    buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw))
 }
 
 fn replacement_region_bounds(

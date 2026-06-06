@@ -4212,8 +4212,12 @@ fn vm_current_buffer_query_builtins_use_shared_runtime_state() {
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("hello");
-                let start = buffer.lisp_pos_to_emacs_byte_pos(2).get();
-                let end = buffer.lisp_pos_to_emacs_byte_pos(5).get();
+                let start = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(2))
+                    .get();
+                let end = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(5))
+                    .get();
                 buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
                     start, end,
                 ));
@@ -4258,8 +4262,12 @@ fn vm_navigation_predicates_and_line_positions_use_shared_narrowed_buffer_state(
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("wx\nab\ncd");
-                let start = buffer.lisp_pos_to_emacs_byte_pos(4).get();
-                let end = buffer.lisp_pos_to_emacs_byte_pos(6).get();
+                let start = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(4))
+                    .get();
+                let end = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(6))
+                    .get();
                 buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
                     start, end,
                 ));
@@ -7893,8 +7901,12 @@ fn vm_char_primitives_and_buffer_substring_use_narrowed_current_buffer_state() {
                 let current = eval.buffers.current_buffer_id().expect("scratch buffer");
                 let buffer = eval.buffers.get_mut(current).expect("scratch buffer");
                 buffer.insert("Hello, 世界");
-                let start = buffer.lisp_pos_to_emacs_byte_pos(3).get();
-                let end = buffer.lisp_pos_to_emacs_byte_pos(8).get();
+                let start = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(3))
+                    .get();
+                let end = buffer
+                    .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(8))
+                    .get();
                 buffer.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
                     start, end,
                 ));

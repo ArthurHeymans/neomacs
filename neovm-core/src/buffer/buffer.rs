@@ -2306,15 +2306,15 @@ impl Buffer {
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the full buffer.
-    pub fn lisp_pos_to_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
-        let char_pos = LispCharPos1::new(lisp_pos).to_char_pos();
+    pub fn lisp_pos_to_emacs_byte_pos(&self, lisp_pos: LispCharPos1) -> EmacsBytePos {
+        let char_pos = lisp_pos.to_char_pos();
         self.char_pos_to_emacs_byte_pos_clamped(char_pos)
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the accessible region.
-    pub fn lisp_pos_to_accessible_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
-        let char_pos = LispCharPos1::new(lisp_pos).to_char_pos();
+    pub fn lisp_pos_to_accessible_emacs_byte_pos(&self, lisp_pos: LispCharPos1) -> EmacsBytePos {
+        let char_pos = lisp_pos.to_char_pos();
         let clamped_char = char_pos.get().clamp(
             self.point_min_char_pos().get(),
             self.point_max_char_pos().get(),
@@ -2328,8 +2328,8 @@ impl Buffer {
     ///
     /// GNU Emacs: `set-marker` clamps to the full buffer, not the narrowed
     /// region, so markers can be placed outside the accessible range.
-    pub fn lisp_pos_to_full_buffer_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
-        let char_pos = LispCharPos1::new(lisp_pos).to_char_pos();
+    pub fn lisp_pos_to_full_buffer_emacs_byte_pos(&self, lisp_pos: LispCharPos1) -> EmacsBytePos {
+        let char_pos = lisp_pos.to_char_pos();
         let clamped_char = char_pos.get().min(self.total_char_len().get());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))

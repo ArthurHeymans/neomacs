@@ -846,7 +846,11 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
             .get(),
         "ééz".len()
     );
-    assert_eq!(buf.lisp_pos_to_emacs_byte_pos(99).get(), "ééz".len());
+    assert_eq!(
+        buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(99))
+            .get(),
+        "ééz".len()
+    );
 
     buf.narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
         'é'.len_utf8(),
@@ -855,11 +859,13 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
     assert_eq!(buf.point_min_char(), 1);
     assert_eq!(buf.point_max_char(), 3);
     assert_eq!(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(1).get(),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(1))
+            .get(),
         'é'.len_utf8()
     );
     assert_eq!(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(99).get(),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(99))
+            .get(),
         "ééz".len()
     );
 }

@@ -97,8 +97,8 @@ pub(crate) fn builtin_zlib_decompress_region(
         (end, start)
     };
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
     );
     let from_byte = byte_range.start().get();
     let to_byte = byte_range.end().get();

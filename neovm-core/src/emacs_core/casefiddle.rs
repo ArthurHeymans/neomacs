@@ -450,8 +450,8 @@ fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> EmacsByteRange {
     }
 
     EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(a),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(b),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(a)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(b)),
     )
 }
 

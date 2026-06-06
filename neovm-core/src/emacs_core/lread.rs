@@ -387,8 +387,9 @@ pub(crate) fn eval_region_source_text_in_state(
         }
 
         let byte_range = EmacsByteRange::new(
-            buffer.lisp_pos_to_accessible_emacs_byte_pos(raw_start),
-            buffer.lisp_pos_to_accessible_emacs_byte_pos(raw_end),
+            buffer
+                .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw_start)),
+            buffer.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw_end)),
         );
         let text = buffer.buffer_substring_lisp_string_range(byte_range);
         (text, raw_start, raw_end)

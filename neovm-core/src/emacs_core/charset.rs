@@ -1523,8 +1523,8 @@ pub(crate) fn builtin_find_charset_region(
     }
 
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(a),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(b),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(a)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(b)),
     );
     if byte_range.is_empty() {
         return Ok(Value::list(vec![Value::symbol("ascii")]));
@@ -1770,7 +1770,7 @@ pub(crate) fn builtin_charset_after(
         if pos < point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
     } else {
         buf.point_emacs_byte_pos()
     };

@@ -4703,8 +4703,8 @@ fn write_region_content_in_state(
         (end, start)
     };
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_start),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_end),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_start)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_end)),
     );
     Ok(buf.buffer_substring_lisp_string_range(byte_range))
 }
