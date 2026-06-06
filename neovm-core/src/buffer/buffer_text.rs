@@ -1016,6 +1016,23 @@ impl BufferText {
             .set_properties_for_object_char_len(range, object_len, plist);
     }
 
+    /// Like `text_props_set_properties_in_emacs_byte_range` but takes the char
+    /// range directly, skipping the byte->char conversion.  Callers that
+    /// already know the char range -- e.g. `insert`, which knows point and the
+    /// inserted char length -- should use this to avoid re-deriving it (a
+    /// per-insert cost that shows up heavily during byte-compilation).
+    pub fn text_props_set_properties_in_char_range(
+        &self,
+        range: CharRange,
+        plist: Vec<(Value, Value)>,
+    ) {
+        let object_len = self.storage.borrow().metrics.char_len();
+        self.storage
+            .borrow_mut()
+            .text_props
+            .set_properties_for_object_char_len(range, object_len, plist);
+    }
+
     pub fn text_props_next_change_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
