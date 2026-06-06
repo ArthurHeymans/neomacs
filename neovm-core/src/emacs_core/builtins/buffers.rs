@@ -128,6 +128,10 @@ fn char_pos_to_buffer_emacs_byte_pos(
     buf.char_pos_to_emacs_byte_pos_clamped(char_pos)
 }
 
+fn clamped_lisp_char_pos_to_char_pos(pos: LispCharPos1, max_chars: CharLen) -> CharPos0 {
+    CharPos0::new(pos.to_char_pos().get().min(max_chars.get()))
+}
+
 pub(crate) fn normalize_narrow_region_in_buffers(
     buffers: &BufferManager,
     current_id: BufferId,
@@ -1969,14 +1973,14 @@ pub(crate) fn builtin_compute_motion(
         .unwrap_or(8);
 
     // Convert 1-based char positions to byte offsets.
-    let max_chars = buf.total_char_len().get();
+    let max_chars = buf.total_char_len();
     let from_byte = char_pos_to_buffer_emacs_byte_pos(
         buf,
-        CharPos0::new(((from - 1).max(0) as usize).min(max_chars)),
+        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(from), max_chars),
     );
     let to_byte = char_pos_to_buffer_emacs_byte_pos(
         buf,
-        CharPos0::new(((to - 1).max(0) as usize).min(max_chars)),
+        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(to), max_chars),
     );
 
     let from_pos = accessible.clamp(from_byte).get();
@@ -3514,12 +3518,9 @@ fn subst_char_in_region_scan(
         ));
     }
 
-    let lo = start.min(end) as usize;
-    let hi = start.max(end) as usize;
-    let range = buf.edit_range_for_char_range(CharRange::from_usize(
-        lo.saturating_sub(1),
-        hi.saturating_sub(1),
-    ));
+    let lo = LispCharPos1::new(start.min(end));
+    let hi = LispCharPos1::new(start.max(end));
+    let range = buf.edit_range_for_char_range(CharRange::new(lo.to_char_pos(), hi.to_char_pos()));
     if from_code == to_code {
         return Ok(None);
     }
