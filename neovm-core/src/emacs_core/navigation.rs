@@ -8,7 +8,7 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::{BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -838,8 +838,7 @@ pub(crate) fn builtin_beginning_of_line(
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        let zero_based = (target_char - 1).max(0) as usize;
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
+        buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(target_char).to_char_pos())
     };
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
@@ -875,8 +874,7 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     };
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        let zero_based = (target_char - 1).max(0) as usize;
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(zero_based))
+        buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(target_char).to_char_pos())
     };
     let adjusted = adjust_for_intangible(eval, target_byte, 1);
     let _ = eval
