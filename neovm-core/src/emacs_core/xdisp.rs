@@ -875,6 +875,11 @@ struct ModeLineRendered {
     text_props: TextPropertyTable,
 }
 
+#[inline]
+fn display_char_range(start: usize, end: usize) -> CharRange {
+    CharRange::new(CharPos0::new(start), CharPos0::new(end))
+}
+
 #[derive(Clone, Copy)]
 struct ModeLineFaceSpec {
     no_props: bool,
@@ -946,7 +951,7 @@ impl ModeLineRendered {
                 );
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
                     self.text_props.append_shifted_at_char_offset(
-                        &props.slice_char_range(CharRange::from_usize(start_char, end_char)),
+                        &props.slice_char_range(display_char_range(start_char, end_char)),
                         CharLen::new(char_offset),
                     );
                 }
@@ -966,7 +971,7 @@ impl ModeLineRendered {
                 if value.is_string() {
                     if let Some(props) = get_string_text_properties_table_for_value(*value) {
                         self.text_props.append_shifted_at_char_offset(
-                            &props.slice_char_range(CharRange::from_usize(start_char, end_char)),
+                            &props.slice_char_range(display_char_range(start_char, end_char)),
                             CharLen::new(char_offset),
                         );
                     }
@@ -988,7 +993,7 @@ impl ModeLineRendered {
             text: self.text.chars().take(precision).collect(),
             text_props: self
                 .text_props
-                .slice_char_range(CharRange::from_usize(0, precision)),
+                .slice_char_range(display_char_range(0, precision)),
         }
     }
 
@@ -1021,7 +1026,7 @@ impl ModeLineRendered {
                 continue;
             }
             self.text_props.put_property_in_char_range(
-                CharRange::from_usize(0, self.char_len()),
+                display_char_range(0, self.char_len()),
                 chunk[0],
                 chunk[1],
             );
@@ -1034,7 +1039,7 @@ impl ModeLineRendered {
         }
         for (name, value) in props {
             self.text_props.put_property_in_char_range(
-                CharRange::from_usize(0, self.char_len()),
+                display_char_range(0, self.char_len()),
                 name,
                 value,
             );
@@ -1056,7 +1061,7 @@ impl ModeLineRendered {
 
             if cursor < start {
                 self.text_props.put_property_in_char_range(
-                    CharRange::from_usize(cursor, start),
+                    display_char_range(cursor, start),
                     Value::symbol("face"),
                     face,
                 );
@@ -1070,7 +1075,7 @@ impl ModeLineRendered {
                     .map(|existing| Value::list(vec![existing, face]))
                     .unwrap_or(face);
                 self.text_props.put_property_in_char_range(
-                    CharRange::from_usize(start, interval_end),
+                    display_char_range(start, interval_end),
                     Value::symbol("face"),
                     merged_face,
                 );
@@ -1084,7 +1089,7 @@ impl ModeLineRendered {
 
         if cursor < end {
             self.text_props.put_property_in_char_range(
-                CharRange::from_usize(cursor, end),
+                display_char_range(cursor, end),
                 Value::symbol("face"),
                 face,
             );
