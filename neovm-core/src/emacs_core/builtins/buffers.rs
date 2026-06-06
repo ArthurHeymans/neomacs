@@ -4215,7 +4215,7 @@ pub(crate) fn builtin_position_bytes(
     }
 
     let byte_pos = char_pos_to_buffer_emacs_byte_pos(buf, LispCharPos1::new(pos).to_char_pos());
-    Ok(Value::fixnum(byte_pos.get() as i64 + 1))
+    Ok(Value::fixnum(byte_pos.to_lisp_byte_pos().as_i64()))
 }
 
 pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {

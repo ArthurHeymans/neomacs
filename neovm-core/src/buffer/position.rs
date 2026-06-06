@@ -332,6 +332,11 @@ impl EmacsBytePos {
         text.emacs_byte_pos_to_char_pos(self).to_lisp()
     }
 
+    /// Convert to a 1-based Lisp byte position.
+    pub const fn to_lisp_byte_pos(self) -> LispBytePos1 {
+        LispBytePos1(self.0 as i64 + 1)
+    }
+
     /// Convert from a 1-based Lisp position.
     /// Requires the buffer for char-to-byte conversion.
     pub fn from_lisp(p: LispCharPos1, text: &super::BufferText) -> Self {
