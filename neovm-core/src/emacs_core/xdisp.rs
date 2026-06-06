@@ -21,7 +21,8 @@ use super::hook_runtime;
 use super::intern::intern;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextPropertyTable,
+    Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    TextPropertyTable,
 };
 use crate::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
@@ -2617,13 +2618,13 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     let from_pos = args
         .get(1)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| (i.max(1) - 1) as usize)
-        .unwrap_or(0);
+        .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
+        .unwrap_or_else(|| EmacsBytePos::new(0));
     let to_pos = args
         .get(2)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| (i.max(1) - 1) as usize)
-        .unwrap_or(buf.total_emacs_byte_len().get());
+        .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
+        .unwrap_or_else(|| EmacsBytePos::new(buf.total_emacs_byte_len().get()));
 
     // Count lines and max columns in the region.  GNU's TO=t means
     // measure through the line ending the last non-empty line, not
@@ -2631,8 +2632,8 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(
         EmacsByteRange::new(
-            EmacsBytePos::new(from_pos),
-            EmacsBytePos::new(to_pos.min(buf.total_emacs_byte_len().get())),
+            from_pos,
+            EmacsBytePos::new(to_pos.get().min(buf.total_emacs_byte_len().get())),
         ),
         &mut bytes,
     );
