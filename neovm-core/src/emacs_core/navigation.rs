@@ -399,17 +399,17 @@ fn lookup_buffer_char_property(
     lookup_buffer_text_property(obarray, buffers, buf, byte_pos, prop)
 }
 
-fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+fn next_char_property_change(
+    buf: &crate::buffer::Buffer,
+    byte_pos: EmacsBytePos,
+) -> Option<EmacsBytePos> {
     let accessible = buf.accessible_emacs_byte_region();
-    let byte_pos = EmacsBytePos::new(byte_pos);
     let text_next = buf
         .text_props_next_change_after_emacs_byte_pos(byte_pos)
-        .map(EmacsBytePos::get)
-        .filter(|next| *next <= accessible.end_usize());
+        .filter(|next| *next <= accessible.end());
     let overlay_next = buf
         .overlays
-        .next_boundary_after_until_emacs_byte_pos(byte_pos, accessible.end())
-        .map(EmacsBytePos::get);
+        .next_boundary_after_until_emacs_byte_pos(byte_pos, accessible.end());
     match (text_next, overlay_next) {
         (Some(text), Some(overlay)) => Some(text.min(overlay)),
         (Some(text), None) => Some(text),
@@ -418,17 +418,17 @@ fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Op
     }
 }
 
-fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+fn previous_char_property_change(
+    buf: &crate::buffer::Buffer,
+    byte_pos: EmacsBytePos,
+) -> Option<EmacsBytePos> {
     let accessible = buf.accessible_emacs_byte_region();
-    let byte_pos = EmacsBytePos::new(byte_pos);
     let text_prev = buf
         .text_props_previous_change_before_emacs_byte_pos(byte_pos)
-        .map(EmacsBytePos::get)
-        .filter(|prev| *prev >= accessible.start_usize());
+        .filter(|prev| *prev >= accessible.start());
     let overlay_prev = buf
         .overlays
-        .previous_boundary_before_since_emacs_byte_pos(byte_pos, accessible.start())
-        .map(EmacsBytePos::get);
+        .previous_boundary_before_since_emacs_byte_pos(byte_pos, accessible.start());
     match (text_prev, overlay_prev) {
         (Some(text), Some(overlay)) => Some(text.max(overlay)),
         (Some(text), None) => Some(text),
@@ -469,7 +469,7 @@ pub(crate) fn adjust_for_intangible(
     if !intangible.is_truthy() {
         return pos;
     }
-    let mut cursor = pos.get();
+    let mut cursor = pos;
     if direction >= 0 {
         loop {
             match next_char_property_change(buf, cursor) {
@@ -478,7 +478,7 @@ pub(crate) fn adjust_for_intangible(
                         &eval.obarray,
                         &eval.buffers,
                         buf,
-                        next,
+                        next.get(),
                         Value::symbol("intangible"),
                     );
                     cursor = next;
@@ -487,7 +487,7 @@ pub(crate) fn adjust_for_intangible(
                     }
                 }
                 None => {
-                    cursor = accessible.end_usize();
+                    cursor = accessible.end();
                     break;
                 }
             }
@@ -496,7 +496,7 @@ pub(crate) fn adjust_for_intangible(
         loop {
             match previous_char_property_change(buf, cursor) {
                 Some(prev) => {
-                    let check = prev.saturating_sub(1);
+                    let check = prev.get().saturating_sub(1);
                     let prop = lookup_buffer_char_property(
                         &eval.obarray,
                         &eval.buffers,
@@ -510,13 +510,13 @@ pub(crate) fn adjust_for_intangible(
                     }
                 }
                 None => {
-                    cursor = accessible.start_usize();
+                    cursor = accessible.start();
                     break;
                 }
             }
         }
     }
-    EmacsBytePos::new(cursor)
+    cursor
 }
 
 // ===========================================================================
