@@ -239,6 +239,22 @@ fn write_object_extra(out: &mut Vec<u8>, obj: &DumpHeapObject) -> Result<(), Dum
 }
 
 fn object_needs_extra(obj: &DumpHeapObject) -> bool {
+    // Property-free strings whose bytes are mapped are self-contained in the
+    // heap image: `write_raw_string_obj` bakes the StringObj header in and
+    // relocates the data pointer, and the loader reconstructs them from the
+    // object-starts span (installing only the storage sidecar).  They need no
+    // object_extra descriptor.  This must stay in lockstep with the
+    // self-containment decision in `object_starts::write_object_span`.
+    if let DumpHeapObject::Str {
+        data: DumpByteData::Mapped(_),
+        text_props,
+        ..
+    } = obj
+    {
+        if text_props.is_empty() {
+            return false;
+        }
+    }
     !matches!(
         obj,
         DumpHeapObject::Cons { .. }
@@ -432,9 +448,13 @@ fn mapped_object_is_self_contained(
                 ))),
             }
         }
-        LoadedObjectSpan::None | LoadedObjectSpan::String(_) | LoadedObjectSpan::Unmapped => {
-            Ok(false)
-        }
+        // A string span carrying a byte-data span is self-contained (the loader
+        // reconstructs it from the heap image); without one it is Category B
+        // and still needs an object_extra descriptor.
+        LoadedObjectSpan::String { data: Some(_), .. } => Ok(true),
+        LoadedObjectSpan::None
+        | LoadedObjectSpan::String { data: None, .. }
+        | LoadedObjectSpan::Unmapped => Ok(false),
     }
 }
 

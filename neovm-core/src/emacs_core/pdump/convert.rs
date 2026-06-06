@@ -594,7 +594,7 @@ impl<'a> LoadDecoder<'a> {
                         Ok(())
                     })?;
                 }
-                LoadedObjectSpan::String(span) => {
+                LoadedObjectSpan::String { object: span, .. } => {
                     let mapped_heap = mapped_heap.ok_or_else(|| {
                         DumpError::ImageFormatError(
                             "dump reserves mapped string objects but image has no heap section"
@@ -984,6 +984,38 @@ impl<'a> LoadDecoder<'a> {
         mapped_heap.float_obj_mut(span).map(Some)
     }
 
+    /// Reconstruct a self-contained string directly from the heap image.
+    ///
+    /// Mirrors `allocate_mapped_self_contained_veclike`: property-free strings
+    /// with mapped bytes have no object_extra descriptor, so the object is
+    /// `Free` and the object-starts span carries the byte-data span.  The
+    /// StringObj header is already baked into the image with its data pointer
+    /// relocated (`write_raw_string_obj`); the only load-time work is allocating
+    /// the storage-sidecar box that marks the bytes as mapped.
+    fn allocate_mapped_self_contained_string(
+        &mut self,
+        id: TaggedHeapRef,
+    ) -> Result<Option<Value>, DumpError> {
+        let index = id.index as usize;
+        if !matches!(self.state.objects[index], DumpHeapObject::Free) {
+            return Ok(None);
+        }
+        let Some(byte_span) = self.state.spans.string_self_contained_data(index) else {
+            return Ok(None);
+        };
+        let ptr = self.mapped_string_obj_for_object(id)?.ok_or_else(|| {
+            DumpError::ImageFormatError(
+                "self-contained string span has no mapped string object".into(),
+            )
+        })?;
+        unsafe {
+            debug_assert!(matches!((*ptr).header.kind, HeapObjectKind::String));
+        }
+        let data = DumpByteData::Mapped(byte_span);
+        self.install_mapped_string_sidecars(ptr, &data)?;
+        Ok(Some(unsafe { Value::from_string_ptr(ptr) }))
+    }
+
     fn mapped_string_obj_for_object(
         &self,
         id: TaggedHeapRef,
@@ -1210,6 +1242,9 @@ impl<'a> LoadDecoder<'a> {
             return Ok(value);
         }
         if let Some(value) = self.allocate_mapped_self_contained_veclike(id)? {
+            return Ok(value);
+        }
+        if let Some(value) = self.allocate_mapped_self_contained_string(id)? {
             return Ok(value);
         }
         let value = match &self.state.objects[id.index as usize] {

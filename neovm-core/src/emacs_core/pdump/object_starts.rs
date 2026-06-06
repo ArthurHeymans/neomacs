@@ -11,7 +11,7 @@ use super::{DumpError, types::*};
 use std::marker::PhantomData;
 
 const OBJECT_STARTS_MAGIC: [u8; 16] = *b"NEOOBJSTARTS\0\0\0\0";
-const OBJECT_STARTS_FORMAT_VERSION: u32 = 4;
+const OBJECT_STARTS_FORMAT_VERSION: u32 = 5;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -80,11 +80,27 @@ fn write_object_span(
                 out.push(SPAN_NONE);
             }
         }
-        DumpHeapObject::Str { .. } => {
+        DumpHeapObject::Str {
+            data, text_props, ..
+        } => {
             if let Some(span) = heap.mapped_strings.get(index).and_then(|s| *s) {
                 out.push(SPAN_STRING);
                 write_dump_off(out, span.offset)?;
                 write_dump_off(out, span.len)?;
+                // A property-free string whose bytes live in the mapped image is
+                // self-contained: `write_raw_string_obj` already baked its
+                // StringObj header into the image and registered a relocation
+                // for the data pointer, so the loader only needs the byte-data
+                // span to install the storage sidecar -- no object_extra
+                // descriptor.  Mirror the vectorlike slot-span flag byte.
+                match data {
+                    DumpByteData::Mapped(byte_span) if text_props.is_empty() => {
+                        out.push(1); // self-contained
+                        write_dump_off(out, byte_span.offset)?;
+                        write_dump_off(out, byte_span.len)?;
+                    }
+                    _ => out.push(0), // descriptor-driven (Category B)
+                }
             } else {
                 out.push(SPAN_NONE);
             }
@@ -136,7 +152,16 @@ pub(crate) enum LoadedObjectSpan {
     Unmapped,
     Cons(DumpConsSpan),
     Float(DumpFloatSpan),
-    String(DumpStringSpan),
+    String {
+        /// Location of the mapped `StringObj` header (already baked into the
+        /// image at dump time with its `data` pointer relocated).
+        object: DumpStringSpan,
+        /// Present when the string is self-contained in the heap image: a
+        /// property-free string whose bytes are mapped.  The loader uses this
+        /// byte-data span to install the storage sidecar directly, skipping the
+        /// `object_extra` descriptor.  `None` => descriptor-driven (Category B).
+        data: Option<DumpByteSpan>,
+    },
     Vectorlike {
         object: DumpVecLikeSpan,
         slots: Option<DumpSlotSpan>,
@@ -208,7 +233,16 @@ impl<'data> LoadedSpans<'data> {
 
     pub(crate) fn string(&self, index: usize) -> Option<DumpStringSpan> {
         match self.get(index) {
-            LoadedObjectSpan::String(span) => Some(span),
+            LoadedObjectSpan::String { object, .. } => Some(object),
+            _ => None,
+        }
+    }
+
+    /// Byte-data span for a self-contained string (property-free, mapped
+    /// bytes).  `None` for descriptor-driven strings or non-strings.
+    pub(crate) fn string_self_contained_data(&self, index: usize) -> Option<DumpByteSpan> {
+        match self.get(index) {
+            LoadedObjectSpan::String { data, .. } => data,
             _ => None,
         }
     }
@@ -249,7 +283,18 @@ fn span_record_from_heap(heap: &DumpTaggedHeap, index: usize) -> LoadedObjectSpa
         return LoadedObjectSpan::Float(span);
     }
     if let Some(span) = heap.mapped_strings.get(index).copied().flatten() {
-        return LoadedObjectSpan::String(span);
+        // Match the self-containment decision in `write_object_span`: a
+        // property-free string with mapped bytes carries its byte-data span so
+        // the loader can skip the object_extra descriptor.
+        let data = match heap.objects.get(index) {
+            Some(DumpHeapObject::Str {
+                data: DumpByteData::Mapped(byte_span),
+                text_props,
+                ..
+            }) if text_props.is_empty() => Some(*byte_span),
+            _ => None,
+        };
+        return LoadedObjectSpan::String { object: span, data };
     }
     if let Some(object) = heap.mapped_veclikes.get(index).copied().flatten() {
         return LoadedObjectSpan::Vectorlike {
@@ -326,7 +371,30 @@ fn read_span_record(data: &[u8], cursor: &mut usize) -> Result<LoadedObjectSpan,
         SPAN_STRING => {
             let offset = read_dump_off(data, cursor)?;
             let len = read_dump_off(data, cursor)?;
-            Ok(LoadedObjectSpan::String(DumpStringSpan { offset, len }))
+            if *cursor >= data.len() {
+                return Err(DumpError::ImageFormatError(
+                    "object-starts string self-contained flag truncated".into(),
+                ));
+            }
+            let self_contained = data[*cursor];
+            *cursor += 1;
+            if self_contained > 1 {
+                return Err(DumpError::ImageFormatError(
+                    "object-starts string self-contained flag is invalid".into(),
+                ));
+            }
+            let byte_data = if self_contained != 0 {
+                Some(DumpByteSpan {
+                    offset: read_dump_off(data, cursor)?,
+                    len: read_dump_off(data, cursor)?,
+                })
+            } else {
+                None
+            };
+            Ok(LoadedObjectSpan::String {
+                object: DumpStringSpan { offset, len },
+                data: byte_data,
+            })
         }
         SPAN_VECTORLIKE => {
             let object = DumpVecLikeSpan {
