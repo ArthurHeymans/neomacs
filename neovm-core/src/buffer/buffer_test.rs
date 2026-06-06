@@ -28,6 +28,15 @@ fn require_implemented_kind(kind: BufferTextBackendKind) -> ImplementedBufferTex
         .expect("test backend should be implemented")
 }
 
+fn marker_position_anchor(byte_pos: usize, char_pos: usize) -> TextPositionAnchor {
+    TextPositionAnchor::from_usize(char_pos, byte_pos)
+}
+
+fn marker_chain_anchor_for_test(buf: &Buffer, marker_id: u64) -> Option<TextPositionAnchor> {
+    marker_chain_lookup_for_test(buf, marker_id)
+        .map(|(byte_pos, char_pos, _)| marker_position_anchor(byte_pos, char_pos))
+}
+
 fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
     BufferTextBackendKind::implemented_variants()
 }
@@ -1297,7 +1306,7 @@ struct BackendEditSnapshot {
     point_char: usize,
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
-    marker_position: Option<(usize, usize)>,
+    marker_position: Option<TextPositionAnchor>,
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
@@ -1333,8 +1342,7 @@ fn run_backend_edit_script(kind: BufferTextBackendKind) -> BackendEditSnapshot {
         &replacement,
     );
 
-    let marker_position =
-        marker_chain_lookup_for_test(&buf, 42).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position = marker_chain_anchor_for_test(&buf, 42);
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
@@ -1381,8 +1389,7 @@ fn run_backend_transpose_script(kind: BufferTextBackendKind) -> BackendEditSnaps
     );
     buf.transpose_regions(transposition, false);
 
-    let marker_position =
-        marker_chain_lookup_for_test(&buf, 42).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position = marker_chain_anchor_for_test(&buf, 42);
 
     BackendEditSnapshot {
         buffer_string: buf.buffer_string(),
@@ -1563,7 +1570,7 @@ struct BackendUndoSnapshot {
     point_char: usize,
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
-    marker_position: Option<(usize, usize)>,
+    marker_position: Option<TextPositionAnchor>,
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
@@ -1630,8 +1637,7 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
     let undo_before = undo_list_snapshot(mgr.get(id).expect("scratch buffer").get_undo_list());
     let undo_result = mgr.undo_buffer(id, 1).expect("undo result");
     let buf = mgr.get(id).expect("scratch buffer");
-    let marker_position =
-        marker_chain_lookup_for_test(&buf, 88).map(|(byte_pos, char_pos, _)| (byte_pos, char_pos));
+    let marker_position = marker_chain_anchor_for_test(&buf, 88);
     assert_eq!(buf.text_backend_kind(), kind);
 
     BackendUndoSnapshot {
@@ -1668,7 +1674,7 @@ struct ManagerEditEntrypointSnapshot {
     point_char: usize,
     mark_byte: Option<usize>,
     mark_char: Option<usize>,
-    marker_position: Option<(usize, usize)>,
+    marker_position: Option<TextPositionAnchor>,
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
     undo: Vec<UndoEntrySnapshot>,
 }
@@ -1743,8 +1749,7 @@ fn run_manager_edit_entrypoint_script(
         point_char: buf.point_char_pos().get(),
         mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
         mark_char: buf.mark_char_pos().map(|pos| pos.get()),
-        marker_position: marker_chain_lookup_for_test(&buf, 99)
-            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        marker_position: marker_chain_anchor_for_test(&buf, 99),
         text_properties: buffer_text_property_snapshot(buf),
         undo: undo_list_snapshot(buf.get_undo_list()),
     }
@@ -1841,12 +1846,12 @@ fn manager_replace_lisp_string_grafts_converted_intervals_once() {
 struct SharedInsertPolicySnapshot {
     base_string: String,
     indirect_string: String,
-    base_point: (usize, usize),
-    indirect_point: (usize, usize),
+    base_point: TextPositionAnchor,
+    indirect_point: TextPositionAnchor,
     base_mark: (Option<usize>, Option<usize>),
     indirect_mark: (Option<usize>, Option<usize>),
-    marker_after_position: Option<(usize, usize)>,
-    marker_before_position: Option<(usize, usize)>,
+    marker_after_position: Option<TextPositionAnchor>,
+    marker_before_position: Option<TextPositionAnchor>,
     indirect_overlay_range: (Option<usize>, Option<usize>),
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
@@ -1947,13 +1952,10 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
     SharedInsertPolicySnapshot {
         base_string: base.buffer_string(),
         indirect_string: indirect.buffer_string(),
-        base_point: (
-            base.point_emacs_byte_pos().get(),
-            base.point_char_pos().get(),
-        ),
-        indirect_point: (
-            indirect.point_emacs_byte_pos().get(),
-            indirect.point_char_pos().get(),
+        base_point: TextPositionAnchor::new(base.point_char_pos(), base.point_emacs_byte_pos()),
+        indirect_point: TextPositionAnchor::new(
+            indirect.point_char_pos(),
+            indirect.point_emacs_byte_pos(),
         ),
         base_mark: (
             base.mark_emacs_byte_pos().map(|pos| pos.get()),
@@ -1963,10 +1965,8 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
             indirect.mark_emacs_byte_pos().map(|pos| pos.get()),
             indirect.mark_char_pos().map(|pos| pos.get()),
         ),
-        marker_after_position: marker_chain_lookup_for_test(&base, 701)
-            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
-        marker_before_position: marker_chain_lookup_for_test(&indirect, 702)
-            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        marker_after_position: marker_chain_anchor_for_test(base, 701),
+        marker_before_position: marker_chain_anchor_for_test(indirect, 702),
         indirect_overlay_range: (
             overlay_start_for_test(indirect, indirect_overlay),
             overlay_end_for_test(indirect, indirect_overlay),
@@ -1994,7 +1994,7 @@ struct BackendMigrationSnapshot {
     buffer_string: String,
     char_to_byte_4: usize,
     byte_to_char_at_char_4: usize,
-    marker_position: Option<(usize, usize)>,
+    marker_position: Option<TextPositionAnchor>,
     overlay_range: (Option<usize>, Option<usize>),
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
@@ -2054,8 +2054,7 @@ fn run_backend_migration_script(
         buffer_string: buf.buffer_string(),
         char_to_byte_4,
         byte_to_char_at_char_4: char_pos_for_byte(&buf, char_to_byte_4),
-        marker_position: marker_chain_lookup_for_test(&buf, 77)
-            .map(|(byte_pos, char_pos, _)| (byte_pos, char_pos)),
+        marker_position: marker_chain_anchor_for_test(&buf, 77),
         overlay_range: (
             overlay_start_for_test(&buf, overlay),
             overlay_end_for_test(&buf, overlay),
