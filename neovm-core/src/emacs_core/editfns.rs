@@ -75,8 +75,11 @@ fn expect_integer(_name: &str, val: &Value) -> Result<i64, Flow> {
 
 /// Convert a Lisp 1-based character position to a 0-based byte position,
 /// clamping to the accessible region `[begv, zv]`.
-pub(crate) fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> EmacsBytePos {
-    buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(lisp_pos))
+pub(crate) fn lisp_pos_to_byte(
+    buf: &crate::buffer::Buffer,
+    lisp_pos: LispCharPos1,
+) -> EmacsBytePos {
+    buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos)
 }
 
 fn dynamic_buffer_or_global_symbol_value(
@@ -829,8 +832,10 @@ fn call_overlay_hook_list(
 fn expect_integer_or_marker_in_buffers(
     buffers: &BufferManager,
     value: &Value,
-) -> Result<i64, Flow> {
-    super::position::fix_position_with_buffers(buffers, value)
+) -> Result<LispCharPos1, Flow> {
+    Ok(LispCharPos1::new(
+        super::position::fix_position_with_buffers(buffers, value)?,
+    ))
 }
 
 pub(crate) fn current_buffer_accessible_char_region_in_buffers(
@@ -846,7 +851,11 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
     let end = expect_integer_or_marker_in_buffers(buffers, end_arg)?;
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal(
             "args-out-of-range",
             vec![Value::make_buffer(buf.id), *start_arg, *end_arg],
@@ -859,8 +868,8 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
         (end, start)
     };
     Ok(Some(EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
     )))
 }
 
