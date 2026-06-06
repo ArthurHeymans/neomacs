@@ -22,14 +22,13 @@ fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: usize) -> usize {
 }
 
 #[inline]
-fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
-    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
-        .get()
+fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: CharPos0) -> usize {
+    buf.char_pos_to_emacs_byte_pos_clamped(char_pos).get()
 }
 
 #[inline]
-fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: usize) -> EmacsBytePos {
-    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: CharPos0) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(char_pos)
 }
 
 #[derive(Clone, Copy)]
@@ -807,7 +806,10 @@ fn forward_word_with_options(
         }
         if idx == accessible_len {
             let abs_char = accessible_char_start + idx;
-            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
+            return (
+                buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
+                false,
+            );
         }
         // Skip word characters
         while idx < accessible_len
@@ -829,7 +831,10 @@ fn forward_word_with_options(
 
     // Convert char index back to byte position (absolute).
     let abs_char = accessible_char_start + idx;
-    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
+    (
+        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
+        true,
+    )
 }
 
 /// Move backward over `count` words.  Returns the resulting Emacs byte position.
@@ -876,7 +881,10 @@ fn backward_word_with_options(
         }
         if idx == 0 {
             let abs_char = accessible_char_start + idx;
-            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
+            return (
+                buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
+                false,
+            );
         }
         // Skip word characters backward
         while idx > 0
@@ -897,7 +905,10 @@ fn backward_word_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
+    (
+        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
+        true,
+    )
 }
 
 /// Skip forward over characters whose syntax class matches any character in
@@ -955,7 +966,7 @@ fn skip_syntax_forward_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    buffer_char_to_byte_pos(buf, abs_char)
+    buffer_char_to_byte_pos(buf, CharPos0::new(abs_char))
 }
 
 /// Skip backward over characters whose syntax class matches any character in
@@ -1011,7 +1022,7 @@ fn skip_syntax_backward_with_options(
     }
 
     let abs_char = accessible_char_start + idx;
-    buffer_char_to_byte_pos(buf, abs_char)
+    buffer_char_to_byte_pos(buf, CharPos0::new(abs_char))
 }
 
 fn parse_skip_syntax_classes(syntax_chars: &str) -> (Vec<SyntaxClass>, bool) {
@@ -1079,7 +1090,7 @@ fn scan_sexps_with_options(
         }
     }
 
-    Ok(Some(buffer_char_to_byte_pos(buf, idx)))
+    Ok(Some(buffer_char_to_byte_pos(buf, CharPos0::new(idx))))
 }
 
 fn is_sexp_ignored_syntax(class: SyntaxClass) -> bool {
@@ -2038,7 +2049,7 @@ fn effective_syntax_entry_for_abs_char(
     abs_char: usize,
     honor_properties: bool,
 ) -> SyntaxEntry {
-    let byte_pos = buffer_char_to_byte_pos(buf, abs_char);
+    let byte_pos = buffer_char_to_byte_pos(buf, CharPos0::new(abs_char));
     effective_syntax_entry_for_char_at_byte(
         buf,
         table,
@@ -2440,7 +2451,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
     let char_index = pos as usize - 1;
     let byte_index = EmacsBytePos::new(buffer_char_to_byte_pos(
         buf,
-        char_index.min(buf.total_char_len().get()),
+        CharPos0::new(char_index.min(buf.total_char_len().get())),
     ));
     let Some(unit) = buffer_syntax_char_after(buf, byte_index) else {
         return Ok(Value::NIL);
@@ -3267,7 +3278,7 @@ pub(crate) fn builtin_forward_word(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         // Convert constrained 1-based char position back to a byte offset.
         let zero_based = (constrained_char - 1).max(0) as usize;
-        buffer_char_to_emacs_byte_pos(buf, zero_based)
+        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(zero_based))
     };
 
     let current_id = eval
@@ -3577,7 +3588,10 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let table = SyntaxTable::for_buffer(buf);
 
     let from_char = if from > 0 { from as usize - 1 } else { 0 };
-    let from_byte = buffer_char_to_byte_pos(buf, from_char.min(buf.total_char_len().get()));
+    let from_byte = buffer_char_to_byte_pos(
+        buf,
+        CharPos0::new(from_char.min(buf.total_char_len().get())),
+    );
 
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(
@@ -3879,8 +3893,8 @@ fn parse_state_from_range_with_options(
     let chars = buffer_chars_in_range(
         buf,
         EmacsByteRange::new(
-            buffer_char_to_emacs_byte_pos(buf, from_char),
-            buffer_char_to_emacs_byte_pos(buf, to_char),
+            buffer_char_to_emacs_byte_pos(buf, CharPos0::new(from_char)),
+            buffer_char_to_emacs_byte_pos(buf, CharPos0::new(to_char)),
         ),
     );
     let to_idx = chars.len();
