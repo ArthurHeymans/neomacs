@@ -272,6 +272,10 @@ Progress:
   narrowing, marker creation, and inserted-property clearing shims were removed.
   Tests now construct `EmacsByteRange` or `EmacsBytePos` explicitly and call the
   production typed APIs directly.
+- Display and search boundary helpers now use named range/metric types instead
+  of anonymous `(usize, usize)` tuples where the pair has semantic meaning:
+  mode-line/window text sizing uses typed line/column and text metrics, and
+  replacement/isearch byte spans use `MatchGroup`.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
