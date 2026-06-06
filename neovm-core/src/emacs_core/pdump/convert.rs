@@ -4397,9 +4397,8 @@ fn load_property_interval(
 // load_undo_record removed — undo state is loaded from buffer-local properties.
 
 #[inline]
-fn dump_buffer_byte_to_char_pos(text: &BufferText, byte_pos: usize) -> usize {
-    text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-        .get()
+fn dump_buffer_byte_to_char_pos(text: &BufferText, byte_pos: EmacsBytePos) -> CharPos0 {
+    text.emacs_byte_pos_to_char_pos(byte_pos)
 }
 
 fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
@@ -4410,12 +4409,12 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
     let total_chars = text.char_count().get();
     let begv_char = db
         .begv_char
-        .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, db.begv));
+        .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.begv)).get());
     let zv_char = db.zv_char.unwrap_or_else(|| {
         if db.zv == text.emacs_byte_len().get() {
             total_chars
         } else {
-            dump_buffer_byte_to_char_pos(&text, db.zv)
+            dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.zv)).get()
         }
     });
     let pt_char = db.pt_char.unwrap_or_else(|| {
@@ -4424,7 +4423,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         } else if db.pt == db.zv {
             zv_char
         } else {
-            dump_buffer_byte_to_char_pos(&text, db.pt)
+            dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.pt)).get()
         }
     });
     let mark_char = match db.mark {
@@ -4434,7 +4433,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             } else if mark == db.zv {
                 zv_char
             } else {
-                dump_buffer_byte_to_char_pos(&text, mark)
+                dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(mark)).get()
             }
         })),
         None => None,
