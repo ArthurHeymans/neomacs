@@ -514,7 +514,7 @@ impl PieceTreeTextBackend {
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.len());
         self.copy_emacs_byte_range_to(
-            EmacsByteRange::new(EmacsBytePos::ZERO, EmacsBytePos::new(self.len())),
+            EmacsByteRange::new(EmacsBytePos::ZERO, self.metrics().emacs_byte_end()),
             &mut out,
         );
         out
@@ -764,7 +764,7 @@ impl fmt::Display for PieceTreeTextBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.text_emacs_byte_range(EmacsByteRange::new(
             EmacsBytePos::ZERO,
-            EmacsBytePos::new(self.len()),
+            self.metrics().emacs_byte_end(),
         )))
     }
 }
