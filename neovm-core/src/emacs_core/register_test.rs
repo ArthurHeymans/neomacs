@@ -92,7 +92,7 @@ fn marker_storage() {
             let (buffer_id, point, insertion_type) =
                 crate::emacs_core::marker::marker_logical_fields(stored).expect("marker");
             assert_eq!(buffer_id, Some(crate::buffer::BufferId(7)));
-            assert_eq!(point, Some(42));
+            assert_eq!(point, Some(crate::buffer::LispCharPos1::new(42)));
             assert!(!insertion_type);
         }
         other => panic!("Expected Marker, got {:?}", other),

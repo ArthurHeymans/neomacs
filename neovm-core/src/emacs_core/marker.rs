@@ -137,7 +137,9 @@ pub(crate) fn make_registered_buffer_marker(
     marker
 }
 
-pub(crate) fn marker_logical_fields(v: &Value) -> Option<(Option<BufferId>, Option<i64>, bool)> {
+pub(crate) fn marker_logical_fields(
+    v: &Value,
+) -> Option<(Option<BufferId>, Option<LispCharPos1>, bool)> {
     if !v.is_marker() {
         return None;
     };
@@ -150,7 +152,7 @@ pub(crate) fn marker_logical_fields(v: &Value) -> Option<(Option<BufferId>, Opti
     // `buffer == None && charpos == 0`, which reports `None` and matches
     // GNU's "points nowhere" semantics.
     let position = if data.buffer.is_some() || data.last_position_valid {
-        Some(marker_charpos_to_lisp_i64(data.charpos))
+        Some(marker_charpos_to_lisp_pos(data.charpos))
     } else {
         None
     };
@@ -203,8 +205,8 @@ fn set_marker_id(v: &Value, mid: u64) {
     }
 }
 
-fn marker_charpos_to_lisp_i64(charpos: usize) -> i64 {
-    CharPos0::new(charpos).to_lisp().as_i64()
+fn marker_charpos_to_lisp_pos(charpos: usize) -> LispCharPos1 {
+    CharPos0::new(charpos).to_lisp()
 }
 
 pub(crate) fn detach_marker_in_buffers(buffers: &mut BufferManager, marker: &Value) {
@@ -245,7 +247,7 @@ fn marker_position_value(v: &Value) -> Value {
     // charpos for detached/dead-buffer markers is exposed by
     // `marker-last-position`, not by `marker-position`.
     if data.buffer.is_some() {
-        Value::fixnum(marker_charpos_to_lisp_i64(data.charpos))
+        Value::fixnum(marker_charpos_to_lisp_pos(data.charpos).as_i64())
     } else {
         Value::NIL
     }
@@ -293,7 +295,7 @@ pub(crate) fn marker_position_as_int_with_buffers(
     // still retain a charpos for `marker-last-position`, but they do not
     // point anywhere for `marker-position`.
     if data.buffer.is_some() {
-        Ok(marker_charpos_to_lisp_i64(data.charpos))
+        Ok(marker_charpos_to_lisp_pos(data.charpos).as_i64())
     } else {
         Err(signal(
             "error",

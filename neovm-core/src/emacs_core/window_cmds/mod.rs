@@ -244,8 +244,8 @@ fn parse_integer_or_marker_arg(value: &Value) -> Result<IntegerOrMarkerArg, Flow
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(IntegerOrMarkerArg::Int(n)),
         _ if value.is_marker() => {
-            let position =
-                super::marker::marker_logical_fields(value).and_then(|(_, position, _)| position);
+            let position = super::marker::marker_logical_fields(value)
+                .and_then(|(_, position, _)| position.map(|pos| pos.as_i64()));
             Ok(IntegerOrMarkerArg::Marker {
                 raw: *value,
                 position,
