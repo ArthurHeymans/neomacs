@@ -772,7 +772,8 @@ pub(crate) fn builtin_buffer_substring(
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
-    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    let byte_range =
+        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
     Ok(buffer_slice_value_range(buf, byte_range))
 }
 
@@ -861,15 +862,19 @@ fn buffer_slice_for_char_region(
     super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string_range(byte_range))
 }
 
-fn accessible_lisp_range_to_byte_range(buf: &Buffer, start: i64, end: i64) -> EmacsByteRange {
+fn accessible_lisp_range_to_byte_range(
+    buf: &Buffer,
+    start: LispCharPos1,
+    end: LispCharPos1,
+) -> EmacsByteRange {
     let (from, to) = if start <= end {
         (start, end)
     } else {
         (end, start)
     };
     EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
     )
 }
 
@@ -894,7 +899,8 @@ fn checked_buffer_slice_for_char_region(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    let byte_range =
+        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
     Ok(super::runtime_string_from_lisp_string(
         &buf.buffer_substring_lisp_string_range(byte_range),
     ))
@@ -957,7 +963,8 @@ fn checked_buffer_slice_for_char_region_in_manager(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    let byte_range =
+        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
     Ok(super::runtime_string_from_lisp_string(
         &buf.buffer_substring_lisp_string_range(byte_range),
     ))
@@ -988,7 +995,8 @@ fn checked_buffer_substring_for_char_region_in_manager(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    let byte_range =
+        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
     Ok(buffer_slice_value(
         buf,
         byte_range.start().get(),
