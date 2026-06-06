@@ -627,14 +627,14 @@ fn parse_str_as_multibyte_counts() {
         let n = char_string(c, &mut tmp);
         input.extend_from_slice(&tmp[..n]);
     }
-    let (chars, nbytes) = parse_str_as_multibyte(&input);
-    assert_eq!(chars, 3);
-    assert_eq!(nbytes, input.len());
+    let metrics = parse_str_as_multibyte(&input);
+    assert_eq!(metrics.chars, 3);
+    assert_eq!(metrics.nbytes, input.len());
 
     // Lone high byte counts as 1 char / 2 bytes.
-    let (chars, nbytes) = parse_str_as_multibyte(&[b'A', 0xFF]);
-    assert_eq!(chars, 2);
-    assert_eq!(nbytes, 1 + 2);
+    let metrics = parse_str_as_multibyte(&[b'A', 0xFF]);
+    assert_eq!(metrics.chars, 2);
+    assert_eq!(metrics.nbytes, 1 + 2);
 }
 
 // -----------------------------------------------------------------------

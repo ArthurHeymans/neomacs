@@ -794,7 +794,13 @@ pub fn str_to_multibyte(src: &[u8]) -> Vec<u8> {
 /// multibyte and lone high bytes as raw-byte chars (2 bytes each).
 ///
 /// Mirrors GNU `parse_str_as_multibyte` (character.c:543).
-pub fn parse_str_as_multibyte(src: &[u8]) -> (usize, usize) {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MultibyteParseMetrics {
+    pub chars: usize,
+    pub nbytes: usize,
+}
+
+pub fn parse_str_as_multibyte(src: &[u8]) -> MultibyteParseMetrics {
     let mut chars = 0usize;
     let mut nbytes = 0usize;
     let mut p = 0usize;
@@ -811,7 +817,7 @@ pub fn parse_str_as_multibyte(src: &[u8]) -> (usize, usize) {
         }
         chars += 1;
     }
-    (chars, nbytes)
+    MultibyteParseMetrics { chars, nbytes }
 }
 
 /// Reinterpret unibyte text as multibyte, preserving valid multibyte
