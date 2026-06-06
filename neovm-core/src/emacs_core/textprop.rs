@@ -398,14 +398,17 @@ fn lookup_overlay_property(
 /// This is only valid after GNU-style range validation.  Text-property
 /// builtins must not clamp positions: GNU `validate_interval_range` signals
 /// `args-out-of-range` for invalid positions.
-fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
-    debug_assert!(pos >= 1);
-    buffer_char_to_emacs_byte_pos(buf, lisp_char_pos(pos).to_char_pos())
+fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: LispCharPos1) -> EmacsBytePos {
+    debug_assert!(pos.as_i64() >= 1);
+    buffer_char_to_emacs_byte_pos(buf, pos.to_char_pos())
 }
 
-fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
+fn elisp_pos_to_byte_clipped_full(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: LispCharPos1,
+) -> EmacsBytePos {
     let max = buf.z_lisp_char_pos().as_i64();
-    let clipped = pos.clamp(1, max);
+    let clipped = LispCharPos1::new(pos.as_i64().clamp(1, max));
     elisp_pos_to_byte(buf, clipped)
 }
 
@@ -421,8 +424,8 @@ fn elisp_range_to_byte_clipped_full(
     let clipped_beg = beg.clamp(1, max);
     let clipped_end = end.clamp(clipped_beg, max);
     EmacsByteRange::new(
-        elisp_pos_to_byte(buf, clipped_beg),
-        elisp_pos_to_byte(buf, clipped_end),
+        elisp_pos_to_byte(buf, LispCharPos1::new(clipped_beg)),
+        elisp_pos_to_byte(buf, LispCharPos1::new(clipped_end)),
     )
 }
 
@@ -511,7 +514,7 @@ pub(crate) fn validate_buffer_point_emacs_byte_pos_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point(pos));
     }
-    Ok(elisp_pos_to_byte(buf, pos))
+    Ok(elisp_pos_to_byte(buf, LispCharPos1::new(pos)))
 }
 
 fn validate_buffer_property_point_emacs_byte_pos_raw(
@@ -524,7 +527,7 @@ fn validate_buffer_property_point_emacs_byte_pos_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point_pair(pos0));
     }
-    Ok(elisp_pos_to_byte(buf, pos))
+    Ok(elisp_pos_to_byte(buf, LispCharPos1::new(pos)))
 }
 
 fn validate_buffer_property_range(
@@ -554,8 +557,8 @@ fn validate_buffer_property_emacs_byte_range(
         return Err(args_out_of_range_range(beg0, end0));
     }
     Ok(Some(EmacsByteRange::new(
-        elisp_pos_to_byte(buf, start),
-        elisp_pos_to_byte(buf, finish),
+        elisp_pos_to_byte(buf, LispCharPos1::new(start)),
+        elisp_pos_to_byte(buf, LispCharPos1::new(finish)),
     )))
 }
 
@@ -2649,7 +2652,7 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
     let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
@@ -2679,7 +2682,7 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
     let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
@@ -2855,7 +2858,7 @@ pub(crate) fn builtin_overlays_at_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
     let mut ids = buf.overlays.overlays_at_emacs_byte_pos(byte_pos);
     if let Some(sorted) = args.get(1)
         && sorted.is_truthy()
@@ -3091,12 +3094,12 @@ pub(crate) fn builtin_remove_overlays(
         let start = if args.is_empty() || args[0].is_nil() {
             buf.point_min_emacs_byte_pos()
         } else {
-            elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[0])?)
+            elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(expect_int_eval(eval, &args[0])?))
         };
         let end = if args.len() < 2 || args[1].is_nil() {
             buf.point_max_emacs_byte_pos()
         } else {
-            elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[1])?)
+            elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(expect_int_eval(eval, &args[1])?))
         };
         (start, end)
     };
