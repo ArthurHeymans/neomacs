@@ -4,7 +4,7 @@ use neovm_core::buffer::{
     Buffer, BufferId, BufferManager, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
 };
 use neovm_core::emacs_core::value::Value;
-use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId};
+use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId, WindowMargins};
 
 fn eval_lisp(eval: &mut neovm_core::emacs_core::Context, source: &str) -> Value {
     eval.eval_str(source).expect("evaluate form")
@@ -834,7 +834,7 @@ fn test_window_params_fringes_and_margins() {
                 display, margins, ..
             } = win
             {
-                *margins = (2, 3);
+                *margins = WindowMargins::new(2, 3);
                 display.left_fringe_width = 10;
                 display.right_fringe_width = 12;
             }
@@ -871,7 +871,7 @@ fn test_window_params_tty_ignores_fringes_keeps_margins() {
                 display, margins, ..
             } = win
             {
-                *margins = (2, 3);
+                *margins = WindowMargins::new(2, 3);
                 display.left_fringe_width = 10;
                 display.right_fringe_width = 12;
             }

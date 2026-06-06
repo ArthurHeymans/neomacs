@@ -14,7 +14,9 @@ use neovm_core::emacs_core::load::{
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot};
+use neovm_core::window::{
+    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot, WindowVisibleBufferSpan,
+};
 use std::sync::{Arc, Mutex};
 
 trait BufferTextPropertyTestExt {
@@ -447,26 +449,10 @@ struct BackendLayoutTrace {
     points: Vec<DisplayPointSnapshot>,
     output_rows: Vec<DisplayRowSnapshot>,
     phys_cursor: Option<WindowCursorSnapshot>,
-    visible_span: Option<VisibleSpan>,
+    visible_span: Option<WindowVisibleBufferSpan>,
     window_start: usize,
     window_point: usize,
     hit: Option<WindowHitTrace>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct VisibleSpan {
-    start: usize,
-    end: usize,
-}
-
-impl VisibleSpan {
-    const fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-fn visible_span_from_pair(pair: Option<(usize, usize)>) -> Option<VisibleSpan> {
-    pair.map(|(start, end)| VisibleSpan::new(start, end))
 }
 
 fn selected_window_layout_trace(
@@ -519,7 +505,7 @@ fn selected_window_layout_trace(
         points: display_snapshot.points.clone(),
         output_rows: display_snapshot.rows.clone(),
         phys_cursor: display_snapshot.phys_cursor.clone(),
-        visible_span: visible_span_from_pair(display_snapshot.visible_buffer_span()),
+        visible_span: display_snapshot.visible_buffer_span(),
         window_start,
         window_point,
         hit,
@@ -1724,7 +1710,7 @@ fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
     );
     assert_eq!(
         baseline.visible_span,
-        Some(VisibleSpan::new(4, 7)),
+        Some(WindowVisibleBufferSpan::new(4, 7)),
         "baseline should publish the visible hscrolled buffer span"
     );
     assert!(
@@ -4590,19 +4576,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             .window_display_snapshot(selected_window)
             .expect("display snapshot");
         let all_points = snapshot.points.clone();
-        let visible_span = visible_span_from_pair(
-            snapshot
-                .rows
-                .iter()
-                .find_map(|row| row.start_buffer_pos)
-                .zip(
-                    snapshot
-                        .rows
-                        .iter()
-                        .rev()
-                        .find_map(|row| row.end_buffer_pos),
-                ),
-        );
+        let visible_span = snapshot.visible_buffer_span();
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
         let sample_chars = [
             (

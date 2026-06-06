@@ -14,9 +14,9 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
-    Window, WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
-    is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
-    window_parent_id, window_prev_sibling_id,
+    Window, WindowBufferDisplayDefaults, WindowId, WindowMargins,
+    is_valid_horizontal_scroll_bar_value, is_valid_vertical_scroll_bar_value,
+    window_first_child_id, window_next_sibling_id, window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
 use strum::{EnumString, IntoStaticStr};
@@ -938,8 +938,8 @@ fn window_body_horizontal_offsets_pixels(
     match w {
         Window::Leaf { margins, .. } => {
             let char_width = frame.char_width.max(1.0);
-            let left_margin = (margins.0 as f32 * char_width).round().max(0.0) as i64;
-            let right_margin = (margins.1 as f32 * char_width).round().max(0.0) as i64;
+            let left_margin = (margins.left() as f32 * char_width).round().max(0.0) as i64;
+            let right_margin = (margins.right() as f32 * char_width).round().max(0.0) as i64;
             let (left_fringe, right_fringe, _, _) = frames
                 .window_fringes(w.id())
                 .unwrap_or((0, 0, false, false));
@@ -2073,7 +2073,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             if let Some(snapshot_end) = frames
                 .get(fid)
                 .and_then(|frame| frame.window_display_snapshot(wid))
-                .and_then(|snapshot| snapshot.visible_buffer_span().map(|(_, end)| end))
+                .and_then(|snapshot| snapshot.visible_buffer_span().map(|span| span.end()))
             {
                 return Ok(Value::fixnum(snapshot_end as i64));
             }
@@ -2807,7 +2807,7 @@ pub(crate) fn builtin_set_window_margins(
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
-        let next = (left, right);
+        let next = WindowMargins::new(left, right);
         if *margins != next {
             *margins = next;
             return Ok(Value::T);
@@ -2826,10 +2826,12 @@ pub(crate) fn builtin_window_margins(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let w = get_leaf(frames, fid, wid)?;
-    let (left, right) = match w {
+    let margins = match w {
         Window::Leaf { margins, .. } => *margins,
-        _ => (0, 0),
+        _ => WindowMargins::ZERO,
     };
+    let left = margins.left();
+    let right = margins.right();
     let left_v = if left == 0 {
         Value::NIL
     } else {
@@ -4441,7 +4443,7 @@ pub(crate) fn builtin_set_window_buffer(
         let next_margins = if keep_margins {
             None
         } else {
-            Some((
+            Some(WindowMargins::new(
                 buffer_margin_width(buffers, buf_id, "left-margin-width")?,
                 buffer_margin_width(buffers, buf_id, "right-margin-width")?,
             ))

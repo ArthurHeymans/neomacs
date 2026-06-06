@@ -1,13 +1,13 @@
 use super::{
     Frame, FrameManager, FrameParam, HorizontalScrollBarType, VerticalScrollBarType, Window,
-    WindowDisplayState, WindowId,
+    WindowDisplayState, WindowId, WindowMargins,
 };
 use crate::buffer::BufferId;
 use crate::emacs_core::value::{Value, next_float_id};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowBufferDisplayDefaults {
-    pub margins: Option<(usize, usize)>,
+    pub margins: Option<WindowMargins>,
     pub fringes: Option<(Option<i32>, Option<i32>, bool)>,
     pub scroll_bars: Option<(Option<i32>, Value, Option<i32>, Value)>,
 }

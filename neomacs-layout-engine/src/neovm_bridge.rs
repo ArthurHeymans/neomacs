@@ -1082,8 +1082,8 @@ pub fn window_params_from_neovm(
     // Compute text bounds (bounds minus scroll bars, fringes, and margins).
     let left_fringe = left_fringe_width.max(0) as f32;
     let right_fringe = right_fringe_width.max(0) as f32;
-    let left_margin = margins.0 as f32 * char_width;
-    let right_margin = margins.1 as f32 * char_width;
+    let left_margin = margins.left() as f32 * char_width;
+    let right_margin = margins.right() as f32 * char_width;
     let text_x = bounds.x + left_sb + left_fringe + left_margin;
     let text_width = (bounds.width
         - left_sb

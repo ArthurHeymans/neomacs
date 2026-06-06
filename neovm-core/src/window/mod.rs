@@ -393,6 +393,28 @@ impl Default for WindowHistoryState {
 
 pub(crate) type WindowParameters = Vec<(Value, Value)>;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowMargins {
+    left: usize,
+    right: usize,
+}
+
+impl WindowMargins {
+    pub const ZERO: Self = Self { left: 0, right: 0 };
+
+    pub const fn new(left: usize, right: usize) -> Self {
+        Self { left, right }
+    }
+
+    pub const fn left(self) -> usize {
+        self.left
+    }
+
+    pub const fn right(self) -> usize {
+        self.right
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowRedisplayState {
     pub id: WindowId,
@@ -495,8 +517,8 @@ pub enum Window {
         vscroll: i32,
         /// Mirrors GNU `w->preserve_vscroll_p`.
         preserve_vscroll_p: bool,
-        /// Window margins (left, right) in columns.
-        margins: (usize, usize),
+        /// Window margins in columns.
+        margins: WindowMargins,
         /// Window-local display settings mirrored from GNU `struct window`.
         display: WindowDisplayState,
         /// Pending pixel size queued by `set-window-new-pixel`. GNU
@@ -584,7 +606,7 @@ impl Window {
             hscroll: 0,
             vscroll: 0,
             preserve_vscroll_p: false,
-            margins: (0, 0),
+            margins: WindowMargins::ZERO,
             display: WindowDisplayState::default(),
             new_pixel: None,
             new_total: None,
@@ -1191,6 +1213,26 @@ pub struct WindowDisplaySnapshot {
     pub rows: Vec<DisplayRowSnapshot>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowVisibleBufferSpan {
+    start: usize,
+    end: usize,
+}
+
+impl WindowVisibleBufferSpan {
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub const fn start(self) -> usize {
+        self.start
+    }
+
+    pub const fn end(self) -> usize {
+        self.end
+    }
+}
+
 impl WindowDisplaySnapshot {
     pub fn logical_cursor_pos(&self) -> Option<WindowCursorPos> {
         self.logical_cursor.or_else(|| {
@@ -1200,7 +1242,7 @@ impl WindowDisplaySnapshot {
         })
     }
 
-    pub fn visible_buffer_span(&self) -> Option<(usize, usize)> {
+    pub fn visible_buffer_span(&self) -> Option<WindowVisibleBufferSpan> {
         let start = self
             .rows
             .iter()
@@ -1212,7 +1254,7 @@ impl WindowDisplaySnapshot {
             .rev()
             .find_map(|row| row.end_buffer_pos)
             .or_else(|| self.points.last().map(|point| point.buffer_pos))?;
-        Some((start, end))
+        Some(WindowVisibleBufferSpan::new(start, end))
     }
 
     fn row_for_buffer_pos(&self, pos: usize) -> Option<&DisplayRowSnapshot> {
@@ -1236,8 +1278,8 @@ impl WindowDisplaySnapshot {
         if self.points.is_empty() {
             return None;
         }
-        let (visible_start, visible_end) = self.visible_buffer_span()?;
-        if pos < visible_start || pos > visible_end {
+        let visible_span = self.visible_buffer_span()?;
+        if pos < visible_span.start() || pos > visible_span.end() {
             return None;
         }
         let idx = self.points.partition_point(|point| point.buffer_pos < pos);
