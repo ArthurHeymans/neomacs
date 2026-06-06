@@ -891,8 +891,19 @@ pub(crate) fn buffer_manager_is_empty(manager: &DumpBufferManager) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::buffer::BufferTextBackendKind;
+
     use super::super::types::DumpHeapRef;
     use super::*;
+
+    #[test]
+    fn buffer_text_backend_kind_tags_match_runtime_backend_kind() {
+        for kind in BufferTextBackendKind::implemented_variants() {
+            let dump_kind = DumpBufferTextBackendKind::from(kind);
+            assert_eq!(BufferTextBackendKind::from(dump_kind), kind);
+            assert_eq!(u8::from(dump_kind), u8::from(kind));
+        }
+    }
 
     #[test]
     fn buffer_section_round_trips_manager_state() {

@@ -7,6 +7,7 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
+use crate::buffer::BufferTextBackendKind;
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -547,6 +548,20 @@ pub enum DumpBufferTextBackendKind {
     GapBuffer = 0,
     PieceTree = 1,
     Rope = 2,
+}
+
+impl From<BufferTextBackendKind> for DumpBufferTextBackendKind {
+    fn from(kind: BufferTextBackendKind) -> Self {
+        Self::try_from(u8::from(kind))
+            .expect("implemented buffer text backend must have a pdump tag")
+    }
+}
+
+impl From<DumpBufferTextBackendKind> for BufferTextBackendKind {
+    fn from(kind: DumpBufferTextBackendKind) -> Self {
+        Self::try_from(u8::from(kind))
+            .expect("pdump buffer text backend tag must be implemented at runtime")
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

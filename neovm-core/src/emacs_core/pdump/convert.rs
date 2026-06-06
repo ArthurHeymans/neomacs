@@ -2798,21 +2798,15 @@ fn dump_overlay_list(encoder: &mut DumpEncoder, ol: &OverlayList) -> DumpOverlay
 fn dump_buffer_text_backend_kind(
     kind: ImplementedBufferTextBackendKind,
 ) -> DumpBufferTextBackendKind {
-    match kind {
-        ImplementedBufferTextBackendKind::GAP_BUFFER => DumpBufferTextBackendKind::GapBuffer,
-        ImplementedBufferTextBackendKind::PIECE_TREE => DumpBufferTextBackendKind::PieceTree,
-        ImplementedBufferTextBackendKind::ROPE => DumpBufferTextBackendKind::Rope,
-    }
+    kind.public_kind().into()
 }
 
 fn load_buffer_text_backend_kind(
     kind: DumpBufferTextBackendKind,
 ) -> ImplementedBufferTextBackendKind {
-    match kind {
-        DumpBufferTextBackendKind::GapBuffer => ImplementedBufferTextBackendKind::GAP_BUFFER,
-        DumpBufferTextBackendKind::PieceTree => ImplementedBufferTextBackendKind::PIECE_TREE,
-        DumpBufferTextBackendKind::Rope => ImplementedBufferTextBackendKind::ROPE,
-    }
+    crate::buffer::BufferTextBackendKind::from(kind)
+        .try_into()
+        .expect("pdump buffer text backend tag must be implemented at runtime")
 }
 
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
