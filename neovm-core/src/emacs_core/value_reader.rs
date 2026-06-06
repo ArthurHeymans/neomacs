@@ -20,6 +20,7 @@ use malachite::integer::Integer;
 use super::emacs_char;
 use crate::buffer::{Buffer, EmacsBytePos, EmacsByteRange};
 use smallvec::SmallVec;
+use std::cell::Cell;
 
 use super::builtins::collections::lookup_hash_table_test_alias;
 use super::value::{
@@ -287,6 +288,17 @@ struct Reader<'a> {
     /// The active obarray, for resolving `#$` to the current value of
     /// `load-file-name` (matching GNU's `Vload_file_name`).
     obarray: &'a super::symbol::Obarray,
+    /// One-entry decode cache: `(pos, code, next_pos)` for the most recently
+    /// decoded position.  neomacs's reader peeks the current char
+    /// (`source_code_at`) then advances (`next_pos`) as separate steps, which
+    /// otherwise decodes the same multibyte char twice (each decode reads
+    /// bytes one at a time via `emacs_byte_at_pos`).  This cache makes the
+    /// peek+advance pair decode each position once.  GNU avoids the double
+    /// decode differently -- `readchar` reads-and-advances in one step -- but
+    /// GNU's `unreadchar` still re-decodes pushed-back chars (it only backs the
+    /// position up); this pos cache does not.  Safe because the source bytes at
+    /// a given position are immutable for the reader's lifetime.
+    step_cache: Cell<Option<(usize, u32, usize)>>,
 }
 
 struct ReaderToken {
@@ -375,6 +387,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            step_cache: Cell::new(None),
         }
     }
 
@@ -398,6 +411,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            step_cache: Cell::new(None),
         }
     }
 
@@ -422,6 +436,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            step_cache: Cell::new(None),
         }
     }
 
@@ -2193,6 +2208,31 @@ impl<'a> Reader<'a> {
     }
 
     fn source_code_at(&self, pos: usize) -> Option<u32> {
+        self.code_and_next(pos).map(|(code, _)| code)
+    }
+
+    fn next_pos(&self, pos: usize) -> Option<usize> {
+        self.code_and_next(pos).map(|(_, next)| next)
+    }
+
+    /// Decode the char at `pos`, returning `(code, next_pos)`, through the
+    /// one-entry `step_cache`.  The read hot path peeks then advances over the
+    /// same position, so caching makes it decode each char once.
+    fn code_and_next(&self, pos: usize) -> Option<(u32, usize)> {
+        if let Some((cached_pos, code, next)) = self.step_cache.get() {
+            if cached_pos == pos {
+                return Some((code, next));
+            }
+        }
+        let decoded = self.decode_step(pos)?;
+        self.step_cache.set(Some((pos, decoded.0, decoded.1)));
+        Some(decoded)
+    }
+
+    /// Raw single-char decode at `pos` -> `(code, next_pos)`, bypassing the
+    /// cache.  Preserves the exact per-source limit semantics of the previous
+    /// `source_code_at`/`next_pos`.
+    fn decode_step(&self, pos: usize) -> Option<(u32, usize)> {
         if pos >= self.limit {
             return None;
         }
@@ -2200,31 +2240,13 @@ impl<'a> Reader<'a> {
             ReaderSource::Runtime(input) => {
                 crate::emacs_core::string_escape::storage_code_step(input, pos)
                     .filter(|(_, next)| *next <= self.limit)
-                    .map(|(code, _)| code)
-            }
-            ReaderSource::LispString(input) => {
-                self.lisp_string_code_step(input, pos).map(|(code, _)| code)
-            }
-            ReaderSource::Buffer(input) => self.buffer_code_step(input, pos).map(|(code, _)| code),
-        }
-    }
-
-    fn next_pos(&self, pos: usize) -> Option<usize> {
-        if pos >= self.limit {
-            return None;
-        }
-        match self.source {
-            ReaderSource::Runtime(input) => {
-                crate::emacs_core::string_escape::storage_code_step(input, pos)
-                    .map(|(_, next)| next)
-                    .filter(|next| *next <= self.limit)
             }
             ReaderSource::LispString(input) => self
                 .lisp_string_code_step(input, pos)
-                .map(|(_, width)| pos + width),
+                .map(|(code, width)| (code, pos + width)),
             ReaderSource::Buffer(input) => self
                 .buffer_code_step(input, pos)
-                .map(|(_, width)| pos + width),
+                .map(|(code, width)| (code, pos + width)),
         }
     }
 
