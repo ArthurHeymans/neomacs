@@ -13,6 +13,7 @@ use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
 };
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
@@ -80,6 +81,11 @@ fn string_char_pos(pos: usize) -> CharPos0 {
 #[inline]
 fn string_char_len(len: usize) -> CharLen {
     CharLen::new(len)
+}
+
+#[inline]
+fn lisp_char_pos(pos: i64) -> LispCharPos1 {
+    LispCharPos1::new(pos)
 }
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
@@ -394,10 +400,7 @@ fn lookup_overlay_property(
 /// `args-out-of-range` for invalid positions.
 fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
     debug_assert!(pos >= 1);
-    EmacsBytePos::new(buffer_char_to_byte_pos(
-        buf,
-        CharPos0::new((pos - 1) as usize),
-    ))
+    buffer_char_to_emacs_byte_pos(buf, lisp_char_pos(pos).to_char_pos())
 }
 
 fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
@@ -447,11 +450,19 @@ pub(crate) fn validate_string_point_raw(
     pos: i64,
     pos0: Value,
 ) -> Result<usize, Flow> {
+    validate_string_char_pos_raw(s, pos, pos0).map(CharPos0::get)
+}
+
+pub(crate) fn validate_string_char_pos_raw(
+    s: &crate::heap_types::LispString,
+    pos: i64,
+    pos0: Value,
+) -> Result<CharPos0, Flow> {
     let len = s.schars() as i64;
     if !(0 <= pos && pos <= len) {
         return Err(args_out_of_range_point_pair(pos0));
     }
-    Ok(pos as usize)
+    Ok(string_char_pos(pos as usize))
 }
 
 fn validate_string_range(
@@ -469,7 +480,10 @@ fn validate_string_range(
     if !(0 <= start && start <= finish && finish <= len) {
         return Err(args_out_of_range_range(beg0, end0));
     }
-    Ok(Some(CharRange::from_usize(start as usize, finish as usize)))
+    Ok(Some(CharRange::new(
+        string_char_pos(start as usize),
+        string_char_pos(finish as usize),
+    )))
 }
 
 pub(crate) fn validate_buffer_point(
@@ -1208,13 +1222,17 @@ pub(crate) fn builtin_get_text_property_in_state(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let char_pos = validate_string_point_raw(s, pos, args[0])?;
-        if char_pos == s.schars() {
+        let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
+        if char_pos.get() == s.schars() {
             return Ok(Value::NIL);
         }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
             return Ok(lookup_string_text_property(
-                obarray, buffers, &table, char_pos, prop,
+                obarray,
+                buffers,
+                &table,
+                char_pos.get(),
+                prop,
             ));
         }
         return Ok(lookup_char_property_from_direct(
@@ -1912,12 +1930,12 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
-        let char_pos = validate_string_point_raw(s, pos, args[0])?;
-        if char_pos == s.schars() {
+        let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
+        if char_pos.get() == s.schars() {
             return Ok(Value::NIL);
         }
         if let Some(table) = get_string_text_properties_table_for_value(str_val) {
-            return Ok(table.get_properties_plist_value_at_char_pos(string_char_pos(char_pos)));
+            return Ok(table.get_properties_plist_value_at_char_pos(char_pos));
         }
         return Ok(Value::NIL);
     }
@@ -1957,7 +1975,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point_raw(s, pos, args[0])?;
+        let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
@@ -1965,11 +1983,12 @@ pub(crate) fn builtin_next_single_property_change_in_state(
             }
             _ => (None, None),
         };
-        let current_val = lookup_string_text_property(obarray, buffers, &table, char_pos, prop);
+        let current_val =
+            lookup_string_text_property(obarray, buffers, &table, char_pos.get(), prop);
         let str_len = s.schars();
         let mut cursor = char_pos;
         loop {
-            match table.next_interval_boundary_after_char_pos(string_char_pos(cursor)) {
+            match table.next_interval_boundary_after_char_pos(cursor) {
                 Some(next) => {
                     let next = next.get();
                     if let Some(lim) = limit_pos {
@@ -1991,7 +2010,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
                             string_char_pos(next),
                         )));
                     }
-                    cursor = next;
+                    cursor = string_char_pos(next);
                 }
                 None => break,
             }
@@ -2093,7 +2112,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point_raw(s, pos, args[0])?;
+        let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(3) {
             Some(v) if !v.is_nil() => {
                 let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
@@ -2101,11 +2120,11 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             }
             _ => (None, None),
         };
-        let ref_char = if char_pos > 0 { char_pos - 1 } else { 0 };
+        let ref_char = char_pos.get().saturating_sub(1);
         let current_val = lookup_string_text_property(obarray, buffers, &table, ref_char, prop);
         let mut cursor = char_pos;
         loop {
-            match table.previous_interval_boundary_before_char_pos(string_char_pos(cursor)) {
+            match table.previous_interval_boundary_before_char_pos(cursor) {
                 Some(prev) => {
                     let prev = prev.get();
                     if let Some(lim) = limit_pos {
@@ -2129,7 +2148,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
                     if prev == 0 {
                         break;
                     }
-                    cursor = if prev < cursor { prev } else { prev - 1 };
+                    cursor = string_char_pos(if prev < cursor.get() { prev } else { prev - 1 });
                 }
                 None => break,
             }
@@ -2216,11 +2235,11 @@ pub(crate) fn builtin_next_property_change_in_buffers(
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let char_pos = validate_string_point_raw(s, pos, args[0])?;
+        let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
         let limit_arg = args.get(2);
         if limit_arg.is_some_and(|v| v.is_t()) {
             let next = table
-                .next_interval_boundary_after_char_pos(string_char_pos(char_pos))
+                .next_interval_boundary_after_char_pos(char_pos)
                 .map(|pos| pos.get())
                 .unwrap_or_else(|| s.schars());
             return Ok(Value::fixnum(next as i64));
@@ -2233,7 +2252,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
             _ => (None, None),
         };
         let str_char_len = s.schars();
-        return match table.next_property_change_after_char_pos(string_char_pos(char_pos)) {
+        return match table.next_property_change_after_char_pos(char_pos) {
             Some(next) => {
                 let next = next.get();
                 if let Some(lim) = limit_pos {
