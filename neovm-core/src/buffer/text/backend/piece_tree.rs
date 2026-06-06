@@ -19,6 +19,10 @@ enum PieceSource {
 #[repr(transparent)]
 struct SourceBytePos(usize);
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct PieceByteOffset(usize);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Piece {
     source: PieceSource,
@@ -39,6 +43,16 @@ impl SourceBytePos {
 
     const fn add_emacs_bytes(self, len: EmacsByteLen) -> Self {
         Self(self.0 + len.get())
+    }
+}
+
+impl PieceByteOffset {
+    const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    const fn get(self) -> usize {
+        self.0
     }
 }
 
@@ -83,19 +97,24 @@ impl Piece {
         TextMetrics::from_extent(self.extent)
     }
 
-    fn split_at_emacs_byte(self, local_byte: usize, chars_before: usize) -> (Self, Self) {
+    fn split_at_emacs_byte(
+        self,
+        local_byte: PieceByteOffset,
+        chars_before: CharLen,
+    ) -> (Self, Self) {
+        let local_byte = local_byte.get();
         debug_assert!(local_byte > 0 && local_byte < self.len_usize());
         (
             Self::new(
                 self.source,
                 self.start,
-                TextExtent::new(CharLen::new(chars_before), EmacsByteLen::new(local_byte)),
+                TextExtent::new(chars_before, EmacsByteLen::new(local_byte)),
             ),
             Self::new(
                 self.source,
                 self.start.add_emacs_bytes(EmacsByteLen::new(local_byte)),
                 TextExtent::new(
-                    CharLen::new(self.char_len_usize() - chars_before),
+                    CharLen::new(self.char_len_usize() - chars_before.get()),
                     EmacsByteLen::new(self.len_usize() - local_byte),
                 ),
             ),
@@ -594,15 +613,15 @@ impl PieceTreeTextBackend {
             return (Some(node), right);
         }
 
-        let (left_piece, right_piece) = self.split_piece(node.piece, local);
+        let (left_piece, right_piece) = self.split_piece(node.piece, PieceByteOffset::new(local));
         let left_tree = Self::merge(node.left.take(), self.node_for_piece(left_piece));
         let right_tree = Self::merge(self.node_for_piece(right_piece), node.right.take());
         (left_tree, right_tree)
     }
 
-    fn split_piece(&self, piece: Piece, local_byte: usize) -> (Piece, Piece) {
-        debug_assert!(local_byte > 0 && local_byte < piece.len_usize());
-        let chars_before = self.piece_byte_to_char(piece, local_byte);
+    fn split_piece(&self, piece: Piece, local_byte: PieceByteOffset) -> (Piece, Piece) {
+        debug_assert!(local_byte.get() > 0 && local_byte.get() < piece.len_usize());
+        let chars_before = CharLen::new(self.piece_byte_to_char(piece, local_byte.get()));
         piece.split_at_emacs_byte(local_byte, chars_before)
     }
 
