@@ -14,9 +14,10 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
-    Window, WindowBufferDisplayDefaults, WindowId, WindowMargins,
-    is_valid_horizontal_scroll_bar_value, is_valid_vertical_scroll_bar_value,
-    window_first_child_id, window_next_sibling_id, window_parent_id, window_prev_sibling_id,
+    Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
+    WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
+    is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
+    window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
 use strum::{EnumString, IntoStaticStr};
@@ -4451,7 +4452,7 @@ pub(crate) fn builtin_set_window_buffer(
         let next_fringes = if keep_margins {
             None
         } else {
-            Some((
+            Some(WindowFringeDefaults::new(
                 buffer_local_optional_dimension(buffers, buf_id, "left-fringe-width")?,
                 buffer_local_optional_dimension(buffers, buf_id, "right-fringe-width")?,
                 buffer_local_value(buffers, buf_id, "fringes-outside-margins").is_truthy(),
@@ -4474,7 +4475,7 @@ pub(crate) fn builtin_set_window_buffer(
                     vec![Value::string("Invalid type of horizontal scroll bar")],
                 ));
             }
-            Some((
+            Some(WindowScrollBarDefaults::new(
                 buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-width")?,
                 vertical_type,
                 buffer_local_optional_dimension(buffers, buf_id, "scroll-bar-height")?,

@@ -8,8 +8,49 @@ use crate::emacs_core::value::{Value, next_float_id};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowBufferDisplayDefaults {
     pub margins: Option<WindowMargins>,
-    pub fringes: Option<(Option<i32>, Option<i32>, bool)>,
-    pub scroll_bars: Option<(Option<i32>, Value, Option<i32>, Value)>,
+    pub fringes: Option<WindowFringeDefaults>,
+    pub scroll_bars: Option<WindowScrollBarDefaults>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowFringeDefaults {
+    pub left_width: Option<i32>,
+    pub right_width: Option<i32>,
+    pub outside_margins: bool,
+}
+
+impl WindowFringeDefaults {
+    pub fn new(left_width: Option<i32>, right_width: Option<i32>, outside_margins: bool) -> Self {
+        Self {
+            left_width,
+            right_width,
+            outside_margins,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowScrollBarDefaults {
+    pub vertical_width: Option<i32>,
+    pub vertical_type: Value,
+    pub horizontal_height: Option<i32>,
+    pub horizontal_type: Value,
+}
+
+impl WindowScrollBarDefaults {
+    pub fn new(
+        vertical_width: Option<i32>,
+        vertical_type: Value,
+        horizontal_height: Option<i32>,
+        horizontal_type: Value,
+    ) -> Self {
+        Self {
+            vertical_width,
+            vertical_type,
+            horizontal_height,
+            horizontal_type,
+        }
+    }
 }
 
 /// Effective scroll-bar geometry for one live window.
@@ -605,21 +646,26 @@ impl FrameManager {
             }
         }
 
-        if let Some((left_width, right_width, outside_margins)) = defaults.fringes
+        if let Some(next_fringes) = defaults.fringes
             && !fringes_persistent
         {
-            let _ =
-                self.set_window_fringes(window_id, left_width, right_width, outside_margins, false);
+            let _ = self.set_window_fringes(
+                window_id,
+                next_fringes.left_width,
+                next_fringes.right_width,
+                next_fringes.outside_margins,
+                false,
+            );
         }
-        if let Some((width, vertical_type, height, horizontal_type)) = defaults.scroll_bars
+        if let Some(next_scroll_bars) = defaults.scroll_bars
             && !scroll_bars_persistent
         {
             let _ = self.set_window_scroll_bars(
                 window_id,
-                width,
-                vertical_type,
-                height,
-                horizontal_type,
+                next_scroll_bars.vertical_width,
+                next_scroll_bars.vertical_type,
+                next_scroll_bars.horizontal_height,
+                next_scroll_bars.horizontal_type,
                 false,
             );
         }

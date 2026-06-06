@@ -22,7 +22,8 @@ mod scroll_bar;
 pub mod window_markers;
 
 pub use display::{
-    WindowBufferDisplayDefaults, WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
+    WindowBufferDisplayDefaults, WindowFringeDefaults, WindowScrollBarDefaults,
+    WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
 };
 pub use frame_params::{
     CursorTypeSymbol, FrameFullscreen, FrameParam, FrameParamKey, FrameToolBarPosition,
