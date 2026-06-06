@@ -342,3 +342,28 @@ fn parse_partial_sexp_uses_absolute_positions_under_narrowing() {
         "last complete sexp should keep its absolute buffer position"
     );
 }
+
+#[test]
+fn parse_partial_sexp_honors_syntax_table_string_fence_property() {
+    crate::test_utils::init_test_tracing();
+    // A `syntax-table' text property of generic-string-fence syntax (class 15)
+    // must put parse-partial-sexp inside a string between the two fences, and
+    // back outside once past the closing fence.  This drives the per-char
+    // syntax-table property read -- and the SyntaxPropRange run cache that
+    // serves it -- through a NON-nil value, which the common all-nil run never
+    // exercises.  `syntax-propertize--done' is pinned past point-max so the
+    // lazy propertizer does not clear the manually applied properties.
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (progn
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "a|b|c")
+          (put-text-property 2 3 'syntax-table '(15))
+          (put-text-property 4 5 'syntax-table '(15))
+          (setq-local syntax-propertize--done (point-max))
+          (list (and (nth 3 (parse-partial-sexp 1 3)) t)
+                (and (nth 3 (parse-partial-sexp 1 5)) t)))
+        "#,
+    );
+    assert_eq!(result, "OK (t nil)");
+}

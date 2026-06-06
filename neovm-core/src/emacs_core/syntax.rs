@@ -2049,6 +2049,66 @@ fn syntax_entry_from_syntax_property(prop: Value, ch: char) -> Option<SyntaxEntr
     }
 }
 
+/// Per-scan cache of the `syntax-table` text-property run, mirroring GNU
+/// `syntax.c` `gl_state` (`b_property`/`e_property` plus the current value).
+/// A scan reads the property once per char, but it is almost always nil over
+/// long runs, so caching the `[start, end)` char range turns a per-char
+/// interval lookup (and its byte->char) into a plain range check, refetching
+/// only when the scan leaves the run.  Indexed by char position so a
+/// char-indexed scan needs no conversion at all on a hit.  Created fresh per
+/// scan, so it never observes a mid-scan property edit (syntax-propertize runs
+/// before the scan).
+struct SyntaxPropRange {
+    cache: RefCell<Option<(usize, usize, Option<Value>)>>,
+}
+
+impl SyntaxPropRange {
+    fn new() -> Self {
+        Self {
+            cache: RefCell::new(None),
+        }
+    }
+
+    /// The `syntax-table` property at char position `pos`, served from the
+    /// cached run when possible.  In debug builds every cache hit is validated
+    /// against a fresh interval lookup, the same safety net the byte<->char
+    /// cache uses.
+    fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
+        {
+            let cache = self.cache.borrow();
+            if let Some((start, end, ref value)) = *cache
+                && start <= pos
+                && pos < end
+            {
+                #[cfg(debug_assertions)]
+                {
+                    let (fresh, _, _) = buf.get_property_run_at_char_pos(
+                        CharPos0::new(pos),
+                        Value::symbol("syntax-table"),
+                    );
+                    debug_assert!(
+                        *value == fresh,
+                        "SyntaxPropRange stale syntax-table at char {pos} in [{start}, {end})"
+                    );
+                }
+                return value.clone();
+            }
+        }
+        let (value, start, end) =
+            buf.get_property_run_at_char_pos(CharPos0::new(pos), Value::symbol("syntax-table"));
+        self.cache
+            .replace(Some((start.get(), end.get(), value.clone())));
+        value
+    }
+}
+
+#[inline]
+fn syntax_entry_from_table(table: &SyntaxTable, ch: char) -> SyntaxEntry {
+    table
+        .get_entry(ch)
+        .unwrap_or_else(|| SyntaxEntry::simple(table.char_syntax(ch)))
+}
+
 fn effective_syntax_entry_for_char_at_byte(
     buf: &Buffer,
     table: &SyntaxTable,
@@ -2064,9 +2124,28 @@ fn effective_syntax_entry_for_char_at_byte(
         return entry;
     }
 
-    table
-        .get_entry(ch)
-        .unwrap_or_else(|| SyntaxEntry::simple(table.char_syntax(ch)))
+    syntax_entry_from_table(table, ch)
+}
+
+/// Like [`effective_syntax_entry_for_abs_char`] but reads the `syntax-table`
+/// property through a per-scan run cache (GNU `gl_state`), avoiding an
+/// interval lookup (and a char->byte->char round trip) on every char.
+fn effective_syntax_entry_for_abs_char_cached(
+    buf: &Buffer,
+    table: &SyntaxTable,
+    ch: char,
+    abs_char: usize,
+    honor_properties: bool,
+    prop_cache: &SyntaxPropRange,
+) -> SyntaxEntry {
+    if honor_properties
+        && let Some(prop) = prop_cache.syntax_table_prop_at_char(buf, abs_char)
+        && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
+    {
+        return entry;
+    }
+
+    syntax_entry_from_table(table, ch)
 }
 
 fn effective_syntax_entry_for_abs_char(
@@ -3876,8 +3955,16 @@ fn syntax_class_and_flags(
     ch: char,
     abs_char: usize,
     honor_properties: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> (SyntaxClass, SyntaxFlags) {
-    let entry = effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, honor_properties);
+    let entry = effective_syntax_entry_for_abs_char_cached(
+        buf,
+        table,
+        ch,
+        abs_char,
+        honor_properties,
+        prop_cache,
+    );
     (entry.class, entry.flags)
 }
 
@@ -3919,6 +4006,7 @@ fn parse_state_from_range_with_options(
         .clamp(point_min, point_max);
     let chars = BufferChars::new(buf, from_char);
     let to_idx = to_char - from_char;
+    let prop_cache = SyntaxPropRange::new();
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
@@ -3934,7 +4022,8 @@ fn parse_state_from_range_with_options(
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
         let ch = chars.char_at(idx);
-        let (class, flags) = syntax_class_and_flags(buf, table, ch, abs_char, honor_properties);
+        let (class, flags) =
+            syntax_class_and_flags(buf, table, ch, abs_char, honor_properties, &prop_cache);
 
         if state.quoted {
             state.quoted = false;
@@ -4043,6 +4132,7 @@ fn parse_state_from_range_with_options(
                                 chars.char_at(idx + 1),
                                 abs_char + 1,
                                 honor_properties,
+                                &prop_cache,
                             );
                             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND)
                                 && next_flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
@@ -4086,6 +4176,7 @@ fn parse_state_from_range_with_options(
                             chars.char_at(idx + 1),
                             abs_char + 1,
                             honor_properties,
+                            &prop_cache,
                         );
                         if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
                             && next_flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
@@ -4144,6 +4235,7 @@ fn parse_state_from_range_with_options(
                 chars.char_at(idx + 1),
                 abs_char + 1,
                 honor_properties,
+                &prop_cache,
             );
             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
                 state.in_comment = Some(ParseCommentState::Syntax {

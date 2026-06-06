@@ -1521,6 +1521,35 @@ impl TextPropertyTable {
         plist_value_get(node.plist, name)
     }
 
+    /// Returns property `name` at `pos` together with the `[start, end)` char
+    /// run over which it stays constant (the interval containing `pos`, or the
+    /// gap up to the next property boundary when no interval covers it).
+    ///
+    /// Mirrors GNU `syntax.c` `update_syntax_table`, which loads
+    /// `gl_state.b_property` / `gl_state.e_property` from the interval at the
+    /// position so a scan range-checks per char and only refetches when it
+    /// leaves the run.  `total` bounds the gap run at the buffer end.
+    pub fn get_property_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+        name: Value,
+        total: usize,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        match self.intervals.find_id(pos) {
+            Some((start, id)) => {
+                let node = &self.intervals.nodes[id.0];
+                let end = self.intervals.interval_end(start, id);
+                (plist_value_get(node.plist, name), start, end)
+            }
+            None => {
+                let end = self
+                    .next_property_change_raw(pos)
+                    .unwrap_or_else(|| CharPos0::new(total));
+                (None, pos, end)
+            }
+        }
+    }
+
     pub fn get_properties_at_char_pos(&self, pos: CharPos0) -> HashMap<Value, Value> {
         self.get_properties_raw(pos)
     }

@@ -895,6 +895,23 @@ impl BufferText {
             .get_property_at_char_pos(pos.start(), name)
     }
 
+    /// Returns property `name` at char `pos` plus the `[start, end)` char run
+    /// over which it is constant.  Lets a per-char scanner cache the run (GNU
+    /// `gl_state.b_property` / `e_property`) and avoid an interval lookup on
+    /// every char; the bounds come straight from the interval containing
+    /// `pos`, so a char-indexed scan range-checks without any conversion.
+    pub fn get_property_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+        name: Value,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        let storage = self.storage.borrow();
+        let total = storage.metrics.char_len().get();
+        storage
+            .text_props
+            .get_property_run_at_char_pos(pos, name, total)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

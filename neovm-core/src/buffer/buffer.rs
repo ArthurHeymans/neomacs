@@ -2367,6 +2367,17 @@ impl Buffer {
             .text_props_get_property_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos), name)
     }
 
+    /// Property `name` at char `pos` plus the `[start, end)` char run over
+    /// which it is constant.  See
+    /// [`BufferText::get_property_run_at_char_pos`].
+    pub fn get_property_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+        name: Value,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        self.text.get_property_run_at_char_pos(pos, name)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
