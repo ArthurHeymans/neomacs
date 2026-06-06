@@ -23,6 +23,14 @@ struct SourceBytePos(usize);
 #[repr(transparent)]
 struct PieceByteOffset(usize);
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct PieceNodePriority(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+struct PieceNodeSerial(u64);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Piece {
     source: PieceSource,
@@ -52,6 +60,26 @@ impl PieceByteOffset {
     }
 
     const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl PieceNodePriority {
+    const fn new(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl PieceNodeSerial {
+    const FIRST: Self = Self(1);
+
+    fn next(&mut self) -> Self {
+        let current = *self;
+        self.0 = self.0.wrapping_add(1);
+        current
+    }
+
+    const fn priority_seed(self) -> u64 {
         self.0
     }
 }
@@ -125,14 +153,14 @@ impl Piece {
 #[derive(Clone)]
 struct PieceNode {
     piece: Piece,
-    priority: u64,
+    priority: PieceNodePriority,
     metrics: TextMetrics,
     left: Option<Box<PieceNode>>,
     right: Option<Box<PieceNode>>,
 }
 
 impl PieceNode {
-    fn new(piece: Piece, priority: u64) -> Box<Self> {
+    fn new(piece: Piece, priority: PieceNodePriority) -> Box<Self> {
         Box::new(Self {
             piece,
             priority,
@@ -155,7 +183,7 @@ pub(in crate::buffer) struct PieceTreeTextBackend {
     add: Vec<u8>,
     multibyte: bool,
     root: Option<Box<PieceNode>>,
-    next_piece_id: u64,
+    next_piece_serial: PieceNodeSerial,
 }
 
 impl PieceTreeTextBackend {
@@ -165,7 +193,7 @@ impl PieceTreeTextBackend {
             add: Vec::new(),
             multibyte: true,
             root: None,
-            next_piece_id: 1,
+            next_piece_serial: PieceNodeSerial::FIRST,
         }
     }
 
@@ -180,7 +208,7 @@ impl PieceTreeTextBackend {
             add: Vec::new(),
             multibyte,
             root: None,
-            next_piece_id: 1,
+            next_piece_serial: PieceNodeSerial::FIRST,
         };
         backend.root = backend.node_for_piece(Piece::new(
             PieceSource::Original,
@@ -548,7 +576,7 @@ impl PieceTreeTextBackend {
         self.add.clear();
         self.multibyte = multibyte;
         self.root = None;
-        self.next_piece_id = 1;
+        self.next_piece_serial = PieceNodeSerial::FIRST;
         self.root = self.node_for_piece(Piece::new(
             PieceSource::Original,
             SourceBytePos::ZERO,
@@ -556,10 +584,8 @@ impl PieceTreeTextBackend {
         ));
     }
 
-    fn next_priority(&mut self) -> u64 {
-        let id = self.next_piece_id;
-        self.next_piece_id = self.next_piece_id.wrapping_add(1);
-        splitmix64(id)
+    fn next_priority(&mut self) -> PieceNodePriority {
+        PieceNodePriority::new(splitmix64(self.next_piece_serial.next().priority_seed()))
     }
 
     fn node_for_piece(&mut self, piece: Piece) -> Option<Box<PieceNode>> {
