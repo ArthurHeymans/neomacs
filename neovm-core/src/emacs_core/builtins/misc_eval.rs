@@ -2060,7 +2060,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         for chunk in chunks.iter().rev() {
             if chunk.len() == 2 {
                 table.put_property_for_object_char_len(
-                    CharRange::from_usize(0, char_len),
+                    CharRange::new(CharPos0::new(0), CharPos0::new(char_len)),
                     CharLen::new(char_len),
                     chunk[0],
                     chunk[1],
