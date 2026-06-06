@@ -5457,12 +5457,12 @@ impl BufferManager {
                                 if !undo_lisp_char_position_is_visible(buffer, apos1) {
                                     return None;
                                 }
-                                undo_char_pos1_to_byte_clamped(buffer, apos1).get()
+                                undo_char_pos1_to_byte_clamped(buffer, apos1)
                             };
-                            self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(byte_pos))?;
+                            self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
                             self.insert_into_buffer(id, &text)?;
                             if pos1 > 0 {
-                                self.goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(byte_pos))?;
+                                self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
                             }
                         }
                         (ValueKind::T, ValueKind::Fixnum(_)) => {
