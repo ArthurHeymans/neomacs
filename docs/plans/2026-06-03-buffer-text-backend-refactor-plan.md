@@ -253,6 +253,12 @@ Progress:
 - Text-property and overlay byte conversion helpers now accept typed
   `LispCharPos1` internally after GNU-style range validation, while preserving
   original Lisp argument values in error payloads.
+- Buffer substring, insertion, comparison, narrowing, labeled narrowing,
+  edit-function region validation, `call-process-region`,
+  `process-send-region`, XML region parsing, zlib decompression, and charset
+  region queries now validate like GNU's `validate_region` path and carry
+  `LispCharPos1` into the byte-conversion helper instead of passing raw `i64`
+  positions through shared semantic helpers.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
