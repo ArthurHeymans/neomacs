@@ -41,8 +41,8 @@ pub struct PropertyInterval {
 impl PropertyInterval {
     fn new(range: CharRange) -> Self {
         Self {
-            start: range.start_usize(),
-            end: range.end_usize(),
+            start: range.start().get(),
+            end: range.end().get(),
             properties: HashMap::new(),
             key_order: Vec::new(),
         }
@@ -51,8 +51,8 @@ impl PropertyInterval {
     pub fn with_properties(range: CharRange, properties: HashMap<Value, Value>) -> Self {
         let key_order: Vec<Value> = properties.keys().copied().collect();
         Self {
-            start: range.start_usize(),
-            end: range.end_usize(),
+            start: range.start().get(),
+            end: range.end().get(),
             properties,
             key_order,
         }
@@ -70,8 +70,8 @@ impl PropertyInterval {
             }
         }
         Self {
-            start: range.start_usize(),
-            end: range.end_usize(),
+            start: range.start().get(),
+            end: range.end().get(),
             properties,
             key_order,
         }
@@ -363,14 +363,6 @@ impl IntervalRun {
 
     fn end(&self) -> CharPos0 {
         self.range.end()
-    }
-
-    fn start_usize(&self) -> usize {
-        self.range.start_usize()
-    }
-
-    fn end_usize(&self) -> usize {
-        self.range.end_usize()
     }
 
     fn set_start(&mut self, start: CharPos0) {
@@ -1498,7 +1490,7 @@ impl TextPropertyTable {
         }
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(range.end_usize())));
+            .ensure_cover(CharPos0::new(object_len.get().max(range.end().get())));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
@@ -1751,7 +1743,7 @@ impl TextPropertyTable {
         }
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(range.end_usize())));
+            .ensure_cover(CharPos0::new(object_len.get().max(range.end().get())));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
@@ -1915,15 +1907,7 @@ impl TextPropertyTable {
             .runs()
             .into_iter()
             .filter(|run| !run.is_empty_plist())
-            .map(|run| {
-                PropertyInterval::from_plist(
-                    CharRange::new(
-                        CharPos0::new(run.start_usize()),
-                        CharPos0::new(run.end_usize()),
-                    ),
-                    &plist_pairs(run.plist),
-                )
-            })
+            .map(|run| PropertyInterval::from_plist(run.range, &plist_pairs(run.plist)))
             .collect()
     }
 
@@ -1966,8 +1950,8 @@ impl TextPropertyTable {
         let mut runs = Vec::new();
         let mut cursor = 0;
         for run in self.intervals.runs() {
-            let start = run.start_usize().min(len);
-            let end = run.end_usize().min(len);
+            let start = run.start().get().min(len);
+            let end = run.end().get().min(len);
             if cursor < start {
                 runs.push((cursor, start, Value::NIL));
             }
@@ -2103,8 +2087,8 @@ impl TextPropertyTable {
         if range.is_empty() {
             return TextPropertyTable::new();
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
 
         let mut runs = Vec::new();
         self.for_each_interval_overlapping(range, |interval_start, node_end, node| {
@@ -2129,8 +2113,8 @@ impl TextPropertyTable {
         if range.is_empty() {
             return TextPropertyTable::new();
         }
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
 
         let mut table = TextPropertyTable::new();
         self.for_each_interval_overlapping(range, |interval_start, node_end, node| {
@@ -2284,7 +2268,7 @@ impl TextPropertyTable {
         self.intervals
             .runs()
             .into_iter()
-            .map(|run| (run.start_usize(), run.end_usize(), run.is_empty_plist()))
+            .map(|run| (run.start().get(), run.end().get(), run.is_empty_plist()))
             .collect()
     }
 
