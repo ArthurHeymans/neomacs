@@ -355,7 +355,6 @@ impl Buffer {
         marker_adjustment: InsertMarkerAdjustment,
     ) -> TextInsertion {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
-        let insert_pos = self.pt_byte;
         let extent = TextExtent::new(
             CharLen::new(text.schars()),
             EmacsByteLen::new(text.as_bytes().len()),
@@ -369,7 +368,7 @@ impl Buffer {
         if text.has_intervals() {
             self.text.text_props_append_shifted_at_emacs_byte_pos(
                 text.intervals(),
-                EmacsBytePos::new(insert_pos),
+                insertion.byte_pos(),
             );
         }
         insertion
@@ -396,8 +395,6 @@ impl Buffer {
         let new_bytes = text.as_bytes();
         let new_byte_len = new_bytes.len();
         let new_char_len = text.schars();
-        let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
 
         if old_range.is_empty() {
             self.goto_emacs_byte_pos(old_range.byte_start());
@@ -413,11 +410,10 @@ impl Buffer {
             TextExtent::new(CharLen::new(new_char_len), EmacsByteLen::new(new_byte_len));
         let replacement = TextReplacement::new(old_range, new_extent);
 
-        let old_pt_byte = self.pt_byte;
-        let old_pt = self.pt;
+        let old_point = self.point_anchor();
         let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
-        self.undo_prepare_change(EmacsBytePos::new(start), EmacsBytePos::new(old_pt_byte));
+        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             // GNU `replace_range` records the insertion before the deletion
@@ -434,7 +430,7 @@ impl Buffer {
                 &mut ul,
                 start_char,
                 deleted_text,
-                CharPos0::new(old_pt),
+                old_point.char_pos(),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -448,9 +444,9 @@ impl Buffer {
         if text.has_intervals() {
             self.text.text_props_append_shifted_at_emacs_byte_pos(
                 text.intervals(),
-                EmacsBytePos::new(start),
+                replacement.byte_start(),
             );
-        } else if new_char_len > 0 {
+        } else if !new_extent.chars().is_empty() {
             self.text.text_props_set_properties_in_emacs_byte_range(
                 EmacsByteRange::from_start_len(replacement.byte_start(), new_extent.emacs_bytes()),
                 Vec::new(),
