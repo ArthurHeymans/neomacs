@@ -963,34 +963,34 @@ pub(crate) fn builtin_delete_char(
             let pt = buf.point_emacs_byte_pos();
             if n > 0 {
                 // Delete N characters forward from point.
-                let mut end = pt.get();
+                let mut end = pt;
                 for _ in 0..n {
-                    if end >= accessible.end_usize() {
+                    if end >= accessible.end() {
                         return Err(signal("end-of-buffer", vec![]));
                     }
-                    match buf.char_after_emacs_byte_len(EmacsBytePos::new(end)) {
-                        Some(char_len) => end += char_len.get(),
+                    match buf.char_after_emacs_byte_len(end) {
+                        Some(char_len) => end = end.add_len(char_len),
                         None => {
                             return Err(signal("end-of-buffer", vec![]));
                         }
                     }
                 }
-                Some(EmacsByteRange::new(pt, EmacsBytePos::new(end)))
+                Some(EmacsByteRange::new(pt, end))
             } else if n < 0 {
                 // Delete |N| characters backward from point.
-                let mut start = pt.get();
+                let mut start = pt;
                 for _ in 0..(-n) {
-                    if start <= accessible.start_usize() {
+                    if start <= accessible.start() {
                         return Err(signal("beginning-of-buffer", vec![]));
                     }
-                    match buf.char_before_emacs_byte_len(EmacsBytePos::new(start)) {
-                        Some(char_len) => start -= char_len.get(),
+                    match buf.char_before_emacs_byte_len(start) {
+                        Some(char_len) => start = start.saturating_sub_len(char_len),
                         None => {
                             return Err(signal("beginning-of-buffer", vec![]));
                         }
                     }
                 }
-                Some(EmacsByteRange::new(EmacsBytePos::new(start), pt))
+                Some(EmacsByteRange::new(start, pt))
             } else {
                 None
             }
