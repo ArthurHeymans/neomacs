@@ -590,6 +590,11 @@ Completed so far:
 - Aligned pdump backend tags with the runtime `BufferTextBackendKind`
   `num_enum` tags and added a round-trip test so serialized backend kind drift
   fails at test time instead of becoming a silent image compatibility bug.
+- Moved line motion, syntax scan entry points, `window-text-pixel-size`
+  range handling, and `byte-to-position` onto explicit
+  `LispCharPos1` / `LispBytePos1` boundary conversions.  The display fix also
+  adds multibyte range coverage so character positions are not accidentally
+  treated as byte offsets when measuring a window region.
 
 Next work:
 
