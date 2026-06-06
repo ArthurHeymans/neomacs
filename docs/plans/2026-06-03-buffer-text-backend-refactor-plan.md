@@ -69,9 +69,13 @@ The broad shape is now in place:
   backends and GNU-style anchor scans for the gap backend.
 - Text-property interval storage is character-indexed like GNU intervals;
   `BufferText` owns conversion from Emacs byte ranges at the boundary.
+- Edit transactions, search replacement bookkeeping, syntax motion helpers,
+  navigation property-boundary helpers, and several buffer builtins now carry
+  typed char/byte positions through their semantic boundaries.
 
-The main remaining weakness is that some edit and property APIs still accept
-raw `usize` positions at higher layers. They should be migrated toward
+The main remaining weakness is that some builtins, pdump conversion paths,
+file I/O, display code, and string-only helpers still accept raw `usize`
+positions near semantic boundaries. They should be migrated toward
 `EmacsBytePos`, `EmacsByteRange`, `CharPos0`, and `CharRange` so the compiler
 catches coordinate-system mistakes before they reach backend code.
 
@@ -184,9 +188,19 @@ Progress:
   `EmacsByteLen`, and display/narrowing wrappers exist.
 - Text-property slice/append/merge APIs at the `BufferText` boundary use typed
   Emacs byte positions/ranges.
-- Remaining work is to push these types up through `BufferManager`, builtins,
-  file I/O, search, and display so raw `usize` is confined to local algorithms
-  after explicit conversion.
+- Search replacement update and undo paths carry typed ranges/char lengths.
+- `BufferText` forward multibyte scanning stores typed scan state; raw offsets
+  remain only for chunk-local slice movement.
+- Indexed backends build edit ranges from typed insertion positions and
+  measured extents, and whole-buffer debug/dump ranges use backend metrics
+  endpoints rather than raw byte lengths.
+- Syntax motion helpers convert through typed Emacs byte positions internally
+  and unwrap only at legacy public byte-offset returns.
+- Navigation intangible/property-boundary helpers carry `EmacsBytePos` through
+  text-property and overlay boundary scans.
+- Remaining work is to push these types through the rest of `BufferManager`,
+  pdump conversion, file I/O, display, and string-only helper boundaries so raw
+  `usize` is confined to local algorithms after explicit conversion.
 
 ## Phase 3: Replace Gap-Shaped Layout With Metrics
 
