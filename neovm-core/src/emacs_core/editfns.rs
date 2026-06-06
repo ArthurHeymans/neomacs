@@ -14,7 +14,7 @@ use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    Buffer, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
     TextChange, TextEditRange, TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
@@ -629,11 +629,9 @@ pub(crate) fn execute_combined_after_change(
     // signal_after_change typed byte range.
     let byte_range = {
         let buf = ctx.buffers.get(target_id).expect("target buffer");
-        let beg_char_zero = (begpos - 1).max(0) as usize;
-        let end_char_zero = (endpos - 1).max(0) as usize;
         EmacsByteRange::new(
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(beg_char_zero)),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char_zero)),
+            buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(begpos).to_char_pos()),
+            buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(endpos).to_char_pos()),
         )
     };
     let old_len = CharLen::new((endpos - begpos - change_total).max(0) as usize);
