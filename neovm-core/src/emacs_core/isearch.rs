@@ -470,8 +470,8 @@ pub struct IsearchState {
     pub barrier: usize,
     /// Index into the history ring, if navigating history.
     pub history_index: Option<usize>,
-    /// All visible matches for lazy-highlight overlays: `(start, end)` pairs.
-    pub lazy_matches: Vec<(usize, usize)>,
+    /// All visible matches for lazy-highlight overlays.
+    pub lazy_matches: Vec<MatchGroup>,
 }
 
 // ---------------------------------------------------------------------------
@@ -671,9 +671,9 @@ impl IsearchManager {
     /// Perform one incremental search step in the current direction, starting
     /// from the current match position (or the barrier after a wrap).
     ///
-    /// `text` is the full buffer contents.  Returns match `(start, end)` if
+    /// `text` is the full buffer contents.  Returns the match range if
     /// found.  The caller is responsible for moving point.
-    pub fn search_next(&mut self, text: &str) -> Option<(usize, usize)> {
+    pub fn search_next(&mut self, text: &str) -> Option<MatchGroup> {
         let state = self.state.as_mut()?;
         if state.search_string.is_empty() {
             state.success = true;
@@ -693,20 +693,20 @@ impl IsearchManager {
 
         let forward = state.direction == SearchDirection::Forward;
 
-        if let Some((start, end)) =
+        if let Some(range) =
             find_match(text, &search_string, from, forward, state.regexp, case_fold)
         {
             state.success = true;
-            state.match_start = Some(start);
-            state.match_end = Some(end);
-            return Some((start, end));
+            state.match_start = Some(range.start());
+            state.match_end = Some(range.end());
+            return Some(range);
         }
 
         // Not found from current position — try wrapping.
         if !state.wrapped {
             state.wrapped = true;
             let wrap_from = if forward { 0 } else { text.len() };
-            if let Some((start, end)) = find_match(
+            if let Some(range) = find_match(
                 text,
                 &search_string,
                 wrap_from,
@@ -715,9 +715,9 @@ impl IsearchManager {
                 case_fold,
             ) {
                 state.success = true;
-                state.match_start = Some(start);
-                state.match_end = Some(end);
-                return Some((start, end));
+                state.match_start = Some(range.start());
+                state.match_end = Some(range.end());
+                return Some(range);
             }
         }
 
@@ -728,9 +728,9 @@ impl IsearchManager {
     /// Re-run the search from the origin for the current search string (used
     /// after each character addition/deletion to update the match).
     ///
-    /// `text` is the full buffer contents.  Returns match `(start, end)` if
+    /// `text` is the full buffer contents.  Returns the match range if
     /// found.
-    pub fn search_update(&mut self, text: &str) -> Option<(usize, usize)> {
+    pub fn search_update(&mut self, text: &str) -> Option<MatchGroup> {
         let state = self.state.as_mut()?;
         if state.search_string.is_empty() {
             state.success = true;
@@ -745,7 +745,7 @@ impl IsearchManager {
         let forward = state.direction == SearchDirection::Forward;
 
         // Search from origin first.
-        if let Some((start, end)) = find_match(
+        if let Some(range) = find_match(
             text,
             &search_string,
             state.origin,
@@ -755,14 +755,14 @@ impl IsearchManager {
         ) {
             state.success = true;
             state.wrapped = false;
-            state.match_start = Some(start);
-            state.match_end = Some(end);
-            return Some((start, end));
+            state.match_start = Some(range.start());
+            state.match_end = Some(range.end());
+            return Some(range);
         }
 
         // Wrap around.
         let wrap_from = if forward { 0 } else { text.len() };
-        if let Some((start, end)) = find_match(
+        if let Some(range) = find_match(
             text,
             &search_string,
             wrap_from,
@@ -772,9 +772,9 @@ impl IsearchManager {
         ) {
             state.success = true;
             state.wrapped = true;
-            state.match_start = Some(start);
-            state.match_end = Some(end);
-            return Some((start, end));
+            state.match_start = Some(range.start());
+            state.match_end = Some(range.end());
+            return Some(range);
         }
 
         state.success = false;
@@ -820,13 +820,10 @@ impl IsearchManager {
                     let Some(group) = groups.first().and_then(|group| *group) else {
                         continue;
                     };
-                    let (match_start, match_end) = group.as_pair();
-                    if match_start == match_end {
+                    if group.start() == group.end() {
                         continue;
                     }
-                    state
-                        .lazy_matches
-                        .push((start + match_start, start + match_end));
+                    state.lazy_matches.push(group.shift(start));
                 }
             }
         } else {
@@ -844,7 +841,7 @@ impl IsearchManager {
             while let Some(pos) = haystack[search_from..].find(&needle) {
                 let ms = start + search_from + pos;
                 let me = ms + needle.len();
-                state.lazy_matches.push((ms, me));
+                state.lazy_matches.push(MatchGroup::new(ms, me));
                 search_from += pos + needle.len();
             }
         }
@@ -1140,10 +1137,10 @@ impl QueryReplaceManager {
 
     /// Find the next match at or after `from_pos`.
     ///
-    /// `text` is the full buffer contents.  Returns `(start, end)` of the
+    /// `text` is the full buffer contents.  Returns the range of the
     /// match, also storing it in `current_match`.  Returns `None` when there
     /// are no more matches.
-    pub fn find_next(&mut self, text: &str, from_pos: usize) -> Option<(usize, usize)> {
+    pub fn find_next(&mut self, text: &str, from_pos: usize) -> Option<MatchGroup> {
         let state = self.state.as_mut()?;
 
         let limit = state.region_end.unwrap_or(text.len()).min(text.len());
@@ -1158,10 +1155,10 @@ impl QueryReplaceManager {
         let case_fold = resolve_case_fold(state.case_fold, &from_string);
         let result = find_match(text, &from_string, start, true, state.regexp, case_fold);
 
-        if let Some((ms, me)) = result {
-            if me <= limit {
-                state.current_match = Some((ms, me));
-                return Some((ms, me));
+        if let Some(range) = result {
+            if range.end() <= limit {
+                state.current_match = Some(range.as_pair());
+                return Some(range);
             }
         }
 
@@ -1406,7 +1403,7 @@ fn build_regex_pattern(pattern: &str, case_fold: bool) -> String {
 /// - `regexp`:  treat `pattern` as an Emacs regular expression.
 /// - `case_fold`: perform case-insensitive matching.
 ///
-/// Returns `(match_start, match_end)` byte offsets into `text`, or `None`.
+/// Returns the match byte range into `text`, or `None`.
 fn find_match(
     text: &str,
     pattern: &str,
@@ -1414,7 +1411,7 @@ fn find_match(
     forward: bool,
     regexp: bool,
     case_fold: bool,
-) -> Option<(usize, usize)> {
+) -> Option<MatchGroup> {
     if pattern.is_empty() {
         return None;
     }
@@ -1428,12 +1425,10 @@ fn find_match(
                 pattern, text, start, case_fold,
             )
             .ok()?;
-            iterated.matches.into_iter().find_map(|groups| {
-                groups
-                    .first()
-                    .and_then(|group| *group)
-                    .map(MatchGroup::as_pair)
-            })
+            iterated
+                .matches
+                .into_iter()
+                .find_map(|groups| groups.first().and_then(|group| *group))
         } else {
             let end = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
@@ -1446,12 +1441,7 @@ fn find_match(
             iterated
                 .matches
                 .into_iter()
-                .filter_map(|groups| {
-                    groups
-                        .first()
-                        .and_then(|group| *group)
-                        .map(MatchGroup::as_pair)
-                })
+                .filter_map(|groups| groups.first().and_then(|group| *group))
                 .last()
         }
     } else {
@@ -1463,10 +1453,10 @@ fn find_match(
                 let hay = region.to_lowercase();
                 let needle = pattern.to_lowercase();
                 let pos = hay.find(&needle)?;
-                Some((start + pos, start + pos + needle.len()))
+                Some(MatchGroup::new(start + pos, start + pos + needle.len()))
             } else {
                 let pos = region.find(pattern)?;
-                Some((start + pos, start + pos + pattern.len()))
+                Some(MatchGroup::new(start + pos, start + pos + pattern.len()))
             }
         } else {
             let end = from.min(text_len);
@@ -1475,10 +1465,10 @@ fn find_match(
                 let hay = region.to_lowercase();
                 let needle = pattern.to_lowercase();
                 let pos = hay.rfind(&needle)?;
-                Some((pos, pos + needle.len()))
+                Some(MatchGroup::new(pos, pos + needle.len()))
             } else {
                 let pos = region.rfind(pattern)?;
-                Some((pos, pos + pattern.len()))
+                Some(MatchGroup::new(pos, pos + pattern.len()))
             }
         }
     }
@@ -1744,9 +1734,8 @@ fn replace_string_eval_impl(
         out.push_str(&source[last..]);
     } else {
         let mut cursor = 0usize;
-        while let Some((m_start, m_end)) =
-            find_match(&source, &from, cursor, true, false, case_fold)
-        {
+        while let Some(range) = find_match(&source, &from, cursor, true, false, case_fold) {
+            let (m_start, m_end) = range.as_pair();
             if delimited && !is_delimited_match(&source, m_start, m_end) {
                 out.push_str(&source[cursor..m_end]);
                 cursor = m_end;
