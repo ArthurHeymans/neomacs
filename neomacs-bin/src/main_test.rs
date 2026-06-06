@@ -2057,7 +2057,7 @@ fn bootstrap_buffers_clears_predump_messages_buffer_contents() {
             .get_mut(messages_id)
             .expect("live messages buffer");
         messages.widen();
-        messages.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(messages.point_max()));
+        messages.goto_emacs_byte_pos(messages.point_max_emacs_byte_pos());
         messages.insert("stale predump log\n");
     }
 
@@ -2068,7 +2068,7 @@ fn bootstrap_buffers_clears_predump_messages_buffer_contents() {
         .get(messages_id)
         .expect("messages buffer after bootstrap");
     assert_eq!(messages.buffer_string(), "");
-    assert_eq!(messages.point_byte(), 0);
+    assert_eq!(messages.point_emacs_byte_pos().get(), 0);
 }
 
 #[test]
