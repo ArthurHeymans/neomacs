@@ -37,6 +37,36 @@ fn marker_chain_anchor_for_test(buf: &Buffer, marker_id: u64) -> Option<TextPosi
         .map(|(byte_pos, char_pos, _)| marker_position_anchor(byte_pos, char_pos))
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct OptionalTextPositionSnapshot {
+    char_pos: Option<CharPos0>,
+    emacs_byte_pos: Option<EmacsBytePos>,
+}
+
+impl OptionalTextPositionSnapshot {
+    fn new(char_pos: Option<CharPos0>, emacs_byte_pos: Option<EmacsBytePos>) -> Self {
+        Self {
+            char_pos,
+            emacs_byte_pos,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct OptionalEmacsByteRangeSnapshot {
+    start: Option<EmacsBytePos>,
+    end: Option<EmacsBytePos>,
+}
+
+impl OptionalEmacsByteRangeSnapshot {
+    fn from_usize(start: Option<usize>, end: Option<usize>) -> Self {
+        Self {
+            start: start.map(EmacsBytePos::new),
+            end: end.map(EmacsBytePos::new),
+        }
+    }
+}
+
 fn implemented_text_backends() -> impl Iterator<Item = BufferTextBackendKind> {
     BufferTextBackendKind::implemented_variants()
 }
@@ -1848,11 +1878,11 @@ struct SharedInsertPolicySnapshot {
     indirect_string: String,
     base_point: TextPositionAnchor,
     indirect_point: TextPositionAnchor,
-    base_mark: (Option<usize>, Option<usize>),
-    indirect_mark: (Option<usize>, Option<usize>),
+    base_mark: OptionalTextPositionSnapshot,
+    indirect_mark: OptionalTextPositionSnapshot,
     marker_after_position: Option<TextPositionAnchor>,
     marker_before_position: Option<TextPositionAnchor>,
-    indirect_overlay_range: (Option<usize>, Option<usize>),
+    indirect_overlay_range: OptionalEmacsByteRangeSnapshot,
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
@@ -1957,17 +1987,17 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
             indirect.point_char_pos(),
             indirect.point_emacs_byte_pos(),
         ),
-        base_mark: (
-            base.mark_emacs_byte_pos().map(|pos| pos.get()),
-            base.mark_char_pos().map(|pos| pos.get()),
+        base_mark: OptionalTextPositionSnapshot::new(
+            base.mark_char_pos(),
+            base.mark_emacs_byte_pos(),
         ),
-        indirect_mark: (
-            indirect.mark_emacs_byte_pos().map(|pos| pos.get()),
-            indirect.mark_char_pos().map(|pos| pos.get()),
+        indirect_mark: OptionalTextPositionSnapshot::new(
+            indirect.mark_char_pos(),
+            indirect.mark_emacs_byte_pos(),
         ),
         marker_after_position: marker_chain_anchor_for_test(base, 701),
         marker_before_position: marker_chain_anchor_for_test(indirect, 702),
-        indirect_overlay_range: (
+        indirect_overlay_range: OptionalEmacsByteRangeSnapshot::from_usize(
             overlay_start_for_test(indirect, indirect_overlay),
             overlay_end_for_test(indirect, indirect_overlay),
         ),
@@ -1995,7 +2025,7 @@ struct BackendMigrationSnapshot {
     char_to_byte_4: usize,
     byte_to_char_at_char_4: usize,
     marker_position: Option<TextPositionAnchor>,
-    overlay_range: (Option<usize>, Option<usize>),
+    overlay_range: OptionalEmacsByteRangeSnapshot,
     text_properties: Vec<(usize, usize, Vec<(Value, Value)>)>,
 }
 
@@ -2055,7 +2085,7 @@ fn run_backend_migration_script(
         char_to_byte_4,
         byte_to_char_at_char_4: char_pos_for_byte(&buf, char_to_byte_4),
         marker_position: marker_chain_anchor_for_test(&buf, 77),
-        overlay_range: (
+        overlay_range: OptionalEmacsByteRangeSnapshot::from_usize(
             overlay_start_for_test(&buf, overlay),
             overlay_end_for_test(&buf, overlay),
         ),
