@@ -44,12 +44,8 @@ impl Buffer {
     }
 
     fn set_edit_state(&mut self, state: BufferEditState) {
-        self.pt_byte = state.point().emacs_byte_pos_usize();
-        self.pt = state.point().char_pos_usize();
-        self.begv_byte = state.begv().emacs_byte_pos_usize();
-        self.begv = state.begv().char_pos_usize();
-        self.zv_byte = state.zv().emacs_byte_pos_usize();
-        self.zv = state.zv().char_pos_usize();
+        self.set_accessible_region_anchors_unchecked(state.begv(), state.zv());
+        self.set_point_anchor_unchecked(state.point());
     }
 
     fn buffer_region_lisp_string(&self, range: EmacsByteRange) -> LispString {
@@ -739,8 +735,7 @@ impl Buffer {
                 .remap_marker_anchors(|old_position| transposition.transpose_anchor(old_position));
         }
 
-        self.pt_byte = new_point.emacs_byte_pos_usize();
-        self.pt = new_point.char_pos_usize();
+        self.set_point_anchor_unchecked(new_point);
         self.apply_same_len_edit_side_effects(plan.edit(), false);
     }
 }
@@ -1093,8 +1088,7 @@ impl BufferManager {
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
             if update_state_fields {
                 let point = transposition.transpose_anchor(sibling.point_anchor());
-                sibling.pt_byte = point.emacs_byte_pos_usize();
-                sibling.pt = point.char_pos_usize();
+                sibling.set_point_anchor_unchecked(point);
             }
             Self::adjust_shared_same_len_edit_metadata(sibling, edit, false);
         })

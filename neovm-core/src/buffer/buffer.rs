@@ -1516,6 +1516,14 @@ pub struct AccessibleBufferRegionSnapshot {
 }
 
 impl AccessibleBufferRegionSnapshot {
+    fn start_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.start_char, self.start_emacs_byte)
+    }
+
+    fn end_anchor(self) -> TextPositionAnchor {
+        TextPositionAnchor::new(self.end_char, self.end_emacs_byte)
+    }
+
     pub fn start_emacs_byte(self) -> EmacsBytePos {
         self.start_emacs_byte
     }
@@ -2083,20 +2091,12 @@ impl Buffer {
     /// the authoritative character coordinate from the restored byte
     /// coordinate, and debug builds verify that the saved pair was coherent.
     pub fn set_point_anchor(&mut self, point: TextPositionAnchor) {
-        let requested_byte = point.emacs_byte_pos_usize();
-        self.pt_byte = requested_byte.clamp(self.begv_byte, self.zv_byte);
-        self.pt = if self.pt_byte == self.begv_byte {
-            self.begv
-        } else if self.pt_byte == self.zv_byte {
-            self.zv
-        } else {
-            self.text
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.pt_byte))
-                .get()
-        };
-        if self.pt_byte == requested_byte {
+        let requested_byte = point.emacs_byte_pos();
+        let restored = self.accessible_anchor_for_emacs_byte_pos(requested_byte);
+        self.set_point_anchor_unchecked(restored);
+        if restored.emacs_byte_pos() == requested_byte {
             debug_assert_eq!(
-                self.pt,
+                restored.char_pos_usize(),
                 point.char_pos_usize().min(self.total_char_len().get())
             );
         }
@@ -2339,16 +2339,7 @@ impl Buffer {
 
     /// Set point in Emacs bytes, clamping to the accessible region `[begv, zv]`.
     pub fn goto_emacs_byte_pos(&mut self, pos: EmacsBytePos) {
-        self.pt_byte = pos.get().clamp(self.begv_byte, self.zv_byte);
-        self.pt = if self.pt_byte == self.begv_byte {
-            self.begv
-        } else if self.pt_byte == self.zv_byte {
-            self.zv
-        } else {
-            self.text
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.pt_byte))
-                .get()
-        };
+        self.set_point_anchor_unchecked(self.accessible_anchor_for_emacs_byte_pos(pos));
     }
 
     // -- Undo helpers --------------------------------------------------------
@@ -2760,20 +2751,9 @@ impl Buffer {
         let total = self.total_emacs_byte_len().get();
         let s = range.start().get().min(total);
         let e = range.end().get().clamp(s, total);
-        let total_chars = self.total_char_len().get();
-        self.begv_byte = s;
-        self.begv = self
-            .text
-            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(s))
-            .get();
-        self.zv_byte = e;
-        self.zv = if e == total {
-            total_chars
-        } else {
-            self.text
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(e))
-                .get()
-        };
+        let start = self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(s));
+        let end = self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(e));
+        self.set_accessible_region_anchors_unchecked(start, end);
         // Clamp point into the new accessible region.
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
@@ -2808,10 +2788,10 @@ impl Buffer {
     }
 
     pub fn restore_accessible_region(&mut self, snapshot: AccessibleBufferRegionSnapshot) {
-        self.begv = snapshot.start_char.get();
-        self.begv_byte = snapshot.start_emacs_byte.get();
-        self.zv = snapshot.end_char.get();
-        self.zv_byte = snapshot.end_emacs_byte.get();
+        self.set_accessible_region_anchors_unchecked(
+            snapshot.start_anchor(),
+            snapshot.end_anchor(),
+        );
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
@@ -2819,10 +2799,12 @@ impl Buffer {
         &mut self,
         snapshot: AccessibleBufferRegionSnapshot,
     ) {
-        self.begv = snapshot.start_char.get();
-        self.begv_byte = snapshot.start_emacs_byte.get();
-        self.zv = self.total_char_len().get();
-        self.zv_byte = self.total_emacs_byte_len().get();
+        self.set_accessible_region_anchors_unchecked(
+            snapshot.start_anchor(),
+            self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(
+                self.total_emacs_byte_len().get(),
+            )),
+        );
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
@@ -2862,17 +2844,46 @@ impl Buffer {
     }
 
     fn marker_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
+        self.text_anchor_for_emacs_byte_pos(pos)
+    }
+
+    fn text_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
         let clamped = pos.get().min(self.total_emacs_byte_len().get());
-        let char_pos = if clamped == self.begv_byte {
-            self.begv
-        } else if clamped == self.zv_byte {
-            self.zv
+        let char_pos = if clamped == self.total_emacs_byte_len().get() {
+            self.total_char_len().get()
         } else {
             self.text
                 .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
                 .get()
         };
         TextPositionAnchor::new(CharPos0::new(char_pos), EmacsBytePos::new(clamped))
+    }
+
+    fn accessible_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
+        let clamped = pos.get().clamp(self.begv_byte, self.zv_byte);
+        if clamped == self.begv_byte {
+            self.point_min_anchor()
+        } else if clamped == self.zv_byte {
+            self.point_max_anchor()
+        } else {
+            self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(clamped))
+        }
+    }
+
+    fn set_point_anchor_unchecked(&mut self, anchor: TextPositionAnchor) {
+        self.pt_byte = anchor.emacs_byte_pos_usize();
+        self.pt = anchor.char_pos_usize();
+    }
+
+    fn set_accessible_region_anchors_unchecked(
+        &mut self,
+        start: TextPositionAnchor,
+        end: TextPositionAnchor,
+    ) {
+        self.begv_byte = start.emacs_byte_pos_usize();
+        self.begv = start.char_pos_usize();
+        self.zv_byte = end.emacs_byte_pos_usize();
+        self.zv = end.char_pos_usize();
     }
 
     fn canonical_marker_anchor(&self, position: TextPositionAnchor) -> TextPositionAnchor {
