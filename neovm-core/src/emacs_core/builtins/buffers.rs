@@ -136,16 +136,16 @@ fn clamped_lisp_char_pos_to_char_pos(pos: LispCharPos1, max_chars: CharLen) -> C
 pub(crate) fn normalize_narrow_region_in_buffers(
     buffers: &BufferManager,
     current_id: BufferId,
-    start: i64,
-    end: i64,
+    start: LispCharPos1,
+    end: LispCharPos1,
     start_arg: Value,
     end_arg: Value,
 ) -> Result<EmacsByteRange, Flow> {
     let buf = buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let mut s = start;
-    let mut e = end;
+    let mut s = start.as_i64();
+    let mut e = end.as_i64();
     if e < s {
         std::mem::swap(&mut s, &mut e);
     }
@@ -835,8 +835,8 @@ fn resolve_buffer_designator_allow_nil_current(
 fn buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
-    start: i64,
-    end: i64,
+    start: LispCharPos1,
+    end: LispCharPos1,
 ) -> String {
     let Some(buffer_id) = buffer_id else {
         return String::new();
@@ -852,11 +852,11 @@ fn buffer_slice_for_char_region(
     };
     let from_byte = char_pos_to_buffer_emacs_byte_pos(
         buf,
-        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(from), buf.total_char_len()),
+        clamped_lisp_char_pos_to_char_pos(from, buf.total_char_len()),
     );
     let to_byte = char_pos_to_buffer_emacs_byte_pos(
         buf,
-        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(to), buf.total_char_len()),
+        clamped_lisp_char_pos_to_char_pos(to, buf.total_char_len()),
     );
     let byte_range = EmacsByteRange::new(from_byte, to_byte);
     super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string_range(byte_range))
@@ -881,8 +881,8 @@ fn accessible_lisp_range_to_byte_range(
 fn checked_buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
-    start: i64,
-    end: i64,
+    start: LispCharPos1,
+    end: LispCharPos1,
     start_arg: Value,
     end_arg: Value,
 ) -> Result<String, Flow> {
@@ -895,12 +895,15 @@ fn checked_buffer_slice_for_char_region(
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range =
-        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
         &buf.buffer_substring_lisp_string_range(byte_range),
     ))
@@ -945,8 +948,8 @@ pub(crate) fn resolve_buffer_designator_allow_nil_current_in_manager(
 fn checked_buffer_slice_for_char_region_in_manager(
     buffers: &BufferManager,
     buffer_id: Option<BufferId>,
-    start: i64,
-    end: i64,
+    start: LispCharPos1,
+    end: LispCharPos1,
     start_arg: Value,
     end_arg: Value,
 ) -> Result<String, Flow> {
@@ -959,12 +962,15 @@ fn checked_buffer_slice_for_char_region_in_manager(
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range =
-        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
         &buf.buffer_substring_lisp_string_range(byte_range),
     ))
@@ -973,8 +979,8 @@ fn checked_buffer_slice_for_char_region_in_manager(
 fn checked_buffer_substring_for_char_region_in_manager(
     buffers: &BufferManager,
     buffer_id: Option<BufferId>,
-    start: i64,
-    end: i64,
+    start: LispCharPos1,
+    end: LispCharPos1,
     start_arg: Value,
     end_arg: Value,
 ) -> Result<Value, Flow> {
@@ -991,12 +997,15 @@ fn checked_buffer_substring_for_char_region_in_manager(
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let byte_range =
-        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(buffer_slice_value(
         buf,
         byte_range.start().get(),
@@ -1129,13 +1138,15 @@ fn replace_region_source_value_in_state(
                     vec![Value::string("Selecting deleted buffer")],
                 ));
             };
+            let start = buf.point_min_lisp_char_pos();
+            let end = buf.point_max_lisp_char_pos();
             checked_buffer_substring_for_char_region_in_manager(
                 buffers,
                 Some(id),
-                buf.point_min_lisp_char_pos().as_i64(),
-                buf.point_max_lisp_char_pos().as_i64(),
-                Value::fixnum(buf.point_min_lisp_char_pos().as_i64()),
-                Value::fixnum(buf.point_max_lisp_char_pos().as_i64()),
+                start,
+                end,
+                Value::fixnum(start.as_i64()),
+                Value::fixnum(end.as_i64()),
             )
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
@@ -1158,8 +1169,8 @@ fn replace_region_source_value_in_state(
             checked_buffer_substring_for_char_region_in_manager(
                 buffers,
                 Some(buffer_id),
-                start,
-                end,
+                LispCharPos1::new(start),
+                LispCharPos1::new(end),
                 items[1],
                 items[2],
             )
@@ -1220,8 +1231,8 @@ pub(crate) fn builtin_insert_buffer_substring(
     let text = checked_buffer_substring_for_char_region_in_manager(
         &mut eval.buffers,
         buffer_id,
-        start,
-        end,
+        LispCharPos1::new(start),
+        LispCharPos1::new(end),
         Value::fixnum(start),
         Value::fixnum(end),
     )?;
@@ -1888,16 +1899,16 @@ pub(crate) fn builtin_compare_buffer_substrings_with_case_fold(
     let left = checked_buffer_slice_for_char_region_in_manager(
         buffers,
         left_buffer,
-        left_start,
-        left_end,
+        LispCharPos1::new(left_start),
+        LispCharPos1::new(left_end),
         args[1],
         args[2],
     )?;
     let right = checked_buffer_slice_for_char_region_in_manager(
         buffers,
         right_buffer,
-        right_start,
-        right_end,
+        LispCharPos1::new(right_start),
+        LispCharPos1::new(right_end),
         args[4],
         args[5],
     )?;
@@ -2335,8 +2346,8 @@ fn current_buffer_has_newline_between_positions(
     let text = checked_buffer_slice_for_char_region_in_manager(
         buffers,
         Some(current_id),
-        left.min(right),
-        left.max(right),
+        LispCharPos1::new(left.min(right)),
+        LispCharPos1::new(left.max(right)),
         Value::fixnum(left.min(right)),
         Value::fixnum(left.max(right)),
     )?;
@@ -3680,8 +3691,8 @@ pub(crate) fn builtin_narrow_to_region(
     let byte_range = normalize_narrow_region_in_buffers(
         &eval.buffers,
         current_id,
-        start,
-        end,
+        LispCharPos1::new(start),
+        LispCharPos1::new(end),
         args[0],
         args[1],
     )?;
