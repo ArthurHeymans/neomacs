@@ -240,7 +240,7 @@ fn pure_dispatch_typed_numeric_primitives_accept_markers() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        4,
+        crate::buffer::LispCharPos1::new(4),
         false,
     );
 
@@ -252,7 +252,7 @@ fn pure_dispatch_typed_numeric_primitives_accept_markers() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        4,
+        crate::buffer::LispCharPos1::new(4),
         false,
     );
     let min_with_marker = dispatch_builtin_pure("min", vec![Value::fixnum(10), marker])
@@ -263,13 +263,13 @@ fn pure_dispatch_typed_numeric_primitives_accept_markers() {
     let left_marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        2,
+        crate::buffer::LispCharPos1::new(2),
         false,
     );
     let right_marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        5,
+        crate::buffer::LispCharPos1::new(5),
         false,
     );
     let lt_with_markers = dispatch_builtin_pure("<", vec![left_marker, right_marker])
@@ -280,7 +280,7 @@ fn pure_dispatch_typed_numeric_primitives_accept_markers() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        4,
+        crate::buffer::LispCharPos1::new(4),
         false,
     );
     let add1_with_marker = dispatch_builtin_pure("1+", vec![marker])
@@ -291,7 +291,7 @@ fn pure_dispatch_typed_numeric_primitives_accept_markers() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        4,
+        crate::buffer::LispCharPos1::new(4),
         false,
     );
     let sub1_with_marker = dispatch_builtin_pure("1-", vec![marker])
@@ -3865,7 +3865,7 @@ fn byte_position_and_clear_bitmap_semantics() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        2,
+        crate::buffer::LispCharPos1::new(2),
         false,
     );
     assert_eq!(
@@ -15403,7 +15403,7 @@ fn get_byte_buffer_semantics_match_oracle_edges() {
     let marker = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        2,
+        crate::buffer::LispCharPos1::new(2),
         false,
     );
     assert_eq!(

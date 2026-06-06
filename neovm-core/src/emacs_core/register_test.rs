@@ -85,7 +85,11 @@ fn marker_storage() {
     crate::test_utils::init_test_tracing();
     let mut mgr = RegisterManager::new();
     let buffer_id = crate::buffer::BufferId(7);
-    let marker = crate::emacs_core::marker::make_marker_value(Some(buffer_id), Some(42), false);
+    let marker = crate::emacs_core::marker::make_marker_value(
+        Some(buffer_id),
+        Some(crate::buffer::LispCharPos1::new(42)),
+        false,
+    );
     mgr.set('p', RegisterContent::Marker(marker));
     match mgr.get('p') {
         Some(RegisterContent::Marker(stored)) => {

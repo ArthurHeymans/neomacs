@@ -4380,8 +4380,9 @@ pub(crate) fn builtin_set_window_buffer(
             }
             if old_buffer_id != buf_id {
                 let old_buffer_value = Value::make_buffer(old_buffer_id);
-                let old_window_start_pos = old_window_start.max(1) as i64;
-                let old_point_pos = old_point.max(1) as i64;
+                let old_window_start_pos =
+                    crate::buffer::LispCharPos1::new(old_window_start.max(1) as i64);
+                let old_point_pos = crate::buffer::LispCharPos1::new(old_point.max(1) as i64);
                 let history_entry = Value::list(vec![
                     old_buffer_value,
                     super::marker::make_marker_value(

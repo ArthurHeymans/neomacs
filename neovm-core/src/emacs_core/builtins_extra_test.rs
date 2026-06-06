@@ -295,12 +295,12 @@ fn assoc_string_and_car_less_than_car_semantics() {
     );
     let left_marker = crate::emacs_core::marker::make_marker_value(
         Some(crate::buffer::BufferId(1)),
-        Some(3),
+        Some(crate::buffer::LispCharPos1::new(3)),
         false,
     );
     let right_marker = crate::emacs_core::marker::make_marker_value(
         Some(crate::buffer::BufferId(1)),
-        Some(8),
+        Some(crate::buffer::LispCharPos1::new(8)),
         false,
     );
     assert!(

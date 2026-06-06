@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -1463,10 +1463,16 @@ pub(crate) fn builtin_match_data_with_state(
                     (buffer_positions, buffers.as_deref_mut(), searched_buffer_id)
                 {
                     flat.push(super::marker::make_registered_buffer_marker(
-                        bufs, buffer_id, start_pos, false,
+                        bufs,
+                        buffer_id,
+                        LispCharPos1::new(start_pos),
+                        false,
                     ));
                     flat.push(super::marker::make_registered_buffer_marker(
-                        bufs, buffer_id, end_pos, false,
+                        bufs,
+                        buffer_id,
+                        LispCharPos1::new(end_pos),
+                        false,
                     ));
                     continue;
                 }

@@ -174,7 +174,12 @@ fn test_primitive_undo_restores_marker_adjustments_after_deletion() {
         .expect("scratch buffer")
         .insert("ae");
 
-    let marker = marker::make_registered_buffer_marker(&mut eval.buffers, buf_id, 2, false);
+    let marker = marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buf_id,
+        crate::buffer::LispCharPos1::new(2),
+        false,
+    );
     let delete_record = Value::cons(Value::string("bcd"), Value::fixnum(2));
     let marker_record = Value::cons(marker, Value::fixnum(-2));
     let list = Value::list(vec![delete_record, marker_record]);

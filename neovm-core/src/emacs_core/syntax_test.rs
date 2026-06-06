@@ -1697,13 +1697,13 @@ fn parse_partial_sexp_accepts_marker_positions_like_gnu() {
     let from = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        1,
+        crate::buffer::LispCharPos1::new(1),
         false,
     );
     let to = crate::emacs_core::marker::make_registered_buffer_marker(
         &mut eval.buffers,
         buffer_id,
-        4,
+        crate::buffer::LispCharPos1::new(4),
         false,
     );
 

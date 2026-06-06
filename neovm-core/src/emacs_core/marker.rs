@@ -66,7 +66,7 @@ pub(crate) fn is_marker(v: &Value) -> bool {
 
 pub(crate) fn make_marker_value(
     buffer_id: Option<BufferId>,
-    position: Option<i64>,
+    position: Option<LispCharPos1>,
     insertion_type: bool,
 ) -> Value {
     make_marker_value_with_id(buffer_id, position, insertion_type, None)
@@ -74,7 +74,7 @@ pub(crate) fn make_marker_value(
 
 pub(crate) fn make_marker_value_with_id(
     buffer_id: Option<BufferId>,
-    position: Option<i64>,
+    position: Option<LispCharPos1>,
     insertion_type: bool,
     marker_id: Option<u64>,
 ) -> Value {
@@ -85,10 +85,8 @@ pub(crate) fn make_marker_value_with_id(
     // Markers that later get registered via register_marker have their
     // charpos/bytepos overwritten through the chain path, so this only
     // matters for unregistered/synthesized markers.
-    let charpos = position
-        .map(|p| LispCharPos1::new(p).to_char_pos().get())
-        .unwrap_or(0);
-    let last_position_valid = matches!(position, Some(p) if p > 0) || buffer_id.is_some();
+    let charpos = position.map(|p| p.to_char_pos().get()).unwrap_or(0);
+    let last_position_valid = matches!(position, Some(p) if p.as_i64() > 0) || buffer_id.is_some();
     Value::make_marker(crate::heap_types::LispMarker {
         buffer: buffer_id,
         insertion_type,
@@ -103,7 +101,7 @@ pub(crate) fn make_marker_value_with_id(
 pub(crate) fn make_registered_buffer_marker(
     buffers: &mut BufferManager,
     buffer_id: BufferId,
-    position: i64,
+    position: LispCharPos1,
     insertion_type: bool,
 ) -> Value {
     let byte_pos = match buffers.get(buffer_id) {
@@ -335,9 +333,9 @@ fn marker_buffer_id(v: &Value) -> Option<BufferId> {
     v.as_marker_data().unwrap().buffer
 }
 
-fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> EmacsBytePos {
+fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: LispCharPos1) -> EmacsBytePos {
     // GNU Emacs: set-marker clamps to the full buffer, not the narrowed region.
-    buf.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos)
+    buf.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos.as_i64())
 }
 
 fn marker_targets_current_mark(marker: &Value) -> bool {
@@ -481,10 +479,10 @@ pub(crate) fn builtin_copy_marker_in_buffers(
             let position = if is_mark_marker(src) {
                 buffer_id
                     .and_then(|buf_id| buffers.get(buf_id))
-                    .and_then(|buf| buf.mark_char_pos().map(|m| m.to_lisp().as_i64()))
+                    .and_then(|buf| buf.mark_char_pos().map(|m| m.to_lisp()))
             } else {
                 match marker_position_value(src).kind() {
-                    ValueKind::Fixnum(n) => Some(n),
+                    ValueKind::Fixnum(n) => Some(LispCharPos1::new(n)),
                     _ => None,
                 }
             };
@@ -495,8 +493,9 @@ pub(crate) fn builtin_copy_marker_in_buffers(
         }
         ValueKind::Fixnum(n) => {
             let buffer_id = buffers.current_buffer().map(|b| b.id);
-            let marker = make_marker_value(buffer_id, Some(n), insertion_type);
-            register_marker_in_buffers(buffers, &marker, buffer_id, Some(n));
+            let position = LispCharPos1::new(n);
+            let marker = make_marker_value(buffer_id, Some(position), insertion_type);
+            register_marker_in_buffers(buffers, &marker, buffer_id, Some(position));
             Ok(marker)
         }
         ValueKind::Nil => Ok(make_marker_value(None, None, insertion_type)),
@@ -547,11 +546,13 @@ pub(crate) fn builtin_set_marker_in_buffers(
     };
 
     // Resolve position
-    let position: Option<i64> = match args[1].kind() {
+    let position: Option<LispCharPos1> = match args[1].kind() {
         ValueKind::Nil => None,
-        ValueKind::Fixnum(n) => Some(n),
+        ValueKind::Fixnum(n) => Some(LispCharPos1::new(n)),
         ValueKind::Veclike(VecLikeType::Marker) => {
-            marker_position_as_int_with_buffers(buffers, &args[1]).ok()
+            marker_position_as_int_with_buffers(buffers, &args[1])
+                .ok()
+                .map(LispCharPos1::new)
         }
         _other => {
             return Err(signal(
@@ -570,7 +571,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
         (Some(pos), Some(buf_id)) => {
             if let Some(buf) = buffers.get(buf_id) {
                 let max_pos = buf.z_lisp_char_pos().as_i64();
-                Some(pos.clamp(1, max_pos))
+                Some(LispCharPos1::new(pos.as_i64().clamp(1, max_pos)))
             } else {
                 Some(pos)
             }
@@ -639,7 +640,7 @@ fn register_marker_in_buffer(
     eval: &mut super::eval::Context,
     marker: &Value,
     buffer_id: Option<BufferId>,
-    position: Option<i64>,
+    position: Option<LispCharPos1>,
 ) {
     register_marker_in_buffers(&mut eval.buffers, marker, buffer_id, position);
 }
@@ -648,7 +649,7 @@ fn register_marker_in_buffers(
     buffers: &mut BufferManager,
     marker: &Value,
     buffer_id: Option<BufferId>,
-    position: Option<i64>,
+    position: Option<LispCharPos1>,
 ) {
     if is_mark_marker(marker) {
         return;
@@ -718,7 +719,7 @@ pub(crate) fn builtin_point_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_lisp_char_pos().as_i64(); // 1-based
+    let pos = buf.point_lisp_char_pos();
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));
@@ -741,7 +742,7 @@ pub(crate) fn builtin_point_min_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_min_lisp_char_pos().as_i64(); // 1-based
+    let pos = buf.point_min_lisp_char_pos();
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));
@@ -764,7 +765,7 @@ pub(crate) fn builtin_point_max_marker_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let pos = buf.point_max_lisp_char_pos().as_i64(); // 1-based
+    let pos = buf.point_max_lisp_char_pos();
     let buffer_id = buf.id;
     let marker = make_marker_value(Some(buffer_id), Some(pos), false);
     register_marker_in_buffers(buffers, &marker, Some(buffer_id), Some(pos));

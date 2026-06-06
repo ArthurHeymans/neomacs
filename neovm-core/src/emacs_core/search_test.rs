@@ -535,14 +535,38 @@ fn match_data_reseat_reuse_markers_before_refill_like_gnu() {
         .expect("rewind point");
 
     builtin_re_search_forward(&mut eval, vec![Value::string("b")]).expect("regexp should match");
-    let first_marker =
-        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false);
+    let first_marker = marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buffer_id,
+        crate::buffer::LispCharPos1::new(3),
+        false,
+    );
     let reuse = Value::list(vec![
         first_marker,
-        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
-        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
-        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
-        marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, 3, false),
+        marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            crate::buffer::LispCharPos1::new(3),
+            false,
+        ),
+        marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            crate::buffer::LispCharPos1::new(3),
+            false,
+        ),
+        marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            crate::buffer::LispCharPos1::new(3),
+            false,
+        ),
+        marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            crate::buffer::LispCharPos1::new(3),
+            false,
+        ),
     ]);
 
     let result = builtin_match_data(&mut eval, vec![Value::T, reuse, Value::T]).unwrap();
