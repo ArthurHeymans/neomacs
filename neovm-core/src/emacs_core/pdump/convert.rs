@@ -6012,7 +6012,7 @@ pub(crate) fn load_text_property_table(
         for (name, dump_val) in &iv.properties {
             let val = decoder.load_value(dump_val);
             table.put_property_in_char_range(
-                CharRange::from_usize(iv.start, iv.end),
+                CharRange::new(CharPos0::new(iv.start), CharPos0::new(iv.end)),
                 decoder.load_value(name),
                 val,
             );

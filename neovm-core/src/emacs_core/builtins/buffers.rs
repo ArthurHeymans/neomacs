@@ -1627,7 +1627,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
             let end_byte = map_boundary(overlay.end_old_emacs_byte.get());
             buf.overlays.move_overlay_to_emacs_byte_range(
                 overlay.overlay,
-                EmacsByteRange::from_usize(start_byte, end_byte),
+                EmacsByteRange::new(EmacsBytePos::new(start_byte), EmacsBytePos::new(end_byte)),
             );
         }
 

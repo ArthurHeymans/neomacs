@@ -3343,13 +3343,13 @@ pub(crate) fn builtin_transpose_regions(
             }
         }
         (
-            CharRange::from_usize(
-                raw_start1.min(raw_end1) as usize - 1,
-                raw_start1.max(raw_end1) as usize - 1,
+            CharRange::new(
+                CharPos0::new(raw_start1.min(raw_end1) as usize - 1),
+                CharPos0::new(raw_start1.max(raw_end1) as usize - 1),
             ),
-            CharRange::from_usize(
-                raw_start2.min(raw_end2) as usize - 1,
-                raw_start2.max(raw_end2) as usize - 1,
+            CharRange::new(
+                CharPos0::new(raw_start2.min(raw_end2) as usize - 1),
+                CharPos0::new(raw_start2.max(raw_end2) as usize - 1),
             ),
         )
     };
