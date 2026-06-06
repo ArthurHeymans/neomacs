@@ -4,7 +4,7 @@
 //! motion functions (forward/backward word, sexp scanning), and the
 //! `string-to-syntax` descriptor parser.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -742,17 +742,50 @@ fn syntax_char_from_code(code: u32) -> char {
 struct BufferChars<'a> {
     buf: &'a Buffer,
     base_char: usize,
+    multibyte: bool,
+    /// Byte cursor for sequential reads: `(char_idx, emacs_byte_pos of that
+    /// char, byte width of that char)`.  Lets a forward scan advance
+    /// `byte += width` with ONE decode per char -- like GNU `syntax.c`
+    /// `FETCH_CHAR`, which walks byte positions directly -- instead of a
+    /// char->byte conversion per char.  Random access falls back to the
+    /// (cached) conversion, so this only ever helps.
+    cursor: Cell<Option<(usize, usize, usize)>>,
 }
 
 impl<'a> BufferChars<'a> {
     fn new(buf: &'a Buffer, base_char: usize) -> Self {
-        Self { buf, base_char }
+        Self {
+            buf,
+            base_char,
+            multibyte: buf.get_multibyte(),
+            cursor: Cell::new(None),
+        }
     }
 
     #[inline]
     fn char_at(&self, idx: usize) -> char {
-        let byte_pos = buffer_char_to_emacs_byte_pos(self.buf, CharPos0::new(self.base_char + idx));
-        let code = self.buf.char_code_at_emacs_byte_pos(byte_pos).unwrap_or(0);
+        // For a forward step (or re-read of the same char) advance the byte
+        // cursor directly; otherwise pay for one (cached) char->byte
+        // conversion.  GNU's syntax scanners never convert per char -- they
+        // carry the byte position and bump it by the char width.
+        let byte_pos = match self.cursor.get() {
+            Some((c_idx, c_byte, _)) if idx == c_idx => c_byte,
+            Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte + c_width,
+            _ => buffer_char_to_emacs_byte_pos(self.buf, CharPos0::new(self.base_char + idx)).get(),
+        };
+        let code = self
+            .buf
+            .char_code_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+            .unwrap_or(0);
+        // A unibyte buffer stores one byte per char; a multibyte buffer stores
+        // the char's internal multibyte length (raw bytes included -- see
+        // `emacs_char::char_bytes`).
+        let width = if self.multibyte {
+            crate::emacs_core::emacs_char::char_bytes(code)
+        } else {
+            1
+        };
+        self.cursor.set(Some((idx, byte_pos, width)));
         syntax_char_from_code(code)
     }
 }
