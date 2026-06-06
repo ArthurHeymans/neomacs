@@ -334,8 +334,8 @@ pub(crate) fn signal_before_change(
 
         ctx.last_overlay_modification_hooks = collect_overlay_change_hooks(
             ctx,
-            byte_range.start_usize(),
-            byte_range.end_usize(),
+            byte_range.start().get(),
+            byte_range.end().get(),
             byte_range.is_empty(),
         );
         run_recorded_overlay_change_hooks(ctx, Value::NIL, lisp_beg, lisp_end, None)?;
@@ -452,8 +452,8 @@ pub(crate) fn signal_after_change(
         // modification-hooks:    overlays covering [beg, end)
         run_overlay_after_change_hooks(
             ctx,
-            byte_range.start_usize(),
-            byte_range.end_usize(),
+            byte_range.start().get(),
+            byte_range.end().get(),
             lisp_beg,
             lisp_end,
             lisp_old_len,
@@ -997,8 +997,8 @@ pub(crate) fn builtin_delete_char(
         }) else {
             return Ok(Value::NIL);
         };
-        let start = byte_range.start_usize();
-        let end = byte_range.end_usize();
+        let start = byte_range.start().get();
+        let end = byte_range.end().get();
         let delete_range =
             buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
         crate::emacs_core::textprop::verify_text_read_only_in_state(
@@ -1029,8 +1029,8 @@ pub(crate) fn builtin_delete_region(
     else {
         return Ok(Value::NIL);
     };
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
+    let start_byte = byte_range.start().get();
+    let end_byte = byte_range.end().get();
     if start_byte == end_byte {
         return Ok(Value::NIL);
     }
@@ -1078,8 +1078,8 @@ pub(crate) fn builtin_delete_and_extract_region(
     else {
         return Ok(Value::string(""));
     };
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
+    let start_byte = byte_range.start().get();
+    let end_byte = byte_range.end().get();
     if start_byte == end_byte {
         return Ok(Value::string(""));
     }
