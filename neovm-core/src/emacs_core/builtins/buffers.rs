@@ -3145,10 +3145,10 @@ fn insert_pieces_in_state(
         if piece.text.is_empty() {
             continue;
         }
-        let (insert_pos, insert_char_pos) = buffers
+        let insert_pos = buffers
             .get(current_id)
-            .map(|buf| (buf.point_emacs_byte_pos(), buf.point_char_pos()))
-            .unwrap_or((EmacsBytePos::ZERO, CharPos0::ZERO));
+            .map(Buffer::point_emacs_byte_pos)
+            .unwrap_or(EmacsBytePos::ZERO);
         if before_markers {
             let _ = buffers.insert_lisp_string_into_buffer_before_markers(current_id, &piece.text);
         } else {
@@ -3156,13 +3156,9 @@ fn insert_pieces_in_state(
         }
         let inserted_end = insert_pos.add_len(EmacsByteLen::new(piece.text.sbytes()));
         if !inherit && piece.text_props.is_none() {
-            // The inserted text occupies char range [insert_char_pos,
-            // insert_char_pos + schars); use it directly to avoid the
-            // byte->char reconversion of [insert_pos, inserted_end].
-            let char_end = CharPos0::new(insert_char_pos.get() + piece.text.schars());
-            let _ = buffers.clear_inserted_plain_text_properties_in_char_range(
+            let _ = buffers.clear_inserted_plain_text_properties_in_emacs_byte_range(
                 current_id,
-                CharRange::new(insert_char_pos, char_end),
+                EmacsByteRange::new(insert_pos, inserted_end),
             );
         }
         if inherit {

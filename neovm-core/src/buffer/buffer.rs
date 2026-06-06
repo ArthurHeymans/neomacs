@@ -4955,20 +4955,6 @@ impl BufferManager {
         Some(())
     }
 
-    /// Char-range variant: the caller already knows the inserted char range, so
-    /// this skips the byte->char conversion done by the byte-range version.
-    pub(crate) fn clear_inserted_plain_text_properties_in_char_range(
-        &mut self,
-        id: BufferId,
-        char_range: CharRange,
-    ) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .text
-            .text_props_set_properties_in_char_range(char_range, Vec::new());
-        Some(())
-    }
-
     #[cfg(test)]
     pub fn set_buffer_text_properties(
         &mut self,
