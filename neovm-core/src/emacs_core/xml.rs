@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsByteRange, LispCharPos1};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -28,6 +28,22 @@ fn expect_integer_or_marker(
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
+}
+
+fn lisp_range_to_accessible_byte_range(
+    buf: &crate::buffer::Buffer,
+    start: LispCharPos1,
+    end: LispCharPos1,
+) -> EmacsByteRange {
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+    )
 }
 
 fn expect_optional_string(v: Value) -> Result<Option<String>, Flow> {
@@ -66,35 +82,31 @@ fn validate_region_byte_bounds(
     };
 
     let start = if args.is_empty() || args[0].is_nil() {
-        buf.point_min_lisp_char_pos().as_i64()
+        buf.point_min_lisp_char_pos()
     } else {
-        expect_integer_or_marker(&ctx.buffers, &args[0])?
+        LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[0])?)
     };
 
     let end = if args.len() <= 1 || args[1].is_nil() {
-        buf.point_max_lisp_char_pos().as_i64()
+        buf.point_max_lisp_char_pos()
     } else {
-        expect_integer_or_marker(&ctx.buffers, &args[1])?
+        LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[1])?)
     };
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal(
             "args-out-of-range",
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
 
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
-    );
+    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
 
     Ok(Some((buf.id, byte_range)))
 }

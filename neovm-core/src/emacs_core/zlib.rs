@@ -15,7 +15,7 @@ use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsByteRange, LispCharPos1};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use flate2::{Decompress, FlushDecompress, Status};
@@ -35,6 +35,22 @@ fn expect_integer_or_marker(
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
+}
+
+fn lisp_range_to_accessible_byte_range(
+    buf: &crate::buffer::Buffer,
+    start: LispCharPos1,
+    end: LispCharPos1,
+) -> EmacsByteRange {
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+    )
 }
 
 /// (zlib-available-p)
@@ -62,14 +78,18 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Ok(Value::NIL);
     };
 
-    let start = expect_integer_or_marker(&ctx.buffers, &args[0])?;
-    let end = expect_integer_or_marker(&ctx.buffers, &args[1])?;
+    let start = LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[0])?);
+    let end = LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[1])?);
 
     // GNU `Fzlib_decompress_region` calls `validate_region` before the
     // unibyte-buffer check.
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal(
             "args-out-of-range",
             vec![Value::make_buffer(buf.id), args[0], args[1]],
@@ -91,15 +111,7 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
     }
 
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(from)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(to)),
-    );
+    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
     let from_byte = byte_range.start().get();
     let to_byte = byte_range.end().get();
 

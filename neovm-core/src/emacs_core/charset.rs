@@ -11,7 +11,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -1499,8 +1499,8 @@ pub(crate) fn builtin_find_charset_region(
 ) -> EvalResult {
     expect_min_args("find-charset-region", &args, 2)?;
     expect_max_args("find-charset-region", &args, 3)?;
-    let beg = expect_int_or_marker(&args[0])?;
-    let end = expect_int_or_marker(&args[1])?;
+    let beg = LispCharPos1::new(expect_int_or_marker(&args[0])?);
+    let end = LispCharPos1::new(expect_int_or_marker(&args[1])?);
 
     let buf = ctx
         .buffers
@@ -1509,22 +1509,22 @@ pub(crate) fn builtin_find_charset_region(
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if beg < point_min || beg > point_max || end < point_min || end > point_max {
+    if beg.as_i64() < point_min
+        || beg.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
         return Err(signal(
             "args-out-of-range",
-            vec![Value::fixnum(beg), Value::fixnum(end)],
+            vec![Value::fixnum(beg.as_i64()), Value::fixnum(end.as_i64())],
         ));
     }
 
-    let mut a = beg;
-    let mut b = end;
-    if a > b {
-        std::mem::swap(&mut a, &mut b);
-    }
+    let (from, to) = if beg <= end { (beg, end) } else { (end, beg) };
 
     let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(a)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(b)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
     );
     if byte_range.is_empty() {
         return Ok(Value::list(vec![Value::symbol("ascii")]));
@@ -1764,13 +1764,13 @@ pub(crate) fn builtin_charset_after(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let target_byte = if let Some(pos) = args.first() {
-        let pos = expect_int_or_marker(pos)?;
+        let pos = LispCharPos1::new(expect_int_or_marker(pos)?);
         let point_min = buf.point_min_lisp_char_pos().as_i64();
         let point_max = buf.point_max_lisp_char_pos().as_i64();
-        if pos < point_min || pos > point_max {
+        if pos.as_i64() < point_min || pos.as_i64() > point_max {
             return Ok(Value::NIL);
         }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
+        buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
     } else {
         buf.point_emacs_byte_pos()
     };
