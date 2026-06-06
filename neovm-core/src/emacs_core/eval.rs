@@ -8082,9 +8082,10 @@ impl Context {
         }
 
         let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-        let off = buf_fwd.offset as usize;
+        let slot = crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)?;
+        let off = slot.index();
         if let Some(buf) = self.buffers.current_buffer() {
-            let local = buf_fwd.local_flags_idx < 0 || buf.slot_local_flag(off);
+            let local = buf_fwd.local_flags_idx < 0 || buf.slot_local_flag(slot);
             if local && off < buf.slots.len() {
                 return Some(buf.slots[off]);
             }
@@ -12064,14 +12065,18 @@ impl Context {
                 let fwd = unsafe { &*fwd_ptr };
                 if matches!(fwd.ty, LispFwdType::BufferObj) {
                     let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                    let off = buf_fwd.offset as usize;
+                    let Some(slot) = crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
+                    else {
+                        return;
+                    };
+                    let off = slot.index();
                     let flags_idx = buf_fwd.local_flags_idx;
                     let buf_id_opt = self.buffers.current_buffer_id();
                     let has_local = match buf_id_opt {
                         Some(id) => self
                             .buffers
                             .get(id)
-                            .map(|buf| flags_idx < 0 || buf.slot_local_flag(off))
+                            .map(|buf| flags_idx < 0 || buf.slot_local_flag(slot))
                             .unwrap_or(false),
                         None => false,
                     };
@@ -12763,7 +12768,7 @@ pub(crate) fn set_runtime_binding(
     {
         let has_local = buffers
             .get(current_id)
-            .map(|buf| info.local_flags_idx < 0 || buf.slot_local_flag(info.offset.index()))
+            .map(|buf| info.local_flags_idx < 0 || buf.slot_local_flag(info.offset))
             .unwrap_or(false);
         if has_local {
             let _ = buffers.set_buffer_local_property_by_sym_id(current_id, sym_id, value);

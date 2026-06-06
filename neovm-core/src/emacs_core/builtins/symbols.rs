@@ -3856,9 +3856,13 @@ pub(crate) fn builtin_variable_binding_locus(
                         let fwd = unsafe { &*sym.val.fwd };
                         if matches!(fwd.ty, LispFwdType::BufferObj) {
                             let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                            let offset = buf_fwd.offset as usize;
+                            let Some(slot) =
+                                crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
+                            else {
+                                return Ok(Value::NIL);
+                            };
                             let flags_idx = buf_fwd.local_flags_idx;
-                            flags_idx == -1 || buf.slot_local_flag(offset)
+                            flags_idx == -1 || buf.slot_local_flag(slot)
                         } else {
                             false
                         }

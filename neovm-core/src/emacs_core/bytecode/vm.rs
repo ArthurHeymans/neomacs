@@ -2599,7 +2599,15 @@ impl<'a> Vm<'a> {
                     let header = unsafe { &*fwd };
                     if matches!(header.ty, LispFwdType::BufferObj) {
                         let buf_fwd = unsafe { &*(fwd as *const LispBufferObjFwd) };
-                        let offset = buf_fwd.offset as usize;
+                        let Some(slot) =
+                            crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
+                        else {
+                            return Err(signal(
+                                "error",
+                                vec![Value::string("Invalid buffer slot offset")],
+                            ));
+                        };
+                        let offset = slot.index();
                         let flags_idx = buf_fwd.local_flags_idx;
                         let slot_exists = self
                             .ctx
@@ -2618,7 +2626,7 @@ impl<'a> Vm<'a> {
                             if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
                                 buf.slots[offset] = value;
                                 if flags_idx >= 0 {
-                                    buf.set_slot_local_flag(offset, true);
+                                    buf.set_slot_local_flag(slot, true);
                                 }
                             }
                             self.ctx.sync_cached_runtime_binding_by_id(resolved, value);

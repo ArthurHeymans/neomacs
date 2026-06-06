@@ -167,16 +167,16 @@ pub(crate) fn builtin_make_local_variable(
                 let fwd = unsafe { &*s.val.fwd };
                 if matches!(fwd.ty, LispFwdType::BufferObj) {
                     let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                    Some(buf_fwd.offset as usize)
+                    crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
                 } else {
                     None
                 }
             });
-        if let Some(offset) = buf_objfwd {
+        if let Some(slot) = buf_objfwd {
             if let Some(buf_id) = ctx.buffers.current_buffer_id()
                 && let Some(buf) = ctx.buffers.get_mut(buf_id)
             {
-                buf.set_slot_local_flag(offset, true);
+                buf.set_slot_local_flag(slot, true);
             }
             return Ok(args[0]);
         }
@@ -543,19 +543,22 @@ pub(crate) fn builtin_kill_local_variable_impl(
                 let fwd = unsafe { &*s.val.fwd };
                 if matches!(fwd.ty, LispFwdType::BufferObj) {
                     let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                    crate::buffer::buffer::lookup_buffer_slot(resolved_name)
-                        .map(|info| (info, buf_fwd.offset as usize))
+                    crate::buffer::buffer::lookup_buffer_slot(resolved_name).and_then(|info| {
+                        crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
+                            .map(|slot| (info, slot))
+                    })
                 } else {
                     None
                 }
             });
-        if let Some((info, offset)) = forwarded_slot {
+        if let Some((info, slot)) = forwarded_slot {
+            let offset = slot.index();
             let default_value = ctx.buffers.buffer_defaults.get(offset).copied();
             if info.local_flags_idx >= 0
                 && let Some(buffer_id) = buffer_id
                 && let Some(buf) = ctx.buffers.get_mut(buffer_id)
             {
-                buf.set_slot_local_flag(offset, false);
+                buf.set_slot_local_flag(slot, false);
                 if let Some(default_value) = default_value {
                     buf.slots[offset] = default_value;
                 }

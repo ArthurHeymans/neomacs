@@ -93,58 +93,58 @@ impl BufferSlot {
 
 /// Slot index for `buffer-file-name`. Mirrors GNU's slot for the
 /// `file_name_` field in `struct buffer` (`buffer.h:319`).
-pub const BUFFER_SLOT_FILE_NAME: usize = 0;
+pub const BUFFER_SLOT_FILE_NAME: BufferSlot = BufferSlot::new(0);
 /// Slot index for `buffer-auto-save-file-name`. Mirrors GNU's
 /// `auto_save_file_name_` (`buffer.h:323`).
-pub const BUFFER_SLOT_AUTO_SAVE_FILE_NAME: usize = 1;
+pub const BUFFER_SLOT_AUTO_SAVE_FILE_NAME: BufferSlot = BufferSlot::new(1);
 /// Slot index for `buffer-read-only`. Mirrors GNU's `read_only_`
 /// (`buffer.h:338`).
-pub const BUFFER_SLOT_READ_ONLY: usize = 2;
+pub const BUFFER_SLOT_READ_ONLY: BufferSlot = BufferSlot::new(2);
 /// Slot index for `enable-multibyte-characters`. Mirrors GNU's
 /// `enable_multibyte_characters_` (`buffer.h:346`).
-pub const BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS: usize = 3;
+pub const BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS: BufferSlot = BufferSlot::new(3);
 /// Slot index for `buffer-file-truename`. Mirrors GNU's
 /// `file_truename_` (`buffer.h:325`).
-pub const BUFFER_SLOT_FILE_TRUENAME: usize = 4;
+pub const BUFFER_SLOT_FILE_TRUENAME: BufferSlot = BufferSlot::new(4);
 /// Slot index for `default-directory`. Mirrors GNU's
 /// `directory_` (`buffer.h:321`).
-pub const BUFFER_SLOT_DEFAULT_DIRECTORY: usize = 5;
+pub const BUFFER_SLOT_DEFAULT_DIRECTORY: BufferSlot = BufferSlot::new(5);
 /// Slot index for `buffer-saved-size`. Mirrors GNU's `save_length_`
 /// (`buffer.h:340`).
-pub const BUFFER_SLOT_SAVED_SIZE: usize = 6;
+pub const BUFFER_SLOT_SAVED_SIZE: BufferSlot = BufferSlot::new(6);
 /// Slot index for `buffer-backed-up`. Mirrors GNU's `backed_up_`
 /// (`buffer.h:341`).
-pub const BUFFER_SLOT_BACKED_UP: usize = 7;
+pub const BUFFER_SLOT_BACKED_UP: BufferSlot = BufferSlot::new(7);
 /// Slot index for `buffer-file-format`. Mirrors GNU's
 /// `file_format_` (`buffer.h:342`).
-pub const BUFFER_SLOT_FILE_FORMAT: usize = 8;
+pub const BUFFER_SLOT_FILE_FORMAT: BufferSlot = BufferSlot::new(8);
 /// Slot index for `buffer-auto-save-file-format`. Mirrors GNU's
 /// `auto_save_file_format_` (`buffer.h:343`).
-pub const BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT: usize = 9;
+pub const BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT: BufferSlot = BufferSlot::new(9);
 /// Slot index for `major-mode`. Mirrors GNU's `major_mode_`
 /// (`buffer.h:347`).
-pub const BUFFER_SLOT_MAJOR_MODE: usize = 10;
+pub const BUFFER_SLOT_MAJOR_MODE: BufferSlot = BufferSlot::new(10);
 /// Slot index for `local-minor-modes`. Mirrors GNU's
 /// `local_minor_modes_` (`buffer.h:349`).
-pub const BUFFER_SLOT_LOCAL_MINOR_MODES: usize = 11;
+pub const BUFFER_SLOT_LOCAL_MINOR_MODES: BufferSlot = BufferSlot::new(11);
 /// Slot index for `mode-name`. Mirrors GNU's `mode_name_`
 /// (`buffer.h:351`).
-pub const BUFFER_SLOT_MODE_NAME: usize = 12;
+pub const BUFFER_SLOT_MODE_NAME: BufferSlot = BufferSlot::new(12);
 /// Slot index for `mark-active`. Mirrors GNU's `mark_active_`
 /// (`buffer.h:381`).
-pub const BUFFER_SLOT_MARK_ACTIVE: usize = 13;
+pub const BUFFER_SLOT_MARK_ACTIVE: BufferSlot = BufferSlot::new(13);
 /// Slot index for `point-before-scroll`. Mirrors GNU's
 /// `point_before_scroll_` (`buffer.h:413`).
-pub const BUFFER_SLOT_POINT_BEFORE_SCROLL: usize = 14;
+pub const BUFFER_SLOT_POINT_BEFORE_SCROLL: BufferSlot = BufferSlot::new(14);
 /// Slot index for `buffer-display-count`. Mirrors GNU's
 /// `display_count_` (`buffer.h:418`).
-pub const BUFFER_SLOT_DISPLAY_COUNT: usize = 15;
+pub const BUFFER_SLOT_DISPLAY_COUNT: BufferSlot = BufferSlot::new(15);
 /// Slot index for `buffer-display-time`. Mirrors GNU's
 /// `display_time_` (`buffer.h:432`).
-pub const BUFFER_SLOT_DISPLAY_TIME: usize = 16;
+pub const BUFFER_SLOT_DISPLAY_TIME: BufferSlot = BufferSlot::new(16);
 /// Slot index for `buffer-invisibility-spec`. Mirrors GNU's
 /// `invisibility_spec_` (`buffer.h:411`).
-pub const BUFFER_SLOT_INVISIBILITY_SPEC: usize = 17;
+pub const BUFFER_SLOT_INVISIBILITY_SPEC: BufferSlot = BufferSlot::new(17);
 
 // ---------------------------------------------------------------------------
 // Phase 10D conditional slot offsets. These are BUFFER_OBJFWD slots
@@ -161,87 +161,87 @@ pub const BUFFER_SLOT_INVISIBILITY_SPEC: usize = 17;
 /// (`buffer.h:387`). First conditional slot migrated by Phase 10D
 /// step 3 — picked because the value is a simple integer with a
 /// non-trivial default (70) and dense test coverage.
-pub const BUFFER_SLOT_FILL_COLUMN: usize = 18;
+pub const BUFFER_SLOT_FILL_COLUMN: BufferSlot = BufferSlot::new(18);
 /// Slot index for `tab-width`. Mirrors GNU's `tab_width_`
 /// (`buffer.h:386`). Default 8 (`buffer.c:4848`).
-pub const BUFFER_SLOT_TAB_WIDTH: usize = 19;
+pub const BUFFER_SLOT_TAB_WIDTH: BufferSlot = BufferSlot::new(19);
 /// Slot index for `left-margin`. Mirrors GNU's `left_margin_`
 /// (`buffer.h:388`). Default 0 (`buffer.c:4867`).
-pub const BUFFER_SLOT_LEFT_MARGIN: usize = 20;
+pub const BUFFER_SLOT_LEFT_MARGIN: BufferSlot = BufferSlot::new(20);
 /// Slot index for `abbrev-mode`. Mirrors GNU's `abbrev_mode_`
 /// (`buffer.h:368`). Default nil (`buffer.c:4835`).
-pub const BUFFER_SLOT_ABBREV_MODE: usize = 21;
+pub const BUFFER_SLOT_ABBREV_MODE: BufferSlot = BufferSlot::new(21);
 /// Slot index for `overwrite-mode`. Mirrors GNU's `overwrite_mode_`
 /// (`buffer.h:369`). Default nil (`buffer.c:4836`).
-pub const BUFFER_SLOT_OVERWRITE_MODE: usize = 22;
+pub const BUFFER_SLOT_OVERWRITE_MODE: BufferSlot = BufferSlot::new(22);
 /// Slot index for `selective-display`. Mirrors GNU's
 /// `selective_display_` (`buffer.h:373`). Default nil (`buffer.c:4838`).
-pub const BUFFER_SLOT_SELECTIVE_DISPLAY: usize = 23;
+pub const BUFFER_SLOT_SELECTIVE_DISPLAY: BufferSlot = BufferSlot::new(23);
 /// Slot index for `selective-display-ellipses`. Mirrors GNU's
 /// `selective_display_ellipses_` (`buffer.h:374`). Default t
 /// (`buffer.c:4839`).
-pub const BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES: usize = 24;
+pub const BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES: BufferSlot = BufferSlot::new(24);
 /// Slot index for `truncate-lines`. Mirrors GNU's `truncate_lines_`
 /// (`buffer.h:355`). Default nil (`buffer.c:4849`).
-pub const BUFFER_SLOT_TRUNCATE_LINES: usize = 25;
+pub const BUFFER_SLOT_TRUNCATE_LINES: BufferSlot = BufferSlot::new(25);
 /// Slot index for `word-wrap`. Mirrors GNU's `word_wrap_`
 /// (`buffer.h:357`). Default nil (`buffer.c:4850`).
-pub const BUFFER_SLOT_WORD_WRAP: usize = 26;
+pub const BUFFER_SLOT_WORD_WRAP: BufferSlot = BufferSlot::new(26);
 /// Slot index for `ctl-arrow`. Mirrors GNU's `ctl_arrow_`
 /// (`buffer.h:359`). Default t (`buffer.c:4851`).
-pub const BUFFER_SLOT_CTL_ARROW: usize = 27;
+pub const BUFFER_SLOT_CTL_ARROW: BufferSlot = BufferSlot::new(27);
 /// Slot index for `auto-fill-function`. Mirrors GNU's
 /// `auto_fill_function_` (`buffer.h:367`). Default nil
 /// (`buffer.c:4837`).
-pub const BUFFER_SLOT_AUTO_FILL_FUNCTION: usize = 28;
+pub const BUFFER_SLOT_AUTO_FILL_FUNCTION: BufferSlot = BufferSlot::new(28);
 /// Slot index for `mode-line-format`. Default `"%-"`.
-pub const BUFFER_SLOT_MODE_LINE_FORMAT: usize = 29;
+pub const BUFFER_SLOT_MODE_LINE_FORMAT: BufferSlot = BufferSlot::new(29);
 /// Slot index for `header-line-format`. Default nil.
-pub const BUFFER_SLOT_HEADER_LINE_FORMAT: usize = 30;
+pub const BUFFER_SLOT_HEADER_LINE_FORMAT: BufferSlot = BufferSlot::new(30);
 /// Slot index for `tab-line-format`. Default nil.
-pub const BUFFER_SLOT_TAB_LINE_FORMAT: usize = 31;
+pub const BUFFER_SLOT_TAB_LINE_FORMAT: BufferSlot = BufferSlot::new(31);
 //
 // Phase 10D step 5 batch 2 — display/bidi/fringe/scroll-bar slots.
 /// Slot index for `bidi-display-reordering`. Default t.
-pub const BUFFER_SLOT_BIDI_DISPLAY_REORDERING: usize = 32;
+pub const BUFFER_SLOT_BIDI_DISPLAY_REORDERING: BufferSlot = BufferSlot::new(32);
 /// Slot index for `bidi-paragraph-direction`. Default nil.
-pub const BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION: usize = 33;
+pub const BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION: BufferSlot = BufferSlot::new(33);
 /// Slot index for `bidi-paragraph-start-re`. Default nil.
-pub const BUFFER_SLOT_BIDI_PARAGRAPH_START_RE: usize = 34;
+pub const BUFFER_SLOT_BIDI_PARAGRAPH_START_RE: BufferSlot = BufferSlot::new(34);
 /// Slot index for `bidi-paragraph-separate-re`. Default nil.
-pub const BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE: usize = 35;
+pub const BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE: BufferSlot = BufferSlot::new(35);
 /// Slot index for `cursor-type`. Default t.
-pub const BUFFER_SLOT_CURSOR_TYPE: usize = 36;
+pub const BUFFER_SLOT_CURSOR_TYPE: BufferSlot = BufferSlot::new(36);
 /// Slot index for `line-spacing`. Default nil.
-pub const BUFFER_SLOT_LINE_SPACING: usize = 37;
+pub const BUFFER_SLOT_LINE_SPACING: BufferSlot = BufferSlot::new(37);
 /// Slot index for `text-conversion-style`. Default nil.
-pub const BUFFER_SLOT_TEXT_CONVERSION_STYLE: usize = 38;
+pub const BUFFER_SLOT_TEXT_CONVERSION_STYLE: BufferSlot = BufferSlot::new(38);
 /// Slot index for `cursor-in-non-selected-windows`. Default t.
-pub const BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS: usize = 39;
+pub const BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS: BufferSlot = BufferSlot::new(39);
 /// Slot index for `left-margin-width`. Default nil.
-pub const BUFFER_SLOT_LEFT_MARGIN_WIDTH: usize = 40;
+pub const BUFFER_SLOT_LEFT_MARGIN_WIDTH: BufferSlot = BufferSlot::new(40);
 /// Slot index for `right-margin-width`. Default nil.
-pub const BUFFER_SLOT_RIGHT_MARGIN_WIDTH: usize = 41;
+pub const BUFFER_SLOT_RIGHT_MARGIN_WIDTH: BufferSlot = BufferSlot::new(41);
 /// Slot index for `left-fringe-width`. Default nil.
-pub const BUFFER_SLOT_LEFT_FRINGE_WIDTH: usize = 42;
+pub const BUFFER_SLOT_LEFT_FRINGE_WIDTH: BufferSlot = BufferSlot::new(42);
 /// Slot index for `right-fringe-width`. Default nil.
-pub const BUFFER_SLOT_RIGHT_FRINGE_WIDTH: usize = 43;
+pub const BUFFER_SLOT_RIGHT_FRINGE_WIDTH: BufferSlot = BufferSlot::new(43);
 /// Slot index for `fringes-outside-margins`. Default nil.
-pub const BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS: usize = 44;
+pub const BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS: BufferSlot = BufferSlot::new(44);
 /// Slot index for `scroll-bar-width`. Default nil.
-pub const BUFFER_SLOT_SCROLL_BAR_WIDTH: usize = 45;
+pub const BUFFER_SLOT_SCROLL_BAR_WIDTH: BufferSlot = BufferSlot::new(45);
 /// Slot index for `scroll-bar-height`. Default nil.
-pub const BUFFER_SLOT_SCROLL_BAR_HEIGHT: usize = 46;
+pub const BUFFER_SLOT_SCROLL_BAR_HEIGHT: BufferSlot = BufferSlot::new(46);
 /// Slot index for `vertical-scroll-bar`. Default t.
-pub const BUFFER_SLOT_VERTICAL_SCROLL_BAR: usize = 47;
+pub const BUFFER_SLOT_VERTICAL_SCROLL_BAR: BufferSlot = BufferSlot::new(47);
 /// Slot index for `horizontal-scroll-bar`. Default t.
-pub const BUFFER_SLOT_HORIZONTAL_SCROLL_BAR: usize = 48;
+pub const BUFFER_SLOT_HORIZONTAL_SCROLL_BAR: BufferSlot = BufferSlot::new(48);
 /// Slot index for `indicate-empty-lines`. Default nil.
-pub const BUFFER_SLOT_INDICATE_EMPTY_LINES: usize = 49;
+pub const BUFFER_SLOT_INDICATE_EMPTY_LINES: BufferSlot = BufferSlot::new(49);
 /// Slot index for `indicate-buffer-boundaries`. Default nil.
-pub const BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES: usize = 50;
+pub const BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES: BufferSlot = BufferSlot::new(50);
 /// Slot index for `fringe-indicator-alist`. Default nil.
-pub const BUFFER_SLOT_FRINGE_INDICATOR_ALIST: usize = 51;
+pub const BUFFER_SLOT_FRINGE_INDICATOR_ALIST: BufferSlot = BufferSlot::new(51);
 /// Slot index for `fringe-cursor-alist`. Default nil.
 ///
 /// Cursor audit Finding 14 in `drafts/cursor-audit.md`: this
@@ -251,37 +251,37 @@ pub const BUFFER_SLOT_FRINGE_INDICATOR_ALIST: usize = 51;
 /// `get_logical_cursor_bitmap` to map fringe indicator types to
 /// cursor bitmaps. Wiring it requires the fringe bitmap resolver,
 /// which is itself still mostly stubbed.
-pub const BUFFER_SLOT_FRINGE_CURSOR_ALIST: usize = 52;
+pub const BUFFER_SLOT_FRINGE_CURSOR_ALIST: BufferSlot = BufferSlot::new(52);
 /// Slot index for `scroll-up-aggressively`. Default nil.
-pub const BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY: usize = 53;
+pub const BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY: BufferSlot = BufferSlot::new(53);
 /// Slot index for `scroll-down-aggressively`. Default nil.
-pub const BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY: usize = 54;
+pub const BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY: BufferSlot = BufferSlot::new(54);
 /// Slot index for `cache-long-scans`. Default t.
-pub const BUFFER_SLOT_CACHE_LONG_SCANS: usize = 55;
+pub const BUFFER_SLOT_CACHE_LONG_SCANS: BufferSlot = BufferSlot::new(55);
 /// Slot index for `local-abbrev-table`. Default nil.
-pub const BUFFER_SLOT_LOCAL_ABBREV_TABLE: usize = 56;
+pub const BUFFER_SLOT_LOCAL_ABBREV_TABLE: BufferSlot = BufferSlot::new(56);
 /// Slot index for `buffer-display-table`. Default nil.
-pub const BUFFER_SLOT_BUFFER_DISPLAY_TABLE: usize = 57;
+pub const BUFFER_SLOT_BUFFER_DISPLAY_TABLE: BufferSlot = BufferSlot::new(57);
 /// Slot index for `buffer-file-coding-system`. Default nil
 /// (permanent).
-pub const BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM: usize = 58;
+pub const BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM: BufferSlot = BufferSlot::new(58);
 /// Slot index for the buffer's syntax table (`BVAR(buf, syntax_table)`
 /// in GNU `buffer.h:391`). Not exposed as a Lisp variable in GNU —
 /// accessed only via `(syntax-table)` / `(set-syntax-table)`. Conditional
 /// per GNU `buffer.c:4758` (`PER_BUFFER_VAR_IDX(syntax_table)`).
-pub const BUFFER_SLOT_SYNTAX_TABLE: usize = 59;
+pub const BUFFER_SLOT_SYNTAX_TABLE: BufferSlot = BufferSlot::new(59);
 /// Slot index for the buffer's category table (`BVAR(buf, category_table)`
 /// in GNU `buffer.h:394`). Not exposed as a Lisp variable in GNU —
 /// accessed only via `(category-table)` / `(set-category-table)`. Conditional
 /// per GNU `buffer.c:4760`.
-pub const BUFFER_SLOT_CATEGORY_TABLE: usize = 60;
+pub const BUFFER_SLOT_CATEGORY_TABLE: BufferSlot = BufferSlot::new(60);
 /// Slot index for the buffer's case table (combined downcase/upcase/
 /// canonicalize/equivalence as extras of a single char-table —
 /// NeoMacs's collapse of GNU's 4-slot design in `buffer.h:408-417`).
 /// Not exposed as a Lisp variable; accessed via `(current-case-table)`
 /// / `(set-case-table)`. Always-local per GNU `buffer.c:4731-4734`
 /// (flag=0 means every buffer has its own value, no conditional gate).
-pub const BUFFER_SLOT_CASE_TABLE: usize = 61;
+pub const BUFFER_SLOT_CASE_TABLE: BufferSlot = BufferSlot::new(61);
 
 // ---------------------------------------------------------------------------
 // BUFFER_SLOT_INFO table — declarative metadata for every BUFFER_OBJFWD
@@ -408,7 +408,7 @@ pub struct BufferSlotInfo {
 pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     BufferSlotInfo {
         name: "buffer-file-name",
-        offset: BufferSlot::new(BUFFER_SLOT_FILE_NAME),
+        offset: BUFFER_SLOT_FILE_NAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "stringp",
         reset_on_kill: false,
@@ -418,7 +418,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-auto-save-file-name",
-        offset: BufferSlot::new(BUFFER_SLOT_AUTO_SAVE_FILE_NAME),
+        offset: BUFFER_SLOT_AUTO_SAVE_FILE_NAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "stringp",
         reset_on_kill: false,
@@ -428,7 +428,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-read-only",
-        offset: BufferSlot::new(BUFFER_SLOT_READ_ONLY),
+        offset: BUFFER_SLOT_READ_ONLY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "booleanp",
         reset_on_kill: false,
@@ -438,7 +438,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "enable-multibyte-characters",
-        offset: BufferSlot::new(BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS),
+        offset: BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "booleanp",
         reset_on_kill: false,
@@ -448,7 +448,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-file-truename",
-        offset: BufferSlot::new(BUFFER_SLOT_FILE_TRUENAME),
+        offset: BUFFER_SLOT_FILE_TRUENAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "stringp",
         reset_on_kill: false,
@@ -462,7 +462,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // compute that at const time so we use SlotDefault::LazyCwd
         // which calls std::env::current_dir() at install time.
         name: "default-directory",
-        offset: BufferSlot::new(BUFFER_SLOT_DEFAULT_DIRECTORY),
+        offset: BUFFER_SLOT_DEFAULT_DIRECTORY,
         default: SlotDefault::LazyCwd,
         predicate: "stringp",
         reset_on_kill: false,
@@ -472,7 +472,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-saved-size",
-        offset: BufferSlot::new(BUFFER_SLOT_SAVED_SIZE),
+        offset: BUFFER_SLOT_SAVED_SIZE,
         default: SlotDefault::LazyFixnum(0),
         predicate: "integerp",
         reset_on_kill: false,
@@ -482,7 +482,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-backed-up",
-        offset: BufferSlot::new(BUFFER_SLOT_BACKED_UP),
+        offset: BUFFER_SLOT_BACKED_UP,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "booleanp",
         reset_on_kill: false,
@@ -492,7 +492,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-file-format",
-        offset: BufferSlot::new(BUFFER_SLOT_FILE_FORMAT),
+        offset: BUFFER_SLOT_FILE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "listp",
         reset_on_kill: false,
@@ -502,7 +502,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-auto-save-file-format",
-        offset: BufferSlot::new(BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT),
+        offset: BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "listp",
         reset_on_kill: false,
@@ -512,7 +512,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "major-mode",
-        offset: BufferSlot::new(BUFFER_SLOT_MAJOR_MODE),
+        offset: BUFFER_SLOT_MAJOR_MODE,
         default: SlotDefault::LazySymbol("fundamental-mode"),
         predicate: "symbolp",
         reset_on_kill: true,
@@ -522,7 +522,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "local-minor-modes",
-        offset: BufferSlot::new(BUFFER_SLOT_LOCAL_MINOR_MODES),
+        offset: BUFFER_SLOT_LOCAL_MINOR_MODES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "listp",
         reset_on_kill: false,
@@ -532,7 +532,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "mode-name",
-        offset: BufferSlot::new(BUFFER_SLOT_MODE_NAME),
+        offset: BUFFER_SLOT_MODE_NAME,
         default: SlotDefault::LazyString("Fundamental"),
         predicate: "",
         reset_on_kill: true,
@@ -542,7 +542,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "mark-active",
-        offset: BufferSlot::new(BUFFER_SLOT_MARK_ACTIVE),
+        offset: BUFFER_SLOT_MARK_ACTIVE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
@@ -552,7 +552,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "point-before-scroll",
-        offset: BufferSlot::new(BUFFER_SLOT_POINT_BEFORE_SCROLL),
+        offset: BUFFER_SLOT_POINT_BEFORE_SCROLL,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
@@ -562,7 +562,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-display-count",
-        offset: BufferSlot::new(BUFFER_SLOT_DISPLAY_COUNT),
+        offset: BUFFER_SLOT_DISPLAY_COUNT,
         default: SlotDefault::LazyFixnum(0),
         predicate: "integerp",
         reset_on_kill: false,
@@ -572,7 +572,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     },
     BufferSlotInfo {
         name: "buffer-display-time",
-        offset: BufferSlot::new(BUFFER_SLOT_DISPLAY_TIME),
+        offset: BUFFER_SLOT_DISPLAY_TIME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
@@ -585,7 +585,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // legacy ALWAYS_LOCAL_BUFFER_LOCAL_NAMES table also used
         // Value::T, matching `init_buffer_once`.
         name: "buffer-invisibility-spec",
-        offset: BufferSlot::new(BUFFER_SLOT_INVISIBILITY_SPEC),
+        offset: BUFFER_SLOT_INVISIBILITY_SPEC,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: true,
@@ -600,77 +600,77 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // in `buffer_local_flags`. NeoMacs reuses `offset` as the
         // bit index in `Buffer::local_flags`.
         name: "fill-column",
-        offset: BufferSlot::new(BUFFER_SLOT_FILL_COLUMN),
+        offset: BUFFER_SLOT_FILL_COLUMN,
         default: SlotDefault::LazyFixnum(70),
         predicate: "integerp",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_FILL_COLUMN as i16,
+        local_flags_idx: BUFFER_SLOT_FILL_COLUMN.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4848` — tab-width defaults to 8.
         name: "tab-width",
-        offset: BufferSlot::new(BUFFER_SLOT_TAB_WIDTH),
+        offset: BUFFER_SLOT_TAB_WIDTH,
         default: SlotDefault::LazyFixnum(8),
         predicate: "integerp",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_TAB_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_TAB_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4867` — left-margin defaults to 0.
         name: "left-margin",
-        offset: BufferSlot::new(BUFFER_SLOT_LEFT_MARGIN),
+        offset: BUFFER_SLOT_LEFT_MARGIN,
         default: SlotDefault::LazyFixnum(0),
         predicate: "integerp",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_LEFT_MARGIN as i16,
+        local_flags_idx: BUFFER_SLOT_LEFT_MARGIN.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4835` — abbrev-mode defaults to nil.
         name: "abbrev-mode",
-        offset: BufferSlot::new(BUFFER_SLOT_ABBREV_MODE),
+        offset: BUFFER_SLOT_ABBREV_MODE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_ABBREV_MODE as i16,
+        local_flags_idx: BUFFER_SLOT_ABBREV_MODE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4836` — overwrite-mode defaults to nil.
         name: "overwrite-mode",
-        offset: BufferSlot::new(BUFFER_SLOT_OVERWRITE_MODE),
+        offset: BUFFER_SLOT_OVERWRITE_MODE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_OVERWRITE_MODE as i16,
+        local_flags_idx: BUFFER_SLOT_OVERWRITE_MODE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4838` — selective-display defaults to nil.
         name: "selective-display",
-        offset: BufferSlot::new(BUFFER_SLOT_SELECTIVE_DISPLAY),
+        offset: BUFFER_SLOT_SELECTIVE_DISPLAY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY as i16,
+        local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4839` — selective-display-ellipses defaults to t.
         name: "selective-display-ellipses",
-        offset: BufferSlot::new(BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES),
+        offset: BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES as i16,
+        local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
@@ -681,44 +681,44 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // step 5+ will add a dedicated field), so for now we leave
         // `reset_on_kill` false to mirror the most common path.
         name: "truncate-lines",
-        offset: BufferSlot::new(BUFFER_SLOT_TRUNCATE_LINES),
+        offset: BUFFER_SLOT_TRUNCATE_LINES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_TRUNCATE_LINES as i16,
+        local_flags_idx: BUFFER_SLOT_TRUNCATE_LINES.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: true,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4850` — word-wrap defaults to nil.
         name: "word-wrap",
-        offset: BufferSlot::new(BUFFER_SLOT_WORD_WRAP),
+        offset: BUFFER_SLOT_WORD_WRAP,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_WORD_WRAP as i16,
+        local_flags_idx: BUFFER_SLOT_WORD_WRAP.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4851` — ctl-arrow defaults to t.
         name: "ctl-arrow",
-        offset: BufferSlot::new(BUFFER_SLOT_CTL_ARROW),
+        offset: BUFFER_SLOT_CTL_ARROW,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_CTL_ARROW as i16,
+        local_flags_idx: BUFFER_SLOT_CTL_ARROW.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4837` — auto-fill-function defaults to nil.
         name: "auto-fill-function",
-        offset: BufferSlot::new(BUFFER_SLOT_AUTO_FILL_FUNCTION),
+        offset: BUFFER_SLOT_AUTO_FILL_FUNCTION,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_AUTO_FILL_FUNCTION as i16,
+        local_flags_idx: BUFFER_SLOT_AUTO_FILL_FUNCTION.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
@@ -727,33 +727,33 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // Layout engine reads via `effective_buffer_value`, which
         // was updated to consult the slot table directly.
         name: "mode-line-format",
-        offset: BufferSlot::new(BUFFER_SLOT_MODE_LINE_FORMAT),
+        offset: BUFFER_SLOT_MODE_LINE_FORMAT,
         default: SlotDefault::LazyString("%-"),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_MODE_LINE_FORMAT as i16,
+        local_flags_idx: BUFFER_SLOT_MODE_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4833` — header-line-format defaults to nil.
         name: "header-line-format",
-        offset: BufferSlot::new(BUFFER_SLOT_HEADER_LINE_FORMAT),
+        offset: BUFFER_SLOT_HEADER_LINE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_HEADER_LINE_FORMAT as i16,
+        local_flags_idx: BUFFER_SLOT_HEADER_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4834` — tab-line-format defaults to nil.
         name: "tab-line-format",
-        offset: BufferSlot::new(BUFFER_SLOT_TAB_LINE_FORMAT),
+        offset: BUFFER_SLOT_TAB_LINE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_TAB_LINE_FORMAT as i16,
+        local_flags_idx: BUFFER_SLOT_TAB_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
@@ -762,286 +762,286 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
     BufferSlotInfo {
         // GNU `buffer.c:4852` — bidi-display-reordering defaults to t.
         name: "bidi-display-reordering",
-        offset: BufferSlot::new(BUFFER_SLOT_BIDI_DISPLAY_REORDERING),
+        offset: BUFFER_SLOT_BIDI_DISPLAY_REORDERING,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BIDI_DISPLAY_REORDERING as i16,
+        local_flags_idx: BUFFER_SLOT_BIDI_DISPLAY_REORDERING.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4853` — bidi-paragraph-direction defaults to nil.
         name: "bidi-paragraph-direction",
-        offset: BufferSlot::new(BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION),
+        offset: BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION as i16,
+        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4854` — bidi-paragraph-start-re defaults to nil.
         name: "bidi-paragraph-start-re",
-        offset: BufferSlot::new(BUFFER_SLOT_BIDI_PARAGRAPH_START_RE),
+        offset: BUFFER_SLOT_BIDI_PARAGRAPH_START_RE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_START_RE as i16,
+        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_START_RE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4855` — bidi-paragraph-separate-re defaults to nil.
         name: "bidi-paragraph-separate-re",
-        offset: BufferSlot::new(BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE),
+        offset: BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE as i16,
+        local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4856` — cursor-type defaults to t.
         name: "cursor-type",
-        offset: BufferSlot::new(BUFFER_SLOT_CURSOR_TYPE),
+        offset: BUFFER_SLOT_CURSOR_TYPE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_CURSOR_TYPE as i16,
+        local_flags_idx: BUFFER_SLOT_CURSOR_TYPE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4857` — extra-line-spacing defaults to nil.
         name: "line-spacing",
-        offset: BufferSlot::new(BUFFER_SLOT_LINE_SPACING),
+        offset: BUFFER_SLOT_LINE_SPACING,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_LINE_SPACING as i16,
+        local_flags_idx: BUFFER_SLOT_LINE_SPACING.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4861` — text-conversion-style defaults to nil.
         name: "text-conversion-style",
-        offset: BufferSlot::new(BUFFER_SLOT_TEXT_CONVERSION_STYLE),
+        offset: BUFFER_SLOT_TEXT_CONVERSION_STYLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_TEXT_CONVERSION_STYLE as i16,
+        local_flags_idx: BUFFER_SLOT_TEXT_CONVERSION_STYLE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4862` — cursor-in-non-selected-windows defaults to t.
         name: "cursor-in-non-selected-windows",
-        offset: BufferSlot::new(BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS),
+        offset: BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS as i16,
+        local_flags_idx: BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4871` — left-margin-cols defaults to 0.
         name: "left-margin-width",
-        offset: BufferSlot::new(BUFFER_SLOT_LEFT_MARGIN_WIDTH),
+        offset: BUFFER_SLOT_LEFT_MARGIN_WIDTH,
         default: SlotDefault::LazyFixnum(0),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_LEFT_MARGIN_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_LEFT_MARGIN_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4872` — right-margin-cols defaults to 0.
         name: "right-margin-width",
-        offset: BufferSlot::new(BUFFER_SLOT_RIGHT_MARGIN_WIDTH),
+        offset: BUFFER_SLOT_RIGHT_MARGIN_WIDTH,
         default: SlotDefault::LazyFixnum(0),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_RIGHT_MARGIN_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_RIGHT_MARGIN_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4873` — left-fringe-width defaults to nil.
         name: "left-fringe-width",
-        offset: BufferSlot::new(BUFFER_SLOT_LEFT_FRINGE_WIDTH),
+        offset: BUFFER_SLOT_LEFT_FRINGE_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_LEFT_FRINGE_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_LEFT_FRINGE_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4874` — right-fringe-width defaults to nil.
         name: "right-fringe-width",
-        offset: BufferSlot::new(BUFFER_SLOT_RIGHT_FRINGE_WIDTH),
+        offset: BUFFER_SLOT_RIGHT_FRINGE_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_RIGHT_FRINGE_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_RIGHT_FRINGE_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4875` — fringes-outside-margins defaults to nil.
         name: "fringes-outside-margins",
-        offset: BufferSlot::new(BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS),
+        offset: BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS as i16,
+        local_flags_idx: BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4876` — scroll-bar-width defaults to nil.
         name: "scroll-bar-width",
-        offset: BufferSlot::new(BUFFER_SLOT_SCROLL_BAR_WIDTH),
+        offset: BUFFER_SLOT_SCROLL_BAR_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SCROLL_BAR_WIDTH as i16,
+        local_flags_idx: BUFFER_SLOT_SCROLL_BAR_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4877` — scroll-bar-height defaults to nil.
         name: "scroll-bar-height",
-        offset: BufferSlot::new(BUFFER_SLOT_SCROLL_BAR_HEIGHT),
+        offset: BUFFER_SLOT_SCROLL_BAR_HEIGHT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SCROLL_BAR_HEIGHT as i16,
+        local_flags_idx: BUFFER_SLOT_SCROLL_BAR_HEIGHT.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4878` — vertical-scroll-bar defaults to t.
         name: "vertical-scroll-bar",
-        offset: BufferSlot::new(BUFFER_SLOT_VERTICAL_SCROLL_BAR),
+        offset: BUFFER_SLOT_VERTICAL_SCROLL_BAR,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_VERTICAL_SCROLL_BAR as i16,
+        local_flags_idx: BUFFER_SLOT_VERTICAL_SCROLL_BAR.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4879` — horizontal-scroll-bar defaults to t.
         name: "horizontal-scroll-bar",
-        offset: BufferSlot::new(BUFFER_SLOT_HORIZONTAL_SCROLL_BAR),
+        offset: BUFFER_SLOT_HORIZONTAL_SCROLL_BAR,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_HORIZONTAL_SCROLL_BAR as i16,
+        local_flags_idx: BUFFER_SLOT_HORIZONTAL_SCROLL_BAR.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4880` — indicate-empty-lines defaults to nil.
         name: "indicate-empty-lines",
-        offset: BufferSlot::new(BUFFER_SLOT_INDICATE_EMPTY_LINES),
+        offset: BUFFER_SLOT_INDICATE_EMPTY_LINES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_INDICATE_EMPTY_LINES as i16,
+        local_flags_idx: BUFFER_SLOT_INDICATE_EMPTY_LINES.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4881` — indicate-buffer-boundaries defaults to nil.
         name: "indicate-buffer-boundaries",
-        offset: BufferSlot::new(BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES),
+        offset: BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES as i16,
+        local_flags_idx: BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4882` — fringe-indicator-alist defaults to nil.
         name: "fringe-indicator-alist",
-        offset: BufferSlot::new(BUFFER_SLOT_FRINGE_INDICATOR_ALIST),
+        offset: BUFFER_SLOT_FRINGE_INDICATOR_ALIST,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_FRINGE_INDICATOR_ALIST as i16,
+        local_flags_idx: BUFFER_SLOT_FRINGE_INDICATOR_ALIST.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4883` — fringe-cursor-alist defaults to nil.
         name: "fringe-cursor-alist",
-        offset: BufferSlot::new(BUFFER_SLOT_FRINGE_CURSOR_ALIST),
+        offset: BUFFER_SLOT_FRINGE_CURSOR_ALIST,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_FRINGE_CURSOR_ALIST as i16,
+        local_flags_idx: BUFFER_SLOT_FRINGE_CURSOR_ALIST.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4884` — scroll-up-aggressively defaults to nil.
         name: "scroll-up-aggressively",
-        offset: BufferSlot::new(BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY),
+        offset: BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY as i16,
+        local_flags_idx: BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4885` — scroll-down-aggressively defaults to nil.
         name: "scroll-down-aggressively",
-        offset: BufferSlot::new(BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY),
+        offset: BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY as i16,
+        local_flags_idx: BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4868` — cache-long-scans defaults to t.
         name: "cache-long-scans",
-        offset: BufferSlot::new(BUFFER_SLOT_CACHE_LONG_SCANS),
+        offset: BUFFER_SLOT_CACHE_LONG_SCANS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_CACHE_LONG_SCANS as i16,
+        local_flags_idx: BUFFER_SLOT_CACHE_LONG_SCANS.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4840` — abbrev-table defaults to nil.
         name: "local-abbrev-table",
-        offset: BufferSlot::new(BUFFER_SLOT_LOCAL_ABBREV_TABLE),
+        offset: BUFFER_SLOT_LOCAL_ABBREV_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_LOCAL_ABBREV_TABLE as i16,
+        local_flags_idx: BUFFER_SLOT_LOCAL_ABBREV_TABLE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
     BufferSlotInfo {
         // GNU `buffer.c:4841` — display-table defaults to nil.
         name: "buffer-display-table",
-        offset: BufferSlot::new(BUFFER_SLOT_BUFFER_DISPLAY_TABLE),
+        offset: BUFFER_SLOT_BUFFER_DISPLAY_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BUFFER_DISPLAY_TABLE as i16,
+        local_flags_idx: BUFFER_SLOT_BUFFER_DISPLAY_TABLE.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: false,
     },
@@ -1051,11 +1051,11 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // permanent semantics are deferred until step 5+ adds the
         // dedicated field.
         name: "buffer-file-coding-system",
-        offset: BufferSlot::new(BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM),
+        offset: BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM as i16,
+        local_flags_idx: BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM.local_flags_idx(),
         install_as_forwarder: true,
         permanent_local: true,
     },
@@ -1072,11 +1072,11 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // local_flags entry. Read via `Fsyntax_table` / written via
         // `Fset_syntax_table` (which also `SET_PER_BUFFER_VALUE_P`).
         name: "syntax-table",
-        offset: BufferSlot::new(BUFFER_SLOT_SYNTAX_TABLE),
+        offset: BUFFER_SLOT_SYNTAX_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_SYNTAX_TABLE as i16,
+        local_flags_idx: BUFFER_SLOT_SYNTAX_TABLE.local_flags_idx(),
         install_as_forwarder: false,
         permanent_local: false,
     },
@@ -1085,11 +1085,11 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // local_flags entry. Read via `Fcategory_table` / written via
         // `Fset_category_table`.
         name: "category-table",
-        offset: BufferSlot::new(BUFFER_SLOT_CATEGORY_TABLE),
+        offset: BUFFER_SLOT_CATEGORY_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
-        local_flags_idx: BUFFER_SLOT_CATEGORY_TABLE as i16,
+        local_flags_idx: BUFFER_SLOT_CATEGORY_TABLE.local_flags_idx(),
         install_as_forwarder: false,
         permanent_local: false,
     },
@@ -1102,7 +1102,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         // the same value shape `Fcurrent_case_table` returns. Read via
         // `Fcurrent_case_table` / written via `Fset_case_table`.
         name: "case-table",
-        offset: BufferSlot::new(BUFFER_SLOT_CASE_TABLE),
+        offset: BUFFER_SLOT_CASE_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
         predicate: "",
         reset_on_kill: false,
@@ -1170,7 +1170,7 @@ pub fn lookup_buffer_slot_by_sym_id(sym_id: SymId) -> Option<&'static BufferSlot
 /// from `name_` through `cursor_in_non_selected_windows_` and prepends each
 /// visible slot.  Keep that externally visible walk independent from the
 /// internal slot-offset numbering.
-const GNU_STRUCT_BUFFER_SLOT_ORDER: &[usize] = &[
+const GNU_STRUCT_BUFFER_SLOT_ORDER: &[BufferSlot] = &[
     BUFFER_SLOT_FILE_NAME,
     BUFFER_SLOT_DEFAULT_DIRECTORY,
     BUFFER_SLOT_BACKED_UP,
@@ -1235,10 +1235,8 @@ const GNU_STRUCT_BUFFER_SLOT_ORDER: &[usize] = &[
     BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS,
 ];
 
-fn buffer_slot_info_by_offset(offset: usize) -> Option<&'static BufferSlotInfo> {
-    BUFFER_SLOT_INFO
-        .iter()
-        .find(|info| info.offset.index() == offset)
+fn buffer_slot_info_by_offset(offset: BufferSlot) -> Option<&'static BufferSlotInfo> {
+    BUFFER_SLOT_INFO.iter().find(|info| info.offset == offset)
 }
 
 fn buffer_undo_list_sym() -> SymId {
@@ -1753,11 +1751,14 @@ impl Buffer {
     /// `current_buffer_syntax_table_object_in_buffers`, which seeds
     /// the slot on first access.
     pub fn syntax_chartable(&self) -> Value {
-        self.slots[BUFFER_SLOT_SYNTAX_TABLE]
+        self.slots[BUFFER_SLOT_SYNTAX_TABLE.index()]
     }
 
-    fn swap_slot_with(&mut self, other: &mut Self, offset: usize) {
-        mem::swap(&mut self.slots[offset], &mut other.slots[offset]);
+    fn swap_slot_with(&mut self, other: &mut Self, slot: BufferSlot) {
+        mem::swap(
+            &mut self.slots[slot.index()],
+            &mut other.slots[slot.index()],
+        );
     }
 
     fn swap_owned_text_state_with(&mut self, other: &mut Self) {
@@ -1776,12 +1777,12 @@ impl Buffer {
         self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION);
         self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE);
         self.swap_slot_with(other, BUFFER_SLOT_BIDI_PARAGRAPH_START_RE);
-        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
-        other.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
+        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] = Value::NIL;
+        other.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] = Value::NIL;
     }
 
     fn note_buffer_swap_text_self(&mut self) {
-        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::NIL;
+        self.slots[BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] = Value::NIL;
         self.text.record_char_modification(2);
         self.increment_overlay_modified_tick();
         self.increment_overlay_modified_tick();
@@ -1972,17 +1973,15 @@ impl Buffer {
     /// local value installed in this buffer. Mirrors GNU
     /// `PER_BUFFER_VALUE_P` (`buffer.h:1640`).
     #[inline]
-    pub fn slot_local_flag(&self, offset: usize) -> bool {
-        debug_assert!(offset < BUFFER_SLOT_COUNT);
-        (self.local_flags >> (offset as u32)) & 1 != 0
+    pub fn slot_local_flag(&self, slot: BufferSlot) -> bool {
+        (self.local_flags >> (slot.index() as u32)) & 1 != 0
     }
 
     /// Set or clear the conditional-local flag for the slot at
     /// `offset`. Mirrors GNU `SET_PER_BUFFER_VALUE_P` (`buffer.h:1645`).
     #[inline]
-    pub fn set_slot_local_flag(&mut self, offset: usize, on: bool) {
-        debug_assert!(offset < BUFFER_SLOT_COUNT);
-        let bit = 1u64 << (offset as u32);
+    pub fn set_slot_local_flag(&mut self, slot: BufferSlot, on: bool) {
+        let bit = 1u64 << (slot.index() as u32);
         if on {
             self.local_flags |= bit;
         } else {
@@ -2000,13 +1999,13 @@ impl Buffer {
     /// Read `buffer-file-name` as the underlying Lisp value, mirroring GNU
     /// `BVAR(buf, filename)` (`buffer.h:319`).
     pub fn file_name_value(&self) -> Value {
-        self.slots[BUFFER_SLOT_FILE_NAME]
+        self.slots[BUFFER_SLOT_FILE_NAME.index()]
     }
 
     /// Clone `buffer-file-name` as an owned runtime string.
     /// This is a boundary helper for filesystem-facing code.
     pub fn file_name_runtime_string_owned(&self) -> Option<String> {
-        self.slots[BUFFER_SLOT_FILE_NAME].as_runtime_string_owned()
+        self.slots[BUFFER_SLOT_FILE_NAME.index()].as_runtime_string_owned()
     }
 
     pub fn file_name_lisp_string(&self) -> Option<&'static crate::heap_types::LispString> {
@@ -2020,19 +2019,19 @@ impl Buffer {
             v.is_nil() || v.is_string(),
             "buffer-file-name must be nil or a Lisp string"
         );
-        self.slots[BUFFER_SLOT_FILE_NAME] = v;
+        self.slots[BUFFER_SLOT_FILE_NAME.index()] = v;
     }
 
     /// Read `buffer-auto-save-file-name` as the underlying Lisp value,
     /// mirroring GNU `BVAR(buf, auto_save_file_name)` (`buffer.h:323`).
     pub fn auto_save_file_name_value(&self) -> Value {
-        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME]
+        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()]
     }
 
     /// Clone `buffer-auto-save-file-name` as an owned runtime string.
     /// This is a boundary helper for filesystem-facing code.
     pub fn auto_save_file_name_runtime_string_owned(&self) -> Option<String> {
-        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME].as_runtime_string_owned()
+        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()].as_runtime_string_owned()
     }
 
     pub fn auto_save_file_name_lisp_string(
@@ -2049,33 +2048,34 @@ impl Buffer {
             v.is_nil() || v.is_string(),
             "buffer-auto-save-file-name must be nil or a Lisp string"
         );
-        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME] = v;
+        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()] = v;
     }
 
     /// Read `buffer-read-only`, mirroring GNU
     /// `BVAR(buf, read_only)`. A non-nil slot maps to `true`.
     pub fn get_read_only(&self) -> bool {
-        self.slots[BUFFER_SLOT_READ_ONLY].is_truthy()
+        self.slots[BUFFER_SLOT_READ_ONLY.index()].is_truthy()
     }
 
     /// Write `buffer-read-only`. `true` stores `Value::T`, `false`
     /// stores `Value::NIL`.
     pub fn set_read_only_value(&mut self, v: bool) {
-        self.slots[BUFFER_SLOT_READ_ONLY] = if v { Value::T } else { Value::NIL };
+        self.slots[BUFFER_SLOT_READ_ONLY.index()] = if v { Value::T } else { Value::NIL };
     }
 
     /// Read `enable-multibyte-characters`, mirroring GNU
     /// `BVAR(buf, enable_multibyte_characters)`. A non-nil slot
     /// maps to `true`.
     pub fn get_multibyte(&self) -> bool {
-        self.slots[BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS].is_truthy()
+        self.slots[BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS.index()].is_truthy()
     }
 
     /// Write `enable-multibyte-characters`. `true` stores
     /// `Value::T`, `false` stores `Value::NIL`.
     pub fn set_multibyte_value(&mut self, v: bool) {
         self.text.set_multibyte(v);
-        self.slots[BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS] = if v { Value::T } else { Value::NIL };
+        self.slots[BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS.index()] =
+            if v { Value::T } else { Value::NIL };
     }
 
     // -- Point queries -------------------------------------------------------
@@ -3104,7 +3104,7 @@ impl Buffer {
             self.slots[info.offset.index()] =
                 coerce_to_slot(info, value, self.slots[info.offset.index()]);
             if info.local_flags_idx >= 0 {
-                self.set_slot_local_flag(info.offset.index(), true);
+                self.set_slot_local_flag(info.offset, true);
             }
             return;
         }
@@ -3206,7 +3206,7 @@ impl Buffer {
                 if info.permanent_local && !kill_permanent {
                     continue;
                 }
-                self.set_slot_local_flag(info.offset.index(), false);
+                self.set_slot_local_flag(info.offset, false);
                 // GNU `buffer.c:1242` — `set_per_buffer_value(b, offset,
                 // per_buffer_default(offset))`. The reset target is the
                 // CURRENT runtime buffer-defaults slot, NOT the
@@ -3324,7 +3324,7 @@ impl Buffer {
         // set; the caller falls through to the global default at a
         // higher layer that has access to `BufferManager::buffer_defaults`.
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset.index()) {
+            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset) {
                 return None;
             }
             return Some(self.slots[info.offset.index()]);
@@ -3377,7 +3377,7 @@ impl Buffer {
         // per-buffer binding when the local-flag bit is set;
         // otherwise the caller falls through to the global default.
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset.index()) {
+            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset) {
                 return None;
             }
             return Some(RuntimeBindingValue::Bound(self.slots[info.offset.index()]));
@@ -3414,7 +3414,7 @@ impl Buffer {
         // `data.c:2347-2380`.
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
             if info.local_flags_idx >= 0 {
-                return self.slot_local_flag(info.offset.index());
+                return self.slot_local_flag(info.offset);
             }
             return true;
         }
@@ -3543,7 +3543,7 @@ impl Buffer {
             // (local_flags_idx == -1) or the per-buffer flag bit is
             // set. Always-local slots in GNU correspond to neomacs
             // slots with `local_flags_idx < 0'.
-            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset.index()) {
+            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset) {
                 continue;
             }
             out.push((
@@ -4069,7 +4069,7 @@ impl BufferManager {
         indirect.goto_emacs_byte_pos(root.point_emacs_byte_pos());
         indirect.set_multibyte_value(root.get_multibyte());
         indirect.autosave_modified_tick = root.autosave_modified_tick;
-        indirect.slots[BUFFER_SLOT_FILE_NAME] = Value::NIL;
+        indirect.slots[BUFFER_SLOT_FILE_NAME.index()] = Value::NIL;
         if !clone {
             indirect.overlays = OverlayList::new();
             indirect.mark_marker_id = None;
@@ -4940,7 +4940,7 @@ impl BufferManager {
     pub fn set_buffer_file_truename(&mut self, id: BufferId, file_truename: Value) -> Option<()> {
         debug_assert!(file_truename.is_nil() || file_truename.is_string());
         let buf = self.buffers.get_mut(&id)?;
-        buf.slots[BUFFER_SLOT_FILE_TRUENAME] = file_truename;
+        buf.slots[BUFFER_SLOT_FILE_TRUENAME.index()] = file_truename;
         Some(())
     }
 
@@ -5601,7 +5601,7 @@ impl BufferManager {
         if info.local_flags_idx >= 0 {
             // Conditional slot: propagate to non-local buffers.
             for buf in self.buffers.values_mut() {
-                if !buf.slot_local_flag(info.offset.index()) {
+                if !buf.slot_local_flag(info.offset) {
                     buf.slots[info.offset.index()] = value;
                 }
             }

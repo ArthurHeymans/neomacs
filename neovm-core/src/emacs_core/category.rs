@@ -38,7 +38,7 @@ pub fn collect_category_gc_roots(roots: &mut Vec<Value>) {
 }
 
 // Phase 10D holdout 4: per-buffer category table char-table now lives in
-// `Buffer::slots[BUFFER_SLOT_CATEGORY_TABLE]`, mirroring GNU's
+// `Buffer::slots[BUFFER_SLOT_CATEGORY_TABLE.index()]`, mirroring GNU's
 // `BVAR(buf, category_table)` storage. The slot is non-Lisp-visible
 // (`install_as_forwarder: false`); the symbol `category-table` continues
 // to signal void-variable as in GNU. Reads/writes happen exclusively
@@ -387,7 +387,7 @@ fn current_buffer_category_table_in_buffers(
 
     // Mirrors GNU `Fcategory_table` (`category.c:184-189`):
     //     return BVAR (current_buffer, category_table);
-    let table = buf.slots[BUFFER_SLOT_CATEGORY_TABLE];
+    let table = buf.slots[BUFFER_SLOT_CATEGORY_TABLE.index()];
     if !table.is_nil() {
         return Ok(table);
     }
@@ -396,7 +396,7 @@ fn current_buffer_category_table_in_buffers(
     // matches GNU `reset_buffer` cloning the standard table into
     // a fresh buffer.
     let fallback = ensure_standard_category_table_object()?;
-    buf.slots[BUFFER_SLOT_CATEGORY_TABLE] = fallback;
+    buf.slots[BUFFER_SLOT_CATEGORY_TABLE.index()] = fallback;
     Ok(fallback)
 }
 
@@ -441,7 +441,7 @@ fn set_current_buffer_category_table_in_buffers(
     //     bset_category_table (current_buffer, table);
     //     SET_PER_BUFFER_VALUE_P (current_buffer,
     //                             PER_BUFFER_VAR_IDX (category_table), 1);
-    buf.slots[BUFFER_SLOT_CATEGORY_TABLE] = table;
+    buf.slots[BUFFER_SLOT_CATEGORY_TABLE.index()] = table;
     buf.set_slot_local_flag(BUFFER_SLOT_CATEGORY_TABLE, true);
     Ok(())
 }
@@ -474,7 +474,7 @@ pub(crate) fn active_category_table_for_buffer(
     buffer: Option<&crate::buffer::Buffer>,
 ) -> Result<Value, Flow> {
     if let Some(buffer) = buffer {
-        let table = buffer.slots[crate::buffer::buffer::BUFFER_SLOT_CATEGORY_TABLE];
+        let table = buffer.slots[crate::buffer::buffer::BUFFER_SLOT_CATEGORY_TABLE.index()];
         if !table.is_nil() {
             return Ok(table);
         }

@@ -2892,7 +2892,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
             dump_text_property_table(encoder, &TextPropertyTable::new())
         },
         overlays: dump_overlay_list(encoder, &buf.overlays),
-        // Syntax table lives in `buf.slots[BUFFER_SLOT_SYNTAX_TABLE]`
+        // Syntax table lives in `buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()]`
         // (serialized via the slots Vec below) — matches GNU where
         // `buffer->syntax_table` is a single Lisp_Object slot.
         undo_list: None,
@@ -4754,25 +4754,25 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             }
             // Legacy header field overrides (older dump compat).
             if let Some(ref fname) = db.file_name_lisp {
-                s[crate::buffer::buffer::BUFFER_SLOT_FILE_NAME] =
+                s[crate::buffer::buffer::BUFFER_SLOT_FILE_NAME.index()] =
                     crate::emacs_core::value::Value::heap_string(load_lisp_string(fname));
             } else if let Some(ref fname) = db.file_name {
-                s[crate::buffer::buffer::BUFFER_SLOT_FILE_NAME] =
+                s[crate::buffer::buffer::BUFFER_SLOT_FILE_NAME.index()] =
                     crate::emacs_core::value::Value::string(fname);
             }
             if let Some(ref asname) = db.auto_save_file_name_lisp {
-                s[crate::buffer::buffer::BUFFER_SLOT_AUTO_SAVE_FILE_NAME] =
+                s[crate::buffer::buffer::BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()] =
                     crate::emacs_core::value::Value::heap_string(load_lisp_string(asname));
             } else if let Some(ref asname) = db.auto_save_file_name {
-                s[crate::buffer::buffer::BUFFER_SLOT_AUTO_SAVE_FILE_NAME] =
+                s[crate::buffer::buffer::BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()] =
                     crate::emacs_core::value::Value::string(asname);
             }
             if db.read_only {
-                s[crate::buffer::buffer::BUFFER_SLOT_READ_ONLY] =
+                s[crate::buffer::buffer::BUFFER_SLOT_READ_ONLY.index()] =
                     crate::emacs_core::value::Value::T;
             }
             if db.multibyte {
-                s[crate::buffer::buffer::BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS] =
+                s[crate::buffer::buffer::BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS.index()] =
                     crate::emacs_core::value::Value::T;
             }
             s

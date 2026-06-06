@@ -3227,8 +3227,9 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
                 .buffers
                 .get_mut(first_id)
                 .expect("first buffer should exist");
-            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::T;
-            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE.index()] = Value::T;
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] =
+                Value::fixnum(2);
             first.set_undo_list(Value::symbol("first-undo"));
         }
         {
@@ -3236,8 +3237,9 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
                 .buffers
                 .get_mut(second_id)
                 .expect("second buffer should exist");
-            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE] = Value::NIL;
-            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(4);
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE.index()] = Value::NIL;
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] =
+                Value::fixnum(4);
             second.set_undo_list(Value::symbol("second-undo"));
         }
 
@@ -3276,19 +3278,19 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
         assert_eq!(second.point_max_emacs_byte_pos().get(), 4);
         assert_eq!(second.mark_emacs_byte_pos().map(|pos| pos.get()), Some(3));
         assert_eq!(
-            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE.index()],
             Value::NIL
         );
         assert_eq!(
-            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE],
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_MARK_ACTIVE.index()],
             Value::T
         );
         assert_eq!(
-            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+            first.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()],
             Value::NIL
         );
         assert_eq!(
-            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+            second.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()],
             Value::NIL
         );
         assert_eq!(first.get_undo_list(), Value::symbol("second-undo"));
@@ -3350,7 +3352,8 @@ fn buffer_swap_text_self_keeps_gnu_side_effects() {
             .buffers
             .get_mut(buffer_id)
             .expect("buffer should exist");
-        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL] = Value::fixnum(2);
+        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()] =
+            Value::fixnum(2);
     }
     let before_modified = eval.buffers.get(buffer_id).unwrap().modified_tick();
     let before_chars_modified = eval.buffers.get(buffer_id).unwrap().chars_modified_tick();
@@ -3368,7 +3371,7 @@ fn buffer_swap_text_self_keeps_gnu_side_effects() {
     assert_eq!(buffer.chars_modified_tick(), before_chars_modified + 2);
     assert_eq!(buffer.overlay_modified_tick(), before_overlay_modified + 2);
     assert_eq!(
-        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL],
+        buffer.slots[crate::buffer::buffer::BUFFER_SLOT_POINT_BEFORE_SCROLL.index()],
         Value::NIL
     );
 }

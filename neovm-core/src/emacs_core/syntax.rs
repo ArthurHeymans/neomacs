@@ -155,7 +155,7 @@ impl SyntaxPurposeSymbol {
 }
 
 // Phase 10D holdout 3: the per-buffer syntax table char-table now lives in
-// `Buffer::slots[BUFFER_SLOT_SYNTAX_TABLE]`, mirroring GNU's
+// `Buffer::slots[BUFFER_SLOT_SYNTAX_TABLE.index()]`, mirroring GNU's
 // `BVAR(buf, syntax_table)` storage. Reads go through `slots[offset]`,
 // writes go through `slots[offset]` plus `set_slot_local_flag` (matching
 // `Fset_syntax_table`'s `SET_PER_BUFFER_VALUE_P`). The slot itself is
@@ -560,7 +560,7 @@ fn syntax_code_object(code: usize) -> Option<Value> {
 /// Characters not explicitly set fall back to a parent table (if present)
 /// or to the built-in standard defaults.
 /// A Lisp-level syntax table: a thin wrapper around the chartable `Value`
-/// stored in `buffer->syntax_table` / `buf.slots[BUFFER_SLOT_SYNTAX_TABLE]`.
+/// stored in `buffer->syntax_table` / `buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()]`.
 ///
 /// Mirrors GNU Emacs design: the chartable IS the runtime form. All
 /// queries go through `CHAR_TABLE_REF(table, c)` (→ our
@@ -628,7 +628,7 @@ impl SyntaxTable {
     /// GNU idiom `(set-syntax-table (copy-syntax-table))`.
     pub fn isolate_for_buffer(buf: &mut crate::buffer::buffer::Buffer) -> Self {
         use crate::buffer::buffer::BUFFER_SLOT_SYNTAX_TABLE;
-        let slot = buf.slots[BUFFER_SLOT_SYNTAX_TABLE];
+        let slot = buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()];
         let source = if slot.is_nil() {
             ensure_standard_syntax_table_object().unwrap_or(Value::NIL)
         } else {
@@ -639,7 +639,7 @@ impl SyntaxTable {
         } else {
             builtin_copy_syntax_table(vec![source]).unwrap_or(source)
         };
-        buf.slots[BUFFER_SLOT_SYNTAX_TABLE] = own;
+        buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()] = own;
         Self { chartable: own }
     }
 
@@ -1888,7 +1888,7 @@ fn current_buffer_syntax_table_object_in_buffers(
 
     // Mirrors GNU `Fsyntax_table` (`syntax.c:987-993`):
     //     return BVAR (current_buffer, syntax_table);
-    let value = buf.slots[BUFFER_SLOT_SYNTAX_TABLE];
+    let value = buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()];
     if !value.is_nil() && builtin_syntax_table_p(vec![value])?.is_truthy() {
         return Ok(value);
     }
@@ -1897,7 +1897,7 @@ fn current_buffer_syntax_table_object_in_buffers(
     // from the standard syntax table — matches GNU's
     // `reset_buffer` (`buffer.c:1149-1157`) which copies the
     // standard tables into a fresh buffer.
-    buf.slots[BUFFER_SLOT_SYNTAX_TABLE] = fallback;
+    buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()] = fallback;
     Ok(fallback)
 }
 
@@ -1910,7 +1910,7 @@ pub(crate) fn sync_current_buffer_syntax_table_state(
 ) -> Result<(), Flow> {
     // Just ensure the slot is seeded with the standard chartable if
     // it was left `Value::NIL`. No compilation, no cache rebuild —
-    // motion/parse code reads `buf.slots[BUFFER_SLOT_SYNTAX_TABLE]`
+    // motion/parse code reads `buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()]`
     // directly via `SyntaxTable::for_buffer`. Matches GNU
     // `set_buffer_internal`.
     let _ = current_buffer_syntax_table_object_in_buffers(&mut ctx.buffers)?;
@@ -1932,7 +1932,7 @@ fn set_current_buffer_syntax_table_object_in_buffers(
     //     bset_syntax_table (current_buffer, table);
     //     SET_PER_BUFFER_VALUE_P (current_buffer,
     //                             PER_BUFFER_VAR_IDX (syntax_table), 1);
-    buf.slots[BUFFER_SLOT_SYNTAX_TABLE] = table;
+    buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()] = table;
     buf.set_slot_local_flag(BUFFER_SLOT_SYNTAX_TABLE, true);
     Ok(())
 }

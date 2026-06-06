@@ -234,7 +234,7 @@ const CT_SUBTYPE: usize = 3;
 const CT_EXTRA_COUNT: usize = 4;
 const CT_EXTRA_START: usize = 5;
 // Phase 10D holdout 5: per-buffer case-table char-table now lives in
-// `Buffer::slots[BUFFER_SLOT_CASE_TABLE]`. NeoMacs collapses GNU's four
+// `Buffer::slots[BUFFER_SLOT_CASE_TABLE.index()]`. NeoMacs collapses GNU's four
 // separate `downcase_table_` / `upcase_table_` / `case_canon_table_` /
 // `case_eqv_table_` BVAR slots (`buffer.h:408-417`) into a single
 // downcase char-table whose extras[0..2] hold the upcase / canonicalize /
@@ -427,7 +427,7 @@ fn current_case_table_for_buffer_in_state(
 
     // Mirrors GNU `Fcurrent_case_table` (`casetab.c:65-72`):
     //     return BVAR (current_buffer, downcase_table);
-    let value = buf.slots[BUFFER_SLOT_CASE_TABLE];
+    let value = buf.slots[BUFFER_SLOT_CASE_TABLE.index()];
     if is_case_table(&value) {
         return Ok(value);
     }
@@ -435,7 +435,7 @@ fn current_case_table_for_buffer_in_state(
     // Slot unset or invalid: seed from the standard table —
     // matches GNU `reset_buffer` cloning the standard tables
     // into a fresh buffer (`buffer.c:1149-1157`).
-    buf.slots[BUFFER_SLOT_CASE_TABLE] = fallback;
+    buf.slots[BUFFER_SLOT_CASE_TABLE.index()] = fallback;
     Ok(fallback)
 }
 
@@ -472,7 +472,7 @@ fn set_current_case_table_for_buffer_in_state(
     // plus the implicit consistency between extras[0..2] and the other
     // 3 case tables. The case-table slot is always-local
     // (`local_flags_idx == -1`), so no flag bit needs setting.
-    buf.slots[BUFFER_SLOT_CASE_TABLE] = table;
+    buf.slots[BUFFER_SLOT_CASE_TABLE.index()] = table;
     Ok(())
 }
 
