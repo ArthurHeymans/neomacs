@@ -6,7 +6,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::syntax::forward_word;
 use super::value::*;
-use crate::buffer::{Buffer, EmacsByteRange};
+use crate::buffer::{Buffer, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -439,19 +439,19 @@ fn preserve_upcase_case_string_payload(code: i64) -> bool {
     )
 }
 
-fn resolve_region(buf: &Buffer, beg: i64, end: i64) -> EmacsByteRange {
+fn resolve_region(buf: &Buffer, beg: LispCharPos1, end: LispCharPos1) -> EmacsByteRange {
     let point_min = buf.point_min_lisp_char_pos().as_i64();
     let point_max = buf.point_max_lisp_char_pos().as_i64();
 
-    let mut a = beg.clamp(point_min, point_max);
-    let mut b = end.clamp(point_min, point_max);
+    let mut a = beg.as_i64().clamp(point_min, point_max);
+    let mut b = end.as_i64().clamp(point_min, point_max);
     if a > b {
         std::mem::swap(&mut a, &mut b);
     }
 
     EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(a)),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(b)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(a)),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(b)),
     )
 }
 
@@ -482,7 +482,11 @@ fn resolve_case_region_in_buffers(
         });
     }
 
-    Ok(resolve_region(buf, beg, end))
+    Ok(resolve_region(
+        buf,
+        LispCharPos1::new(beg),
+        LispCharPos1::new(end),
+    ))
 }
 
 fn replace_current_buffer_region_in_buffers(
