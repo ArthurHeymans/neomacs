@@ -2282,12 +2282,26 @@ impl<'a> Reader<'a> {
             return Some((byte as u32, 1));
         }
 
-        let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (self.limit - pos).min(tmp.len());
-        for (idx, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = input.emacs_byte_at_pos(EmacsBytePos::new(pos + idx))?;
-        }
-        let (code, width) = emacs_char::string_char(&tmp[..available]);
+        let available = (self.limit - pos).min(emacs_char::MAX_MULTIBYTE_LENGTH);
+
+        // Fast path: decode straight from a contiguous byte slice, like GNU's
+        // `string_char_and_length (BUF_BYTE_ADDRESS (...))`.  Only when the
+        // char's bytes straddle a gap / piece boundary does this yield None,
+        // and we fall back to assembling them one byte at a time.  `available`
+        // never exceeds the buffer length (it is clamped to `limit <= total`),
+        // so both paths read identical bytes.
+        let range = EmacsByteRange::new(EmacsBytePos::new(pos), EmacsBytePos::new(pos + available));
+        let (code, width) =
+            match input.with_contiguous_emacs_byte_range(range, emacs_char::string_char) {
+                Some(decoded) => decoded,
+                None => {
+                    let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
+                    for (idx, slot) in tmp[..available].iter_mut().enumerate() {
+                        *slot = input.emacs_byte_at_pos(EmacsBytePos::new(pos + idx))?;
+                    }
+                    emacs_char::string_char(&tmp[..available])
+                }
+            };
         if pos + width > self.limit {
             return None;
         }
