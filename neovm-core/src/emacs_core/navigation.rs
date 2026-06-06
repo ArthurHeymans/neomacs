@@ -585,8 +585,8 @@ pub(crate) fn pos_bol_compute(
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
     let accessible = buf.accessible_emacs_byte_region();
-    let begv = accessible.start_usize();
-    let zv = accessible.end_usize();
+    let begv = accessible.start().get();
+    let zv = accessible.end().get();
     let point = buf.point_emacs_byte_pos();
     let mut pos = point.get();
     let mut moved: i64 = 0;
@@ -622,8 +622,8 @@ pub(crate) fn pos_eol_compute(
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
     let accessible = buf.accessible_emacs_byte_region();
-    let begv = accessible.start_usize();
-    let zv = accessible.end_usize();
+    let begv = accessible.start().get();
+    let zv = accessible.end().get();
     let point = buf.point_emacs_byte_pos();
     let mut pos = point.get();
     let mut moved = 0;
@@ -789,8 +789,8 @@ pub(crate) fn builtin_forward_line(
         &text,
         pt.get(),
         n,
-        accessible.start_usize(),
-        accessible.end_usize(),
+        accessible.start().get(),
+        accessible.end().get(),
     );
     let new_pos = EmacsBytePos::new(new_pos);
     let direction = if n >= 0 { 1 } else { -1 };
