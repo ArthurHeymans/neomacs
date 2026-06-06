@@ -126,6 +126,11 @@ pub enum TextPositionLookup {
 }
 
 impl TextPositionAnchor {
+    pub const ZERO: Self = Self {
+        char_pos: CharPos0::ZERO,
+        emacs_byte_pos: EmacsBytePos::ZERO,
+    };
+
     pub const fn new(char_pos: CharPos0, emacs_byte_pos: EmacsBytePos) -> Self {
         Self {
             char_pos,
