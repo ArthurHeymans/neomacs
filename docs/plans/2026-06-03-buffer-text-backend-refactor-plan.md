@@ -203,13 +203,21 @@ Progress:
 - `insert-file-contents` post-format handling preserves the accessible start as
   `EmacsBytePos`, matching GNU's separation of buffer byte positions from file
   byte offsets.
-- Undo reinsert handling carries typed byte positions through the manager.
+- Undo reinsert handling carries typed byte positions through the manager, and
+  `primitive-undo` now keeps Lisp-visible undo positions as `LispCharPos1`
+  until converting to `CharPos0`/`EmacsBytePos` at the edit boundary, matching
+  GNU's Lisp-level `goto-char`/`delete-region` shape.
 - Layout bridge copy/count/overlay scan paths isolate the signed display API at
   the bridge and construct typed `EmacsByteRange` values before touching buffer
   snapshots.
+- Display output row/point emission now stores temporary row positions as
+  `LispCharPos1` and unwraps only when filling the legacy protocol snapshot.
+- Rope and piece-tree split helpers distinguish backend-local byte offsets from
+  byte lengths and character lengths, so backend-local physical mutation is
+  harder to confuse with global Emacs byte positions.
 - Remaining work is to push these types through the rest of `BufferManager`,
-  display engine row/point emission, and string-only helper boundaries so raw
-  `usize` is confined to local algorithms after explicit conversion.
+  display engine internals, and string-only helper boundaries so raw `usize` is
+  confined to local algorithms after explicit conversion.
 
 ## Phase 3: Replace Gap-Shaped Layout With Metrics
 
