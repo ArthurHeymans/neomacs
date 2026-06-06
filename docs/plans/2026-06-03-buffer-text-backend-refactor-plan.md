@@ -1,7 +1,7 @@
 # Buffer Text Backend Refactor Plan
 
 Date: 2026-06-03
-Status: in progress, updated 2026-06-05
+Status: in progress, updated 2026-06-06
 Scope: `neovm-core` buffer text storage, edit semantics, text properties,
 markers, backend selection, and backend parity tests
 
@@ -73,11 +73,11 @@ The broad shape is now in place:
   navigation property-boundary helpers, and several buffer builtins now carry
   typed char/byte positions through their semantic boundaries.
 
-The main remaining weakness is that some builtins, pdump conversion paths,
-file I/O, display code, and string-only helpers still accept raw `usize`
-positions near semantic boundaries. They should be migrated toward
-`EmacsBytePos`, `EmacsByteRange`, `CharPos0`, and `CharRange` so the compiler
-catches coordinate-system mistakes before they reach backend code.
+The main remaining weakness is that some manager, display, and string-only
+helpers still accept raw `usize` positions near semantic boundaries. They
+should be migrated toward `EmacsBytePos`, `EmacsByteRange`, `CharPos0`, and
+`CharRange` so the compiler catches coordinate-system mistakes before they
+reach backend code.
 
 ## Non-Negotiable Invariants
 
@@ -198,8 +198,17 @@ Progress:
   and unwrap only at legacy public byte-offset returns.
 - Navigation intangible/property-boundary helpers carry `EmacsBytePos` through
   text-property and overlay boundary scans.
+- Pdump buffer conversion now carries typed Emacs byte positions until the
+  final raw compatibility fields are populated.
+- `insert-file-contents` post-format handling preserves the accessible start as
+  `EmacsBytePos`, matching GNU's separation of buffer byte positions from file
+  byte offsets.
+- Undo reinsert handling carries typed byte positions through the manager.
+- Layout bridge copy/count/overlay scan paths isolate the signed display API at
+  the bridge and construct typed `EmacsByteRange` values before touching buffer
+  snapshots.
 - Remaining work is to push these types through the rest of `BufferManager`,
-  pdump conversion, file I/O, display, and string-only helper boundaries so raw
+  display engine row/point emission, and string-only helper boundaries so raw
   `usize` is confined to local algorithms after explicit conversion.
 
 ## Phase 3: Replace Gap-Shaped Layout With Metrics
