@@ -1752,7 +1752,7 @@ fn overlay_change_boundaries_respect_narrowing_limits() {
 
     let buffer_id = eval.buffers.current_buffer_id().unwrap();
     eval.buffers
-        .narrow_buffer_to_region(buffer_id, 1, 5)
+        .narrow_buffer_to_emacs_byte_range(buffer_id, EmacsByteRange::from_usize(1, 5))
         .unwrap();
 
     let next_at_zv = builtin_next_overlay_change(&mut eval, vec![Value::fixnum(6)]).unwrap();

@@ -340,7 +340,12 @@ fn test_primitive_undo_restores_nil_text_property_value() {
         .expect("scratch buffer")
         .insert("abcd");
     eval.buffers
-        .put_buffer_text_property(id, 1, 3, face, bold)
+        .put_buffer_text_property_in_emacs_byte_range(
+            id,
+            EmacsByteRange::from_usize(1, 3),
+            face,
+            bold,
+        )
         .expect("scratch buffer");
 
     let range = Value::cons(Value::fixnum(2), Value::fixnum(4));
@@ -465,13 +470,18 @@ fn test_undo_restores_property_when_range_start_was_unpropertied() {
         buffer.insert("abcdef");
     }
     eval.buffers
-        .put_buffer_text_property(id, 2, 4, face, bold)
+        .put_buffer_text_property_in_emacs_byte_range(
+            id,
+            EmacsByteRange::from_usize(2, 4),
+            face,
+            bold,
+        )
         .expect("scratch buffer");
     eval.buffers
         .configure_buffer_undo_list(id, Value::NIL)
         .expect("scratch buffer");
     eval.buffers
-        .remove_buffer_text_property(id, 0, 4, face)
+        .remove_buffer_text_property_in_emacs_byte_range(id, EmacsByteRange::from_usize(0, 4), face)
         .expect("scratch buffer");
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
@@ -527,16 +537,30 @@ fn test_set_text_properties_partial_interval_undo_matches_gnu() {
         buffer.insert("abcdef");
     }
     eval.buffers
-        .put_buffer_text_property(id, 0, 2, face, bold)
+        .put_buffer_text_property_in_emacs_byte_range(
+            id,
+            EmacsByteRange::from_usize(0, 2),
+            face,
+            bold,
+        )
         .expect("scratch buffer");
     eval.buffers
-        .put_buffer_text_property(id, 2, 4, face, italic)
+        .put_buffer_text_property_in_emacs_byte_range(
+            id,
+            EmacsByteRange::from_usize(2, 4),
+            face,
+            italic,
+        )
         .expect("scratch buffer");
     eval.buffers
         .configure_buffer_undo_list(id, Value::NIL)
         .expect("scratch buffer");
     eval.buffers
-        .set_buffer_text_properties(id, 1, 3, vec![(face, underline)])
+        .set_buffer_text_properties_in_emacs_byte_range(
+            id,
+            EmacsByteRange::from_usize(1, 3),
+            vec![(face, underline)],
+        )
         .expect("scratch buffer");
     {
         let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");

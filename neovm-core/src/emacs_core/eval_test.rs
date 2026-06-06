@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::EmacsByteRange;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
@@ -5035,12 +5036,16 @@ fn redisplay_restores_current_innermost_labeled_restriction_after_callback_mutat
     let buffer_id = eval.buffers.create_buffer("redisplay-labeled");
     eval.buffers.set_current(buffer_id);
     let _ = eval.buffers.insert_into_buffer(buffer_id, "abcdef");
-    let _ = eval
-        .buffers
-        .internal_labeled_narrow_to_region(buffer_id, 1, 5, Value::symbol("outer"));
-    let _ = eval
-        .buffers
-        .internal_labeled_narrow_to_region(buffer_id, 2, 4, Value::symbol("inner"));
+    let _ = eval.buffers.internal_labeled_narrow_to_emacs_byte_range(
+        buffer_id,
+        EmacsByteRange::from_usize(1, 5),
+        Value::symbol("outer"),
+    );
+    let _ = eval.buffers.internal_labeled_narrow_to_emacs_byte_range(
+        buffer_id,
+        EmacsByteRange::from_usize(2, 4),
+        Value::symbol("inner"),
+    );
 
     let observed = Rc::new(RefCell::new(Vec::new()));
     let observed_in_callback = observed.clone();

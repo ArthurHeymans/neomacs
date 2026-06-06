@@ -265,10 +265,9 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         let indirect_id = mgr
             .create_indirect_buffer(base_id, "*indirect-restored*", false)
             .expect("indirect buffer");
-        let _ = mgr.put_buffer_text_property(
+        let _ = mgr.put_buffer_text_property_in_emacs_byte_range(
             base_id,
-            1,
-            4,
+            EmacsByteRange::from_usize(1, 4),
             Value::symbol("face"),
             Value::symbol("bold"),
         );
@@ -347,7 +346,8 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
             .create_indirect_buffer(base_id, "*indirect-narrow*", false)
             .expect("indirect buffer");
 
-        let _ = mgr.narrow_buffer_to_region(indirect_id, 2, 6);
+        let _ =
+            mgr.narrow_buffer_to_emacs_byte_range(indirect_id, EmacsByteRange::from_usize(2, 6));
         let _ = mgr.goto_buffer_emacs_byte_pos(indirect_id, crate::buffer::EmacsBytePos::new(4));
 
         let _ = mgr.goto_buffer_emacs_byte_pos(base_id, crate::buffer::EmacsBytePos::new(0));
@@ -391,7 +391,7 @@ fn cloned_indirect_buffers_do_not_share_base_state_markers() {
         .expect("second indirect buffer");
 
     mgr.set_current(second);
-    let _ = mgr.narrow_buffer_to_region(second, 4, 7);
+    let _ = mgr.narrow_buffer_to_emacs_byte_range(second, EmacsByteRange::from_usize(4, 7));
     mgr.set_current(base_id);
 
     let base = mgr.get(base_id).expect("base buffer");
@@ -544,12 +544,22 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
 
             let left_prop_start = buffer_byte_pos_for_char(&mgr, left_id, 1);
             let left_prop_end = buffer_byte_pos_for_char(&mgr, left_id, 5);
-            mgr.put_buffer_text_property(left_id, left_prop_start, left_prop_end, face, bold)
-                .expect("left property");
+            mgr.put_buffer_text_property_in_emacs_byte_range(
+                left_id,
+                EmacsByteRange::from_usize(left_prop_start, left_prop_end),
+                face,
+                bold,
+            )
+            .expect("left property");
             let right_prop_start = buffer_byte_pos_for_char(&mgr, right_id, 2);
             let right_prop_end = buffer_byte_pos_for_char(&mgr, right_id, 7);
-            mgr.put_buffer_text_property(right_id, right_prop_start, right_prop_end, face, italic)
-                .expect("right property");
+            mgr.put_buffer_text_property_in_emacs_byte_range(
+                right_id,
+                EmacsByteRange::from_usize(right_prop_start, right_prop_end),
+                face,
+                italic,
+            )
+            .expect("right property");
 
             let left_marker_pos = buffer_byte_pos_for_char(&mgr, left_id, 3);
             let left_marker = register_marker_for_test(
@@ -602,8 +612,11 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             let left_mark = buffer_byte_pos_for_char(&mgr, left_id, 4);
             let left_narrow_start = buffer_byte_pos_for_char(&mgr, left_id, 1);
             let left_narrow_end = buffer_byte_pos_for_char(&mgr, left_id, 5);
-            mgr.narrow_buffer_to_region(left_id, left_narrow_start, left_narrow_end)
-                .expect("left narrow");
+            mgr.narrow_buffer_to_emacs_byte_range(
+                left_id,
+                EmacsByteRange::from_usize(left_narrow_start, left_narrow_end),
+            )
+            .expect("left narrow");
             mgr.goto_buffer_emacs_byte_pos(left_id, crate::buffer::EmacsBytePos::new(left_point))
                 .expect("left point");
             mgr.set_buffer_mark_emacs_byte_pos(
@@ -616,8 +629,11 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
             let right_mark = buffer_byte_pos_for_char(&mgr, right_id, 1);
             let right_narrow_start = buffer_byte_pos_for_char(&mgr, right_id, 2);
             let right_narrow_end = buffer_byte_pos_for_char(&mgr, right_id, 7);
-            mgr.narrow_buffer_to_region(right_id, right_narrow_start, right_narrow_end)
-                .expect("right narrow");
+            mgr.narrow_buffer_to_emacs_byte_range(
+                right_id,
+                EmacsByteRange::from_usize(right_narrow_start, right_narrow_end),
+            )
+            .expect("right narrow");
             mgr.goto_buffer_emacs_byte_pos(right_id, crate::buffer::EmacsBytePos::new(right_point))
                 .expect("right point");
             mgr.set_buffer_mark_emacs_byte_pos(
@@ -1585,8 +1601,13 @@ fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
 
     let prop_start = buffer_byte_pos_for_char(&mgr, id, 1);
     let prop_end = buffer_byte_pos_for_char(&mgr, id, 6);
-    mgr.put_buffer_text_property(id, prop_start, prop_end, face, italic)
-        .expect("put text property");
+    mgr.put_buffer_text_property_in_emacs_byte_range(
+        id,
+        EmacsByteRange::from_usize(prop_start, prop_end),
+        face,
+        italic,
+    )
+    .expect("put text property");
 
     let delete_start = buffer_byte_pos_for_char(&mgr, id, 4);
     let delete_end = buffer_byte_pos_for_char(&mgr, id, 6);
@@ -1847,8 +1868,13 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
 
     let prop_start = buffer_byte_pos_for_char(&mgr, base_id, 1);
     let prop_end = buffer_byte_pos_for_char(&mgr, base_id, 6);
-    mgr.put_buffer_text_property(base_id, prop_start, prop_end, face, bold)
-        .expect("text property");
+    mgr.put_buffer_text_property_in_emacs_byte_range(
+        base_id,
+        EmacsByteRange::from_usize(prop_start, prop_end),
+        face,
+        bold,
+    )
+    .expect("text property");
 
     let insert_pos = buffer_byte_pos_for_char(&mgr, base_id, 2);
     register_marker_for_test(
@@ -2486,7 +2512,8 @@ fn manager_create_and_query_marker() {
     // Insert some text so there is room for a marker.
     mgr.insert_into_buffer(id, "abcdef").expect("insert text");
 
-    let (mid, _) = mgr.create_marker(id, 3, InsertionType::After);
+    let (mid, _) =
+        mgr.create_marker_at_emacs_byte_pos(id, EmacsBytePos::new(3), InsertionType::After);
     assert_eq!(
         mgr.marker_emacs_byte_pos(id, mid).map(EmacsBytePos::get),
         Some(3)
@@ -2500,7 +2527,8 @@ fn manager_marker_clamped_to_buffer_len() {
     let mut mgr = BufferManager::new();
     let id = mgr.create_buffer("m");
     // Buffer is empty (len = 0), marker at 100 should be clamped.
-    let (mid, _) = mgr.create_marker(id, 100, InsertionType::Before);
+    let (mid, _) =
+        mgr.create_marker_at_emacs_byte_pos(id, EmacsBytePos::new(100), InsertionType::Before);
     assert_eq!(
         mgr.marker_emacs_byte_pos(id, mid).map(EmacsBytePos::get),
         Some(0)
@@ -2524,7 +2552,11 @@ fn manager_labeled_widen_uses_innermost_and_without_restriction_reaches_full_buf
     mgr.set_current(id);
     mgr.get_mut(id).unwrap().insert("abcdef");
 
-    let _ = mgr.internal_labeled_narrow_to_region(id, 1, 4, Value::symbol("tag"));
+    let _ = mgr.internal_labeled_narrow_to_emacs_byte_range(
+        id,
+        EmacsByteRange::from_usize(1, 4),
+        Value::symbol("tag"),
+    );
     let buf = mgr.get(id).unwrap();
     assert_eq!(buf.point_min_emacs_byte_pos().get(), 1);
     assert_eq!(buf.point_max_emacs_byte_pos().get(), 4);
@@ -2547,13 +2579,17 @@ fn manager_save_restriction_state_restores_labeled_stack() {
     let id = mgr.create_buffer("saved-labeled");
     mgr.set_current(id);
     mgr.get_mut(id).unwrap().insert("abcdefgh");
-    let _ = mgr.internal_labeled_narrow_to_region(id, 1, 5, Value::symbol("tag"));
+    let _ = mgr.internal_labeled_narrow_to_emacs_byte_range(
+        id,
+        EmacsByteRange::from_usize(1, 5),
+        Value::symbol("tag"),
+    );
 
     let saved = mgr
         .save_current_restriction_state()
         .expect("restriction state should save");
     let _ = mgr.internal_labeled_widen(id, &Value::symbol("tag"));
-    let _ = mgr.narrow_buffer_to_region(id, 2, 3);
+    let _ = mgr.narrow_buffer_to_emacs_byte_range(id, EmacsByteRange::from_usize(2, 3));
     mgr.restore_saved_restriction_state(saved);
 
     let buf = mgr.get(id).unwrap();
@@ -2574,8 +2610,16 @@ fn manager_reset_outermost_restrictions_restores_current_innermost_after_mutatio
     mgr.set_current(id);
     mgr.get_mut(id).unwrap().insert("abcdef");
 
-    let _ = mgr.internal_labeled_narrow_to_region(id, 1, 5, Value::symbol("outer"));
-    let _ = mgr.internal_labeled_narrow_to_region(id, 2, 4, Value::symbol("inner"));
+    let _ = mgr.internal_labeled_narrow_to_emacs_byte_range(
+        id,
+        EmacsByteRange::from_usize(1, 5),
+        Value::symbol("outer"),
+    );
+    let _ = mgr.internal_labeled_narrow_to_emacs_byte_range(
+        id,
+        EmacsByteRange::from_usize(2, 4),
+        Value::symbol("inner"),
+    );
 
     let buf = mgr.get(id).unwrap();
     assert_eq!(buf.point_min_emacs_byte_pos().get(), 2);

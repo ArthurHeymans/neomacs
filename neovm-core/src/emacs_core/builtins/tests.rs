@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharRange, LispCharPos1};
+use crate::buffer::{CharRange, EmacsByteRange, LispCharPos1};
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
@@ -2841,7 +2841,9 @@ fn insert_buffer_substring_defaults_to_source_accessible_region() {
     let source_id = eval.buffers.create_buffer("*ibs-source-defaults*");
     eval.buffers.set_current(source_id);
     builtin_insert(&mut eval, vec![Value::string("abcdef")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(source_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(source_id, EmacsByteRange::from_usize(1, 4));
 
     let dest_id = eval.buffers.create_buffer("*ibs-dest-defaults*");
     eval.buffers.set_current(dest_id);
@@ -2866,7 +2868,9 @@ fn insert_buffer_substring_signals_when_bounds_escape_source_narrowing() {
     let source_id = eval.buffers.create_buffer("*ibs-source-range*");
     eval.buffers.set_current(source_id);
     builtin_insert(&mut eval, vec![Value::string("abcdef")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(source_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(source_id, EmacsByteRange::from_usize(1, 4));
 
     let err = builtin_insert_buffer_substring(
         &mut eval,
@@ -3203,7 +3207,7 @@ fn buffer_swap_text_swaps_owned_backend_and_state() {
         }
 
         eval.buffers
-            .narrow_buffer_to_region(first_id, 1, 4)
+            .narrow_buffer_to_emacs_byte_range(first_id, EmacsByteRange::from_usize(1, 4))
             .expect("first narrow should succeed");
         eval.buffers
             .goto_buffer_emacs_byte_pos(first_id, crate::buffer::EmacsBytePos::new(2))
@@ -3376,12 +3380,16 @@ fn compare_buffer_substrings_nil_bounds_use_accessible_region() {
     let left_id = eval.buffers.create_buffer("*cbs-left*");
     eval.buffers.set_current(left_id);
     builtin_insert(&mut eval, vec![Value::string("xaBCy")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(left_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(left_id, EmacsByteRange::from_usize(1, 4));
 
     let right_id = eval.buffers.create_buffer("*cbs-right*");
     eval.buffers.set_current(right_id);
     builtin_insert(&mut eval, vec![Value::string("zaBCw")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(right_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(right_id, EmacsByteRange::from_usize(1, 4));
 
     assert_eq!(
         builtin_compare_buffer_substrings(
@@ -3407,12 +3415,16 @@ fn compare_buffer_substrings_signals_when_bounds_escape_narrowing() {
     let left_id = eval.buffers.create_buffer("*cbs-left-range*");
     eval.buffers.set_current(left_id);
     builtin_insert(&mut eval, vec![Value::string("xaBCy")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(left_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(left_id, EmacsByteRange::from_usize(1, 4));
 
     let right_id = eval.buffers.create_buffer("*cbs-right-range*");
     eval.buffers.set_current(right_id);
     builtin_insert(&mut eval, vec![Value::string("zaBCw")]).unwrap();
-    let _ = eval.buffers.narrow_buffer_to_region(right_id, 1, 4);
+    let _ = eval
+        .buffers
+        .narrow_buffer_to_emacs_byte_range(right_id, EmacsByteRange::from_usize(1, 4));
 
     let err = builtin_compare_buffer_substrings(
         &mut eval,
@@ -8070,10 +8082,9 @@ fn delete_and_extract_region_preserves_buffer_text_properties() {
     let mut eval = crate::emacs_core::eval::Context::new();
     builtin_insert(&mut eval, vec![Value::string("AAABBBCCC")]).expect("insert should succeed");
     let buf = eval.buffers.current_buffer().expect("current buffer");
-    let _ = eval.buffers.put_buffer_text_property(
+    let _ = eval.buffers.put_buffer_text_property_in_emacs_byte_range(
         buf.id,
-        3,
-        6,
+        EmacsByteRange::from_usize(3, 6),
         Value::symbol("face"),
         Value::symbol("italic"),
     );

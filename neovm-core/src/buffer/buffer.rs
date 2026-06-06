@@ -4640,19 +4640,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[cfg(test)]
-    pub fn narrow_buffer_to_region(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-    ) -> Option<()> {
-        self.narrow_buffer_to_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-        )
-    }
-
     pub fn widen_buffer(&mut self, id: BufferId) -> Option<()> {
         self.buffers.get(&id)?;
         let Some(restriction) = self.labeled_restriction_at(id, false).copied() else {
@@ -4735,23 +4722,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[cfg(test)]
-    pub fn put_buffer_text_property(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-        name: Value,
-        value: Value,
-    ) -> Option<bool> {
-        self.put_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            name,
-            value,
-        )
-    }
-
     pub fn put_buffer_text_property_in_emacs_byte_range(
         &mut self,
         id: BufferId,
@@ -4817,21 +4787,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[cfg(test)]
-    pub fn remove_buffer_text_property(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-        name: Value,
-    ) -> Option<bool> {
-        self.remove_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            name,
-        )
-    }
-
     pub fn remove_buffer_text_property_in_emacs_byte_range(
         &mut self,
         id: BufferId,
@@ -4848,19 +4803,6 @@ impl BufferManager {
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
         Some(buf.text_props_remove_property_in_emacs_byte_range(byte_range, name))
-    }
-
-    #[cfg(test)]
-    pub fn clear_buffer_text_properties(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-    ) -> Option<()> {
-        self.clear_buffer_text_properties_in_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-        )
     }
 
     pub fn clear_buffer_text_properties_in_emacs_byte_range(
@@ -4911,21 +4853,6 @@ impl BufferManager {
             .text
             .text_props_set_properties_in_char_range(char_range, Vec::new());
         Some(())
-    }
-
-    #[cfg(test)]
-    pub fn set_buffer_text_properties(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-        plist: Vec<(Value, Value)>,
-    ) -> Option<()> {
-        self.set_buffer_text_properties_in_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            plist,
-        )
     }
 
     pub fn set_buffer_text_properties_in_emacs_byte_range(
@@ -5131,19 +5058,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[cfg(test)]
-    pub fn restore_buffer_restriction(
-        &mut self,
-        id: BufferId,
-        begv: usize,
-        zv: usize,
-    ) -> Option<()> {
-        self.restore_buffer_emacs_byte_restriction(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(begv), EmacsBytePos::new(zv)),
-        )
-    }
-
     pub fn save_current_restriction_state(&mut self) -> Option<SavedRestrictionState> {
         let buffer_id = self.current_buffer_id()?;
         let (begv, zv, len) = {
@@ -5250,21 +5164,6 @@ impl BufferManager {
                 self.remove_marker(end_marker);
             }
         }
-    }
-
-    #[cfg(test)]
-    pub fn internal_labeled_narrow_to_region(
-        &mut self,
-        buffer_id: BufferId,
-        start: usize,
-        end: usize,
-        label: Value,
-    ) -> Option<()> {
-        self.internal_labeled_narrow_to_emacs_byte_range(
-            buffer_id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-            label,
-        )
     }
 
     pub fn internal_labeled_narrow_to_emacs_byte_range(
@@ -5531,16 +5430,6 @@ impl BufferManager {
     /// after first calling `chain_unlink` on the
     /// owning buffer's `BufferText` to satisfy the
     /// `chain_splice_at_head` precondition.
-    #[cfg(test)]
-    pub fn create_marker(
-        &mut self,
-        buffer_id: BufferId,
-        pos: usize,
-        insertion_type: InsertionType,
-    ) -> (u64, *mut crate::tagged::header::MarkerObj) {
-        self.create_marker_at_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos), insertion_type)
-    }
-
     pub fn create_marker_at_emacs_byte_pos(
         &mut self,
         buffer_id: BufferId,
