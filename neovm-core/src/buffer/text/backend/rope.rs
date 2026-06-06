@@ -15,6 +15,14 @@ const MAX_LEAF_BYTES: EmacsByteLen = EmacsByteLen::new(1024);
 #[repr(transparent)]
 struct ChunkByteOffset(usize);
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+struct RopeNodePriority(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+struct RopeNodeSerial(u64);
+
 #[derive(Clone)]
 struct RopeChunk {
     bytes: Vec<u8>,
@@ -27,6 +35,26 @@ impl ChunkByteOffset {
     }
 
     const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl RopeNodePriority {
+    const fn new(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl RopeNodeSerial {
+    const FIRST: Self = Self(1);
+
+    fn next(&mut self) -> Self {
+        let current = *self;
+        self.0 = self.0.wrapping_add(1);
+        current
+    }
+
+    const fn priority_seed(self) -> u64 {
         self.0
     }
 }
@@ -73,14 +101,14 @@ impl RopeChunk {
 #[derive(Clone)]
 struct RopeNode {
     chunk: RopeChunk,
-    priority: u64,
+    priority: RopeNodePriority,
     metrics: TextMetrics,
     left: Option<Box<RopeNode>>,
     right: Option<Box<RopeNode>>,
 }
 
 impl RopeNode {
-    fn new(chunk: RopeChunk, priority: u64) -> Box<Self> {
+    fn new(chunk: RopeChunk, priority: RopeNodePriority) -> Box<Self> {
         let metrics = chunk.metrics();
         Box::new(Self {
             chunk,
@@ -102,7 +130,7 @@ impl RopeNode {
 pub(in crate::buffer) struct RopeTextBackend {
     root: Option<Box<RopeNode>>,
     multibyte: bool,
-    next_node_id: u64,
+    next_node_serial: RopeNodeSerial,
 }
 
 impl RopeTextBackend {
@@ -110,7 +138,7 @@ impl RopeTextBackend {
         Self {
             root: None,
             multibyte: true,
-            next_node_id: 1,
+            next_node_serial: RopeNodeSerial::FIRST,
         }
     }
 
@@ -123,7 +151,7 @@ impl RopeTextBackend {
         let mut backend = Self {
             root: None,
             multibyte,
-            next_node_id: 1,
+            next_node_serial: RopeNodeSerial::FIRST,
         };
         backend.root = backend.tree_for_bytes(bytes);
         backend
@@ -499,7 +527,7 @@ impl RopeTextBackend {
     fn rebuild_from_bytes(&mut self, bytes: Vec<u8>, multibyte: bool) {
         self.root = None;
         self.multibyte = multibyte;
-        self.next_node_id = 1;
+        self.next_node_serial = RopeNodeSerial::FIRST;
         self.root = self.tree_for_bytes(&bytes);
     }
 
@@ -516,10 +544,8 @@ impl RopeTextBackend {
         tree
     }
 
-    fn next_priority(&mut self) -> u64 {
-        let id = self.next_node_id;
-        self.next_node_id = self.next_node_id.wrapping_add(1);
-        splitmix64(id)
+    fn next_priority(&mut self) -> RopeNodePriority {
+        RopeNodePriority::new(splitmix64(self.next_node_serial.next().priority_seed()))
     }
 
     fn split_at_byte(
