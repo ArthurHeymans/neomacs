@@ -1,5 +1,5 @@
 use super::TextBackend;
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
 use crate::buffer::text::{
     ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextReplacement,
 };
@@ -177,59 +177,73 @@ fn buffer_bytes_for_text(text: &str, multibyte: bool) -> Vec<u8> {
     crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte)
 }
 
-fn insert_text(backend: &mut TextBackend, byte_pos: usize, text: &str) {
+fn insert_text(backend: &mut TextBackend, byte_pos: EmacsBytePos, text: &str) {
     let bytes = buffer_bytes_for_text(text, backend.is_multibyte());
     backend.insert_measured_emacs_bytes(
-        EmacsBytePos::new(byte_pos),
+        byte_pos,
         &bytes,
         extent_for_bytes(&bytes, backend.is_multibyte()),
     );
 }
 
-fn insert_bytes(backend: &mut TextBackend, byte_pos: usize, bytes: &[u8], chars: usize) {
+fn insert_bytes(backend: &mut TextBackend, byte_pos: EmacsBytePos, bytes: &[u8], chars: usize) {
     backend.insert_measured_emacs_bytes(
-        EmacsBytePos::new(byte_pos),
+        byte_pos,
         bytes,
         TextExtent::from_usize(chars, bytes.len()),
     );
 }
 
-fn delete_char_range(backend: &mut TextBackend, start_char: usize, end_char: usize) {
-    let start = char_to_byte(backend, start_char);
-    let end = char_to_byte(backend, end_char);
-    backend.delete_measured_range(TextEditRange::from_usize(start, end, start_char, end_char));
+fn delete_char_range(backend: &mut TextBackend, char_range: CharRange) {
+    let start = char_to_byte(backend, char_range.start().get());
+    let end = char_to_byte(backend, char_range.end().get());
+    backend.delete_measured_range(TextEditRange::new(
+        byte_range(start, end),
+        char_range.start(),
+        char_range.end(),
+    ));
 }
 
-fn delete_byte_range(backend: &mut TextBackend, start: usize, end: usize) {
-    let start_char = byte_to_char(backend, start);
-    let end_char = byte_to_char(backend, end);
-    backend.delete_measured_range(TextEditRange::from_usize(start, end, start_char, end_char));
+fn delete_byte_range(backend: &mut TextBackend, byte_range: EmacsByteRange) {
+    let start_char = byte_to_char(backend, byte_range.start().get());
+    let end_char = byte_to_char(backend, byte_range.end().get());
+    backend.delete_measured_range(TextEditRange::new(
+        byte_range,
+        CharPos0::new(start_char),
+        CharPos0::new(end_char),
+    ));
 }
 
-fn replace_char_range(backend: &mut TextBackend, start_char: usize, end_char: usize, text: &str) {
-    let start = char_to_byte(backend, start_char);
-    let end = char_to_byte(backend, end_char);
+fn replace_char_range(backend: &mut TextBackend, char_range: CharRange, text: &str) {
+    let start = char_to_byte(backend, char_range.start().get());
+    let end = char_to_byte(backend, char_range.end().get());
     let bytes = buffer_bytes_for_text(text, backend.is_multibyte());
-    let range = TextEditRange::from_usize(start, end, start_char, end_char);
+    let range = TextEditRange::new(byte_range(start, end), char_range.start(), char_range.end());
     backend.replace_measured_range(
         TextReplacement::new(range, extent_for_bytes(&bytes, backend.is_multibyte())),
         &bytes,
     );
 }
 
-fn replace_byte_range(backend: &mut TextBackend, start: usize, end: usize, bytes: &[u8]) {
-    let start_char = byte_to_char(backend, start);
-    let end_char = byte_to_char(backend, end);
-    let range = TextEditRange::from_usize(start, end, start_char, end_char);
+fn replace_byte_range(backend: &mut TextBackend, byte_range: EmacsByteRange, bytes: &[u8]) {
+    let start_char = byte_to_char(backend, byte_range.start().get());
+    let end_char = byte_to_char(backend, byte_range.end().get());
+    let range = TextEditRange::new(
+        byte_range,
+        CharPos0::new(start_char),
+        CharPos0::new(end_char),
+    );
     backend.replace_measured_range(
         TextReplacement::new(range, TextExtent::from_usize(bytes.len(), bytes.len())),
         bytes,
     );
 }
 
-fn replace_same_len(backend: &mut TextBackend, start: usize, end: usize, bytes: &[u8]) {
-    assert_eq!(end - start, bytes.len());
-    let byte_range = byte_range(start, end);
+fn replace_same_len(backend: &mut TextBackend, byte_range: EmacsByteRange, bytes: &[u8]) {
+    assert_eq!(
+        byte_range.end().get() - byte_range.start().get(),
+        bytes.len()
+    );
     let old_range = TextEditRange::new(
         byte_range,
         backend.emacs_byte_pos_to_char_pos(byte_range.start()),
@@ -296,22 +310,22 @@ fn implemented_backends_match_gap_for_scripted_multibyte_edits() {
         assert_backend_matches_gap(kind, &backend, &gap);
 
         let insert_pos = char_to_byte(&backend, 2);
-        insert_text(&mut backend, insert_pos, "XYZ");
-        insert_text(&mut gap, insert_pos, "XYZ");
+        insert_text(&mut backend, EmacsBytePos::new(insert_pos), "XYZ");
+        insert_text(&mut gap, EmacsBytePos::new(insert_pos), "XYZ");
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        delete_char_range(&mut backend, 1, 5);
-        delete_char_range(&mut gap, 1, 5);
+        delete_char_range(&mut backend, CharRange::from_usize(1, 5));
+        delete_char_range(&mut gap, CharRange::from_usize(1, 5));
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        replace_char_range(&mut backend, 2, 4, "🙂z");
-        replace_char_range(&mut gap, 2, 4, "🙂z");
+        replace_char_range(&mut backend, CharRange::from_usize(2, 4), "🙂z");
+        replace_char_range(&mut gap, CharRange::from_usize(2, 4), "🙂z");
         assert_backend_matches_gap(kind, &backend, &gap);
 
         let start = char_to_byte(&backend, 0);
         let end = char_to_byte(&backend, 1);
-        replace_same_len(&mut backend, start, end, b"Q");
-        replace_same_len(&mut gap, start, end, b"Q");
+        replace_same_len(&mut backend, EmacsByteRange::from_usize(start, end), b"Q");
+        replace_same_len(&mut gap, EmacsByteRange::from_usize(start, end), b"Q");
         assert_backend_matches_gap(kind, &backend, &gap);
 
         backend.set_multibyte(false);
@@ -337,20 +351,32 @@ fn implemented_backends_match_gap_for_scripted_unibyte_edits() {
         );
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        insert_bytes(&mut backend, 1, &[0, b'x', 0xFE], 3);
-        insert_bytes(&mut gap, 1, &[0, b'x', 0xFE], 3);
+        insert_bytes(&mut backend, EmacsBytePos::new(1), &[0, b'x', 0xFE], 3);
+        insert_bytes(&mut gap, EmacsBytePos::new(1), &[0, b'x', 0xFE], 3);
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        delete_byte_range(&mut backend, 2, 5);
-        delete_byte_range(&mut gap, 2, 5);
+        delete_byte_range(&mut backend, EmacsByteRange::from_usize(2, 5));
+        delete_byte_range(&mut gap, EmacsByteRange::from_usize(2, 5));
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        replace_byte_range(&mut backend, 1, 3, &[b'R', b'S', b'T', b'U']);
-        replace_byte_range(&mut gap, 1, 3, &[b'R', b'S', b'T', b'U']);
+        replace_byte_range(
+            &mut backend,
+            EmacsByteRange::from_usize(1, 3),
+            &[b'R', b'S', b'T', b'U'],
+        );
+        replace_byte_range(
+            &mut gap,
+            EmacsByteRange::from_usize(1, 3),
+            &[b'R', b'S', b'T', b'U'],
+        );
         assert_backend_matches_gap(kind, &backend, &gap);
 
-        replace_same_len(&mut backend, 0, 2, &[0xAA, 0xBB]);
-        replace_same_len(&mut gap, 0, 2, &[0xAA, 0xBB]);
+        replace_same_len(
+            &mut backend,
+            EmacsByteRange::from_usize(0, 2),
+            &[0xAA, 0xBB],
+        );
+        replace_same_len(&mut gap, EmacsByteRange::from_usize(0, 2), &[0xAA, 0xBB]);
         assert_backend_matches_gap(kind, &backend, &gap);
     }
 }
@@ -361,14 +387,14 @@ fn backend_dump_round_trips_across_implemented_kinds() {
     for source_kind in ImplementedBufferTextBackendKind::variants() {
         let mut source = TextBackend::from_str("αβ\n日本🙂", source_kind);
         let insert_pos = char_to_byte(&source, 2);
-        insert_text(&mut source, insert_pos, "XY");
-        replace_char_range(&mut source, 1, 3, "Ω");
+        insert_text(&mut source, EmacsBytePos::new(insert_pos), "XY");
+        replace_char_range(&mut source, CharRange::from_usize(1, 3), "Ω");
 
         let mut gap =
             TextBackend::from_str("αβ\n日本🙂", ImplementedBufferTextBackendKind::GAP_BUFFER);
         let insert_pos = char_to_byte(&gap, 2);
-        insert_text(&mut gap, insert_pos, "XY");
-        replace_char_range(&mut gap, 1, 3, "Ω");
+        insert_text(&mut gap, EmacsBytePos::new(insert_pos), "XY");
+        replace_char_range(&mut gap, CharRange::from_usize(1, 3), "Ω");
         assert_backend_matches_gap(source_kind, &source, &gap);
 
         let snapshot = source.snapshot();
@@ -398,8 +424,8 @@ proptest! {
                         let char_pos = a % (backend.metrics().chars_usize() + 1);
                         let byte_pos = char_to_byte(&backend, char_pos);
                         let text = sample_insert(*seed);
-                        insert_text(&mut backend, byte_pos, text);
-                        insert_text(&mut gap, byte_pos, text);
+                        insert_text(&mut backend, EmacsBytePos::new(byte_pos), text);
+                        insert_text(&mut gap, EmacsBytePos::new(byte_pos), text);
                     }
                     1 => {
                         if backend.metrics().chars_usize() > 0 {
@@ -407,8 +433,8 @@ proptest! {
                             let char_b = b % (backend.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
-                            delete_char_range(&mut backend, start_char, end_char);
-                            delete_char_range(&mut gap, start_char, end_char);
+                            delete_char_range(&mut backend, CharRange::from_usize(start_char, end_char));
+                            delete_char_range(&mut gap, CharRange::from_usize(start_char, end_char));
                         }
                     }
                     2 => {
@@ -417,8 +443,8 @@ proptest! {
                             let start = char_to_byte(&backend, char_pos);
                             let end = char_to_byte(&backend, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, *seed) {
-                                replace_same_len(&mut backend, start, end, &replacement);
-                                replace_same_len(&mut gap, start, end, &replacement);
+                                replace_same_len(&mut backend, EmacsByteRange::from_usize(start, end), &replacement);
+                                replace_same_len(&mut gap, EmacsByteRange::from_usize(start, end), &replacement);
                             }
                         }
                     }
@@ -428,8 +454,8 @@ proptest! {
                             let char_b = b % (backend.metrics().chars_usize() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
-                            replace_char_range(&mut backend, start_char, end_char, sample_insert(*seed));
-                            replace_char_range(&mut gap, start_char, end_char, sample_insert(*seed));
+                            replace_char_range(&mut backend, CharRange::from_usize(start_char, end_char), sample_insert(*seed));
+                            replace_char_range(&mut gap, CharRange::from_usize(start_char, end_char), sample_insert(*seed));
                         }
                     }
                 }
@@ -460,8 +486,8 @@ proptest! {
                         let backend_len = backend.metrics().emacs_bytes_usize();
                         let byte_pos = a % (backend_len + 1);
                         let bytes = sample_unibyte_insert(*seed);
-                        insert_bytes(&mut backend, byte_pos, &bytes, bytes.len());
-                        insert_bytes(&mut gap, byte_pos, &bytes, bytes.len());
+                        insert_bytes(&mut backend, EmacsBytePos::new(byte_pos), &bytes, bytes.len());
+                        insert_bytes(&mut gap, EmacsBytePos::new(byte_pos), &bytes, bytes.len());
                     }
                     1 => {
                         if !backend.metrics().is_empty() {
@@ -470,8 +496,8 @@ proptest! {
                             let byte_b = b % (backend_len + 1);
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
-                            delete_byte_range(&mut backend, start, end);
-                            delete_byte_range(&mut gap, start, end);
+                            delete_byte_range(&mut backend, EmacsByteRange::from_usize(start, end));
+                            delete_byte_range(&mut gap, EmacsByteRange::from_usize(start, end));
                         }
                     }
                     2 => {
@@ -480,8 +506,8 @@ proptest! {
                             let start = a % backend_len;
                             let end = (start + 1 + (b % 4)).min(backend_len);
                             let replacement = vec![*seed; end - start];
-                            replace_same_len(&mut backend, start, end, &replacement);
-                            replace_same_len(&mut gap, start, end, &replacement);
+                            replace_same_len(&mut backend, EmacsByteRange::from_usize(start, end), &replacement);
+                            replace_same_len(&mut gap, EmacsByteRange::from_usize(start, end), &replacement);
                         }
                     }
                     _ => {
@@ -492,8 +518,8 @@ proptest! {
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
                             let bytes = sample_unibyte_insert(*seed);
-                            replace_byte_range(&mut backend, start, end, &bytes);
-                            replace_byte_range(&mut gap, start, end, &bytes);
+                            replace_byte_range(&mut backend, EmacsByteRange::from_usize(start, end), &bytes);
+                            replace_byte_range(&mut gap, EmacsByteRange::from_usize(start, end), &bytes);
                         }
                     }
                 }
