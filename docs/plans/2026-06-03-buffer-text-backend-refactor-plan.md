@@ -221,6 +221,15 @@ Progress:
   undo yank deletion, pdump interval load, and set-buffer-multibyte overlay
   remapping now construct typed `CharRange`/`EmacsByteRange` values at their
   semantic boundaries.
+- Line motion, syntax scanning, marker Lisp-position reporting,
+  `window-text-pixel-size`, `position-bytes`, tree-sitter visible-base
+  position reporting, and tree-sitter edit invalidation now cross typed
+  `LispCharPos1`, `LispBytePos1`, `CharPos0`, and `EmacsBytePos` boundaries
+  instead of open-coded `+ 1` conversions at Lisp-facing call sites.
+- Accessible narrowed character ranges expose typed Lisp bounds, so undo
+  visibility, narrowing normalization, tree-sitter position checks, and
+  syntax cache lower bounds no longer recompute `BEGV`/`ZV` with raw `usize`
+  arithmetic at their semantic boundaries.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
