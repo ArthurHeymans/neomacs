@@ -21,6 +21,7 @@ use super::eval::Context;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
+use crate::buffer::{EmacsByteRange, LispCharPos1};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
@@ -2545,9 +2546,9 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
         return Err(signal("args-out-of-range", vec![args[0], args[1]]));
     }
 
-    let byte_range = crate::buffer::EmacsByteRange::new(
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(start)),
-        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(end)),
+    let byte_range = EmacsByteRange::new(
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
     );
     let text = {
         let string = buffer.buffer_substring_lisp_string_range(byte_range);

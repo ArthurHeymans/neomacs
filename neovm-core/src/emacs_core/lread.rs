@@ -6,7 +6,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsByteRange, LispCharPos1};
 use crate::heap_types::LispString;
 use std::path::Path;
 
@@ -386,10 +386,11 @@ pub(crate) fn eval_region_source_text_in_state(
             ));
         }
 
+        let start = LispCharPos1::new(raw_start);
+        let end = LispCharPos1::new(raw_end);
         let byte_range = EmacsByteRange::new(
-            buffer
-                .lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw_start)),
-            buffer.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(raw_end)),
+            buffer.lisp_pos_to_accessible_emacs_byte_pos(start),
+            buffer.lisp_pos_to_accessible_emacs_byte_pos(end),
         );
         let text = buffer.buffer_substring_lisp_string_range(byte_range);
         (text, raw_start, raw_end)
