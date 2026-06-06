@@ -159,11 +159,11 @@ pub(crate) fn normalize_narrow_region_in_buffers(
         s = s.clamp(labeled_min, labeled_max);
         e = e.clamp(labeled_min, labeled_max);
     }
-    let start_char = if s > 0 { s as usize - 1 } else { 0 };
-    let end_char = if e > 0 { e as usize - 1 } else { 0 };
+    let start_char = clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(s), buf.total_char_len());
+    let end_char = clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(e), buf.total_char_len());
     Ok(EmacsByteRange::new(
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start_char)),
-        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_char)),
+        buf.char_pos_to_emacs_byte_pos_clamped(start_char),
+        buf.char_pos_to_emacs_byte_pos_clamped(end_char),
     ))
 }
 
@@ -848,12 +848,14 @@ fn buffer_slice_for_char_region(
     } else {
         (end, start)
     };
-    let from_char = if from > 0 { from as usize - 1 } else { 0 };
-    let to_char = if to > 0 { to as usize - 1 } else { 0 };
-    let char_count = buf.total_char_len().get();
-    let from_byte =
-        char_pos_to_buffer_emacs_byte_pos(buf, CharPos0::new(from_char.min(char_count)));
-    let to_byte = char_pos_to_buffer_emacs_byte_pos(buf, CharPos0::new(to_char.min(char_count)));
+    let from_byte = char_pos_to_buffer_emacs_byte_pos(
+        buf,
+        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(from), buf.total_char_len()),
+    );
+    let to_byte = char_pos_to_buffer_emacs_byte_pos(
+        buf,
+        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(to), buf.total_char_len()),
+    );
     let byte_range = EmacsByteRange::new(from_byte, to_byte);
     super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string_range(byte_range))
 }
