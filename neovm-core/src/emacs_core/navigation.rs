@@ -179,39 +179,31 @@ fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
     buf.accessible_emacs_byte_region().clamp(byte_pos)
 }
 
-/// Return the full buffer text as raw Emacs bytes.
-fn buffer_bytes(buf: &crate::buffer::Buffer) -> Vec<u8> {
-    let mut out = Vec::new();
-    buf.copy_emacs_byte_range_to(buf.full_emacs_byte_range(), &mut out);
-    out
-}
-
 /// Count newlines in the Emacs-byte range [start, end).
-fn count_newlines(text: &[u8], start: usize, end: usize) -> usize {
-    let s = start.min(text.len());
-    let e = end.max(start).min(text.len());
-    text[s..e].iter().filter(|&&b| b == b'\n').count()
+fn count_newlines(buf: &crate::buffer::Buffer, start: usize, end: usize) -> usize {
+    buf.count_newlines_emacs_byte(start, end.max(start))
 }
 
 /// Like `move_by_lines` but confined to the narrowed region `[begv, zv)`.
+/// Newlines are found by scanning the buffer in place (no whole-buffer copy),
+/// mirroring GNU `scan_newline` (search.c).
 fn move_by_lines_narrowed(
-    text: &[u8],
+    buf: &crate::buffer::Buffer,
     byte_pos: usize,
     n: i64,
     begv: usize,
     zv: usize,
 ) -> (usize, i64) {
-    let zv = zv.min(text.len());
     let mut pos = byte_pos.clamp(begv, zv);
     let mut moved: i64 = 0;
     if n >= 0 {
         if n == 0 {
-            return (line_beginning_byte_narrowed(text, pos, begv), 0);
+            return (line_beginning_byte_narrowed(buf, pos, begv), 0);
         }
         for _ in 0..n {
-            match text[pos..zv].iter().position(|&b| b == b'\n') {
-                Some(offset) => {
-                    pos += offset + 1;
+            match buf.next_newline_emacs_byte(pos, zv) {
+                Some(nl) => {
+                    pos = nl + 1;
                     moved += 1;
                 }
                 None => {
@@ -222,12 +214,12 @@ fn move_by_lines_narrowed(
         }
     } else {
         for _ in 0..(-n) {
-            let bol = line_beginning_byte_narrowed(text, pos, begv);
+            let bol = line_beginning_byte_narrowed(buf, pos, begv);
             if bol <= begv {
                 pos = begv;
                 break;
             }
-            pos = line_beginning_byte_narrowed(text, bol - 1, begv);
+            pos = line_beginning_byte_narrowed(buf, bol - 1, begv);
             moved -= 1;
         }
     }
@@ -235,23 +227,20 @@ fn move_by_lines_narrowed(
 }
 
 /// Find the beginning of the line containing `byte_pos`, but not before `begv`.
-fn line_beginning_byte_narrowed(text: &[u8], byte_pos: usize, begv: usize) -> usize {
-    let pos = byte_pos.min(text.len());
-    let start = begv.min(pos);
-    match text[start..pos].iter().rposition(|&b| b == b'\n') {
-        Some(offset) => start + offset + 1,
-        None => start,
+fn line_beginning_byte_narrowed(
+    buf: &crate::buffer::Buffer,
+    byte_pos: usize,
+    begv: usize,
+) -> usize {
+    match buf.prev_newline_emacs_byte(byte_pos, begv) {
+        Some(nl) => nl + 1,
+        None => begv,
     }
 }
 
 /// Find the end of the line containing `byte_pos`, but not past `zv`.
-fn line_end_byte_narrowed(text: &[u8], byte_pos: usize, zv: usize) -> usize {
-    let pos = byte_pos.min(text.len());
-    let end = zv.min(text.len());
-    match text[pos..end].iter().position(|&b| b == b'\n') {
-        Some(offset) => pos + offset,
-        None => end,
-    }
+fn line_end_byte_narrowed(buf: &crate::buffer::Buffer, byte_pos: usize, zv: usize) -> usize {
+    buf.next_newline_emacs_byte(byte_pos, zv).unwrap_or(zv)
 }
 
 // ===========================================================================
@@ -583,7 +572,6 @@ pub(crate) fn pos_bol_compute(
     scan_count: i64,
 ) -> Result<(i64, i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    let text = buffer_bytes(buf);
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start().get();
     let zv = accessible.end().get();
@@ -591,7 +579,7 @@ pub(crate) fn pos_bol_compute(
     let mut pos = point.get();
     let mut moved: i64 = 0;
     if scan_count != 0 {
-        let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, scan_count, begv, zv);
+        let (new_pos, actual_moved) = move_by_lines_narrowed(buf, pos, scan_count, begv, zv);
         pos = new_pos;
         moved = actual_moved;
     }
@@ -603,7 +591,7 @@ pub(crate) fn pos_bol_compute(
     let bol = if scan_count > 0 && moved != scan_count && pos == zv {
         zv
     } else {
-        line_beginning_byte_narrowed(&text, pos, begv)
+        line_beginning_byte_narrowed(buf, pos, begv)
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(bol)),
@@ -620,7 +608,6 @@ pub(crate) fn pos_eol_compute(
     scan_count: i64,
 ) -> Result<(i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    let text = buffer_bytes(buf);
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start().get();
     let zv = accessible.end().get();
@@ -629,14 +616,14 @@ pub(crate) fn pos_eol_compute(
     let mut moved = 0;
     let delta = scan_count.saturating_sub(1);
     if delta != 0 {
-        let (new_pos, actual_moved) = move_by_lines_narrowed(&text, pos, delta, begv, zv);
+        let (new_pos, actual_moved) = move_by_lines_narrowed(buf, pos, delta, begv, zv);
         pos = new_pos;
         moved = actual_moved;
     }
     let eol = if delta != 0 && moved != delta && pos == begv {
         begv
     } else {
-        line_end_byte_narrowed(&text, pos, zv)
+        line_end_byte_narrowed(buf, pos, zv)
     };
     Ok((
         byte_to_char_pos(buf, EmacsBytePos::new(eol)),
@@ -736,13 +723,12 @@ pub(crate) fn builtin_line_number_at_pos(
     };
     let _absolute = args.get(1).is_some_and(|v| v.is_truthy());
     // Count newlines from start of buffer to byte_pos.
-    let text = buffer_bytes(buf);
     let start = if _absolute {
         0
     } else {
         buf.accessible_emacs_byte_region().start().get()
     };
-    let line_num = count_newlines(&text, start, byte_pos.get()) + 1;
+    let line_num = count_newlines(buf, start, byte_pos.get()) + 1;
     Ok(Value::fixnum(line_num as i64))
 }
 
@@ -760,8 +746,7 @@ pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Val
     } else {
         (byte_end, byte_beg)
     };
-    let text = buffer_bytes(buf);
-    let mut n = count_newlines(&text, s.get(), e.get());
+    let mut n = count_newlines(buf, s.get(), e.get());
     // GNU Emacs: "can be one more if START is not equal to END and the
     // greater of them is not at the start of a line."
     // i.e., if the region is non-empty and the char before `e` is not '\n'.
@@ -779,19 +764,20 @@ pub(crate) fn builtin_forward_line(
     let line_arg = optional_line_count_arg(&args, 1)?;
     let n = line_arg.count;
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
-    let (text, accessible, pt) = {
+    let (accessible, pt, new_pos, moved) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let accessible = buf.accessible_emacs_byte_region();
-        (buffer_bytes(buf), accessible, buf.point_emacs_byte_pos())
+        let pt = buf.point_emacs_byte_pos();
+        let (new_pos, moved) = move_by_lines_narrowed(
+            buf,
+            pt.get(),
+            n,
+            accessible.start().get(),
+            accessible.end().get(),
+        );
+        (accessible, pt, new_pos, moved)
     };
     let old_byte = pt;
-    let (new_pos, moved) = move_by_lines_narrowed(
-        &text,
-        pt.get(),
-        n,
-        accessible.start().get(),
-        accessible.end().get(),
-    );
     let new_pos = EmacsBytePos::new(new_pos);
     let direction = if n >= 0 { 1 } else { -1 };
     let adjusted = adjust_for_intangible(eval, new_pos, direction);

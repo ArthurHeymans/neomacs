@@ -2614,6 +2614,24 @@ impl Buffer {
             .with_contiguous_emacs_byte_range(self.clamped_emacs_byte_range(range), f)
     }
 
+    /// First `\n` in logical emacs-byte range `[from, limit)`, scanned in
+    /// place.  See [`BufferText::next_newline_emacs_byte`].
+    pub(crate) fn next_newline_emacs_byte(&self, from: usize, limit: usize) -> Option<usize> {
+        self.text.next_newline_emacs_byte(from, limit)
+    }
+
+    /// Last `\n` in logical emacs-byte range `[floor, from)`, scanned in
+    /// place.  See [`BufferText::prev_newline_emacs_byte`].
+    pub(crate) fn prev_newline_emacs_byte(&self, from: usize, floor: usize) -> Option<usize> {
+        self.text.prev_newline_emacs_byte(from, floor)
+    }
+
+    /// Number of `\n` in logical emacs-byte range `[from, limit)`.
+    /// See [`BufferText::count_newlines_emacs_byte`].
+    pub(crate) fn count_newlines_emacs_byte(&self, from: usize, limit: usize) -> usize {
+        self.text.count_newlines_emacs_byte(from, limit)
+    }
+
     /// Return a raw Emacs-byte copy of the range `[start, end)`.
     pub fn buffer_substring_bytes_range(&self, range: EmacsByteRange) -> Vec<u8> {
         let mut out = Vec::new();

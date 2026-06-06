@@ -617,6 +617,97 @@ impl BufferText {
             .with_contiguous_emacs_byte_range(range, f)
     }
 
+    fn emacs_byte_len_usize(&self) -> usize {
+        self.storage.borrow().metrics.emacs_byte_len().get()
+    }
+
+    /// First `\n` in the logical emacs-byte range `[from, limit)`, or `None`.
+    /// Scans the backend's contiguous chunks (gap segments) in place with no
+    /// copy and stops at the first match, mirroring GNU `find_newline`
+    /// (search.c) scanning forward between `BUFFER_CEILING_OF` boundaries.
+    pub(crate) fn next_newline_emacs_byte(&self, from: usize, limit: usize) -> Option<usize> {
+        let total = self.emacs_byte_len_usize();
+        let from = from.min(total);
+        let limit = limit.min(total);
+        if from >= limit {
+            return None;
+        }
+        let mut base = from;
+        let mut found = None;
+        let _ = self.for_each_emacs_byte_range_chunk::<()>(
+            EmacsByteRange::new(EmacsBytePos::new(from), EmacsBytePos::new(limit)),
+            |chunk| match chunk.iter().position(|&b| b == b'\n') {
+                Some(off) => {
+                    found = Some(base + off);
+                    Err(())
+                }
+                None => {
+                    base += chunk.len();
+                    Ok(())
+                }
+            },
+        );
+        found
+    }
+
+    /// Last `\n` in the logical emacs-byte range `[floor, from)`, or `None`.
+    /// Uses a backward galloping window so the work is O(distance back to the
+    /// newline), not O(from) -- the in-place analog of GNU `find_newline`
+    /// scanning backward with `memrchr`.  Each window is bulk-scanned.
+    pub(crate) fn prev_newline_emacs_byte(&self, from: usize, floor: usize) -> Option<usize> {
+        let total = self.emacs_byte_len_usize();
+        let from = from.min(total);
+        if from <= floor {
+            return None;
+        }
+        let mut hi = from;
+        let mut window = 256usize;
+        while hi > floor {
+            let lo = hi.saturating_sub(window).max(floor);
+            let mut base = lo;
+            let mut last = None;
+            let _ = self.for_each_emacs_byte_range_chunk::<()>(
+                EmacsByteRange::new(EmacsBytePos::new(lo), EmacsBytePos::new(hi)),
+                |chunk| {
+                    if let Some(off) = chunk.iter().rposition(|&b| b == b'\n') {
+                        last = Some(base + off);
+                    }
+                    base += chunk.len();
+                    Ok::<(), ()>(())
+                },
+            );
+            if last.is_some() {
+                return last;
+            }
+            if lo == floor {
+                return None;
+            }
+            hi = lo;
+            window = window.saturating_mul(2);
+        }
+        None
+    }
+
+    /// Number of `\n` in the logical emacs-byte range `[from, limit)`, counted
+    /// over the backend's contiguous chunks with no copy.
+    pub(crate) fn count_newlines_emacs_byte(&self, from: usize, limit: usize) -> usize {
+        let total = self.emacs_byte_len_usize();
+        let from = from.min(total);
+        let limit = limit.min(total);
+        if from >= limit {
+            return 0;
+        }
+        let mut count = 0usize;
+        let _ = self.for_each_emacs_byte_range_chunk::<()>(
+            EmacsByteRange::new(EmacsBytePos::new(from), EmacsBytePos::new(limit)),
+            |chunk| {
+                count += chunk.iter().filter(|&&b| b == b'\n').count();
+                Ok::<(), ()>(())
+            },
+        );
+        count
+    }
+
     pub(crate) fn insert_measured_emacs_bytes(
         &mut self,
         pos: EmacsBytePos,
