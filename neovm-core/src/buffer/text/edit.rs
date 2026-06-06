@@ -649,6 +649,14 @@ const fn transpose_half_open_position(
 mod tests {
     use super::*;
 
+    fn byte_range(start: usize, end: usize) -> EmacsByteRange {
+        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+    }
+
+    fn char_range(start: usize, end: usize) -> CharRange {
+        CharRange::new(CharPos0::new(start), CharPos0::new(end))
+    }
+
     #[test]
     fn text_extent_measures_emacs_bytes_for_buffer_mode() {
         let multibyte = TextExtent::from_emacs_bytes("aé🙂".as_bytes(), true);
@@ -680,8 +688,8 @@ mod tests {
             TextExtent::from_usize(3, 7),
         );
 
-        assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 27));
-        assert_eq!(range.char_range(), CharRange::from_usize(10, 13));
+        assert_eq!(range.byte_range(), byte_range(20, 27));
+        assert_eq!(range.char_range(), char_range(10, 13));
     }
 
     #[test]
@@ -721,32 +729,17 @@ mod tests {
     fn text_transposition_keeps_byte_and_char_ranges_together() {
         let transposition = TextTransposition::from_usize(0, 3, 0, 2, 8, 13, 6, 9);
 
-        assert_eq!(
-            transposition.first().byte_range(),
-            EmacsByteRange::from_usize(0, 3)
-        );
-        assert_eq!(
-            transposition.first().char_range(),
-            CharRange::from_usize(0, 2)
-        );
-        assert_eq!(
-            transposition.second().byte_range(),
-            EmacsByteRange::from_usize(8, 13)
-        );
-        assert_eq!(
-            transposition.second().char_range(),
-            CharRange::from_usize(6, 9)
-        );
-        assert_eq!(transposition.byte_span(), EmacsByteRange::from_usize(0, 13));
-        assert_eq!(transposition.char_span(), CharRange::from_usize(0, 9));
+        assert_eq!(transposition.first().byte_range(), byte_range(0, 3));
+        assert_eq!(transposition.first().char_range(), char_range(0, 2));
+        assert_eq!(transposition.second().byte_range(), byte_range(8, 13));
+        assert_eq!(transposition.second().char_range(), char_range(6, 9));
+        assert_eq!(transposition.byte_span(), byte_range(0, 13));
+        assert_eq!(transposition.char_span(), char_range(0, 9));
         assert_eq!(
             transposition.span_edit_range(),
             TextEditRange::from_usize(0, 13, 0, 9)
         );
-        assert_eq!(
-            transposition.middle_byte_range(),
-            EmacsByteRange::from_usize(3, 8)
-        );
+        assert_eq!(transposition.middle_byte_range(), byte_range(3, 8));
         assert_eq!(transposition.changed_chars(), CharLen::new(9));
     }
 
@@ -788,8 +781,8 @@ mod tests {
     fn empty_text_edit_range_keeps_coordinate_spaces_together() {
         let range = TextEditRange::empty_at(EmacsBytePos::new(20), CharPos0::new(10));
 
-        assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 20));
-        assert_eq!(range.char_range(), CharRange::from_usize(10, 10));
+        assert_eq!(range.byte_range(), byte_range(20, 20));
+        assert_eq!(range.char_range(), char_range(10, 10));
         assert!(range.is_empty());
     }
 
@@ -826,10 +819,7 @@ mod tests {
         );
         let change = TextChange::replacement(replacement);
 
-        assert_eq!(
-            change.before_byte_range(),
-            EmacsByteRange::from_usize(20, 36)
-        );
+        assert_eq!(change.before_byte_range(), byte_range(20, 36));
         assert_eq!(change.after_start_byte(), EmacsBytePos::new(20));
         assert_eq!(change.after_end_byte(), EmacsBytePos::new(25));
         assert_eq!(change.old_char_len(), CharLen::new(8));
@@ -840,10 +830,7 @@ mod tests {
         let range = TextEditRange::from_usize(20, 36, 10, 18);
         let change = TextChange::unchanged_extent(range);
 
-        assert_eq!(
-            change.before_byte_range(),
-            EmacsByteRange::from_usize(20, 36)
-        );
+        assert_eq!(change.before_byte_range(), byte_range(20, 36));
         assert_eq!(change.after_start_byte(), EmacsBytePos::new(20));
         assert_eq!(change.after_end_byte(), EmacsBytePos::new(36));
         assert_eq!(change.old_char_len(), CharLen::new(8));
