@@ -161,8 +161,6 @@ impl Buffer {
             return;
         }
         let insertion = edit.insertion();
-        let insert_pos = edit.byte_pos_usize();
-        let insert_char_pos = edit.char_pos_usize();
         let char_len = edit.char_len();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
@@ -176,8 +174,8 @@ impl Buffer {
             }
         }
         debug_assert_eq!(
-            char_pos_for_emacs_byte(&self.text, EmacsBytePos::new(insert_pos)).get(),
-            insert_char_pos,
+            char_pos_for_emacs_byte(&self.text, edit.byte_pos()),
+            edit.char_pos(),
             "insert-side-effect char position drifted from the source edit site"
         );
         if policy.adjust_shared_text_props {
@@ -527,7 +525,6 @@ impl Buffer {
         if edit.is_empty() {
             return false;
         }
-        let start = range.byte_start_usize();
 
         let mut region_bytes = Vec::with_capacity(range.byte_len().get());
         self.text
@@ -543,14 +540,12 @@ impl Buffer {
         };
 
         if !noundo {
-            self.undo_prepare_change(modified_range.byte_start(), EmacsBytePos::new(self.pt_byte));
+            self.undo_prepare_change(modified_range.byte_start(), self.point_emacs_byte_pos());
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 for changed_range in plan.changed_ranges().iter().copied() {
                     let mut deleted = lisp_string_from_buffer_bytes(
-                        region_bytes[changed_range.byte_start_usize() - start
-                            ..changed_range.byte_end_usize() - start]
-                            .to_vec(),
+                        region_bytes[changed_range.byte_index_range_relative_to(range)].to_vec(),
                         self.get_multibyte(),
                     );
                     let props = self
@@ -563,7 +558,7 @@ impl Buffer {
                         &mut ul,
                         changed_range.char_start(),
                         deleted,
-                        CharPos0::new(self.pt),
+                        self.point_char_pos(),
                         self.undo_state.point_before_command_or_undo(),
                     );
                     undo::undo_list_record_insert(

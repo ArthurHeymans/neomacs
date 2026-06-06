@@ -604,6 +604,18 @@ impl TextEditRange {
         self.byte_range.len()
     }
 
+    pub(in crate::buffer) fn byte_index_range_relative_to(
+        self,
+        base: Self,
+    ) -> std::ops::Range<usize> {
+        debug_assert!(
+            self.byte_start() >= base.byte_start() && self.byte_end() <= base.byte_end(),
+            "relative byte index range must be contained in its base range"
+        );
+        let base_start = base.byte_start().get();
+        self.byte_start().get() - base_start..self.byte_end().get() - base_start
+    }
+
     pub const fn char_len(self) -> CharLen {
         CharLen::new(self.char_end.get().saturating_sub(self.char_start.get()))
     }
@@ -673,6 +685,14 @@ mod tests {
 
         assert_eq!(range.byte_range(), EmacsByteRange::from_usize(20, 27));
         assert_eq!(range.char_range(), CharRange::from_usize(10, 13));
+    }
+
+    #[test]
+    fn text_edit_range_reports_relative_byte_index_range() {
+        let base = TextEditRange::from_usize(20, 40, 10, 30);
+        let inner = TextEditRange::from_usize(25, 32, 15, 22);
+
+        assert_eq!(inner.byte_index_range_relative_to(base), 5..12);
     }
 
     #[test]
