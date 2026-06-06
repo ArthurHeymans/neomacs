@@ -100,8 +100,8 @@ pub(crate) fn builtin_zlib_decompress_region(
         buf.lisp_pos_to_accessible_emacs_byte_pos(from),
         buf.lisp_pos_to_accessible_emacs_byte_pos(to),
     );
-    let from_byte = byte_range.start_usize();
-    let to_byte = byte_range.end_usize();
+    let from_byte = byte_range.start().get();
+    let to_byte = byte_range.end().get();
 
     let buffer_id = buf.id;
     let compressed = read_buffer_region_bytes_in_manager(&ctx.buffers, buffer_id, byte_range)?;

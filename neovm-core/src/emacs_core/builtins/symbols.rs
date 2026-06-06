@@ -2027,7 +2027,7 @@ pub(crate) fn builtin_vertical_motion(
     };
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible.clamp(buf.point_emacs_byte_pos());
-    let begv = accessible.start_usize();
+    let begv = accessible.start().get();
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
@@ -3354,16 +3354,16 @@ pub(crate) fn builtin_transpose_regions(
         )
     };
 
-    if second.start_usize() < first.end_usize() {
+    if second.start().get() < first.end().get() {
         std::mem::swap(&mut first, &mut second);
     }
-    if second.start_usize() < first.end_usize() {
+    if second.start().get() < first.end().get() {
         return Err(signal(
             "error",
             vec![Value::string("Transposed regions overlap")],
         ));
     }
-    if (first.is_empty() || second.is_empty()) && first.end_usize() == second.start_usize() {
+    if (first.is_empty() || second.is_empty()) && first.end().get() == second.start().get() {
         return Ok(Value::NIL);
     }
 
@@ -3375,8 +3375,8 @@ pub(crate) fn builtin_transpose_regions(
         buf.text_transposition_for_char_ranges(first, second)
     };
     let changed_byte_span = transposition.byte_span();
-    let changed_start_byte = changed_byte_span.start_usize();
-    let changed_end_byte = changed_byte_span.end_usize();
+    let changed_start_byte = changed_byte_span.start().get();
+    let changed_end_byte = changed_byte_span.end().get();
 
     let read_only = eval.buffers.get(current_id).is_some_and(|buf| {
         crate::emacs_core::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)

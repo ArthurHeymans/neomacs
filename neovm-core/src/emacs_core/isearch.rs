@@ -374,8 +374,8 @@ fn delete_line_operation_byte_range(
         &eval.obarray,
         &eval.buffers,
         current_id,
-        range.start_usize(),
-        range.end_usize(),
+        range.start().get(),
+        range.end().get(),
     )?;
 
     let change =

@@ -1686,9 +1686,9 @@ fn update_match_data_after_buffer_replace(
         return;
     };
 
-    let oldstart = old_byte_range.start_usize();
-    let oldend = old_byte_range.end_usize();
-    let newend = new_byte_range.end_usize();
+    let oldstart = old_byte_range.start().get();
+    let oldend = old_byte_range.end().get();
+    let newend = new_byte_range.end().get();
     let change = newend as i64 - oldend as i64;
     for group in md.groups.iter_mut() {
         let Some(match_group) = group.as_mut() else {
