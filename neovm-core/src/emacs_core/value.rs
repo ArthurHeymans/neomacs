@@ -26,7 +26,7 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyPlistRun, TextPropertyTable};
-use crate::buffer::{CharPos0, CharRange};
+use crate::buffer::{CharPos0, CharRange, EmacsBytePos};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
@@ -734,7 +734,7 @@ pub enum HashKey {
     /// Structural vector/record key for `equal`-test hash tables.
     EqualVec(Vec<HashKey>),
     /// Structural marker key for `equal`-test hash tables.
-    Marker(Option<u64>, usize),
+    Marker(Option<u64>, EmacsBytePos),
     /// Structural overlay key for `equal`-test hash tables.
     Overlay {
         buffer: Option<u64>,

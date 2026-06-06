@@ -2346,7 +2346,7 @@ pub(crate) fn dump_hash_key(encoder: &mut DumpEncoder, k: &HashKey) -> DumpHashK
         HashKey::EqualVec(v) => {
             DumpHashKey::EqualVec(v.iter().map(|key| dump_hash_key(encoder, key)).collect())
         }
-        HashKey::Marker(buffer, bytepos) => DumpHashKey::Marker(*buffer, *bytepos),
+        HashKey::Marker(buffer, bytepos) => DumpHashKey::Marker(*buffer, bytepos.get()),
         HashKey::Overlay {
             buffer,
             start,
@@ -4070,7 +4070,9 @@ pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashK
         DumpHashKey::EqualVec(v) => {
             HashKey::EqualVec(v.iter().map(|item| load_hash_key(decoder, item)).collect())
         }
-        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(*buffer, *bytepos),
+        DumpHashKey::Marker(buffer, bytepos) => {
+            HashKey::Marker(*buffer, EmacsBytePos::new(*bytepos))
+        }
         DumpHashKey::Overlay {
             buffer,
             start,
@@ -4120,7 +4122,7 @@ fn load_hash_key_owned(decoder: &mut LoadDecoder, k: DumpHashKey) -> HashKey {
                 .map(|item| load_hash_key_owned(decoder, item))
                 .collect(),
         ),
-        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(buffer, bytepos),
+        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(buffer, EmacsBytePos::new(bytepos)),
         DumpHashKey::Overlay {
             buffer,
             start,

@@ -157,15 +157,15 @@ pub(crate) fn marker_logical_fields(v: &Value) -> Option<(Option<BufferId>, Opti
     Some((data.buffer, position, data.insertion_type))
 }
 
-pub(crate) fn marker_equal_logical_fields(v: &Value) -> Option<(Option<BufferId>, usize)> {
+pub(crate) fn marker_equal_logical_fields(v: &Value) -> Option<(Option<BufferId>, EmacsBytePos)> {
     if !v.is_marker() {
         return None;
     };
     let data = v.as_marker_data().unwrap();
     let bytepos = if data.buffer.is_some() {
-        data.bytepos
+        EmacsBytePos::new(data.bytepos)
     } else {
-        0
+        EmacsBytePos::ZERO
     };
     Some((data.buffer, bytepos))
 }
@@ -174,9 +174,9 @@ pub(crate) fn marker_equal_logical_fields(v: &Value) -> Option<(Option<BufferId>
 pub(crate) fn marker_equal_hash_key_value(v: &Value) -> HashKey {
     if let Some(marker) = v.as_marker_data() {
         let bytepos = if marker.buffer.is_some() {
-            marker.bytepos
+            EmacsBytePos::new(marker.bytepos)
         } else {
-            0
+            EmacsBytePos::ZERO
         };
         HashKey::Marker(marker.buffer.map(|buffer| buffer.0), bytepos)
     } else {
