@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharRange};
+use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::coding::TextQuotingStyle;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, get_string_text_properties_table_for_value,
@@ -15,6 +15,10 @@ use std::str::FromStr;
 // ===========================================================================
 // String operations
 // ===========================================================================
+
+fn string_char_range(start: usize, end: usize) -> CharRange {
+    CharRange::new(CharPos0::new(start), CharPos0::new(end))
+}
 
 pub(crate) fn builtin_string_equal(args: Vec<Value>) -> EvalResult {
     expect_args("string-equal", &args, 2)?;
@@ -174,7 +178,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                 };
                 let sliced_props = if let Some(src_table) = src_props.as_ref() {
                     let sliced = src_table
-                        .slice_copy_text_properties_char_range(CharRange::from_usize(from, to));
+                        .slice_copy_text_properties_char_range(string_char_range(from, to));
                     (!sliced.is_empty()).then_some(sliced)
                 } else {
                     None
@@ -1754,7 +1758,7 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
         let ordered: Vec<_> = src_interval.ordered_properties().collect();
         for (name, value) in ordered.into_iter().rev() {
             if table.put_property_for_object_char_len(
-                CharRange::from_usize(result_start, result_end),
+                string_char_range(result_start, result_end),
                 CharLen::new(result_string.schars()),
                 name,
                 *value,
@@ -1835,7 +1839,7 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
             let ordered: Vec<_> = interval.ordered_properties().collect();
             for (name, value) in ordered.into_iter().rev() {
                 if table.put_property_for_object_char_len(
-                    CharRange::from_usize(
+                    string_char_range(
                         span.result_char_start + interval.start,
                         span.result_char_start + end,
                     ),
