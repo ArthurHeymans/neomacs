@@ -4185,9 +4185,7 @@ fn process_mark_insert_emacs_byte_pos(
     match super::marker::marker_position_as_int_with_buffers(buffers, &mark) {
         Ok(pos) => buffers
             .get(buf_id)
-            .map(|b| {
-                b.lisp_pos_to_full_buffer_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
-            })
+            .map(|b| b.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(pos)))
             .unwrap_or(EmacsBytePos::ZERO),
         Err(_) => buffers
             .get(buf_id)

@@ -25,7 +25,7 @@ use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
@@ -2077,8 +2077,7 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
         return Ok(Value::NIL);
     }
 
-    let bytepos =
-        buffer.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos));
+    let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos));
     let face = resolved_face_at_buffer_byte(eval, buffer, bytepos);
     let character = buffer.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
         signal(

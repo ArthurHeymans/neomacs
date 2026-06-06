@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::symbol::Obarray;
 
 fn runtime_string_value(value: Value) -> String {
@@ -56,9 +56,7 @@ pub(crate) fn builtin_get_pos_property_impl(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let byte_pos = buf
-        .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
-        .get();
+    let byte_pos = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(pos)).get();
 
     if let Some((value, _overlay_id)) =
         super::textprop::buffer_overlay_property_for_inserted_char_at_byte_pos(buf, byte_pos, prop)
@@ -68,13 +66,17 @@ pub(crate) fn builtin_get_pos_property_impl(
 
     match text_property_stickiness_in_state(obarray, buffers, buf, pos, prop) {
         1 => Ok(text_property_value_at_char_pos(
-            obarray, buffers, buf, pos, prop,
+            obarray,
+            buffers,
+            buf,
+            LispCharPos1::new(pos),
+            prop,
         )),
         -1 if pos > buf.point_min_lisp_char_pos().as_i64() => Ok(text_property_value_at_char_pos(
             obarray,
             buffers,
             buf,
-            pos - 1,
+            LispCharPos1::new(pos - 1),
             prop,
         )),
         _ => Ok(Value::NIL),
@@ -812,7 +814,7 @@ fn text_property_stickiness_in_state(
             obarray,
             buffers,
             buf,
-            pos - 1,
+            LispCharPos1::new(pos - 1),
             Value::symbol("rear-nonsticky"),
         );
         if matches_rear_nonsticky(previous_props, prop) {
@@ -821,7 +823,13 @@ fn text_property_stickiness_in_state(
     }
 
     let front_sticky = matches_front_sticky(
-        text_property_value_at_char_pos(obarray, buffers, buf, pos, Value::symbol("front-sticky")),
+        text_property_value_at_char_pos(
+            obarray,
+            buffers,
+            buf,
+            LispCharPos1::new(pos),
+            Value::symbol("front-sticky"),
+        ),
         prop,
     );
 
@@ -836,7 +844,8 @@ fn text_property_stickiness_in_state(
     }
 
     if ignore_previous_character
-        || text_property_value_at_char_pos(obarray, buffers, buf, pos - 1, prop).is_nil()
+        || text_property_value_at_char_pos(obarray, buffers, buf, LispCharPos1::new(pos - 1), prop)
+            .is_nil()
     {
         1
     } else {
@@ -1008,12 +1017,10 @@ fn text_property_value_at_char_pos(
     obarray: &crate::emacs_core::symbol::Obarray,
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
-    pos: i64,
+    pos: LispCharPos1,
     prop: Value,
 ) -> Value {
-    let byte_pos = buf
-        .lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos))
-        .get();
+    let byte_pos = buf.lisp_pos_to_emacs_byte_pos(pos).get();
     super::textprop::lookup_buffer_text_property(obarray, buffers, buf, byte_pos, prop)
 }
 
@@ -1120,8 +1127,7 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
             vec![Value::fixnum(pos), Value::fixnum(pos)],
         ));
     }
-    let prop_byte =
-        buf.lisp_pos_to_accessible_emacs_byte_pos(crate::buffer::LispCharPos1::new(pos));
+    let prop_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos));
     if buf
         .text_props_get_property_at_emacs_byte_pos(prop_byte, Value::symbol("inhibit-read-only"))
         .is_some_and(|value| value.is_truthy())
@@ -1269,8 +1275,7 @@ fn write_print_output_to_target(
                     )],
                 ));
             }
-            let marker_byte =
-                buffer.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(marker_pos));
+            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(marker_pos));
             let saved_current = ctx.buffers.current_buffer_id();
             let saved_point = saved_current
                 .and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_emacs_byte_pos()));
