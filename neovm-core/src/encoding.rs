@@ -6,7 +6,7 @@
 
 use crate::emacs_core::intern::resolve_sym;
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
-use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
 use encoding_rs::{BIG5, GBK};
 
@@ -1472,16 +1472,16 @@ fn insert_coding_result(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,
     text: &crate::heap_types::LispString,
-    restore_point: Option<(usize, usize)>,
+    restore_point: Option<TextPositionAnchor>,
 ) -> Result<(), crate::emacs_core::error::Flow> {
     ctx.buffers
         .insert_lisp_string_into_buffer(buffer_id, text)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    if let Some((pt_byte, pt)) = restore_point
+    if let Some(point) = restore_point
         && let Some(buf) = ctx.buffers.get_mut(buffer_id)
     {
-        buf.pt_byte = pt_byte;
-        buf.pt = pt;
+        buf.pt_byte = point.emacs_byte_pos().get();
+        buf.pt = point.char_pos().get();
     }
     Ok(())
 }
@@ -1548,7 +1548,10 @@ fn builtin_coding_string_in_context(
     let Some(buffer_id) = destination else {
         return Ok(result);
     };
-    let restore_point = ctx.buffers.get(buffer_id).map(|buf| (buf.pt_byte, buf.pt));
+    let restore_point = ctx
+        .buffers
+        .get(buffer_id)
+        .map(|buf| TextPositionAnchor::new(CharPos0::new(buf.pt), EmacsBytePos::new(buf.pt_byte)));
     if restore_point.is_none() {
         return Err(signal(
             "error",
@@ -1681,7 +1684,9 @@ fn builtin_coding_region(
             Ok(Value::fixnum(produced_chars as i64))
         }
         Some(Some(buffer_id)) => {
-            let restore_point = ctx.buffers.get(buffer_id).map(|buf| (buf.pt_byte, buf.pt));
+            let restore_point = ctx.buffers.get(buffer_id).map(|buf| {
+                TextPositionAnchor::new(CharPos0::new(buf.pt), EmacsBytePos::new(buf.pt_byte))
+            });
             if restore_point.is_none() {
                 return Err(signal(
                     "error",
