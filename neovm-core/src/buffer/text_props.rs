@@ -1917,7 +1917,10 @@ impl TextPropertyTable {
             .filter(|run| !run.is_empty_plist())
             .map(|run| {
                 PropertyInterval::from_plist(
-                    CharRange::from_usize(run.start_usize(), run.end_usize()),
+                    CharRange::new(
+                        CharPos0::new(run.start_usize()),
+                        CharPos0::new(run.end_usize()),
+                    ),
                     &plist_pairs(run.plist),
                 )
             })
@@ -2109,7 +2112,7 @@ impl TextPropertyTable {
             let new_end = node_end.min(end) - start;
             if new_start < new_end {
                 runs.push(TextPropertyPlistRun::new(
-                    CharRange::from_usize(new_start, new_end),
+                    CharRange::new(CharPos0::new(new_start), CharPos0::new(new_end)),
                     plist_pairs(node.plist),
                 ));
             }
@@ -2138,7 +2141,7 @@ impl TextPropertyTable {
             }
             for (name, value) in plist_pairs(node.plist) {
                 table.put_property_in_char_range(
-                    CharRange::from_usize(new_start, new_end),
+                    CharRange::new(CharPos0::new(new_start), CharPos0::new(new_end)),
                     name,
                     value,
                 );
@@ -2292,7 +2295,7 @@ impl TextPropertyTable {
                 .filter(|interval| interval.start < interval.end)
                 .map(|interval| {
                     IntervalRun::new_in_char_range(
-                        CharRange::from_usize(interval.start, interval.end),
+                        CharRange::new(CharPos0::new(interval.start), CharPos0::new(interval.end)),
                         plist_value_from_pairs(&interval.into_plist()),
                     )
                 })
