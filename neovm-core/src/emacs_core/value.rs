@@ -25,8 +25,8 @@ use strum::{EnumString, IntoStaticStr};
 
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
-use crate::buffer::CharRange;
 use crate::buffer::text_props::{PropertyInterval, TextPropertyPlistRun, TextPropertyTable};
+use crate::buffer::{CharPos0, CharRange};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
@@ -357,7 +357,7 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
             }
         }
         plist_runs.push(TextPropertyPlistRun::new(
-            CharRange::from_usize(run.start, run.end),
+            CharRange::new(CharPos0::new(run.start), CharPos0::new(run.end)),
             plist,
         ));
     }
