@@ -268,6 +268,10 @@ Progress:
   `point_char_pos`, `mark_emacs_byte_pos`, `mark_char_pos`, and
   `register_marker_at_emacs_byte_pos`, so future test code exercises the same
   typed APIs as production.
+- Test-only raw `BufferManager` narrowing, text-property, restriction, labeled
+  narrowing, marker creation, and inserted-property clearing shims were removed.
+  Tests now construct `EmacsByteRange` or `EmacsBytePos` explicitly and call the
+  production typed APIs directly.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.

@@ -4816,19 +4816,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[cfg(test)]
-    pub(crate) fn clear_inserted_plain_text_properties(
-        &mut self,
-        id: BufferId,
-        start: usize,
-        end: usize,
-    ) -> Option<()> {
-        self.clear_inserted_plain_text_properties_in_emacs_byte_range(
-            id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
-        )
-    }
-
     pub(crate) fn clear_inserted_plain_text_properties_in_emacs_byte_range(
         &mut self,
         id: BufferId,
