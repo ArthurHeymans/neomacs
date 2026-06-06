@@ -1053,12 +1053,10 @@ fn find_forward_match_data_compiled(
 ) -> Option<MatchData> {
     match compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let (match_start, match_end) = literal_find(&text[start..limit], literal, case_fold)?;
+            let matched = literal_find(&text[start..limit], literal, case_fold)?;
+            let matched = matched.shift(offset + start);
             Some(MatchData {
-                groups: gnu_single_group_vec(Some(MatchGroup::new(
-                    offset + start + match_start,
-                    offset + start + match_end,
-                ))),
+                groups: gnu_single_group_vec(Some(matched)),
                 searched_string: None,
                 searched_buffer: None,
                 buffer_positions_are_bytes: false,
@@ -1205,10 +1203,10 @@ fn ascii_case_fold_rfind(haystack: &str, needle: &str) -> Option<usize> {
     })
 }
 
-fn unicode_case_fold_literal_find(text: &str, literal: &str) -> Option<(usize, usize)> {
+fn unicode_case_fold_literal_find(text: &str, literal: &str) -> Option<MatchGroup> {
     let needle: Vec<char> = literal.chars().flat_map(|ch| ch.to_lowercase()).collect();
     if needle.is_empty() {
-        return Some((0, 0));
+        return Some(MatchGroup::new(0, 0));
     }
     let mut window = std::collections::VecDeque::with_capacity(needle.len());
     let mut ranges = std::collections::VecDeque::with_capacity(needle.len());
@@ -1227,17 +1225,17 @@ fn unicode_case_fold_literal_find(text: &str, literal: &str) -> Option<(usize, u
                     .zip(needle.iter())
                     .all(|(lhs, rhs)| lhs == rhs)
             {
-                return Some((ranges.front()?.0, ranges.back()?.1));
+                return Some(MatchGroup::new(ranges.front()?.0, ranges.back()?.1));
             }
         }
     }
     None
 }
 
-fn unicode_case_fold_literal_rfind(text: &str, literal: &str) -> Option<(usize, usize)> {
+fn unicode_case_fold_literal_rfind(text: &str, literal: &str) -> Option<MatchGroup> {
     let needle: Vec<char> = literal.chars().flat_map(|ch| ch.to_lowercase()).collect();
     if needle.is_empty() {
-        return Some((text.len(), text.len()));
+        return Some(MatchGroup::new(text.len(), text.len()));
     }
     let mut last_match = None;
     let mut window = std::collections::VecDeque::with_capacity(needle.len());
@@ -1257,7 +1255,7 @@ fn unicode_case_fold_literal_rfind(text: &str, literal: &str) -> Option<(usize, 
                     .zip(needle.iter())
                     .all(|(lhs, rhs)| lhs == rhs)
             {
-                last_match = Some((ranges.front()?.0, ranges.back()?.1));
+                last_match = Some(MatchGroup::new(ranges.front()?.0, ranges.back()?.1));
             }
         }
     }
@@ -1274,7 +1272,7 @@ fn unicode_case_fold_literal_rfind(text: &str, literal: &str) -> Option<(usize, 
 /// helper). Audit finding #18 in `drafts/regex-search-audit.md`
 /// flags this as a perf gap, not a correctness gap; the audit's
 /// Phase D Task 4.2 covers porting boyer_moore (~1 day).
-fn literal_find(text: &str, literal: &str, case_fold: bool) -> Option<(usize, usize)> {
+fn literal_find(text: &str, literal: &str, case_fold: bool) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
         || {
@@ -1287,7 +1285,7 @@ fn literal_find(text: &str, literal: &str, case_fold: bool) -> Option<(usize, us
             } else {
                 text.find(literal)?
             };
-            Some((start, start + literal.len()))
+            Some(MatchGroup::new(start, start + literal.len()))
         },
     )
 }
@@ -1297,7 +1295,7 @@ fn literal_find_lisp_string(
     literal: &str,
     start: usize,
     case_fold: bool,
-) -> Option<(usize, usize)> {
+) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
         || {
@@ -1309,7 +1307,7 @@ fn literal_find_lisp_string(
                 let haystack = &text.as_bytes()[start..];
                 let needle = literal.as_bytes();
                 if needle.is_empty() {
-                    return Some((start, start));
+                    return Some(MatchGroup::new(start, start));
                 }
                 if needle.len() > haystack.len() {
                     return None;
@@ -1325,17 +1323,16 @@ fn literal_find_lisp_string(
                     }
                 })?;
                 let match_end = match_start + needle.len();
-                return Some((start + match_start, start + match_end));
+                return Some(MatchGroup::new(start + match_start, start + match_end));
             }
 
             let text = text.as_utf8_str()?;
-            literal_find(&text[start..], literal, case_fold)
-                .map(|(match_start, match_end)| (start + match_start, start + match_end))
+            literal_find(&text[start..], literal, case_fold).map(|matched| matched.shift(start))
         },
     )
 }
 
-fn literal_rfind(text: &str, literal: &str, case_fold: bool) -> Option<(usize, usize)> {
+fn literal_rfind(text: &str, literal: &str, case_fold: bool) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
         || {
@@ -1348,7 +1345,7 @@ fn literal_rfind(text: &str, literal: &str, case_fold: bool) -> Option<(usize, u
             } else {
                 text.rfind(literal)?
             };
-            Some((start, start + literal.len()))
+            Some(MatchGroup::new(start, start + literal.len()))
         },
     )
 }
@@ -1366,24 +1363,24 @@ fn literal_find_emacs_bytes(
     literal: &[u8],
     multibyte: bool,
     case_fold: bool,
-) -> Option<(usize, usize)> {
+) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
         || {
             if literal.is_empty() {
-                return Some((0, 0));
+                return Some(MatchGroup::new(0, 0));
             }
             if !case_fold {
                 return text
                     .windows(literal.len())
                     .position(|window| window == literal)
-                    .map(|start| (start, start + literal.len()));
+                    .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             if literal.is_ascii() {
                 return text
                     .windows(literal.len())
                     .position(|window| bytes_equal_ascii_case_fold(window, literal))
-                    .map(|start| (start, start + literal.len()));
+                    .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             if let (Some(text_utf8), Some(literal_utf8)) = (
                 crate::emacs_core::emacs_char::try_as_utf8(text),
@@ -1396,15 +1393,15 @@ fn literal_find_emacs_bytes(
                 crate::emacs_core::string_escape::emacs_bytes_to_storage_string(text, multibyte);
             let literal_storage =
                 crate::emacs_core::string_escape::emacs_bytes_to_storage_string(literal, multibyte);
-            literal_find(&text_storage, &literal_storage, true).map(|(start, end)| {
-                (
+            literal_find(&text_storage, &literal_storage, true).map(|matched| {
+                MatchGroup::new(
                     crate::emacs_core::string_escape::storage_byte_to_logical_byte(
                         &text_storage,
-                        start,
+                        matched.start(),
                     ),
                     crate::emacs_core::string_escape::storage_byte_to_logical_byte(
                         &text_storage,
-                        end,
+                        matched.end(),
                     ),
                 )
             })
@@ -1417,12 +1414,12 @@ fn literal_rfind_emacs_bytes(
     literal: &[u8],
     multibyte: bool,
     case_fold: bool,
-) -> Option<(usize, usize)> {
+) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
         || {
             if literal.is_empty() {
-                return Some((text.len(), text.len()));
+                return Some(MatchGroup::new(text.len(), text.len()));
             }
             if !case_fold {
                 return text
@@ -1430,7 +1427,7 @@ fn literal_rfind_emacs_bytes(
                     .enumerate()
                     .rev()
                     .find(|(_, window)| *window == literal)
-                    .map(|(start, _)| (start, start + literal.len()));
+                    .map(|(start, _)| MatchGroup::new(start, start + literal.len()));
             }
             if literal.is_ascii() {
                 return text
@@ -1438,7 +1435,7 @@ fn literal_rfind_emacs_bytes(
                     .enumerate()
                     .rev()
                     .find(|(_, window)| bytes_equal_ascii_case_fold(window, literal))
-                    .map(|(start, _)| (start, start + literal.len()));
+                    .map(|(start, _)| MatchGroup::new(start, start + literal.len()));
             }
             if let (Some(text_utf8), Some(literal_utf8)) = (
                 crate::emacs_core::emacs_char::try_as_utf8(text),
@@ -1451,15 +1448,15 @@ fn literal_rfind_emacs_bytes(
                 crate::emacs_core::string_escape::emacs_bytes_to_storage_string(text, multibyte);
             let literal_storage =
                 crate::emacs_core::string_escape::emacs_bytes_to_storage_string(literal, multibyte);
-            literal_rfind(&text_storage, &literal_storage, true).map(|(start, end)| {
-                (
+            literal_rfind(&text_storage, &literal_storage, true).map(|matched| {
+                MatchGroup::new(
                     crate::emacs_core::string_escape::storage_byte_to_logical_byte(
                         &text_storage,
-                        start,
+                        matched.start(),
                     ),
                     crate::emacs_core::string_escape::storage_byte_to_logical_byte(
                         &text_storage,
-                        end,
+                        matched.end(),
                     ),
                 )
             })
@@ -1531,13 +1528,13 @@ pub fn search_forward(
         literal_find_emacs_bytes(text, &literal, multibyte, case_fold)
     });
 
-    if let Some((rel_start, rel_end)) = found {
-        let match_start = start.get() + rel_start;
-        let match_end = start.get() + rel_end;
+    if let Some(found) = found {
+        let matched = found.shift(start.get());
+        let match_end = matched.end();
         let match_end_pos = EmacsBytePos::new(match_end);
         buf.goto_emacs_byte_pos(match_end_pos);
         *match_data = Some(MatchData {
-            groups: gnu_single_group_vec(Some(MatchGroup::new(match_start, match_end))),
+            groups: gnu_single_group_vec(Some(matched)),
             searched_string: None,
             searched_buffer: Some(buf.id),
             buffer_positions_are_bytes: true,
@@ -1585,18 +1582,17 @@ pub fn search_backward(
         literal_rfind_emacs_bytes(text, &literal, multibyte, case_fold)
     });
 
-    if let Some((rel_start, rel_end)) = found {
-        let match_start = limit.get() + rel_start;
-        let match_end = limit.get() + rel_end;
-        let match_start_pos = EmacsBytePos::new(match_start);
+    if let Some(found) = found {
+        let matched = found.shift(limit.get());
+        let match_start_pos = EmacsBytePos::new(matched.start());
         buf.goto_emacs_byte_pos(match_start_pos);
         *match_data = Some(MatchData {
-            groups: gnu_single_group_vec(Some(MatchGroup::new(match_start, match_end))),
+            groups: gnu_single_group_vec(Some(matched)),
             searched_string: None,
             searched_buffer: Some(buf.id),
             buffer_positions_are_bytes: true,
         });
-        Ok(Some(match_start))
+        Ok(Some(matched.start()))
     } else if noerror {
         Ok(None)
     } else {
@@ -1663,11 +1659,8 @@ pub fn re_search_forward_with_posix(
                 multibyte,
                 case_fold,
             )
-            .map(|(rel_start, rel_end)| MatchData {
-                groups: gnu_single_group_vec(Some(MatchGroup::new(
-                    start.get() + rel_start,
-                    start.get() + rel_end,
-                ))),
+            .map(|matched| MatchData {
+                groups: gnu_single_group_vec(Some(matched.shift(start.get()))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,
@@ -1756,11 +1749,8 @@ pub fn re_search_backward_with_posix(
                 multibyte,
                 case_fold,
             )
-            .map(|(rel_start, rel_end)| MatchData {
-                groups: gnu_single_group_vec(Some(MatchGroup::new(
-                    region_start.get() + limit_rel + rel_start,
-                    region_start.get() + limit_rel + rel_end,
-                ))),
+            .map(|matched| MatchData {
+                groups: gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
                 searched_string: None,
                 searched_buffer: Some(buffer_id),
                 buffer_positions_are_bytes: true,
@@ -1944,7 +1934,7 @@ pub fn looking_at_with_posix(
             );
             let tail = &text[start_rel..];
             let matched = literal_find_emacs_bytes(tail, &literal_bytes, multibyte, case_fold)
-                .is_some_and(|(match_start, _)| match_start == 0);
+                .is_some_and(|matched| matched.start() == 0);
             if !matched {
                 return Ok(false);
             }
@@ -2035,7 +2025,7 @@ pub fn looking_at_string(
     match compile_search_pattern(pattern, case_fold)? {
         CompiledSearchPattern::Literal(literal) => {
             let matched = literal_find(string, &literal, case_fold)
-                .is_some_and(|(match_start, _)| match_start == 0);
+                .is_some_and(|matched| matched.start() == 0);
             if !matched {
                 return Ok(false);
             }
@@ -2265,11 +2255,11 @@ fn string_match_full_with_case_fold_source_compiled_syntax(
     match compiled {
         CompiledSearchPattern::Literal(literal) => {
             let byte_match = literal_find(&string[start..], &literal, _case_fold)
-                .map(|(match_start, match_end)| (start + match_start, start + match_end));
-            if let Some((byte_start, byte_end)) = byte_match {
+                .map(|matched| matched.shift(start));
+            if let Some(byte_match) = byte_match {
                 let char_md = string_char_match_data(
                     searched_string,
-                    single_group_match_data(byte_start, byte_end),
+                    single_group_match_data(byte_match.start(), byte_match.end()),
                 );
                 let result_pos = char_md.groups[0].unwrap().start();
                 *match_data = Some(char_md);
