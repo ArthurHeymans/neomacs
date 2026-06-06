@@ -12,6 +12,7 @@ use std::mem;
 use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
+use super::marker_data::{marker_data_anchor, positioned_marker_data, set_marker_data_anchor};
 use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, EmacsByteLen,
     EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
@@ -32,38 +33,9 @@ use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
-use crate::heap_types::LispMarker;
 use crate::tagged::gc::with_tagged_heap;
 use crate::window::WindowId;
 use rustc_hash::FxHashMap;
-
-fn marker_anchor(data: &LispMarker) -> TextPositionAnchor {
-    TextPositionAnchor::new(CharPos0::new(data.charpos), EmacsBytePos::new(data.bytepos))
-}
-
-fn set_marker_anchor(data: &mut LispMarker, anchor: TextPositionAnchor) {
-    data.bytepos = anchor.emacs_byte_pos_usize();
-    data.charpos = anchor.char_pos_usize();
-}
-
-fn positioned_marker_data(
-    buffer: BufferId,
-    marker_id: u64,
-    anchor: TextPositionAnchor,
-    insertion_type: InsertionType,
-) -> LispMarker {
-    let mut data = LispMarker {
-        buffer: Some(buffer),
-        insertion_type: insertion_type == InsertionType::After,
-        marker_id: Some(marker_id),
-        bytepos: 0,
-        charpos: 0,
-        last_position_valid: true,
-        next_marker: std::ptr::null_mut(),
-    };
-    set_marker_anchor(&mut data, anchor);
-    data
-}
 
 // ---------------------------------------------------------------------------
 // BUFFER_SLOT_COUNT — sized to mirror GNU's `MAX_PER_BUFFER_VARS = 50`.
@@ -3010,7 +2982,7 @@ impl Buffer {
             // Update existing marker position via the chain
             let ptr = self.mark_marker_ptr;
             unsafe {
-                set_marker_anchor(&mut (*ptr).data, position);
+                set_marker_data_anchor(&mut (*ptr).data, position);
             }
         }
     }
@@ -3026,7 +2998,7 @@ impl Buffer {
         if self.mark_marker_ptr.is_null() {
             None
         } else {
-            unsafe { Some(marker_anchor(&(*self.mark_marker_ptr).data).emacs_byte_pos()) }
+            unsafe { Some(marker_data_anchor(&(*self.mark_marker_ptr).data).emacs_byte_pos()) }
         }
     }
 
@@ -3035,7 +3007,7 @@ impl Buffer {
         if self.mark_marker_ptr.is_null() {
             None
         } else {
-            unsafe { Some(marker_anchor(&(*self.mark_marker_ptr).data).char_pos()) }
+            unsafe { Some(marker_data_anchor(&(*self.mark_marker_ptr).data).char_pos()) }
         }
     }
 

@@ -15,6 +15,9 @@ use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
 use super::gap_buffer::{GAP_BYTES_DFL, GAP_BYTES_MIN};
+use super::marker_data::{
+    apply_marker_data_delta, marker_data_anchor, marker_data_byte_pos, set_marker_data_anchor,
+};
 use super::position::{
     CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
     TextPositionBounds,
@@ -145,23 +148,6 @@ fn multibyte_chunk_contains_char_code(chunk: &[u8], code: u32, carry: &mut Vec<u
         pos += len;
     }
     false
-}
-
-fn marker_data_anchor(data: &crate::heap_types::LispMarker) -> TextPositionAnchor {
-    TextPositionAnchor::new(CharPos0::new(data.charpos), EmacsBytePos::new(data.bytepos))
-}
-
-fn marker_data_byte_pos(data: &crate::heap_types::LispMarker) -> EmacsBytePos {
-    EmacsBytePos::new(data.bytepos)
-}
-
-fn set_marker_data_anchor(data: &mut crate::heap_types::LispMarker, anchor: TextPositionAnchor) {
-    data.bytepos = anchor.emacs_byte_pos_usize();
-    data.charpos = anchor.char_pos_usize();
-}
-
-fn apply_marker_data_delta(data: &mut crate::heap_types::LispMarker, delta: TextExtentDelta) {
-    set_marker_data_anchor(data, delta.apply_to_anchor(marker_data_anchor(data)));
 }
 
 impl Clone for BufferTextStorage {

@@ -2,6 +2,7 @@ pub mod buffer;
 pub(crate) mod buffer_text;
 mod edit_transaction;
 pub(crate) mod gap_buffer;
+mod marker_data;
 pub mod overlay;
 pub mod position;
 pub mod shared;
