@@ -236,11 +236,23 @@ Progress:
 - Lisp marker raw storage is converted through one buffer-local
   `marker_data` helper module, so marker chain adjustment, mark marker storage,
   and marker-position reads share one typed `TextPositionAnchor` boundary.
+- Marker construction, registration, copying, save-excursion state, search
+  match-data reuse, register storage, syntax marker bounds, window history
+  point restoration, and pdump marker hashing now keep `LispCharPos1` or
+  `EmacsBytePos` until the final Lisp value or dump compatibility boundary.
 - Point, narrowing, and edit-state paired writes now route through typed
   anchor setters in `Buffer`. Raw `PT`/`PT_BYTE`, `BEGV`/`BEGV_BYTE`, and
   `ZV`/`ZV_BYTE` assignment is isolated to those setters, while full-buffer
   marker anchors are derived from current text metrics to avoid stale endpoint
   shortcuts after representation changes such as `set-buffer-multibyte`.
+- Buffer Lisp-position conversion APIs now require `LispCharPos1`, so callers
+  such as buffer builtins, search, coding, window commands, process insertion,
+  tree-sitter, XML/zlib helpers, display queries, and navigation helpers must
+  explicitly cross the Lisp-position boundary before converting to
+  `EmacsBytePos`.
+- Text-property and overlay byte conversion helpers now accept typed
+  `LispCharPos1` internally after GNU-style range validation, while preserving
+  original Lisp argument values in error payloads.
 - Remaining work is to push these types through the rest of `BufferManager`,
   display engine internals, and string-only helper boundaries so raw `usize` is
   confined to local algorithms after explicit conversion.
