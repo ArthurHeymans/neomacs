@@ -578,24 +578,16 @@ impl AccessibleEmacsByteRange {
         self.range.end()
     }
 
-    pub const fn start_usize(self) -> usize {
-        self.range.start_usize()
-    }
-
-    pub const fn end_usize(self) -> usize {
-        self.range.end_usize()
-    }
-
     pub fn contains_usize(self, pos: usize) -> bool {
-        self.start_usize() <= pos && pos < self.end_usize()
+        self.start().get() <= pos && pos < self.end().get()
     }
 
     pub fn contains_preceding_char_boundary_usize(self, pos: usize) -> bool {
-        self.start_usize() < pos && pos <= self.end_usize()
+        self.start().get() < pos && pos <= self.end().get()
     }
 
     pub fn clamp_usize(self, pos: usize) -> usize {
-        pos.clamp(self.start_usize(), self.end_usize())
+        pos.clamp(self.start().get(), self.end().get())
     }
 
     pub fn clamp(self, pos: EmacsBytePos) -> EmacsBytePos {
@@ -620,14 +612,6 @@ impl AccessibleCharRange {
         self.range.end()
     }
 
-    pub const fn start_usize(self) -> usize {
-        self.range.start_usize()
-    }
-
-    pub const fn end_usize(self) -> usize {
-        self.range.end_usize()
-    }
-
     pub fn start_lisp(self) -> LispCharPos1 {
         self.range.start_lisp()
     }
@@ -645,15 +629,15 @@ impl AccessibleCharRange {
     }
 
     pub fn contains_usize(self, pos: usize) -> bool {
-        self.start_usize() <= pos && pos < self.end_usize()
+        self.start().get() <= pos && pos < self.end().get()
     }
 
     pub fn contains_boundary_usize(self, pos: usize) -> bool {
-        self.start_usize() <= pos && pos <= self.end_usize()
+        self.start().get() <= pos && pos <= self.end().get()
     }
 
     pub fn clamp_usize(self, pos: usize) -> usize {
-        pos.clamp(self.start_usize(), self.end_usize())
+        pos.clamp(self.start().get(), self.end().get())
     }
 }
 

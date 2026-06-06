@@ -368,8 +368,8 @@ impl OverlayList {
         Self::insert_index_entry(&mut self.by_end, range.end(), overlay);
         self.itree.remove_at(old_range.start(), overlay);
         let _ = overlay.with_overlay_data_mut(|data| {
-            data.start = range.start_usize();
-            data.end = range.end_usize();
+            data.start = range.start().get();
+            data.end = range.end().get();
         });
         self.itree.insert(range, overlay);
         // GNU Emacs drops empty overlays created by move-overlay when

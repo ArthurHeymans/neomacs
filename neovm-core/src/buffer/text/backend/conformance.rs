@@ -138,16 +138,16 @@ fn assert_contiguous_contract(
         contiguous.is_some(),
         has_contiguous,
         "{kind:?} contiguous predicate/result diverged for range {}..{}",
-        range.start_usize(),
-        range.end_usize()
+        range.start().get(),
+        range.end().get()
     );
     if let Some(slice) = contiguous {
         assert_eq!(
             slice,
             copied_range(backend, range),
             "{kind:?} contiguous slice bytes diverged for range {}..{}",
-            range.start_usize(),
-            range.end_usize()
+            range.start().get(),
+            range.end().get()
         );
     }
 }

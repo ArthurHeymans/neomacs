@@ -255,11 +255,6 @@ impl TextReplacement {
         self.old_range.end_anchor()
     }
 
-    #[cfg(test)]
-    pub const fn byte_start_usize(self) -> usize {
-        self.old_range.byte_start_usize()
-    }
-
     pub const fn old_byte_len(self) -> EmacsByteLen {
         self.old_range.byte_len()
     }
@@ -461,20 +456,20 @@ impl TextTransposition {
     pub const fn transpose_byte_pos(self, pos: EmacsBytePos) -> EmacsBytePos {
         EmacsBytePos::new(transpose_half_open_position(
             pos.get(),
-            self.first.byte_start_usize(),
-            self.first.byte_end_usize(),
-            self.second.byte_start_usize(),
-            self.second.byte_end_usize(),
+            self.first.byte_start().get(),
+            self.first.byte_end().get(),
+            self.second.byte_start().get(),
+            self.second.byte_end().get(),
         ))
     }
 
     pub const fn transpose_char_pos(self, pos: CharPos0) -> CharPos0 {
         CharPos0::new(transpose_half_open_position(
             pos.get(),
-            self.first.char_start_usize(),
-            self.first.char_end_usize(),
-            self.second.char_start_usize(),
-            self.second.char_end_usize(),
+            self.first.char_start().get(),
+            self.first.char_end().get(),
+            self.second.char_start().get(),
+            self.second.char_end().get(),
         ))
     }
 
@@ -566,22 +561,6 @@ impl TextEditRange {
 
     pub const fn char_range(self) -> CharRange {
         CharRange::new(self.char_start, self.char_end)
-    }
-
-    pub const fn byte_start_usize(self) -> usize {
-        self.byte_range.start_usize()
-    }
-
-    pub const fn byte_end_usize(self) -> usize {
-        self.byte_range.end_usize()
-    }
-
-    pub const fn char_start_usize(self) -> usize {
-        self.char_start.get()
-    }
-
-    pub const fn char_end_usize(self) -> usize {
-        self.char_end.get()
     }
 
     pub const fn byte_len(self) -> EmacsByteLen {
@@ -793,7 +772,7 @@ mod tests {
             TextExtent::from_usize(3, 5),
         );
 
-        assert_eq!(replacement.byte_start_usize(), 20);
+        assert_eq!(replacement.byte_start().get(), 20);
         assert_eq!(replacement.old_byte_len().get(), 16);
         assert_eq!(replacement.old_char_len().get(), 8);
         assert_eq!(replacement.new_byte_len().get(), 5);

@@ -229,8 +229,8 @@ impl RopeTextBackend {
     }
 
     pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(start <= end, "text_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -247,8 +247,8 @@ impl RopeTextBackend {
         range: EmacsByteRange,
         out: &mut Vec<u8>,
     ) {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "copy_emacs_bytes_to: start ({start}) > end ({end})"
@@ -272,8 +272,8 @@ impl RopeTextBackend {
         range: EmacsByteRange,
         mut f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "for_each_emacs_byte_chunk: start ({start}) > end ({end})"
@@ -287,8 +287,8 @@ impl RopeTextBackend {
     }
 
     pub(in crate::buffer) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "has_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -306,8 +306,8 @@ impl RopeTextBackend {
         range: EmacsByteRange,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "with_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -359,8 +359,8 @@ impl RopeTextBackend {
     }
 
     pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
-        let start = range.byte_start_usize();
-        let end = range.byte_end_usize();
+        let start = range.byte_start().get();
+        let end = range.byte_end().get();
         let nchars = range.char_len().get();
         assert!(
             start <= end,
@@ -393,8 +393,8 @@ impl RopeTextBackend {
         bytes: &[u8],
     ) {
         let old_range = replacement.old_range();
-        let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
+        let start = old_range.byte_start().get();
+        let end = old_range.byte_end().get();
         assert!(
             start <= end,
             "replace_range_both: start ({start}) > end ({end})"
@@ -434,8 +434,8 @@ impl RopeTextBackend {
         bytes: &[u8],
     ) {
         let old_range = replacement.old_range();
-        let start = old_range.byte_start_usize();
-        let end = old_range.byte_end_usize();
+        let start = old_range.byte_start().get();
+        let end = old_range.byte_end().get();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"

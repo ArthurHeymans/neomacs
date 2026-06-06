@@ -286,8 +286,8 @@ impl GapBuffer {
     // -----------------------------------------------------------------------
 
     pub(crate) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(start <= end, "text_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -303,8 +303,8 @@ impl GapBuffer {
     }
 
     pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "copy_emacs_bytes_to: start ({start}) > end ({end})"
@@ -340,8 +340,8 @@ impl GapBuffer {
         range: EmacsByteRange,
         mut f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "for_each_emacs_byte_chunk: start ({start}) > end ({end})"
@@ -368,8 +368,8 @@ impl GapBuffer {
     }
 
     pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "has_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -387,8 +387,8 @@ impl GapBuffer {
         range: EmacsByteRange,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(
             start <= end,
             "with_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -492,8 +492,8 @@ impl GapBuffer {
     }
 
     pub(crate) fn delete_emacs_byte_range(&mut self, range: EmacsByteRange) {
-        let start = range.start_usize();
-        let end = range.end_usize();
+        let start = range.start().get();
+        let end = range.end().get();
         assert!(start <= end, "delete_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -529,8 +529,8 @@ impl GapBuffer {
     }
 
     pub(crate) fn delete_measured_range(&mut self, range: TextEditRange) {
-        let start = range.byte_start_usize();
-        let end = range.byte_end_usize();
+        let start = range.byte_start().get();
+        let end = range.byte_end().get();
         let nchars = range.char_len().get();
         assert!(
             start <= end,
@@ -613,8 +613,8 @@ impl GapBuffer {
         replacement: TextReplacement,
         bytes: &[u8],
     ) {
-        let start = replacement.old_range().byte_start_usize();
-        let end = replacement.old_range().byte_end_usize();
+        let start = replacement.old_range().byte_start().get();
+        let end = replacement.old_range().byte_end().get();
         assert!(
             start <= end,
             "replace_same_len_range: start ({start}) > end ({end})"

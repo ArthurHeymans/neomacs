@@ -1632,8 +1632,8 @@ fn builtin_coding_region(
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
         .buffer_substring_lisp_string_range(byte_range);
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
+    let start_byte = byte_range.start().get();
+    let end_byte = byte_range.end().get();
     let result = transformed_region_string(source, &coding, encode)?;
     let result_text = result
         .as_lisp_string()
