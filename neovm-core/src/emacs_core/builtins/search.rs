@@ -26,8 +26,8 @@ fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
-fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> usize {
-    buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get()
+fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> CharPos0 {
+    buf.emacs_byte_pos_to_char_pos_clamped(byte_pos)
 }
 
 pub(crate) fn builtin_search_forward(
@@ -1903,16 +1903,17 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         let cased_text = buf.buffer_substring_lisp_string_range(replacement_byte_range);
         let mut undo_list = buf.get_undo_list();
         if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
+            let end_char = start_char.add_len(CharLen::new(cased_text.schars()));
             crate::buffer::undo::undo_list_record_delete(
                 &mut undo_list,
-                CharPos0::new(start_char),
+                start_char,
                 cased_text.clone(),
-                CharPos0::new(start_char + cased_text.schars()),
+                end_char,
                 None,
             );
             crate::buffer::undo::undo_list_record_insert(
                 &mut undo_list,
-                CharPos0::new(start_char),
+                start_char,
                 CharLen::new(cased_text.schars()),
                 None,
             );
