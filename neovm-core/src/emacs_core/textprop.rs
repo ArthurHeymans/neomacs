@@ -58,12 +58,12 @@ pub(crate) fn init_textprop_vars(
 // ---------------------------------------------------------------------------
 
 #[inline]
-fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: usize) -> EmacsBytePos {
-    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: CharPos0) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(char_pos)
 }
 
 #[inline]
-fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
+fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: CharPos0) -> usize {
     buffer_char_to_emacs_byte_pos(buf, char_pos).get()
 }
 
@@ -320,7 +320,7 @@ fn lookup_buffer_text_property_at_char_pos(
     obarray: &Obarray,
     buffers: &BufferManager,
     buf: &crate::buffer::buffer::Buffer,
-    char_pos: usize,
+    char_pos: CharPos0,
     prop: Value,
 ) -> Value {
     lookup_char_property_from_direct(
@@ -364,7 +364,7 @@ pub(crate) fn lookup_buffer_text_property_at_emacs_byte_pos(
         obarray,
         buffers,
         buf,
-        buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get(),
+        buf.emacs_byte_pos_to_char_pos_clamped(byte_pos),
         prop,
     )
 }
@@ -394,7 +394,10 @@ fn lookup_overlay_property(
 /// `args-out-of-range` for invalid positions.
 fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
     debug_assert!(pos >= 1);
-    EmacsBytePos::new(buffer_char_to_byte_pos(buf, (pos - 1) as usize))
+    EmacsBytePos::new(buffer_char_to_byte_pos(
+        buf,
+        CharPos0::new((pos - 1) as usize),
+    ))
 }
 
 fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
@@ -2053,8 +2056,8 @@ fn emacs_byte_pos_of_preceding_char(buf: &Buffer, byte_pos: EmacsBytePos) -> Ema
     if byte_pos <= EmacsBytePos::ZERO {
         return EmacsBytePos::ZERO;
     }
-    let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get();
-    let prev_char = char_pos.saturating_sub(1);
+    let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
+    let prev_char = char_pos.saturating_sub_len(CharLen::new(1));
     EmacsBytePos::new(buffer_char_to_byte_pos(buf, prev_char))
 }
 
