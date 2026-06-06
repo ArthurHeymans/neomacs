@@ -1679,14 +1679,16 @@ pub(crate) fn builtin_match_data_translate(
 
 fn update_match_data_after_buffer_replace(
     match_data: &mut Option<super::regex::MatchData>,
-    oldstart: usize,
-    oldend: usize,
-    newend: usize,
+    old_byte_range: EmacsByteRange,
+    new_byte_range: EmacsByteRange,
 ) {
     let Some(md) = match_data else {
         return;
     };
 
+    let oldstart = old_byte_range.start_usize();
+    let oldend = old_byte_range.end_usize();
+    let newend = new_byte_range.end_usize();
     let change = newend as i64 - oldend as i64;
     for group in md.groups.iter_mut() {
         let Some(match_group) = group.as_mut() else {
@@ -1887,17 +1889,14 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         old_range,
         &replacement,
     )?;
-    let oldstart = old_byte_range.start_usize();
-    let oldend = old_byte_range.end_usize();
     let replacement_byte_range = EmacsByteRange::new(
         old_byte_range.start(),
         old_byte_range
             .start()
             .add_len(crate::buffer::EmacsByteLen::new(replacement_len)),
     );
-    let newend = replacement_byte_range.end_usize();
     if case_action != crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
-        && oldstart < newend
+        && old_byte_range.start() < replacement_byte_range.end()
         && let Some(buf) = buffers.get_mut(current_id)
     {
         let start_char = buffer_byte_to_char_pos(buf, replacement_byte_range.start());
@@ -1926,7 +1925,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     // this to continue after an expanded entity rather than re-reading the
     // replacement from its beginning.
     let _ = buffers.goto_buffer_emacs_byte_pos(current_id, replacement_byte_range.end());
-    update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
+    update_match_data_after_buffer_replace(match_data, old_byte_range, replacement_byte_range);
     Ok(Value::NIL)
 }
 
