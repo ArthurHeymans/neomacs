@@ -6,6 +6,7 @@
 //! handoff.
 
 use super::display_status_line::StatusLineOutputProgress;
+use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorPos, WindowCursorSnapshot,
@@ -41,8 +42,8 @@ pub(crate) struct WindowOutputEmitter {
     points: Vec<DisplayPointSnapshot>,
     rows: Vec<DisplayRowSnapshot>,
     row_metrics: Vec<RowMetricsSnapshot>,
-    current_row_first_display_pos: Option<usize>,
-    current_row_last_display_pos: Option<usize>,
+    current_row_first_display_pos: Option<LispCharPos1>,
+    current_row_last_display_pos: Option<LispCharPos1>,
     current_row_progress: Option<CurrentRowProgress>,
 }
 
@@ -87,11 +88,20 @@ impl WindowOutputEmitter {
         self.points.iter().find(|point| point.buffer_pos == pos)
     }
 
+    pub(crate) fn point_for_lisp_buffer_pos(
+        &self,
+        pos: LispCharPos1,
+    ) -> Option<&DisplayPointSnapshot> {
+        self.point_for_buffer_pos(pos.as_i64() as usize)
+    }
+
     pub(crate) fn row_metrics(&self) -> &[RowMetricsSnapshot] {
         &self.row_metrics
     }
 
-    pub(crate) fn current_row_display_positions(&self) -> (Option<usize>, Option<usize>) {
+    pub(crate) fn current_row_display_positions(
+        &self,
+    ) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (
             self.current_row_first_display_pos,
             self.current_row_last_display_pos,
@@ -100,8 +110,8 @@ impl WindowOutputEmitter {
 
     pub(crate) fn restore_current_row_display_positions(
         &mut self,
-        first: Option<usize>,
-        last: Option<usize>,
+        first: Option<LispCharPos1>,
+        last: Option<LispCharPos1>,
     ) {
         self.current_row_first_display_pos = first;
         self.current_row_last_display_pos = last;
@@ -148,7 +158,7 @@ impl WindowOutputEmitter {
         Some(f(&mut update))
     }
 
-    pub(crate) fn note_display_buffer_pos(&mut self, buffer_pos: usize) {
+    pub(crate) fn note_display_buffer_pos(&mut self, buffer_pos: LispCharPos1) {
         if self.current_row_first_display_pos.is_none() {
             self.current_row_first_display_pos = Some(buffer_pos);
         }
@@ -169,8 +179,9 @@ impl WindowOutputEmitter {
         if buffer_pos < 1 {
             return;
         }
-        let buffer_pos = buffer_pos as usize;
+        let buffer_pos = LispCharPos1::new(buffer_pos);
         self.note_display_buffer_pos(buffer_pos);
+        let buffer_pos = buffer_pos.as_i64() as usize;
         self.points.push(DisplayPointSnapshot {
             buffer_pos,
             x: (glyph_x - self.text_x).round() as i64,
@@ -337,8 +348,14 @@ impl WindowOutputEmitter {
             start_col: row_progress.start_col,
             end_x: row_progress.x,
             end_col: row_progress.col,
-            start_buffer_pos: self.current_row_first_display_pos.take(),
-            end_buffer_pos: self.current_row_last_display_pos.take(),
+            start_buffer_pos: self
+                .current_row_first_display_pos
+                .take()
+                .map(|pos| pos.as_i64() as usize),
+            end_buffer_pos: self
+                .current_row_last_display_pos
+                .take()
+                .map(|pos| pos.as_i64() as usize),
         });
         self.row_metrics.push(RowMetricsSnapshot {
             row: row_progress.row.max(0) as usize,

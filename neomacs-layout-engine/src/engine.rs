@@ -23,7 +23,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
@@ -3455,8 +3455,8 @@ impl LayoutEngine {
         let mut _wrap_break_x: f32 = 0.0;
         let mut _wrap_break_col = 0usize;
         let mut wrap_break_display_point_count = 0usize;
-        let mut wrap_break_row_first_display_pos: Option<usize> = None;
-        let mut wrap_break_row_last_display_pos: Option<usize> = None;
+        let mut wrap_break_row_first_display_pos: Option<LispCharPos1> = None;
+        let mut wrap_break_row_last_display_pos: Option<LispCharPos1> = None;
         let mut wrap_has_break = false;
         let mut word_wrap_may_wrap = false;
 
@@ -3946,7 +3946,7 @@ impl LayoutEngine {
                     }
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
-                    output_emitter.note_display_buffer_pos(charpos as usize);
+                    output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     // Record hit-test row (hscroll newline)
                     hit_rows.push(HitRow {
                         y_start: y,
@@ -4950,7 +4950,7 @@ impl LayoutEngine {
                 // newline. Without this, trailing empty rows have
                 // end_buffer_pos=None and window-end falls short of
                 // point-max, causing %p to show "Top" instead of "All".
-                output_emitter.note_display_buffer_pos(charpos as usize);
+                output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
                 hit_rows.push(HitRow {
                     y_start: y,
@@ -6295,8 +6295,8 @@ impl LayoutEngine {
             let Some(style) = cursor_style_for_visual(spec) else {
                 continue;
             };
-            let Some(point) =
-                output_emitter.point_for_buffer_pos(spec.charpos.saturating_add(1) as usize)
+            let Some(point) = output_emitter
+                .point_for_lisp_buffer_pos(LispCharPos1::new(spec.charpos.saturating_add(1)))
             else {
                 continue;
             };
