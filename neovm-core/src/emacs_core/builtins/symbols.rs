@@ -1374,20 +1374,24 @@ pub(crate) fn global_obarray_symbols_in_bucket_order(
     let len = obarray_len(lisp_obarray)
         .filter(|len| *len > 1)
         .unwrap_or(GNU_INITIAL_OBARRAY_SIZE);
-    let mut buckets = vec![Vec::new(); len];
-    for id in obarray.global_member_ids() {
-        let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
-        let idx = obarray_hash_lisp_string(name, len);
-        buckets[idx].push(id);
-    }
-
-    let mut symbols = Vec::new();
-    for bucket in buckets {
-        for id in bucket.into_iter().rev() {
-            symbols.push(Value::from_sym_id(id));
-        }
-    }
-    symbols
+    // Avoid allocating `len` (~16K) bucket Vecs on every call -- that showed up
+    // as ~28% of all-completions in `_int_malloc`.  Compute each symbol's
+    // (bucket, insertion-order) key once and sort, reproducing the exact GNU
+    // iteration order: bucket index ascending, then reverse insertion order
+    // within a bucket (what `bucket.into_iter().rev()` produced).
+    let mut entries: Vec<_> = obarray
+        .global_member_ids()
+        .enumerate()
+        .map(|(order, id)| {
+            let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
+            (obarray_hash_lisp_string(name, len), order, id)
+        })
+        .collect();
+    entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)));
+    entries
+        .into_iter()
+        .map(|(_, _, id)| Value::from_sym_id(id))
+        .collect()
 }
 
 /// Search a bucket chain (cons list) for a symbol with the given name.
