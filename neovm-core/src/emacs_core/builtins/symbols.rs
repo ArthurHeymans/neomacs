@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -2294,7 +2294,7 @@ pub(crate) fn builtin_marker_last_position(args: Vec<Value>) -> EvalResult {
             // tracks this with `last_position_valid`, set the first time
             // the marker is positioned and preserved across detach.
             let last = if marker.last_position_valid {
-                marker.charpos as i64 + 1
+                CharPos0::new(marker.charpos).to_lisp().as_i64()
             } else {
                 0
             };

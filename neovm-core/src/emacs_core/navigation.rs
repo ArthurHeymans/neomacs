@@ -708,9 +708,11 @@ pub(crate) fn builtin_line_number_at_pos(
                             eval.buffers
                                 .marker_emacs_byte_pos(current_buffer_id, marker_id)
                         })
-                        .unwrap_or_else(|| char_pos_to_byte(buf, marker.charpos as i64 + 1))
+                        .unwrap_or_else(|| {
+                            char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp().as_i64())
+                        })
                 } else {
-                    char_pos_to_byte(buf, marker.charpos as i64 + 1)
+                    char_pos_to_byte(buf, CharPos0::new(marker.charpos).to_lisp().as_i64())
                 }
             }
             ValueKind::Fixnum(pos) => {

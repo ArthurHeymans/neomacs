@@ -15,7 +15,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, InsertionType, LispCharPos1};
+use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType, LispCharPos1};
 
 // ---------------------------------------------------------------------------
 // Marker struct (for documentation / internal helpers)
@@ -150,7 +150,7 @@ pub(crate) fn marker_logical_fields(v: &Value) -> Option<(Option<BufferId>, Opti
     // `buffer == None && charpos == 0`, which reports `None` and matches
     // GNU's "points nowhere" semantics.
     let position = if data.buffer.is_some() || data.last_position_valid {
-        Some(data.charpos as i64 + 1)
+        Some(marker_charpos_to_lisp_i64(data.charpos))
     } else {
         None
     };
@@ -203,6 +203,10 @@ fn set_marker_id(v: &Value, mid: u64) {
     }
 }
 
+fn marker_charpos_to_lisp_i64(charpos: usize) -> i64 {
+    CharPos0::new(charpos).to_lisp().as_i64()
+}
+
 pub(crate) fn detach_marker_in_buffers(buffers: &mut BufferManager, marker: &Value) {
     if !is_marker(marker) {
         return;
@@ -241,7 +245,7 @@ fn marker_position_value(v: &Value) -> Value {
     // charpos for detached/dead-buffer markers is exposed by
     // `marker-last-position`, not by `marker-position`.
     if data.buffer.is_some() {
-        Value::fixnum(data.charpos as i64 + 1)
+        Value::fixnum(marker_charpos_to_lisp_i64(data.charpos))
     } else {
         Value::NIL
     }
@@ -275,7 +279,7 @@ pub(crate) fn marker_position_as_int_with_buffers(
             && let Some(buf) = buffers.get(buf_id)
         {
             return match buf.mark_char_pos() {
-                Some(char_pos) => Ok(char_pos.get() as i64 + 1),
+                Some(char_pos) => Ok(char_pos.to_lisp().as_i64()),
                 None => Err(signal(
                     "error",
                     vec![Value::string("Marker does not point anywhere")],
@@ -289,7 +293,7 @@ pub(crate) fn marker_position_as_int_with_buffers(
     // still retain a charpos for `marker-last-position`, but they do not
     // point anywhere for `marker-position`.
     if data.buffer.is_some() {
-        Ok(data.charpos as i64 + 1)
+        Ok(marker_charpos_to_lisp_i64(data.charpos))
     } else {
         Err(signal(
             "error",
@@ -475,7 +479,7 @@ pub(crate) fn builtin_copy_marker_in_buffers(
             let position = if is_mark_marker(src) {
                 buffer_id
                     .and_then(|buf_id| buffers.get(buf_id))
-                    .and_then(|buf| buf.mark_char_pos().map(|m| m.get() as i64 + 1))
+                    .and_then(|buf| buf.mark_char_pos().map(|m| m.to_lisp().as_i64()))
             } else {
                 match marker_position_value(src).kind() {
                     ValueKind::Fixnum(n) => Some(n),
