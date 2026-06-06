@@ -1022,12 +1022,12 @@ impl BufferText {
     ) -> Option<EmacsBytePos> {
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
-            .start_usize();
+            .start();
         let next = {
             self.storage
                 .borrow()
                 .text_props
-                .next_property_change_after_char_pos(CharPos0::new(char_pos))
+                .next_property_change_after_char_pos(char_pos)
         };
         next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
@@ -1038,12 +1038,12 @@ impl BufferText {
     ) -> Option<EmacsBytePos> {
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
-            .start_usize();
+            .start();
         let prev = {
             self.storage
                 .borrow()
                 .text_props
-                .previous_property_change_before_char_pos(CharPos0::new(char_pos))
+                .previous_property_change_before_char_pos(char_pos)
         };
         prev.map(|prev| self.char_pos_to_emacs_byte_pos(prev))
     }
@@ -1054,12 +1054,12 @@ impl BufferText {
     ) -> Option<EmacsBytePos> {
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
-            .start_usize();
+            .start();
         let next = {
             self.storage
                 .borrow()
                 .text_props
-                .next_interval_boundary_after_char_pos(CharPos0::new(char_pos))
+                .next_interval_boundary_after_char_pos(char_pos)
         };
         next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
@@ -1085,12 +1085,12 @@ impl BufferText {
     ) -> Option<EmacsBytePos> {
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
-            .start_usize();
+            .start();
         let prev = {
             self.storage
                 .borrow()
                 .text_props
-                .previous_interval_boundary_before_char_pos(CharPos0::new(char_pos))
+                .previous_interval_boundary_before_char_pos(char_pos)
         };
         prev.map(|prev| self.char_pos_to_emacs_byte_pos(prev))
     }
@@ -1259,15 +1259,15 @@ impl BufferText {
         &self,
         range: TextEditRange,
     ) -> Vec<(crate::emacs_core::value::Value, i64)> {
-        let from1 = range.char_start_usize() as i64 + 1;
-        let to1 = range.char_end_usize() as i64 + 1;
+        let from1 = range.char_start().to_lisp().as_i64();
+        let to1 = range.char_end().to_lisp().as_i64();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         let mut adjustments = Vec::new();
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                let charpos1 = data.charpos as i64 + 1;
+                let charpos1 = marker_data_anchor(data).char_pos().to_lisp().as_i64();
                 if from1 <= charpos1 && charpos1 <= to1 {
                     let target = if data.insertion_type { to1 } else { from1 };
                     let adjustment = target - charpos1;
