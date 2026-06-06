@@ -96,8 +96,7 @@ fn marker_chain_lookup_for_test(
 }
 
 /// Test helper: allocate a scratch `MarkerObj` via the tagged heap and
-/// register it on `buf` at `pos`. Keeps the old `buf.register_marker(id, pos, ty)`
-/// call shape used by the pre-chain tests.
+/// register it on `buf` at an Emacs byte position.
 fn register_marker_for_test(
     buf: &mut Buffer,
     marker_id: u64,
@@ -117,7 +116,12 @@ fn register_marker_for_test(
         .as_veclike_ptr()
         .expect("freshly allocated marker should have a veclike ptr")
         as *mut crate::tagged::header::MarkerObj;
-    buf.register_marker(marker_ptr, marker_id, pos, insertion_type);
+    buf.register_marker_at_emacs_byte_pos(
+        marker_ptr,
+        marker_id,
+        EmacsBytePos::new(pos),
+        insertion_type,
+    );
     marker_value
 }
 

@@ -2780,18 +2780,6 @@ impl Buffer {
         self.goto_emacs_byte_pos(EmacsBytePos::new(self.pt_byte));
     }
 
-    #[cfg(test)]
-    pub fn register_marker(
-        &mut self,
-        marker_ptr: *mut crate::tagged::header::MarkerObj,
-        marker_id: u64,
-        pos: usize,
-        insertion_type: InsertionType,
-    ) {
-        let position = self.marker_anchor_for_emacs_byte_pos(EmacsBytePos::new(pos));
-        self.register_marker_at_anchor(marker_ptr, marker_id, position, insertion_type);
-    }
-
     pub fn register_marker_at_emacs_byte_pos(
         &mut self,
         marker_ptr: *mut crate::tagged::header::MarkerObj,
