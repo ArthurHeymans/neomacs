@@ -4211,7 +4211,7 @@ pub(crate) fn builtin_position_bytes(
         return Ok(Value::NIL);
     }
 
-    let byte_pos = char_pos_to_buffer_emacs_byte_pos(buf, CharPos0::new((pos - 1) as usize));
+    let byte_pos = char_pos_to_buffer_emacs_byte_pos(buf, LispCharPos1::new(pos).to_char_pos());
     Ok(Value::fixnum(byte_pos.get() as i64 + 1))
 }
 
