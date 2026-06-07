@@ -3330,12 +3330,13 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let buf = buffers
-        .get_mut(current_id)
+        .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     let min = buf.accessible_emacs_byte_region().start();
+    let mut final_pos = buf.point_emacs_byte_pos();
     loop {
-        let pt = buf.point_emacs_byte_pos();
+        let pt = final_pos;
         if pt <= min {
             break;
         }
@@ -3355,8 +3356,10 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
         if !is_prefix {
             break;
         }
-        buf.goto_emacs_byte_pos(unit.start);
+        final_pos = unit.start;
     }
+
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
 
     Ok(Value::NIL)
 }
@@ -4461,10 +4464,11 @@ pub(crate) fn builtin_parse_partial_sexp(
         commentstop,
         honor_properties,
     );
-    let stop_byte = lisp_pos_to_byte(buf, LispCharPos1::new(stop_pos)).get();
-    if let Some(buf_mut) = eval.buffers.current_buffer_mut() {
-        buf_mut.goto_emacs_byte_pos(EmacsBytePos::new(stop_byte));
-    }
+    let current_id = buf.id;
+    let stop_byte = lisp_pos_to_byte(buf, LispCharPos1::new(stop_pos));
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(current_id, stop_byte);
     Ok(state)
 }
 

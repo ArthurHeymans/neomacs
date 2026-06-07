@@ -752,6 +752,9 @@ Completed so far:
 - Split `forward-comment` scanning from buffer point mutation by introducing a
   local syntax scanner cursor; the scanner records its temporary point in the
   cursor and the builtin applies the final point through `BufferManager`.
+- Routed `backward-prefix-chars` and `parse-partial-sexp` final point movement
+  through `BufferManager`, matching GNU's primitive-boundary point updates while
+  keeping syntax scanners from mutating concrete buffer storage directly.
 
 Next work:
 
