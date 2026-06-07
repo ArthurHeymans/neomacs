@@ -514,9 +514,14 @@ fn replace_current_buffer_region_in_buffers(
         replacement,
     )?;
     if restore_point {
-        if let Some(buf) = eval.buffers.current_buffer_mut() {
-            let accessible_end = buf.accessible_emacs_byte_region().end();
-            buf.goto_emacs_byte_pos(saved_pt.min(accessible_end));
+        let restore_pos = eval
+            .buffers
+            .get(buffer_id)
+            .map(|buf| saved_pt.min(buf.accessible_emacs_byte_region().end()));
+        if let Some(restore_pos) = restore_pos {
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(buffer_id, restore_pos);
         }
     }
     Ok(Value::NIL)

@@ -4375,8 +4375,11 @@ pub(crate) fn builtin_set_window_buffer(
                     last_selected_window != wid
                         && window_displays_buffer(frames, last_selected_window, old_buffer_id)
                 });
-            if !preserve_old_buffer_point && let Some(buffer) = buffers.get_mut(old_buffer_id) {
-                buffer.goto_emacs_byte_pos(EmacsBytePos::new(old_point.saturating_sub(1)));
+            if !preserve_old_buffer_point {
+                let _ = buffers.goto_buffer_emacs_byte_pos(
+                    old_buffer_id,
+                    EmacsBytePos::new(old_point.saturating_sub(1)),
+                );
             }
             if old_buffer_id != buf_id
                 && let Some(buffer) = buffers.get_mut(old_buffer_id)

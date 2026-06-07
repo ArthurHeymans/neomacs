@@ -727,6 +727,10 @@ Completed so far:
 - Moved process-output, erase-buffer, and auto-coding probe point resets onto
   `BufferManager::goto_buffer_emacs_byte_pos`, keeping direct `Buffer` borrows
   out of those production point-movement boundaries after manager edits.
+- Moved isolated case-conversion and window-buffer-switch point restoration
+  onto `BufferManager::goto_buffer_emacs_byte_pos`; syntax scanner point churn
+  remains reserved for a dedicated scanner-level refactor because GNU's
+  `syntax.c` also advances point inside scanner algorithms.
 
 Next work:
 
