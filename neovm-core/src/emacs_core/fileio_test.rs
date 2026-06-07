@@ -4441,6 +4441,24 @@ fn test_write_region_bounds_and_order_semantics() {
     .expect("write-region should accept reversed in-range bounds");
     assert_eq!(read_file_contents(&out_str).unwrap(), "ab");
 
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let marker_start = crate::emacs_core::marker::make_marker_value(
+        Some(buffer_id),
+        Some(crate::buffer::LispCharPos1::new(2)),
+        false,
+    );
+    let marker_end = crate::emacs_core::marker::make_marker_value(
+        Some(buffer_id),
+        Some(crate::buffer::LispCharPos1::new(4)),
+        false,
+    );
+    builtin_write_region(
+        &mut eval,
+        vec![marker_start, marker_end, Value::string(&out_str)],
+    )
+    .expect("write-region should accept marker bounds");
+    assert_eq!(read_file_contents(&out_str).unwrap(), "bc");
+
     for (start, end) in [(-1, 2), (1, -1), (1, 9)] {
         let err = builtin_write_region(
             &mut eval,

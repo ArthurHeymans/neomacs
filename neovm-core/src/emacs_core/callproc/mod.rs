@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1};
+use crate::buffer::{BufferManager, EmacsByteRange};
 use crate::heap_types::LispString;
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
@@ -697,17 +697,13 @@ fn builtin_call_process_region_impl(
             )
         }
         _ => {
-            let start = super::process::expect_int_or_marker(&args[0])?;
-            let end = super::process::expect_int_or_marker(&args[1])?;
+            let region_args =
+                super::position::LispRegionArgs::from_values(&*buffers, args[0], args[1])?;
             let (text, region) = {
                 let buf = buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let region = super::process::checked_region_bytes(
-                    buf,
-                    LispCharPos1::new(start),
-                    LispCharPos1::new(end),
-                )?;
+                let region = super::process::checked_region_bytes(buf, region_args)?;
                 (
                     encode_call_process_region_buffer_text(
                         buf.storage_text_emacs_byte_range(region),

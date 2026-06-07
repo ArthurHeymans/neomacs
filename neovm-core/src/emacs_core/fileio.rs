@@ -4677,34 +4677,9 @@ fn write_region_content_in_state(
         return Ok(buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range()));
     }
 
-    let end = end.unwrap_or(&Value::NIL);
-    let start = LispCharPos1::new(expect_int(start)?);
-    let end = LispCharPos1::new(expect_int(end)?);
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start.as_i64() < point_min
-        || start.as_i64() > point_max
-        || end.as_i64() < point_min
-        || end.as_i64() > point_max
-    {
-        return Err(signal(
-            "args-out-of-range",
-            vec![
-                Value::make_buffer(buf.id),
-                Value::fixnum(start.as_i64()),
-                Value::fixnum(end.as_i64()),
-            ],
-        ));
-    }
-    let (lisp_start, lisp_end) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_start),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_end),
-    );
+    let end = *end.unwrap_or(&Value::NIL);
+    let byte_range = super::position::LispRegionArgs::from_values(buffers, *start, end)?
+        .accessible_byte_range(buf)?;
     Ok(buf.buffer_substring_lisp_string_range(byte_range))
 }
 

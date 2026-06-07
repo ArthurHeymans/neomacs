@@ -2405,33 +2405,9 @@ pub(crate) fn expect_int_or_marker(value: &Value) -> Result<i64, Flow> {
 
 pub(crate) fn checked_region_bytes(
     buf: &crate::buffer::Buffer,
-    start: LispCharPos1,
-    end: LispCharPos1,
+    region: super::position::LispRegionArgs,
 ) -> Result<EmacsByteRange, Flow> {
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start.as_i64() < point_min
-        || start.as_i64() > point_max
-        || end.as_i64() < point_min
-        || end.as_i64() > point_max
-    {
-        return Err(signal(
-            "args-out-of-range",
-            vec![
-                Value::make_buffer(buf.id),
-                Value::fixnum(start.as_i64()),
-                Value::fixnum(end.as_i64()),
-            ],
-        ));
-    }
-
-    let start_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(start);
-    let end_byte = buf.lisp_pos_to_accessible_emacs_byte_pos(end);
-    Ok(if start_byte <= end_byte {
-        EmacsByteRange::new(start_byte, end_byte)
-    } else {
-        EmacsByteRange::new(end_byte, start_byte)
-    })
+    region.accessible_byte_range(buf)
 }
 
 fn file_error_symbol(kind: std::io::ErrorKind) -> &'static str {
@@ -7641,8 +7617,7 @@ pub(crate) fn builtin_process_send_region_impl(
 
     if let Some(n) = args[0].as_fixnum() {
         if n >= 0 && is_stale_process_id_designator_in_manager(processes, &args[0]) {
-            let _ = expect_int_or_marker(&args[1])?;
-            let _ = expect_int_or_marker(&args[2])?;
+            let _ = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
             return Err(signal_process_not_running_in_manager(
                 processes,
                 n as ProcessId,
@@ -7652,14 +7627,13 @@ pub(crate) fn builtin_process_send_region_impl(
 
     let id =
         resolve_optional_process_or_current_buffer_in_state(processes, buffers, Some(&args[0]))?;
-    let start = expect_int_or_marker(&args[1])?;
-    let end = expect_int_or_marker(&args[2])?;
+    let region_args = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
 
     let region_text = {
         let buf = buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let region = checked_region_bytes(buf, LispCharPos1::new(start), LispCharPos1::new(end))?;
+        let region = checked_region_bytes(buf, region_args)?;
         buf.buffer_substring_lisp_string_range(region)
     };
 
