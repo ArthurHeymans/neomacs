@@ -756,16 +756,20 @@ pub(crate) fn builtin_line_number_at_pos(
 pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("count-lines", &args, 2)?;
     expect_max_args("count-lines", &args, 3)?;
-    let beg = expect_int(&args[0])?;
-    let end = expect_int(&args[1])?;
+    let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
+    let beg = crate::emacs_core::position::fix_position_with_buffers(&eval.buffers, &args[0])?;
+    let end = crate::emacs_core::position::fix_position_with_buffers(&eval.buffers, &args[1])?;
+    let range = crate::emacs_core::builtins::normalize_narrow_region_in_buffers(
+        &eval.buffers,
+        current_id,
+        LispCharPos1::new(beg),
+        LispCharPos1::new(end),
+        args[0],
+        args[1],
+    )?;
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    let byte_beg = char_pos_to_byte(buf, LispCharPos1::new(beg));
-    let byte_end = char_pos_to_byte(buf, LispCharPos1::new(end));
-    let (s, e) = if byte_beg <= byte_end {
-        (byte_beg, byte_end)
-    } else {
-        (byte_end, byte_beg)
-    };
+    let s = range.start();
+    let e = range.end();
     let mut n = count_newlines(buf, s, e);
     // GNU Emacs: "can be one more if START is not equal to END and the
     // greater of them is not at the start of a line."

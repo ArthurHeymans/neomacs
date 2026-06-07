@@ -1,9 +1,11 @@
+use super::super::error::Flow;
 use super::super::eval::Context;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
 use super::super::value::{Value, ValueKind};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_context};
+use malachite::integer::Integer;
 use std::fs;
 use std::path::PathBuf;
 
@@ -344,6 +346,51 @@ fn test_line_counting_on_unibyte_raw_bytes() {
     assert_eq!(eval_int(&mut ev, "(count-lines 1 5)"), 2);
     assert_eq!(eval_int(&mut ev, "(forward-line 1)"), 0);
     assert_eq!(eval_int(&mut ev, "(point)"), 3);
+}
+
+#[test]
+fn count_lines_accepts_marker_bounds_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_text("a\nb");
+    let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
+    let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut ev.buffers,
+        buffer_id,
+        crate::buffer::LispCharPos1::new(3),
+        false,
+    );
+    assert_eq!(
+        super::builtin_count_lines(&mut ev, vec![Value::fixnum(1), marker]).unwrap(),
+        Value::fixnum(1)
+    );
+}
+
+#[test]
+fn count_lines_reports_narrow_to_region_range_errors_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_text("abc");
+
+    let err = super::builtin_count_lines(&mut ev, vec![Value::fixnum(0), Value::fixnum(2)])
+        .expect_err("out-of-range start should signal");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(0), Value::fixnum(2)]);
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+
+    let big = Value::make_integer(Integer::from(1u64) << 100u32);
+    let err = super::builtin_count_lines(&mut ev, vec![Value::fixnum(1), big])
+        .expect_err("out-of-range bignum end should signal");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data[0], Value::fixnum(1));
+            assert!(matches!(sig.data[1].kind(), ValueKind::Veclike(_)));
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 #[test]
