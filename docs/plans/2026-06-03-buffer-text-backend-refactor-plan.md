@@ -285,6 +285,9 @@ Progress:
 - Buffer builtins and display sizing now clamp Lisp-derived character and byte
   positions against typed buffer endpoints before calling conversion or copy
   helpers.
+- Buffer-backed Lisp reader decode and slice helpers now convert raw reader
+  offsets into typed `EmacsBytePos` + `EmacsByteLen` ranges at the buffer access
+  boundary.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

@@ -18,7 +18,7 @@ use malachite::integer::Integer;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + Vec<u8> directly
 use super::emacs_char;
-use crate::buffer::{Buffer, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use smallvec::SmallVec;
 use std::cell::Cell;
 
@@ -2290,7 +2290,8 @@ impl<'a> Reader<'a> {
         // and we fall back to assembling them one byte at a time.  `available`
         // never exceeds the buffer length (it is clamped to `limit <= total`),
         // so both paths read identical bytes.
-        let range = EmacsByteRange::new(EmacsBytePos::new(pos), EmacsBytePos::new(pos + available));
+        let range =
+            EmacsByteRange::from_start_len(EmacsBytePos::new(pos), EmacsByteLen::new(available));
         let (code, width) =
             match input.with_contiguous_emacs_byte_range(range, emacs_char::string_char) {
                 Some(decoded) => decoded,
@@ -2326,7 +2327,10 @@ impl<'a> Reader<'a> {
             ReaderSource::Buffer(input) => {
                 let mut bytes = Vec::with_capacity(end - start);
                 input.copy_emacs_byte_range_to(
-                    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
+                    EmacsByteRange::from_start_len(
+                        EmacsBytePos::new(start),
+                        EmacsByteLen::new(end - start),
+                    ),
                     &mut bytes,
                 );
                 let slice = if input.get_multibyte() {
