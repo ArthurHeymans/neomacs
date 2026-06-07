@@ -4538,8 +4538,8 @@ pub(crate) fn builtin_set_window_buffer(
         frames.apply_set_window_buffer_state(
             wid,
             buf_id,
-            next_window_start,
-            next_point,
+            lisp_pos_usize(next_window_start),
+            lisp_pos_usize(next_point),
             same_buffer && keep_margins,
             WindowBufferDisplayDefaults {
                 margins: next_margins,

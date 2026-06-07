@@ -2,7 +2,7 @@ use super::{
     Frame, FrameManager, FrameParam, HorizontalScrollBarType, VerticalScrollBarType, Window,
     WindowDisplayState, WindowId, WindowMargins,
 };
-use crate::buffer::BufferId;
+use crate::buffer::{BufferId, LispCharPos1};
 use crate::emacs_core::value::{Value, next_float_id};
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -597,8 +597,8 @@ impl FrameManager {
         &mut self,
         window_id: WindowId,
         buffer_id: BufferId,
-        window_start: usize,
-        point: usize,
+        window_start: LispCharPos1,
+        point: LispCharPos1,
         preserve_display_state: bool,
         defaults: WindowBufferDisplayDefaults,
     ) {
@@ -629,13 +629,17 @@ impl FrameManager {
             .get_mut(frame_id)
             .and_then(|frame| frame.find_window_mut(window_id))
         {
+            let window_start = usize::try_from(window_start.as_i64().max(1))
+                .expect("Lisp character position fits usize");
+            let point =
+                usize::try_from(point.as_i64().max(1)).expect("Lisp character position fits usize");
             *leaf_buffer_id = buffer_id;
-            *leaf_window_start = window_start.max(1);
+            *leaf_window_start = window_start;
             *start_marker_id = None;
-            *leaf_point = point.max(1);
+            *leaf_point = point;
             *point_marker_id = None;
             if !preserve_display_state {
-                *old_point = point.max(1);
+                *old_point = point;
                 *old_point_marker_id = None;
                 *hscroll = 0;
                 *vscroll = 0;
