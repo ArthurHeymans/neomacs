@@ -814,6 +814,76 @@ impl IntervalTree {
         if len.is_empty() || self.root.is_none() {
             return;
         }
+        let tree_len = CharPos0::new(self.len().get());
+        // A gap before the insertion (pos past the tree) is rare and not on the
+        // buffer-insert hot path; keep the simple rebuild for it.
+        if pos > tree_len {
+            return self.insert_default_at_slow(pos, len);
+        }
+        if pos == tree_len {
+            // Append a fresh property-free interval at the very end.
+            self.insert_default_node_before(None, len);
+            return;
+        }
+        let Some((start, id)) = self.find_id(pos) else {
+            return;
+        };
+        if pos == start {
+            // At an interval boundary: splice a default interval in front of it.
+            self.insert_default_node_before(Some(id), len);
+        } else if self.nodes[id.0].is_empty_plist() {
+            // Inside an interval with no properties: stretch it (and shift
+            // everything after) by `len` -- O(log n), no new node.
+            self.add_length_to_ancestors(Some(id), len.get() as isize);
+        } else {
+            // Inside a property-bearing interval: split it at `pos` and splice a
+            // default interval between the halves, so the inserted text does not
+            // inherit the surrounding properties (mirrors GNU
+            // `adjust_intervals_for_insertion`).
+            let Some(right) = self.split_at(pos) else {
+                return;
+            };
+            self.insert_default_node_before(Some(right), len);
+        }
+    }
+
+    /// Splice a fresh, property-free interval of `len` chars into the tree as
+    /// the in-order predecessor of `before` (or at the very end when `None`),
+    /// shifting every later interval by `len`.  Local: O(log n), no rebuild.
+    fn insert_default_node_before(&mut self, before: Option<IntervalId>, len: CharLen) {
+        let d_id = self.push_node(IntervalNode::new(len, CharPos0::ZERO, Value::NIL));
+        match before {
+            Some(n) => {
+                if let Some(left) = self.nodes[n.0].left {
+                    let mut cur = left;
+                    while let Some(right) = self.nodes[cur.0].right {
+                        cur = right;
+                    }
+                    self.nodes[cur.0].right = Some(d_id);
+                    self.nodes[d_id.0].parent = Some(cur);
+                } else {
+                    self.nodes[n.0].left = Some(d_id);
+                    self.nodes[d_id.0].parent = Some(n);
+                }
+            }
+            None => {
+                let mut cur = self.root.expect("non-empty tree");
+                while let Some(right) = self.nodes[cur.0].right {
+                    cur = right;
+                }
+                self.nodes[cur.0].right = Some(d_id);
+                self.nodes[d_id.0].parent = Some(cur);
+            }
+        }
+        let parent = self.nodes[d_id.0].parent;
+        self.add_length_to_ancestors(parent, len.get() as isize);
+        self.balance_upwards(parent);
+    }
+
+    fn insert_default_at_slow(&mut self, pos: CharPos0, len: CharLen) {
+        if len.is_empty() || self.root.is_none() {
+            return;
+        }
 
         let mut runs = self.runs();
         let tree_len = CharPos0::new(self.len().get());
@@ -2250,12 +2320,37 @@ impl TextPropertyTable {
     }
 
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
-        let mut runs = self.intervals.runs();
-        for mut run in other.intervals.runs() {
-            run.shift_by(offset);
-            Self::splice_interval_run(&mut runs, run);
+        // Apply each inserted run's properties to its shifted range locally --
+        // split at the run edges and set the run's plist on each covered
+        // interval, O(log n) per run -- instead of extracting every run and
+        // rebuilding the whole tree (O(n), so repeated inserts were O(n^2)).
+        // This REPLACES the range's properties with the run's plist (matching
+        // the old splice), preserving the plist ORDER (set, not per-property
+        // put which prepends) and NOT merging adjacent intervals, so the insert
+        // boundaries that text-property stickiness relies on survive.
+        for run in other.intervals.runs() {
+            let start = run.start().add_len(offset);
+            let end = run.end().add_len(offset);
+            if start >= end {
+                continue;
+            }
+            self.intervals.ensure_cover(end);
+            self.intervals.split_at(start);
+            self.intervals.split_at(end);
+            let plist = run.plist;
+            let mut cursor = start;
+            while cursor < end {
+                let Some((node_start, id)) = self.intervals.find_id(cursor) else {
+                    break;
+                };
+                let node_end = self.intervals.interval_end(node_start, id);
+                self.intervals.set_node_plist(id, plist);
+                if node_end <= cursor {
+                    break;
+                }
+                cursor = node_end;
+            }
         }
-        self.replace_runs_preserving_shape(runs);
     }
 
     pub fn append_shifted_via_add_text_properties_at_char_offset(
