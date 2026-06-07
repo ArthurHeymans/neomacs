@@ -910,11 +910,23 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     frame
         .find_window_mut(w1)
         .unwrap()
-        .set_window_end_from_positions(200, 200, 50, 50, 3);
+        .set_window_end_from_positions(
+            LispCharPos1::from_one_based_usize(200),
+            EmacsBytePos::new(200),
+            LispCharPos1::from_one_based_usize(50),
+            EmacsBytePos::new(50),
+            3,
+        );
     frame
         .find_window_mut(w2)
         .unwrap()
-        .set_window_end_from_positions(200, 200, 60, 60, 3);
+        .set_window_end_from_positions(
+            LispCharPos1::from_one_based_usize(200),
+            EmacsBytePos::new(200),
+            LispCharPos1::from_one_based_usize(60),
+            EmacsBytePos::new(60),
+            3,
+        );
 
     frame.resize_pixelwise(400, 260);
 

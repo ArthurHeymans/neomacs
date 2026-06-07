@@ -1,6 +1,6 @@
 use super::*;
 use crate::buffer::buffer::BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM;
-use crate::buffer::{BufferTextBackendKind, CharPos0};
+use crate::buffer::{BufferTextBackendKind, CharPos0, LispCharPos1};
 use crate::emacs_core::Context;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::{
@@ -1367,10 +1367,12 @@ fn test_format_mode_line_percent_specs_use_window_buffer_and_completed_window_en
             crate::window::Window::Leaf { window_start, .. } => {
                 *window_start = 20;
                 window.set_window_end_from_positions(
-                    target.point_max_char_pos().get().saturating_add(1),
-                    target.point_max_emacs_byte_pos().get(),
-                    target.point_max_char_pos().get(),
-                    target.point_max_emacs_byte_pos().get(),
+                    LispCharPos1::from_one_based_usize(
+                        target.point_max_char_pos().get().saturating_add(1),
+                    ),
+                    target.point_max_emacs_byte_pos(),
+                    target.point_max_char_pos().to_lisp(),
+                    target.point_max_emacs_byte_pos(),
                     0,
                 );
             }

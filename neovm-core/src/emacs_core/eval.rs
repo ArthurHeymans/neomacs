@@ -7257,11 +7257,11 @@ impl Context {
         &mut self,
         frame_id: crate::window::FrameId,
         window_id: crate::window::WindowId,
-        window_start_lisp: usize,
-        buffer_z_char: usize,
-        buffer_z_byte: usize,
-        window_end_lisp: usize,
-        window_end_byte: usize,
+        window_start_lisp: LispCharPos1,
+        buffer_z_char: LispCharPos1,
+        buffer_z_byte: EmacsBytePos,
+        window_end_lisp: LispCharPos1,
+        window_end_byte: EmacsBytePos,
         window_end_vpos: usize,
     ) {
         let frames = &mut self.frames;
@@ -7274,7 +7274,8 @@ impl Context {
             crate::window::window_markers::set_window_start_with_marker(
                 buffers,
                 window,
-                window_start_lisp,
+                usize::try_from(window_start_lisp.as_i64().max(1))
+                    .expect("Lisp character position fits usize"),
             );
             window.set_window_end_from_positions(
                 buffer_z_char,

@@ -7,7 +7,7 @@
 //! - The **selected window** is the one receiving input.
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
-use crate::buffer::{BufferId, LispCharPos1};
+use crate::buffer::{BufferId, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::face::Face as RuntimeFace;
 use crate::gc_trace::GcTrace;
@@ -923,10 +923,10 @@ impl Window {
     /// Publish the last redisplay's window-end state for this leaf window.
     pub fn set_window_end_from_positions(
         &mut self,
-        buffer_z_char: usize,
-        buffer_z_byte: usize,
-        end_charpos: usize,
-        end_bytepos: usize,
+        buffer_z_char: LispCharPos1,
+        buffer_z_byte: EmacsBytePos,
+        end_charpos: LispCharPos1,
+        end_bytepos: EmacsBytePos,
         vpos: usize,
     ) {
         if let Window::Leaf {
@@ -937,8 +937,14 @@ impl Window {
             ..
         } = self
         {
+            let buffer_z_char = usize::try_from(buffer_z_char.as_i64().max(1))
+                .expect("Lisp character position fits usize");
+            let end_charpos = usize::try_from(end_charpos.as_i64().max(1))
+                .expect("Lisp character position fits usize");
             *window_end_pos = buffer_z_char.saturating_sub(end_charpos.min(buffer_z_char));
-            *window_end_bytepos = buffer_z_byte.saturating_sub(end_bytepos.min(buffer_z_byte));
+            *window_end_bytepos = buffer_z_byte
+                .get()
+                .saturating_sub(end_bytepos.get().min(buffer_z_byte.get()));
             *window_end_vpos = vpos;
             *window_end_valid = true;
         }

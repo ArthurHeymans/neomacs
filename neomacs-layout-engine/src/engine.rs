@@ -16,10 +16,7 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
-use crate::coords::{
-    layout_i64_char_pos_to_lisp_char_pos, layout_usize_char_pos_to_lisp_usize,
-    lisp_char_pos_to_layout_i64,
-};
+use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
@@ -6441,7 +6438,7 @@ impl LayoutEngine {
             return;
         }
 
-        let window_start_lisp = layout_usize_char_pos_to_lisp_usize(window_start as usize);
+        let window_start_lisp = layout_i64_char_pos_to_lisp_char_pos(window_start);
         // Use the last row that actually has a buffer position, not
         // just the last row.  Empty trailing rows (e.g. the blank
         // line after a buffer ending with `\n`) have
@@ -6453,9 +6450,9 @@ impl LayoutEngine {
             .iter()
             .rev()
             .find_map(|row| row.end_buffer_pos)
-            .map(|pos| pos.as_i64().saturating_add(1) as usize)
-            .unwrap_or(1);
-        let window_end_byte = text_start_byte.saturating_add(byte_idx);
+            .map(|pos| layout_i64_char_pos_to_lisp_char_pos(pos.as_i64()))
+            .unwrap_or_else(|| LispCharPos1::from_one_based_usize(1));
+        let window_end_byte = EmacsBytePos::new(text_start_byte.saturating_add(byte_idx));
         let window_end_vpos = output_emitter
             .rows()
             .last()
@@ -6465,14 +6462,14 @@ impl LayoutEngine {
         if let Some(info) = self.matrix_builder.window_infos_last_mut()
             && info.window_id == params.window_id
         {
-            info.window_start = window_start_lisp as i64;
-            info.window_end = window_end_lisp as i64;
+            info.window_start = window_start_lisp.as_i64();
+            info.window_end = window_end_lisp.as_i64();
         }
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
-            window_start_lisp,
-            window_end_lisp
+            window_start_lisp.as_i64(),
+            window_end_lisp.as_i64()
         );
 
         // GNU status-line percent specs read the live window state from the
@@ -6484,8 +6481,8 @@ impl LayoutEngine {
             frame_id,
             neovm_core::window::WindowId(params.window_id as u64),
             window_start_lisp,
-            accessible_end_lisp_char,
-            accessible_end_emacs_byte,
+            LispCharPos1::from_one_based_usize(accessible_end_lisp_char),
+            EmacsBytePos::new(accessible_end_emacs_byte),
             window_end_lisp,
             window_end_byte,
             window_end_vpos,

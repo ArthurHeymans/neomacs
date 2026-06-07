@@ -28,10 +28,6 @@ pub(crate) fn layout_i64_char_pos_to_lisp_char_pos(charpos: i64) -> LispCharPos1
     LispCharPos1::new(layout_i64_char_pos_to_lisp_i64(charpos))
 }
 
-pub(crate) fn layout_usize_char_pos_to_lisp_usize(charpos: usize) -> usize {
-    charpos.saturating_add(1)
-}
-
 #[inline]
 pub(crate) fn clamped_lisp_charpos_to_layout_i64(charpos: i64) -> i64 {
     lisp_charpos_to_layout_char_pos(charpos)
