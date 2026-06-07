@@ -86,6 +86,25 @@ fn extend_glyph_grapheme(glyph: &mut Glyph, ch: char) {
     }
 }
 
+/// Number of grid columns `glyph` advances the materialize column counter.
+///
+/// Must stay in lock-step with `FrameDisplayState::materialize_grid_row`'s
+/// `col +=` rule (glyph_matrix.rs): a stretch advances by its `width_cols`, a
+/// double-width glyph by 2, everything else by 1. Used to place the physical
+/// cursor on the same column index materialize assigns to the glyph at point.
+fn glyph_cell_span(glyph: &Glyph) -> u16 {
+    match glyph.glyph_type {
+        GlyphType::Stretch { width_cols } => width_cols,
+        _ => {
+            if glyph.wide {
+                2
+            } else {
+                1
+            }
+        }
+    }
+}
+
 /// Whether `glyph` is a complex-run member's padding cell carrying its own
 /// per-cell grapheme (a non-blank Char or a Composite), as opposed to a
 /// blank wide-char padding slot. Such cells let the TTY decompose the run.
@@ -870,11 +889,33 @@ impl GlyphMatrixBuilder {
             && cursor.row < matrix.rows.len()
         {
             let row = &matrix.rows[cursor.row];
-            let text = &row.glyphs[GlyphArea::Text.index()];
-            visual_col = text
-                .iter()
-                .position(|glyph| !glyph.padding && glyph.charpos == cursor.charpos)
-                .map(|idx| idx as u16);
+            // The cursor's `slot_id.col` must equal the column
+            // `FrameDisplayState::materialize_grid_row` assigns to the glyph at
+            // point: a single running counter over the LeftMargin (line numbers,
+            // fringe) area and then the Text area, skipping padding cells and
+            // weighting each glyph by its cell span. Counting only the Text-area
+            // index drops the line-number gutter, so the renderer would snap the
+            // cursor to a glyph `lnum_cols` cells to the left (or into the gutter
+            // on short lines), drawing a stray second cursor. GNU accounts for
+            // the same gutter in `set_cursor_from_row`, where the line-number
+            // glyphs live at the start of TEXT_AREA (src/xdisp.c).
+            let mut col_acc: u16 = 0;
+            for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
+                if glyph.padding {
+                    continue;
+                }
+                col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+            }
+            for glyph in &row.glyphs[GlyphArea::Text.index()] {
+                if glyph.padding {
+                    continue;
+                }
+                if glyph.charpos == cursor.charpos {
+                    visual_col = Some(col_acc);
+                    break;
+                }
+                col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+            }
 
             if let Some(col) = visual_col {
                 if col != cursor.col {

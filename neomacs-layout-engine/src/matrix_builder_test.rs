@@ -477,6 +477,89 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
 }
 
 #[test]
+fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
+    // Regression for the Doom `SPC h d h` "two cursors / wrong column" bug.
+    //
+    // With `display-line-numbers`, the line-number glyphs are emitted into the
+    // LeftMargin area and `FrameDisplayState::materialize` assigns slot columns
+    // from a single running counter over LeftMargin then Text. The cursor's
+    // `slot_id.col` must land on that same counter, otherwise the renderer's
+    // `cursor_glyph_slot_rect` resolves the wrong glyph (one `lnum_cols` cells
+    // to the left, i.e. inside the gutter), drawing a stray second cursor.
+    //
+    // GNU does the equivalent in `set_cursor_from_row`: the line-number glyphs
+    // sit at the start of TEXT_AREA and the cursor walks past their pixel width
+    // before landing on the buffer glyph (src/xdisp.c).
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    // Line-number gutter "12 ": two digits + a one-cell trailing stretch ->
+    // three materialize columns (cols 0, 1, 2).
+    builder.push_left_margin_char('1', 1);
+    builder.push_left_margin_char('2', 1);
+    builder.push_left_margin_stretch(1, 1);
+    // Buffer text "Hello" at char positions 100..=104 (materialize cols 3..=7).
+    builder.push_char('H', 0, 100);
+    builder.push_char('e', 0, 101);
+    builder.push_char('l', 0, 102);
+    builder.push_char('l', 0, 103);
+    builder.push_char('o', 0, 104);
+    builder.end_row();
+
+    // Point sits on the first 'l' (charpos 102). The engine's capture passes the
+    // Text-area index (2) for both `col` and `slot_id.col`, never counting the
+    // gutter -- exactly the input that triggered the bug.
+    builder.set_phys_cursor(PhysCursor {
+        window_id: 1,
+        charpos: 102,
+        row: 0,
+        col: 2,
+        slot_id: DisplaySlotId {
+            window_id: 1,
+            row: 0,
+            col: 2,
+        },
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+
+    // 3 gutter columns + Text index 2 = materialize column 5.
+    assert_eq!(
+        cursor.slot_id.col, 5,
+        "cursor slot column must include the 3-column line-number gutter"
+    );
+    assert_eq!(cursor.col, 5);
+    // char_w = 640 / 80 = 8.0; grid fallback x = 5 * 8.0.
+    assert_eq!(cursor.x, 40.0);
+
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.cursor_col, Some(5));
+
+    // The glyph the renderer will snap the cursor to (via `slot_glyph`) must be
+    // the buffer 'l' at point -- not a gutter stretch and not the wrong letter.
+    let buf = state.materialize();
+    let slot = buf
+        .slot_glyph(cursor.slot_id)
+        .expect("cursor slot glyph must be present");
+    match slot {
+        neomacs_display_protocol::frame_glyphs::FrameGlyph::Char { char, .. } => {
+            assert_eq!(*char, 'l', "cursor must resolve to the buffer glyph at point");
+        }
+        other => panic!("expected a Char glyph at the cursor slot, got {other:?}"),
+    }
+}
+
+#[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
