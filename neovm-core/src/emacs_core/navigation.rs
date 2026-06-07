@@ -368,7 +368,7 @@ fn point_motion_property(
             obarray,
             buffers,
             buf,
-            point_byte.get() - 1,
+            point_byte.saturating_sub_len(EmacsByteLen::new(1)).get(),
             Value::symbol(property),
         )
     }
