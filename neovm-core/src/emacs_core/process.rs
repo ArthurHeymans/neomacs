@@ -3607,7 +3607,7 @@ fn ai_numerichost_flag() -> i32 {
 
 #[cfg(windows)]
 fn ai_numerichost_flag() -> i32 {
-    windows_sys::Win32::Networking::WinSock::AI_NUMERICHOST
+    windows_sys::Win32::Networking::WinSock::AI_NUMERICHOST as i32
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
