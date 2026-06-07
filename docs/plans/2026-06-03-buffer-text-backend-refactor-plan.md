@@ -684,6 +684,9 @@ Completed so far:
 - Replaced the same-length edit modified-state boolean with a named policy, so
   same-length substitutions and transpositions explicitly choose whether they
   record a change or preserve a clean modified state.
+- Added a transaction-owned insertion storage plan that keeps converted Emacs
+  bytes, measured insert metadata, marker policy, and source text properties
+  together before current-buffer insertion mutates storage.
 
 Next work:
 

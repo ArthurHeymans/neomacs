@@ -8,8 +8,8 @@
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
     BufferId, BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
-    TextEditRange, TextExtent, TextInsertion, TextPositionAnchor, TextReplacement,
-    TextTransposition,
+    TextEditRange, TextExtent, TextInsertion, TextPositionAnchor, TextPropertyTable,
+    TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -399,6 +399,101 @@ impl MeasuredInsertEdit {
         policy: InsertSideEffectPolicy,
     ) -> BufferEditState {
         insert_state_after_edit(state, self.insertion, policy)
+    }
+}
+
+/// Backend-neutral storage plan for inserting text at a measured buffer point.
+///
+/// This keeps GNU's insert inputs together before the storage mutation: Emacs
+/// bytes, measured character/byte extent, marker placement, and any source
+/// text properties that must be grafted onto the inserted range after the
+/// structural side effects run.
+#[derive(Clone, Debug)]
+pub(in crate::buffer) struct InsertTextPlan {
+    bytes: Vec<u8>,
+    text_properties: TextPropertyTable,
+    edit: MeasuredInsertEdit,
+}
+
+impl InsertTextPlan {
+    pub(in crate::buffer) fn from_storage_text(
+        text: &str,
+        multibyte: bool,
+        anchor: TextPositionAnchor,
+        marker_placement: InsertMarkerPlacement,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> Self {
+        let bytes =
+            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
+        Self::from_emacs_bytes(
+            bytes,
+            TextPropertyTable::new(),
+            multibyte,
+            anchor,
+            marker_placement,
+            marker_adjustment,
+        )
+    }
+
+    pub(in crate::buffer) fn from_lisp_string(
+        text: &LispString,
+        multibyte: bool,
+        anchor: TextPositionAnchor,
+        marker_placement: InsertMarkerPlacement,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> Self {
+        let text = convert_lisp_string_for_buffer_mode(text, multibyte);
+        let text_properties = if text.has_intervals() {
+            text.intervals().clone()
+        } else {
+            TextPropertyTable::new()
+        };
+        Self::from_emacs_bytes(
+            text.as_bytes().to_vec(),
+            text_properties,
+            multibyte,
+            anchor,
+            marker_placement,
+            marker_adjustment,
+        )
+    }
+
+    fn from_emacs_bytes(
+        bytes: Vec<u8>,
+        text_properties: TextPropertyTable,
+        multibyte: bool,
+        anchor: TextPositionAnchor,
+        marker_placement: InsertMarkerPlacement,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> Self {
+        let extent = TextExtent::from_emacs_bytes(&bytes, multibyte);
+        let insertion = TextInsertion::at_anchor(anchor, extent);
+        let edit = MeasuredInsertEdit::new(insertion, marker_placement, marker_adjustment);
+        Self {
+            bytes,
+            text_properties,
+            edit,
+        }
+    }
+
+    pub(in crate::buffer) fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub(in crate::buffer) const fn edit(&self) -> MeasuredInsertEdit {
+        self.edit
+    }
+
+    pub(in crate::buffer) const fn insertion(&self) -> TextInsertion {
+        self.edit.insertion()
+    }
+
+    pub(in crate::buffer) fn text_properties(&self) -> Option<&TextPropertyTable> {
+        if self.text_properties.is_empty() {
+            None
+        } else {
+            Some(&self.text_properties)
+        }
     }
 }
 

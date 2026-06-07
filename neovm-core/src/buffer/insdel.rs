@@ -7,8 +7,8 @@
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
-    InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenModifiedStatePolicy,
+    InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit, MeasuredInsertEdit,
+    MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenModifiedStatePolicy,
     SameLenSubstitutionPlan, SharedBufferStateUpdate, SharedTextEditMetadata, SharedTextEditScope,
     SharedTextEditStatePolicy, TranspositionStoragePlan, char_pos_for_emacs_byte,
     convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
@@ -46,10 +46,6 @@ impl Buffer {
         string
     }
 
-    fn insertion_at_point(&self, extent: TextExtent) -> TextInsertion {
-        TextInsertion::at_anchor(self.point_anchor(), extent)
-    }
-
     fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
         self.text.edit_range_at_emacs_byte_pos(byte_pos)
     }
@@ -80,34 +76,12 @@ impl Buffer {
         )
     }
 
-    fn insert_bytes_internal(
-        &mut self,
-        bytes: &[u8],
-        extent: TextExtent,
-        marker_placement: InsertMarkerPlacement,
-    ) -> TextInsertion {
-        self.insert_bytes_internal_full(
-            bytes,
-            extent,
-            marker_placement,
-            InsertMarkerAdjustment::ByInsertionType,
-        )
-    }
-
-    /// Same as `insert_bytes_internal`, but with explicit marker adjustment
-    /// policy. The replacement path uses [`InsertMarkerAdjustment::StrictAfter`]
-    /// so markers collapsed to the replacement start are not pushed past the
-    /// inserted text, matching GNU `adjust_markers_for_replace`
-    /// (insdel.c:341).
-    fn insert_bytes_internal_full(
-        &mut self,
-        bytes: &[u8],
-        extent: TextExtent,
-        marker_placement: InsertMarkerPlacement,
-        marker_adjustment: InsertMarkerAdjustment,
-    ) -> TextInsertion {
-        let insertion = self.insertion_at_point(extent);
-        let edit = MeasuredInsertEdit::new(insertion, marker_placement, marker_adjustment);
+    /// Execute a fully measured insertion plan.  The replacement path uses
+    /// [`InsertMarkerAdjustment::StrictAfter`] so markers collapsed to the
+    /// replacement start are not pushed past the inserted text, matching GNU
+    /// `adjust_markers_for_replace` (insdel.c:341).
+    fn execute_insert_text_plan(&mut self, plan: InsertTextPlan) -> TextInsertion {
+        let edit = plan.edit();
         if edit.is_empty() {
             return edit.insertion();
         }
@@ -126,11 +100,15 @@ impl Buffer {
         }
 
         self.text
-            .insert_measured_emacs_bytes(edit.byte_pos(), bytes, edit.extent());
+            .insert_measured_emacs_bytes(edit.byte_pos(), plan.bytes(), edit.extent());
         self.apply_byte_insert_side_effects(edit, InsertSideEffectPolicy::current_buffer());
         if edit.before_markers() {
             self.text
                 .advance_markers_at_position(edit.byte_pos(), edit.extent());
+        }
+        if let Some(text_properties) = plan.text_properties() {
+            self.text
+                .text_props_append_shifted_at_emacs_byte_pos(text_properties, edit.byte_pos());
         }
         edit.insertion()
     }
@@ -318,14 +296,16 @@ impl Buffer {
         marker_placement: InsertMarkerPlacement,
     ) -> TextInsertion {
         if text.is_empty() {
-            return self.insertion_at_point(TextExtent::ZERO);
+            return TextInsertion::at_anchor(self.point_anchor(), TextExtent::ZERO);
         }
-        let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
+        let plan = InsertTextPlan::from_storage_text(
             text,
             self.get_multibyte(),
+            self.point_anchor(),
+            marker_placement,
+            InsertMarkerAdjustment::ByInsertionType,
         );
-        let extent = TextExtent::from_emacs_bytes(&bytes, self.get_multibyte());
-        self.insert_bytes_internal(&bytes, extent, marker_placement)
+        self.execute_insert_text_plan(plan)
     }
 
     pub fn insert(&mut self, text: &str) -> TextInsertion {
@@ -371,24 +351,14 @@ impl Buffer {
         marker_placement: InsertMarkerPlacement,
         marker_adjustment: InsertMarkerAdjustment,
     ) -> TextInsertion {
-        let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
-        let extent = TextExtent::new(
-            CharLen::new(text.schars()),
-            EmacsByteLen::new(text.as_bytes().len()),
-        );
-        let insertion = self.insert_bytes_internal_full(
-            text.as_bytes(),
-            extent,
+        let plan = InsertTextPlan::from_lisp_string(
+            text,
+            self.get_multibyte(),
+            self.point_anchor(),
             marker_placement,
             marker_adjustment,
         );
-        if text.has_intervals() {
-            self.text.text_props_append_shifted_at_emacs_byte_pos(
-                text.intervals(),
-                insertion.byte_pos(),
-            );
-        }
-        insertion
+        self.execute_insert_text_plan(plan)
     }
 
     pub fn replace_emacs_byte_range_lisp_string(
