@@ -2639,22 +2639,20 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         .get(1)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
         .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
-        .unwrap_or_else(|| EmacsBytePos::new(0));
+        .unwrap_or(EmacsBytePos::ZERO);
+    let buffer_end = EmacsBytePos::ZERO.add_len(buf.total_emacs_byte_len());
     let to_pos = args
         .get(2)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
         .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
-        .unwrap_or_else(|| EmacsBytePos::new(buf.total_emacs_byte_len().get()));
+        .unwrap_or(buffer_end);
 
     // Count lines and max columns in the region.  GNU's TO=t means
     // measure through the line ending the last non-empty line, not
     // through trailing blank lines.
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(
-        EmacsByteRange::new(
-            from_pos,
-            EmacsBytePos::new(to_pos.get().min(buf.total_emacs_byte_len().get())),
-        ),
+        EmacsByteRange::new(from_pos, to_pos.min(buffer_end)),
         &mut bytes,
     );
     let measured = if args

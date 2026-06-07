@@ -282,6 +282,9 @@ Progress:
   range.
 - Tree-sitter buffer edit tracking now accepts an ordered `EmacsByteRange` and
   unwraps to raw byte offsets only at the tree-sitter API boundary.
+- Buffer builtins and display sizing now clamp Lisp-derived character and byte
+  positions against typed buffer endpoints before calling conversion or copy
+  helpers.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

@@ -130,7 +130,7 @@ fn char_pos_to_buffer_emacs_byte_pos(
 }
 
 fn clamped_lisp_char_pos_to_char_pos(pos: LispCharPos1, max_chars: CharLen) -> CharPos0 {
-    CharPos0::new(pos.to_char_pos().get().min(max_chars.get()))
+    pos.to_char_pos().min(CharPos0::ZERO.add_len(max_chars))
 }
 
 pub(crate) fn normalize_narrow_region_in_buffers(
