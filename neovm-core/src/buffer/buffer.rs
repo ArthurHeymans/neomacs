@@ -5255,8 +5255,9 @@ impl BufferManager {
                         .get(&buffer_id)
                         .map(|buffer| buffer.total_emacs_byte_len()),
                 ) {
-                    let mut restored_begv = EmacsBytePos::new(begv.get().min(len.get()));
-                    let mut restored_zv = EmacsBytePos::new(zv.get().min(len.get()));
+                    let end = EmacsBytePos::ZERO.add_len(len);
+                    let mut restored_begv = begv.min(end);
+                    let mut restored_zv = zv.min(end);
                     if restored_begv > restored_zv {
                         std::mem::swap(&mut restored_begv, &mut restored_zv);
                     }

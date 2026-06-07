@@ -277,6 +277,9 @@ Progress:
 - Text-property object-interval partitioning now carries `CharLen` and
   `CharPos0` through length clamping instead of unwrapping interval endpoints
   and rebuilding typed positions.
+- Saved restriction restoration now clamps marker-derived `EmacsBytePos`
+  anchors against a typed buffer end position before rebuilding the narrowing
+  range.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.
