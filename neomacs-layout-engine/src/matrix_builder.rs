@@ -540,6 +540,34 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    /// Grow a contextual-shaping run (Arabic, Indic) by appending `ch` to the
+    /// last text glyph's composed cluster AND pushing a padding cell carrying
+    /// `ch`'s own buffer position. The run becomes one `Composite` glyph that
+    /// the renderer shapes as a unit (joining / reordering), occupying one
+    /// column per character; the per-char padding keeps per-letter cursor
+    /// positions. Mirrors GNU emitting a multi-character composition while
+    /// each character keeps a distinct buffer position. Falls back to a
+    /// standalone glyph when there is no base to merge into (run start).
+    pub fn push_run_member(&mut self, ch: char, face_id: u32, charpos: usize, pixel_width: f32) {
+        if let Some(ref mut matrix) = self.current_matrix {
+            if self.current_row < matrix.rows.len() {
+                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
+                if merge_extender_into_last_glyph(area, ch) {
+                    let mut pad = Glyph::padding_for(face_id, charpos);
+                    pad.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+                        pixel_width
+                    } else {
+                        0.0
+                    };
+                    area.push(pad);
+                    return;
+                }
+                area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
+                matrix.rows[self.current_row].displays_text = true;
+            }
+        }
+    }
+
     pub fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
         self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
     }
@@ -1170,11 +1198,13 @@ impl GlyphMatrixBuilder {
             let mut glyphs = vec![glyph.clone()];
             idx += 1;
 
-            if glyph.wide
-                && idx < text.len()
-                && text[idx].padding
-                && text[idx].charpos == glyph.charpos
-            {
+            // Absorb this base's trailing padding cells into the same bidi
+            // unit so the glyph stays a contiguous, base-first block under
+            // visual reordering: a 2-column wide char (one padding) or a
+            // multi-column composed Arabic/Indic run (one padding per extra
+            // character). Padding is only ever emitted immediately after its
+            // base, so consecutive padding always belongs to this glyph.
+            while idx < text.len() && text[idx].padding {
                 cols.push(idx);
                 glyphs.push(text[idx].clone());
                 idx += 1;

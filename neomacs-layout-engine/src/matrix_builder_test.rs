@@ -898,3 +898,28 @@ fn cluster_continuation_without_base_falls_back_to_standalone() {
     let area = finish_text_area(builder);
     assert_eq!(area[0].glyph_type, GlyphType::Char { ch: '\u{200D}' });
 }
+
+// --- complex-script run grouping (Phase 3) ---
+
+#[test]
+fn complex_run_grows_into_one_composite_with_per_char_padding() {
+    let mut builder = cluster_builder();
+    // Arabic run: ا (U+0627) ل (U+0644) م (U+0645) => "الم".
+    builder.push_char('\u{0627}', 0, 10);
+    builder.push_run_member('\u{0644}', 0, 11, 8.0);
+    builder.push_run_member('\u{0645}', 0, 12, 8.0);
+    let area = finish_text_area(builder);
+    // One composed cell holding the whole run + 2 padding cells = 3 columns,
+    // so the renderer shapes (joins) the run as a unit.
+    assert_eq!(area.len(), 3);
+    assert_eq!(
+        area[0].glyph_type,
+        GlyphType::Composite { text: "\u{0627}\u{0644}\u{0645}".into() }
+    );
+    assert!(!area[0].padding);
+    assert!(area[1].padding && area[2].padding);
+    // Per-letter cursor: each column carries its own buffer position.
+    assert_eq!(area[0].charpos, 10);
+    assert_eq!(area[1].charpos, 11);
+    assert_eq!(area[2].charpos, 12);
+}

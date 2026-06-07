@@ -87,3 +87,16 @@ fn complex_script_is_none_for_latin_and_cjk() {
     assert!(!needs_complex_shaping('a'));
     assert!(needs_complex_shaping('\u{0627}'));
 }
+
+#[test]
+fn continues_complex_run_groups_same_script_only() {
+    // Two Arabic letters continue the same run.
+    assert!(continues_complex_run('\u{0644}', Some(('\u{0627}', false))));
+    // Different complex scripts do not merge into one run.
+    assert!(!continues_complex_run('\u{0905}', Some(('\u{0627}', false))));
+    // A complex char after a non-complex one (or at row start) starts fresh.
+    assert!(!continues_complex_run('\u{0627}', Some(('a', false))));
+    assert!(!continues_complex_run('\u{0627}', None));
+    // Latin never forms a contextual run.
+    assert!(!continues_complex_run('b', Some(('a', false))));
+}

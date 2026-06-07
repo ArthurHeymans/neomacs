@@ -5541,6 +5541,13 @@ impl LayoutEngine {
             let cluster_tail = self.matrix_builder.last_text_cluster_tail();
             let is_cluster_continuation =
                 crate::composition::continues_cluster(ch, cluster_tail);
+            // Arabic/Indic run member: a same-script char continuing the
+            // previous glyph. It grows the composed run (one column each) so
+            // the renderer shapes the run as a unit, while per-char padding
+            // cells keep per-letter cursor positions.
+            let is_run_member = !is_cluster_continuation
+                && control_display.is_none()
+                && crate::composition::continues_complex_run(ch, cluster_tail);
             let char_cols = if control_display.is_some() {
                 2
             } else if is_cluster_continuation {
@@ -5867,6 +5874,14 @@ impl LayoutEngine {
                     ch,
                     current_text_face_id,
                     charpos as usize,
+                );
+            } else if is_run_member {
+                self.run_buf.push(ch, advance);
+                self.matrix_builder.push_run_member(
+                    ch,
+                    current_text_face_id,
+                    charpos as usize,
+                    advance,
                 );
             } else {
                 self.run_buf.push(ch, advance);

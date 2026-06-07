@@ -51,7 +51,6 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
 /// shaping is wrong and the run must be shaped together with `shape_run`.
 /// The concrete value only matters for grouping consecutive same-script
 /// characters into one shaped run.
-#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ComplexScript {
     Arabic,
@@ -75,7 +74,6 @@ pub(crate) enum ComplexScript {
 /// (Latin, CJK, …) render correctly per character and return `None`, so they
 /// stay on the fast per-char path. Mirrors the coverage GNU's default
 /// `composition-function-table` provides for these scripts.
-#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
 pub(crate) fn complex_script(ch: char) -> Option<ComplexScript> {
     use ComplexScript::*;
     let cp = ch as u32;
@@ -100,8 +98,24 @@ pub(crate) fn complex_script(ch: char) -> Option<ComplexScript> {
     })
 }
 
+/// Whether `ch` continues a contextual-shaping run started by the previously
+/// emitted glyph: both belong to the SAME complex script. Such a run is grown
+/// into one composed `Composite` glyph plus one padding cell per following
+/// character, so the renderer shapes (joins / reorders) the whole run as a
+/// unit while the per-char padding keeps per-letter cursor positions.
+///
+/// Unlike [`continues_cluster`], a run member is NOT zero-width — it occupies
+/// its own column. `tail` is the previously emitted glyph's
+/// `(last_char, _)` from `GlyphMatrixBuilder::last_text_cluster_tail`.
+pub(crate) fn continues_complex_run(ch: char, tail: Option<(char, bool)>) -> bool {
+    match (complex_script(ch), tail) {
+        (Some(script), Some((prev, _))) => complex_script(prev) == Some(script),
+        _ => false,
+    }
+}
+
 /// Whether `ch` belongs to a script that needs run-level contextual shaping.
-#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
+#[allow(dead_code)] // utility predicate; run grouping uses continues_complex_run
 pub(crate) fn needs_complex_shaping(ch: char) -> bool {
     complex_script(ch).is_some()
 }
