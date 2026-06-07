@@ -2018,12 +2018,12 @@ fn estimated_window_end_from_body_lines(
     buffers: &BufferManager,
     fid: FrameId,
     wid: WindowId,
-    window_start: usize,
+    window_start: LispCharPos1,
     bounds: &Rect,
     buffer_id: crate::buffer::BufferId,
 ) -> usize {
     let Some(frame) = frames.get(fid) else {
-        return window_start;
+        return window_start.to_one_based_usize();
     };
     let body_lines = if is_minibuffer_window(frames, fid, wid) {
         (bounds.height / frame.char_height) as usize
@@ -2032,11 +2032,11 @@ fn estimated_window_end_from_body_lines(
     };
 
     let Some(buf) = buffers.get(buffer_id) else {
-        return window_start;
+        return window_start.to_one_based_usize();
     };
     let buffer_end = buf.total_char_len().get().saturating_add(1);
     let text = buf.full_text_string();
-    let start_char = window_start.saturating_sub(1);
+    let start_char = window_start.to_char_pos().get();
     let mut char_pos = start_char;
     let mut lines_seen = 0usize;
     for (i, ch) in text.char_indices().skip(start_char) {
@@ -2093,7 +2093,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
                 buffers,
                 fid,
                 wid,
-                window_start.to_one_based_usize(),
+                *window_start,
                 bounds,
                 *buffer_id,
             ) as i64))
