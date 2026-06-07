@@ -326,14 +326,14 @@ impl WgpuGlyphAtlas {
         let line_height = font_size * 1.3;
         let metrics = Metrics::new(font_size, line_height);
 
-        // Create a small buffer for the text
-        // Make buffer large enough for large fonts and multi-char sequences
+        // Lay the cluster out on a single unbounded line. A finite width here
+        // makes cosmic-text apply line alignment, and the default alignment for
+        // an RTL run is to the RIGHT edge of that width — which shoves a shaped
+        // Arabic/Hebrew word to the right of its own texture (it then renders
+        // displaced from its cell). No width bound = glyphs start at the origin
+        // regardless of direction, matching FontMetricsService::shape_run.
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
-        buffer.set_size(
-            &mut self.font_system,
-            Some(font_size * 8.0),
-            Some(font_size * 3.0),
-        );
+        buffer.set_size(&mut self.font_system, None, None);
         buffer.set_text(
             &mut self.font_system,
             text,
