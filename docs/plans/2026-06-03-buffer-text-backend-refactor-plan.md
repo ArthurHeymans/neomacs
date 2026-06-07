@@ -742,6 +742,9 @@ Completed so far:
   APIs, then routed erase-buffer, minibuffer setup, and `*Messages*` logging
   widen/restore behavior through them so narrowing state-marker updates stay
   above concrete text storage.
+- Split buffer regex search matching from point movement: regex helpers now
+  return the target byte position, while search builtins apply successful
+  motion through `BufferManager::goto_buffer_emacs_byte_pos` after each step.
 
 Next work:
 

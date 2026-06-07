@@ -1471,8 +1471,8 @@ fn with_buffer_emacs_bytes<R>(
 
 /// Search forward from point for a literal string PATTERN.
 ///
-/// If found, moves point to end of match and returns the new point position
-/// (as a byte position).  If not found, behaviour depends on `noerror`:
+/// If found, returns the end of match as the point position the caller should
+/// apply. If not found, behaviour depends on `noerror`:
 /// - `noerror` false: signals `search-failed`
 /// - `noerror` true: returns `None` without signaling
 ///
@@ -1509,8 +1509,6 @@ pub fn search_forward(
     if let Some(found) = found {
         let matched = found.shift(start.get());
         let match_end = matched.end();
-        let match_end_pos = EmacsBytePos::new(match_end);
-        buf.goto_emacs_byte_pos(match_end_pos);
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some(matched)),
             searched_string: None,
@@ -1529,8 +1527,8 @@ pub fn search_forward(
 
 /// Search backward from point for a literal string PATTERN.
 ///
-/// If found, moves point to beginning of match and returns the new point
-/// position (as a byte position).
+/// If found, returns the beginning of match as the point position the caller
+/// should apply.
 pub fn search_backward(
     buf: &mut Buffer,
     pattern: &str,
@@ -1562,8 +1560,6 @@ pub fn search_backward(
 
     if let Some(found) = found {
         let matched = found.shift(limit.get());
-        let match_start_pos = EmacsBytePos::new(matched.start());
-        buf.goto_emacs_byte_pos(match_start_pos);
         *match_data = Some(MatchData {
             groups: gnu_single_group_vec(Some(matched)),
             searched_string: None,
@@ -1580,7 +1576,8 @@ pub fn search_backward(
 
 /// Search forward from point for a regex PATTERN.
 ///
-/// If found, moves point to end of match and returns the new point position.
+/// If found, returns the end of match as the point position the caller should
+/// apply.
 /// Updates match data with capture groups.
 pub fn re_search_forward(
     buf: &mut Buffer,
@@ -1658,7 +1655,6 @@ pub fn re_search_forward_with_posix(
 
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.end()));
         *match_data = Some(md);
         Ok(Some(full_match.end()))
     } else if noerror {
@@ -1670,7 +1666,8 @@ pub fn re_search_forward_with_posix(
 
 /// Search backward from point for a regex PATTERN.
 ///
-/// If found, moves point to beginning of match and returns the new point.
+/// If found, returns the beginning of match as the point position the caller
+/// should apply.
 /// Updates match data with capture groups.
 pub fn re_search_backward(
     buf: &mut Buffer,
@@ -1749,7 +1746,6 @@ pub fn re_search_backward_with_posix(
 
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.start()));
         *match_data = Some(md);
         Ok(Some(full_match.start()))
     } else if noerror {
@@ -1805,7 +1801,6 @@ pub(crate) fn re_search_forward_lisp_with_posix(
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.end()));
         *match_data = Some(md);
         Ok(Some(full_match.end()))
     } else if noerror {
@@ -1860,7 +1855,6 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.searched_buffer = Some(buffer_id);
         let full_match = md.groups[0].unwrap();
-        buf.goto_emacs_byte_pos(EmacsBytePos::new(full_match.start()));
         *match_data = Some(md);
         Ok(Some(full_match.start()))
     } else if noerror {

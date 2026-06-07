@@ -1844,7 +1844,7 @@ fn search_forward_basic() {
     let result = search_forward(&mut buf, "world", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(11)); // end of "world"
-    assert_eq!(buf.point_char_pos().get(), 11);
+    assert_eq!(buf.point_char_pos().get(), 0);
     let md = md.unwrap();
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(6, 11)));
 }
@@ -1983,7 +1983,7 @@ fn search_backward_basic() {
     let result = search_backward(&mut buf, "hello", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0)); // beginning of "hello"
-    assert_eq!(buf.point_char_pos().get(), 0);
+    assert_eq!(buf.point_char_pos().get(), 11);
 }
 
 #[test]
@@ -2007,7 +2007,7 @@ fn search_backward_finds_last_occurrence() {
     assert!(result.is_ok());
     // Should find the LAST "aaa" (at position 8)
     assert_eq!(result.unwrap(), Some(8));
-    assert_eq!(buf.point_char_pos().get(), 8);
+    assert_eq!(buf.point_char_pos().get(), 11);
 }
 
 #[test]
@@ -2019,8 +2019,8 @@ fn search_backward_case_fold_true_unicode_literal() {
     let result = search_backward(&mut buf, "ä", None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some('Ä'.len_utf8()));
-    assert_eq!(buf.point_emacs_byte_pos().get(), 'Ä'.len_utf8());
-    assert_eq!(buf.point_char_pos().get(), 1);
+    assert_eq!(buf.point_emacs_byte_pos().get(), "Ää".len());
+    assert_eq!(buf.point_char_pos().get(), 2);
 }
 
 // -----------------------------------------------------------------------
@@ -2035,7 +2035,7 @@ fn re_search_forward_basic() {
     let result = re_search_forward(&mut buf, "[0-9]+", None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(7)); // end of "123"
-    assert_eq!(buf.point_char_pos().get(), 7);
+    assert_eq!(buf.point_char_pos().get(), 0);
     let md = md.unwrap();
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(4, 7)));
 }
@@ -2077,6 +2077,7 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     )
     .expect("first search should succeed");
     assert_eq!(first, Some("alpha=1".len()));
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first.unwrap()));
     let first_md = md.as_ref().expect("match data for first search");
     assert_eq!(
         buf.buffer_substring_range(match_group_byte_range(first_md.groups[1].unwrap())),
@@ -2138,7 +2139,7 @@ fn re_search_backward_basic() {
     // first position where the regex succeeds.  From point-max (15/0-indexed=14),
     // position 14 is '6' which matches [0-9]+.  So match-beginning is 14.
     assert_eq!(result.unwrap(), Some(14));
-    assert_eq!(buf.point_char_pos().get(), 14);
+    assert_eq!(buf.point_char_pos().get(), 15);
 }
 
 #[test]
@@ -2188,6 +2189,7 @@ fn re_search_backward_log_line_loop_progresses() {
             pos,
             md.as_ref().and_then(|data| match_group(data.groups[0])),
         ));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(pos));
     }
 
     assert_eq!(

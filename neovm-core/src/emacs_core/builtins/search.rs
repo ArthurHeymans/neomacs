@@ -30,6 +30,17 @@ fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) 
     buf.emacs_byte_pos_to_char_pos_clamped(byte_pos)
 }
 
+fn record_buffer_search_success(
+    buffers: &mut crate::buffer::BufferManager,
+    buffer_id: crate::buffer::BufferId,
+    pos: usize,
+) -> Result<usize, Flow> {
+    buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos))
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    Ok(pos)
+}
+
 pub(crate) fn builtin_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -91,7 +102,9 @@ pub(crate) fn builtin_search_forward_with_state(
             }
         };
         match result {
-            Ok(Some(pos)) => last_pos = Some(pos),
+            Ok(Some(pos)) => {
+                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+            }
             Ok(None) => {
                 // regex::search_* with `noerror = false` never returns None.
                 return Err(signal("search-failed", vec![Value::string(pattern)]));
@@ -365,7 +378,9 @@ pub(crate) fn builtin_search_backward_with_state(
             }
         };
         match result {
-            Ok(Some(pos)) => last_pos = Some(pos),
+            Ok(Some(pos)) => {
+                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+            }
             Ok(None) => {
                 return Err(signal("search-failed", vec![args[0]]));
             }
@@ -473,7 +488,9 @@ pub(crate) fn re_search_forward_with_state_posix(
         };
 
         match result {
-            Ok(Some(pos)) => last_pos = Some(pos),
+            Ok(Some(pos)) => {
+                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+            }
             Ok(None) => {
                 return Err(signal("search-failed", vec![args[0]]));
             }
@@ -580,7 +597,9 @@ pub(crate) fn re_search_backward_with_state_posix(
         };
 
         match result {
-            Ok(Some(pos)) => last_pos = Some(pos),
+            Ok(Some(pos)) => {
+                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+            }
             Ok(None) => {
                 return Err(signal("search-failed", vec![args[0]]));
             }
