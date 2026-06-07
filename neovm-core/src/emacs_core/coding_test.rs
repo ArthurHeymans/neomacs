@@ -794,6 +794,58 @@ fn find_coding_systems_region_internal_accepts_raw_unibyte_string() {
     assert_eq!(result.unwrap(), Value::T);
 }
 
+#[test]
+fn find_coding_systems_region_internal_ignores_bad_exclude_for_ascii() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_find_coding_systems_region_internal(
+        &mut eval,
+        vec![Value::string("abc"), Value::NIL, Value::symbol("utf-8")],
+    );
+    assert_eq!(result.unwrap(), Value::T);
+}
+
+#[test]
+fn find_coding_systems_region_internal_rejects_non_list_exclude_for_non_ascii_string() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_find_coding_systems_region_internal(
+        &mut eval,
+        vec![Value::string("汉"), Value::NIL, Value::symbol("utf-8")],
+    );
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("listp"), Value::symbol("utf-8")]
+            );
+        }
+        other => panic!("expected wrong-type-argument listp, got {other:?}"),
+    }
+}
+
+#[test]
+fn find_coding_systems_region_internal_rejects_non_list_exclude_for_non_ascii_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    eval.eval_str("(insert \"汉\")").expect("insert text");
+    let result = builtin_find_coding_systems_region_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(2), Value::symbol("utf-8")],
+    );
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("listp"), Value::symbol("utf-8")]
+            );
+        }
+        other => panic!("expected wrong-type-argument listp, got {other:?}"),
+    }
+}
+
 // ----- coding-system-type -----
 
 #[test]

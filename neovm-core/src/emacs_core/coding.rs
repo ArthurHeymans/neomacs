@@ -2433,6 +2433,16 @@ fn alias_sort_rank(canonical: &str, alias: &str) -> usize {
     }
 }
 
+fn coding_exclude_list(exclude: Option<Value>) -> Result<Option<Vec<Value>>, Flow> {
+    match exclude {
+        None => Ok(None),
+        Some(value) if value.is_nil() => Ok(None),
+        Some(value) => super::value::list_to_vec(&value)
+            .map(Some)
+            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), value])),
+    }
+}
+
 fn raw_coding_candidates(mgr: &CodingSystemManager, exclude: Option<&[Value]>) -> Vec<String> {
     let excluded: HashSet<String> = exclude
         .unwrap_or(&[])
@@ -2471,15 +2481,16 @@ fn safe_coding_systems_for_text(
     mgr: &CodingSystemManager,
     text: &str,
     multibyte: bool,
-    exclude: Option<&[Value]>,
-) -> Value {
+    exclude: Option<Value>,
+) -> Result<Value, Flow> {
     if !multibyte || text.is_ascii() {
-        return Value::T;
+        return Ok(Value::T);
     }
 
     if !text.is_ascii() {
+        let exclude = coding_exclude_list(exclude)?;
         let mut safe_codings = Vec::new();
-        for coding in raw_coding_candidates(mgr, exclude) {
+        for coding in raw_coding_candidates(mgr, exclude.as_deref()) {
             if text
                 .chars()
                 .filter(|ch| !ch.is_ascii())
@@ -2490,10 +2501,10 @@ fn safe_coding_systems_for_text(
         }
         safe_codings.push(Value::symbol("raw-text"));
         safe_codings.push(Value::symbol("no-conversion"));
-        return Value::list(safe_codings);
+        return Ok(Value::list(safe_codings));
     }
 
-    Value::T
+    Ok(Value::T)
 }
 
 fn marker_or_integer_position(value: &Value) -> Result<i64, Flow> {
@@ -2517,20 +2528,18 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
     expect_max_args("find-coding-systems-region-internal", &args, 3)?;
 
     if args[0].is_string() {
-        let exclude = args.get(2).and_then(super::value::list_to_vec);
         let text = coding_runtime_string(&args[0])?;
         let multibyte = args[0].string_is_multibyte();
-        return Ok(safe_coding_systems_for_text(
+        return safe_coding_systems_for_text(
             &eval.coding_systems,
             &text,
             multibyte,
-            exclude.as_deref(),
-        ));
+            args.get(2).copied(),
+        );
     }
 
     let start = marker_or_integer_position(&args[0])?;
     let end = marker_or_integer_position(&args[1])?;
-    let exclude = args.get(2).and_then(super::value::list_to_vec);
 
     let buffer = eval
         .buffers
@@ -2554,12 +2563,12 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
         let string = buffer.buffer_substring_lisp_string_range(byte_range);
         super::builtins::runtime_string_from_lisp_string(&string)
     };
-    Ok(safe_coding_systems_for_text(
+    safe_coding_systems_for_text(
         &eval.coding_systems,
         &text,
         buffer.get_multibyte(),
-        exclude.as_deref(),
-    ))
+        args.get(2).copied(),
+    )
 }
 
 // ===========================================================================
