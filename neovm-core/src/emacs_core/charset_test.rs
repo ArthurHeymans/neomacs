@@ -772,12 +772,19 @@ fn find_charset_region_eval_out_of_range_errors() {
             .expect("current buffer must exist");
         buf.insert("abc");
     }
-    assert!(
-        builtin_find_charset_region(&mut eval, vec![Value::fixnum(0), Value::fixnum(2)]).is_err()
-    );
-    assert!(
-        builtin_find_charset_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).is_err()
-    );
+    let current = Value::make_buffer(eval.buffers.current_buffer().expect("current buffer").id);
+    for (beg, end) in [(0, 2), (1, 5)] {
+        match builtin_find_charset_region(&mut eval, vec![Value::fixnum(beg), Value::fixnum(end)]) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "args-out-of-range");
+                assert_eq!(
+                    sig.data,
+                    vec![current, Value::fixnum(beg), Value::fixnum(end)]
+                );
+            }
+            other => panic!("expected args-out-of-range signal, got {other:?}"),
+        }
+    }
 }
 
 // -----------------------------------------------------------------------
