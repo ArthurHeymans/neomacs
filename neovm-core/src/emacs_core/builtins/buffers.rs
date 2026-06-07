@@ -1613,11 +1613,6 @@ pub(crate) fn builtin_set_buffer_multibyte(
     }
 
     for snapshot in snapshots {
-        let buf = eval
-            .buffers
-            .get_mut(snapshot.id)
-            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
-
         let map_boundary = |logical_byte: usize| {
             lisp_string_advance_byte_to_boundary(&new_storage, logical_byte.min(new_total_bytes))
         };
@@ -1630,38 +1625,48 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .map(|old_byte| map_boundary(old_byte.get()));
         let last_window_start_byte = map_boundary(snapshot.last_window_start_old_emacs_byte.get());
 
-        buf.set_accessible_region_and_point_from_emacs_bytes(
-            EmacsByteRange::new(EmacsBytePos::new(begv_byte), EmacsBytePos::new(zv_byte)),
-            EmacsBytePos::new(pt_byte),
-        );
+        eval.buffers
+            .restore_buffer_emacs_byte_restriction(
+                snapshot.id,
+                EmacsByteRange::new(EmacsBytePos::new(begv_byte), EmacsBytePos::new(zv_byte)),
+            )
+            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
+        eval.buffers
+            .goto_buffer_emacs_byte_pos(snapshot.id, EmacsBytePos::new(pt_byte))
+            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
 
         if let Some(mark_byte) = mark_byte {
-            buf.set_mark_emacs_byte_pos(EmacsBytePos::new(mark_byte));
+            eval.buffers
+                .set_buffer_mark_emacs_byte_pos(snapshot.id, EmacsBytePos::new(mark_byte))
+                .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
         } else {
-            buf.mark_marker_id = None;
-            buf.mark_marker_ptr = std::ptr::null_mut();
+            eval.buffers
+                .clear_buffer_mark(snapshot.id)
+                .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
         }
 
-        buf.last_window_start = lisp_string_byte_to_char(&new_storage, last_window_start_byte) + 1;
+        eval.buffers
+            .set_buffer_last_window_start(
+                snapshot.id,
+                lisp_string_byte_to_char(&new_storage, last_window_start_byte) + 1,
+            )
+            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
 
         for overlay in snapshot.overlays {
             let start_byte = map_boundary(overlay.start_old_emacs_byte.get());
             let end_byte = map_boundary(overlay.end_old_emacs_byte.get());
-            buf.overlays.move_overlay_to_emacs_byte_range(
-                overlay.overlay,
-                EmacsByteRange::new(EmacsBytePos::new(start_byte), EmacsBytePos::new(end_byte)),
-            );
+            eval.buffers
+                .move_buffer_overlay_to_emacs_byte_range(
+                    snapshot.id,
+                    overlay.overlay,
+                    EmacsByteRange::new(EmacsBytePos::new(start_byte), EmacsBytePos::new(end_byte)),
+                )
+                .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
         }
 
-        buf.set_multibyte_value(target_multibyte);
-        buf.set_buffer_local(
-            "enable-multibyte-characters",
-            if target_multibyte {
-                Value::T
-            } else {
-                Value::NIL
-            },
-        );
+        eval.buffers
+            .set_buffer_multibyte_flag(snapshot.id, target_multibyte)
+            .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
     }
 
     if !old_undo_list.is_t() {

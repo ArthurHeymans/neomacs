@@ -745,6 +745,10 @@ Completed so far:
 - Split buffer regex search matching from point movement: regex helpers now
   return the target byte position, while search builtins apply successful
   motion through `BufferManager::goto_buffer_emacs_byte_pos` after each step.
+- Routed `set-buffer-multibyte` shared-buffer state remapping for point,
+  narrowing, mark, overlays, last-window-start, and the multibyte flag through
+  `BufferManager` methods while preserving the existing byte-boundary
+  conversion algorithm.
 
 Next work:
 

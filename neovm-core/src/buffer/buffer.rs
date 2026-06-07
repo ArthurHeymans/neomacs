@@ -5006,6 +5006,28 @@ impl BufferManager {
         Some(())
     }
 
+    pub fn set_buffer_last_window_start(
+        &mut self,
+        id: BufferId,
+        lisp_char_pos: usize,
+    ) -> Option<()> {
+        self.buffers.get_mut(&id)?.last_window_start = lisp_char_pos;
+        Some(())
+    }
+
+    pub fn move_buffer_overlay_to_emacs_byte_range(
+        &mut self,
+        id: BufferId,
+        overlay_id: Value,
+        range: EmacsByteRange,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .overlays
+            .move_overlay_to_emacs_byte_range(overlay_id, range);
+        Some(())
+    }
+
     pub fn clear_buffer_mark(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.mark_marker_id = None;
