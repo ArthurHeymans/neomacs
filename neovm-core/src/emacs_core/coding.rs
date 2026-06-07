@@ -1689,7 +1689,10 @@ pub(crate) fn builtin_check_coding_systems_region(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("check-coding-systems-region", &args, 3)?;
-    expect_integer_or_marker(&args[1])?;
+    if !args[0].is_string() {
+        expect_integer_or_marker(&args[0])?;
+        expect_integer_or_marker(&args[1])?;
+    }
     Ok(Value::NIL)
 }
 

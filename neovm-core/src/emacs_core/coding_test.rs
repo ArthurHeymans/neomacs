@@ -1577,6 +1577,22 @@ fn check_coding_systems_region_semantics() {
         .is_nil()
     );
 
+    let start_type_err = builtin_check_coding_systems_region(
+        &m,
+        vec![Value::symbol("x"), Value::fixnum(1), Value::symbol("utf-8")],
+    )
+    .unwrap_err();
+    match start_type_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("integer-or-marker-p"), Value::symbol("x")]
+            );
+        }
+        other => panic!("expected wrong-type-argument, got {other:?}"),
+    }
+
     let type_err = builtin_check_coding_systems_region(
         &m,
         vec![Value::fixnum(1), Value::string("x"), Value::symbol("utf-8")],
