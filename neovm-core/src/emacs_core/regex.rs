@@ -41,7 +41,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::buffer::{Buffer, BufferId, CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::casefiddle::apply_replace_match_case;
 use crate::emacs_core::regex_emacs::{
     self, BufferSyntaxLookup, CaseTranslation, CompiledPattern, DefaultSyntaxLookup,
@@ -66,6 +66,20 @@ fn buffer_syntax_lookup(buf: &Buffer) -> BufferSyntaxLookup {
         syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buf),
         category_table,
     }
+}
+
+#[inline]
+fn buffer_lisp_match_char_pos_to_byte_pos(buf: &Buffer, lisp_char_pos: usize) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(
+        CharPos0::new(lisp_char_pos).saturating_sub_len(CharLen::new(1)),
+    )
+}
+
+#[inline]
+fn lisp_char_pos_to_zero_based_index(lisp_char_pos: usize) -> usize {
+    CharPos0::new(lisp_char_pos)
+        .saturating_sub_len(CharLen::new(1))
+        .get()
 }
 
 /// Convert `MatchRegisters` (from the GNU-translated engine) into `MatchData`
@@ -2347,14 +2361,8 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
         )
     } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
         (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
-                match_group.start().saturating_sub(1),
-            ))
-            .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
-                match_group.end().saturating_sub(1),
-            ))
-            .get(),
+            buffer_lisp_match_char_pos_to_byte_pos(buf, match_group.start()).get(),
+            buffer_lisp_match_char_pos_to_byte_pos(buf, match_group.end()).get(),
         )
     } else {
         (match_group.start(), match_group.end())
@@ -2510,8 +2518,11 @@ fn compute_replacement_with_syntax(
         // coordinates, which are 1-based. Convert them back to 0-based
         // character offsets before slicing the storage string.
         (
-            char_pos_to_byte(source, match_group.start().saturating_sub(1)),
-            char_pos_to_byte(source, match_group.end().saturating_sub(1)),
+            char_pos_to_byte(
+                source,
+                lisp_char_pos_to_zero_based_index(match_group.start()),
+            ),
+            char_pos_to_byte(source, lisp_char_pos_to_zero_based_index(match_group.end())),
         )
     } else if uses_buffer_byte_positions {
         (
