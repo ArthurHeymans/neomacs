@@ -1533,17 +1533,16 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 .into_iter()
                 .filter_map(|overlay| {
                     let data = overlay.as_overlay_data()?;
-                    let total_bytes = buffer.total_emacs_byte_len();
+                    let total_end = buffer.total_emacs_byte_end_pos();
                     Some(OverlaySnapshot {
                         overlay,
-                        start_old_emacs_byte: EmacsBytePos::new(data.start.min(total_bytes.get())),
-                        end_old_emacs_byte: EmacsBytePos::new(data.end.min(total_bytes.get())),
+                        start_old_emacs_byte: EmacsBytePos::new(data.start).min(total_end),
+                        end_old_emacs_byte: EmacsBytePos::new(data.end).min(total_end),
                     })
                 })
                 .collect();
             let last_window_start = LispCharPos1::from_one_based_usize(buffer.last_window_start);
-            let total_bytes = buffer.total_emacs_byte_len();
-            let total_end = EmacsBytePos::new(total_bytes.get());
+            let total_end = buffer.total_emacs_byte_end_pos();
             snapshots.push(BufferSnapshot {
                 id: *id,
                 pt_old_emacs_byte: buffer.point_emacs_byte_pos().min(total_end),
@@ -2068,7 +2067,7 @@ pub(crate) fn builtin_compute_motion(
     }
 
     // Convert byte pos back to 1-based char position.
-    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(accessible.end().get())));
+    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos).min(accessible.end()));
 
     Ok(Value::list(vec![
         Value::fixnum(final_charpos),
@@ -3199,10 +3198,9 @@ fn insert_pieces_in_state(
             // The inserted text occupies char range [insert_char_pos,
             // insert_char_pos + schars); use it directly to avoid the
             // byte->char reconversion of [insert_pos, inserted_end].
-            let char_end = CharPos0::new(insert_char_pos.get() + piece.text.schars());
             let _ = buffers.clear_inserted_plain_text_properties_in_char_range(
                 current_id,
-                CharRange::new(insert_char_pos, char_end),
+                CharRange::from_start_len(insert_char_pos, CharLen::new(piece.text.schars())),
             );
         }
         if inherit {
@@ -4200,7 +4198,8 @@ pub(crate) fn builtin_byte_to_position(
 
     let byte_len = buf.total_emacs_byte_len();
     let byte_pos0 = LispBytePos1::new(byte_pos).to_emacs_byte_pos();
-    if byte_pos0.get() > byte_len.get() {
+    let byte_end = buf.total_emacs_byte_end_pos();
+    if byte_pos0 > byte_end {
         return Ok(Value::NIL);
     }
 
@@ -4308,7 +4307,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos))
     };
 
-    if byte_pos.get() >= buf.total_emacs_byte_len().get() {
+    if byte_pos >= buf.total_emacs_byte_end_pos() {
         return Ok(Value::fixnum(0));
     }
 
