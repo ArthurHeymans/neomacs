@@ -8,7 +8,7 @@
 //!
 //! neomacs mirrors this: each `Window::Leaf` carries three marker IDs
 //! (`start_marker_id`, `point_marker_id`, `old_point_marker_id`) alongside
-//! cached `usize` byte positions.  The markers are the source of truth; the
+//! cached Lisp positions.  The markers are the source of truth; the
 //! caches are refreshed by `sync_window_positions_from_markers` after every
 //! text edit.
 
@@ -76,27 +76,15 @@ pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer
         return;
     };
 
-    let start = lisp_position_to_restricted_marker_position(
-        bm,
-        buffer_id,
-        LispCharPos1::from_one_based_usize(*window_start),
-    );
+    let start = lisp_position_to_restricted_marker_position(bm, buffer_id, *window_start);
     let (start_mid, _) = bm.create_marker_at_anchor(buffer_id, start, START_INSERTION_TYPE);
     *start_marker_id = Some(start_mid);
 
-    let point = lisp_position_to_restricted_marker_position(
-        bm,
-        buffer_id,
-        LispCharPos1::from_one_based_usize(*point),
-    );
+    let point = lisp_position_to_restricted_marker_position(bm, buffer_id, *point);
     let (pt_mid, _) = bm.create_marker_at_anchor(buffer_id, point, POINT_INSERTION_TYPE);
     *point_marker_id = Some(pt_mid);
 
-    let old_point = lisp_position_to_restricted_marker_position(
-        bm,
-        buffer_id,
-        LispCharPos1::from_one_based_usize(*old_point),
-    );
+    let old_point = lisp_position_to_restricted_marker_position(bm, buffer_id, *old_point);
     let (op_mid, _) = bm.create_marker_at_anchor(buffer_id, old_point, OLD_POINT_INSERTION_TYPE);
     *old_point_marker_id = Some(op_mid);
 }
@@ -149,7 +137,7 @@ pub fn set_window_start_with_marker(
     else {
         return;
     };
-    *window_start = lisp_position_to_usize(lisp_position);
+    *window_start = lisp_position.max(LispCharPos1::ONE);
     move_marker(bm, *buffer_id, *start_marker_id, lisp_position);
 }
 
@@ -167,7 +155,7 @@ pub fn set_window_point_with_marker(
     else {
         return;
     };
-    *point = lisp_position_to_usize(lisp_position);
+    *point = lisp_position.max(LispCharPos1::ONE);
     move_marker(bm, *buffer_id, *point_marker_id, lisp_position);
 }
 
@@ -185,13 +173,13 @@ pub fn set_window_old_point_with_marker(
     else {
         return;
     };
-    *old_point = lisp_position_to_usize(lisp_position);
+    *old_point = lisp_position.max(LispCharPos1::ONE);
     move_marker(bm, *buffer_id, *old_point_marker_id, lisp_position);
 }
 
-/// Refresh cached `usize` positions on every leaf window from its markers.
+/// Refresh cached Lisp positions on every leaf window from its markers.
 ///
-/// Call this after text edits (insert/delete) so that the `usize` caches
+/// Call this after text edits (insert/delete) so that the window caches
 /// reflect the auto-adjusted marker positions.  Only windows whose buffer
 /// matches `edited_buffer_id` need updating.
 pub fn sync_window_positions_from_markers(
@@ -237,17 +225,17 @@ fn sync_leaf(window: &mut Window, bm: &BufferManager, edited_buffer_id: BufferId
 
     if let Some(mid) = *start_marker_id {
         if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *window_start = lisp_position_to_usize(pos);
+            *window_start = pos;
         }
     }
     if let Some(mid) = *point_marker_id {
         if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *point = lisp_position_to_usize(pos);
+            *point = pos;
         }
     }
     if let Some(mid) = *old_point_marker_id {
         if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *old_point = lisp_position_to_usize(pos);
+            *old_point = pos;
         }
     }
 }

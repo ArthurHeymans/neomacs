@@ -879,8 +879,8 @@ fn ensure_selected_frame_id_in_state_with_policy(
             ..
         }) = frame.find_window_mut(frame.selected_window)
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
         {
             let sel = frame.selected_window;
@@ -1986,7 +1986,7 @@ pub(crate) fn builtin_window_start(
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let w = get_leaf(frames, fid, wid)?;
     match w {
-        Window::Leaf { window_start, .. } => Ok(Value::fixnum(*window_start as i64)),
+        Window::Leaf { window_start, .. } => Ok(Value::fixnum(window_start.as_i64())),
         _ => Ok(Value::fixnum(0)),
     }
 }
@@ -2009,7 +2009,7 @@ pub(crate) fn builtin_window_group_start(
     }
     let w = get_leaf(frames, fid, wid)?;
     match w {
-        Window::Leaf { window_start, .. } => Ok(Value::fixnum(*window_start as i64)),
+        Window::Leaf { window_start, .. } => Ok(Value::fixnum(window_start.as_i64())),
         _ => Ok(Value::fixnum(1)),
     }
 }
@@ -2072,7 +2072,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             let stored_end = buffers
                 .get(*buffer_id)
                 .map(|b| b.point_max_char_pos().get().saturating_add(1))
-                .unwrap_or(*window_start)
+                .unwrap_or(window_start.to_one_based_usize())
                 .saturating_sub(*window_end_pos)
                 .max(1);
             if let Some(snapshot_end) = frames
@@ -2082,7 +2082,9 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             {
                 return Ok(Value::fixnum(snapshot_end.as_i64()));
             }
-            if !update_requested && (*window_end_valid || stored_end > *window_start) {
+            if !update_requested
+                && (*window_end_valid || stored_end > window_start.to_one_based_usize())
+            {
                 return Ok(Value::fixnum(stored_end as i64));
             }
 
@@ -2091,7 +2093,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
                 buffers,
                 fid,
                 wid,
-                *window_start,
+                window_start.to_one_based_usize(),
                 bounds,
                 *buffer_id,
             ) as i64))
@@ -2123,7 +2125,7 @@ pub(crate) fn builtin_window_point(
                     ));
                 }
             }
-            Ok(Value::fixnum(*point as i64))
+            Ok(Value::fixnum(point.as_i64()))
         }
         _ => Ok(Value::fixnum(0)),
     }
@@ -2419,7 +2421,9 @@ pub(crate) fn builtin_window_old_point(
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let w = get_leaf(frames, fid, wid)?;
     match w {
-        Window::Leaf { old_point, .. } => Ok(Value::fixnum((*old_point).max(1) as i64)),
+        Window::Leaf { old_point, .. } => {
+            Ok(Value::fixnum((*old_point).max(LispCharPos1::ONE).as_i64()))
+        }
         _ => Ok(Value::fixnum(1)),
     }
 }
@@ -4043,7 +4047,7 @@ pub(crate) fn remember_selected_window_point_in_state(
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(selected_wid))
     {
-        *window_point = point;
+        *window_point = lisp_pos_usize(point);
     }
 }
 
@@ -4069,7 +4073,7 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     // `record_buffer`.  Selection/display primitives record explicitly.
     buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
-        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(point));
+        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point);
         let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
     }
 }
@@ -4378,7 +4382,7 @@ pub(crate) fn builtin_set_window_buffer(
                 ));
             }
             if let Some(buffer) = buffers.get_mut(old_buffer_id) {
-                buffer.last_window_start = old_window_start.max(1);
+                buffer.last_window_start = old_window_start.to_one_based_usize();
             }
             let selected_buffer_id = frames
                 .get(selected_fid)
@@ -4394,7 +4398,7 @@ pub(crate) fn builtin_set_window_buffer(
                 });
             if !preserve_old_buffer_point {
                 let old_point_byte_pos = buffers.get(old_buffer_id).map(|buffer| {
-                    buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(old_point.max(1)))
+                    buffer.lisp_pos_to_emacs_byte_pos(old_point.max(LispCharPos1::ONE))
                 });
                 if let Some(old_point_byte_pos) = old_point_byte_pos {
                     let _ = buffers.goto_buffer_emacs_byte_pos(old_buffer_id, old_point_byte_pos);
@@ -4408,8 +4412,8 @@ pub(crate) fn builtin_set_window_buffer(
             }
             if old_buffer_id != buf_id {
                 let old_buffer_value = Value::make_buffer(old_buffer_id);
-                let old_window_start_pos = lisp_pos_usize(old_window_start.max(1));
-                let old_point_pos = lisp_pos_usize(old_point.max(1));
+                let old_window_start_pos = old_window_start.max(LispCharPos1::ONE);
+                let old_point_pos = old_point.max(LispCharPos1::ONE);
                 let history_entry = Value::list(vec![
                     old_buffer_value,
                     super::marker::make_marker_value(
@@ -4521,24 +4525,29 @@ pub(crate) fn builtin_set_window_buffer(
         let same_buffer = old_state.is_some_and(|(old_buffer_id, _, _, _)| old_buffer_id == buf_id);
         let (next_window_start, next_point) = if same_buffer && keep_margins {
             old_state
-                .map(|(_, window_start, point, _)| (window_start.max(1), point.max(1)))
-                .unwrap_or((1, 1))
+                .map(|(_, window_start, point, _)| {
+                    (
+                        window_start.max(LispCharPos1::ONE),
+                        point.max(LispCharPos1::ONE),
+                    )
+                })
+                .unwrap_or((LispCharPos1::ONE, LispCharPos1::ONE))
         } else {
             buffers
                 .get(buf_id)
                 .map(|buf| {
                     (
-                        buf.last_window_start.max(1),
-                        buf.point_char_pos().get().saturating_add(1).max(1),
+                        lisp_pos_usize(buf.last_window_start.max(1)),
+                        lisp_pos_usize(buf.point_char_pos().get().saturating_add(1).max(1)),
                     )
                 })
-                .unwrap_or((1, 1))
+                .unwrap_or((LispCharPos1::ONE, LispCharPos1::ONE))
         };
         frames.apply_set_window_buffer_state(
             wid,
             buf_id,
-            lisp_pos_usize(next_window_start),
-            lisp_pos_usize(next_point),
+            next_window_start,
+            next_point,
             same_buffer && keep_margins,
             WindowBufferDisplayDefaults {
                 margins: next_margins,
@@ -5455,7 +5464,7 @@ fn scroll_by_lines_in_state(
     let (buffer_id, window_point) = match get_leaf(frames, fid, wid)? {
         Window::Leaf {
             buffer_id, point, ..
-        } => (*buffer_id, *point as i64),
+        } => (*buffer_id, *point),
         _ => return Ok(Value::NIL),
     };
     let Some(buf) = buffers.get(buffer_id) else {
@@ -5464,7 +5473,7 @@ fn scroll_by_lines_in_state(
     let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible
-        .clamp(buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(window_point)))
+        .clamp(buf.lisp_pos_to_emacs_byte_pos(window_point))
         .get();
     let bytes = text.as_bytes();
     let begv = accessible.start().get();
@@ -5570,9 +5579,9 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 }
                 let point = buffers
                     .get(*buffer_id)
-                    .map(|buf| buf.point_char_pos().get().saturating_add(1))
+                    .map(|buf| lisp_pos_usize(buf.point_char_pos().get().saturating_add(1)))
                     .unwrap_or(*point);
-                (*buffer_id, point as i64)
+                (*buffer_id, point)
             }
             _ => return Ok(Value::NIL),
         };
@@ -5582,7 +5591,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let text = buf.full_text_string();
         let accessible = buf.accessible_emacs_byte_region();
         let pt = accessible
-            .clamp(buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(window_point)))
+            .clamp(buf.lisp_pos_to_emacs_byte_pos(window_point))
             .get();
         let bytes = text.as_bytes();
         let begv = accessible.start().get();

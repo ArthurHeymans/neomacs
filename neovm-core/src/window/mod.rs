@@ -459,11 +459,11 @@ pub enum Window {
         /// GNU Emacs stores this as a marker (`w->start`) so that buffer
         /// edits before the start position auto-shift it.  neomacs now
         /// maintains a real marker (`start_marker_id`) alongside this
-        /// cached byte position.  The cache is refreshed from the marker
+        /// cached Lisp-visible position.  The cache is refreshed from the marker
         /// by `sync_window_positions_from_markers` after every text edit,
         /// and on every explicit position write.  All read sites continue
-        /// to use this `usize` cache for zero-cost reads.
-        window_start: usize,
+        /// to use this typed cache for zero-cost reads.
+        window_start: LispCharPos1,
         /// Marker id backing `window_start`.  `None` until the window is
         /// attached to a buffer via `create_window_markers`.
         start_marker_id: Option<u64>,
@@ -486,16 +486,16 @@ pub enum Window {
         /// GNU Emacs stores this as a marker (`w->pointm`) so that buffer
         /// insertions before the position auto-shift it.  neomacs now
         /// maintains a real marker (`point_marker_id`) alongside this
-        /// cached byte position.  The cache is refreshed from the marker
+        /// cached Lisp-visible position.  The cache is refreshed from the marker
         /// after every text edit.  For the selected window, reads should
         /// prefer `buffer.pt` directly (GNU fast path); this cached value
         /// is authoritative for non-selected windows.
-        point: usize,
+        point: LispCharPos1,
         /// Marker id backing `point`.  `None` until the window is
         /// attached to a buffer via `create_window_markers`.
         point_marker_id: Option<u64>,
         /// Cached previous point value mirrored from GNU `w->old_pointm`.
-        old_point: usize,
+        old_point: LispCharPos1,
         /// Marker id backing `old_point`.  `None` until the window is
         /// attached to a buffer via `create_window_markers`.
         old_point_marker_id: Option<u64>,
@@ -589,15 +589,15 @@ impl Window {
             id,
             buffer_id,
             bounds,
-            window_start: 1,
+            window_start: LispCharPos1::ONE,
             start_marker_id: None,
             window_end_pos: 0,
             window_end_bytepos: 0,
             window_end_vpos: 0,
             window_end_valid: false,
-            point: 1,
+            point: LispCharPos1::ONE,
             point_marker_id: None,
-            old_point: 1,
+            old_point: LispCharPos1::ONE,
             old_point_marker_id: None,
             dedicated: false,
             parameters: Vec::new(),
@@ -709,8 +709,7 @@ impl Window {
     /// GNU Emacs xdisp.c:20616 syncs w->pointm from buffer PT before redisplay.
     pub fn set_point(&mut self, pos: LispCharPos1) {
         if let Window::Leaf { point, .. } = self {
-            *point =
-                usize::try_from(pos.as_i64().max(1)).expect("Lisp character position fits usize");
+            *point = pos.max(LispCharPos1::ONE);
         }
     }
 
@@ -740,13 +739,13 @@ impl Window {
                     redisplay_f32_bits(bounds.width),
                     redisplay_f32_bits(bounds.height),
                 ),
-                window_start: LispCharPos1::from_one_based_usize(*window_start),
+                window_start: *window_start,
                 window_end_pos: *window_end_pos,
                 window_end_bytepos: *window_end_bytepos,
                 window_end_vpos: *window_end_vpos,
                 window_end_valid: *window_end_valid,
-                point: LispCharPos1::from_one_based_usize(*point),
-                old_point: LispCharPos1::from_one_based_usize(*old_point),
+                point: *point,
+                old_point: *old_point,
                 hscroll: *hscroll,
                 vscroll: *vscroll,
                 preserve_vscroll_p: *preserve_vscroll_p,
@@ -881,13 +880,13 @@ impl Window {
         } = self
         {
             *buffer_id = new_id;
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
             *start_marker_id = None;
             *window_end_pos = 0;
             *window_end_bytepos = 0;
             *window_end_vpos = 0;
             *window_end_valid = false;
-            *point = 1;
+            *point = LispCharPos1::ONE;
             *point_marker_id = None;
             *old_point_marker_id = None;
         }
@@ -1590,8 +1589,8 @@ impl Frame {
             ..
         } = &mut minibuffer_leaf
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
         let selected = root_window
             .leaf_ids()
@@ -3052,15 +3051,15 @@ fn split_window_in_tree(
                 *bounds = right_bounds;
                 parameters.clear();
                 *history = WindowHistoryState::default();
-                *window_start = 1;
+                *window_start = LispCharPos1::ONE;
                 *start_marker_id = None;
                 *window_end_pos = 0;
                 *window_end_bytepos = 0;
                 *window_end_vpos = 0;
                 *window_end_valid = false;
-                *point = 1;
+                *point = LispCharPos1::ONE;
                 *point_marker_id = None;
-                *old_point = 1;
+                *old_point = LispCharPos1::ONE;
                 *old_point_marker_id = None;
                 *vscroll = 0;
                 *preserve_vscroll_p = false;

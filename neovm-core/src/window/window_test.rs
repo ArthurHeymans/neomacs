@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 
 #[test]
 fn window_cursor_kind_codes_match_gnu_text_cursor_kinds() {
@@ -818,7 +819,7 @@ fn window_set_buffer_resets_position() {
     let frame = mgr.get_mut(fid).unwrap();
     if let Some(w) = frame.find_window_mut(wid) {
         if let Window::Leaf { point, .. } = w {
-            *point = 100;
+            *point = LispCharPos1::from_one_based_usize(100);
         }
     }
 
@@ -835,7 +836,7 @@ fn window_set_buffer_resets_position() {
     } = w
     {
         assert_eq!(*buffer_id, BufferId(2));
-        assert_eq!(*point, 1);
+        assert_eq!(*point, LispCharPos1::ONE);
     }
 }
 
@@ -876,7 +877,7 @@ fn window_start_marker_stays_before_insert_at_start() {
     else {
         panic!("selected window should be a leaf");
     };
-    assert_eq!(*window_start, 1);
+    assert_eq!(*window_start, LispCharPos1::ONE);
 }
 
 #[test]

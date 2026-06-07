@@ -625,12 +625,18 @@ impl AccessibleCharRange {
 }
 
 impl LispCharPos1 {
+    pub const ONE: Self = Self(1);
+
     pub const fn new(pos: i64) -> Self {
         Self(pos)
     }
 
     pub fn from_one_based_usize(pos: usize) -> Self {
         Self(i64::try_from(pos.max(1)).expect("Lisp character position fits i64"))
+    }
+
+    pub fn to_one_based_usize(self) -> usize {
+        usize::try_from(self.as_i64().max(1)).expect("Lisp character position fits usize")
     }
 
     /// Convert to 0-based internal char position.

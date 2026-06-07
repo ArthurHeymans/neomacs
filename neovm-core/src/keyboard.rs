@@ -4443,7 +4443,7 @@ impl crate::emacs_core::eval::Context {
 
     fn window_point(window: &crate::window::Window) -> Option<i64> {
         match window {
-            crate::window::Window::Leaf { point, .. } => Some(*point as i64),
+            crate::window::Window::Leaf { point, .. } => Some(point.as_i64()),
             crate::window::Window::Internal { .. } => None,
         }
     }

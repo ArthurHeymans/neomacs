@@ -629,17 +629,13 @@ impl FrameManager {
             .get_mut(frame_id)
             .and_then(|frame| frame.find_window_mut(window_id))
         {
-            let window_start = usize::try_from(window_start.as_i64().max(1))
-                .expect("Lisp character position fits usize");
-            let point =
-                usize::try_from(point.as_i64().max(1)).expect("Lisp character position fits usize");
             *leaf_buffer_id = buffer_id;
-            *leaf_window_start = window_start;
+            *leaf_window_start = window_start.max(LispCharPos1::ONE);
             *start_marker_id = None;
-            *leaf_point = point;
+            *leaf_point = point.max(LispCharPos1::ONE);
             *point_marker_id = None;
             if !preserve_display_state {
-                *old_point = point;
+                *old_point = point.max(LispCharPos1::ONE);
                 *old_point_marker_id = None;
                 *hscroll = 0;
                 *vscroll = 0;

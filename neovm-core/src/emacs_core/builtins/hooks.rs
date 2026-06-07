@@ -575,7 +575,7 @@ fn normalize_selected_window_point_in_snapshot(
         ..
     }) = snapshot.root_window.find_mut(snapshot.selected_window)
     {
-        *window_point = point;
+        *window_point = LispCharPos1::from_one_based_usize(point);
         return;
     }
 
@@ -587,7 +587,7 @@ fn normalize_selected_window_point_in_snapshot(
         .as_mut()
         .filter(|window| window.id() == snapshot.selected_window)
     {
-        *window_point = point;
+        *window_point = LispCharPos1::from_one_based_usize(point);
     }
 }
 
@@ -776,8 +776,7 @@ pub(crate) fn builtin_set_window_configuration(
         };
         if let Some((buffer_id, point)) = selected_window_state {
             if let Some(buffer) = eval.buffers.get(buffer_id) {
-                let byte_pos =
-                    buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(point));
+                let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point);
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
             }
         }

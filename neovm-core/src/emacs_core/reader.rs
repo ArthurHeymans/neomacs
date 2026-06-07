@@ -343,8 +343,8 @@ struct ActiveMinibufferWindowState {
     calling_frame: crate::window::FrameId,
     previous_selected_window: crate::window::WindowId,
     previous_minibuffer_buffer: Option<crate::buffer::BufferId>,
-    previous_minibuffer_window_start: usize,
-    previous_minibuffer_point: usize,
+    previous_minibuffer_window_start: LispCharPos1,
+    previous_minibuffer_point: LispCharPos1,
     previous_minibuffer_selected_window: Option<crate::window::WindowId>,
     previous_active_minibuffer_window: Option<crate::window::WindowId>,
 }
@@ -361,8 +361,8 @@ fn activate_minibuffer_window_in_state(
     let minibuffer_window_id = frame.minibuffer_window?;
     let previous_selected_window = frame.selected_window;
     let mut previous_minibuffer_buffer = None;
-    let mut previous_minibuffer_window_start = 1;
-    let mut previous_minibuffer_point = 1;
+    let mut previous_minibuffer_window_start = LispCharPos1::ONE;
+    let mut previous_minibuffer_point = LispCharPos1::ONE;
     if let Some(crate::window::Window::Leaf {
         buffer_id,
         window_start,
@@ -432,12 +432,12 @@ fn restore_minibuffer_window_in_state(
                 crate::window::window_markers::set_window_start_with_marker(
                     buffers,
                     window,
-                    LispCharPos1::from_one_based_usize(saved.previous_minibuffer_window_start),
+                    saved.previous_minibuffer_window_start,
                 );
                 crate::window::window_markers::set_window_point_with_marker(
                     buffers,
                     window,
-                    LispCharPos1::from_one_based_usize(saved.previous_minibuffer_point),
+                    saved.previous_minibuffer_point,
                 );
             }
         }

@@ -702,7 +702,7 @@ fn build_mode_line_percent_context(
         {
             // Window positions are 1-indexed (Elisp convention); convert to
             // 0-indexed to match buffer begv/zv.
-            ctx.window_start = window_start.saturating_sub(1);
+            ctx.window_start = window_start.to_char_pos().get();
             if let Some(buf) = context_buffer {
                 ctx.window_end = buf
                     .point_max_char_pos()
@@ -3089,7 +3089,7 @@ pub(crate) fn builtin_move_to_window_line(
     // character position at the start of `target_line`.
     let text = buf.full_text_string();
     let char_count = buf.total_char_len().get();
-    let start_char = ws.saturating_sub(1); // window_start is 1-based
+    let start_char = ws.to_char_pos().get(); // window_start is 1-based
     let mut lines_seen: usize = 0;
     let mut target_char_pos = start_char; // fallback: stay at window-start
 
@@ -3605,9 +3605,9 @@ fn resolve_live_window_display_context(
     let body_lines = ((body_height + char_height - 1) / char_height).max(1);
     let chars = buffer.full_text_string().chars().collect::<Vec<_>>();
     let window_point = if frame.selected_window == wid {
-        buffer.point_char_pos().get().saturating_add(1)
+        buffer.point_char_pos().to_lisp()
     } else {
-        (*point).max(1)
+        (*point).max(LispCharPos1::ONE)
     };
 
     Ok(Some(ApproxWindowDisplayContext {
@@ -3615,8 +3615,8 @@ fn resolve_live_window_display_context(
         body_lines,
         char_width,
         char_height,
-        window_start: LispCharPos1::from_one_based_usize(*window_start),
-        window_point: LispCharPos1::from_one_based_usize(window_point),
+        window_start: *window_start,
+        window_point,
         chars,
         is_minibuffer: frame.minibuffer_window == Some(wid),
     }))

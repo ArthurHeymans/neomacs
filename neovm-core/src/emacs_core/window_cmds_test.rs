@@ -1,3 +1,4 @@
+use crate::buffer::LispCharPos1;
 use crate::emacs_core::eval::{GuiFrameHostSize, ResolvedFrameFont};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::window_cmds::SplitWindowSide;
@@ -675,7 +676,7 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
         .get_mut(frame_id)
         .and_then(|frame| frame.find_window_mut(selected_wid))
     {
-        *point = 1;
+        *point = LispCharPos1::ONE;
     }
 
     let pre_buffer_point = ev
@@ -715,7 +716,7 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
         .get()
         + 1;
 
-    assert_eq!(selected_point, 5);
+    assert_eq!(selected_point, LispCharPos1::from_one_based_usize(5));
     assert_eq!(buffer_point, 5);
 }
 
@@ -5410,7 +5411,7 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
             ..
         }) = frame.find_window_mut(wid)
         {
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
             *window_end_pos = point_max;
             *window_end_valid = false;
         } else {
@@ -5654,7 +5655,7 @@ fn recenter_uses_current_buffer_point_for_selected_window() {
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
-        *point = 1;
+        *point = LispCharPos1::ONE;
     }
     let results = ev
         .eval_str_each(

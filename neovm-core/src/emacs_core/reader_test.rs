@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::CharPos0;
+use crate::buffer::{CharPos0, LispCharPos1};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::print_value;
 use crate::emacs_core::value::{
@@ -1098,7 +1098,7 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .get_mut(frame_id)
         .and_then(|frame| frame.find_window_mut(minibuffer_window))
     {
-        *point = 7;
+        *point = LispCharPos1::from_one_based_usize(7);
     }
 
     let pre_buffer_point = ev
@@ -1138,7 +1138,7 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .get()
         + 1;
 
-    assert_eq!(window_point, 14);
+    assert_eq!(window_point, LispCharPos1::from_one_based_usize(14));
     assert_eq!(buffer_point, 14);
 }
 

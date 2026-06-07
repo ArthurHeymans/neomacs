@@ -1295,7 +1295,7 @@ fn test_format_mode_line_position_o_and_q_specs() {
             .expect("selected window");
         match window {
             crate::window::Window::Leaf { window_start, .. } => {
-                *window_start = 20;
+                *window_start = LispCharPos1::from_one_based_usize(20);
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
@@ -1323,7 +1323,7 @@ fn test_format_mode_line_position_o_and_q_specs() {
             .expect("selected window");
         match window {
             crate::window::Window::Leaf { window_start, .. } => {
-                *window_start = 0;
+                *window_start = LispCharPos1::new(0);
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
@@ -1365,7 +1365,7 @@ fn test_format_mode_line_percent_specs_use_window_buffer_and_completed_window_en
             .expect("selected window");
         match window {
             crate::window::Window::Leaf { window_start, .. } => {
-                *window_start = 20;
+                *window_start = LispCharPos1::from_one_based_usize(20);
                 window.set_window_end_from_positions(
                     LispCharPos1::from_one_based_usize(
                         target.point_max_char_pos().get().saturating_add(1),
@@ -1753,8 +1753,8 @@ fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() 
                 point,
                 ..
             } => {
-                *window_start = 1;
-                *point = 5;
+                *window_start = LispCharPos1::ONE;
+                *point = LispCharPos1::from_one_based_usize(5);
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
@@ -1822,8 +1822,8 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
                 point,
                 ..
             } => {
-                *window_start = 1;
-                *point = 5;
+                *window_start = LispCharPos1::ONE;
+                *point = LispCharPos1::from_one_based_usize(5);
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
@@ -2042,8 +2042,8 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                 point,
                 ..
             } => {
-                *window_start = 1;
-                *point = 5;
+                *window_start = LispCharPos1::ONE;
+                *point = LispCharPos1::from_one_based_usize(5);
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
