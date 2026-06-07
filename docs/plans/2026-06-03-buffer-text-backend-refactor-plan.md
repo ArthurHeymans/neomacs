@@ -274,6 +274,9 @@ Progress:
 - Buffer text newline scans now clamp typed `EmacsBytePos` endpoints and build
   typed ranges before entering backend chunk iteration; raw offsets are limited
   to chunk-local byte arithmetic.
+- Text-property object-interval partitioning now carries `CharLen` and
+  `CharPos0` through length clamping instead of unwrapping interval endpoints
+  and rebuilding typed positions.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

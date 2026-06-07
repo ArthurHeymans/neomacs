@@ -2085,10 +2085,10 @@ impl TextPropertyTable {
     /// interval tree exists.  GNU reports those gaps so callers can observe the
     /// complete interval partition of the string.
     pub fn object_interval_runs_for_char_len(&self, len: CharLen) -> Vec<ObjectIntervalRun> {
-        self.object_interval_runs_raw(len.get())
+        self.object_interval_runs_raw(len)
     }
 
-    fn object_interval_runs_raw(&self, len: usize) -> Vec<ObjectIntervalRun> {
+    fn object_interval_runs_raw(&self, len: CharLen) -> Vec<ObjectIntervalRun> {
         self.object_interval_plist_runs_raw(len)
             .into_iter()
             .map(|run| ObjectIntervalRun::new(run.start(), run.end(), plist_pairs(run.plist())))
@@ -2104,41 +2104,30 @@ impl TextPropertyTable {
         &self,
         len: CharLen,
     ) -> Vec<ObjectIntervalPlistRun> {
-        self.object_interval_plist_runs_raw(len.get())
+        self.object_interval_plist_runs_raw(len)
     }
 
-    fn object_interval_plist_runs_raw(&self, len: usize) -> Vec<ObjectIntervalPlistRun> {
+    fn object_interval_plist_runs_raw(&self, len: CharLen) -> Vec<ObjectIntervalPlistRun> {
         if self.intervals.is_empty() {
             return Vec::new();
         }
 
+        let len_pos = CharPos0::ZERO.add_len(len);
         let mut runs = Vec::new();
-        let mut cursor = 0;
+        let mut cursor = CharPos0::ZERO;
         for run in self.intervals.runs() {
-            let start = run.start().get().min(len);
-            let end = run.end().get().min(len);
+            let start = run.start().min(len_pos);
+            let end = run.end().min(len_pos);
             if cursor < start {
-                runs.push(ObjectIntervalPlistRun::new(
-                    CharPos0::new(cursor),
-                    CharPos0::new(start),
-                    Value::NIL,
-                ));
+                runs.push(ObjectIntervalPlistRun::new(cursor, start, Value::NIL));
             }
             if start < end {
-                runs.push(ObjectIntervalPlistRun::new(
-                    CharPos0::new(start),
-                    CharPos0::new(end),
-                    run.plist,
-                ));
+                runs.push(ObjectIntervalPlistRun::new(start, end, run.plist));
                 cursor = end;
             }
         }
-        if cursor < len {
-            runs.push(ObjectIntervalPlistRun::new(
-                CharPos0::new(cursor),
-                CharPos0::new(len),
-                Value::NIL,
-            ));
+        if cursor < len_pos {
+            runs.push(ObjectIntervalPlistRun::new(cursor, len_pos, Value::NIL));
         }
         runs
     }
