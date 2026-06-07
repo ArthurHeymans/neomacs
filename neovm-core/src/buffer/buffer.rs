@@ -2113,8 +2113,10 @@ impl Buffer {
         self.set_point_anchor_unchecked(restored);
         if restored.emacs_byte_pos() == requested_byte {
             debug_assert_eq!(
-                restored.char_pos_usize(),
-                point.char_pos_usize().min(self.total_char_len().get())
+                restored.char_pos(),
+                point
+                    .char_pos()
+                    .min(CharPos0::new(self.total_char_len().get()))
             );
         }
     }
@@ -2268,17 +2270,16 @@ impl Buffer {
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
-        self.text.char_pos_to_emacs_byte_pos(CharPos0::new(
-            char_pos.get().min(self.total_char_len().get()),
-        ))
+        self.text
+            .char_pos_to_emacs_byte_pos(char_pos.min(CharPos0::new(self.total_char_len().get())))
     }
 
     /// Convert an Emacs byte position to a 0-based character position,
     /// clamping to the buffer text length.
     pub fn emacs_byte_pos_to_char_pos_clamped(&self, byte_pos: EmacsBytePos) -> CharPos0 {
-        self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-            byte_pos.get().min(self.total_emacs_byte_len().get()),
-        ))
+        self.text.emacs_byte_pos_to_char_pos(
+            byte_pos.min(EmacsBytePos::new(self.total_emacs_byte_len().get())),
+        )
     }
 
     pub fn emacs_byte_pos_to_lisp_char_pos(&self, byte_pos: EmacsBytePos) -> LispCharPos1 {
@@ -2311,9 +2312,8 @@ impl Buffer {
     /// region, so markers can be placed outside the accessible range.
     pub fn lisp_pos_to_full_buffer_emacs_byte_pos(&self, lisp_pos: LispCharPos1) -> EmacsBytePos {
         let char_pos = lisp_pos.to_char_pos();
-        let clamped_char = char_pos.get().min(self.total_char_len().get());
         self.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+            .char_pos_to_emacs_byte_pos(char_pos.min(CharPos0::new(self.total_char_len().get())))
     }
 
     // -- Point movement ------------------------------------------------------
@@ -2342,7 +2342,7 @@ impl Buffer {
     // -- Text queries --------------------------------------------------------
 
     fn clamped_emacs_byte_pos(&self, pos: EmacsBytePos) -> EmacsBytePos {
-        EmacsBytePos::new(pos.get().min(self.total_emacs_byte_len().get()))
+        pos.min(EmacsBytePos::new(self.total_emacs_byte_len().get()))
     }
 
     fn clamped_emacs_byte_range(&self, range: EmacsByteRange) -> EmacsByteRange {

@@ -258,6 +258,9 @@ Progress:
   character positions.
 - `TextInsertion` no longer exposes raw byte/character position accessors;
   callers must use the typed `EmacsBytePos` and `CharPos0` accessors.
+- Buffer point restoration and full-buffer char/byte clamp helpers now compare
+  and clamp typed `CharPos0`/`EmacsBytePos` values before entering the
+  `BufferText` conversion boundary.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.
