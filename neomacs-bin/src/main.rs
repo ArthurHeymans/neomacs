@@ -43,7 +43,7 @@ use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
 
-use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
+use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
@@ -2896,8 +2896,8 @@ fn bootstrap_buffers(
         } = &mut frame.root_window
         {
             *buffer_id = scratch_id;
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
     eval.create_window_markers_for_root(frame_id, scratch_id);
@@ -2939,8 +2939,8 @@ fn bootstrap_buffers(
             } = mini_leaf
             {
                 *buffer_id = mini_id;
-                *window_start = 1;
-                *point = 1;
+                *window_start = LispCharPos1::ONE;
+                *point = LispCharPos1::ONE;
                 bounds.y = mini_y;
                 bounds.height = mini_h;
                 bounds.width = width as f32;
