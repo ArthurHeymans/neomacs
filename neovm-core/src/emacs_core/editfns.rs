@@ -296,12 +296,8 @@ pub(crate) fn signal_before_change(
         && let Some(buf) = ctx.buffers.get(current_id)
     {
         let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
-        ctx.treesit.begin_buffer_edit(
-            current_id,
-            &source,
-            beg.get().min(end.get()),
-            beg.get().max(end.get()),
-        );
+        ctx.treesit
+            .begin_buffer_edit(current_id, &source, EmacsByteRange::ordered(beg, end));
     }
 
     crate::emacs_core::textprop::prepare_interval_modification_for_change(

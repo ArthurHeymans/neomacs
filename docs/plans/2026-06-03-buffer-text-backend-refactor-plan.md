@@ -280,6 +280,8 @@ Progress:
 - Saved restriction restoration now clamps marker-derived `EmacsBytePos`
   anchors against a typed buffer end position before rebuilding the narrowing
   range.
+- Tree-sitter buffer edit tracking now accepts an ordered `EmacsByteRange` and
+  unwraps to raw byte offsets only at the tree-sitter API boundary.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

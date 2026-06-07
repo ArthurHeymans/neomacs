@@ -5,7 +5,7 @@ use tree_sitter::{InputEdit, Language, Parser, Point, Query, Tree};
 
 use super::intern::SymId;
 use super::value::Value;
-use crate::buffer::{BufferId, EmacsBytePos};
+use crate::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
 
 pub(crate) const TREESIT_PARSER_TAG: &str = "treesit-parser";
@@ -343,12 +343,13 @@ impl TreeSitterManager {
         &mut self,
         buffer_id: BufferId,
         source: &LispString,
-        start_byte: usize,
-        old_end_byte: usize,
+        byte_range: EmacsByteRange,
     ) {
         if !self.has_editable_tree(buffer_id) {
             return;
         }
+        let start_byte = byte_range.start().get();
+        let old_end_byte = byte_range.end().get();
         self.pending_edits.insert(
             buffer_id,
             PendingBufferEdit {
@@ -408,7 +409,14 @@ mod tests {
         let buffer_id = BufferId(7);
         let source = LispString::from_utf8("alpha\nbeta\ngamma\n");
 
-        manager.begin_buffer_edit(buffer_id, &source, source.sbytes(), source.sbytes());
+        manager.begin_buffer_edit(
+            buffer_id,
+            &source,
+            EmacsByteRange::new(
+                EmacsBytePos::new(source.sbytes()),
+                EmacsBytePos::new(source.sbytes()),
+            ),
+        );
 
         assert!(manager.pending_edits.is_empty());
     }
