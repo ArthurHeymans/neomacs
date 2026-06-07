@@ -814,3 +814,87 @@ fn overwrite_last_window_right_border_preserves_truncation_marker() {
     assert_eq!(row0_right.len(), 1);
     assert_eq!(row0_right[0].glyph_type, GlyphType::Char { ch: '|' });
 }
+
+// --- Grapheme-cluster composition (Phase 1: emoji ZWJ + flag pairs) ---
+
+fn cluster_builder() -> GlyphMatrixBuilder {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder
+}
+
+fn finish_text_area(builder: GlyphMatrixBuilder) -> Vec<Glyph> {
+    let mut builder = builder;
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(40, 3, 8.0, 16.0);
+    state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text as usize].clone()
+}
+
+#[test]
+fn cluster_tail_is_none_at_row_start() {
+    let builder = cluster_builder();
+    assert_eq!(builder.last_text_cluster_tail(), None);
+}
+
+#[test]
+fn cluster_continuation_merges_combining_mark() {
+    let mut builder = cluster_builder();
+    builder.push_char('e', 0, 0);
+    // Combining acute accent (U+0301) is a cluster extender.
+    builder.push_cluster_continuation('\u{0301}', 0, 1);
+    let area = finish_text_area(builder);
+    assert_eq!(
+        area[0].glyph_type,
+        GlyphType::Composite { text: "e\u{0301}".into() }
+    );
+    assert_eq!(area.iter().filter(|g| !g.padding).count(), 1);
+}
+
+#[test]
+fn cluster_continuation_merges_zwj_emoji_sequence() {
+    let mut builder = cluster_builder();
+    // 👨 base, then ZWJ 👩 ZWJ 👧 as continuations (family emoji).
+    builder.push_wide_char('\u{1F468}', 0, 0);
+    for (i, ch) in "\u{200D}\u{1F469}\u{200D}\u{1F467}".chars().enumerate() {
+        builder.push_cluster_continuation(ch, 0, i + 1);
+    }
+    let area = finish_text_area(builder);
+    assert_eq!(
+        area[0].glyph_type,
+        GlyphType::Composite {
+            text: "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}".into()
+        }
+    );
+    // One cluster cell + its wide padding; nothing else.
+    assert_eq!(area.iter().filter(|g| !g.padding).count(), 1);
+    assert!(area[1].padding);
+}
+
+#[test]
+fn cluster_tail_detects_lone_regional_indicator_then_pairs_flag() {
+    let mut builder = cluster_builder();
+    // Regional indicators J (U+1F1EF) + P (U+1F1F5) => 🇯🇵 flag.
+    builder.push_wide_char('\u{1F1EF}', 0, 0);
+    assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1EF}', true)));
+    builder.push_cluster_continuation('\u{1F1F5}', 0, 1);
+    // After pairing, the tail is a Composite — no longer a lone RI, so a
+    // third regional indicator would start a fresh flag.
+    assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1F5}', false)));
+    let area = finish_text_area(builder);
+    assert_eq!(
+        area[0].glyph_type,
+        GlyphType::Composite { text: "\u{1F1EF}\u{1F1F5}".into() }
+    );
+    assert_eq!(area.iter().filter(|g| !g.padding).count(), 1);
+}
+
+#[test]
+fn cluster_continuation_without_base_falls_back_to_standalone() {
+    let mut builder = cluster_builder();
+    // Stray ZWJ at row start: no base to merge into.
+    builder.push_cluster_continuation('\u{200D}', 0, 0);
+    let area = finish_text_area(builder);
+    assert_eq!(area[0].glyph_type, GlyphType::Char { ch: '\u{200D}' });
+}

@@ -496,6 +496,50 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    /// Append a grapheme-cluster continuation character — a ZWJ-joined
+    /// emoji, the second regional indicator of a flag, a combining mark,
+    /// a variation selector, etc. — to the last emitted text glyph,
+    /// upgrading it to a `Composite` so the renderer shapes the whole
+    /// cluster as one unit. Falls back to a standalone glyph when there
+    /// is no mergeable base (e.g. a stray ZWJ at the start of a row).
+    ///
+    /// Mirrors GNU's automatic composition, which collapses a grapheme
+    /// cluster into a single `COMPOSITE_GLYPH` (see `src/composite.c` and
+    /// `produce_composite_glyph` in `src/term.c`).
+    pub fn push_cluster_continuation(&mut self, ch: char, face_id: u32, charpos: usize) {
+        if let Some(ref mut matrix) = self.current_matrix {
+            if self.current_row < matrix.rows.len() {
+                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
+                if merge_extender_into_last_glyph(area, ch) {
+                    return;
+                }
+                area.push(Glyph::char(ch, face_id, charpos));
+                matrix.rows[self.current_row].displays_text = true;
+            }
+        }
+    }
+
+    /// Return `(last_char, is_lone_regional_indicator)` for the last
+    /// non-padding text glyph in the current row. Used to decide whether
+    /// the next character continues its grapheme cluster for the cases
+    /// whose members are not themselves `is_cluster_extender` characters:
+    /// ZWJ emoji sequences (the char after a `U+200D`) and flag pairs
+    /// (a second regional indicator following a lone one). Returns `None`
+    /// at a row start or when the last glyph cannot host a cluster.
+    pub fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
+        let matrix = self.current_matrix.as_ref()?;
+        let row = matrix.rows.get(self.current_row)?;
+        let area = &row.glyphs[GlyphArea::Text.index()];
+        let glyph = area.iter().rev().find(|g| !g.padding)?;
+        match &glyph.glyph_type {
+            GlyphType::Char { ch } => {
+                Some((*ch, crate::unicode::is_regional_indicator(*ch as u32)))
+            }
+            GlyphType::Composite { text } => text.chars().last().map(|c| (c, false)),
+            _ => None,
+        }
+    }
+
     pub fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
         self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
     }

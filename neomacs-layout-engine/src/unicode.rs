@@ -96,8 +96,9 @@ pub(crate) fn is_cluster_extender(ch: char) -> bool {
     cp == 0x200D || cp == 0x20E3 || (0x1F3FB..=0x1F3FF).contains(&cp)
 }
 
-/// Check if a codepoint is a Regional Indicator Symbol.
-#[cfg(test)]
+/// Check if a codepoint is a Regional Indicator Symbol. A pair of these
+/// forms a flag emoji; the layout walk composes the second one into the
+/// first's grapheme cluster (see `engine.rs` cluster-continuation logic).
 pub(crate) fn is_regional_indicator(cp: u32) -> bool {
     (0x1F1E6..=0x1F1FF).contains(&cp)
 }
