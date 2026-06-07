@@ -1504,6 +1504,8 @@ fn render_overlay_string(
         // marks, ZWJ emoji sequences, and flag pairs cluster here too.
         let cluster_tail = builder.last_text_cluster_tail();
         let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
+        let is_run_member = !is_continuation
+            && crate::composition::continues_complex_run(ch, cluster_tail);
         let cols = if is_continuation {
             0
         } else {
@@ -1526,9 +1528,12 @@ fn render_overlay_string(
         );
 
         // Push into the matrix builder (charpos=0 for overlay text).
-        // Continuations merge into the preceding Char/Composite cluster.
+        // Continuations merge into the preceding Char/Composite cluster;
+        // Arabic/Indic run members grow the composed run.
         if is_continuation {
             builder.push_cluster_continuation(ch, face_id, 0);
+        } else if is_run_member {
+            builder.push_run_member(ch, face_id, 0, ch_advance);
         } else if cols == 2 {
             builder.push_wide_char(ch, face_id, 0);
         } else {
@@ -4119,12 +4124,14 @@ impl LayoutEngine {
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
                             for rch in replacement.chars() {
-                                // Grapheme-cluster composition for display-
-                                // property replacement text, via the shared
-                                // `composition` rule (emoji ZWJ + flags).
+                                // Grapheme-cluster + Arabic/Indic run
+                                // composition for display-property replacement
+                                // text, via the shared `composition` rule.
                                 let tail = self.matrix_builder.last_text_cluster_tail();
                                 let is_cont =
                                     crate::composition::continues_cluster(rch, tail);
+                                let is_run = !is_cont
+                                    && crate::composition::continues_complex_run(rch, tail);
                                 let rch_cols = if is_cont {
                                     0
                                 } else {
@@ -4155,6 +4162,13 @@ impl LayoutEngine {
                                         rch,
                                         current_text_face_id,
                                         charpos as usize,
+                                    );
+                                } else if is_run {
+                                    self.matrix_builder.push_run_member(
+                                        rch,
+                                        current_text_face_id,
+                                        charpos as usize,
+                                        rch_advance,
                                     );
                                 } else if rch_cols == 2 {
                                     self.matrix_builder.push_wide_char_with_pixel_width(
