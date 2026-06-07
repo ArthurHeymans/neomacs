@@ -1477,10 +1477,8 @@ fn insert_coding_result(
     ctx.buffers
         .insert_lisp_string_into_buffer(buffer_id, text)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    if let Some(point) = restore_point
-        && let Some(buf) = ctx.buffers.get_mut(buffer_id)
-    {
-        buf.set_point_anchor(point);
+    if let Some(point) = restore_point {
+        let _ = ctx.buffers.set_buffer_point_anchor(buffer_id, point);
     }
     Ok(())
 }

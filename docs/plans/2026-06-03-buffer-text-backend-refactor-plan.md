@@ -735,6 +735,9 @@ Completed so far:
   insert-file/format-decode point preservation through it, matching GNU's
   point preservation while keeping state-marker updates outside direct
   `Buffer` mutation.
+- Routed coding-system buffer-destination point preservation through the same
+  manager-owned point-anchor API, leaving direct point-anchor mutation confined
+  to the buffer/manager layer.
 
 Next work:
 
