@@ -3818,3 +3818,16 @@ fn process_network_interface_and_signal_runtime_surface() {
         "OK (\"127.0.0.1:80\" \"127.0.0.1\" \"[0:0:0:0:0:0:0:1]:80\" \"0:0:0:0:0:0:0:1\" \"x\" nil nil nil nil (wrong-number-of-arguments format-network-address 0) t t t t t t t (wrong-number-of-arguments network-interface-list 3) (error \"Unsupported address family\") t t t t t t t t t t (wrong-type-argument stringp nil) (error \"interface name too long\") (error \"interface name too long\") (error \"interface name too long\") t t t t t t t t t t t t t (error \"Unsupported family\") t t (error \"Unsupported hints value\") (wrong-type-argument stringp 1) t t t (wrong-number-of-arguments signal-names 1) (void-function process-connection))"
     );
 }
+
+#[test]
+fn gnutls_log_level_is_defined_for_tls_negotiation() {
+    // GNU `gnutls.c` DEFVAR_INTs `gnutls-log-level` (default 0); `gnutls.el`
+    // only forward-declares it (`(defvar gnutls-log-level)  ; gnutls.c`).
+    // Without the C-side definition the variable is void and
+    // `gnutls-negotiate` errors on `:loglevel ,gnutls-log-level` before it can
+    // call `gnutls-boot`, so every TLS package download fails and
+    // `use-package` is unusable.  https://github.com/eval-exec/neomacs/issues/121
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one("(list (boundp 'gnutls-log-level) gnutls-log-level)");
+    assert_eq!(result, "OK (t 0)");
+}

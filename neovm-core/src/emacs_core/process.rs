@@ -2882,6 +2882,15 @@ fn default_process_tty_name() -> String {
 pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     obarray.set_symbol_value("process-connection-type", Value::T);
     obarray.make_special("process-connection-type");
+    // GNU `gnutls.c` provides this via `DEFVAR_INT ("gnutls-log-level",
+    // global_gnutls_log_level)` (default 0).  `gnutls.el` only forward-declares
+    // it (`(defvar gnutls-log-level)  ; gnutls.c`), so without the C-side
+    // definition it is void and `gnutls-negotiate` errors on
+    // `:loglevel ,gnutls-log-level` before it ever reaches the (working,
+    // rustls-backed) `gnutls-boot` -- breaking every TLS package download and
+    // thus `use-package`.  See https://github.com/eval-exec/neomacs/issues/121.
+    obarray.set_symbol_value("gnutls-log-level", Value::fixnum(0));
+    obarray.make_special("gnutls-log-level");
 }
 
 /// Check whether `process-connection-type` is truthy (non-nil).
