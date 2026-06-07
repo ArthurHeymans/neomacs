@@ -5525,30 +5525,20 @@ impl LayoutEngine {
             // variation selectors) share the preceding base char's
             // cell — zero columns, zero advance. CJK chars occupy 2
             // columns. Everything else occupies 1.
-            let is_extender = is_cluster_extender(ch);
-            // ZWJ emoji sequences (👨‍👩‍👧) and regional-indicator flag
-            // pairs (🇯🇵) are grapheme-cluster continuations whose members
-            // are NOT `is_cluster_extender` characters. Detect them from
-            // the last emitted glyph so they share the base char's cell
-            // (zero advance, zero columns) and merge into one `Composite`,
-            // matching GNU's automatic composition (src/composite.c).
+            // Grapheme-cluster composition: combining marks, ZWJ emoji
+            // sequences (👨‍👩‍👧), and regional-indicator flag pairs (🇯🇵)
+            // share the base char's cell. The rule lives in `composition`
+            // so every layout walk groups clusters identically — neomacs's
+            // stand-in for GNU's shared `composition_it` (src/composite.c).
             let cluster_tail = self.matrix_builder.last_text_cluster_tail();
-            let is_cluster_continuation = is_extender
-                || matches!(cluster_tail, Some((c, _)) if c == '\u{200D}')
-                || (is_regional_indicator(ch as u32) && matches!(cluster_tail, Some((_, true))));
+            let is_cluster_continuation =
+                crate::composition::continues_cluster(ch, cluster_tail);
             let char_cols = if control_display.is_some() {
                 2
             } else if is_cluster_continuation {
                 0
-            } else if is_wide_char(ch) || is_regional_indicator(ch as u32) {
-                // Regional indicators are emoji-presentation symbols that
-                // pair into 2-column flags; reserve the wide cell on the
-                // base so the composed flag does not overlap the next
-                // glyph. (Exact GNU per-glyph composition width arrives
-                // with the gstring phase.)
-                2
             } else {
-                1
+                crate::composition::base_width_cols(ch) as usize
             };
             let advance = if control_display.is_some() {
                 2.0 * face_char_w
