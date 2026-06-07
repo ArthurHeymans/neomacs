@@ -1301,6 +1301,13 @@ impl GlyphMatrixBuilder {
             return None;
         }
 
+        // GNU marks a row whose paragraph base direction is right-to-left as
+        // `reversed_p` and displays it flush to the right margin (src/xdisp.c).
+        // We record the same flag here; row materialization reads it to offset
+        // the glyphs to the right edge. Determined from the logical-order
+        // representative chars (first strong character sets the base level).
+        row.reversed_p = bidi::paragraph_base_level(&chars, BidiDir::Auto) & 1 == 1;
+
         let cursor_logical_idx = row.cursor_col.and_then(|col| {
             units
                 .iter()

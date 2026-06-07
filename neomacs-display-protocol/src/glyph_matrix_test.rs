@@ -267,6 +267,44 @@ fn materialize_produces_correct_glyph_count_from_grid() {
 }
 
 #[test]
+fn materialize_right_aligns_reversed_row() {
+    // A reversed_p (right-to-left) row is flush to the right margin: its glyphs
+    // start where the content ends at the right edge, not at column 0.
+    let char_w = 8.0f32;
+    let char_h = 16.0f32;
+    let cols = 10; // 80px-wide text area
+    let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
+    state.faces.insert(0, Face::new(0));
+    let mut matrix = GlyphMatrix::new(1, cols);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].reversed_p = true;
+    // Two cells, no recorded pixel width -> one column (8px) each => 16px used.
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d0}', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d1}', 0, 1));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        selected: true,
+    });
+    let buf = state.materialize();
+    let first_x = buf
+        .glyphs
+        .iter()
+        .find_map(|g| match g {
+            FrameGlyph::Char { x, .. } => Some(*x),
+            _ => None,
+        })
+        .expect("a char glyph");
+    // 80px area minus 16px content => content flush-right starting at x=64.
+    assert!(
+        (first_x - 64.0).abs() < 0.01,
+        "expected flush-right x=64, got {first_x}"
+    );
+}
+
+#[test]
 fn materialize_empty_grid_produces_no_glyphs() {
     let state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     let buf = state.materialize();

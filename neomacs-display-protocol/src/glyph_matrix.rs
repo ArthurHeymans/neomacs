@@ -234,6 +234,11 @@ pub struct GlyphRow {
     pub truncated_left: bool,
     /// Row has a continuation mark on the right.
     pub continued: bool,
+    /// Row's paragraph base direction is right-to-left. GNU `reversed_p`: such
+    /// rows are displayed flush to the right margin, with the empty space to
+    /// the left of the leftmost glyph filled by the background. Row
+    /// materialization offsets the glyphs to the right edge accordingly.
+    pub reversed_p: bool,
     /// Row displays actual buffer text (not blank filler).
     pub displays_text: bool,
     /// Row ends at end of buffer.
@@ -270,6 +275,7 @@ impl GlyphRow {
             cursor_type: None,
             truncated_left: false,
             continued: false,
+            reversed_p: false,
             displays_text: false,
             ends_at_zv: false,
             mode_line: false,
@@ -320,11 +326,18 @@ impl GlyphRow {
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
+        // Right-to-left rows are aligned differently, so a direction flip on
+        // otherwise-identical glyphs must still count as a change.
+        hash ^= self.reversed_p as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
         hash
     }
 
     pub fn row_equal(&self, other: &GlyphRow) -> bool {
         if self.hash != 0 && other.hash != 0 && self.hash != other.hash {
+            return false;
+        }
+        if self.reversed_p != other.reversed_p {
             return false;
         }
         for i in 0..3 {
@@ -357,6 +370,7 @@ impl GlyphRow {
         self.cursor_type = None;
         self.truncated_left = false;
         self.continued = false;
+        self.reversed_p = false;
         self.displays_text = false;
         self.ends_at_zv = false;
         self.pixel_y = 0.0;
@@ -1234,6 +1248,30 @@ impl FrameDisplayState {
         let clip_rect = Some(pixel_bounds);
         let mut col = 0usize;
         let mut x_cursor = win_x;
+
+        // GNU `reversed_p` rows (right-to-left paragraphs) are flush to the
+        // right margin: start the pen so the content ends at the right edge,
+        // leaving the empty space on the left (drawn as background). The pen
+        // then advances left-to-right as usual over the already visually
+        // reordered glyphs.
+        if glyph_row.reversed_p {
+            let used: f32 = glyph_row.glyphs[GlyphArea::Text.index()]
+                .iter()
+                .filter(|glyph| !glyph.padding)
+                .map(|glyph| {
+                    if glyph.pixel_width > 0.0 {
+                        glyph.pixel_width
+                    } else {
+                        match &glyph.glyph_type {
+                            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_w,
+                            _ if glyph.wide => char_w * 2.0,
+                            _ => char_w,
+                        }
+                    }
+                })
+                .sum();
+            x_cursor = win_x + (win_w - used).max(0.0);
+        }
 
         for area_idx in 0..3 {
             for glyph in &glyph_row.glyphs[area_idx] {

@@ -966,11 +966,60 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
     let before = render_row_text(&row);
     GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
     let after = render_row_text(&row);
+    // First strong char is L, so this is not a reversed (right-aligned) row.
+    assert!(!row.reversed_p);
     // Reorder is a no-op here: the Arabic word keeps its mid-line slot, between
     // "hello " and " world". (When this rendered wrong it was a draw-side bug,
     // not reordering.)
     assert_eq!(before, "Mixed: hello {العربية}...... world");
     assert_eq!(after, before);
+}
+
+#[test]
+fn rtl_paragraph_row_is_marked_reversed() {
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphType};
+    // A pure right-to-left line: one Arabic word as a composed cell. The
+    // paragraph's first strong char is R, so the row must be flagged reversed
+    // (GNU reversed_p) so materialization aligns it flush-right.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    {
+        let text = &mut row.glyphs[GlyphArea::Text.index()];
+        text.push(Glyph {
+            glyph_type: GlyphType::Composite {
+                text: "\u{0627}\u{0644}\u{0645}".into(),
+            },
+            face_id: 0,
+            charpos: 0,
+            bidi_level: 0,
+            wide: false,
+            pixel_width: 40.0,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
+            padding: false,
+        });
+        text.push(Glyph::padding_for(0, 1));
+        text.push(Glyph::padding_for(0, 2));
+    }
+    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    assert!(row.reversed_p);
+    // The reorder itself does not insert filler glyphs; the right-edge offset
+    // happens at materialization time.
+    assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 3);
+}
+
+#[test]
+fn ltr_paragraph_row_is_not_marked_reversed() {
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea};
+    // First strong char is L: not a reversed row.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    {
+        let text = &mut row.glyphs[GlyphArea::Text.index()];
+        for ch in "hello".chars() {
+            text.push(Glyph::char(ch, 0, 0).with_pixel_width(16.0));
+        }
+    }
+    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    assert!(!row.reversed_p);
 }
 
 #[cfg(test)]

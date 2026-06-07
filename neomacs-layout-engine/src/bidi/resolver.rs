@@ -63,6 +63,21 @@ pub fn resolve_levels(text: &str, base_dir: BidiDir) -> Vec<u8> {
     levels
 }
 
+/// Paragraph embedding level (0 = left-to-right, 1 = right-to-left) that
+/// [`resolve_levels`] uses for `text` under `base_dir`. Exposed so the
+/// glyph-row reorderer can right-align right-to-left paragraphs the way GNU
+/// displays them with reversed (`reversed_p`) rows flush to the right margin.
+pub fn paragraph_base_level(text: &str, base_dir: BidiDir) -> u8 {
+    match base_dir {
+        BidiDir::LTR => 0,
+        BidiDir::RTL => 1,
+        BidiDir::Auto => {
+            let classes: Vec<BidiClass> = text.chars().map(bidi_class).collect();
+            determine_paragraph_level(&classes)
+        }
+    }
+}
+
 /// P2-P3: Determine paragraph embedding level from first strong character.
 fn determine_paragraph_level(classes: &[BidiClass]) -> u8 {
     let mut isolate_depth = 0u32;
