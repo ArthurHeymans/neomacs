@@ -4113,12 +4113,16 @@ impl LayoutEngine {
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
                             for rch in replacement.chars() {
-                                let rch_cols = if is_cluster_extender(rch) {
+                                // Grapheme-cluster composition for display-
+                                // property replacement text, via the shared
+                                // `composition` rule (emoji ZWJ + flags).
+                                let tail = self.matrix_builder.last_text_cluster_tail();
+                                let is_cont =
+                                    crate::composition::continues_cluster(rch, tail);
+                                let rch_cols = if is_cont {
                                     0
-                                } else if is_wide_char(rch) {
-                                    2
                                 } else {
-                                    1
+                                    crate::composition::base_width_cols(rch) as i32
                                 };
                                 let rch_advance = if rch_cols == 0 {
                                     0.0
@@ -4140,7 +4144,13 @@ impl LayoutEngine {
                                 if x + rch_advance > right_limit {
                                     break;
                                 }
-                                if rch_cols == 2 {
+                                if is_cont {
+                                    self.matrix_builder.push_cluster_continuation(
+                                        rch,
+                                        current_text_face_id,
+                                        charpos as usize,
+                                    );
+                                } else if rch_cols == 2 {
                                     self.matrix_builder.push_wide_char_with_pixel_width(
                                         rch,
                                         current_text_face_id,
