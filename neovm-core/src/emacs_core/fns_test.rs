@@ -281,6 +281,41 @@ fn base64_region_eval_swapped_bounds_and_url_encoding() {
 }
 
 #[test]
+fn base64_region_eval_accepts_marker_bounds() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            buf.point_min_emacs_byte_pos().get(),
+            buf.point_max_emacs_byte_pos().get(),
+        ));
+        buf.insert("abc");
+    }
+    let start = crate::emacs_core::marker::make_marker_value(
+        Some(buffer_id),
+        Some(crate::buffer::LispCharPos1::new(2)),
+        false,
+    );
+    let end = crate::emacs_core::marker::make_marker_value(
+        Some(buffer_id),
+        Some(crate::buffer::LispCharPos1::new(4)),
+        false,
+    );
+
+    let encoded = builtin_base64_encode_region(&mut eval, vec![start, end, Value::T])
+        .expect("encode region should accept markers");
+    assert_eq!(encoded, Value::fixnum(4));
+    let encoded_text = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .buffer_string();
+    assert_eq!(encoded_text, "aYmM=");
+}
+
+#[test]
 fn base64_region_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

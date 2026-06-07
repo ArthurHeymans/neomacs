@@ -489,6 +489,7 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
     start_arg: &Value,
     end_arg: &Value,
 ) -> Result<(crate::buffer::BufferId, EmacsByteRange), Flow> {
+    let region = super::position::LispRegionArgs::from_values(buffers, *start_arg, *end_arg)?;
     let buffer_id = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
@@ -498,15 +499,7 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    let region = ValidatedBufferLispRegion::from_values(start_arg, end_arg)?;
-    if !region.within_accessible(buf) {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::make_buffer(buffer_id), *start_arg, *end_arg],
-        ));
-    }
-
-    Ok((buffer_id, region.to_accessible_byte_range(buf)))
+    Ok((buffer_id, region.accessible_byte_range(buf)?))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -516,13 +509,6 @@ struct ValidatedBufferLispRegion {
 }
 
 impl ValidatedBufferLispRegion {
-    fn from_values(start_arg: &Value, end_arg: &Value) -> Result<Self, Flow> {
-        Ok(Self {
-            start: LispCharPos1::new(require_int_or_marker(start_arg)?),
-            end: LispCharPos1::new(require_int_or_marker(end_arg)?),
-        })
-    }
-
     fn from_optional_values(
         start_raw: Option<&Value>,
         end_raw: Option<&Value>,
@@ -553,15 +539,6 @@ impl ValidatedBufferLispRegion {
             return Err(signal("args-out-of-range", vec![*start_arg, *end_arg]));
         }
         Ok(self)
-    }
-
-    fn within_accessible(&self, buf: &crate::buffer::Buffer) -> bool {
-        let point_min = buf.point_min_lisp_char_pos();
-        let point_max = buf.point_max_lisp_char_pos();
-        self.start >= point_min
-            && self.start <= point_max
-            && self.end >= point_min
-            && self.end <= point_max
     }
 
     fn ordered(self) -> (LispCharPos1, LispCharPos1) {
