@@ -1659,7 +1659,7 @@ pub struct Buffer {
     /// Base buffer when this is an indirect buffer.
     pub(crate) base_buffer: Option<BufferId>,
     /// The underlying text storage.
-    text: BufferText,
+    pub(in crate::buffer) text: BufferText,
     /// Point — paired character and Emacs-byte cursor position.
     pub(crate) point: TextPositionAnchor,
     /// GNU `BVAR(buf, mark)` — a real Lisp_Marker.  This IS the mark;
@@ -2877,11 +2877,11 @@ impl Buffer {
         }
     }
 
-    fn set_point_anchor_unchecked(&mut self, anchor: TextPositionAnchor) {
+    pub(in crate::buffer) fn set_point_anchor_unchecked(&mut self, anchor: TextPositionAnchor) {
         self.point = anchor;
     }
 
-    fn set_accessible_region_anchors_unchecked(
+    pub(in crate::buffer) fn set_accessible_region_anchors_unchecked(
         &mut self,
         start: TextPositionAnchor,
         end: TextPositionAnchor,

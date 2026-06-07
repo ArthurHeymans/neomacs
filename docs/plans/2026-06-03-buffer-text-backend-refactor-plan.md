@@ -697,6 +697,10 @@ Completed so far:
   transaction executors, matching the existing insert executor shape and
   keeping GNU undo ordering, storage mutation, and side-effect application at
   one explicit boundary for each edit kind.
+- Moved the current-buffer insert/delete/replace executors, shared edit
+  side-effect dispatch, same-length side effects, and first-change undo
+  preparation into `edit_transaction.rs`; `insdel.rs` now keeps the public edit
+  entry points while transaction ordering lives with the typed policy layer.
 
 Next work:
 
