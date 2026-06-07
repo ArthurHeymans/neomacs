@@ -693,6 +693,10 @@ Completed so far:
 - Added a transaction-owned deletion storage plan that keeps measured delete
   metadata, deleted text, and marker-adjustment undo entries together before
   current-buffer deletion mutates storage.
+- Split current-buffer delete and replace execution into plan-consuming
+  transaction executors, matching the existing insert executor shape and
+  keeping GNU undo ordering, storage mutation, and side-effect application at
+  one explicit boundary for each edit kind.
 
 Next work:
 

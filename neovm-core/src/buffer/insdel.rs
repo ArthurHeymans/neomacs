@@ -46,6 +46,14 @@ impl Buffer {
         string
     }
 
+    fn delete_text_plan_for_range(&self, range: TextEditRange) -> DeleteTextPlan {
+        DeleteTextPlan::new(
+            range,
+            self.buffer_region_lisp_string(range.byte_range()),
+            self.text.marker_adjustments_for_delete(range),
+        )
+    }
+
     fn edit_range_at_emacs_byte_pos(&self, byte_pos: EmacsBytePos) -> TextEditRange {
         self.text.edit_range_at_emacs_byte_pos(byte_pos)
     }
@@ -111,6 +119,112 @@ impl Buffer {
                 .text_props_append_shifted_at_emacs_byte_pos(text_properties, edit.byte_pos());
         }
         edit.insertion()
+    }
+
+    /// Execute a fully measured deletion plan.
+    ///
+    /// GNU `del_range_2` records deletion undo before marker adjustment and
+    /// storage mutation.  The plan owns the pre-mutation deleted text and
+    /// marker-adjustment undo entries so this executor consumes one
+    /// transaction object instead of recomputing side inputs mid-edit.
+    fn execute_delete_text_plan(&mut self, plan: DeleteTextPlan) -> TextEditRange {
+        let edit = plan.edit();
+        if edit.is_empty() {
+            return edit.range();
+        }
+
+        // GNU `record_delete` always calls `record_point`, and that path
+        // records the first-change sentinel when the buffer was unmodified.
+        self.undo_prepare_change(plan.range().byte_start(), self.point_emacs_byte_pos());
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            for &(marker, adjustment) in plan.marker_adjustments() {
+                undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
+            }
+            undo::undo_list_record_delete(
+                &mut ul,
+                plan.range().char_start(),
+                plan.deleted_text().clone(),
+                self.point_char_pos(),
+                self.undo_state.point_before_command_or_undo(),
+            );
+            self.set_undo_list(ul);
+        }
+
+        self.text.delete_measured_range(plan.range());
+        self.apply_byte_delete_side_effects(edit, DeleteSideEffectPolicy::current_buffer());
+        plan.range()
+    }
+
+    /// Execute a fully measured replacement plan.
+    ///
+    /// GNU `replace_range` records insertion undo before deletion undo for a
+    /// non-empty replacement.  Keep that ordering next to the storage
+    /// mutation and side-effect policy so the transaction is one explicit
+    /// replace operation rather than scattered delete/insert bookkeeping.
+    fn execute_replace_text_plan(&mut self, plan: ReplaceTextPlan) -> TextReplacement {
+        let old_range = plan.old_range();
+
+        if old_range.is_empty() {
+            self.goto_emacs_byte_pos(old_range.byte_start());
+            let insertion_plan = plan.into_insert_plan(
+                self.point_anchor(),
+                InsertMarkerPlacement::AfterMarkers,
+                InsertMarkerAdjustment::ByInsertionType,
+            );
+            let insertion = self.execute_insert_text_plan(insertion_plan);
+            debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
+            debug_assert_eq!(old_range.char_start(), insertion.char_pos());
+            return TextReplacement::new(old_range, insertion.extent());
+        }
+
+        let old_point = self.point_anchor();
+        let deleted_text = self.buffer_region_lisp_string(plan.old_range().byte_range());
+
+        self.undo_prepare_change(plan.old_range().byte_start(), old_point.emacs_byte_pos());
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            // GNU `replace_range` records the insertion before the deletion
+            // at FROM + old-length, so primitive-undo reinserts the old text
+            // before deleting the replacement.  That order keeps markers and
+            // overlay endpoints on opposite sides of the replacement distinct.
+            undo::undo_list_record_insert(
+                &mut ul,
+                plan.old_char_end(),
+                plan.new_char_len(),
+                self.undo_state.point_before_command_or_undo(),
+            );
+            undo::undo_list_record_delete(
+                &mut ul,
+                plan.old_char_start(),
+                deleted_text,
+                old_point.char_pos(),
+                self.undo_state.point_before_command_or_undo(),
+            );
+            self.set_undo_list(ul);
+        }
+
+        let replacement = plan.replacement();
+        self.text.replace_measured_range(replacement, plan.bytes());
+        self.apply_replace_side_effects(
+            MeasuredReplaceEdit::new(replacement),
+            ReplaceSideEffectPolicy::current_buffer(),
+        );
+        if let Some(text_properties) = plan.text_properties() {
+            self.text.text_props_append_shifted_at_emacs_byte_pos(
+                text_properties,
+                replacement.byte_start(),
+            );
+        } else if !plan.new_extent().chars().is_empty() {
+            self.text.text_props_set_properties_in_emacs_byte_range(
+                EmacsByteRange::from_start_len(
+                    replacement.byte_start(),
+                    plan.new_extent().emacs_bytes(),
+                ),
+                Vec::new(),
+            );
+        }
+        replacement
     }
 
     fn apply_byte_insert_side_effects(
@@ -379,67 +493,7 @@ impl Buffer {
         text: &LispString,
     ) -> TextReplacement {
         let plan = ReplaceTextPlan::from_lisp_string(old_range, text, self.get_multibyte());
-
-        if old_range.is_empty() {
-            self.goto_emacs_byte_pos(old_range.byte_start());
-            let insertion_plan = plan.into_insert_plan(
-                self.point_anchor(),
-                InsertMarkerPlacement::AfterMarkers,
-                InsertMarkerAdjustment::ByInsertionType,
-            );
-            let insertion = self.execute_insert_text_plan(insertion_plan);
-            debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
-            debug_assert_eq!(old_range.char_start(), insertion.char_pos());
-            return TextReplacement::new(old_range, insertion.extent());
-        }
-
-        let old_point = self.point_anchor();
-        let deleted_text = self.buffer_region_lisp_string(plan.old_range().byte_range());
-
-        self.undo_prepare_change(plan.old_range().byte_start(), old_point.emacs_byte_pos());
-        let mut ul = self.get_undo_list();
-        if !undo::undo_list_is_disabled(&ul) {
-            // GNU `replace_range` records the insertion before the deletion
-            // at FROM + old-length, so primitive-undo reinserts the old text
-            // before deleting the replacement.  That order keeps markers and
-            // overlay endpoints on opposite sides of the replacement distinct.
-            undo::undo_list_record_insert(
-                &mut ul,
-                plan.old_char_end(),
-                plan.new_char_len(),
-                self.undo_state.point_before_command_or_undo(),
-            );
-            undo::undo_list_record_delete(
-                &mut ul,
-                plan.old_char_start(),
-                deleted_text,
-                old_point.char_pos(),
-                self.undo_state.point_before_command_or_undo(),
-            );
-            self.set_undo_list(ul);
-        }
-
-        let replacement = plan.replacement();
-        self.text.replace_measured_range(replacement, plan.bytes());
-        self.apply_replace_side_effects(
-            MeasuredReplaceEdit::new(replacement),
-            ReplaceSideEffectPolicy::current_buffer(),
-        );
-        if let Some(text_properties) = plan.text_properties() {
-            self.text.text_props_append_shifted_at_emacs_byte_pos(
-                text_properties,
-                replacement.byte_start(),
-            );
-        } else if !plan.new_extent().chars().is_empty() {
-            self.text.text_props_set_properties_in_emacs_byte_range(
-                EmacsByteRange::from_start_len(
-                    replacement.byte_start(),
-                    plan.new_extent().emacs_bytes(),
-                ),
-                Vec::new(),
-            );
-        }
-        replacement
+        self.execute_replace_text_plan(plan)
     }
 
     fn replace_measured_region_lisp_string_edit(
@@ -465,33 +519,8 @@ impl Buffer {
         if range.is_empty() {
             return TextEditRange::default();
         }
-        let plan = DeleteTextPlan::new(
-            range,
-            self.buffer_region_lisp_string(range.byte_range()),
-            self.text.marker_adjustments_for_delete(range),
-        );
-        // GNU `record_delete` always calls `record_point`, and that path
-        // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(plan.range().byte_start(), self.point_emacs_byte_pos());
-        let mut ul = self.get_undo_list();
-        if !undo::undo_list_is_disabled(&ul) {
-            for &(marker, adjustment) in plan.marker_adjustments() {
-                undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
-            }
-            undo::undo_list_record_delete(
-                &mut ul,
-                plan.range().char_start(),
-                plan.deleted_text().clone(),
-                self.point_char_pos(),
-                self.undo_state.point_before_command_or_undo(),
-            );
-            self.set_undo_list(ul);
-        }
-
-        let edit = plan.edit();
-        self.text.delete_measured_range(plan.range());
-        self.apply_byte_delete_side_effects(edit, DeleteSideEffectPolicy::current_buffer());
-        plan.range()
+        let plan = self.delete_text_plan_for_range(range);
+        self.execute_delete_text_plan(plan)
     }
 
     fn delete_measured_region_edit(&mut self, range: TextEditRange) -> MeasuredDeleteEdit {
