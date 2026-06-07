@@ -708,6 +708,9 @@ Completed so far:
 - Moved current-buffer transposition execution into `edit_transaction.rs` so
   storage replacement, text-property movement, marker remapping, point update,
   and same-length side effects all consume one `TranspositionStoragePlan`.
+- Moved shared-buffer sibling edit propagation into `edit_transaction.rs` so
+  sibling state-policy derivation, side-effect application, and state-marker
+  refresh are owned by the transaction policy layer instead of `insdel.rs`.
 
 Next work:
 

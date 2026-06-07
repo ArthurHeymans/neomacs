@@ -9,10 +9,9 @@ use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, DeleteTextPlan, InsertMarkerAdjustment,
     InsertMarkerPlacement, InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit,
     MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy,
-    ReplaceTextPlan, SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
-    SharedTextEditMetadata, SharedTextEditScope, SharedTextEditStatePolicy,
-    TranspositionStoragePlan, char_pos_for_emacs_byte, emacs_byte_for_char_pos,
-    lisp_string_from_buffer_bytes, modification_tick_delta,
+    ReplaceTextPlan, SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
+    SharedTextEditStatePolicy, TranspositionStoragePlan, char_pos_for_emacs_byte,
+    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -281,52 +280,6 @@ impl BufferManager {
         self.buffers
             .get(&id)
             .map(|buf| buf.edit_range_for_char_range(char_range))
-    }
-
-    fn shared_text_edit_scope(&self, edited_id: BufferId) -> Option<SharedTextEditScope> {
-        let root_id = self.shared_text_root_id(edited_id)?;
-        Some(SharedTextEditScope::new(
-            edited_id,
-            self.buffers_sharing_root_ids(root_id),
-        ))
-    }
-
-    fn shared_sibling_state_update(&self, sibling_id: BufferId) -> SharedBufferStateUpdate {
-        if self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id) {
-            SharedBufferStateUpdate::UpdateFields
-        } else {
-            SharedBufferStateUpdate::RefreshFromStateMarkers
-        }
-    }
-
-    fn apply_shared_text_edit_to_siblings(
-        &mut self,
-        scope: SharedTextEditScope,
-        edit: SharedTextEditMetadata,
-    ) -> Option<()> {
-        for sibling_id in scope.siblings() {
-            let state_policy = edit
-                .state_policy_for_shared_sibling(|| self.shared_sibling_state_update(sibling_id));
-            {
-                let sibling = self.buffers.get_mut(&sibling_id)?;
-                sibling.apply_shared_text_edit_side_effects(edit, state_policy);
-            }
-            if let Some(state_update) = state_policy.state_update() {
-                self.refresh_shared_buffer_state_cache(sibling_id, state_update)?;
-            }
-        }
-        Some(())
-    }
-
-    fn refresh_shared_buffer_state_cache(
-        &mut self,
-        buffer_id: BufferId,
-        state_update: SharedBufferStateUpdate,
-    ) -> Option<()> {
-        if state_update.needs_state_marker_refresh() {
-            self.fetch_buffer_state_markers(buffer_id)?;
-        }
-        Some(())
     }
 
     pub fn insert_into_buffer(&mut self, id: BufferId, text: &str) -> Option<()> {

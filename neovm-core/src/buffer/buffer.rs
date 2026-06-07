@@ -4193,6 +4193,10 @@ impl BufferManager {
         self.current.and_then(|id| self.buffers.get_mut(&id))
     }
 
+    pub(in crate::buffer) fn buffer_mut(&mut self, id: BufferId) -> Option<&mut Buffer> {
+        self.buffers.get_mut(&id)
+    }
+
     /// Return the current buffer id.
     pub fn current_buffer_id(&self) -> Option<BufferId> {
         self.current
@@ -4204,7 +4208,7 @@ impl BufferManager {
             .is_some_and(|buffer| buffer.inhibit_buffer_hooks)
     }
 
-    fn buffer_has_state_markers(&self, id: BufferId) -> bool {
+    pub(in crate::buffer) fn buffer_has_state_markers(&self, id: BufferId) -> bool {
         self.buffers
             .get(&id)
             .and_then(|buffer| buffer.state_markers)
@@ -4281,7 +4285,10 @@ impl BufferManager {
         Some(())
     }
 
-    fn fetch_buffer_state_markers(&mut self, buffer_id: BufferId) -> Option<()> {
+    pub(in crate::buffer) fn fetch_buffer_state_markers(
+        &mut self,
+        buffer_id: BufferId,
+    ) -> Option<()> {
         let markers = self.buffers.get(&buffer_id)?.state_markers?;
         let pt = self.marker_emacs_byte_pos(buffer_id, markers.pt_marker)?;
         let begv = self.marker_emacs_byte_pos(buffer_id, markers.begv_marker)?;
@@ -4436,7 +4443,7 @@ impl BufferManager {
         ids
     }
 
-    fn shared_text_root_id(&self, id: BufferId) -> Option<BufferId> {
+    pub(in crate::buffer) fn shared_text_root_id(&self, id: BufferId) -> Option<BufferId> {
         let buf = self.buffers.get(&id)?;
         Some(buf.base_buffer.unwrap_or(buf.id))
     }
@@ -4614,7 +4621,7 @@ impl BufferManager {
         self.restore_buffer_emacs_byte_restriction(id, range)
     }
 
-    fn buffers_sharing_root_ids(&self, root_id: BufferId) -> Vec<BufferId> {
+    pub(in crate::buffer) fn buffers_sharing_root_ids(&self, root_id: BufferId) -> Vec<BufferId> {
         self.buffers
             .values()
             .filter_map(|buf| (buf.base_buffer.unwrap_or(buf.id) == root_id).then_some(buf.id))

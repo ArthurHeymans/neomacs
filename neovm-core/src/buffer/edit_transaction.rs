@@ -5,7 +5,7 @@
 //! entry points still live in `insdel.rs`, while this module keeps the
 //! GNU-shaped insert/delete/replace ordering in one place.
 
-use super::Buffer;
+use super::{Buffer, BufferManager};
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::undo;
 use crate::buffer::{
@@ -657,6 +657,59 @@ impl Buffer {
         }
         let _ = (beg, pt);
         self.undo_ensure_first_change();
+    }
+}
+
+impl BufferManager {
+    pub(in crate::buffer) fn shared_text_edit_scope(
+        &self,
+        edited_id: BufferId,
+    ) -> Option<SharedTextEditScope> {
+        let root_id = self.shared_text_root_id(edited_id)?;
+        Some(SharedTextEditScope::new(
+            edited_id,
+            self.buffers_sharing_root_ids(root_id),
+        ))
+    }
+
+    fn shared_sibling_state_update(&self, sibling_id: BufferId) -> SharedBufferStateUpdate {
+        if self.current_buffer_id() == Some(sibling_id)
+            || !self.buffer_has_state_markers(sibling_id)
+        {
+            SharedBufferStateUpdate::UpdateFields
+        } else {
+            SharedBufferStateUpdate::RefreshFromStateMarkers
+        }
+    }
+
+    pub(in crate::buffer) fn apply_shared_text_edit_to_siblings(
+        &mut self,
+        scope: SharedTextEditScope,
+        edit: SharedTextEditMetadata,
+    ) -> Option<()> {
+        for sibling_id in scope.siblings() {
+            let state_policy = edit
+                .state_policy_for_shared_sibling(|| self.shared_sibling_state_update(sibling_id));
+            {
+                let sibling = self.buffer_mut(sibling_id)?;
+                sibling.apply_shared_text_edit_side_effects(edit, state_policy);
+            }
+            if let Some(state_update) = state_policy.state_update() {
+                self.refresh_shared_buffer_state_cache(sibling_id, state_update)?;
+            }
+        }
+        Some(())
+    }
+
+    fn refresh_shared_buffer_state_cache(
+        &mut self,
+        buffer_id: BufferId,
+        state_update: SharedBufferStateUpdate,
+    ) -> Option<()> {
+        if state_update.needs_state_marker_refresh() {
+            self.fetch_buffer_state_markers(buffer_id)?;
+        }
+        Some(())
     }
 }
 
