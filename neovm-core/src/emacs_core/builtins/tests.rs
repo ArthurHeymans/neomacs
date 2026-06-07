@@ -9968,6 +9968,47 @@ fn dispatch_builtin_pure_handles_fringe_display_and_debug_output_placeholders() 
 }
 
 #[test]
+fn defined_fringe_bitmap_can_receive_face_until_destroyed() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"
+            (progn
+              (define-fringe-bitmap 'vm-test-fringe [0 24 60 126])
+              (list (get 'vm-test-fringe 'fringe)
+                    (set-fringe-bitmap-face 'vm-test-fringe 'success)
+                    (destroy-fringe-bitmap 'vm-test-fringe)
+                    (get 'vm-test-fringe 'fringe)))
+            "#,
+        )
+        .expect("defined fringe bitmap sequence should evaluate");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&result),
+        "(1 nil nil nil)"
+    );
+
+    let err = dispatch_builtin(
+        &mut eval,
+        "set-fringe-bitmap-face",
+        vec![Value::symbol("vm-test-fringe"), Value::symbol("success")],
+    )
+    .expect("set-fringe-bitmap-face should resolve")
+    .expect_err("destroyed fringe bitmap should no longer accept a face");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                crate::emacs_core::print::print_value(&sig.data[0]),
+                "\"Undefined fringe bitmap\""
+            );
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn mouse_position_builtins_default_to_selected_frame_with_nil_coords() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
