@@ -5852,6 +5852,33 @@ fn eval_rendered(eval: &mut Context, form: &str) -> String {
 }
 
 #[test]
+fn bootstrap_require_reports_loaded_file_that_failed_to_provide_feature() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("tempdir");
+    let file = dir.path().join("missing-provide.el");
+    fs::write(&file, "(setq missing-provide-ran t)\n").expect("write missing-provide fixture");
+
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    let load_path = dir.path().to_string_lossy().replace('\\', "\\\\");
+    let rendered = eval_rendered(
+        &mut eval,
+        &format!(
+            r#"(progn
+                 (add-to-list 'load-path "{load_path}")
+                 (require 'missing-provide))"#
+        ),
+    );
+
+    let loaded_file = file.to_string_lossy();
+    assert!(
+        rendered.contains(&format!(
+            "Loading file {loaded_file} failed to provide feature 'missing-provide'"
+        )),
+        "require error should include loaded file path, got {rendered}"
+    );
+}
+
+#[test]
 fn bootstrap_condition_case_lexical_handler_binding_restores_outer_let() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

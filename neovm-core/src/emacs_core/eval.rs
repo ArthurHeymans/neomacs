@@ -8,6 +8,7 @@ pub type WakeupFd = std::os::windows::io::RawHandle;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
@@ -2043,17 +2044,25 @@ pub(crate) fn plan_require_in_state(
     }
 }
 
-pub(crate) fn finish_require_in_state(features: &[SymId], sym_id: SymId, name: &str) -> EvalResult {
+pub(crate) fn finish_require_in_state(
+    features: &[SymId],
+    sym_id: SymId,
+    name: &str,
+    loaded_path: Option<&Path>,
+) -> EvalResult {
     if features.contains(&sym_id) {
         Ok(Value::symbol(name))
     } else {
-        Err(signal(
-            "error",
-            vec![Value::string(format!(
-                "Required feature '{}' was not provided",
+        let message = if let Some(path) = loaded_path {
+            format!(
+                "Loading file {} failed to provide feature '{}'",
+                path.display(),
                 name
-            ))],
-        ))
+            )
+        } else {
+            format!("Required feature '{}' was not provided", name)
+        };
+        Err(signal("error", vec![Value::string(message)]))
     }
 }
 
@@ -9990,7 +9999,7 @@ impl Context {
                         let result = (|| -> EvalResult {
                             self.load_file_internal(&path)?;
                             self.refresh_features_from_variable();
-                            finish_require_in_state(&self.features, sym_id, &name)
+                            finish_require_in_state(&self.features, sym_id, &name, Some(&path))
                         })();
                         let _ = self.require_stack.pop();
                         if let Err(ref e) = result
