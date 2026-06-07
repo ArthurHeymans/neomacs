@@ -541,14 +541,6 @@ impl EmacsByteRange {
         self.end
     }
 
-    pub const fn start_usize(self) -> usize {
-        self.start.get()
-    }
-
-    pub const fn end_usize(self) -> usize {
-        self.end.get()
-    }
-
     pub const fn len(self) -> EmacsByteLen {
         EmacsByteLen::new(self.end.get().saturating_sub(self.start.get()))
     }

@@ -764,6 +764,9 @@ Completed so far:
 - Removed the raw `CharRange` start/end accessors from production use; string
   comparison and text-property plist validation now order and construct
   character ranges through typed `CharPos0` boundaries.
+- Removed the unused raw `EmacsByteRange` start/end accessors so byte ranges
+  expose typed endpoints only; callers that need storage indices must unwrap
+  `EmacsBytePos` explicitly at the local indexing site.
 
 Next work:
 
