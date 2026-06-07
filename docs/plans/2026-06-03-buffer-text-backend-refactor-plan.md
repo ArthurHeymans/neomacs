@@ -724,6 +724,9 @@ Completed so far:
 - Gated the legacy direct `replace_match_buffer` helper to tests after
   confirming production `replace-match` already computes GNU replacement text
   and applies it through the manager-backed buffer replacement path.
+- Moved process-output, erase-buffer, and auto-coding probe point resets onto
+  `BufferManager::goto_buffer_emacs_byte_pos`, keeping direct `Buffer` borrows
+  out of those production point-movement boundaries after manager edits.
 
 Next work:
 

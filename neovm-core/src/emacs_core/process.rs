@@ -4244,8 +4244,8 @@ pub(crate) fn builtin_internal_default_process_filter(
     // Temporarily clear read-only so process output can be inserted.
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_emacs_byte_pos(insert_pos);
     }
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
 
     // Insert text at point (which is now at the mark position).
     eval.buffers.insert_into_buffer(buf_id, &text);
@@ -4267,9 +4267,9 @@ pub(crate) fn builtin_internal_default_process_filter(
 
     // Restore original point, adjusted for the insertion.
     let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
-    if let (Some(buf), Some(old_pt)) = (eval.buffers.get_mut(buf_id), saved_pt) {
+    if let Some(old_pt) = saved_pt {
         let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
-        buf.goto_emacs_byte_pos(adjusted_pt);
+        let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, adjusted_pt);
     }
 
     // Advance the stored process marker.
@@ -4326,8 +4326,8 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     eval.set_current_buffer_unrecorded(buf_id)?;
     if let Some(buf) = eval.buffers.get_mut(buf_id) {
         buf.set_read_only_value(false);
-        buf.goto_emacs_byte_pos(insert_pos);
     }
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
 
     let text = format!("\nProcess {name} {msg}");
     let _ = eval
@@ -4345,9 +4345,9 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     }
 
     let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
-    if let (Some(buf), Some(old_pt)) = (eval.buffers.get_mut(buf_id), saved_pt) {
+    if let Some(old_pt) = saved_pt {
         let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
-        buf.goto_emacs_byte_pos(adjusted_pt);
+        let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, adjusted_pt);
     }
 
     if let Some(proc) = eval.processes.get_any_mut(id) {
