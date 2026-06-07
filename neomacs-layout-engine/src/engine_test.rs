@@ -452,8 +452,8 @@ struct BackendLayoutTrace {
     output_rows: Vec<DisplayRowSnapshot>,
     phys_cursor: Option<WindowCursorSnapshot>,
     visible_span: Option<WindowVisibleBufferSpan>,
-    window_start: usize,
-    window_point: usize,
+    window_start: LispCharPos1,
+    window_point: LispCharPos1,
     hit: Option<WindowHitTrace>,
 }
 
@@ -551,7 +551,7 @@ fn backend_layout_trace_with_buffer_and_window_setup(
             .find_window_mut(selected_window)
             .expect("selected window");
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
         }
         setup_window(window);
     }
@@ -748,7 +748,7 @@ fn wrapped_retry_backend_layout_trace(kind: BufferTextBackendKind) -> (BackendLa
         },
         |window| {
             if let neovm_core::window::Window::Leaf { point, .. } = window {
-                *point = target_pos;
+                *point = LispCharPos1::from_one_based_usize(target_pos);
             }
         },
     );
@@ -783,7 +783,7 @@ fn point_line_tail_backend_layout_trace(
                 ..
             } = window
             {
-                *window_point = point;
+                *window_point = LispCharPos1::from_one_based_usize(point);
             }
         },
     );
@@ -814,7 +814,7 @@ fn mode_line_geometry_backend_layout_trace(
                 ..
             } = window
             {
-                *window_point = point;
+                *window_point = LispCharPos1::from_one_based_usize(point);
             }
         },
     );
@@ -834,7 +834,7 @@ fn hscroll_cursor_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLa
         },
         |window| {
             if let neovm_core::window::Window::Leaf { point, hscroll, .. } = window {
-                *point = 2;
+                *point = LispCharPos1::from_one_based_usize(2);
                 *hscroll = 3;
             }
         },
@@ -872,7 +872,7 @@ fn edit_redisplay_backend_layout_trace(
             .find_window_mut(selected_window)
             .expect("selected window");
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
         }
     }
 
@@ -959,7 +959,7 @@ fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> Fontificatio
             .find_window_mut(selected_window)
             .expect("selected window");
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
         }
     }
 
@@ -1276,8 +1276,8 @@ fn layout_frame_rust_publishes_increasing_display_positions() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -1339,8 +1339,8 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -1636,7 +1636,7 @@ fn implemented_text_backends_match_wrapped_redisplay_retry_output() {
         "baseline should converge wrapped redisplay on target point {target_pos}, trace={baseline:?}"
     );
     assert!(
-        baseline.window_start > 1,
+        baseline.window_start > LispCharPos1::ONE,
         "baseline should advance window-start after wrapped redisplay retry, trace={baseline:?}"
     );
     assert!(
@@ -1701,11 +1701,12 @@ fn implemented_text_backends_match_mode_line_geometry_after_redisplay_retry() {
         mode_line_geometry_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let mode_line = trace_mode_line_text(&baseline);
     assert!(
-        baseline.window_start > 1,
+        baseline.window_start > LispCharPos1::ONE,
         "baseline should advance window-start for EOB redisplay retry, trace={baseline:?}"
     );
     assert_eq!(
-        baseline.window_point, point,
+        baseline.window_point,
+        LispCharPos1::from_one_based_usize(point),
         "baseline should preserve the selected-window EOB point after retry"
     );
     assert!(
@@ -1880,8 +1881,8 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -2057,8 +2058,8 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -2137,8 +2138,8 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = newline_byte + 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(newline_byte + 1);
         }
     }
 
@@ -2269,8 +2270,8 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -2477,8 +2478,8 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = point_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(point_pos);
         }
     }
 
@@ -2531,8 +2532,8 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 3;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(3);
         }
     }
     eval.frame_manager_mut()
@@ -2600,8 +2601,8 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
             ..
         } = window
         {
-            *window_start = 1;
-            *point = point_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(point_pos);
         }
     }
 
@@ -3015,8 +3016,8 @@ fn layout_frame_rust_captures_cursor_inside_hscroll_skipped_text_without_rescan(
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 2;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(2);
             *hscroll = 3;
         }
     }
@@ -3075,8 +3076,8 @@ fn assert_layout_frame_rust_tab_cursor_width(x_stretch_cursor: bool, cursor_type
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 2;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(2);
         }
     }
 
@@ -3841,8 +3842,8 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 2;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(2);
         }
     }
 
@@ -3917,7 +3918,7 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
             .find_window_mut(selected_window)
             .expect("selected window");
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
-            *window_start = 1;
+            *window_start = LispCharPos1::ONE;
         }
     }
 
@@ -4081,8 +4082,8 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -4220,8 +4221,8 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = sample_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(sample_pos);
         }
     }
 
@@ -4390,8 +4391,8 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -4402,7 +4403,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
             buffer
-                .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(target.line_beg as i64))
+                .lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(target.line_beg))
                 .get()
         };
         let _ = eval
@@ -4414,7 +4415,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
                 .find_window_mut(selected_window)
                 .expect("selected window");
             if let neovm_core::window::Window::Leaf { point, .. } = window {
-                *point = target.line_beg;
+                *point = LispCharPos1::from_one_based_usize(target.line_beg);
             }
         }
 
@@ -4626,8 +4627,8 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -4638,7 +4639,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
         let byte_pos = {
             let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
             buffer
-                .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(target.line_beg as i64))
+                .lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(target.line_beg))
                 .get()
         };
         let _ = eval
@@ -4650,7 +4651,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
                 .find_window_mut(selected_window)
                 .expect("selected window");
             if let neovm_core::window::Window::Leaf { point, .. } = window {
-                *point = target.line_beg;
+                *point = LispCharPos1::from_one_based_usize(target.line_beg);
             }
         }
 
@@ -4816,8 +4817,8 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = 1;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
         }
     }
 
@@ -4840,7 +4841,7 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
         .map(|point| {
             (
                 point.buffer_pos,
-                char_at_lisp_pos(buffer, point.buffer_pos.as_i64() as usize),
+                char_at_lisp_pos(buffer, point.buffer_pos.to_one_based_usize()),
             )
         })
         .collect::<Vec<_>>();
@@ -4905,8 +4906,8 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = target_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(target_pos);
         }
     }
 
@@ -4971,8 +4972,8 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = target_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(target_pos);
         }
     }
 
@@ -4995,8 +4996,8 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
     match window {
         neovm_core::window::Window::Leaf { window_start, .. } => {
             assert!(
-                *window_start > 1,
-                "expected window-start to advance after retry, got {window_start}"
+                *window_start > LispCharPos1::ONE,
+                "expected window-start to advance after retry, got {window_start:?}"
             );
         }
         other => panic!("expected leaf window, got {other:?}"),
@@ -5472,8 +5473,8 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
             ..
         } = window
         {
-            *window_start = 1;
-            *point = target_pos;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(target_pos);
         }
     }
 
@@ -5492,7 +5493,7 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
         .map(|point| {
             (
                 point.buffer_pos,
-                char_at_lisp_pos(buffer, point.buffer_pos.as_i64() as usize),
+                char_at_lisp_pos(buffer, point.buffer_pos.to_one_based_usize()),
             )
         })
         .collect::<Vec<_>>();
@@ -5509,8 +5510,8 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
     match window {
         neovm_core::window::Window::Leaf { window_start, .. } => {
             assert!(
-                *window_start > 1,
-                "expected window-start to advance for wrapped redisplay, got {window_start}"
+                *window_start > LispCharPos1::ONE,
+                "expected window-start to advance for wrapped redisplay, got {window_start:?}"
             );
         }
         other => panic!("expected leaf window, got {other:?}"),
@@ -5558,8 +5559,8 @@ fn layout_frame_rust_converges_visibility_for_point_line_tail_clipping() {
             ..
         } = window
         {
-            *window_start = 1;
-            *window_point = point;
+            *window_start = LispCharPos1::ONE;
+            *window_point = LispCharPos1::from_one_based_usize(point);
         }
     }
 
@@ -5614,8 +5615,8 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
             ..
         } = window
         {
-            *window_start = 1;
-            *window_point = point;
+            *window_start = LispCharPos1::ONE;
+            *window_point = LispCharPos1::from_one_based_usize(point);
         }
     }
 
@@ -5639,7 +5640,8 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
     match window {
         neovm_core::window::Window::Leaf { window_start, .. } => {
             assert_eq!(
-                *window_start, 1,
+                *window_start,
+                LispCharPos1::ONE,
                 "expected visible EOB cursor not to force a retry scroll"
             );
         }
@@ -5683,8 +5685,8 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
             ..
         } = window
         {
-            *window_start = 1;
-            *window_point = point;
+            *window_start = LispCharPos1::ONE;
+            *window_point = LispCharPos1::from_one_based_usize(point);
         }
     }
 
@@ -5708,8 +5710,9 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
     match window {
         neovm_core::window::Window::Leaf { window_start, .. } => {
             assert_eq!(
-                *window_start, 1,
-                "expected short scratch buffer to stay at top, got window-start {window_start}"
+                *window_start,
+                LispCharPos1::ONE,
+                "expected short scratch buffer to stay at top, got window-start {window_start:?}"
             );
         }
         other => panic!("expected leaf window, got {other:?}"),
@@ -5756,8 +5759,8 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
             ..
         } = window
         {
-            *window_start = 1;
-            *window_point = point;
+            *window_start = LispCharPos1::ONE;
+            *window_point = LispCharPos1::from_one_based_usize(point);
         }
     }
 
@@ -5799,8 +5802,8 @@ fn layout_frame_rust_formats_mode_line_from_current_redisplay_geometry() {
     .expect("mode-line text");
 
     assert!(
-        published_window_start > 1,
-        "expected point at EOB to advance window-start, got {published_window_start}"
+        published_window_start > LispCharPos1::ONE,
+        "expected point at EOB to advance window-start, got {published_window_start:?}"
     );
     assert!(
         mode_line_text == expected_mode_line,

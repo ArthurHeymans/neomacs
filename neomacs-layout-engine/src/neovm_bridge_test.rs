@@ -2,6 +2,7 @@ use super::*;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
 use neovm_core::buffer::{
     Buffer, BufferId, BufferManager, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
 };
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId, WindowMargins};
@@ -344,7 +345,7 @@ fn test_window_params_nonselected_reads_window_point() {
             .find_window_mut(selected_window)
             .expect("selected window");
         if let Window::Leaf { point, .. } = window {
-            *point = 5;
+            *point = LispCharPos1::from_one_based_usize(5);
         } else {
             panic!("expected leaf window");
         }
