@@ -717,6 +717,10 @@ Completed so far:
 - Routed minibuffer prompt and initial text installation through the
   `BufferManager` edit transaction path, keeping GNU minibuffer erase/insert
   ordering while centralizing shared-buffer side effects.
+- Routed tree-sitter parse-string temp-buffer insertion and `*Messages*`
+  logging insertion through `BufferManager`, preserving GNU's hidden-buffer
+  and message state-restoration flow while avoiding direct storage mutation in
+  those production paths.
 
 Next work:
 

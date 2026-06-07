@@ -44,23 +44,49 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     // Save and restore current buffer like GNU does.
     let old_buf = ctx.buffers.current_buffer().map(|b| b.id);
     let _ = ctx.set_current_buffer_unrecorded(buf_id);
-    if let Some(buf) = ctx.buffers.get_mut(buf_id) {
-        let old_pt_byte = buf.point_emacs_byte_pos();
-        let old_accessible = buf.accessible_region_snapshot();
-        let old_full_end = buf.full_emacs_byte_range().end();
-        let point_at_end = old_pt_byte == old_full_end;
-        let zv_at_end = old_accessible.end_emacs_byte() == old_full_end;
+    let Some((old_pt_byte, old_accessible, old_full_end, point_at_end, zv_at_end)) =
+        ctx.buffers.get_mut(buf_id).map(|buf| {
+            let old_pt_byte = buf.point_emacs_byte_pos();
+            let old_accessible = buf.accessible_region_snapshot();
+            let old_full_end = buf.full_emacs_byte_range().end();
+            let point_at_end = old_pt_byte == old_full_end;
+            let zv_at_end = old_accessible.end_emacs_byte() == old_full_end;
 
-        buf.widen();
-        buf.goto_emacs_byte_pos(buf.full_emacs_byte_range().end());
-        if buf.get_multibyte() == msg.is_multibyte() {
-            buf.insert_lisp_string(msg);
+            buf.widen();
+            (
+                old_pt_byte,
+                old_accessible,
+                old_full_end,
+                point_at_end,
+                zv_at_end,
+            )
+        })
+    else {
+        if let Some(old) = old_buf {
+            ctx.restore_current_buffer_if_live(old);
+        }
+        return;
+    };
+    if ctx
+        .buffers
+        .goto_buffer_emacs_byte_pos(buf_id, old_full_end)
+        .is_some()
+    {
+        let same_multibyte = ctx
+            .buffers
+            .get(buf_id)
+            .map(|buf| buf.get_multibyte() == msg.is_multibyte())
+            .unwrap_or(false);
+        if same_multibyte {
+            let _ = ctx.buffers.insert_lisp_string_into_buffer(buf_id, msg);
         } else {
             let text = super::runtime_string_from_lisp_string(msg);
-            buf.insert(&text);
+            let _ = ctx.buffers.insert_into_buffer(buf_id, &text);
         }
-        buf.insert("\n");
+        let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
+    }
 
+    if let Some(buf) = ctx.buffers.get_mut(buf_id) {
         let new_full_end = buf.full_emacs_byte_range().end();
         if zv_at_end {
             buf.restore_accessible_region_with_current_full_end(old_accessible);

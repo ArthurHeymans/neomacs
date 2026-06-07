@@ -2653,14 +2653,12 @@ pub(crate) fn builtin_treesit_parse_string(
     if language.is_nil() {
         return Err(query_type_error("treesit-parse-string", language));
     }
-    let text = expect_string(&args[0])?;
+    let text = expect_lisp_string(&args[0])?;
     let name = format!(" *treesit-parse-string-{}*", eval.treesit.roots().len() + 1);
     let buffer_id = eval.buffers.create_buffer_with_hook_inhibition(&name, true);
     let saved_current = eval.buffers.current_buffer_id();
     let _ = eval.buffers.switch_current(buffer_id);
-    if let Some(buffer) = eval.buffers.current_buffer_mut() {
-        buffer.insert(&text);
-    }
+    let _ = eval.buffers.insert_lisp_string_into_buffer(buffer_id, text);
     let parser = builtin_treesit_parser_create(
         eval,
         vec![
