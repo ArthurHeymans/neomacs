@@ -288,6 +288,9 @@ Progress:
 - Buffer-backed Lisp reader decode and slice helpers now convert raw reader
   offsets into typed `EmacsBytePos` + `EmacsByteLen` ranges at the buffer access
   boundary.
+- String and display formatting text-property helpers now build character
+  ranges as typed `CharPos0` + `CharLen` pairs instead of constructing two raw
+  endpoints independently.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

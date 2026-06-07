@@ -17,7 +17,10 @@ use std::str::FromStr;
 // ===========================================================================
 
 fn string_char_range(start: usize, end: usize) -> CharRange {
-    CharRange::new(CharPos0::new(start), CharPos0::new(end))
+    CharRange::from_start_len(
+        CharPos0::new(start),
+        CharLen::new(end.saturating_sub(start)),
+    )
 }
 
 pub(crate) fn builtin_string_equal(args: Vec<Value>) -> EvalResult {
