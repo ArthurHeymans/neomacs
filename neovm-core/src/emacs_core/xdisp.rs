@@ -609,8 +609,8 @@ fn mode_line_conditional_branch(cdr: Value, branch_is_then: bool) -> Option<Valu
 /// in GNU's `decode_mode_spec` (xdisp.c:29083).
 #[derive(Clone)]
 struct ModeLinePercentContext {
-    /// Window start position (character offset of first visible character).
-    /// Corresponds to `marker_position(w->start)` in GNU.
+    /// Internal zero-based character offset of the first visible character.
+    /// Derived from GNU `marker_position(w->start)`, which is Lisp one-based.
     window_start: usize,
     /// Window end position (last visible character position).
     /// In GNU this is `BUF_Z(b) - w->window_end_pos`.
@@ -2641,13 +2641,27 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     let from_pos = args
         .get(1)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
+        .map(|i| {
+            buf.char_pos_to_emacs_byte_pos_clamped(
+                LispCharPos1::from_one_based_usize(
+                    usize::try_from(i.max(1)).expect("Lisp character position fits usize"),
+                )
+                .to_char_pos(),
+            )
+        })
         .unwrap_or(EmacsBytePos::ZERO);
     let buffer_end = EmacsBytePos::ZERO.add_len(buf.total_emacs_byte_len());
     let to_pos = args
         .get(2)
         .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| buf.char_pos_to_emacs_byte_pos_clamped(LispCharPos1::new(i).to_char_pos()))
+        .map(|i| {
+            buf.char_pos_to_emacs_byte_pos_clamped(
+                LispCharPos1::from_one_based_usize(
+                    usize::try_from(i.max(1)).expect("Lisp character position fits usize"),
+                )
+                .to_char_pos(),
+            )
+        })
         .unwrap_or(buffer_end);
 
     // Count lines and max columns in the region.  GNU's TO=t means
@@ -3114,11 +3128,11 @@ pub(crate) fn builtin_move_to_window_line(
     }
 
     // Convert 0-based char pos to 1-based Lisp pos, then to byte pos.
-    let lisp_pos = (target_char_pos + 1) as i64;
+    let lisp_pos = LispCharPos1::from_one_based_usize(target_char_pos + 1);
     let byte_pos = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(lisp_pos)))
+        .map(|b| b.lisp_pos_to_emacs_byte_pos(lisp_pos))
         .unwrap_or(crate::buffer::EmacsBytePos::ZERO);
     let current_id = eval
         .buffers
@@ -3678,8 +3692,8 @@ fn resolve_pos_visible_target_lisp_pos(
 
 fn current_window_point_lisp(ctx: &ApproxWindowDisplayContext) -> LispCharPos1 {
     LispCharPos1::from_one_based_usize(
-        usize::try_from(ctx.window_point.as_i64().max(1))
-            .expect("Lisp character position fits usize")
+        ctx.window_point
+            .to_one_based_usize()
             .min(ctx.chars.len().saturating_add(1)),
     )
 }
@@ -3687,9 +3701,7 @@ fn current_window_point_lisp(ctx: &ApproxWindowDisplayContext) -> LispCharPos1 {
 fn last_visible_row_start_lisp_pos(ctx: &ApproxWindowDisplayContext) -> LispCharPos1 {
     let row_start = nth_visible_row_start_char(
         &ctx.chars,
-        usize::try_from(ctx.window_start.as_i64().max(1))
-            .expect("Lisp character position fits usize")
-            .saturating_sub(1),
+        ctx.window_start.to_one_based_usize().saturating_sub(1),
         ctx.body_lines.saturating_sub(1),
     );
     LispCharPos1::from_one_based_usize(
