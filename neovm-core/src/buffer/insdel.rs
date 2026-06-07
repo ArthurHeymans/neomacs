@@ -211,44 +211,7 @@ impl Buffer {
             return false;
         };
 
-        if !noundo {
-            self.undo_prepare_change(modified_range.byte_start(), self.point_emacs_byte_pos());
-            let mut ul = self.get_undo_list();
-            if !undo::undo_list_is_disabled(&ul) {
-                for changed_range in plan.changed_ranges().iter().copied() {
-                    let mut deleted = lisp_string_from_buffer_bytes(
-                        region_bytes[changed_range.byte_index_range_relative_to(range)].to_vec(),
-                        self.get_multibyte(),
-                    );
-                    let props = self
-                        .text
-                        .text_props_slice_emacs_byte_range(changed_range.byte_range());
-                    if !props.is_empty() {
-                        *deleted.intervals_mut() = props;
-                    }
-                    undo::undo_list_record_delete(
-                        &mut ul,
-                        changed_range.char_start(),
-                        deleted,
-                        self.point_char_pos(),
-                        self.undo_state.point_before_command_or_undo(),
-                    );
-                    undo::undo_list_record_insert(
-                        &mut ul,
-                        changed_range.char_start(),
-                        changed_range.char_len(),
-                        self.undo_state.point_before_command_or_undo(),
-                    );
-                }
-                self.set_undo_list(ul);
-            }
-        }
-
-        self.text.replace_same_len_measured_range(
-            plan.replacement_for_range(range, self.get_multibyte()),
-            plan.replacement_bytes(),
-        );
-        self.apply_same_len_edit_side_effects(edit, SameLenModifiedStatePolicy::RecordChange);
+        self.execute_same_len_substitution_plan(range, modified_range, &region_bytes, plan, noundo);
         true
     }
 
@@ -328,59 +291,9 @@ impl Buffer {
         self.text
             .copy_emacs_byte_range_to(second.byte_range(), &mut region2);
 
-        let old_span = self.buffer_region_lisp_string(byte_span);
-
         let plan = TranspositionStoragePlan::new(transposition, &region1, &mid, &region2);
 
-        self.undo_prepare_change(first.byte_start(), self.point_emacs_byte_pos());
-        let mut undo_list = self.get_undo_list();
-        if !undo::undo_list_is_disabled(&undo_list) {
-            let record_change = |undo_list: &mut crate::emacs_core::value::Value,
-                                 start_char: CharPos0,
-                                 deleted: LispString,
-                                 pt: CharPos0,
-                                 point_before: Option<CharPos0>| {
-                let len_chars = CharLen::new(deleted.schars());
-                undo::undo_list_record_delete(undo_list, start_char, deleted, pt, point_before);
-                undo::undo_list_record_insert(undo_list, start_char, len_chars, point_before);
-            };
-
-            if transposition.same_char_len() {
-                if transposition.adjacent() {
-                    record_change(
-                        &mut undo_list,
-                        first.char_start(),
-                        old_span,
-                        self.point_char_pos(),
-                        self.undo_state.point_before_command_or_undo(),
-                    );
-                } else {
-                    record_change(
-                        &mut undo_list,
-                        first.char_start(),
-                        self.buffer_region_lisp_string(first.byte_range()),
-                        self.point_char_pos(),
-                        self.undo_state.point_before_command_or_undo(),
-                    );
-                    record_change(
-                        &mut undo_list,
-                        second.char_start(),
-                        self.buffer_region_lisp_string(second.byte_range()),
-                        self.point_char_pos(),
-                        self.undo_state.point_before_command_or_undo(),
-                    );
-                }
-            } else {
-                record_change(
-                    &mut undo_list,
-                    first.char_start(),
-                    old_span,
-                    self.point_char_pos(),
-                    self.undo_state.point_before_command_or_undo(),
-                );
-            }
-            self.set_undo_list(undo_list);
-        }
+        self.record_transposition_undo(transposition);
 
         let replacement_props = self.transpose_region_properties(transposition);
         if transposition.same_char_len() {

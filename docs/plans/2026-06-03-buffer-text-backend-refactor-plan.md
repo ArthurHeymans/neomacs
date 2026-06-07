@@ -701,6 +701,10 @@ Completed so far:
   side-effect dispatch, same-length side effects, and first-change undo
   preparation into `edit_transaction.rs`; `insdel.rs` now keeps the public edit
   entry points while transaction ordering lives with the typed policy layer.
+- Moved same-length substitution execution and transpose-region undo recording
+  into `edit_transaction.rs`, keeping GNU's per-character delete+insert undo
+  for substitution and span-vs-region undo choices for transposition with the
+  rest of the typed transaction policy.
 
 Next work:
 
