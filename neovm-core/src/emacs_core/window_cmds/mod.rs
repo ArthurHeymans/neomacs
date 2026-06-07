@@ -2076,7 +2076,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
                 .and_then(|frame| frame.window_display_snapshot(wid))
                 .and_then(|snapshot| snapshot.visible_buffer_span().map(|span| span.end()))
             {
-                return Ok(Value::fixnum(snapshot_end as i64));
+                return Ok(Value::fixnum(snapshot_end.as_i64()));
             }
             if !update_requested && (*window_end_valid || stored_end > *window_start) {
                 return Ok(Value::fixnum(stored_end as i64));

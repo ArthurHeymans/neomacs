@@ -3763,7 +3763,7 @@ fn window_row_metrics(ctx: &ApproxWindowDisplayContext, row: i64) -> WindowLineM
 
 #[derive(Clone, Copy)]
 struct ExactVisibleMetrics {
-    point: usize,
+    point: LispCharPos1,
     x: i64,
     y: i64,
     width: i64,
@@ -3805,7 +3805,8 @@ fn resolve_exact_visible_metrics(
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
         return Ok(None);
     };
-    let Some(point) = snapshot.point_for_buffer_pos(pos_lisp) else {
+    let Some(point) = snapshot.point_for_buffer_pos(LispCharPos1::from_one_based_usize(pos_lisp))
+    else {
         return Ok(None);
     };
     Ok(Some((wid, exact_metrics_from_point(point))))
@@ -3814,11 +3815,11 @@ fn resolve_exact_visible_metrics(
 fn make_text_area_position(window_id: WindowId, metrics: ExactVisibleMetrics) -> Value {
     Value::list(vec![
         Value::make_window(window_id.0),
-        Value::fixnum(metrics.point as i64),
+        Value::fixnum(metrics.point.as_i64()),
         Value::cons(Value::fixnum(metrics.x), Value::fixnum(metrics.y)),
         Value::fixnum(0),
         Value::NIL,
-        Value::fixnum(metrics.point as i64),
+        Value::fixnum(metrics.point.as_i64()),
         Value::cons(Value::fixnum(metrics.col), Value::fixnum(metrics.row)),
         Value::NIL,
         Value::cons(Value::fixnum(0), Value::fixnum(0)),

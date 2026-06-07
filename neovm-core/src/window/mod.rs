@@ -7,7 +7,7 @@
 //! - The **selected window** is the one receiving input.
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
-use crate::buffer::BufferId;
+use crate::buffer::{BufferId, LispCharPos1};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::face::Face as RuntimeFace;
 use crate::gc_trace::GcTrace;
@@ -1076,7 +1076,7 @@ impl Window {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayPointSnapshot {
     /// 1-based buffer position of the source character.
-    pub buffer_pos: usize,
+    pub buffer_pos: LispCharPos1,
     /// X relative to the text area's left edge, in pixels.
     pub x: i64,
     /// Y relative to the window's top edge, in pixels.
@@ -1111,9 +1111,9 @@ pub struct DisplayRowSnapshot {
     /// Visual column where redisplay finished emitting this row.
     pub end_col: i64,
     /// First buffer position represented on this row, if any.
-    pub start_buffer_pos: Option<usize>,
+    pub start_buffer_pos: Option<LispCharPos1>,
     /// Last visible/source position associated with this row, if any.
-    pub end_buffer_pos: Option<usize>,
+    pub end_buffer_pos: Option<LispCharPos1>,
 }
 
 /// Last authoritative physical cursor kind for a window.
@@ -1216,20 +1216,20 @@ pub struct WindowDisplaySnapshot {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowVisibleBufferSpan {
-    start: usize,
-    end: usize,
+    start: LispCharPos1,
+    end: LispCharPos1,
 }
 
 impl WindowVisibleBufferSpan {
-    pub const fn new(start: usize, end: usize) -> Self {
+    pub const fn new(start: LispCharPos1, end: LispCharPos1) -> Self {
         Self { start, end }
     }
 
-    pub const fn start(self) -> usize {
+    pub const fn start(self) -> LispCharPos1 {
         self.start
     }
 
-    pub const fn end(self) -> usize {
+    pub const fn end(self) -> LispCharPos1 {
         self.end
     }
 }
@@ -1258,7 +1258,7 @@ impl WindowDisplaySnapshot {
         Some(WindowVisibleBufferSpan::new(start, end))
     }
 
-    fn row_for_buffer_pos(&self, pos: usize) -> Option<&DisplayRowSnapshot> {
+    fn row_for_buffer_pos(&self, pos: LispCharPos1) -> Option<&DisplayRowSnapshot> {
         self.rows.iter().find(|row| {
             let Some(start) = row.start_buffer_pos else {
                 return false;
@@ -1275,7 +1275,7 @@ impl WindowDisplaySnapshot {
     ///
     /// Off-window positions return `None`, matching GNU Emacs `posn-at-point`
     /// and `pos-visible-in-window-p` semantics.
-    pub fn point_for_buffer_pos(&self, pos: usize) -> Option<&DisplayPointSnapshot> {
+    pub fn point_for_buffer_pos(&self, pos: LispCharPos1) -> Option<&DisplayPointSnapshot> {
         if self.points.is_empty() {
             return None;
         }

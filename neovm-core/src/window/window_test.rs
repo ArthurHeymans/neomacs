@@ -993,8 +993,8 @@ fn replace_display_snapshots_syncs_live_window_cursor_state() {
             start_col: 0,
             end_x: output_cursor.x,
             end_col: output_cursor.col,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(8),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(8)),
         }],
         ..WindowDisplaySnapshot::default()
     }]);
@@ -1030,8 +1030,8 @@ fn replace_display_snapshots_replaces_old_output_cursor_progress() {
             start_col: 0,
             end_x: 44,
             end_col: 8,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(8),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(8)),
         }],
         ..WindowDisplaySnapshot::default()
     }]);
@@ -1046,8 +1046,8 @@ fn replace_display_snapshots_replaces_old_output_cursor_progress() {
             start_col: 0,
             end_x: 88,
             end_col: 12,
-            start_buffer_pos: Some(20),
-            end_buffer_pos: Some(32),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(20)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(32)),
         }],
         ..WindowDisplaySnapshot::default()
     }]);
@@ -1100,8 +1100,8 @@ fn set_display_snapshots_preserves_live_window_cursor_state() {
             start_col: 0,
             end_x: output_cursor.x,
             end_col: output_cursor.col,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(8),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(8)),
         }],
         ..WindowDisplaySnapshot::default()
     };
@@ -1141,7 +1141,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
         frame.set_display_snapshots(vec![WindowDisplaySnapshot {
             window_id: wid,
             points: vec![DisplayPointSnapshot {
-                buffer_pos: 5,
+                buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 64,
                 y: 0,
                 width: 16,
@@ -1157,8 +1157,8 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
                 start_col: 0,
                 end_x: 96,
                 end_col: 6,
-                start_buffer_pos: Some(1),
-                end_buffer_pos: Some(6),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(6)),
             }],
             ..WindowDisplaySnapshot::default()
         }]);
@@ -1170,7 +1170,9 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
     assert!(
         mgr.get(fid)
             .and_then(|frame| frame.window_display_snapshot(wid))
-            .and_then(|snapshot| snapshot.point_for_buffer_pos(5))
+            .and_then(|snapshot| {
+                snapshot.point_for_buffer_pos(crate::buffer::LispCharPos1::new(5))
+            })
             .is_some(),
         "GNU Fset_window_vscroll only invalidates redisplay when vscroll changes"
     );
@@ -1200,8 +1202,8 @@ fn replace_display_snapshots_preserves_logical_cursor_without_physical_cursor() 
             start_col: 0,
             end_x: 64,
             end_col: 8,
-            start_buffer_pos: Some(10),
-            end_buffer_pos: Some(18),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(10)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(18)),
         }],
         ..WindowDisplaySnapshot::default()
     }]);
@@ -1285,8 +1287,8 @@ fn clear_physical_cursor_state_preserves_committed_cursor_history() {
             start_col: 0,
             end_x: 9,
             end_col: 5,
-            start_buffer_pos: Some(11),
-            end_buffer_pos: Some(11),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(11)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(11)),
         }],
         ..WindowDisplaySnapshot::default()
     };
@@ -1449,8 +1451,8 @@ fn output_pass_commits_output_cursor_from_row_geometry() {
             start_col: 0,
             end_x: 80,
             end_col: 12,
-            start_buffer_pos: Some(20),
-            end_buffer_pos: Some(32),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(20)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(32)),
         }],
         ..WindowDisplaySnapshot::default()
     };
@@ -1595,8 +1597,8 @@ fn explicit_window_output_finalization_preserves_live_logical_and_physical_curso
             start_col: 0,
             end_x: 144,
             end_col: 18,
-            start_buffer_pos: Some(20),
-            end_buffer_pos: Some(38),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(20)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(38)),
         }],
         ..WindowDisplaySnapshot::default()
     };
@@ -1657,8 +1659,8 @@ fn finish_window_output_update_preserves_live_cursor_state_with_snapshot_output_
             start_col: 0,
             end_x: 144,
             end_col: 18,
-            start_buffer_pos: Some(20),
-            end_buffer_pos: Some(38),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(20)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(38)),
         }],
         ..WindowDisplaySnapshot::default()
     };
@@ -1713,8 +1715,8 @@ fn output_pass_keeps_cursor_target_and_output_progress_separate() {
                 start_col: 0,
                 end_x: 64,
                 end_col: 8,
-                start_buffer_pos: Some(1),
-                end_buffer_pos: Some(8),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(8)),
             },
             DisplayRowSnapshot {
                 row: 1,
@@ -1724,8 +1726,8 @@ fn output_pass_keeps_cursor_target_and_output_progress_separate() {
                 start_col: 0,
                 end_x: 72,
                 end_col: 9,
-                start_buffer_pos: Some(9),
-                end_buffer_pos: Some(17),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(9)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(17)),
             },
             DisplayRowSnapshot {
                 row: 2,
@@ -1735,8 +1737,8 @@ fn output_pass_keeps_cursor_target_and_output_progress_separate() {
                 start_col: 0,
                 end_x: 80,
                 end_col: 10,
-                start_buffer_pos: Some(18),
-                end_buffer_pos: Some(27),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(18)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(27)),
             },
         ],
         ..WindowDisplaySnapshot::default()

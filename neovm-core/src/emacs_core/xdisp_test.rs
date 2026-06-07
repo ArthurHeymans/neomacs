@@ -1888,8 +1888,8 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
                     start_col: 0,
                     end_x: 20,
                     end_col: 2,
-                    start_buffer_pos: Some(1),
-                    end_buffer_pos: Some(3),
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 3,
@@ -1983,8 +1983,8 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     start_col: 0,
                     end_x: 20,
                     end_col: 2,
-                    start_buffer_pos: Some(1),
-                    end_buffer_pos: Some(3),
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 3,
@@ -1994,8 +1994,8 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     start_col: 0,
                     end_x: 20,
                     end_col: 2,
-                    start_buffer_pos: Some(4),
-                    end_buffer_pos: Some(6),
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(6)),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()
@@ -2049,7 +2049,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![crate::window::DisplayPointSnapshot {
-                buffer_pos: 5,
+                buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 24,
                 y: 18,
                 width: 21,
@@ -2065,8 +2065,8 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                 start_col: 0,
                 end_x: 0,
                 end_col: 0,
-                start_buffer_pos: Some(5),
-                end_buffer_pos: Some(5),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -2101,7 +2101,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![crate::window::DisplayPointSnapshot {
-                buffer_pos: 5,
+                buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 24,
                 y: 18,
                 width: 21,
@@ -2117,8 +2117,8 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
                 start_col: 0,
                 end_x: 0,
                 end_col: 0,
-                start_buffer_pos: Some(5),
-                end_buffer_pos: Some(5),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -2180,7 +2180,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
-                    buffer_pos: 10,
+                    buffer_pos: crate::buffer::LispCharPos1::new(10),
                     x: 24,
                     y: 18,
                     width: 8,
@@ -2189,7 +2189,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
                     col: 2,
                 },
                 crate::window::DisplayPointSnapshot {
-                    buffer_pos: 14,
+                    buffer_pos: crate::buffer::LispCharPos1::new(14),
                     x: 56,
                     y: 18,
                     width: 8,
@@ -2206,8 +2206,8 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
                 start_col: 0,
                 end_x: 0,
                 end_col: 0,
-                start_buffer_pos: Some(10),
-                end_buffer_pos: Some(14),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(10)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(14)),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -2268,7 +2268,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
-                    buffer_pos: 1,
+                    buffer_pos: crate::buffer::LispCharPos1::new(1),
                     x: 0,
                     y: 0,
                     width: 8,
@@ -2277,7 +2277,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     col: 0,
                 },
                 crate::window::DisplayPointSnapshot {
-                    buffer_pos: 4,
+                    buffer_pos: crate::buffer::LispCharPos1::new(4),
                     x: 0,
                     y: 18,
                     width: 8,
@@ -2295,8 +2295,8 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     start_col: 0,
                     end_x: 0,
                     end_col: 0,
-                    start_buffer_pos: Some(1),
-                    end_buffer_pos: Some(1),
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 1,
@@ -2306,8 +2306,8 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     start_col: 0,
                     end_x: 0,
                     end_col: 0,
-                    start_buffer_pos: Some(4),
-                    end_buffer_pos: Some(4),
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()

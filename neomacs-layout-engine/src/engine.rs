@@ -18,7 +18,7 @@ use super::unicode::*;
 use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{
     layout_i64_char_pos_to_lisp_char_pos, layout_usize_char_pos_to_lisp_usize,
-    lisp_buffer_pos_usize_to_layout_i64,
+    lisp_char_pos_to_layout_i64,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -669,19 +669,18 @@ fn next_window_start_from_visible_rows(
 
 #[inline]
 fn row_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
-    row.start_buffer_pos
-        .map(lisp_buffer_pos_usize_to_layout_i64)
+    row.start_buffer_pos.map(lisp_char_pos_to_layout_i64)
 }
 
 #[inline]
 fn row_end_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
-    row.end_buffer_pos.map(lisp_buffer_pos_usize_to_layout_i64)
+    row.end_buffer_pos.map(lisp_char_pos_to_layout_i64)
 }
 
 #[inline]
 fn row_next_window_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
     row.end_buffer_pos
-        .map(|pos| pos as i64)
+        .map(LispCharPos1::as_i64)
         .or_else(|| row_start_charpos(row))
 }
 
@@ -744,7 +743,7 @@ fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutB
         row_start_charpos(point_row).is_some_and(|start| start == point);
 
     for row in rows.iter().skip(point_row_index) {
-        let end_pos = row.end_buffer_pos? as i64;
+        let end_pos = row.end_buffer_pos?.as_i64();
         let end_byte = buf_access.lisp_charpos_to_bytepos(end_pos);
         if matches!(buf_access.byte_at(end_byte), Some(b'\n')) {
             return None;
@@ -6340,14 +6339,14 @@ impl LayoutEngine {
             .iter()
             .rev()
             .find_map(|row| row.end_buffer_pos);
-        let point_lisp = layout_usize_char_pos_to_lisp_usize(point_charpos as usize);
+        let point_lisp = layout_i64_char_pos_to_lisp_char_pos(point_charpos);
         let visible_end_lisp = if point_is_visible_eob {
             Some(visible_end_lisp.unwrap_or(point_lisp).max(point_lisp))
         } else {
             visible_end_lisp
         };
         let visible_progress = visible_end_lisp
-            .map(|end_lisp| end_lisp as i64)
+            .map(LispCharPos1::as_i64)
             .unwrap_or(charpos);
         let point_beyond_visible_span = visible_end_lisp
             .map(|end_lisp| point_lisp > end_lisp)
@@ -6361,7 +6360,7 @@ impl LayoutEngine {
                 .map(|new_ws| new_ws.min(point_charpos.max(accessible_start)));
             tracing::debug!(
                 "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
-                point_lisp,
+                point_lisp.as_i64(),
                 visible_end_lisp,
                 charpos,
                 output_emitter.rows().len(),
@@ -6454,7 +6453,7 @@ impl LayoutEngine {
             .iter()
             .rev()
             .find_map(|row| row.end_buffer_pos)
-            .map(|pos| pos.saturating_add(1))
+            .map(|pos| pos.as_i64().saturating_add(1) as usize)
             .unwrap_or(1);
         let window_end_byte = text_start_byte.saturating_add(byte_idx);
         let window_end_vpos = output_emitter

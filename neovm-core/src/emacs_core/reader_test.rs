@@ -40,7 +40,7 @@ fn install_mouse_help_echo_snapshot_with_value(eval: &mut Context, help: Value) 
         window_id,
         text_area_left_offset: 8,
         points: vec![crate::window::DisplayPointSnapshot {
-            buffer_pos: 1,
+            buffer_pos: crate::buffer::LispCharPos1::new(1),
             x: 0,
             y: 0,
             width: 8,
@@ -56,8 +56,8 @@ fn install_mouse_help_echo_snapshot_with_value(eval: &mut Context, help: Value) 
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(3),
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
         }],
         ..crate::window::WindowDisplaySnapshot::default()
     }]);

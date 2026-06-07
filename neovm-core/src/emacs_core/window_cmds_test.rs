@@ -5427,8 +5427,8 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
                 start_col: 0,
                 end_x: 0,
                 end_col: 0,
-                start_buffer_pos: Some(1),
-                end_buffer_pos: Some(12),
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(12)),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);

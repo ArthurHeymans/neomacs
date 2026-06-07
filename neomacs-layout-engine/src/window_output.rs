@@ -84,7 +84,7 @@ impl WindowOutputEmitter {
         &self.rows
     }
 
-    pub(crate) fn point_for_buffer_pos(&self, pos: usize) -> Option<&DisplayPointSnapshot> {
+    pub(crate) fn point_for_buffer_pos(&self, pos: LispCharPos1) -> Option<&DisplayPointSnapshot> {
         self.points.iter().find(|point| point.buffer_pos == pos)
     }
 
@@ -92,7 +92,7 @@ impl WindowOutputEmitter {
         &self,
         pos: LispCharPos1,
     ) -> Option<&DisplayPointSnapshot> {
-        self.point_for_buffer_pos(pos.as_i64() as usize)
+        self.point_for_buffer_pos(pos)
     }
 
     pub(crate) fn row_metrics(&self) -> &[RowMetricsSnapshot] {
@@ -177,7 +177,6 @@ impl WindowOutputEmitter {
         col: usize,
     ) {
         self.note_display_buffer_pos(buffer_pos);
-        let buffer_pos = buffer_pos.as_i64() as usize;
         self.points.push(DisplayPointSnapshot {
             buffer_pos,
             x: (glyph_x - self.text_x).round() as i64,
@@ -344,14 +343,8 @@ impl WindowOutputEmitter {
             start_col: row_progress.start_col,
             end_x: row_progress.x,
             end_col: row_progress.col,
-            start_buffer_pos: self
-                .current_row_first_display_pos
-                .take()
-                .map(|pos| pos.as_i64() as usize),
-            end_buffer_pos: self
-                .current_row_last_display_pos
-                .take()
-                .map(|pos| pos.as_i64() as usize),
+            start_buffer_pos: self.current_row_first_display_pos.take(),
+            end_buffer_pos: self.current_row_last_display_pos.take(),
         });
         self.row_metrics.push(RowMetricsSnapshot {
             row: row_progress.row.max(0) as usize,

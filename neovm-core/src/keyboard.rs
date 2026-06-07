@@ -3906,7 +3906,7 @@ impl crate::emacs_core::eval::Context {
             &self.obarray,
             &self.buffers,
             vec![
-                Value::fixnum(point.buffer_pos as i64),
+                Value::fixnum(point.buffer_pos.as_i64()),
                 Value::symbol("help-echo"),
                 Value::make_buffer(buffer_id),
             ],
@@ -3930,7 +3930,7 @@ impl crate::emacs_core::eval::Context {
             pair_car,
             Value::make_window(window_id.0),
             object,
-            Value::fixnum(point.buffer_pos as i64),
+            Value::fixnum(point.buffer_pos.as_i64()),
         ))
     }
 
@@ -4776,7 +4776,7 @@ impl crate::emacs_core::eval::Context {
                     x: text_area_x,
                     y: window_y,
                     metrics: MousePosnMetrics {
-                        point: Some(point.buffer_pos as i64),
+                        point: Some(point.buffer_pos.as_i64()),
                         col: Some(point.col),
                         row: Some(point.row),
                         width: Some(point.width.max(1)),

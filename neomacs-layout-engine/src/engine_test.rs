@@ -1288,9 +1288,15 @@ fn layout_frame_rust_publishes_increasing_display_positions() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let b = snapshot.point_for_buffer_pos(2).expect("b");
-    let c = snapshot.point_for_buffer_pos(3).expect("c");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
+        .expect("b");
+    let c = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("c");
     assert!(
         a.x < b.x,
         "expected increasing x positions, got {a:?} then {b:?}"
@@ -1346,10 +1352,18 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let hao1 = snapshot.point_for_buffer_pos(2).expect("hao1");
-    let hao2 = snapshot.point_for_buffer_pos(3).expect("hao2");
-    let b = snapshot.point_for_buffer_pos(4).expect("b");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let hao1 = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
+        .expect("hao1");
+    let hao2 = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("hao2");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(4))
+        .expect("b");
     assert!(
         a.x < hao1.x,
         "expected a before first 好, got {a:?} then {hao1:?}; points={all_points:?}"
@@ -1552,11 +1566,17 @@ fn implemented_text_backends_match_glyphless_display_geometry() {
         "baseline should account for glyphless replacement columns, row={text_row:?}"
     );
     assert!(
-        baseline.points.iter().any(|point| point.buffer_pos == 2),
+        baseline
+            .points
+            .iter()
+            .any(|point| point.buffer_pos == LispCharPos1::new(2)),
         "baseline should publish a display point for the C1 glyphless source char, trace={baseline:?}"
     );
     assert!(
-        baseline.points.iter().any(|point| point.buffer_pos == 6),
+        baseline
+            .points
+            .iter()
+            .any(|point| point.buffer_pos == LispCharPos1::new(6)),
         "baseline should publish a display point for the object-replacement source char, trace={baseline:?}"
     );
 
@@ -1583,7 +1603,10 @@ fn implemented_text_backends_match_composite_glyph_output() {
         "baseline should compose combining marks on multibyte base chars, composites={composites:?}"
     );
     assert!(
-        baseline.points.iter().any(|point| point.buffer_pos == 1),
+        baseline
+            .points
+            .iter()
+            .any(|point| point.buffer_pos == LispCharPos1::new(1)),
         "baseline should publish display geometry for the first composite base char, trace={baseline:?}"
     );
     assert!(
@@ -1609,7 +1632,7 @@ fn implemented_text_backends_match_wrapped_redisplay_retry_output() {
         baseline
             .points
             .iter()
-            .any(|point| point.buffer_pos == target_pos),
+            .any(|point| point.buffer_pos == LispCharPos1::from_one_based_usize(target_pos)),
         "baseline should converge wrapped redisplay on target point {target_pos}, trace={baseline:?}"
     );
     assert!(
@@ -1642,14 +1665,17 @@ fn implemented_text_backends_match_point_line_tail_retry_output() {
     let (baseline, point, later_pos) =
         point_line_tail_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     assert!(
-        baseline.points.iter().any(|item| item.buffer_pos == point),
+        baseline
+            .points
+            .iter()
+            .any(|item| item.buffer_pos == LispCharPos1::from_one_based_usize(point)),
         "baseline should publish geometry for point {point}, trace={baseline:?}"
     );
     assert!(
         baseline
             .points
             .iter()
-            .any(|item| item.buffer_pos == later_pos),
+            .any(|item| item.buffer_pos == LispCharPos1::from_one_based_usize(later_pos)),
         "baseline should publish later positions from the point line after retry, later_pos={later_pos}, trace={baseline:?}"
     );
     assert!(
@@ -1712,7 +1738,10 @@ fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
     );
     assert_eq!(
         baseline.visible_span,
-        Some(WindowVisibleBufferSpan::new(4, 7)),
+        Some(WindowVisibleBufferSpan::new(
+            LispCharPos1::new(4),
+            LispCharPos1::new(7)
+        )),
         "baseline should publish the visible hscrolled buffer span"
     );
     assert!(
@@ -1887,11 +1916,21 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let hao1 = snapshot.point_for_buffer_pos(2).expect("hao1");
-    let hao2 = snapshot.point_for_buffer_pos(3).expect("hao2");
-    let b = snapshot.point_for_buffer_pos(4).expect("b");
-    let space = snapshot.point_for_buffer_pos(5).expect("space");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let hao1 = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
+        .expect("hao1");
+    let hao2 = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("hao2");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(4))
+        .expect("b");
+    let space = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(5))
+        .expect("space");
 
     let default_font_size = frame.font_pixel_size;
     let face_font_size = default_font_size * 1.6;
@@ -2043,7 +2082,9 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let i_point = snapshot.point_for_buffer_pos(1).expect("i point");
+    let i_point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("i point");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
 
     assert_eq!(
@@ -2109,7 +2150,7 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let last_char = snapshot
-        .point_for_buffer_pos(newline_byte)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(newline_byte))
         .expect("last visible char before newline");
     let cursor = snapshot.phys_cursor.as_ref().expect("phys cursor");
 
@@ -2258,7 +2299,9 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let i_point = snapshot.point_for_buffer_pos(1).expect("i point");
+    let i_point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("i point");
     let visual = engine
         .last_frame_display_state
         .as_ref()
@@ -2327,7 +2370,9 @@ fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let b_point = snapshot.point_for_buffer_pos(2).expect("b point");
+    let b_point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
+        .expect("b point");
     let visual = engine
         .last_frame_display_state
         .as_ref()
@@ -2446,7 +2491,7 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let next_visible = snapshot
-        .point_for_buffer_pos(next_visible_pos)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(next_visible_pos))
         .expect("next visible point");
     assert_eq!(cursor.x, next_visible.x);
     assert_eq!(cursor.row, next_visible.row);
@@ -2501,7 +2546,9 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let logical_cursor = snapshot.logical_cursor.expect("logical cursor");
-    let point = snapshot.point_for_buffer_pos(3).expect("point snapshot");
+    let point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("point snapshot");
 
     assert_eq!(snapshot.phys_cursor, None);
     assert_eq!(logical_cursor.x, point.x);
@@ -2566,8 +2613,12 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
-    let c = snapshot.point_for_buffer_pos(3).expect("c");
-    let d = snapshot.point_for_buffer_pos(7).expect("d");
+    let c = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("c");
+    let d = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(7))
+        .expect("d");
     assert_eq!(cursor.x, c.x + c.width);
     assert!(cursor.x < d.x, "cursor should target replacement slot");
     assert_eq!(cursor.row, c.row);
@@ -2611,9 +2662,15 @@ fn layout_frame_rust_records_display_point_for_display_replacement_slot() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let c = snapshot.point_for_buffer_pos(3).expect("c");
-    let replacement = snapshot.point_for_buffer_pos(4).expect("replacement point");
-    let d = snapshot.point_for_buffer_pos(7).expect("d");
+    let c = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("c");
+    let replacement = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(4))
+        .expect("replacement point");
+    let d = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(7))
+        .expect("d");
 
     assert_eq!(replacement.x, c.x + c.width);
     assert!(
@@ -3031,8 +3088,12 @@ fn assert_layout_frame_rust_tab_cursor_width(x_stretch_cursor: bool, cursor_type
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let b = snapshot.point_for_buffer_pos(3).expect("b");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("b");
     let full_tab_slot_width = b.x - (a.x + a.width);
     let single_column_width = frame.char_width.round() as i64;
 
@@ -3793,8 +3854,12 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let b = snapshot.point_for_buffer_pos(3).expect("b");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("b");
     let full_slot_width = b.x - (a.x + a.width);
     let single_column_width = frame.char_width.round() as i64;
     let expected_space_width = (4.0 * frame.char_width).round() as i64;
@@ -3863,8 +3928,12 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let b = snapshot.point_for_buffer_pos(3).expect("b");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("b");
     let slot_width = b.x - (a.x + a.width);
     let expected_width = (4.0 * frame.char_width).round() as i64;
 
@@ -3920,9 +3989,15 @@ fn layout_frame_rust_records_display_point_for_display_space_slot() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let a = snapshot.point_for_buffer_pos(1).expect("a");
-    let space = snapshot.point_for_buffer_pos(2).expect("space");
-    let b = snapshot.point_for_buffer_pos(3).expect("b");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("a");
+    let space = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
+        .expect("space");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("b");
     let expected_width = (4.0 * frame.char_width).round() as i64;
 
     assert_eq!(space.x, a.x + a.width);
@@ -4019,14 +4094,18 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
-    let a = snapshot.point_for_buffer_pos(sample_pos).expect("a");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos))
+        .expect("a");
     let hao1 = snapshot
-        .point_for_buffer_pos(sample_pos + 1)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 1))
         .expect("first 好");
     let hao2 = snapshot
-        .point_for_buffer_pos(sample_pos + 2)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 2))
         .expect("second 好");
-    let b = snapshot.point_for_buffer_pos(sample_pos + 3).expect("b");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 3))
+        .expect("b");
 
     let face_font_size = frame.font_pixel_size * 0.9;
     let mut metrics = FontMetricsService::new();
@@ -4075,7 +4154,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
         b.x
     );
     let space = snapshot
-        .point_for_buffer_pos(sample_pos + 4)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 4))
         .expect("space");
     assert_eq!(
         space.x - b.x,
@@ -4154,14 +4233,18 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
-    let a = snapshot.point_for_buffer_pos(sample_pos).expect("a");
+    let a = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos))
+        .expect("a");
     let hao1 = snapshot
-        .point_for_buffer_pos(sample_pos + 1)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 1))
         .expect("first 好");
     let hao2 = snapshot
-        .point_for_buffer_pos(sample_pos + 2)
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 2))
         .expect("second 好");
-    let b = snapshot.point_for_buffer_pos(sample_pos + 3).expect("b");
+    let b = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 3))
+        .expect("b");
 
     let face_font_size = frame.font_pixel_size * 0.9;
     let mut metrics = FontMetricsService::new();
@@ -4363,19 +4446,19 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
             ),
         ];
         let a = snapshot
-            .point_for_buffer_pos(target.sample_pos)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos))
             .expect("sample a");
         let hao1 = snapshot
-            .point_for_buffer_pos(target.sample_pos + 1)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 1))
             .expect("sample first 好");
         let hao2 = snapshot
-            .point_for_buffer_pos(target.sample_pos + 2)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 2))
             .expect("sample second 好");
         let b = snapshot
-            .point_for_buffer_pos(target.sample_pos + 3)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 3))
             .expect("sample b");
         let after_b = snapshot
-            .point_for_buffer_pos(target.sample_pos + 4)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 4))
             .expect("sample trailing space");
 
         let face_font_size = frame.font_pixel_size * target.height;
@@ -4599,35 +4682,35 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             ),
         ];
         let a = snapshot
-            .point_for_buffer_pos(target.sample_pos)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos))
             .unwrap_or_else(|| {
                 panic!(
                     "sample a missing; target={target:?}; visible_span={visible_span:?}; chars={sample_chars:?}; points={all_points:?}"
                 )
             });
         let hao1 = snapshot
-            .point_for_buffer_pos(target.sample_pos + 1)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 1))
             .unwrap_or_else(|| {
                 panic!(
                     "sample first 好 missing; target={target:?}; visible_span={visible_span:?}; chars={sample_chars:?}; points={all_points:?}"
                 )
             });
         let hao2 = snapshot
-            .point_for_buffer_pos(target.sample_pos + 2)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 2))
             .unwrap_or_else(|| {
                 panic!(
                     "sample second 好 missing; target={target:?}; visible_span={visible_span:?}; chars={sample_chars:?}; points={all_points:?}"
                 )
             });
         let b = snapshot
-            .point_for_buffer_pos(target.sample_pos + 3)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 3))
             .unwrap_or_else(|| {
                 panic!(
                     "sample b missing; target={target:?}; visible_span={visible_span:?}; chars={sample_chars:?}; points={all_points:?}"
                 )
             });
         let after_b = snapshot
-            .point_for_buffer_pos(target.sample_pos + 4)
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target.sample_pos + 4))
             .unwrap_or_else(|| {
                 panic!(
                     "sample trailing space missing; target={target:?}; visible_span={visible_span:?}; chars={sample_chars:?}; points={all_points:?}"
@@ -4754,7 +4837,12 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
     let point_chars = snapshot
         .points
         .iter()
-        .map(|point| (point.buffer_pos, char_at_lisp_pos(buffer, point.buffer_pos)))
+        .map(|point| {
+            (
+                point.buffer_pos,
+                char_at_lisp_pos(buffer, point.buffer_pos.as_i64() as usize),
+            )
+        })
         .collect::<Vec<_>>();
     for window in snapshot.points.windows(2) {
         assert!(
@@ -4829,7 +4917,7 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
-    let target = snapshot.point_for_buffer_pos(target_pos);
+    let target = snapshot.point_for_buffer_pos(LispCharPos1::from_one_based_usize(target_pos));
     assert!(
         target.is_some(),
         "expected last visible truncated line to remain readable by layout, target_pos={target_pos}, points={:?}",
@@ -4898,7 +4986,9 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
     let window = frame.find_window(selected_window).expect("selected window");
 
     assert!(
-        snapshot.point_for_buffer_pos(target_pos).is_some(),
+        snapshot
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target_pos))
+            .is_some(),
         "expected retried layout to publish geometry for point {target_pos}, points={:?}",
         snapshot.points
     );
@@ -4924,8 +5014,8 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(8),
+            start_buffer_pos: Some(LispCharPos1::new(1)),
+            end_buffer_pos: Some(LispCharPos1::new(8)),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -4935,8 +5025,8 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(9),
-            end_buffer_pos: Some(16),
+            start_buffer_pos: Some(LispCharPos1::new(9)),
+            end_buffer_pos: Some(LispCharPos1::new(16)),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -4946,8 +5036,8 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(17),
-            end_buffer_pos: Some(24),
+            start_buffer_pos: Some(LispCharPos1::new(17)),
+            end_buffer_pos: Some(LispCharPos1::new(24)),
         },
         DisplayRowSnapshot {
             row: 3,
@@ -4957,8 +5047,8 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(25),
-            end_buffer_pos: Some(32),
+            start_buffer_pos: Some(LispCharPos1::new(25)),
+            end_buffer_pos: Some(LispCharPos1::new(32)),
         },
     ];
 
@@ -4990,8 +5080,8 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(10),
+            start_buffer_pos: Some(LispCharPos1::new(1)),
+            end_buffer_pos: Some(LispCharPos1::new(10)),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -5001,8 +5091,8 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(11),
-            end_buffer_pos: Some(20),
+            start_buffer_pos: Some(LispCharPos1::new(11)),
+            end_buffer_pos: Some(LispCharPos1::new(20)),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -5012,8 +5102,8 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(21),
-            end_buffer_pos: Some(30),
+            start_buffer_pos: Some(LispCharPos1::new(21)),
+            end_buffer_pos: Some(LispCharPos1::new(30)),
         },
     ];
 
@@ -5056,8 +5146,8 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(10),
+            start_buffer_pos: Some(LispCharPos1::new(1)),
+            end_buffer_pos: Some(LispCharPos1::new(10)),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -5067,8 +5157,8 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(11),
-            end_buffer_pos: Some(20),
+            start_buffer_pos: Some(LispCharPos1::new(11)),
+            end_buffer_pos: Some(LispCharPos1::new(20)),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -5078,8 +5168,8 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(21),
-            end_buffer_pos: Some(25),
+            start_buffer_pos: Some(LispCharPos1::new(21)),
+            end_buffer_pos: Some(LispCharPos1::new(25)),
         },
     ];
 
@@ -5098,8 +5188,8 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(10),
+            start_buffer_pos: Some(LispCharPos1::new(1)),
+            end_buffer_pos: Some(LispCharPos1::new(10)),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -5109,8 +5199,8 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(11),
-            end_buffer_pos: Some(27),
+            start_buffer_pos: Some(LispCharPos1::new(11)),
+            end_buffer_pos: Some(LispCharPos1::new(27)),
         },
     ];
     assert_eq!(
@@ -5152,8 +5242,8 @@ fn next_window_start_for_point_line_continuation_ignores_newline_terminated_rows
         start_col: 0,
         end_x: 0,
         end_col: 0,
-        start_buffer_pos: Some(1),
-        end_buffer_pos: Some(14),
+        start_buffer_pos: Some(LispCharPos1::new(1)),
+        end_buffer_pos: Some(LispCharPos1::new(14)),
     }];
 
     assert_eq!(
@@ -5191,8 +5281,8 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(1),
-            end_buffer_pos: Some(10),
+            start_buffer_pos: Some(LispCharPos1::new(1)),
+            end_buffer_pos: Some(LispCharPos1::new(10)),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -5202,8 +5292,8 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(11),
-            end_buffer_pos: Some(20),
+            start_buffer_pos: Some(LispCharPos1::new(11)),
+            end_buffer_pos: Some(LispCharPos1::new(20)),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -5213,8 +5303,8 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(21),
-            end_buffer_pos: Some(30),
+            start_buffer_pos: Some(LispCharPos1::new(21)),
+            end_buffer_pos: Some(LispCharPos1::new(30)),
         },
         DisplayRowSnapshot {
             row: 3,
@@ -5224,8 +5314,8 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(31),
-            end_buffer_pos: Some(40),
+            start_buffer_pos: Some(LispCharPos1::new(31)),
+            end_buffer_pos: Some(LispCharPos1::new(40)),
         },
         DisplayRowSnapshot {
             row: 4,
@@ -5235,8 +5325,8 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             start_col: 0,
             end_x: 0,
             end_col: 0,
-            start_buffer_pos: Some(41),
-            end_buffer_pos: Some(50),
+            start_buffer_pos: Some(LispCharPos1::new(41)),
+            end_buffer_pos: Some(LispCharPos1::new(50)),
         },
     ];
 
@@ -5399,11 +5489,18 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
     let point_chars = snapshot
         .points
         .iter()
-        .map(|point| (point.buffer_pos, char_at_lisp_pos(buffer, point.buffer_pos)))
+        .map(|point| {
+            (
+                point.buffer_pos,
+                char_at_lisp_pos(buffer, point.buffer_pos.as_i64() as usize),
+            )
+        })
         .collect::<Vec<_>>();
 
     assert!(
-        snapshot.point_for_buffer_pos(target_pos).is_some(),
+        snapshot
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(target_pos))
+            .is_some(),
         "expected wrapped-line redisplay to converge on point {target_pos}, points={:?}, rows={:?}, chars={:?}",
         snapshot.points,
         snapshot.rows,
@@ -5474,7 +5571,9 @@ fn layout_frame_rust_converges_visibility_for_point_line_tail_clipping() {
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
     assert!(
-        snapshot.point_for_buffer_pos(later_pos).is_some(),
+        snapshot
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(later_pos))
+            .is_some(),
         "expected redisplay to publish later positions from the point line after retry, points={:?}, rows={:?}",
         snapshot.points,
         snapshot.rows
@@ -5530,7 +5629,9 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
     let window = frame.find_window(selected_window).expect("selected window");
 
     assert!(
-        snapshot.point_for_buffer_pos(1).is_some(),
+        snapshot
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+            .is_some(),
         "expected first line to remain visible when EOB cursor is already onscreen, points={:?}, rows={:?}",
         snapshot.points,
         snapshot.rows
@@ -5597,7 +5698,9 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
     let window = frame.find_window(selected_window).expect("selected window");
 
     assert!(
-        snapshot.point_for_buffer_pos(1).is_some(),
+        snapshot
+            .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+            .is_some(),
         "expected the first scratch row to remain visible when EOB fits onscreen, points={:?}, rows={:?}",
         snapshot.points,
         snapshot.rows
