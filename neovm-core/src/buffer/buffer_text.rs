@@ -2200,11 +2200,7 @@ fn scan_backward(
             cp = cp.saturating_sub_len(CharLen::new(1));
             continue;
         }
-        let mut prev = bp.get() - 1;
-        while prev > 0 && (backend.byte_at_emacs_byte_pos(EmacsBytePos::new(prev)) & 0xC0) == 0x80 {
-            prev -= 1;
-        }
-        bp = EmacsBytePos::new(prev);
+        bp = previous_multibyte_char_start(backend, bp);
         cp = cp.saturating_sub_len(CharLen::new(1));
     }
     bp
@@ -2252,14 +2248,18 @@ fn scan_backward_bytes(
             cp = cp.saturating_sub_len(CharLen::new(1));
             continue;
         }
-        let mut prev = bp.get() - 1;
-        while prev > 0 && (backend.byte_at_emacs_byte_pos(EmacsBytePos::new(prev)) & 0xC0) == 0x80 {
-            prev -= 1;
-        }
-        bp = EmacsBytePos::new(prev);
+        bp = previous_multibyte_char_start(backend, bp);
         cp = cp.saturating_sub_len(CharLen::new(1));
     }
     cp
+}
+
+fn previous_multibyte_char_start(backend: &TextBackend, pos: EmacsBytePos) -> EmacsBytePos {
+    let mut prev = pos.saturating_sub_len(EmacsByteLen::new(1));
+    while prev > EmacsBytePos::ZERO && (backend.byte_at_emacs_byte_pos(prev) & 0xC0) == 0x80 {
+        prev = prev.saturating_sub_len(EmacsByteLen::new(1));
+    }
+    prev
 }
 
 #[cfg(test)]
