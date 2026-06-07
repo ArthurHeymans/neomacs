@@ -804,7 +804,7 @@ impl IntervalTree {
     }
 
     fn ensure_cover(&mut self, end: CharPos0) {
-        let current_end = CharPos0::new(self.len().get());
+        let current_end = CharPos0::ZERO.add_len(self.len());
         if current_end < end {
             self.append_default_interval(CharRange::new(current_end, end));
         }
@@ -814,7 +814,7 @@ impl IntervalTree {
         if len.is_empty() || self.root.is_none() {
             return;
         }
-        let tree_len = CharPos0::new(self.len().get());
+        let tree_len = CharPos0::ZERO.add_len(self.len());
         // A gap before the insertion (pos past the tree) is rare and not on the
         // buffer-insert hot path; keep the simple rebuild for it.
         if pos > tree_len {
@@ -886,7 +886,7 @@ impl IntervalTree {
         }
 
         let mut runs = self.runs();
-        let tree_len = CharPos0::new(self.len().get());
+        let tree_len = CharPos0::ZERO.add_len(self.len());
         if pos >= tree_len {
             if tree_len < pos {
                 runs.push(IntervalRun::default_in_char_range(CharRange::new(
@@ -1629,7 +1629,7 @@ impl TextPropertyTable {
         }
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(range.end().get())));
+            .ensure_cover(CharPos0::ZERO.add_len(object_len).max(range.end()));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
@@ -1911,7 +1911,7 @@ impl TextPropertyTable {
         }
 
         self.intervals
-            .ensure_cover(CharPos0::new(object_len.get().max(range.end().get())));
+            .ensure_cover(CharPos0::ZERO.add_len(object_len).max(range.end()));
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
@@ -1966,7 +1966,7 @@ impl TextPropertyTable {
         }
 
         let current = self
-            .plist_at(CharPos0::new(pos.get() - 1))
+            .plist_at(pos.saturating_sub_len(CharLen::new(1)))
             .unwrap_or_default();
         let mut cursor = pos;
         while let Some(prev) = self.previous_interval_boundary_raw(cursor) {
@@ -1974,7 +1974,7 @@ impl TextPropertyTable {
                 return None;
             }
             let previous_plist = self
-                .plist_at(CharPos0::new(prev.get() - 1))
+                .plist_at(prev.saturating_sub_len(CharLen::new(1)))
                 .unwrap_or_default();
             if !plists_equal_eq(&current, &previous_plist) {
                 return Some(prev);
@@ -2013,13 +2013,13 @@ impl TextPropertyTable {
             return None;
         }
 
-        let scan_pos = CharPos0::new(pos.get() - 1);
+        let scan_pos = pos.saturating_sub_len(CharLen::new(1));
         if let Some((start, _)) = self.intervals.find_id(scan_pos) {
             return Some(start);
         }
 
-        let tree_len = self.intervals.len().get();
-        (tree_len > 0 && tree_len < pos.get()).then_some(CharPos0::new(tree_len))
+        let tree_len = CharPos0::ZERO.add_len(self.intervals.len());
+        (tree_len > CharPos0::ZERO && tree_len < pos).then_some(tree_len)
     }
 
     pub fn adjust_for_insert_at_char_pos(&mut self, pos: CharPos0, len: CharLen) {
@@ -2239,7 +2239,7 @@ impl TextPropertyTable {
             let right_next = right
                 .map(|table| table.next_interval_boundary_after(pos, end))
                 .unwrap_or(end);
-            let next = left_next.min(right_next).max(CharPos0::new(pos.get() + 1));
+            let next = left_next.min(right_next).max(pos.add_len(CharLen::new(1)));
             pos = next;
         }
         true
