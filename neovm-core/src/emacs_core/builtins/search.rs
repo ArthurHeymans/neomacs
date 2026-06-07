@@ -160,6 +160,12 @@ struct SearchOptions {
     steps: usize,
 }
 
+#[derive(Clone, Copy)]
+struct SearchBound {
+    lisp_pos: LispCharPos1,
+    byte_pos: EmacsBytePos,
+}
+
 fn search_count_arg(args: &[Value]) -> Result<i64, Flow> {
     match args.get(3) {
         None => Ok(1),
@@ -174,15 +180,18 @@ fn search_count_arg(args: &[Value]) -> Result<i64, Flow> {
     }
 }
 
-fn search_bound_to_byte_in_manager(
+fn search_bound_in_manager(
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     value: &Value,
-) -> Result<EmacsBytePos, Flow> {
-    let pos = LispCharPos1::new(super::buffers::expect_integer_or_marker_in_buffers(
+) -> Result<SearchBound, Flow> {
+    let lisp_pos = LispCharPos1::new(super::buffers::expect_integer_or_marker_in_buffers(
         buffers, value,
     )?);
-    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos))
+    Ok(SearchBound {
+        lisp_pos,
+        byte_pos: buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos),
+    })
 }
 
 fn parse_search_options_in_manager(
@@ -198,13 +207,9 @@ fn parse_search_options_in_manager(
         Some(v) if v.is_t() => SearchNoErrorMode::KeepPoint,
         Some(_) => SearchNoErrorMode::MoveToBound,
     };
-    let (bound_lisp, bound) = match args.get(1) {
-        Some(v) if !v.is_nil() => {
-            let raw = super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?;
-            let byte = search_bound_to_byte_in_manager(buffers, buf, v)?;
-            (Some(raw), Some(byte))
-        }
-        _ => (None, None),
+    let bound = match args.get(1) {
+        Some(v) if !v.is_nil() => Some(search_bound_in_manager(buffers, buf, v)?),
+        _ => None,
     };
 
     let direction = match kind {
@@ -225,7 +230,7 @@ fn parse_search_options_in_manager(
     };
     let steps = count.unsigned_abs() as usize;
 
-    if let Some(limit) = bound_lisp {
+    if let Some(limit) = bound.map(|bound| bound.lisp_pos.as_i64()) {
         let point_lisp = buffer_byte_to_lisp_char(buf, buf.point_emacs_byte_pos());
         match direction {
             SearchDirection::Forward if limit < point_lisp => {
@@ -245,7 +250,7 @@ fn parse_search_options_in_manager(
     }
 
     Ok(SearchOptions {
-        bound,
+        bound: bound.map(|bound| bound.byte_pos),
         direction,
         noerror_mode,
         steps,
