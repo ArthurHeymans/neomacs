@@ -15,87 +15,8 @@ use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };
 use super::value::*;
-use crate::buffer::{EmacsByteRange, LispCharPos1};
-use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use flate2::{Decompress, FlushDecompress, Status};
-
-/// Resolve a Lisp integer-or-marker to an i64 position value.
-fn expect_integer_or_marker(
-    buffers: &crate::buffer::BufferManager,
-    value: &Value,
-) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if value.is_marker() => {
-            super::marker::marker_position_as_int_with_buffers(buffers, value)
-        }
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
-}
-
-fn lisp_range_to_accessible_byte_range(
-    buf: &crate::buffer::Buffer,
-    start: LispCharPos1,
-    end: LispCharPos1,
-) -> EmacsByteRange {
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
-    )
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ZlibLispRegion {
-    start: LispCharPos1,
-    end: LispCharPos1,
-}
-
-impl ZlibLispRegion {
-    fn from_values(
-        buffers: &crate::buffer::BufferManager,
-        start: &Value,
-        end: &Value,
-    ) -> Result<Self, Flow> {
-        Ok(Self {
-            start: LispCharPos1::new(expect_integer_or_marker(buffers, start)?),
-            end: LispCharPos1::new(expect_integer_or_marker(buffers, end)?),
-        })
-    }
-
-    fn validate_accessible(
-        self,
-        buf: &crate::buffer::Buffer,
-        start_arg: Value,
-        end_arg: Value,
-    ) -> Result<Self, Flow> {
-        let point_min = buf.point_min_lisp_char_pos();
-        let point_max = buf.point_max_lisp_char_pos();
-        if self.start < point_min
-            || self.start > point_max
-            || self.end < point_min
-            || self.end > point_max
-        {
-            return Err(signal(
-                "args-out-of-range",
-                vec![Value::make_buffer(buf.id), start_arg, end_arg],
-            ));
-        }
-        Ok(self)
-    }
-
-    fn to_accessible_byte_range(self, buf: &crate::buffer::Buffer) -> EmacsByteRange {
-        lisp_range_to_accessible_byte_range(buf, self.start, self.end)
-    }
-}
 
 /// (zlib-available-p)
 /// Return t if zlib decompression is available.
@@ -122,11 +43,11 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Ok(Value::NIL);
     };
 
-    let region = ZlibLispRegion::from_values(&ctx.buffers, &args[0], &args[1])?;
+    let region = super::position::LispRegionArgs::from_values(&ctx.buffers, args[0], args[1])?;
 
     // GNU `Fzlib_decompress_region` calls `validate_region` before the
     // unibyte-buffer check.
-    let region = region.validate_accessible(buf, args[0], args[1])?;
+    let byte_range = region.accessible_byte_range(buf)?;
 
     // Check unibyte — GNU signals error in multibyte buffers.
     if buf.get_multibyte() {
@@ -143,7 +64,6 @@ pub(crate) fn builtin_zlib_decompress_region(
         return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
     }
 
-    let byte_range = region.to_accessible_byte_range(buf);
     let from_byte = byte_range.start().get();
     let to_byte = byte_range.end().get();
 
