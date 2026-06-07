@@ -1499,14 +1499,17 @@ fn render_overlay_string(
             continue;
         }
 
-        let is_extender = is_cluster_extender(ch);
-        let ch_advance = if is_extender {
-            0.0
-        } else if is_wide_char(ch) {
-            2.0 * face_char_w
+        // Grapheme-cluster composition for overlay-string text, using the
+        // same shared rule as buffer text (see `composition`): combining
+        // marks, ZWJ emoji sequences, and flag pairs cluster here too.
+        let cluster_tail = builder.last_text_cluster_tail();
+        let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
+        let cols = if is_continuation {
+            0
         } else {
-            face_char_w
+            crate::composition::base_width_cols(ch)
         };
+        let ch_advance = cols as f32 * face_char_w;
         if *x + ch_advance > max_x {
             break;
         }
@@ -1522,10 +1525,11 @@ fn render_overlay_string(
             builder,
         );
 
-        // Push glyph into the matrix builder (charpos=0 for overlay text).
-        // Extenders merge into the preceding Char/Composite inside
-        // push_char; emit via the regular entry point either way.
-        if is_wide_char(ch) && !is_extender {
+        // Push into the matrix builder (charpos=0 for overlay text).
+        // Continuations merge into the preceding Char/Composite cluster.
+        if is_continuation {
+            builder.push_cluster_continuation(ch, face_id, 0);
+        } else if cols == 2 {
             builder.push_wide_char(ch, face_id, 0);
         } else {
             builder.push_char(ch, face_id, 0);
@@ -1548,13 +1552,7 @@ fn render_overlay_string(
             Some(ch_advance.max(1.0)),
         );
         *x += ch_advance;
-        *col += if is_extender {
-            0
-        } else if is_wide_char(ch) {
-            2
-        } else {
-            1
-        };
+        *col += cols as usize;
         output_emitter.emit_synthetic_text_span(
             evaluator,
             *row,
