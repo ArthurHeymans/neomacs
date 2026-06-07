@@ -29,13 +29,13 @@ trait BufferTextPropertyTestExt {
     fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool;
 }
 
+fn emacs_byte_range(start: usize, end: usize) -> EmacsByteRange {
+    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+}
+
 impl BufferTextPropertyTestExt for Buffer {
     fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
-        self.text_props_put_property_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            name,
-            value,
-        )
+        self.text_props_put_property_in_emacs_byte_range(emacs_byte_range(start, end), name, value)
     }
 }
 
@@ -1047,7 +1047,7 @@ fn fragmented_snapshot_backend_trace(kind: BufferTextBackendKind) -> LayoutSnaps
         let pos = text.find(marker).expect("marker");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
         buf.insert("tmp");
-        buf.delete_emacs_byte_range(EmacsByteRange::from_usize(pos, pos + "tmp".len()));
+        buf.delete_emacs_byte_range(emacs_byte_range(pos, pos + "tmp".len()));
     }
     assert_eq!(buf.buffer_string(), text);
 
@@ -1069,13 +1069,12 @@ fn fragmented_snapshot_backend_trace(kind: BufferTextBackendKind) -> LayoutSnaps
         .chain(std::iter::once(byte_len))
         .collect();
     let mut copied_all = Vec::new();
-    snapshot
-        .layout_copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, byte_len), &mut copied_all);
+    snapshot.layout_copy_emacs_byte_range_to(emacs_byte_range(0, byte_len), &mut copied_all);
 
     let mut iterated_middle = Vec::new();
     snapshot
         .layout_try_for_each_emacs_byte_range_chunk(
-            EmacsByteRange::from_usize(2, byte_len.saturating_sub(1)),
+            emacs_byte_range(2, byte_len.saturating_sub(1)),
             |chunk| {
                 iterated_middle.extend_from_slice(chunk);
                 Ok::<(), std::convert::Infallible>(())

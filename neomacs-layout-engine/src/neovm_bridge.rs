@@ -296,16 +296,13 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     }
 
     fn layout_char_pos_to_emacs_byte_pos(&self, charpos: CharPos0) -> EmacsBytePos {
-        self.text_snapshot.char_pos_to_emacs_byte_pos(CharPos0::new(
-            charpos.get().min(self.accessible_end_char.get()),
-        ))
+        self.text_snapshot
+            .char_pos_to_emacs_byte_pos(charpos.min(self.accessible_end_char))
     }
 
     fn layout_emacs_byte_pos_to_char_pos(&self, bytepos: EmacsBytePos) -> CharPos0 {
         self.text_snapshot
-            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-                bytepos.get().min(self.accessible_end_emacs_byte.get()),
-            ))
+            .emacs_byte_pos_to_char_pos(bytepos.min(self.accessible_end_emacs_byte))
     }
 
     fn layout_copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {

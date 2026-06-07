@@ -3,7 +3,9 @@ use crate::neovm_bridge::RustBufferAccess;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
-use neovm_core::buffer::{BufferId, BufferTextBackendKind, EmacsByteRange, LispCharPos1};
+use neovm_core::buffer::{
+    BufferId, BufferTextBackendKind, EmacsBytePos, EmacsByteRange, LispCharPos1,
+};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -23,13 +25,13 @@ trait BufferTextPropertyTestExt {
     fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool;
 }
 
+fn emacs_byte_range(start: usize, end: usize) -> EmacsByteRange {
+    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+}
+
 impl BufferTextPropertyTestExt for neovm_core::buffer::Buffer {
     fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
-        self.text_props_put_property_in_emacs_byte_range(
-            EmacsByteRange::from_usize(start, end),
-            name,
-            value,
-        )
+        self.text_props_put_property_in_emacs_byte_range(emacs_byte_range(start, end), name, value)
     }
 }
 
@@ -303,7 +305,7 @@ fn insert_fragmented_current_buffer_text(eval: &mut Context, text: &str) {
         if let Some(pos) = text.find(marker) {
             buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(pos));
             buffer.insert("tmp");
-            buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(pos, pos + "tmp".len()));
+            buffer.delete_emacs_byte_range(emacs_byte_range(pos, pos + "tmp".len()));
         }
     }
 
@@ -882,7 +884,7 @@ fn edit_redisplay_backend_layout_trace(
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
-        buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        buffer.delete_emacs_byte_range(emacs_byte_range(start, end));
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
@@ -973,7 +975,7 @@ fn fontification_edit_backend_trace(kind: BufferTextBackendKind) -> Fontificatio
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let start = buffer.buffer_string().find("beta").expect("beta");
         let end = start + "beta".len();
-        buffer.delete_emacs_byte_range(EmacsByteRange::from_usize(start, end));
+        buffer.delete_emacs_byte_range(emacs_byte_range(start, end));
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(start));
         buffer.insert("BETA");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));

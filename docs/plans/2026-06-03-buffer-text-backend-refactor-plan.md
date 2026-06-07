@@ -267,6 +267,10 @@ Progress:
 - Narrowing, marker anchor construction, accessible point clamping, and
   Lisp-to-accessible byte conversion now clamp typed `CharPos0` or
   `EmacsBytePos` values until the final `BufferText` conversion.
+- Layout buffer snapshots now clamp typed character and Emacs-byte positions
+  directly before querying the text snapshot.
+- Layout-engine tests now use local typed `EmacsByteRange` helpers instead of
+  depending on core's test-only raw range constructor across crate boundaries.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.
