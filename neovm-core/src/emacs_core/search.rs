@@ -16,7 +16,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::regex::MatchGroup;
 use super::value::*;
-use crate::buffer::CharPos0;
+use crate::buffer::{CharLen, CharPos0, EmacsBytePos};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,16 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     } else {
         Ok(())
     }
+}
+
+#[inline]
+fn buffer_match_char_pos_to_byte_pos(
+    buf: &crate::buffer::Buffer,
+    lisp_char_pos: usize,
+) -> EmacsBytePos {
+    buf.char_pos_to_emacs_byte_pos_clamped(
+        CharPos0::new(lisp_char_pos).saturating_sub_len(CharLen::new(1)),
+    )
 }
 
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
@@ -663,10 +673,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         )
     } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
         (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_start.saturating_sub(1)))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_end.saturating_sub(1)))
-                .get(),
+            buffer_match_char_pos_to_byte_pos(buf, match_start).get(),
+            buffer_match_char_pos_to_byte_pos(buf, match_end).get(),
         )
     } else {
         (match_start, match_end)
@@ -687,10 +695,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
             .and_then(|range| *range)
             .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
         let group0_start = group0.start();
-        let group0_byte_start =
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(group0_start.saturating_sub(1)));
-        let group0_byte_end =
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(group0.end().saturating_sub(1)));
+        let group0_byte_start = buffer_match_char_pos_to_byte_pos(buf, group0_start);
+        let group0_byte_end = buffer_match_char_pos_to_byte_pos(buf, group0.end());
         let source = buf.buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::new(
             group0_byte_start,
             group0_byte_end,
