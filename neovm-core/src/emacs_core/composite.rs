@@ -102,6 +102,36 @@ fn expect_string_value(arg: &Value) -> Result<&crate::heap_types::LispString, Fl
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *arg]))
 }
 
+fn validate_subarray_indices(
+    array: Value,
+    from: Value,
+    to: Value,
+    size: i64,
+) -> Result<(i64, i64), Flow> {
+    fn normalize_index(value: Value, default: i64, size: i64) -> Result<i64, Flow> {
+        if value.is_nil() {
+            return Ok(default);
+        }
+        let raw = match value.kind() {
+            ValueKind::Fixnum(n) => n,
+            _ => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("integerp"), value],
+                ));
+            }
+        };
+        Ok(if raw < 0 { raw + size } else { raw })
+    }
+
+    let from_idx = normalize_index(from, 0, size)?;
+    let to_idx = normalize_index(to, size, size)?;
+    if !(0 <= from_idx && from_idx <= to_idx && to_idx <= size) {
+        return Err(signal("args-out-of-range", vec![array, from, to]));
+    }
+    Ok((from_idx, to_idx))
+}
+
 // ---------------------------------------------------------------------------
 // Pure builtins
 // ---------------------------------------------------------------------------
@@ -159,21 +189,11 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
-    expect_integerp(&args[1])?;
-    expect_integerp(&args[2])?;
-    let start = integer_value(&args[1]);
-    let end = integer_value(&args[2]);
     let components = args.get(3).copied().unwrap_or(Value::NIL);
     let modification_func = args.get(4).copied().unwrap_or(Value::NIL);
-    expect_composition_components(components)?;
 
     let len = expect_string_value(&args[0])?.schars() as i64;
-    if start < 0 || end < 0 || start > end || end > len {
-        return Err(signal(
-            "args-out-of-range",
-            vec![args[0], Value::fixnum(start), Value::fixnum(end)],
-        ));
-    }
+    let (start, end) = validate_subarray_indices(args[0], args[1], args[2], len)?;
     let char_start = usize::try_from(start).expect("validated non-negative string start");
     let char_end = usize::try_from(end).expect("validated non-negative string end");
     let char_len = usize::try_from(len).expect("string character length fits usize");

@@ -164,6 +164,67 @@ fn compose_string_internal_sets_composition_property() {
 }
 
 #[test]
+fn compose_string_internal_uses_gnu_subarray_bounds() {
+    crate::test_utils::init_test_tracing();
+    let s = Value::string("abcd");
+    let result = builtin_compose_string_internal(vec![
+        s,
+        Value::fixnum(-2),
+        Value::fixnum(-1),
+        Value::NIL,
+        Value::NIL,
+    ]);
+    assert!(result.is_ok());
+
+    let table = get_string_text_properties_table_for_value(s).expect("string text properties");
+    assert!(
+        table
+            .get_property_at_char_pos(CharPos0::new(2), Value::symbol("composition"))
+            .is_some()
+    );
+    assert!(
+        table
+            .get_property_at_char_pos(CharPos0::new(1), Value::symbol("composition"))
+            .is_none()
+    );
+}
+
+#[test]
+fn compose_string_internal_nil_bounds_default_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let s = Value::string("abcd");
+    let result =
+        builtin_compose_string_internal(vec![s, Value::NIL, Value::NIL, Value::NIL, Value::NIL]);
+    assert!(result.is_ok());
+
+    let table = get_string_text_properties_table_for_value(s).expect("string text properties");
+    let prop = table
+        .get_property_at_char_pos(CharPos0::new(0), Value::symbol("composition"))
+        .expect("composition property at start");
+    assert_eq!(prop.cons_car().cons_car().as_fixnum(), Some(4));
+}
+
+#[test]
+fn compose_string_internal_does_not_validate_components_like_region() {
+    crate::test_utils::init_test_tracing();
+    let s = Value::string("abcd");
+    let result = builtin_compose_string_internal(vec![
+        s,
+        Value::fixnum(0),
+        Value::fixnum(2),
+        Value::T,
+        Value::NIL,
+    ]);
+    assert!(result.is_ok());
+
+    let table = get_string_text_properties_table_for_value(s).expect("string text properties");
+    let prop = table
+        .get_property_at_char_pos(CharPos0::new(0), Value::symbol("composition"))
+        .expect("composition property");
+    assert_eq!(prop.cons_car().cons_cdr(), Value::T);
+}
+
+#[test]
 fn compose_string_internal_too_few_args() {
     crate::test_utils::init_test_tracing();
     let result = builtin_compose_string_internal(vec![Value::string("hi"), Value::fixnum(0)]);
@@ -214,12 +275,12 @@ fn compose_string_internal_range_checks() {
     ]);
     assert!(end_oob.is_err());
 
-    let start_neg = builtin_compose_string_internal(vec![
+    let start_too_negative = builtin_compose_string_internal(vec![
         Value::string("abc"),
-        Value::fixnum(-1),
+        Value::fixnum(-4),
         Value::fixnum(1),
     ]);
-    assert!(start_neg.is_err());
+    assert!(start_too_negative.is_err());
 }
 
 #[test]
