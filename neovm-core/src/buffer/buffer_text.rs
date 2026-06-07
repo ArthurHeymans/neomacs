@@ -617,8 +617,8 @@ impl BufferText {
             .with_contiguous_emacs_byte_range(range, f)
     }
 
-    fn emacs_byte_len_usize(&self) -> usize {
-        self.storage.borrow().metrics.emacs_byte_len().get()
+    fn emacs_byte_end_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::ZERO.add_len(self.storage.borrow().metrics.emacs_byte_len())
     }
 
     /// First `\n` in the logical emacs-byte range `[from, limit)`, or `None`.
@@ -630,27 +630,27 @@ impl BufferText {
         from: EmacsBytePos,
         limit: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
-        let total = self.emacs_byte_len_usize();
-        let from = from.get().min(total);
-        let limit = limit.get().min(total);
+        let total = self.emacs_byte_end_pos();
+        let from = from.min(total);
+        let limit = limit.min(total);
         if from >= limit {
             return None;
         }
         let mut base = from;
         let mut found = None;
-        let _ = self.for_each_emacs_byte_range_chunk::<()>(
-            EmacsByteRange::new(EmacsBytePos::new(from), EmacsBytePos::new(limit)),
-            |chunk| match chunk.iter().position(|&b| b == b'\n') {
-                Some(off) => {
-                    found = Some(EmacsBytePos::new(base + off));
-                    Err(())
+        let _ =
+            self.for_each_emacs_byte_range_chunk::<()>(EmacsByteRange::new(from, limit), |chunk| {
+                match chunk.iter().position(|&b| b == b'\n') {
+                    Some(off) => {
+                        found = Some(base.add_len(EmacsByteLen::new(off)));
+                        Err(())
+                    }
+                    None => {
+                        base = base.add_len(EmacsByteLen::new(chunk.len()));
+                        Ok(())
+                    }
                 }
-                None => {
-                    base += chunk.len();
-                    Ok(())
-                }
-            },
-        );
+            });
         found
     }
 
@@ -663,28 +663,26 @@ impl BufferText {
         from: EmacsBytePos,
         floor: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
-        let total = self.emacs_byte_len_usize();
-        let from = from.get().min(total);
-        let floor = floor.get().min(total);
+        let total = self.emacs_byte_end_pos();
+        let from = from.min(total);
+        let floor = floor.min(total);
         if from <= floor {
             return None;
         }
         let mut hi = from;
-        let mut window = 256usize;
+        let mut window = EmacsByteLen::new(256);
         while hi > floor {
-            let lo = hi.saturating_sub(window).max(floor);
+            let lo = hi.saturating_sub_len(window).max(floor);
             let mut base = lo;
             let mut last = None;
-            let _ = self.for_each_emacs_byte_range_chunk::<()>(
-                EmacsByteRange::new(EmacsBytePos::new(lo), EmacsBytePos::new(hi)),
-                |chunk| {
+            let _ =
+                self.for_each_emacs_byte_range_chunk::<()>(EmacsByteRange::new(lo, hi), |chunk| {
                     if let Some(off) = chunk.iter().rposition(|&b| b == b'\n') {
-                        last = Some(EmacsBytePos::new(base + off));
+                        last = Some(base.add_len(EmacsByteLen::new(off)));
                     }
-                    base += chunk.len();
+                    base = base.add_len(EmacsByteLen::new(chunk.len()));
                     Ok::<(), ()>(())
-                },
-            );
+                });
             if last.is_some() {
                 return last;
             }
@@ -692,7 +690,7 @@ impl BufferText {
                 return None;
             }
             hi = lo;
-            window = window.saturating_mul(2);
+            window = window.add_len(window);
         }
         None
     }
@@ -704,20 +702,18 @@ impl BufferText {
         from: EmacsBytePos,
         limit: EmacsBytePos,
     ) -> usize {
-        let total = self.emacs_byte_len_usize();
-        let from = from.get().min(total);
-        let limit = limit.get().min(total);
+        let total = self.emacs_byte_end_pos();
+        let from = from.min(total);
+        let limit = limit.min(total);
         if from >= limit {
             return 0;
         }
         let mut count = 0usize;
-        let _ = self.for_each_emacs_byte_range_chunk::<()>(
-            EmacsByteRange::new(EmacsBytePos::new(from), EmacsBytePos::new(limit)),
-            |chunk| {
+        let _ =
+            self.for_each_emacs_byte_range_chunk::<()>(EmacsByteRange::new(from, limit), |chunk| {
                 count += chunk.iter().filter(|&&b| b == b'\n').count();
                 Ok::<(), ()>(())
-            },
-        );
+            });
         count
     }
 

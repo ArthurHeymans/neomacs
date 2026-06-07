@@ -271,6 +271,9 @@ Progress:
   directly before querying the text snapshot.
 - Layout-engine tests now use local typed `EmacsByteRange` helpers instead of
   depending on core's test-only raw range constructor across crate boundaries.
+- Buffer text newline scans now clamp typed `EmacsBytePos` endpoints and build
+  typed ranges before entering backend chunk iteration; raw offsets are limited
+  to chunk-local byte arithmetic.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.
