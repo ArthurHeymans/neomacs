@@ -473,29 +473,19 @@ pub(crate) fn builtin_copy_marker_in_buffers(
 
     let src = &args[0];
     match src.kind() {
-        ValueKind::Veclike(VecLikeType::Marker) => {
-            let buffer_id = marker_buffer_id(src);
-
-            let position = if is_mark_marker(src) {
-                buffer_id
-                    .and_then(|buf_id| buffers.get(buf_id))
-                    .and_then(|buf| buf.mark_char_pos().map(|m| m.to_lisp()))
+        ValueKind::Veclike(VecLikeType::Marker) | ValueKind::Fixnum(_) => {
+            let marker = make_marker_value(None, None, insertion_type);
+            let buffer = if src.is_marker() {
+                marker_buffer_id(src)
+                    .map(Value::make_buffer)
+                    .unwrap_or(Value::NIL)
             } else {
-                match marker_position_value(src).kind() {
-                    ValueKind::Fixnum(n) => Some(LispCharPos1::new(n)),
-                    _ => None,
-                }
+                Value::NIL
             };
-
-            let marker = make_marker_value(buffer_id, position, insertion_type);
-            register_marker_in_buffers(buffers, &marker, buffer_id, position);
-            Ok(marker)
-        }
-        ValueKind::Fixnum(n) => {
-            let buffer_id = buffers.current_buffer().map(|b| b.id);
-            let position = LispCharPos1::new(n);
-            let marker = make_marker_value(buffer_id, Some(position), insertion_type);
-            register_marker_in_buffers(buffers, &marker, buffer_id, Some(position));
+            builtin_set_marker_in_buffers(buffers, vec![marker, *src, buffer])?;
+            let _ = marker.with_marker_data_mut(|data| {
+                data.insertion_type = insertion_type;
+            });
             Ok(marker)
         }
         ValueKind::Nil => Ok(make_marker_value(None, None, insertion_type)),

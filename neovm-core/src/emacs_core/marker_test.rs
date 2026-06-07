@@ -147,6 +147,24 @@ fn builtin_copy_marker_from_integer() {
 }
 
 #[test]
+fn builtin_copy_marker_from_integer_clips_like_set_marker() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert("abc");
+
+    let before_min = builtin_copy_marker(&mut eval, vec![Value::fixnum(-10)])
+        .expect("copy marker before point-min");
+    assert_eq!(marker_position_value(&before_min), Value::fixnum(1));
+
+    let after_max = builtin_copy_marker(&mut eval, vec![Value::fixnum(99)])
+        .expect("copy marker after point-max");
+    assert_eq!(marker_position_value(&after_max), Value::fixnum(4));
+}
+
+#[test]
 fn builtin_move_marker_matches_set_marker_behavior() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
