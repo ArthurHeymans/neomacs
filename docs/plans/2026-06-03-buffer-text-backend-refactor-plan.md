@@ -767,6 +767,10 @@ Completed so far:
 - Removed the unused raw `EmacsByteRange` start/end accessors so byte ranges
   expose typed endpoints only; callers that need storage indices must unwrap
   `EmacsBytePos` explicitly at the local indexing site.
+- Reworked the test-only regex replacement helper to use the buffer replace
+  transaction path instead of spelling replacement as direct point movement,
+  delete, then insert; backend parity tests now exercise the same replace
+  machinery used by runtime callers.
 
 Next work:
 

@@ -2312,9 +2312,7 @@ pub fn replace_match_buffer_with_syntax(
 
     let match_range =
         EmacsByteRange::new(EmacsBytePos::new(match_start), EmacsBytePos::new(match_end));
-    buf.goto_emacs_byte_pos(match_range.start());
-    buf.delete_emacs_byte_range(match_range);
-    buf.insert_lisp_string(&replacement);
+    buf.replace_emacs_byte_range_lisp_string(match_range, &replacement);
     Ok(())
 }
 
