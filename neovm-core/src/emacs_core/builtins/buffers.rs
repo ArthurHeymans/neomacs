@@ -901,6 +901,44 @@ fn checked_accessible_lisp_range_from_raw(
     Ok((start, end))
 }
 
+fn resolve_lisp_range_with_buffer_defaults(
+    buffers: &BufferManager,
+    buffer_id: Option<BufferId>,
+    start_arg: &Value,
+    end_arg: &Value,
+) -> Result<(LispCharPos1, LispCharPos1), Flow> {
+    let default_start = || {
+        buffer_id
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_min_lisp_char_pos().as_i64())
+            })
+            .unwrap_or(1)
+    };
+    let default_end = || {
+        buffer_id
+            .and_then(|id| {
+                buffers
+                    .get(id)
+                    .map(|buf| buf.point_max_lisp_char_pos().as_i64())
+            })
+            .unwrap_or(1)
+    };
+
+    let start = if start_arg.is_nil() {
+        default_start()
+    } else {
+        expect_integer_or_marker_in_buffers(buffers, start_arg)?
+    };
+    let end = if end_arg.is_nil() {
+        default_end()
+    } else {
+        expect_integer_or_marker_in_buffers(buffers, end_arg)?
+    };
+    Ok((LispCharPos1::new(start), LispCharPos1::new(end)))
+}
+
 fn checked_buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
@@ -1874,64 +1912,24 @@ pub(crate) fn builtin_compare_buffer_substrings_with_case_fold(
     let left_buffer = resolve_buffer_designator_allow_nil_current_in_manager(buffers, &args[0])?;
     let right_buffer = resolve_buffer_designator_allow_nil_current_in_manager(buffers, &args[3])?;
 
-    let left_start = if args[1].is_nil() {
-        left_buffer
-            .and_then(|id| {
-                buffers
-                    .get(id)
-                    .map(|buf| buf.point_min_lisp_char_pos().as_i64())
-            })
-            .unwrap_or(1)
-    } else {
-        expect_integer_or_marker_in_buffers(buffers, &args[1])?
-    };
-    let left_end = if args[2].is_nil() {
-        left_buffer
-            .and_then(|id| {
-                buffers
-                    .get(id)
-                    .map(|buf| buf.point_max_lisp_char_pos().as_i64())
-            })
-            .unwrap_or(1)
-    } else {
-        expect_integer_or_marker_in_buffers(buffers, &args[2])?
-    };
-    let right_start = if args[4].is_nil() {
-        right_buffer
-            .and_then(|id| {
-                buffers
-                    .get(id)
-                    .map(|buf| buf.point_min_lisp_char_pos().as_i64())
-            })
-            .unwrap_or(1)
-    } else {
-        expect_integer_or_marker_in_buffers(buffers, &args[4])?
-    };
-    let right_end = if args[5].is_nil() {
-        right_buffer
-            .and_then(|id| {
-                buffers
-                    .get(id)
-                    .map(|buf| buf.point_max_lisp_char_pos().as_i64())
-            })
-            .unwrap_or(1)
-    } else {
-        expect_integer_or_marker_in_buffers(buffers, &args[5])?
-    };
+    let (left_start, left_end) =
+        resolve_lisp_range_with_buffer_defaults(buffers, left_buffer, &args[1], &args[2])?;
+    let (right_start, right_end) =
+        resolve_lisp_range_with_buffer_defaults(buffers, right_buffer, &args[4], &args[5])?;
 
     let left = checked_buffer_slice_for_char_region_in_manager(
         buffers,
         left_buffer,
-        LispCharPos1::new(left_start),
-        LispCharPos1::new(left_end),
+        left_start,
+        left_end,
         args[1],
         args[2],
     )?;
     let right = checked_buffer_slice_for_char_region_in_manager(
         buffers,
         right_buffer,
-        LispCharPos1::new(right_start),
-        LispCharPos1::new(right_end),
+        right_start,
+        right_end,
         args[4],
         args[5],
     )?;
