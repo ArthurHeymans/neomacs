@@ -65,6 +65,38 @@ impl LispRegionArgs {
         })
     }
 
+    pub(crate) fn from_optional_values(
+        buffers: &BufferManager,
+        start: Option<Value>,
+        end: Option<Value>,
+        default_start: LispCharPos1,
+        default_end: LispCharPos1,
+    ) -> Result<Self, Flow> {
+        let (start, start_arg) = match start {
+            None => (default_start, Value::fixnum(default_start.as_i64())),
+            Some(value) if value.is_nil() => (default_start, Value::fixnum(default_start.as_i64())),
+            Some(value) => (
+                LispCharPos1::new(fix_position_with_buffers(buffers, &value)?),
+                value,
+            ),
+        };
+        let (end, end_arg) = match end {
+            None => (default_end, Value::fixnum(default_end.as_i64())),
+            Some(value) if value.is_nil() => (default_end, Value::fixnum(default_end.as_i64())),
+            Some(value) => (
+                LispCharPos1::new(fix_position_with_buffers(buffers, &value)?),
+                value,
+            ),
+        };
+
+        Ok(Self {
+            start,
+            end,
+            start_arg,
+            end_arg,
+        })
+    }
+
     pub(crate) fn accessible_byte_range(self, buffer: &Buffer) -> Result<EmacsByteRange, Flow> {
         let point_min = buffer.point_min_lisp_char_pos();
         let point_max = buffer.point_max_lisp_char_pos();
