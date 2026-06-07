@@ -1004,6 +1004,44 @@ fn test_skip_chars_forward_with_limit() {
 }
 
 #[test]
+fn skip_chars_accepts_marker_limit() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_text("aaaaaaa");
+    let moved = eval_int(&mut ev, "(skip-chars-forward \"a\" (copy-marker 4))");
+    assert_eq!(moved, 3);
+    let pos = eval_int(&mut ev, "(point)");
+    assert_eq!(pos, 4);
+
+    eval_str(&mut ev, "(goto-char 8)");
+    let moved = eval_int(&mut ev, "(skip-chars-backward \"a\" (copy-marker 5))");
+    assert_eq!(moved, -3);
+    let pos = eval_int(&mut ev, "(point)");
+    assert_eq!(pos, 5);
+}
+
+#[test]
+fn skip_chars_bignum_limit_clamps_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_text("aaa");
+    let moved = eval_int(
+        &mut ev,
+        "(skip-chars-forward \"a\" 1000000000000000000000000000000000000)",
+    );
+    assert_eq!(moved, 3);
+    let pos = eval_int(&mut ev, "(point)");
+    assert_eq!(pos, 4);
+
+    eval_str(&mut ev, "(goto-char 4)");
+    let moved = eval_int(
+        &mut ev,
+        "(skip-chars-backward \"a\" -1000000000000000000000000000000000000)",
+    );
+    assert_eq!(moved, -3);
+    let pos = eval_int(&mut ev, "(point)");
+    assert_eq!(pos, 1);
+}
+
+#[test]
 fn test_forward_char_negative() {
     crate::test_utils::init_test_tracing();
     let mut ev = eval_with_text("abcdef");

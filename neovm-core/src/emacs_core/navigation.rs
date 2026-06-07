@@ -177,6 +177,22 @@ fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
+fn skip_chars_limit_byte(
+    buffers: &BufferManager,
+    buf: &crate::buffer::Buffer,
+    value: Option<&Value>,
+    default: EmacsBytePos,
+) -> Result<EmacsBytePos, Flow> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    if value.is_nil() {
+        return Ok(default);
+    }
+    let pos = super::position::fix_position_with_buffers(buffers, value)?;
+    Ok(char_pos_to_byte(buf, LispCharPos1::new(pos)))
+}
+
 fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> EmacsBytePos {
     buf.accessible_emacs_byte_region().clamp(byte_pos)
 }
@@ -1172,11 +1188,7 @@ pub(crate) fn builtin_skip_chars_forward(
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
-        let lim_byte = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, LispCharPos1::new(expect_int(&args[1])?))
-        } else {
-            accessible.end()
-        };
+        let lim_byte = skip_chars_limit_byte(&ctx.buffers, buf, args.get(1), accessible.end())?;
         let start_pos = buf.point_emacs_byte_pos();
         let mut pos = start_pos;
         let mut moved_chars = 0_i64;
@@ -1226,11 +1238,7 @@ pub(crate) fn builtin_skip_chars_backward(
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
         let accessible = buf.accessible_emacs_byte_region();
-        let limit = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, LispCharPos1::new(expect_int(&args[1])?))
-        } else {
-            accessible.start()
-        };
+        let limit = skip_chars_limit_byte(&ctx.buffers, buf, args.get(1), accessible.start())?;
         let start_pos = buf.point_emacs_byte_pos();
         let mut pos = start_pos;
         let mut moved_chars = 0_i64;
