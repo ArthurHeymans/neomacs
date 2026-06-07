@@ -367,10 +367,10 @@ fn bulk_string_text_property_table(runs: &[StringTextPropertyRun]) -> Option<Tex
     }
 
     let mut sorted_bounds: Vec<CharRange> = plist_runs.iter().map(|run| run.range()).collect();
-    sorted_bounds.sort_unstable_by_key(|range| (range.start_usize(), range.end_usize()));
+    sorted_bounds.sort_unstable_by_key(|range| (range.start(), range.end()));
     if sorted_bounds
         .windows(2)
-        .any(|window| window[1].start_usize() < window[0].end_usize())
+        .any(|window| window[1].start() < window[0].end())
     {
         return None;
     }

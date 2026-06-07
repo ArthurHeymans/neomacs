@@ -412,14 +412,6 @@ impl CharRange {
         self.end
     }
 
-    pub const fn start_usize(self) -> usize {
-        self.start.get()
-    }
-
-    pub const fn end_usize(self) -> usize {
-        self.end.get()
-    }
-
     pub fn start_lisp(self) -> LispCharPos1 {
         self.start.to_lisp()
     }

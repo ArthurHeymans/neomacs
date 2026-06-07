@@ -761,6 +761,9 @@ Completed so far:
 - Removed raw `usize` accessible-range membership/clamp helpers and replaced
   their production callers with typed `EmacsBytePos` / `CharPos0` checks, so
   narrowing-boundary tests cannot accidentally mix byte and character spaces.
+- Removed the raw `CharRange` start/end accessors from production use; string
+  comparison and text-property plist validation now order and construct
+  character ranges through typed `CharPos0` boundaries.
 
 Next work:
 
