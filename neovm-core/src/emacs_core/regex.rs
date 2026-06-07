@@ -2280,6 +2280,7 @@ pub fn string_match_full(
 }
 
 /// Replace the last match in a buffer and return `nil`-style success.
+#[cfg(test)]
 pub fn replace_match_buffer(
     buf: &mut Buffer,
     newtext: &str,
@@ -2295,6 +2296,7 @@ pub fn replace_match_buffer(
 /// `fixedcase=nil` path. Mirrors GNU `src/search.c:2485,2494,2504`;
 /// the buffer's own syntax table is always consulted via `buf`.
 /// See audit findings #14/#20 in `drafts/regex-search-audit.md`.
+#[cfg(test)]
 pub fn replace_match_buffer_with_syntax(
     buf: &mut Buffer,
     newtext: &str,

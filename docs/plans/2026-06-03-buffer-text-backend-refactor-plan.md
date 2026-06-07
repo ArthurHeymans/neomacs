@@ -721,6 +721,9 @@ Completed so far:
   logging insertion through `BufferManager`, preserving GNU's hidden-buffer
   and message state-restoration flow while avoiding direct storage mutation in
   those production paths.
+- Gated the legacy direct `replace_match_buffer` helper to tests after
+  confirming production `replace-match` already computes GNU replacement text
+  and applies it through the manager-backed buffer replacement path.
 
 Next work:
 
