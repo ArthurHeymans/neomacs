@@ -9407,7 +9407,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "composition-get-gstring",
-        |_ctx, args| super::composite::builtin_composition_get_gstring(args),
+        |ctx, args| super::composite::builtin_composition_get_gstring(ctx, args),
         4,
         Some(4),
     );

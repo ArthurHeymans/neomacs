@@ -252,35 +252,54 @@ pub(crate) fn builtin_find_composition_internal(args: Vec<Value>) -> EvalResult 
 /// between FROM and TO with FONT-OBJECT in STRING.
 ///
 /// Stub: return nil (let the display engine handle shaping).
-pub(crate) fn builtin_composition_get_gstring(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_composition_get_gstring(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("composition-get-gstring", &args, 4)?;
-    if !args[3].is_string() {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), args[3]],
-        ));
-    }
-    let text = expect_string_value(&args[3])?;
-    if !text.is_multibyte() && text.as_bytes().iter().any(|byte| *byte >= 0x80) {
-        return Err(signal(
-            "error",
-            vec![Value::string("Attempt to shape unibyte text")],
-        ));
-    }
-    let codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
-    let len = codes.len() as i64;
-    let (from, to) = validate_subarray_indices(args[3], args[0], args[1], len)?;
 
-    if from == to {
+    let codes = if args[3].is_nil() {
+        let byte_range = super::editfns::current_buffer_accessible_char_region_in_buffers(
+            &ctx.buffers,
+            &args[0],
+            &args[1],
+        )?;
+        let Some(buf) = ctx.buffers.current_buffer() else {
+            return Err(signal("error", vec![Value::string("No current buffer")]));
+        };
+        if !buf.get_multibyte() {
+            return Err(signal(
+                "error",
+                vec![Value::string("Attempt to shape unibyte text")],
+            ));
+        }
+        let Some(byte_range) = byte_range else {
+            return Err(signal("error", vec![Value::string("No current buffer")]));
+        };
+        let text = buf.buffer_substring_lisp_string_range(byte_range);
+        crate::emacs_core::builtins::lisp_string_char_codes(&text)
+    } else {
+        let text = expect_string_value(&args[3])?;
+        if !text.is_multibyte() && text.as_bytes().iter().any(|byte| *byte >= 0x80) {
+            return Err(signal(
+                "error",
+                vec![Value::string("Attempt to shape unibyte text")],
+            ));
+        }
+        let codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
+        let len = codes.len() as i64;
+        let (from, to) = validate_subarray_indices(args[3], args[0], args[1], len)?;
+        codes[from as usize..to as usize].to_vec()
+    };
+
+    if codes.is_empty() {
         return Err(signal(
             "error",
             vec![Value::string("Attempt to shape zero-length text")],
         ));
     }
 
-    let from_usize = from as usize;
-    let to_usize = to as usize;
-    let segment = &codes[from_usize..to_usize];
+    let segment = &codes;
     let mut encoded = vec![Value::symbol("utf-8-unix")];
     encoded.extend(segment.iter().map(|code| Value::fixnum(*code as i64)));
 

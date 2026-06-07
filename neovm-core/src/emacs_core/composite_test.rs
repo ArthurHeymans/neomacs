@@ -368,12 +368,16 @@ fn find_composition_internal_position_range_checks() {
 #[test]
 fn composition_get_gstring_returns_vector_shape() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_get_gstring(vec![
-        Value::fixnum(0),
-        Value::fixnum(1),
-        Value::NIL,
-        Value::string("ab"),
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(1),
+            Value::NIL,
+            Value::string("ab"),
+        ],
+    );
     let result = result.unwrap();
     if !result.is_vector() {
         panic!("expected vector gstring");
@@ -386,12 +390,16 @@ fn composition_get_gstring_returns_vector_shape() {
 #[test]
 fn composition_get_gstring_uses_gnu_subarray_bounds() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_get_gstring(vec![
-        Value::fixnum(-2),
-        Value::fixnum(-1),
-        Value::NIL,
-        Value::string("abcd"),
-    ])
+    let mut eval = super::super::eval::Context::new();
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(-2),
+            Value::fixnum(-1),
+            Value::NIL,
+            Value::string("abcd"),
+        ],
+    )
     .unwrap();
     let gs = result.as_vector_data().expect("gstring vector").clone();
     let header = gs[0].as_vector_data().expect("gstring header").clone();
@@ -404,12 +412,16 @@ fn composition_get_gstring_uses_gnu_subarray_bounds() {
 #[test]
 fn composition_get_gstring_nil_bounds_default_like_gnu() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_get_gstring(vec![
-        Value::NIL,
-        Value::fixnum(2),
-        Value::NIL,
-        Value::string("abcd"),
-    ])
+    let mut eval = super::super::eval::Context::new();
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::fixnum(2),
+            Value::NIL,
+            Value::string("abcd"),
+        ],
+    )
     .unwrap();
     let gs = result.as_vector_data().expect("gstring vector").clone();
     let header = gs[0].as_vector_data().expect("gstring header").clone();
@@ -426,9 +438,12 @@ fn composition_get_gstring_nil_bounds_default_like_gnu() {
 #[test]
 fn composition_get_gstring_rejects_non_ascii_unibyte_like_gnu() {
     crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let result =
-        builtin_composition_get_gstring(vec![Value::fixnum(0), Value::fixnum(1), Value::NIL, raw]);
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![Value::fixnum(0), Value::fixnum(1), Value::NIL, raw],
+    );
     match result {
         Err(Flow::Signal(sig)) => {
             assert_eq!(sig.symbol_name(), "error");
@@ -444,56 +459,154 @@ fn composition_get_gstring_rejects_non_ascii_unibyte_like_gnu() {
 #[test]
 fn composition_get_gstring_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_get_gstring(vec![Value::fixnum(0)]);
+    let mut eval = super::super::eval::Context::new();
+    let result = builtin_composition_get_gstring(&mut eval, vec![Value::fixnum(0)]);
     assert!(result.is_err());
 }
 
 #[test]
 fn composition_get_gstring_type_checks() {
     crate::test_utils::init_test_tracing();
-    let bad_from = builtin_composition_get_gstring(vec![
-        Value::symbol("x"),
-        Value::fixnum(5),
-        Value::NIL,
-        Value::string("hello"),
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    let bad_from = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::symbol("x"),
+            Value::fixnum(5),
+            Value::NIL,
+            Value::string("hello"),
+        ],
+    );
     assert!(bad_from.is_err());
 
-    let bad_to = builtin_composition_get_gstring(vec![
-        Value::fixnum(0),
-        Value::symbol("y"),
-        Value::NIL,
-        Value::string("hello"),
-    ]);
+    let bad_to = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::symbol("y"),
+            Value::NIL,
+            Value::string("hello"),
+        ],
+    );
     assert!(bad_to.is_err());
 
-    let bad_string = builtin_composition_get_gstring(vec![
-        Value::fixnum(0),
-        Value::fixnum(5),
-        Value::NIL,
-        Value::fixnum(1),
-    ]);
+    let bad_string = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(5),
+            Value::NIL,
+            Value::fixnum(1),
+        ],
+    );
     assert!(bad_string.is_err());
 }
 
 #[test]
 fn composition_get_gstring_range_errors() {
     crate::test_utils::init_test_tracing();
-    let from_gt_to = builtin_composition_get_gstring(vec![
-        Value::fixnum(2),
-        Value::fixnum(1),
-        Value::NIL,
-        Value::string("ab"),
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    let from_gt_to = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(1),
+            Value::NIL,
+            Value::string("ab"),
+        ],
+    );
     assert!(from_gt_to.is_err());
 
-    let zero_length = builtin_composition_get_gstring(vec![
-        Value::fixnum(0),
-        Value::fixnum(0),
-        Value::NIL,
-        Value::string("ab"),
-    ]);
+    let zero_length = builtin_composition_get_gstring(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::NIL,
+            Value::string("ab"),
+        ],
+    );
     assert!(zero_length.is_err());
+}
+
+#[test]
+fn composition_get_gstring_nil_string_uses_current_buffer_region() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert("abcd");
+
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![Value::fixnum(2), Value::fixnum(4), Value::NIL, Value::NIL],
+    )
+    .unwrap();
+
+    let gs = result.as_vector_data().expect("gstring vector").clone();
+    let header = gs[0].as_vector_data().expect("gstring header").clone();
+    assert_eq!(
+        header,
+        vec![
+            Value::symbol("utf-8-unix"),
+            Value::fixnum('b' as i64),
+            Value::fixnum('c' as i64),
+        ]
+    );
+}
+
+#[test]
+fn composition_get_gstring_nil_string_accepts_reversed_buffer_region() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert("abcd");
+
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![Value::fixnum(4), Value::fixnum(2), Value::NIL, Value::NIL],
+    )
+    .unwrap();
+
+    let gs = result.as_vector_data().expect("gstring vector").clone();
+    let header = gs[0].as_vector_data().expect("gstring header").clone();
+    assert_eq!(
+        header,
+        vec![
+            Value::symbol("utf-8-unix"),
+            Value::fixnum('b' as i64),
+            Value::fixnum('c' as i64),
+        ]
+    );
+}
+
+#[test]
+fn composition_get_gstring_nil_string_rejects_unibyte_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.set_multibyte_value(false);
+        buffer.insert("abcd");
+    }
+
+    let result = builtin_composition_get_gstring(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(2), Value::NIL, Value::NIL],
+    );
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|value| value.as_utf8_str()),
+                Some("Attempt to shape unibyte text")
+            );
+        }
+        other => panic!("expected unibyte shaping error, got {other:?}"),
+    }
 }
 
 #[test]
