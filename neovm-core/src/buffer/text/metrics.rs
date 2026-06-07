@@ -69,11 +69,11 @@ impl TextMetrics {
     }
 
     pub const fn char_end(self) -> CharPos0 {
-        CharPos0::new(self.chars.get())
+        CharPos0::ZERO.add_len(self.chars)
     }
 
     pub const fn emacs_byte_end(self) -> EmacsBytePos {
-        EmacsBytePos::new(self.emacs_bytes.get())
+        EmacsBytePos::ZERO.add_len(self.emacs_bytes)
     }
 
     pub const fn is_empty(self) -> bool {
