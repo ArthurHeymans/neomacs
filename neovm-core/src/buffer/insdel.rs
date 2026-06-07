@@ -6,10 +6,10 @@
 
 use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
-    BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
-    InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit, MeasuredInsertEdit,
-    MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy, ReplaceTextPlan,
-    SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
+    BufferEditState, DeleteSideEffectPolicy, DeleteTextPlan, InsertMarkerAdjustment,
+    InsertMarkerPlacement, InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit,
+    MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy,
+    ReplaceTextPlan, SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
     SharedTextEditMetadata, SharedTextEditScope, SharedTextEditStatePolicy,
     TranspositionStoragePlan, char_pos_for_emacs_byte, emacs_byte_for_char_pos,
     lisp_string_from_buffer_bytes, modification_tick_delta,
@@ -465,32 +465,33 @@ impl Buffer {
         if range.is_empty() {
             return TextEditRange::default();
         }
-        // Record undo: save the deleted text for restoration.
-        let deleted_text = self.buffer_region_lisp_string(range.byte_range());
+        let plan = DeleteTextPlan::new(
+            range,
+            self.buffer_region_lisp_string(range.byte_range()),
+            self.text.marker_adjustments_for_delete(range),
+        );
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(range.byte_start(), self.point_emacs_byte_pos());
+        self.undo_prepare_change(plan.range().byte_start(), self.point_emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            for (marker, adjustment) in self.text.marker_adjustments_for_delete(range) {
+            for &(marker, adjustment) in plan.marker_adjustments() {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
             undo::undo_list_record_delete(
                 &mut ul,
-                range.char_start(),
-                deleted_text,
+                plan.range().char_start(),
+                plan.deleted_text().clone(),
                 self.point_char_pos(),
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
         }
 
-        self.text.delete_measured_range(range);
-        self.apply_byte_delete_side_effects(
-            MeasuredDeleteEdit::new(range),
-            DeleteSideEffectPolicy::current_buffer(),
-        );
-        range
+        let edit = plan.edit();
+        self.text.delete_measured_range(plan.range());
+        self.apply_byte_delete_side_effects(edit, DeleteSideEffectPolicy::current_buffer());
+        plan.range()
     }
 
     fn delete_measured_region_edit(&mut self, range: TextEditRange) -> MeasuredDeleteEdit {

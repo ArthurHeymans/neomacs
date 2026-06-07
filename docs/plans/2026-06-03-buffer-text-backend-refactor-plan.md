@@ -690,6 +690,9 @@ Completed so far:
 - Added a transaction-owned replacement storage plan that keeps converted
   replacement bytes, measured replacement metadata, and replacement text
   properties together before current-buffer replacement mutates storage.
+- Added a transaction-owned deletion storage plan that keeps measured delete
+  metadata, deleted text, and marker-adjustment undo entries together before
+  current-buffer deletion mutates storage.
 
 Next work:
 

@@ -11,6 +11,7 @@ use crate::buffer::{
     TextEditRange, TextExtent, TextInsertion, TextPositionAnchor, TextPropertyTable,
     TextReplacement, TextTransposition,
 };
+use crate::emacs_core::value::Value;
 use crate::heap_types::LispString;
 
 #[inline]
@@ -610,6 +611,49 @@ impl MeasuredDeleteEdit {
         policy: DeleteSideEffectPolicy,
     ) -> BufferEditState {
         delete_state_after_edit(state, self.range, policy)
+    }
+}
+
+/// Backend-neutral storage plan for deleting a measured range.
+///
+/// GNU deletion records both the deleted text and per-marker undo adjustments
+/// before the storage mutation.  Keep those precomputed side inputs with the
+/// measured delete so the executor does not pass independent range, text, and
+/// marker-adjustment values through the pipeline.
+#[derive(Clone, Debug)]
+pub(in crate::buffer) struct DeleteTextPlan {
+    edit: MeasuredDeleteEdit,
+    deleted_text: LispString,
+    marker_adjustments: Vec<(Value, i64)>,
+}
+
+impl DeleteTextPlan {
+    pub(in crate::buffer) fn new(
+        range: TextEditRange,
+        deleted_text: LispString,
+        marker_adjustments: Vec<(Value, i64)>,
+    ) -> Self {
+        Self {
+            edit: MeasuredDeleteEdit::new(range),
+            deleted_text,
+            marker_adjustments,
+        }
+    }
+
+    pub(in crate::buffer) const fn edit(&self) -> MeasuredDeleteEdit {
+        self.edit
+    }
+
+    pub(in crate::buffer) const fn range(&self) -> TextEditRange {
+        self.edit.range()
+    }
+
+    pub(in crate::buffer) fn deleted_text(&self) -> &LispString {
+        &self.deleted_text
+    }
+
+    pub(in crate::buffer) fn marker_adjustments(&self) -> &[(Value, i64)] {
+        &self.marker_adjustments
     }
 }
 
