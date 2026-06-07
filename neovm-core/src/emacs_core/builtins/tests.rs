@@ -10009,6 +10009,30 @@ fn defined_fringe_bitmap_can_receive_face_until_destroyed() {
 }
 
 #[test]
+fn set_fringe_bitmap_face_rejects_non_symbol_bitmap_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let err = dispatch_builtin(
+        &mut eval,
+        "set-fringe-bitmap-face",
+        vec![Value::fixnum(1), Value::symbol("success")],
+    )
+    .expect("set-fringe-bitmap-face should resolve")
+    .expect_err("non-symbol bitmap should signal");
+
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("symbolp"), Value::fixnum(1)]
+            );
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn mouse_position_builtins_default_to_selected_frame_with_nil_coords() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
