@@ -3428,8 +3428,8 @@ struct ApproxWindowDisplayContext {
     body_lines: i64,
     char_width: i64,
     char_height: i64,
-    window_start: usize,
-    window_point: usize,
+    window_start: LispCharPos1,
+    window_point: LispCharPos1,
     chars: Vec<char>,
     is_minibuffer: bool,
 }
@@ -3615,8 +3615,8 @@ fn resolve_live_window_display_context(
         body_lines,
         char_width,
         char_height,
-        window_start: (*window_start).max(1),
-        window_point,
+        window_start: LispCharPos1::from_one_based_usize(*window_start),
+        window_point: LispCharPos1::from_one_based_usize(window_point),
         chars,
         is_minibuffer: frame.minibuffer_window == Some(wid),
     }))
@@ -3660,7 +3660,7 @@ fn resolve_live_window_identity(
 fn resolve_pos_visible_target_lisp_pos(
     ctx: &ApproxWindowDisplayContext,
     pos: Option<&Value>,
-) -> Result<Option<usize>, Flow> {
+) -> Result<Option<LispCharPos1>, Flow> {
     match pos {
         Some(value) if value.is_t() || value.is_symbol_named("t") => {
             Ok(Some(last_visible_row_start_lisp_pos(ctx)))
@@ -3668,27 +3668,35 @@ fn resolve_pos_visible_target_lisp_pos(
         Some(value) if !value.is_nil() => {
             expect_integer_or_marker(value)?;
             let lisp_pos = value.as_int().unwrap_or(0).max(1) as usize;
-            Ok(Some(lisp_pos.min(ctx.chars.len().saturating_add(1))))
+            Ok(Some(LispCharPos1::from_one_based_usize(
+                lisp_pos.min(ctx.chars.len().saturating_add(1)),
+            )))
         }
         _ => Ok(Some(current_window_point_lisp(ctx))),
     }
 }
 
-fn current_window_point_lisp(ctx: &ApproxWindowDisplayContext) -> usize {
-    ctx.window_point
-        .max(1)
-        .min(ctx.chars.len().saturating_add(1))
+fn current_window_point_lisp(ctx: &ApproxWindowDisplayContext) -> LispCharPos1 {
+    LispCharPos1::from_one_based_usize(
+        usize::try_from(ctx.window_point.as_i64().max(1))
+            .expect("Lisp character position fits usize")
+            .min(ctx.chars.len().saturating_add(1)),
+    )
 }
 
-fn last_visible_row_start_lisp_pos(ctx: &ApproxWindowDisplayContext) -> usize {
+fn last_visible_row_start_lisp_pos(ctx: &ApproxWindowDisplayContext) -> LispCharPos1 {
     let row_start = nth_visible_row_start_char(
         &ctx.chars,
-        ctx.window_start.saturating_sub(1),
+        usize::try_from(ctx.window_start.as_i64().max(1))
+            .expect("Lisp character position fits usize")
+            .saturating_sub(1),
         ctx.body_lines.saturating_sub(1),
     );
-    row_start
-        .saturating_add(1)
-        .min(ctx.chars.len().saturating_add(1))
+    LispCharPos1::from_one_based_usize(
+        row_start
+            .saturating_add(1)
+            .min(ctx.chars.len().saturating_add(1)),
+    )
 }
 
 fn nth_visible_row_start_char(chars: &[char], mut start_char: usize, rows: i64) -> usize {
@@ -3705,10 +3713,12 @@ fn nth_visible_row_start_char(chars: &[char], mut start_char: usize, rows: i64) 
     start_char
 }
 
-fn row_col_for_lisp_pos(chars: &[char], start_char: usize, lisp_pos: usize) -> Option<(i64, i64)> {
-    if lisp_pos == 0 {
-        return None;
-    }
+fn row_col_for_lisp_pos(
+    chars: &[char],
+    start_char: usize,
+    lisp_pos: LispCharPos1,
+) -> Option<(i64, i64)> {
+    let lisp_pos = usize::try_from(lisp_pos.as_i64().max(1)).ok()?;
     let target = lisp_pos.saturating_sub(1).min(chars.len());
     let mut row = 0_i64;
     let mut col = 0_i64;
@@ -3727,12 +3737,14 @@ fn row_col_for_lisp_pos(chars: &[char], start_char: usize, lisp_pos: usize) -> O
 
 fn approximate_pos_visible_metrics(
     ctx: &ApproxWindowDisplayContext,
-    pos_lisp: usize,
+    pos_lisp: LispCharPos1,
 ) -> Option<ApproxVisibleMetrics> {
     if pos_lisp < ctx.window_start {
         return None;
     }
-    let start_char = ctx.window_start.saturating_sub(1);
+    let start_char = usize::try_from(ctx.window_start.as_i64().max(1))
+        .ok()?
+        .saturating_sub(1);
     let (row, col) = row_col_for_lisp_pos(&ctx.chars, start_char, pos_lisp)?;
     if row < 0 || row >= ctx.body_lines {
         return None;
@@ -3805,8 +3817,7 @@ fn resolve_exact_visible_metrics(
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
         return Ok(None);
     };
-    let Some(point) = snapshot.point_for_buffer_pos(LispCharPos1::from_one_based_usize(pos_lisp))
-    else {
+    let Some(point) = snapshot.point_for_buffer_pos(pos_lisp) else {
         return Ok(None);
     };
     Ok(Some((wid, exact_metrics_from_point(point))))

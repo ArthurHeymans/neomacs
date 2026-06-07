@@ -309,7 +309,7 @@ fn test_resolve_live_window_display_context_uses_selected_window_buffer_point() 
     .expect("display context")
     .expect("selected window context");
 
-    assert_eq!(ctx.window_point, 6);
+    assert_eq!(ctx.window_point, LispCharPos1::from_one_based_usize(6));
     assert_eq!(eval.buffers.current_buffer_id(), Some(other_id));
 }
 
