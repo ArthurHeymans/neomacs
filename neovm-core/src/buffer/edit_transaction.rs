@@ -478,6 +478,90 @@ impl Buffer {
         self.set_undo_list(undo_list);
     }
 
+    fn transpose_region_properties(&self, transposition: TextTransposition) -> TextPropertyTable {
+        let first = transposition.first();
+        let second = transposition.second();
+        let props1 = self
+            .text
+            .text_props_snapshot()
+            .slice_char_range(first.char_range());
+        let props2 = self
+            .text
+            .text_props_snapshot()
+            .slice_char_range(second.char_range());
+        let props_mid = if transposition.same_char_len() {
+            TextPropertyTable::new()
+        } else {
+            self.text
+                .text_props_snapshot()
+                .slice_char_range(transposition.middle_char_range())
+        };
+
+        let mut props = self.text.text_props_snapshot();
+        if transposition.same_char_len() {
+            props.remove_all_properties_in_char_range(first.char_range());
+            props.remove_all_properties_in_char_range(second.char_range());
+        } else {
+            props.remove_all_properties_in_char_range(transposition.char_span());
+            props.append_shifted_at_char_pos(
+                &props_mid,
+                transposition.middle_destination_char_start(),
+            );
+        }
+        props.append_shifted_at_char_pos(&props1, transposition.first_destination_char_start());
+        props.append_shifted_at_char_pos(&props2, transposition.second_destination_char_start());
+        props
+    }
+
+    /// Execute the current-buffer storage, property, marker, and point portion
+    /// of GNU `transpose-regions` after the byte movement plan has been built.
+    pub(in crate::buffer) fn execute_transposition_storage_plan(
+        &mut self,
+        plan: TranspositionStoragePlan,
+        leave_markers: bool,
+    ) {
+        let transposition = plan.transposition();
+        let first = transposition.first();
+        let second = transposition.second();
+
+        self.record_transposition_undo(transposition);
+
+        let replacement_props = self.transpose_region_properties(transposition);
+        if transposition.same_char_len() {
+            self.set_text_properties_with_undo_range(first.byte_range(), Vec::new());
+            self.set_text_properties_with_undo_range(second.byte_range(), Vec::new());
+        } else {
+            self.set_text_properties_with_undo_range(transposition.byte_span(), Vec::new());
+        }
+        let new_point = transposition.transpose_anchor(self.point_anchor());
+
+        self.text
+            .replace_same_len_measured_range(plan.replacement(), plan.replacement_bytes());
+        self.text.text_props_replace(replacement_props);
+        if leave_markers {
+            self.text.remap_marker_anchors(|old_position| {
+                let old_byte = old_position.emacs_byte_pos();
+                if old_byte > first.byte_start() && old_byte <= second.byte_end() {
+                    TextPositionAnchor::new(
+                        old_position.char_pos(),
+                        emacs_byte_for_char_pos(&self.text, old_position.char_pos()),
+                    )
+                } else {
+                    old_position
+                }
+            });
+        } else {
+            self.text
+                .remap_marker_anchors(|old_position| transposition.transpose_anchor(old_position));
+        }
+
+        self.set_point_anchor_unchecked(new_point);
+        self.apply_same_len_edit_side_effects(
+            plan.edit(),
+            SameLenModifiedStatePolicy::RecordChange,
+        );
+    }
+
     fn apply_replace_side_effects(
         &mut self,
         edit: MeasuredReplaceEdit,
@@ -1490,6 +1574,7 @@ impl SameLenSubstitutionPlan {
 /// the measured same-size edit descriptor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct TranspositionStoragePlan {
+    transposition: TextTransposition,
     replacement_bytes: Vec<u8>,
     replacement: TextReplacement,
     edit: MeasuredSameLenEdit,
@@ -1514,10 +1599,15 @@ impl TranspositionStoragePlan {
         );
         let replacement = TextReplacement::new(span, span.extent());
         Self {
+            transposition,
             replacement_bytes,
             replacement,
             edit: MeasuredSameLenEdit::covering(span),
         }
+    }
+
+    pub(in crate::buffer) const fn transposition(&self) -> TextTransposition {
+        self.transposition
     }
 
     pub(in crate::buffer) fn replacement_bytes(&self) -> &[u8] {

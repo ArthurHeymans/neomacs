@@ -239,48 +239,12 @@ impl Buffer {
         .map(|plan| plan.first_to_last_changed_range())
     }
 
-    fn transpose_region_properties(&self, transposition: TextTransposition) -> TextPropertyTable {
-        let first = transposition.first();
-        let second = transposition.second();
-        let props1 = self
-            .text
-            .text_props_snapshot()
-            .slice_char_range(first.char_range());
-        let props2 = self
-            .text
-            .text_props_snapshot()
-            .slice_char_range(second.char_range());
-        let props_mid = if transposition.same_char_len() {
-            TextPropertyTable::new()
-        } else {
-            self.text
-                .text_props_snapshot()
-                .slice_char_range(transposition.middle_char_range())
-        };
-
-        let mut props = self.text.text_props_snapshot();
-        if transposition.same_char_len() {
-            props.remove_all_properties_in_char_range(first.char_range());
-            props.remove_all_properties_in_char_range(second.char_range());
-        } else {
-            props.remove_all_properties_in_char_range(transposition.char_span());
-            props.append_shifted_at_char_pos(
-                &props_mid,
-                transposition.middle_destination_char_start(),
-            );
-        }
-        props.append_shifted_at_char_pos(&props1, transposition.first_destination_char_start());
-        props.append_shifted_at_char_pos(&props2, transposition.second_destination_char_start());
-        props
-    }
-
     /// GNU `Ftranspose_regions` core: swap two non-overlapping current-buffer
     /// regions without changing buffer size.  Text movement is byte-based,
     /// while property and marker movement follows GNU's character positions.
     pub fn transpose_regions(&mut self, transposition: TextTransposition, leave_markers: bool) {
         let first = transposition.first();
         let second = transposition.second();
-        let byte_span = transposition.byte_span();
         let mut region1 = Vec::with_capacity(first.byte_len().get());
         let mut mid = Vec::with_capacity(transposition.middle_byte_range().len().get());
         let mut region2 = Vec::with_capacity(second.byte_len().get());
@@ -292,43 +256,7 @@ impl Buffer {
             .copy_emacs_byte_range_to(second.byte_range(), &mut region2);
 
         let plan = TranspositionStoragePlan::new(transposition, &region1, &mid, &region2);
-
-        self.record_transposition_undo(transposition);
-
-        let replacement_props = self.transpose_region_properties(transposition);
-        if transposition.same_char_len() {
-            self.set_text_properties_with_undo_range(first.byte_range(), Vec::new());
-            self.set_text_properties_with_undo_range(second.byte_range(), Vec::new());
-        } else {
-            self.set_text_properties_with_undo_range(transposition.byte_span(), Vec::new());
-        }
-        let new_point = transposition.transpose_anchor(self.point_anchor());
-
-        self.text
-            .replace_same_len_measured_range(plan.replacement(), plan.replacement_bytes());
-        self.text.text_props_replace(replacement_props);
-        if leave_markers {
-            self.text.remap_marker_anchors(|old_position| {
-                let old_byte = old_position.emacs_byte_pos();
-                if old_byte > first.byte_start() && old_byte <= second.byte_end() {
-                    TextPositionAnchor::new(
-                        old_position.char_pos(),
-                        emacs_byte_for_char_pos(&self.text, old_position.char_pos()),
-                    )
-                } else {
-                    old_position
-                }
-            });
-        } else {
-            self.text
-                .remap_marker_anchors(|old_position| transposition.transpose_anchor(old_position));
-        }
-
-        self.set_point_anchor_unchecked(new_point);
-        self.apply_same_len_edit_side_effects(
-            plan.edit(),
-            SameLenModifiedStatePolicy::RecordChange,
-        );
+        self.execute_transposition_storage_plan(plan, leave_markers);
     }
 }
 

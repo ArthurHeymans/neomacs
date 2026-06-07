@@ -705,6 +705,9 @@ Completed so far:
   into `edit_transaction.rs`, keeping GNU's per-character delete+insert undo
   for substitution and span-vs-region undo choices for transposition with the
   rest of the typed transaction policy.
+- Moved current-buffer transposition execution into `edit_transaction.rs` so
+  storage replacement, text-property movement, marker remapping, point update,
+  and same-length side effects all consume one `TranspositionStoragePlan`.
 
 Next work:
 

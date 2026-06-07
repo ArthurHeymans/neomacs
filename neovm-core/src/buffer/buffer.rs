@@ -3619,7 +3619,7 @@ impl Buffer {
         )
     }
 
-    pub(crate) fn set_text_properties_with_undo_range(
+    pub(in crate::buffer) fn set_text_properties_with_undo_range(
         &mut self,
         byte_range: EmacsByteRange,
         plist: Vec<(Value, Value)>,
