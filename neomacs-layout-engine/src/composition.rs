@@ -97,8 +97,9 @@ pub(crate) fn complex_script(ch: char) -> Option<ComplexScript> {
     use ComplexScript::*;
     let cp = ch as u32;
     Some(match cp {
-        0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF
-        | 0xFE70..=0xFEFF => Arabic,
+        0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF => {
+            Arabic
+        }
         0x0700..=0x074F => Syriac,
         0x0900..=0x097F => Devanagari,
         0x0980..=0x09FF => Bengali,

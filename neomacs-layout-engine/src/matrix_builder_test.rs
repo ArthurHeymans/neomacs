@@ -847,7 +847,9 @@ fn cluster_continuation_merges_combining_mark() {
     let area = finish_text_area(builder);
     assert_eq!(
         area[0].glyph_type,
-        GlyphType::Composite { text: "e\u{0301}".into() }
+        GlyphType::Composite {
+            text: "e\u{0301}".into()
+        }
     );
     assert_eq!(area.iter().filter(|g| !g.padding).count(), 1);
 }
@@ -885,7 +887,9 @@ fn cluster_tail_detects_lone_regional_indicator_then_pairs_flag() {
     let area = finish_text_area(builder);
     assert_eq!(
         area[0].glyph_type,
-        GlyphType::Composite { text: "\u{1F1EF}\u{1F1F5}".into() }
+        GlyphType::Composite {
+            text: "\u{1F1EF}\u{1F1F5}".into()
+        }
     );
     assert_eq!(area.iter().filter(|g| !g.padding).count(), 1);
 }
@@ -954,7 +958,9 @@ fn complex_run_grows_into_one_composite_with_per_char_padding() {
     assert_eq!(area.len(), 3);
     assert_eq!(
         area[0].glyph_type,
-        GlyphType::Composite { text: "\u{0627}\u{0644}\u{0645}".into() }
+        GlyphType::Composite {
+            text: "\u{0627}\u{0644}\u{0645}".into()
+        }
     );
     assert!(!area[0].padding);
     assert!(area[1].padding && area[2].padding);

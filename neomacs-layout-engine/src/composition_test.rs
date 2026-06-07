@@ -93,7 +93,10 @@ fn continues_complex_run_groups_same_script_only() {
     // Two Arabic letters continue the same run.
     assert!(continues_complex_run('\u{0644}', Some(('\u{0627}', false))));
     // Different complex scripts do not merge into one run.
-    assert!(!continues_complex_run('\u{0905}', Some(('\u{0627}', false))));
+    assert!(!continues_complex_run(
+        '\u{0905}',
+        Some(('\u{0627}', false))
+    ));
     // A complex char after a non-complex one (or at row start) starts fresh.
     assert!(!continues_complex_run('\u{0627}', Some(('a', false))));
     assert!(!continues_complex_run('\u{0627}', None));

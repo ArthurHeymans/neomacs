@@ -766,8 +766,7 @@ impl WgpuGlyphAtlas {
                 Some('\u{1F600}')
             } else {
                 text.chars().find(|&ch| {
-                    !ch.is_ascii()
-                        && !neomacs_layout_engine::composition::is_composition_joiner(ch)
+                    !ch.is_ascii() && !neomacs_layout_engine::composition::is_composition_joiner(ch)
                 })
             };
             if let Some(ch) = repr_char {

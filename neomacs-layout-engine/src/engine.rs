@@ -1504,8 +1504,8 @@ fn render_overlay_string(
         // marks, ZWJ emoji sequences, and flag pairs cluster here too.
         let cluster_tail = builder.last_text_cluster_tail();
         let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
-        let is_run_member = !is_continuation
-            && crate::composition::continues_complex_run(ch, cluster_tail);
+        let is_run_member =
+            !is_continuation && crate::composition::continues_complex_run(ch, cluster_tail);
         let cols = if is_continuation {
             0
         } else {
@@ -4128,8 +4128,7 @@ impl LayoutEngine {
                                 // composition for display-property replacement
                                 // text, via the shared `composition` rule.
                                 let tail = self.matrix_builder.last_text_cluster_tail();
-                                let is_cont =
-                                    crate::composition::continues_cluster(rch, tail);
+                                let is_cont = crate::composition::continues_cluster(rch, tail);
                                 let is_run = !is_cont
                                     && crate::composition::continues_complex_run(rch, tail);
                                 let rch_cols = if is_cont {
@@ -5437,8 +5436,7 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = self.matrix_builder.last_text_cluster_tail();
-            let is_cluster_continuation =
-                crate::composition::continues_cluster(ch, cluster_tail);
+            let is_cluster_continuation = crate::composition::continues_cluster(ch, cluster_tail);
             // Only emoji/text composition joiners (ZWJ, variation selectors,
             // tag chars) are absorbed — not C1 controls, bidi marks, or
             // separators, which must still render as their glyphless glyph.
@@ -5597,8 +5595,7 @@ impl LayoutEngine {
                 // up with the rendered letters (isolated-form widths over-
                 // reserve). Shape the run once and cache advances by absolute
                 // byte offset.
-                if !(complex_run_start <= ch_start_byte_idx
-                    && ch_start_byte_idx < complex_run_end)
+                if !(complex_run_start <= ch_start_byte_idx && ch_start_byte_idx < complex_run_end)
                 {
                     let script = crate::composition::complex_script(ch);
                     let mut end = ch_start_byte_idx;
