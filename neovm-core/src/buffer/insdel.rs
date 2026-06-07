@@ -146,7 +146,7 @@ impl Buffer {
         let char_len = edit.char_len();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
-        if policy.adjust_shared_markers {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             if edit.marker_adjustment() == InsertMarkerAdjustment::StrictAfter {
                 self.text
                     .adjust_markers_for_insert_extent_strict_after(edit.byte_pos(), edit.extent());
@@ -160,7 +160,7 @@ impl Buffer {
             edit.char_pos(),
             "insert-side-effect char position drifted from the source edit site"
         );
-        if policy.adjust_shared_text_props {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             self.text
                 .adjust_text_props_for_insert_at(insertion.char_pos(), insertion.extent().chars());
         }
@@ -182,11 +182,11 @@ impl Buffer {
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
 
-        if policy.adjust_shared_markers {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             self.text.adjust_markers_for_delete_range(range);
         }
 
-        if policy.adjust_shared_text_props {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             self.text
                 .adjust_text_props_for_delete_range(range.char_range());
         }
@@ -222,11 +222,11 @@ impl Buffer {
         let old_range = replacement.old_range();
 
         self.set_edit_state(edit.state_after(self.edit_state(), policy));
-        if policy.adjust_shared_markers {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             self.text
                 .adjust_markers_for_replace_range(old_range, edit.new_extent());
         }
-        if policy.adjust_shared_text_props {
+        if policy.shared_side_data.adjust_in_this_buffer() {
             self.text.adjust_text_props_for_replace_at(
                 edit.old_char_start(),
                 edit.old_char_len(),

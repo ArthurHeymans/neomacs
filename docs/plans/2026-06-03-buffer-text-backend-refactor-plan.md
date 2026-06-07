@@ -678,6 +678,9 @@ Completed so far:
 - Moved shared sibling state-policy derivation onto `SharedTextEditMetadata`,
   removing the remaining manager-level boolean that decided whether an edit
   could touch point/narrowing fields.
+- Replaced raw side-effect policy booleans with named transaction enums for
+  buffer state fields, accessible-start movement, point-at-insertion behavior,
+  and shared text side-data adjustment.
 
 Next work:
 

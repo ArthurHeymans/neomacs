@@ -245,16 +245,16 @@ pub(in crate::buffer) fn insert_state_after_edit(
     insertion: TextInsertion,
     policy: InsertSideEffectPolicy,
 ) -> BufferEditState {
-    if !policy.update_state_fields {
+    if !policy.state_fields.update_state_fields() {
         return state;
     }
 
     state.set_point(move_after_insert(
         state.point(),
         insertion,
-        policy.advance_point_at_insert,
+        policy.point_at_insertion.advance_point_at_insertion(),
     ));
-    if policy.shift_begv {
+    if policy.accessible_start.shift_after_edit() {
         state.set_begv(move_after_insert(state.begv(), insertion, false));
     }
     state.set_zv(move_after_insert(state.zv(), insertion, true));
@@ -267,13 +267,13 @@ pub(in crate::buffer) fn delete_state_after_edit(
     range: TextEditRange,
     policy: DeleteSideEffectPolicy,
 ) -> BufferEditState {
-    if !policy.update_state_fields {
+    if !policy.state_fields.update_state_fields() {
         return state;
     }
 
     state.set_point(move_after_delete(state.point(), range, true));
 
-    if policy.shift_begv {
+    if policy.accessible_start.shift_after_edit() {
         state.set_begv(move_after_delete(state.begv(), range, true));
     }
     state.set_zv(move_after_delete(state.zv(), range, true));
@@ -480,7 +480,7 @@ impl MeasuredReplaceEdit {
         state: BufferEditState,
         policy: ReplaceSideEffectPolicy,
     ) -> BufferEditState {
-        if policy.update_state_fields {
+        if policy.state_fields.update_state_fields() {
             replace_state_after_edit(state, self.replacement)
         } else {
             state
@@ -826,85 +826,134 @@ impl TranspositionStoragePlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum BufferStateFieldUpdatePolicy {
+    Update,
+    Skip,
+}
+
+impl BufferStateFieldUpdatePolicy {
+    pub(in crate::buffer) const fn from_shared_update(
+        state_update: SharedBufferStateUpdate,
+    ) -> Self {
+        if state_update.update_state_fields() {
+            Self::Update
+        } else {
+            Self::Skip
+        }
+    }
+
+    pub(in crate::buffer) const fn update_state_fields(self) -> bool {
+        matches!(self, Self::Update)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum AccessibleStartUpdatePolicy {
+    Preserve,
+    ShiftAfterEdit,
+}
+
+impl AccessibleStartUpdatePolicy {
+    pub(in crate::buffer) const fn shift_after_edit(self) -> bool {
+        matches!(self, Self::ShiftAfterEdit)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum InsertPointUpdatePolicy {
+    AdvanceAtInsertion,
+    StayBeforeInsertion,
+}
+
+impl InsertPointUpdatePolicy {
+    pub(in crate::buffer) const fn advance_point_at_insertion(self) -> bool {
+        matches!(self, Self::AdvanceAtInsertion)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum SharedTextSideDataPolicy {
+    AdjustInThisBuffer,
+    AlreadyAdjustedInSharedText,
+}
+
+impl SharedTextSideDataPolicy {
+    pub(in crate::buffer) const fn adjust_in_this_buffer(self) -> bool {
+        matches!(self, Self::AdjustInThisBuffer)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
-    pub(in crate::buffer) update_state_fields: bool,
-    pub(in crate::buffer) shift_begv: bool,
-    pub(in crate::buffer) advance_point_at_insert: bool,
-    pub(in crate::buffer) adjust_shared_markers: bool,
-    pub(in crate::buffer) adjust_shared_text_props: bool,
+    pub(in crate::buffer) state_fields: BufferStateFieldUpdatePolicy,
+    pub(in crate::buffer) accessible_start: AccessibleStartUpdatePolicy,
+    pub(in crate::buffer) point_at_insertion: InsertPointUpdatePolicy,
+    pub(in crate::buffer) shared_side_data: SharedTextSideDataPolicy,
 }
 
 impl InsertSideEffectPolicy {
     pub(in crate::buffer) fn current_buffer() -> Self {
         Self {
-            update_state_fields: true,
-            shift_begv: false,
-            advance_point_at_insert: true,
-            adjust_shared_markers: true,
-            adjust_shared_text_props: true,
+            state_fields: BufferStateFieldUpdatePolicy::Update,
+            accessible_start: AccessibleStartUpdatePolicy::Preserve,
+            point_at_insertion: InsertPointUpdatePolicy::AdvanceAtInsertion,
+            shared_side_data: SharedTextSideDataPolicy::AdjustInThisBuffer,
         }
     }
 
     pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields: state_update.update_state_fields(),
-            shift_begv: true,
-            advance_point_at_insert: false,
-            adjust_shared_markers: false,
-            adjust_shared_text_props: false,
+            state_fields: BufferStateFieldUpdatePolicy::from_shared_update(state_update),
+            accessible_start: AccessibleStartUpdatePolicy::ShiftAfterEdit,
+            point_at_insertion: InsertPointUpdatePolicy::StayBeforeInsertion,
+            shared_side_data: SharedTextSideDataPolicy::AlreadyAdjustedInSharedText,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct DeleteSideEffectPolicy {
-    pub(in crate::buffer) update_state_fields: bool,
-    pub(in crate::buffer) shift_begv: bool,
-    pub(in crate::buffer) adjust_shared_markers: bool,
-    pub(in crate::buffer) adjust_shared_text_props: bool,
+    pub(in crate::buffer) state_fields: BufferStateFieldUpdatePolicy,
+    pub(in crate::buffer) accessible_start: AccessibleStartUpdatePolicy,
+    pub(in crate::buffer) shared_side_data: SharedTextSideDataPolicy,
 }
 
 impl DeleteSideEffectPolicy {
     pub(in crate::buffer) fn current_buffer() -> Self {
         Self {
-            update_state_fields: true,
-            shift_begv: false,
-            adjust_shared_markers: true,
-            adjust_shared_text_props: true,
+            state_fields: BufferStateFieldUpdatePolicy::Update,
+            accessible_start: AccessibleStartUpdatePolicy::Preserve,
+            shared_side_data: SharedTextSideDataPolicy::AdjustInThisBuffer,
         }
     }
 
     pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields: state_update.update_state_fields(),
-            shift_begv: true,
-            adjust_shared_markers: false,
-            adjust_shared_text_props: false,
+            state_fields: BufferStateFieldUpdatePolicy::from_shared_update(state_update),
+            accessible_start: AccessibleStartUpdatePolicy::ShiftAfterEdit,
+            shared_side_data: SharedTextSideDataPolicy::AlreadyAdjustedInSharedText,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct ReplaceSideEffectPolicy {
-    pub(in crate::buffer) update_state_fields: bool,
-    pub(in crate::buffer) adjust_shared_markers: bool,
-    pub(in crate::buffer) adjust_shared_text_props: bool,
+    pub(in crate::buffer) state_fields: BufferStateFieldUpdatePolicy,
+    pub(in crate::buffer) shared_side_data: SharedTextSideDataPolicy,
 }
 
 impl ReplaceSideEffectPolicy {
     pub(in crate::buffer) fn current_buffer() -> Self {
         Self {
-            update_state_fields: true,
-            adjust_shared_markers: true,
-            adjust_shared_text_props: true,
+            state_fields: BufferStateFieldUpdatePolicy::Update,
+            shared_side_data: SharedTextSideDataPolicy::AdjustInThisBuffer,
         }
     }
 
     pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields: state_update.update_state_fields(),
-            adjust_shared_markers: false,
-            adjust_shared_text_props: false,
+            state_fields: BufferStateFieldUpdatePolicy::from_shared_update(state_update),
+            shared_side_data: SharedTextSideDataPolicy::AlreadyAdjustedInSharedText,
         }
     }
 }
