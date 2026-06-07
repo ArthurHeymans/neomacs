@@ -1438,10 +1438,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// internal character positions, which are 0-based and use an exclusive
     /// accessible end (`accessible_end_char` / `buffer_size`).
     pub fn charpos_to_bytepos(&self, charpos: i64) -> i64 {
-        if charpos <= 0 {
-            return 0;
-        }
-        buffer_charpos_to_emacs_byte_pos(self.buffer, charpos as usize).get() as i64
+        buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos).get() as i64
     }
 
     /// Convert a GNU Lisp-visible buffer position to a byte position.
@@ -1449,10 +1446,10 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// GNU Lisp positions are 1-based, so this is only appropriate for
     /// values coming from Lisp APIs such as `minibuffer-prompt-end`.
     pub fn lisp_charpos_to_bytepos(&self, charpos: i64) -> i64 {
-        if charpos <= 1 {
+        let Some(charpos) = lisp_charpos_to_layout_char_pos(charpos) else {
             return 0;
-        }
-        buffer_charpos_to_emacs_byte_pos(self.buffer, (charpos - 1) as usize).get() as i64
+        };
+        buffer_charpos_to_emacs_byte_pos(self.buffer, charpos).get() as i64
     }
 
     /// Copy buffer text bytes in the range `[byte_from, byte_to)` into `out`.
@@ -1488,12 +1485,9 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     ///
     /// Returns `None` if the position is out of bounds.
     pub fn byte_at(&self, byte_pos: i64) -> Option<u8> {
-        if byte_pos < 0 {
-            return None;
-        }
-        let pos = byte_pos as usize;
-        if pos < self.buffer.layout_total_emacs_byte_len().get() {
-            self.buffer.layout_emacs_byte_at_pos(EmacsBytePos::new(pos))
+        let pos = layout_emacs_byte_pos_from_i64(byte_pos)?;
+        if pos < layout_total_emacs_byte_end_pos(self.buffer) {
+            self.buffer.layout_emacs_byte_at_pos(pos)
         } else {
             None
         }
@@ -1507,10 +1501,10 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     /// Convert an absolute byte position to the layout engine's internal
     /// 0-based char position space.
     pub fn bytepos_to_charpos(&self, bytepos: i64) -> i64 {
-        if bytepos <= 0 {
+        let Some(bytepos) = layout_emacs_byte_pos_from_i64(bytepos) else {
             return 0;
-        }
-        buffer_emacs_byte_pos_to_charpos(self.buffer, EmacsBytePos::new(bytepos as usize)) as i64
+        };
+        buffer_emacs_byte_pos_to_charpos(self.buffer, bytepos) as i64
     }
 
     /// Get the buffer's narrowed end (zv) as byte position.
@@ -1565,13 +1559,42 @@ impl InvisibleStatus {
     };
 }
 
+fn layout_char_pos_from_i64(charpos: i64) -> Option<CharPos0> {
+    usize::try_from(charpos).ok().map(CharPos0::new)
+}
+
+fn lisp_charpos_to_layout_char_pos(charpos: i64) -> Option<CharPos0> {
+    usize::try_from(charpos.checked_sub(1)?)
+        .ok()
+        .map(CharPos0::new)
+}
+
+fn layout_emacs_byte_pos_from_i64(bytepos: i64) -> Option<EmacsBytePos> {
+    usize::try_from(bytepos).ok().map(EmacsBytePos::new)
+}
+
+fn layout_total_emacs_byte_end_pos<B: LayoutBufferView>(buffer: &B) -> EmacsBytePos {
+    EmacsBytePos::ZERO.add_len(buffer.layout_total_emacs_byte_len())
+}
+
+fn clamped_layout_char_pos<B: LayoutBufferView>(buffer: &B, charpos: i64) -> CharPos0 {
+    layout_char_pos_from_i64(charpos)
+        .unwrap_or(CharPos0::ZERO)
+        .min(buffer.layout_point_max_char_pos())
+}
+
 fn buffer_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
     buffer: &B,
-    charpos: usize,
+    charpos: CharPos0,
 ) -> EmacsBytePos {
-    buffer.layout_char_pos_to_emacs_byte_pos(CharPos0::new(
-        charpos.min(buffer.layout_point_max_char_pos().get()),
-    ))
+    buffer.layout_char_pos_to_emacs_byte_pos(charpos.min(buffer.layout_point_max_char_pos()))
+}
+
+fn buffer_i64_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
+    buffer: &B,
+    charpos: i64,
+) -> EmacsBytePos {
+    buffer_charpos_to_emacs_byte_pos(buffer, clamped_layout_char_pos(buffer, charpos))
 }
 
 fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
@@ -1579,11 +1602,7 @@ fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
     bytepos: EmacsBytePos,
 ) -> usize {
     buffer
-        .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-            bytepos
-                .get()
-                .min(buffer.layout_point_max_emacs_byte_pos().get()),
-        ))
+        .layout_emacs_byte_pos_to_char_pos(bytepos.min(buffer.layout_point_max_emacs_byte_pos()))
         .get()
         .min(buffer.layout_point_max_char_pos().get())
 }
@@ -1592,9 +1611,8 @@ fn clamped_layout_emacs_byte_pos<B: LayoutBufferView>(
     buffer: &B,
     bytepos: i64,
 ) -> Option<EmacsBytePos> {
-    (bytepos >= 0).then(|| {
-        EmacsBytePos::new((bytepos as usize).min(buffer.layout_total_emacs_byte_len().get()))
-    })
+    layout_emacs_byte_pos_from_i64(bytepos)
+        .map(|pos| pos.min(layout_total_emacs_byte_end_pos(buffer)))
 }
 
 fn clamped_layout_emacs_byte_range<B: LayoutBufferView>(
@@ -1691,7 +1709,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// `next_visible_pos` is the next char position where visibility might change.
     /// If no change is found, returns `buffer.zv` as the next boundary.
     pub fn check_invisible(&self, charpos: i64) -> (InvisibleStatus, i64) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let text_invis = self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
@@ -1745,7 +1763,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Returns the display property value if present, along with the
     /// next position where display properties change.
     pub fn check_display_prop(&self, charpos: i64) -> (Option<Value>, i64) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let display = self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"));
@@ -1763,7 +1781,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     ///
     /// Returns extra line spacing in pixels (0.0 if no property).
     pub fn check_line_spacing(&self, charpos: i64, base_height: f32) -> f32 {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         match self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("line-spacing"))
@@ -1795,7 +1813,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         &self,
         charpos: i64,
     ) -> (Vec<OverlayDisplayString>, Vec<OverlayDisplayString>) {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let mut before = Vec::new();
         let mut after = Vec::new();
 
@@ -1888,7 +1906,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Test-only helper for direct property-table regression coverage.
     #[cfg(test)]
     pub fn next_property_change(&self, charpos: i64) -> i64 {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         self.buffer
             .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
@@ -1897,7 +1915,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
 
     /// Get a specific text property at a position.
     pub fn get_property(&self, charpos: i64, name: Value) -> Option<Value> {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(self.buffer, charpos.max(0) as usize);
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         self.buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, name)
     }
@@ -2588,7 +2606,7 @@ impl FaceResolver {
         charpos: usize,
         next_check: &mut usize,
     ) -> ResolvedFace {
-        let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, charpos);
+        let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, CharPos0::new(charpos));
         let mut min_next = buffer.layout_point_max_char_pos().get();
         let mut resolved = self.resolve_buffer_default_face(buffer);
         let mut remap_stack = Vec::new();
