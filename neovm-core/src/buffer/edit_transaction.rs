@@ -425,7 +425,7 @@ impl InsertTextPlan {
     ) -> Self {
         let bytes =
             crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
-        Self::from_emacs_bytes(
+        Self::from_emacs_bytes_at_anchor(
             bytes,
             TextPropertyTable::new(),
             multibyte,
@@ -448,7 +448,7 @@ impl InsertTextPlan {
         } else {
             TextPropertyTable::new()
         };
-        Self::from_emacs_bytes(
+        Self::from_emacs_bytes_at_anchor(
             text.as_bytes().to_vec(),
             text_properties,
             multibyte,
@@ -458,7 +458,7 @@ impl InsertTextPlan {
         )
     }
 
-    fn from_emacs_bytes(
+    fn from_emacs_bytes_at_anchor(
         bytes: Vec<u8>,
         text_properties: TextPropertyTable,
         multibyte: bool,
@@ -469,6 +469,14 @@ impl InsertTextPlan {
         let extent = TextExtent::from_emacs_bytes(&bytes, multibyte);
         let insertion = TextInsertion::at_anchor(anchor, extent);
         let edit = MeasuredInsertEdit::new(insertion, marker_placement, marker_adjustment);
+        Self::from_measured_insert(bytes, text_properties, edit)
+    }
+
+    fn from_measured_insert(
+        bytes: Vec<u8>,
+        text_properties: TextPropertyTable,
+        edit: MeasuredInsertEdit,
+    ) -> Self {
         Self {
             bytes,
             text_properties,
@@ -494,6 +502,83 @@ impl InsertTextPlan {
         } else {
             Some(&self.text_properties)
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::buffer) struct ReplaceTextPlan {
+    bytes: Vec<u8>,
+    text_properties: TextPropertyTable,
+    replacement: TextReplacement,
+}
+
+impl ReplaceTextPlan {
+    pub(in crate::buffer) fn from_lisp_string(
+        old_range: TextEditRange,
+        text: &LispString,
+        multibyte: bool,
+    ) -> Self {
+        let text = convert_lisp_string_for_buffer_mode(text, multibyte);
+        let text_properties = if text.has_intervals() {
+            text.intervals().clone()
+        } else {
+            TextPropertyTable::new()
+        };
+        let bytes = text.as_bytes().to_vec();
+        let new_extent =
+            TextExtent::new(CharLen::new(text.schars()), EmacsByteLen::new(bytes.len()));
+        Self {
+            bytes,
+            text_properties,
+            replacement: TextReplacement::new(old_range, new_extent),
+        }
+    }
+
+    pub(in crate::buffer) fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub(in crate::buffer) const fn replacement(&self) -> TextReplacement {
+        self.replacement
+    }
+
+    pub(in crate::buffer) const fn old_range(&self) -> TextEditRange {
+        self.replacement.old_range()
+    }
+
+    pub(in crate::buffer) const fn old_char_start(&self) -> CharPos0 {
+        self.replacement.old_range().char_start()
+    }
+
+    pub(in crate::buffer) const fn old_char_end(&self) -> CharPos0 {
+        self.replacement.old_range().char_end()
+    }
+
+    pub(in crate::buffer) const fn new_extent(&self) -> TextExtent {
+        self.replacement.new_extent()
+    }
+
+    pub(in crate::buffer) const fn new_char_len(&self) -> CharLen {
+        self.replacement.new_char_len()
+    }
+
+    pub(in crate::buffer) fn text_properties(&self) -> Option<&TextPropertyTable> {
+        if self.text_properties.is_empty() {
+            None
+        } else {
+            Some(&self.text_properties)
+        }
+    }
+
+    pub(in crate::buffer) fn into_insert_plan(
+        self,
+        anchor: TextPositionAnchor,
+        marker_placement: InsertMarkerPlacement,
+        marker_adjustment: InsertMarkerAdjustment,
+    ) -> InsertTextPlan {
+        let insertion = TextInsertion::at_anchor(anchor, self.new_extent());
+        let edit = MeasuredInsertEdit::new(insertion, marker_placement, marker_adjustment);
+        InsertTextPlan::from_measured_insert(self.bytes, self.text_properties, edit)
     }
 }
 

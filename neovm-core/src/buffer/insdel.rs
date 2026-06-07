@@ -8,16 +8,16 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit, MeasuredInsertEdit,
-    MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenModifiedStatePolicy,
-    SameLenSubstitutionPlan, SharedBufferStateUpdate, SharedTextEditMetadata, SharedTextEditScope,
-    SharedTextEditStatePolicy, TranspositionStoragePlan, char_pos_for_emacs_byte,
-    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
-    modification_tick_delta,
+    MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy, ReplaceTextPlan,
+    SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
+    SharedTextEditMetadata, SharedTextEditScope, SharedTextEditStatePolicy,
+    TranspositionStoragePlan, char_pos_for_emacs_byte, emacs_byte_for_char_pos,
+    lisp_string_from_buffer_bytes, modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
-    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
-    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
+    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
+    TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -378,29 +378,25 @@ impl Buffer {
         old_range: TextEditRange,
         text: &LispString,
     ) -> TextReplacement {
-        let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
-        let new_bytes = text.as_bytes();
-        let new_byte_len = new_bytes.len();
-        let new_char_len = text.schars();
+        let plan = ReplaceTextPlan::from_lisp_string(old_range, text, self.get_multibyte());
 
         if old_range.is_empty() {
             self.goto_emacs_byte_pos(old_range.byte_start());
-            let insertion = self.insert_lisp_string(&text);
+            let insertion_plan = plan.into_insert_plan(
+                self.point_anchor(),
+                InsertMarkerPlacement::AfterMarkers,
+                InsertMarkerAdjustment::ByInsertionType,
+            );
+            let insertion = self.execute_insert_text_plan(insertion_plan);
             debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
             debug_assert_eq!(old_range.char_start(), insertion.char_pos());
             return TextReplacement::new(old_range, insertion.extent());
         }
 
-        let start_char = old_range.char_start();
-        let end_char = old_range.char_end();
-        let new_extent =
-            TextExtent::new(CharLen::new(new_char_len), EmacsByteLen::new(new_byte_len));
-        let replacement = TextReplacement::new(old_range, new_extent);
-
         let old_point = self.point_anchor();
-        let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
+        let deleted_text = self.buffer_region_lisp_string(plan.old_range().byte_range());
 
-        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
+        self.undo_prepare_change(plan.old_range().byte_start(), old_point.emacs_byte_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             // GNU `replace_range` records the insertion before the deletion
@@ -409,13 +405,13 @@ impl Buffer {
             // overlay endpoints on opposite sides of the replacement distinct.
             undo::undo_list_record_insert(
                 &mut ul,
-                end_char,
-                CharLen::new(new_char_len),
+                plan.old_char_end(),
+                plan.new_char_len(),
                 self.undo_state.point_before_command_or_undo(),
             );
             undo::undo_list_record_delete(
                 &mut ul,
-                start_char,
+                plan.old_char_start(),
                 deleted_text,
                 old_point.char_pos(),
                 self.undo_state.point_before_command_or_undo(),
@@ -423,19 +419,23 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        self.text.replace_measured_range(replacement, new_bytes);
+        let replacement = plan.replacement();
+        self.text.replace_measured_range(replacement, plan.bytes());
         self.apply_replace_side_effects(
             MeasuredReplaceEdit::new(replacement),
             ReplaceSideEffectPolicy::current_buffer(),
         );
-        if text.has_intervals() {
+        if let Some(text_properties) = plan.text_properties() {
             self.text.text_props_append_shifted_at_emacs_byte_pos(
-                text.intervals(),
+                text_properties,
                 replacement.byte_start(),
             );
-        } else if !new_extent.chars().is_empty() {
+        } else if !plan.new_extent().chars().is_empty() {
             self.text.text_props_set_properties_in_emacs_byte_range(
-                EmacsByteRange::from_start_len(replacement.byte_start(), new_extent.emacs_bytes()),
+                EmacsByteRange::from_start_len(
+                    replacement.byte_start(),
+                    plan.new_extent().emacs_bytes(),
+                ),
                 Vec::new(),
             );
         }

@@ -687,6 +687,9 @@ Completed so far:
 - Added a transaction-owned insertion storage plan that keeps converted Emacs
   bytes, measured insert metadata, marker policy, and source text properties
   together before current-buffer insertion mutates storage.
+- Added a transaction-owned replacement storage plan that keeps converted
+  replacement bytes, measured replacement metadata, and replacement text
+  properties together before current-buffer replacement mutates storage.
 
 Next work:
 
