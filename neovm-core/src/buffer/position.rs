@@ -303,11 +303,6 @@ impl CharPos0 {
         Self((p.0 - 1).max(0) as usize)
     }
 
-    /// Convert from a raw `usize` (for internal 0-based use).
-    pub const fn from_usize(pos: usize) -> Self {
-        Self(pos)
-    }
-
     pub const fn add_len(self, len: CharLen) -> Self {
         Self(self.0 + len.get())
     }

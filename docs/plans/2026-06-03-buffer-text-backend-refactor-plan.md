@@ -253,6 +253,9 @@ Progress:
 - Raw `CharRange::from_usize` and `EmacsByteRange::from_usize` constructors
   are test-only, so production range construction now has to name typed
   endpoints or lengths at the semantic boundary.
+- The unused `CharPos0::from_usize` alias was removed; production code now uses
+  `CharPos0::new` as the single explicit constructor for internal 0-based
+  character positions.
 - Text-property and overlay byte conversion helpers now accept typed
   `LispCharPos1` internally after GNU-style range validation, while preserving
   original Lisp argument values in error payloads.
