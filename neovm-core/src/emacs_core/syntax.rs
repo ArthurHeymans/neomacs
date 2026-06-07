@@ -6,6 +6,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::ops::Deref;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
@@ -2607,26 +2608,64 @@ pub(crate) fn builtin_forward_comment_in_buffers(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let buf = buffers
-        .get_mut(current_id)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
     if count == 0 {
         return Ok(Value::T);
     }
 
-    if count > 0 {
-        let ok = forward_comment_forward(buf, count as u64, honor_properties);
-        return Ok(if ok { Value::T } else { Value::NIL });
-    } else {
-        let ok = forward_comment_backward(buf, (-count) as u64, honor_properties);
-        return Ok(if ok { Value::T } else { Value::NIL });
+    let (ok, final_pos) = {
+        let buf = buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let mut scanner = ForwardCommentCursor::new(buf);
+        let ok = if count > 0 {
+            forward_comment_forward(&mut scanner, count as u64, honor_properties)
+        } else {
+            forward_comment_backward(&mut scanner, (-count) as u64, honor_properties)
+        };
+        (ok, scanner.point_emacs_byte_pos())
+    };
+    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
+    Ok(if ok { Value::T } else { Value::NIL })
+}
+
+struct ForwardCommentCursor<'a> {
+    buffer: &'a Buffer,
+    point: EmacsBytePos,
+}
+
+impl<'a> ForwardCommentCursor<'a> {
+    fn new(buffer: &'a Buffer) -> Self {
+        Self {
+            buffer,
+            point: buffer.point_emacs_byte_pos(),
+        }
+    }
+
+    fn point_emacs_byte_pos(&self) -> EmacsBytePos {
+        self.point
+    }
+
+    fn goto_emacs_byte_pos(&mut self, point: EmacsBytePos) {
+        self.point = self.buffer.accessible_emacs_byte_region().clamp(point);
+    }
+}
+
+impl Deref for ForwardCommentCursor<'_> {
+    type Target = Buffer;
+
+    fn deref(&self) -> &Self::Target {
+        self.buffer
     }
 }
 
 /// Skip whitespace and comments forward. Returns true if all `count`
 /// comments were skipped successfully.
-fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool) -> bool {
+fn forward_comment_forward(
+    buf: &mut ForwardCommentCursor<'_>,
+    count: u64,
+    honor_properties: bool,
+) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
     let max = accessible.end();
@@ -2744,7 +2783,7 @@ fn forward_comment_forward(buf: &mut Buffer, count: u64, honor_properties: bool)
 /// Point should be positioned right after the comment start.
 /// Returns true if comment end was found.
 fn scan_forward_comment_body(
-    buf: &mut Buffer,
+    buf: &mut ForwardCommentCursor<'_>,
     style_b: bool,
     nested: bool,
     honor_properties: bool,
@@ -2876,7 +2915,7 @@ fn scan_forward_comment_body(
 }
 
 /// Scan forward for matching comment fence character.
-fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
+fn scan_forward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properties: bool) -> bool {
     let max = buf.accessible_emacs_byte_region().end();
     loop {
         let pt = buf.point_emacs_byte_pos();
@@ -2917,7 +2956,11 @@ fn scan_forward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool 
 
 /// Skip whitespace and comments backward. Returns true if all `count`
 /// comments were skipped successfully.
-fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool) -> bool {
+fn forward_comment_backward(
+    buf: &mut ForwardCommentCursor<'_>,
+    count: u64,
+    honor_properties: bool,
+) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
     let min = accessible.start();
@@ -3058,7 +3101,7 @@ fn forward_comment_backward(buf: &mut Buffer, count: u64, honor_properties: bool
 /// "anything before this belongs to a different comment" and stops the
 /// search.  At the end, point is set to the recorded position.
 fn scan_backward_comment_body(
-    buf: &mut Buffer,
+    buf: &mut ForwardCommentCursor<'_>,
     style_b: bool,
     nested: bool,
     honor_properties: bool,
@@ -3231,7 +3274,7 @@ fn scan_backward_comment_body(
 }
 
 /// Scan backward for matching comment fence character.
-fn scan_backward_comment_fence(buf: &mut Buffer, honor_properties: bool) -> bool {
+fn scan_backward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properties: bool) -> bool {
     let min = buf.accessible_emacs_byte_region().start();
     loop {
         let pt = buf.point_emacs_byte_pos();

@@ -749,6 +749,9 @@ Completed so far:
   narrowing, mark, overlays, last-window-start, and the multibyte flag through
   `BufferManager` methods while preserving the existing byte-boundary
   conversion algorithm.
+- Split `forward-comment` scanning from buffer point mutation by introducing a
+  local syntax scanner cursor; the scanner records its temporary point in the
+  cursor and the builtin applies the final point through `BufferManager`.
 
 Next work:
 
