@@ -46,6 +46,69 @@ fn lisp_range_to_accessible_byte_range(
     )
 }
 
+#[derive(Clone, Copy, Debug)]
+struct XmlLispRegion {
+    start: LispCharPos1,
+    end: LispCharPos1,
+    start_arg: Value,
+    end_arg: Value,
+}
+
+impl XmlLispRegion {
+    fn from_args(
+        buffers: &crate::buffer::BufferManager,
+        buf: &crate::buffer::Buffer,
+        args: &[Value],
+    ) -> Result<Self, Flow> {
+        let (start, start_arg) = if args.is_empty() || args[0].is_nil() {
+            let start = buf.point_min_lisp_char_pos();
+            (start, Value::fixnum(start.as_i64()))
+        } else {
+            (
+                LispCharPos1::new(expect_integer_or_marker(buffers, &args[0])?),
+                args[0],
+            )
+        };
+
+        let (end, end_arg) = if args.len() <= 1 || args[1].is_nil() {
+            let end = buf.point_max_lisp_char_pos();
+            (end, Value::fixnum(end.as_i64()))
+        } else {
+            (
+                LispCharPos1::new(expect_integer_or_marker(buffers, &args[1])?),
+                args[1],
+            )
+        };
+
+        Ok(Self {
+            start,
+            end,
+            start_arg,
+            end_arg,
+        })
+    }
+
+    fn validate_accessible(self, buf: &crate::buffer::Buffer) -> Result<Self, Flow> {
+        let point_min = buf.point_min_lisp_char_pos();
+        let point_max = buf.point_max_lisp_char_pos();
+        if self.start < point_min
+            || self.start > point_max
+            || self.end < point_min
+            || self.end > point_max
+        {
+            return Err(signal(
+                "args-out-of-range",
+                vec![Value::make_buffer(buf.id), self.start_arg, self.end_arg],
+            ));
+        }
+        Ok(self)
+    }
+
+    fn to_accessible_byte_range(self, buf: &crate::buffer::Buffer) -> EmacsByteRange {
+        lisp_range_to_accessible_byte_range(buf, self.start, self.end)
+    }
+}
+
 fn expect_optional_string(v: Value) -> Result<Option<String>, Flow> {
     if v.is_nil() {
         return Ok(None);
@@ -81,32 +144,9 @@ fn validate_region_byte_bounds(
         return Ok(None);
     };
 
-    let start = if args.is_empty() || args[0].is_nil() {
-        buf.point_min_lisp_char_pos()
-    } else {
-        LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[0])?)
-    };
-
-    let end = if args.len() <= 1 || args[1].is_nil() {
-        buf.point_max_lisp_char_pos()
-    } else {
-        LispCharPos1::new(expect_integer_or_marker(&ctx.buffers, &args[1])?)
-    };
-
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start.as_i64() < point_min
-        || start.as_i64() > point_max
-        || end.as_i64() < point_min
-        || end.as_i64() > point_max
-    {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::make_buffer(buf.id), args[0], args[1]],
-        ));
-    }
-
-    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
+    let byte_range = XmlLispRegion::from_args(&ctx.buffers, buf, args)?
+        .validate_accessible(buf)?
+        .to_accessible_byte_range(buf);
 
     Ok(Some((buf.id, byte_range)))
 }
