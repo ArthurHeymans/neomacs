@@ -115,7 +115,7 @@ pub(crate) fn continues_complex_run(ch: char, tail: Option<(char, bool)>) -> boo
 }
 
 /// Whether `ch` belongs to a script that needs run-level contextual shaping.
-#[allow(dead_code)] // utility predicate; run grouping uses continues_complex_run
+/// Gates the run-shaping advance path in the layout walk.
 pub(crate) fn needs_complex_shaping(ch: char) -> bool {
     complex_script(ch).is_some()
 }
