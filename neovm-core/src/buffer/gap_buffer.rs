@@ -856,8 +856,10 @@ impl GapBuffer {
             self.char_pos_from_byte_anchors(byte_pos, None),
             "stale byte->char position cache at byte {byte_pos}"
         );
-        self.byte_char_cache
-            .set(TextPositionAnchor::from_usize(result, byte_pos));
+        self.byte_char_cache.set(TextPositionAnchor::new(
+            CharPos0::new(result),
+            EmacsBytePos::new(byte_pos),
+        ));
         CharPos0::new(result)
     }
 
@@ -871,10 +873,13 @@ impl GapBuffer {
         extra: Option<TextPositionAnchor>,
     ) -> usize {
         let mut below = TextPositionAnchor::ZERO;
-        let mut above = TextPositionAnchor::from_usize(self.total_chars, self.total_bytes);
-        for anchor in std::iter::once(TextPositionAnchor::from_usize(
-            self.gap_start_chars,
-            self.gap_start_bytes,
+        let mut above = TextPositionAnchor::new(
+            CharPos0::new(self.total_chars),
+            EmacsBytePos::new(self.total_bytes),
+        );
+        for anchor in std::iter::once(TextPositionAnchor::new(
+            CharPos0::new(self.gap_start_chars),
+            EmacsBytePos::new(self.gap_start_bytes),
         ))
         .chain(extra)
         {
@@ -950,8 +955,10 @@ impl GapBuffer {
             self.byte_pos_from_char_anchors(char_pos, None),
             "stale char->byte position cache at char {char_pos}"
         );
-        self.byte_char_cache
-            .set(TextPositionAnchor::from_usize(char_pos, result));
+        self.byte_char_cache.set(TextPositionAnchor::new(
+            CharPos0::new(char_pos),
+            EmacsBytePos::new(result),
+        ));
         EmacsBytePos::new(result)
     }
 
@@ -965,9 +972,9 @@ impl GapBuffer {
         extra: Option<TextPositionAnchor>,
     ) -> usize {
         let mut below = TextPositionAnchor::ZERO;
-        for anchor in std::iter::once(TextPositionAnchor::from_usize(
-            self.gap_start_chars,
-            self.gap_start_bytes,
+        for anchor in std::iter::once(TextPositionAnchor::new(
+            CharPos0::new(self.gap_start_chars),
+            EmacsBytePos::new(self.gap_start_bytes),
         ))
         .chain(extra)
         {

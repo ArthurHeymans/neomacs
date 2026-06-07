@@ -775,6 +775,9 @@ Completed so far:
   edits, comparing `next_newline_emacs_byte`, `prev_newline_emacs_byte`, and
   `count_newlines_emacs_byte` against the gap backend for every implemented
   storage backend.
+- Replaced production gap-buffer `TextPositionAnchor::from_usize` construction
+  with typed `CharPos0`/`EmacsBytePos` anchors and made the raw constructor
+  test-only, keeping char/byte anchor pairs explicit in conversion code.
 
 Next work:
 
