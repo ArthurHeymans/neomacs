@@ -711,6 +711,9 @@ Completed so far:
 - Moved shared-buffer sibling edit propagation into `edit_transaction.rs` so
   sibling state-policy derivation, side-effect application, and state-marker
   refresh are owned by the transaction policy layer instead of `insdel.rs`.
+- Added a typed shared-edit executor and `SharedTextEditOutcome`, so public
+  manager edit entry points describe the current-buffer mutation result while
+  `edit_transaction.rs` owns shared scope capture and sibling propagation.
 
 Next work:
 

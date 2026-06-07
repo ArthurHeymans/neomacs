@@ -661,6 +661,22 @@ impl Buffer {
 }
 
 impl BufferManager {
+    pub(in crate::buffer) fn execute_shared_text_edit<T>(
+        &mut self,
+        edited_id: BufferId,
+        edit_current_buffer: impl FnOnce(&mut Buffer) -> Option<SharedTextEditOutcome<T>>,
+    ) -> Option<T> {
+        let scope = self.shared_text_edit_scope(edited_id)?;
+        let outcome = {
+            let edited_buffer = self.buffer_mut(edited_id)?;
+            edit_current_buffer(edited_buffer)?
+        };
+        if let Some(edit) = outcome.edit {
+            self.apply_shared_text_edit_to_siblings(scope, edit)?;
+        }
+        Some(outcome.result)
+    }
+
     pub(in crate::buffer) fn shared_text_edit_scope(
         &self,
         edited_id: BufferId,
@@ -1673,6 +1689,24 @@ impl TranspositionStoragePlan {
 
     pub(in crate::buffer) const fn edit(&self) -> MeasuredSameLenEdit {
         self.edit
+    }
+}
+
+pub(in crate::buffer) struct SharedTextEditOutcome<T> {
+    result: T,
+    edit: Option<SharedTextEditMetadata>,
+}
+
+impl<T> SharedTextEditOutcome<T> {
+    pub(in crate::buffer) const fn no_edit(result: T) -> Self {
+        Self { result, edit: None }
+    }
+
+    pub(in crate::buffer) const fn edited(result: T, edit: SharedTextEditMetadata) -> Self {
+        Self {
+            result,
+            edit: Some(edit),
+        }
     }
 }
 
