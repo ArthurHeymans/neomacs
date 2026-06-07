@@ -8105,6 +8105,135 @@ fn goto_char_rejects_bignum_but_fix_position_builtins_clamp_it() {
 }
 
 #[test]
+fn compute_motion_validates_positions_and_offsets_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    builtin_insert(&mut eval, vec![Value::string("abc")]).expect("insert should succeed");
+    builtin_narrow_to_region(&mut eval, vec![Value::fixnum(2), Value::fixnum(3)])
+        .expect("narrow-to-region should succeed");
+    let frompos = Value::cons(Value::fixnum(0), Value::fixnum(0));
+
+    let from_err = builtin_compute_motion(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            frompos,
+            Value::fixnum(3),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect_err("FROM outside narrowing should signal");
+    match from_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(
+                sig.data,
+                vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let to_err = builtin_compute_motion(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            frompos,
+            Value::fixnum(4),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect_err("TO outside narrowing should signal");
+    match to_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(
+                sig.data,
+                vec![Value::fixnum(4), Value::fixnum(2), Value::fixnum(3)]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
+    let bignum_err = builtin_compute_motion(
+        &mut eval,
+        vec![
+            positive_big,
+            frompos,
+            Value::fixnum(3),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect_err("GNU compute-motion coerces bignum with fix_position before range check");
+    match bignum_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::fixnum(Value::MOST_POSITIVE_FIXNUM),
+                    Value::fixnum(2),
+                    Value::fixnum(3),
+                ]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let cons_bignum_err = builtin_compute_motion(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::cons(positive_big, Value::fixnum(0)),
+            Value::fixnum(3),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect_err("FROMPOS fields are CHECK_FIXNUM, not fix_position");
+    match cons_bignum_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("fixnump"), positive_big]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    let offsets_err = builtin_compute_motion(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            frompos,
+            Value::fixnum(3),
+            Value::NIL,
+            Value::NIL,
+            Value::cons(Value::fixnum(-1), Value::fixnum(0)),
+            Value::NIL,
+        ],
+    )
+    .expect_err("negative OFFSETS should signal args-out-of-range");
+    match offsets_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(-1), Value::fixnum(0)]);
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+#[test]
 fn delete_region_normalizes_reversed_bounds() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

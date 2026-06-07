@@ -1946,14 +1946,14 @@ pub(crate) fn builtin_compute_motion(
     let buffers = &eval.buffers;
     expect_args("compute-motion", &args, 7)?;
 
-    let from = expect_integer_or_marker(&args[0])?;
+    let from = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
     if !args[1].is_cons() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("consp"), args[1]],
         ));
     }
-    let to = expect_integer_or_marker(&args[2])?;
+    let to = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[2])?;
     if !args[3].is_nil() && !args[3].is_cons() {
         return Err(signal(
             "wrong-type-argument",
@@ -1977,13 +1977,13 @@ pub(crate) fn builtin_compute_motion(
     }
 
     // Extract FROMPOS (HPOS . VPOS).
-    let (from_hpos, from_vpos) = extract_cons_ints(args[1])?;
+    let (from_hpos, from_vpos) = extract_cons_fixnums(args[1])?;
 
     // Extract TOPOS (HPOS . VPOS) or nil.
     let (to_hpos, to_vpos) = if args[3].is_nil() {
         (i64::MAX, i64::MAX)
     } else {
-        extract_cons_ints(args[3])?
+        extract_cons_fixnums(args[3])?
     };
 
     // Extract WIDTH.
@@ -1992,6 +1992,15 @@ pub(crate) fn builtin_compute_motion(
     } else {
         expect_fixnum(&args[4])?
     };
+    if !args[5].is_nil() {
+        let (hscroll, tab_offset) = extract_cons_fixnums(args[5])?;
+        if hscroll < 0 || tab_offset < 0 || tab_offset > i32::MAX as i64 {
+            return Err(signal(
+                "args-out-of-range",
+                vec![args[5].cons_car(), args[5].cons_cdr()],
+            ));
+        }
+    }
 
     // Get buffer text.
     let Some(buf) = buffers.current_buffer() else {
@@ -2016,18 +2025,35 @@ pub(crate) fn builtin_compute_motion(
         .unwrap_or(8);
 
     // Convert 1-based char positions to byte offsets.
-    let max_chars = buf.total_char_len();
-    let from_byte = char_pos_to_buffer_emacs_byte_pos(
-        buf,
-        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(from), max_chars),
-    );
-    let to_byte = char_pos_to_buffer_emacs_byte_pos(
-        buf,
-        clamped_lisp_char_pos_to_char_pos(LispCharPos1::new(to), max_chars),
-    );
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if from < point_min || from > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![
+                Value::fixnum(from),
+                Value::fixnum(point_min),
+                Value::fixnum(point_max),
+            ],
+        ));
+    }
+    if to < point_min || to > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![
+                Value::fixnum(to),
+                Value::fixnum(point_min),
+                Value::fixnum(point_max),
+            ],
+        ));
+    }
 
-    let from_pos = accessible.clamp(from_byte).get();
-    let to_pos = accessible.clamp(to_byte).get();
+    let from_pos = buf
+        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(from))
+        .get();
+    let to_pos = buf
+        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(to))
+        .get();
 
     let mut hpos = from_hpos;
     let mut vpos = from_vpos;
@@ -2095,8 +2121,8 @@ pub(crate) fn builtin_compute_motion(
     ]))
 }
 
-/// Extract two integers from a cons cell (CAR . CDR).
-fn extract_cons_ints(val: Value) -> Result<(i64, i64), Flow> {
+/// Extract two fixnums from a cons cell (CAR . CDR).
+fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
     match val.kind() {
         ValueKind::Cons => {
             let car = val.cons_car();
@@ -2106,7 +2132,7 @@ fn extract_cons_ints(val: Value) -> Result<(i64, i64), Flow> {
                 _ => {
                     return Err(signal(
                         "wrong-type-argument",
-                        vec![Value::symbol("integerp"), car],
+                        vec![Value::symbol("fixnump"), car],
                     ));
                 }
             };
@@ -2115,7 +2141,7 @@ fn extract_cons_ints(val: Value) -> Result<(i64, i64), Flow> {
                 _ => {
                     return Err(signal(
                         "wrong-type-argument",
-                        vec![Value::symbol("integerp"), cdr],
+                        vec![Value::symbol("fixnump"), cdr],
                     ));
                 }
             };
