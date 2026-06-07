@@ -1483,7 +1483,7 @@ fn test_window_text_pixel_size_arg_validation() {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
             assert_eq!(
                 sig.data,
-                vec![Value::symbol("integerp"), Value::symbol("bad-offset")]
+                vec![Value::symbol("fixnump"), Value::symbol("bad-offset")]
             );
         }
         other => panic!("expected wrong-type-argument integerp, got {:?}", other),

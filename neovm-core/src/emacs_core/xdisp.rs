@@ -98,7 +98,7 @@ fn validate_window_text_pixel_size_from_arg(from: Value) -> Result<(), Flow> {
     }
     if from.is_cons() {
         expect_integer_or_marker(&from.cons_car())?;
-        expect_fixnum_arg("integerp", &from.cons_cdr())?;
+        expect_fixnum_arg("fixnump", &from.cons_cdr())?;
         return Ok(());
     }
     expect_integer_or_marker(&from)
