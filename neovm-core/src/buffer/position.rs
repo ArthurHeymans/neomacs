@@ -523,7 +523,11 @@ impl EmacsByteRange {
         }
     }
 
-    #[cfg(test)]
+    /// Convenience `usize`-based constructor, primarily for tests. Wraps
+    /// the typed [`EmacsByteRange::new`]. Not `#[cfg(test)]`-gated because
+    /// downstream crates' test builds (e.g. neomacs-layout-engine) compile
+    /// neovm-core without `cfg(test)`, so a test-gated item is invisible
+    /// to them. Prefer the typed constructors in production code.
     pub const fn from_usize(start: usize, end: usize) -> Self {
         Self {
             start: EmacsBytePos::new(start),
