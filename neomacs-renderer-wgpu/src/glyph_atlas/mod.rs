@@ -521,6 +521,51 @@ impl WgpuGlyphAtlas {
             return None;
         }
 
+        // All sub-glyphs are plain alpha masks (e.g. an Arabic/Indic shaped
+        // run, or a base char with combining marks): composite them into a
+        // single-channel COVERAGE MASK so the draw path tints it by the face
+        // foreground color, exactly like a single mask glyph. Baking them into
+        // an RGBA buffer and flagging it "color" (the mixed-content path below)
+        // would render them untinted-white — invisible on a light background.
+        if !any_color && !any_subpixel {
+            let mut mask = vec![0u8; (total_w * total_h) as usize];
+            for (bx, by, w, h, data, _, _, _) in &sub_glyphs {
+                let ox = (*bx - min_x).round() as i32;
+                let oy = (-*by - min_y).round() as i32;
+                for py in 0..*h {
+                    for px in 0..*w {
+                        let dx = ox + px as i32;
+                        let dy = oy + py as i32;
+                        if dx < 0 || dy < 0 || dx >= total_w as i32 || dy >= total_h as i32 {
+                            continue;
+                        }
+                        let src_idx = (py * *w + px) as usize;
+                        if src_idx >= data.len() {
+                            continue;
+                        }
+                        let sa = data[src_idx] as u32;
+                        if sa == 0 {
+                            continue;
+                        }
+                        let dst = (dy as u32 * total_w + dx as u32) as usize;
+                        let da = mask[dst] as u32;
+                        // Alpha-over of coverage (glyphs may overlap at joins).
+                        mask[dst] = (sa + da * (255 - sa) / 255) as u8;
+                    }
+                }
+            }
+            return Some(RasterizeResult {
+                width: total_w,
+                height: total_h,
+                pixel_data: mask,
+                bearing_x: min_x,
+                bearing_y: -min_y,
+                is_color: false,
+                is_subpixel: false,
+                advance_width: total_advance,
+            });
+        }
+
         // Composite all sub-glyphs into a single RGBA buffer
         let bpp = 4u32; // always RGBA for composited result
         let mut composite = vec![0u8; (total_w * total_h * bpp) as usize];
