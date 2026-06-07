@@ -2337,8 +2337,7 @@ pub(crate) fn builtin_set_window_point(
                         {
                             buffer_to_move = Some((
                                 buffer_id,
-                                buffer
-                                    .lisp_pos_to_emacs_byte_pos(LispCharPos1::new(clamped as i64)),
+                                buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(clamped)),
                             ));
                         }
                     }
@@ -4070,7 +4069,7 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     // `record_buffer`.  Selection/display primitives record explicitly.
     buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
-        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(point as i64));
+        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(point));
         let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
     }
 }
@@ -4395,7 +4394,7 @@ pub(crate) fn builtin_set_window_buffer(
                 });
             if !preserve_old_buffer_point {
                 let old_point_byte_pos = buffers.get(old_buffer_id).map(|buffer| {
-                    buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(old_point.max(1) as i64))
+                    buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(old_point.max(1)))
                 });
                 if let Some(old_point_byte_pos) = old_point_byte_pos {
                     let _ = buffers.goto_buffer_emacs_byte_pos(old_buffer_id, old_point_byte_pos);
@@ -4409,8 +4408,8 @@ pub(crate) fn builtin_set_window_buffer(
             }
             if old_buffer_id != buf_id {
                 let old_buffer_value = Value::make_buffer(old_buffer_id);
-                let old_window_start_pos = LispCharPos1::new(old_window_start.max(1) as i64);
-                let old_point_pos = LispCharPos1::new(old_point.max(1) as i64);
+                let old_window_start_pos = lisp_pos_usize(old_window_start.max(1));
+                let old_point_pos = lisp_pos_usize(old_point.max(1));
                 let history_entry = Value::list(vec![
                     old_buffer_value,
                     super::marker::make_marker_value(
@@ -5505,15 +5504,12 @@ fn scroll_by_lines_in_state(
         }
     }
 
-    let point_lisp = buf
-        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos))
-        .as_i64() as usize;
+    let point_lisp = buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos));
     let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos));
     if let Some(window) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
-        let point_lisp = lisp_pos_usize(point_lisp);
         crate::window::window_markers::set_window_point_with_marker(buffers, window, point_lisp);
         crate::window::window_markers::set_window_start_with_marker(buffers, window, point_lisp);
     }
