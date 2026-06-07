@@ -811,21 +811,22 @@ impl BufferManager {
         }
     }
 
-    fn apply_shared_text_edit_to_siblings<F>(
+    fn apply_shared_text_edit_to_siblings(
         &mut self,
         scope: SharedTextEditScope,
-        mut apply: F,
-    ) -> Option<()>
-    where
-        F: FnMut(&mut Buffer, bool),
-    {
+        edit: SharedTextEditMetadata,
+    ) -> Option<()> {
+        let can_update_state_fields = edit.can_update_buffer_state_fields();
         for sibling_id in scope.siblings() {
-            let update_state_fields = self.shared_sibling_updates_state_fields(sibling_id);
+            let update_state_fields =
+                can_update_state_fields && self.shared_sibling_updates_state_fields(sibling_id);
             {
                 let sibling = self.buffers.get_mut(&sibling_id)?;
-                apply(sibling, update_state_fields);
+                Self::apply_shared_text_edit_metadata(sibling, edit, update_state_fields);
             }
-            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+            if can_update_state_fields {
+                self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+            }
         }
         Some(())
     }
@@ -850,13 +851,7 @@ impl BufferManager {
         let edit =
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::AfterMarkers);
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Insert(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Insert(edit))
     }
 
     pub fn insert_lisp_string_into_buffer(
@@ -904,13 +899,7 @@ impl BufferManager {
             marker_adjustment,
         );
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Insert(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Insert(edit))
     }
 
     pub fn insert_into_buffer_before_markers(&mut self, id: BufferId, text: &str) -> Option<()> {
@@ -922,13 +911,7 @@ impl BufferManager {
         let edit =
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Insert(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Insert(edit))
     }
 
     pub fn insert_lisp_string_into_buffer_before_markers(
@@ -948,13 +931,7 @@ impl BufferManager {
         let edit =
             MeasuredInsertEdit::by_insertion_type(insertion, InsertMarkerPlacement::BeforeMarkers);
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Insert(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Insert(edit))
     }
 
     pub fn delete_buffer_emacs_byte_range(
@@ -992,13 +969,7 @@ impl BufferManager {
             .get_mut(&id)?
             .delete_measured_region_edit(range);
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Delete(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Delete(edit))
     }
 
     #[cfg(test)]
@@ -1049,13 +1020,7 @@ impl BufferManager {
             .get_mut(&id)?
             .replace_measured_region_lisp_string_edit(range, text);
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Replace(edit),
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(scope, SharedTextEditMetadata::Replace(edit))
     }
 
     pub fn subst_char_in_buffer_region(
@@ -1084,17 +1049,13 @@ impl BufferManager {
             return Some(false);
         }
 
-        for sibling_id in scope.siblings() {
-            let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::SameLen {
-                    edit,
-                    preserve_modified_state: false,
-                },
-                false,
-            );
-        }
+        self.apply_shared_text_edit_to_siblings(
+            scope,
+            SharedTextEditMetadata::SameLen {
+                edit,
+                preserve_modified_state: false,
+            },
+        )?;
         Some(true)
     }
 
@@ -1111,16 +1072,13 @@ impl BufferManager {
             .transpose_regions(transposition, leave_markers);
         let edit = MeasuredSameLenEdit::covering(transposition.span_edit_range());
 
-        self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            Self::apply_shared_text_edit_metadata(
-                sibling,
-                SharedTextEditMetadata::Transposition {
-                    edit,
-                    transposition,
-                    preserve_modified_state: false,
-                },
-                update_state_fields,
-            );
-        })
+        self.apply_shared_text_edit_to_siblings(
+            scope,
+            SharedTextEditMetadata::Transposition {
+                edit,
+                transposition,
+                preserve_modified_state: false,
+            },
+        )
     }
 }

@@ -660,6 +660,10 @@ Completed so far:
 - Routed shared transposition propagation through that same typed edit metadata,
   including sibling point remapping, so this same-length edit case no longer
   leaves transaction-specific state adjustment inline in the manager loop.
+- Replaced closure-based shared edit sibling dispatch with typed
+  `SharedTextEditMetadata` dispatch.  The metadata now states whether an edit
+  can update point/narrowing fields, preserving same-length substitution's
+  no-refresh behavior while routing all shared edits through one manager path.
 
 Next work:
 

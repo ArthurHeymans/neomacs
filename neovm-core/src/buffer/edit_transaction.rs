@@ -549,6 +549,17 @@ pub(in crate::buffer) enum SharedTextEditMetadata {
     },
 }
 
+impl SharedTextEditMetadata {
+    pub(in crate::buffer) const fn can_update_buffer_state_fields(self) -> bool {
+        match self {
+            Self::Insert(_) | Self::Delete(_) | Self::Replace(_) | Self::Transposition { .. } => {
+                true
+            }
+            Self::SameLen { .. } => false,
+        }
+    }
+}
+
 /// Backend-neutral plan for GNU `subst-char-in-region`.
 ///
 /// GNU scans the buffer once to find each single-character replacement, records
