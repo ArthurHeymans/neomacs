@@ -261,6 +261,9 @@ Progress:
 - Buffer point restoration and full-buffer char/byte clamp helpers now compare
   and clamp typed `CharPos0`/`EmacsBytePos` values before entering the
   `BufferText` conversion boundary.
+- Buffer byte-range clamping now clamps typed `EmacsBytePos` endpoints and
+  constructs the final `EmacsByteRange` without round-tripping through raw
+  endpoint integers.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

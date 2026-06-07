@@ -2346,10 +2346,10 @@ impl Buffer {
     }
 
     fn clamped_emacs_byte_range(&self, range: EmacsByteRange) -> EmacsByteRange {
-        let total = self.total_emacs_byte_len().get();
-        let start = range.start().get().min(total);
-        let end = range.end().get().max(start).min(total);
-        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+        let total = EmacsBytePos::new(self.total_emacs_byte_len().get());
+        let start = range.start().min(total);
+        let end = range.end().max(start).min(total);
+        EmacsByteRange::new(start, end)
     }
 
     pub fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
