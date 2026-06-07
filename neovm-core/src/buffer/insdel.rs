@@ -16,8 +16,8 @@ use crate::buffer::edit_transaction::{
 };
 use crate::buffer::undo;
 use crate::buffer::{
-    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent,
-    TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
+    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
+    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -437,7 +437,10 @@ impl BufferManager {
         }
         self.replace_buffer_emacs_byte_range_lisp_string(
             id,
-            EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end)),
+            EmacsByteRange::from_start_len(
+                EmacsBytePos::new(start),
+                EmacsByteLen::new(end - start),
+            ),
             text,
         )
     }

@@ -621,11 +621,13 @@ mod tests {
     use super::*;
 
     fn byte_range(start: usize, end: usize) -> EmacsByteRange {
-        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+        assert!(start <= end);
+        EmacsByteRange::from_start_len(EmacsBytePos::new(start), EmacsByteLen::new(end - start))
     }
 
     fn char_range(start: usize, end: usize) -> CharRange {
-        CharRange::new(CharPos0::new(start), CharPos0::new(end))
+        assert!(start <= end);
+        CharRange::from_start_len(CharPos0::new(start), CharLen::new(end - start))
     }
 
     #[test]

@@ -1,12 +1,13 @@
 use super::TextBackend;
-use crate::buffer::position::{CharPos0, CharRange, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use crate::buffer::text::{
     ImplementedBufferTextBackendKind, TextEditRange, TextExtent, TextReplacement,
 };
 use proptest::prelude::*;
 
 fn byte_range(start: usize, end: usize) -> EmacsByteRange {
-    EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+    assert!(start <= end);
+    EmacsByteRange::from_start_len(EmacsBytePos::new(start), EmacsByteLen::new(end - start))
 }
 
 #[track_caller]

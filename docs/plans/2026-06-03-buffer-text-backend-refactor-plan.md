@@ -291,6 +291,9 @@ Progress:
 - String and display formatting text-property helpers now build character
   ranges as typed `CharPos0` + `CharLen` pairs instead of constructing two raw
   endpoints independently.
+- Remaining edit and backend conformance test helpers now keep raw `usize`
+  inputs at the test-data boundary, assert ordered endpoints, and construct
+  typed ranges from start positions plus typed lengths.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.

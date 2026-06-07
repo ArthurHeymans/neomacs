@@ -896,7 +896,8 @@ mod tests {
     use proptest::prelude::*;
 
     fn byte_range(start: usize, end: usize) -> EmacsByteRange {
-        EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end))
+        assert!(start <= end);
+        EmacsByteRange::from_start_len(EmacsBytePos::new(start), EmacsByteLen::new(end - start))
     }
 
     fn assert_matches_gap(rope: &RopeTextBackend, gap: &GapBuffer) {
