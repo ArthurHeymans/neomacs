@@ -1869,16 +1869,15 @@ pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
 
 fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsByteLen {
     buf.char_after_emacs_byte_len(pos)
-        .map(|len| EmacsByteLen::new(len.get().max(1)))
+        .map(|len| len.max(EmacsByteLen::new(1)))
         .unwrap_or(EmacsByteLen::new(1))
 }
 
 fn next_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    pos: usize,
-) -> Result<Option<usize>, Flow> {
-    let mut pos = EmacsBytePos::new(pos);
+    mut pos: EmacsBytePos,
+) -> Result<Option<EmacsBytePos>, Flow> {
     let point_max = match eval.buffers.get(buffer_id) {
         Some(buf) => buf.accessible_emacs_byte_region().end(),
         None => return Ok(None),
@@ -1904,7 +1903,7 @@ fn next_visible_line_start(
         };
         pos = pos.add_len(len);
         if code == b'\n' as u32 {
-            return Ok(Some(pos.get()));
+            return Ok(Some(pos));
         }
     }
 
@@ -1914,9 +1913,8 @@ fn next_visible_line_start(
 fn previous_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    pos: usize,
-) -> Result<Option<(usize, bool)>, Flow> {
-    let pos = EmacsBytePos::new(pos);
+    pos: EmacsBytePos,
+) -> Result<Option<(EmacsBytePos, bool)>, Flow> {
     let (point_min, point_max) = match eval.buffers.get(buffer_id) {
         Some(buf) => {
             let accessible = buf.accessible_emacs_byte_region();
@@ -1962,9 +1960,9 @@ fn previous_visible_line_start(
     }
 
     if let Some(previous_start) = previous_start {
-        Ok(Some((previous_start.get(), true)))
+        Ok(Some((previous_start, true)))
     } else if pos > current_start {
-        Ok(Some((current_start.get(), false)))
+        Ok(Some((current_start, false)))
     } else {
         Ok(None)
     }
@@ -2031,21 +2029,21 @@ pub(crate) fn builtin_vertical_motion(
     };
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible.clamp(buf.point_emacs_byte_pos());
-    let begv = accessible.start().get();
+    let begv = accessible.start();
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line (= beginning of line).
-        let mut bol = pt.get();
-        while bol > begv && buf.emacs_byte_at_pos(EmacsBytePos::new(bol - 1)) != Some(b'\n') {
-            bol -= 1;
+        let mut bol = pt;
+        while bol > begv
+            && buf.emacs_byte_at_pos(bol.saturating_sub_len(EmacsByteLen::new(1))) != Some(b'\n')
+        {
+            bol = bol.saturating_sub_len(EmacsByteLen::new(1));
         }
-        let _ = eval
-            .buffers
-            .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(bol));
+        let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, bol);
         return Ok(Value::fixnum(0));
     }
 
-    let mut pos = pt.get();
+    let mut pos = pt;
     let mut moved: i64 = 0;
 
     if lines > 0 {
@@ -2076,18 +2074,16 @@ pub(crate) fn builtin_vertical_motion(
             && eval
                 .buffers
                 .get(current_id)
-                .and_then(|buf| buf.emacs_byte_at_pos(EmacsBytePos::new(pos - 1)))
+                .and_then(|buf| buf.emacs_byte_at_pos(pos.saturating_sub_len(EmacsByteLen::new(1))))
                 != Some(b'\n')
         {
-            pos -= 1;
+            pos = pos.saturating_sub_len(EmacsByteLen::new(1));
         }
     }
 
     // Now pos is at beginning of target line.
     // If COLS was specified, advance to that column.
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(pos));
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, pos);
     if let Some(target_col) = cols {
         let _ = indent::builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
     }
