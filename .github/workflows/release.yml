@@ -341,6 +341,9 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          ./scripts/vendor-windows-gstreamer-runtime.sh \
+            --package-root "$STAGING" \
+            --bin-dir "$STAGING"
           mkdir -p dist
           zip -r "dist/${STAGING}.zip" "$STAGING"
 

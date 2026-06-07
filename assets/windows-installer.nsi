@@ -114,9 +114,6 @@ Section "!${PRODUCT_NAME}" SEC_MAIN
 
   File /r "${SOURCE_DIR}\*.*"
 
-  IfFileExists "$INSTDIR\vendor\gstreamer\gstreamer-runtime.msi" 0 +2
-    ExecWait 'msiexec /i "$INSTDIR\vendor\gstreamer\gstreamer-runtime.msi" /qn ADDLOCAL=ALL'
-
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
