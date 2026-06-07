@@ -17,8 +17,8 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{
-    layout_i64_char_pos_to_lisp_char_pos, layout_i64_char_pos_to_lisp_i64,
-    layout_usize_char_pos_to_lisp_usize, lisp_buffer_pos_usize_to_layout_i64,
+    layout_i64_char_pos_to_lisp_char_pos, layout_usize_char_pos_to_lisp_usize,
+    lisp_buffer_pos_usize_to_layout_i64,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -4169,7 +4169,7 @@ impl LayoutEngine {
                         if x > replacement_start_x || col > replacement_start_col {
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4268,7 +4268,7 @@ impl LayoutEngine {
                             col += width_cols as usize;
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4360,7 +4360,7 @@ impl LayoutEngine {
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4413,7 +4413,7 @@ impl LayoutEngine {
                             if x > replacement_start_x || col > replacement_start_col {
                                 output_emitter.emit_text_span(
                                     evaluator,
-                                    layout_i64_char_pos_to_lisp_i64(charpos),
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
                                     row,
                                     y,
                                     replacement_start_x,
@@ -4497,7 +4497,7 @@ impl LayoutEngine {
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4530,7 +4530,7 @@ impl LayoutEngine {
                             col += 5;
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4596,7 +4596,7 @@ impl LayoutEngine {
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4676,7 +4676,7 @@ impl LayoutEngine {
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -4709,7 +4709,7 @@ impl LayoutEngine {
                             col += 5;
                             output_emitter.emit_text_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_i64(charpos),
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 replacement_start_x,
@@ -5114,7 +5114,7 @@ impl LayoutEngine {
                 }
                 output_emitter.emit_text_span(
                     evaluator,
-                    charpos + 1,
+                    layout_i64_char_pos_to_lisp_char_pos(charpos),
                     row,
                     y,
                     x_before_tab,
@@ -5258,7 +5258,7 @@ impl LayoutEngine {
                 }
                 output_emitter.emit_text_span(
                     evaluator,
-                    charpos + 1,
+                    layout_i64_char_pos_to_lisp_char_pos(charpos),
                     row,
                     y,
                     x,
@@ -5316,7 +5316,7 @@ impl LayoutEngine {
                         let display_ch = if ch == '\u{00A0}' { ' ' } else { '-' };
                         output_emitter.emit_text_span(
                             evaluator,
-                            charpos + 1,
+                            layout_i64_char_pos_to_lisp_char_pos(charpos),
                             row,
                             y,
                             x,
@@ -5357,7 +5357,7 @@ impl LayoutEngine {
                         if x + needed <= content_x + avail_width {
                             output_emitter.emit_text_span(
                                 evaluator,
-                                charpos + 1,
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
                                 row,
                                 y,
                                 x,
@@ -5502,7 +5502,7 @@ impl LayoutEngine {
                 if x > replacement_start_x || col > replacement_start_col {
                     output_emitter.emit_text_span(
                         evaluator,
-                        layout_i64_char_pos_to_lisp_i64(charpos),
+                        layout_i64_char_pos_to_lisp_char_pos(charpos),
                         row,
                         y,
                         replacement_start_x,
@@ -5836,7 +5836,7 @@ impl LayoutEngine {
             }
             let glyph_x = x;
             let glyph_col = col;
-            let buffer_pos = layout_i64_char_pos_to_lisp_i64(charpos);
+            let buffer_pos = layout_i64_char_pos_to_lisp_char_pos(charpos);
             if let Some((prefix, suffix)) = control_display {
                 self.run_buf.push(prefix, face_char_w);
                 self.run_buf.push(suffix, face_char_w);

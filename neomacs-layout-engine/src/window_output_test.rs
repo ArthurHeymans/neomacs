@@ -1,4 +1,5 @@
 use super::WindowOutputEmitter;
+use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 
 #[test]
@@ -21,7 +22,18 @@ fn emit_text_span_advances_live_output_before_row_finish() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-    emitter.emit_text_span(&mut eval, 1, 0, 0.0, 0.0, 0.0, 24.0, 16.0, 0, 3);
+    emitter.emit_text_span(
+        &mut eval,
+        LispCharPos1::new(1),
+        0,
+        0.0,
+        0.0,
+        0.0,
+        24.0,
+        16.0,
+        0,
+        3,
+    );
 
     let display = eval
         .frame_manager()

@@ -168,7 +168,7 @@ impl WindowOutputEmitter {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_display_point(
         &mut self,
-        buffer_pos: i64,
+        buffer_pos: LispCharPos1,
         glyph_x: f32,
         glyph_y: f32,
         width: f32,
@@ -176,10 +176,6 @@ impl WindowOutputEmitter {
         row: i64,
         col: usize,
     ) {
-        if buffer_pos < 1 {
-            return;
-        }
-        let buffer_pos = LispCharPos1::new(buffer_pos);
         self.note_display_buffer_pos(buffer_pos);
         let buffer_pos = buffer_pos.as_i64() as usize;
         self.points.push(DisplayPointSnapshot {
@@ -196,7 +192,7 @@ impl WindowOutputEmitter {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_text_display_point(
         &mut self,
-        buffer_pos: i64,
+        buffer_pos: LispCharPos1,
         glyph_x: f32,
         glyph_y: f32,
         width: f32,
@@ -219,7 +215,7 @@ impl WindowOutputEmitter {
     pub(crate) fn emit_text_span(
         &mut self,
         evaluator: &mut Context,
-        buffer_pos: i64,
+        buffer_pos: LispCharPos1,
         row: usize,
         row_y: f32,
         glyph_x: f32,
