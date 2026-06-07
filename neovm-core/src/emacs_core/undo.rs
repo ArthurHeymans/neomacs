@@ -367,12 +367,14 @@ fn primitive_undo_inner(
                             let del_start_char = point - len;
                             let del_end_char = point;
                             let accessible = buf.accessible_char_region();
-                            if accessible.contains_boundary_usize(del_start_char)
-                                && accessible.contains_boundary_usize(del_end_char)
+                            let del_start_char = CharPos0::new(del_start_char);
+                            let del_end_char = CharPos0::new(del_end_char);
+                            if accessible.contains_boundary(del_start_char)
+                                && accessible.contains_boundary(del_end_char)
                             {
                                 Some(buf.edit_range_for_char_range(CharRange::new(
-                                    CharPos0::new(del_start_char),
-                                    CharPos0::new(del_end_char),
+                                    del_start_char,
+                                    del_end_char,
                                 )))
                             } else {
                                 None

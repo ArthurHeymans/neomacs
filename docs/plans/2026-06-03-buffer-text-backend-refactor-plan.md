@@ -758,6 +758,9 @@ Completed so far:
 - Typed the newline scan helpers on `Buffer`/`BufferText` to accept and return
   `EmacsBytePos`, so line navigation callers cross the semantic text boundary
   with explicit byte-position types instead of raw `usize` coordinates.
+- Removed raw `usize` accessible-range membership/clamp helpers and replaced
+  their production callers with typed `EmacsBytePos` / `CharPos0` checks, so
+  narrowing-boundary tests cannot accidentally mix byte and character spaces.
 
 Next work:
 

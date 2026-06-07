@@ -4108,7 +4108,7 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
     let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
         let point = buf.point_emacs_byte_pos();
-        accessible.contains_usize(point.get()).then_some(point)
+        accessible.contains(point).then_some(point)
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
@@ -4137,7 +4137,7 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
     let byte_pos = if args.is_empty() || args[0].is_nil() {
         let point = buf.point_emacs_byte_pos();
         accessible
-            .contains_preceding_char_boundary_usize(point.get())
+            .contains_preceding_char_boundary(point)
             .then_some(point)
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
