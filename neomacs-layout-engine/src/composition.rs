@@ -54,7 +54,7 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
 /// flag tag sequences). Deliberately EXCLUDES bidi controls (LRM/RLM), spaces
 /// (ZWSP/ZWNBSP), line/paragraph separators, and C1 controls — those stay
 /// glyphless so they still display as their own replacement glyph.
-pub(crate) fn is_composition_joiner(ch: char) -> bool {
+pub fn is_composition_joiner(ch: char) -> bool {
     matches!(
         ch as u32,
         0x200C | 0x200D            // ZERO WIDTH NON-JOINER / JOINER

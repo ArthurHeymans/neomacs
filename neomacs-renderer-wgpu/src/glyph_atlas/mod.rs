@@ -746,7 +746,31 @@ impl WgpuGlyphAtlas {
                 None
             };
 
-            if let Some(ch) = text.chars().find(|ch| !ch.is_ascii()) {
+            // Choose the font by what the cluster's presentation actually
+            // requires, not by a selector char's own font.
+            //
+            // U+FE0F (emoji variation selector) requests EMOJI (color)
+            // presentation for the whole cluster. An emoji keycap is
+            // digit + U+FE0F + U+20E3: the digit is ASCII and U+20E3 is
+            // classified as a plain symbol, so without honoring U+FE0F the
+            // cluster resolves to a monochrome symbol font and renders as an
+            // outline box instead of GNU's color keycap. When U+FE0F is
+            // present, resolve the font the way an emoji codepoint does (the
+            // fontset's emoji entry → the color emoji font) by probing with a
+            // canonical emoji; cosmic-text then shapes the whole sequence with
+            // that font and forms the precomposed color glyph.
+            //
+            // Otherwise pick the first glyph-bearing character, skipping
+            // zero-width joiners/selectors that don't determine the font.
+            let repr_char = if text.contains('\u{FE0F}') {
+                Some('\u{1F600}')
+            } else {
+                text.chars().find(|&ch| {
+                    !ch.is_ascii()
+                        && !neomacs_layout_engine::composition::is_composition_joiner(ch)
+                })
+            };
+            if let Some(ch) = repr_char {
                 let prefer_monospace =
                     neomacs_layout_engine::fontconfig::family_prefers_monospace(&effective_family);
                 if let Some(matched) = neomacs_layout_engine::fontconfig::match_font_for_char(
