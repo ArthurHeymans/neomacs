@@ -853,16 +853,15 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     insert_start: usize,
     insert_len: usize,
 ) -> Vec<(Value, Value)> {
-    let insert_start_char = buf
-        .emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(insert_start))
-        .get();
-    let left_props = if insert_start_char > buf.point_min_char_pos().get() {
+    let insert_start_char = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(insert_start));
+    let left_props = if insert_start_char > buf.point_min_char_pos() {
         // GNU intervals are indexed by character positions (`PT`), not raw
         // bytes. Step to the previous character boundary before consulting
         // the left neighbor; `insert_start - 1` can land inside an Emacs
         // multibyte/non-Unicode storage sequence.
-        let left_byte = buf
-            .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(insert_start_char.saturating_sub(1)));
+        let left_byte = buf.char_pos_to_emacs_byte_pos_clamped(
+            insert_start_char.saturating_sub_len(CharLen::new(1)),
+        );
         buf.text_props_get_properties_ordered_at_emacs_byte_pos(left_byte)
     } else {
         Vec::new()
