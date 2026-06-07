@@ -2616,19 +2616,31 @@ impl Buffer {
 
     /// First `\n` in logical emacs-byte range `[from, limit)`, scanned in
     /// place.  See [`BufferText::next_newline_emacs_byte`].
-    pub(crate) fn next_newline_emacs_byte(&self, from: usize, limit: usize) -> Option<usize> {
+    pub(crate) fn next_newline_emacs_byte(
+        &self,
+        from: EmacsBytePos,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
         self.text.next_newline_emacs_byte(from, limit)
     }
 
     /// Last `\n` in logical emacs-byte range `[floor, from)`, scanned in
     /// place.  See [`BufferText::prev_newline_emacs_byte`].
-    pub(crate) fn prev_newline_emacs_byte(&self, from: usize, floor: usize) -> Option<usize> {
+    pub(crate) fn prev_newline_emacs_byte(
+        &self,
+        from: EmacsBytePos,
+        floor: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
         self.text.prev_newline_emacs_byte(from, floor)
     }
 
     /// Number of `\n` in logical emacs-byte range `[from, limit)`.
     /// See [`BufferText::count_newlines_emacs_byte`].
-    pub(crate) fn count_newlines_emacs_byte(&self, from: usize, limit: usize) -> usize {
+    pub(crate) fn count_newlines_emacs_byte(
+        &self,
+        from: EmacsBytePos,
+        limit: EmacsBytePos,
+    ) -> usize {
         self.text.count_newlines_emacs_byte(from, limit)
     }
 

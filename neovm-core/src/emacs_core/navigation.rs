@@ -181,7 +181,7 @@ fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
 
 /// Count newlines in the Emacs-byte range [start, end).
 fn count_newlines(buf: &crate::buffer::Buffer, start: usize, end: usize) -> usize {
-    buf.count_newlines_emacs_byte(start, end.max(start))
+    buf.count_newlines_emacs_byte(EmacsBytePos::new(start), EmacsBytePos::new(end.max(start)))
 }
 
 /// Like `move_by_lines` but confined to the narrowed region `[begv, zv)`.
@@ -201,9 +201,9 @@ fn move_by_lines_narrowed(
             return (line_beginning_byte_narrowed(buf, pos, begv), 0);
         }
         for _ in 0..n {
-            match buf.next_newline_emacs_byte(pos, zv) {
+            match buf.next_newline_emacs_byte(EmacsBytePos::new(pos), EmacsBytePos::new(zv)) {
                 Some(nl) => {
-                    pos = nl + 1;
+                    pos = nl.get() + 1;
                     moved += 1;
                 }
                 None => {
@@ -232,15 +232,17 @@ fn line_beginning_byte_narrowed(
     byte_pos: usize,
     begv: usize,
 ) -> usize {
-    match buf.prev_newline_emacs_byte(byte_pos, begv) {
-        Some(nl) => nl + 1,
+    match buf.prev_newline_emacs_byte(EmacsBytePos::new(byte_pos), EmacsBytePos::new(begv)) {
+        Some(nl) => nl.get() + 1,
         None => begv,
     }
 }
 
 /// Find the end of the line containing `byte_pos`, but not past `zv`.
 fn line_end_byte_narrowed(buf: &crate::buffer::Buffer, byte_pos: usize, zv: usize) -> usize {
-    buf.next_newline_emacs_byte(byte_pos, zv).unwrap_or(zv)
+    buf.next_newline_emacs_byte(EmacsBytePos::new(byte_pos), EmacsBytePos::new(zv))
+        .map(EmacsBytePos::get)
+        .unwrap_or(zv)
 }
 
 // ===========================================================================

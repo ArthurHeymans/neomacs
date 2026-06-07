@@ -755,6 +755,9 @@ Completed so far:
 - Routed `backward-prefix-chars` and `parse-partial-sexp` final point movement
   through `BufferManager`, matching GNU's primitive-boundary point updates while
   keeping syntax scanners from mutating concrete buffer storage directly.
+- Typed the newline scan helpers on `Buffer`/`BufferText` to accept and return
+  `EmacsBytePos`, so line navigation callers cross the semantic text boundary
+  with explicit byte-position types instead of raw `usize` coordinates.
 
 Next work:
 
