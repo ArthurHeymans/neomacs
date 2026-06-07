@@ -731,6 +731,10 @@ Completed so far:
   onto `BufferManager::goto_buffer_emacs_byte_pos`; syntax scanner point churn
   remains reserved for a dedicated scanner-level refactor because GNU's
   `syntax.c` also advances point inside scanner algorithms.
+- Added a manager-owned point-anchor restore API and routed `fileio.rs`
+  insert-file/format-decode point preservation through it, matching GNU's
+  point preservation while keeping state-marker updates outside direct
+  `Buffer` mutation.
 
 Next work:
 

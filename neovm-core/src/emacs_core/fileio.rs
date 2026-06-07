@@ -4346,12 +4346,10 @@ fn restore_point_after_file_replace(
             buf.char_pos_to_emacs_byte_pos_clamped(point_char),
         )
     };
-    if let Some(buf) = buffers.get_mut(current_id) {
-        buf.set_point_anchor(point);
-        Ok(())
-    } else {
-        Err(signal("error", vec![Value::string("No current buffer")]))
-    }
+    buffers
+        .set_buffer_point_anchor(current_id, point)
+        .map(|_| ())
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))
 }
 
 fn signal_and_delete_file_replace_region(
@@ -4540,9 +4538,7 @@ fn insert_file_contents_into_current_buffer_in_state(
             super::editfns::signal_after_text_change(eval, change)?;
         }
         // Restore point to before the insertion (matching GNU).
-        if let Some(buf) = eval.buffers.get_mut(current_id) {
-            buf.set_point_anchor(pt_before);
-        }
+        let _ = eval.buffers.set_buffer_point_anchor(current_id, pt_before);
         Ok(())
     }
 }
@@ -4648,11 +4644,10 @@ fn run_after_insert_file_pipeline(
         .get(current_id)
         .map(|buf| buf.chars_modified_tick())
         .unwrap_or(chars_modiff_before + 1);
-    if replace_requested
-        && chars_modiff_after == chars_modiff_before
-        && let Some(buf) = eval.buffers.get_mut(current_id)
-    {
-        buf.set_point_anchor(saved_point);
+    if replace_requested && chars_modiff_after == chars_modiff_before {
+        let _ = eval
+            .buffers
+            .set_buffer_point_anchor(current_id, saved_point);
     }
     eval.unbind_to(specpdl_count);
 

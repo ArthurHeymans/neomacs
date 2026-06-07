@@ -4650,6 +4650,20 @@ impl BufferManager {
         Some(point)
     }
 
+    pub fn set_buffer_point_anchor(
+        &mut self,
+        id: BufferId,
+        point: TextPositionAnchor,
+    ) -> Option<TextPositionAnchor> {
+        {
+            let buf = self.buffers.get_mut(&id)?;
+            buf.set_point_anchor(point);
+        }
+        let point = self.buffers.get(&id)?.point_anchor();
+        let _ = self.record_buffer_state_markers(id);
+        Some(point)
+    }
+
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         if !buf.overlays.is_empty() {
