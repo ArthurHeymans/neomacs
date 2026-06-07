@@ -572,6 +572,49 @@ fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
         .get())
 }
 
+fn treesit_invalid_range(ranges: Value) -> Flow {
+    signal(
+        "treesit-range-invalid",
+        vec![
+            Value::string("RANGE is either overlapping, out-of-order or out-of-range"),
+            ranges,
+        ],
+    )
+}
+
+fn expect_treesit_range_fixnum(value: Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integerp"), value],
+        )),
+    }
+}
+
+fn validate_treesit_included_range(
+    buf: &Buffer,
+    range: Value,
+    ranges: Value,
+    last_point: &mut i64,
+) -> Result<(i64, i64), Flow> {
+    if !range.is_cons() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("consp"), range],
+        ));
+    }
+    let beg = expect_treesit_range_fixnum(range.cons_car())?;
+    let end = expect_treesit_range_fixnum(range.cons_cdr())?;
+    let point_max = buf.accessible_char_region().end_lisp().as_i64();
+    if *last_point <= beg && beg <= end && end <= point_max {
+        *last_point = end;
+        Ok((beg, end))
+    } else {
+        Err(treesit_invalid_range(ranges))
+    }
+}
+
 fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize) -> Value {
     let char_offset = byte_to_char_pos(source.as_bytes(), byte_offset) as i64;
     Value::fixnum(buf.accessible_char_region().start_lisp().as_i64() + char_offset)
@@ -2186,32 +2229,20 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
     let ts_ranges = if args[1].is_nil() {
         Vec::new()
     } else {
+        let mut last_point = buffer.accessible_char_region().start_lisp().as_i64();
+        let range_values = crate::emacs_core::value::list_to_vec(&args[1])
+            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[1]]))?;
         let mut hint = runtime::LineColCache {
             line: 1,
             col: 1,
             bytepos: 0,
         };
         let mut ranges = Vec::new();
-        for value in crate::emacs_core::value::list_to_vec(&args[1]).ok_or_else(|| {
-            signal(
-                "wrong-type-argument",
-                vec![
-                    Value::symbol("consp"),
-                    args[1],
-                    Value::symbol("treesit-parser-set-included-ranges"),
-                ],
-            )
-        })? {
-            if !value.is_cons() {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("consp"), value],
-                ));
-            }
-            let start =
-                lisp_pos_to_relative_byte(buffer, expect_integer_or_marker(&value.cons_car())?)?;
-            let end =
-                lisp_pos_to_relative_byte(buffer, expect_integer_or_marker(&value.cons_cdr())?)?;
+        for value in range_values {
+            let (start_pos, end_pos) =
+                validate_treesit_included_range(buffer, value, args[1], &mut last_point)?;
+            let start = lisp_pos_to_relative_byte(buffer, start_pos)?;
+            let end = lisp_pos_to_relative_byte(buffer, end_pos)?;
             let start_point = byte_offset_to_point(&source, start, hint);
             let next_hint = byte_offset_to_linecol(&source, end, hint);
             let end_point = Point {
@@ -2238,11 +2269,11 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         .set_included_ranges(&ts_ranges)
         .map_err(|err| {
             signal(
-                "error",
-                vec![Value::string(format!(
-                    "Invalid tree-sitter ranges at index {}",
-                    err.0
-                ))],
+                "treesit-range-invalid",
+                vec![
+                    Value::string("Something went wrong when setting ranges"),
+                    args[1],
+                ],
             )
         })?;
     parser.tree = None;
@@ -2796,6 +2827,43 @@ pub(crate) fn builtin_treesit_linecol_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emacs_core::error::Flow;
+
+    fn eval_with_json_parser(text: &str) -> (super::super::eval::Context, Value) {
+        let mut eval = super::super::eval::Context::new();
+        eval.buffers
+            .current_buffer_mut()
+            .expect("current buffer")
+            .insert(text);
+        let language_sym = Value::symbol("json").as_symbol_id().expect("json symbol");
+        eval.treesit.cache_loaded_language(
+            language_sym,
+            runtime::LoadedLanguage {
+                language: Language::new(tree_sitter_json::LANGUAGE),
+                filename: None,
+                _library: None,
+            },
+        );
+        let parser = builtin_treesit_parser_create(
+            &mut eval,
+            vec![Value::symbol("json"), Value::NIL, Value::T, Value::NIL],
+        )
+        .expect("json parser");
+        (eval, parser)
+    }
+
+    fn expect_signal(
+        result: EvalResult,
+        symbol: &str,
+    ) -> Box<crate::emacs_core::error::SignalData> {
+        match result.expect_err("expected signal") {
+            Flow::Signal(sig) => {
+                assert_eq!(sig.symbol_name(), symbol);
+                sig
+            }
+            other => panic!("expected {symbol} signal, got {other:?}"),
+        }
+    }
 
     #[test]
     fn treesit_node_property_domain_matches_gnu_symbols() {
@@ -2881,5 +2949,105 @@ mod tests {
             Some(TreesitPatternKeyword::MatchQuestion)
         );
         assert_eq!(TreesitPatternKeyword::EqQuestion.name(), ":eq?");
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_accepts_valid_fixnum_ranges() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let ranges = Value::list(vec![Value::cons(Value::fixnum(1), Value::fixnum(3))]);
+
+        assert_eq!(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, ranges])
+                .expect("valid included ranges"),
+            Value::NIL
+        );
+        assert_eq!(
+            builtin_treesit_parser_included_ranges(&mut eval, vec![parser])
+                .expect("included ranges"),
+            ranges
+        );
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_requires_proper_list() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let bad_ranges = Value::symbol("not-a-list");
+
+        let sig = expect_signal(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, bad_ranges]),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("listp"), bad_ranges]);
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_requires_range_cons() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let bad_range = Value::fixnum(1);
+        let ranges = Value::list(vec![bad_range]);
+
+        let sig = expect_signal(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, ranges]),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("consp"), bad_range]);
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_requires_fixnum_endpoints() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+        let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            LispCharPos1::new(1),
+            false,
+        );
+        let ranges = Value::list(vec![Value::cons(marker, Value::fixnum(3))]);
+
+        let sig = expect_signal(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, ranges]),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("integerp"), marker]);
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_rejects_overlapping_ranges() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let ranges = Value::list(vec![
+            Value::cons(Value::fixnum(1), Value::fixnum(3)),
+            Value::cons(Value::fixnum(2), Value::fixnum(3)),
+        ]);
+
+        let sig = expect_signal(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, ranges]),
+            "treesit-range-invalid",
+        );
+        assert_eq!(
+            sig.data,
+            vec![
+                Value::string("RANGE is either overlapping, out-of-order or out-of-range"),
+                ranges,
+            ]
+        );
+    }
+
+    #[test]
+    fn treesit_parser_set_included_ranges_rejects_out_of_range_endpoint() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let ranges = Value::list(vec![Value::cons(Value::fixnum(1), Value::fixnum(4))]);
+
+        let sig = expect_signal(
+            builtin_treesit_parser_set_included_ranges(&mut eval, vec![parser, ranges]),
+            "treesit-range-invalid",
+        );
+        assert_eq!(
+            sig.data,
+            vec![
+                Value::string("RANGE is either overlapping, out-of-order or out-of-range"),
+                ranges,
+            ]
+        );
     }
 }
