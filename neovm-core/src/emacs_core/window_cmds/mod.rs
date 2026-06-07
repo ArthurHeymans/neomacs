@@ -4382,7 +4382,7 @@ pub(crate) fn builtin_set_window_buffer(
                 ));
             }
             if let Some(buffer) = buffers.get_mut(old_buffer_id) {
-                buffer.last_window_start = old_window_start.to_one_based_usize();
+                buffer.last_window_start = old_window_start.max(LispCharPos1::ONE);
             }
             let selected_buffer_id = frames
                 .get(selected_fid)
@@ -4537,7 +4537,7 @@ pub(crate) fn builtin_set_window_buffer(
                 .get(buf_id)
                 .map(|buf| {
                     (
-                        lisp_pos_usize(buf.last_window_start.max(1)),
+                        buf.last_window_start.max(LispCharPos1::ONE),
                         lisp_pos_usize(buf.point_char_pos().get().saturating_add(1).max(1)),
                     )
                 })

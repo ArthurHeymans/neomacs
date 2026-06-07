@@ -12648,7 +12648,7 @@ fn set_buffer_multibyte_remaps_last_window_start_as_lisp_position() {
     eval.buffers
         .get_mut(current_id)
         .expect("current buffer")
-        .last_window_start = 2;
+        .last_window_start = LispCharPos1::from_one_based_usize(2);
 
     builtin_set_buffer_multibyte(&mut eval, vec![Value::NIL]).unwrap();
     assert_eq!(
@@ -12656,7 +12656,7 @@ fn set_buffer_multibyte_remaps_last_window_start_as_lisp_position() {
             .get(current_id)
             .expect("current buffer")
             .last_window_start,
-        3
+        LispCharPos1::from_one_based_usize(3)
     );
 
     builtin_set_buffer_multibyte(&mut eval, vec![Value::T]).unwrap();
@@ -12665,7 +12665,7 @@ fn set_buffer_multibyte_remaps_last_window_start_as_lisp_position() {
             .get(current_id)
             .expect("current buffer")
             .last_window_start,
-        2
+        LispCharPos1::from_one_based_usize(2)
     );
 }
 

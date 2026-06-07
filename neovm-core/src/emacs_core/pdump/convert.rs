@@ -2838,7 +2838,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         modtime_sec: buf.modtime_sec,
         modtime_nsec: buf.modtime_nsec,
         modtime_size: buf.modtime_size,
-        last_window_start: Some(buf.last_window_start),
+        last_window_start: Some(buf.last_window_start.to_one_based_usize()),
         read_only: buf.get_read_only(),
         multibyte: buf.get_multibyte(),
         file_name_lisp: buf.file_name_lisp_string().map(dump_lisp_string),
@@ -4635,7 +4635,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         }
     });
     let autosave_modified_tick = db.autosave_modified_tick.unwrap_or(save_modified_tick);
-    let last_window_start = db.last_window_start.unwrap_or(1).max(1);
+    let last_window_start = LispCharPos1::from_one_based_usize(db.last_window_start.unwrap_or(1));
 
     let text_props = TextPropertyTable::from_dump(
         db.text_props

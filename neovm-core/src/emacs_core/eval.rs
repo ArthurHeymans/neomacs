@@ -6436,7 +6436,7 @@ impl Context {
             zv_emacs_byte: accessible_bytes.end(),
             total_chars: buffer.total_char_len(),
             total_emacs_bytes: buffer.total_emacs_byte_len(),
-            last_window_start: LispCharPos1::from_one_based_usize(buffer.last_window_start),
+            last_window_start: buffer.last_window_start,
             last_selected_window: buffer.last_selected_window.map(|id| id.0),
         })
     }

@@ -1626,7 +1626,7 @@ pub(crate) struct BufferDumpParts {
     pub accessible_start: TextPositionAnchor,
     pub accessible_end: TextPositionAnchor,
     pub autosave_modified_tick: i64,
-    pub last_window_start: usize,
+    pub last_window_start: LispCharPos1,
     pub last_selected_window: Option<WindowId>,
     pub inhibit_buffer_hooks: bool,
     pub state_markers: Option<BufferStateMarkers>,
@@ -1679,7 +1679,7 @@ pub struct Buffer {
     pub(crate) autosave_modified_tick: i64,
     /// GNU `last_window_start`: start position of the most recently
     /// disconnected window that showed this buffer.
-    pub(crate) last_window_start: usize,
+    pub(crate) last_window_start: LispCharPos1,
     /// GNU `last_selected_window`: most recently selected live window showing
     /// this buffer, when known.
     pub(crate) last_selected_window: Option<WindowId>,
@@ -1824,7 +1824,7 @@ impl Buffer {
             accessible_start: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
             accessible_end: TextPositionAnchor::new(CharPos0::ZERO, EmacsBytePos::ZERO),
             autosave_modified_tick: 1,
-            last_window_start: 1,
+            last_window_start: LispCharPos1::ONE,
             last_selected_window: None,
             inhibit_buffer_hooks: false,
             state_markers: None,
@@ -5000,9 +5000,9 @@ impl BufferManager {
     pub fn set_buffer_last_window_start(
         &mut self,
         id: BufferId,
-        lisp_char_pos: usize,
+        lisp_char_pos: LispCharPos1,
     ) -> Option<()> {
-        self.buffers.get_mut(&id)?.last_window_start = lisp_char_pos;
+        self.buffers.get_mut(&id)?.last_window_start = lisp_char_pos.max(LispCharPos1::ONE);
         Some(())
     }
 

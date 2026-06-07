@@ -1541,7 +1541,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     })
                 })
                 .collect();
-            let last_window_start = LispCharPos1::from_one_based_usize(buffer.last_window_start);
+            let last_window_start = buffer.last_window_start;
             let total_end = buffer.total_emacs_byte_end_pos();
             snapshots.push(BufferSnapshot {
                 id: *id,
@@ -1647,7 +1647,9 @@ pub(crate) fn builtin_set_buffer_multibyte(
         eval.buffers
             .set_buffer_last_window_start(
                 snapshot.id,
-                lisp_string_byte_to_char(&new_storage, last_window_start_byte) + 1,
+                LispCharPos1::from_one_based_usize(
+                    lisp_string_byte_to_char(&new_storage, last_window_start_byte) + 1,
+                ),
             )
             .ok_or_else(|| signal("error", vec![Value::string("Missing shared buffer")]))?;
 
