@@ -8,8 +8,8 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
-    SharedTextEditScope, TranspositionStoragePlan, char_pos_for_emacs_byte,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
+    SharedTextEditMetadata, SharedTextEditScope, TranspositionStoragePlan, char_pos_for_emacs_byte,
     convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
     modification_tick_delta,
 };
@@ -757,27 +757,37 @@ impl BufferManager {
         ))
     }
 
-    fn shared_sibling_updates_state_fields(&self, sibling_id: BufferId) -> bool {
-        self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id)
+    fn shared_sibling_state_update(&self, sibling_id: BufferId) -> SharedBufferStateUpdate {
+        if self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id) {
+            SharedBufferStateUpdate::UpdateFields
+        } else {
+            SharedBufferStateUpdate::RefreshFromStateMarkers
+        }
     }
 
     fn apply_shared_text_edit_metadata(
         buf: &mut Buffer,
         edit: SharedTextEditMetadata,
-        update_state_fields: bool,
+        state_update: Option<SharedBufferStateUpdate>,
     ) {
         match edit {
             SharedTextEditMetadata::Insert(edit) => buf.apply_byte_insert_side_effects(
                 edit,
-                InsertSideEffectPolicy::shared_buffer(update_state_fields),
+                InsertSideEffectPolicy::shared_buffer(
+                    state_update.expect("insert shared edit requires state update policy"),
+                ),
             ),
             SharedTextEditMetadata::Delete(edit) => buf.apply_byte_delete_side_effects(
                 edit,
-                DeleteSideEffectPolicy::shared_buffer(update_state_fields),
+                DeleteSideEffectPolicy::shared_buffer(
+                    state_update.expect("delete shared edit requires state update policy"),
+                ),
             ),
             SharedTextEditMetadata::Replace(edit) => buf.apply_replace_side_effects(
                 edit,
-                ReplaceSideEffectPolicy::shared_buffer(update_state_fields),
+                ReplaceSideEffectPolicy::shared_buffer(
+                    state_update.expect("replace shared edit requires state update policy"),
+                ),
             ),
             SharedTextEditMetadata::SameLen {
                 edit,
@@ -788,7 +798,10 @@ impl BufferManager {
                 transposition,
                 preserve_modified_state,
             } => {
-                if update_state_fields {
+                if state_update
+                    .expect("transposition shared edit requires state update policy")
+                    .update_state_fields()
+                {
                     let point = transposition.transpose_anchor(buf.point_anchor());
                     buf.set_point_anchor_unchecked(point);
                 }
@@ -804,14 +817,14 @@ impl BufferManager {
     ) -> Option<()> {
         let can_update_state_fields = edit.can_update_buffer_state_fields();
         for sibling_id in scope.siblings() {
-            let update_state_fields =
-                can_update_state_fields && self.shared_sibling_updates_state_fields(sibling_id);
+            let state_update =
+                can_update_state_fields.then(|| self.shared_sibling_state_update(sibling_id));
             {
                 let sibling = self.buffers.get_mut(&sibling_id)?;
-                Self::apply_shared_text_edit_metadata(sibling, edit, update_state_fields);
+                Self::apply_shared_text_edit_metadata(sibling, edit, state_update);
             }
-            if can_update_state_fields {
-                self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+            if let Some(state_update) = state_update {
+                self.refresh_shared_buffer_state_cache(sibling_id, state_update)?;
             }
         }
         Some(())
@@ -820,9 +833,9 @@ impl BufferManager {
     fn refresh_shared_buffer_state_cache(
         &mut self,
         buffer_id: BufferId,
-        update_state_fields: bool,
+        state_update: SharedBufferStateUpdate,
     ) -> Option<()> {
-        if !update_state_fields && self.buffer_has_state_markers(buffer_id) {
+        if state_update.needs_state_marker_refresh() {
             self.fetch_buffer_state_markers(buffer_id)?;
         }
         Some(())

@@ -583,6 +583,22 @@ impl SharedTextEditScope {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum SharedBufferStateUpdate {
+    UpdateFields,
+    RefreshFromStateMarkers,
+}
+
+impl SharedBufferStateUpdate {
+    pub(in crate::buffer) const fn update_state_fields(self) -> bool {
+        matches!(self, Self::UpdateFields)
+    }
+
+    pub(in crate::buffer) const fn needs_state_marker_refresh(self) -> bool {
+        matches!(self, Self::RefreshFromStateMarkers)
+    }
+}
+
 /// Backend-neutral plan for GNU `subst-char-in-region`.
 ///
 /// GNU scans the buffer once to find each single-character replacement, records
@@ -802,9 +818,9 @@ impl InsertSideEffectPolicy {
         }
     }
 
-    pub(in crate::buffer) fn shared_buffer(update_state_fields: bool) -> Self {
+    pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields,
+            update_state_fields: state_update.update_state_fields(),
             shift_begv: true,
             advance_point_at_insert: false,
             adjust_shared_markers: false,
@@ -831,9 +847,9 @@ impl DeleteSideEffectPolicy {
         }
     }
 
-    pub(in crate::buffer) fn shared_buffer(update_state_fields: bool) -> Self {
+    pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields,
+            update_state_fields: state_update.update_state_fields(),
             shift_begv: true,
             adjust_shared_markers: false,
             adjust_shared_text_props: false,
@@ -857,9 +873,9 @@ impl ReplaceSideEffectPolicy {
         }
     }
 
-    pub(in crate::buffer) fn shared_buffer(update_state_fields: bool) -> Self {
+    pub(in crate::buffer) fn shared_buffer(state_update: SharedBufferStateUpdate) -> Self {
         Self {
-            update_state_fields,
+            update_state_fields: state_update.update_state_fields(),
             adjust_shared_markers: false,
             adjust_shared_text_props: false,
         }
@@ -928,7 +944,7 @@ mod tests {
             insert_state_after_edit(
                 state(20, 10, 28, 14, 60, 42),
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(true),
+                InsertSideEffectPolicy::shared_buffer(SharedBufferStateUpdate::UpdateFields),
             ),
             state(20, 10, 33, 17, 65, 45)
         );
@@ -940,7 +956,7 @@ mod tests {
             insert_state_after_edit(
                 state(0, 0, 0, 0, 20, 10),
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(true),
+                InsertSideEffectPolicy::shared_buffer(SharedBufferStateUpdate::UpdateFields),
             ),
             state(0, 0, 0, 0, 25, 13)
         );
@@ -976,7 +992,7 @@ mod tests {
             delete_state_after_edit(
                 state(44, 24, 28, 14, 60, 42),
                 deleted_range(),
-                DeleteSideEffectPolicy::shared_buffer(true),
+                DeleteSideEffectPolicy::shared_buffer(SharedBufferStateUpdate::UpdateFields),
             ),
             state(28, 16, 20, 10, 44, 34)
         );
@@ -990,7 +1006,9 @@ mod tests {
             insert_state_after_edit(
                 original,
                 insertion(),
-                InsertSideEffectPolicy::shared_buffer(false),
+                InsertSideEffectPolicy::shared_buffer(
+                    SharedBufferStateUpdate::RefreshFromStateMarkers,
+                ),
             ),
             original
         );
@@ -998,7 +1016,9 @@ mod tests {
             delete_state_after_edit(
                 original,
                 deleted_range(),
-                DeleteSideEffectPolicy::shared_buffer(false),
+                DeleteSideEffectPolicy::shared_buffer(
+                    SharedBufferStateUpdate::RefreshFromStateMarkers,
+                ),
             ),
             original
         );
