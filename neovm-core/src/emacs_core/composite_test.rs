@@ -384,16 +384,61 @@ fn composition_get_gstring_returns_vector_shape() {
 }
 
 #[test]
-fn composition_get_gstring_preserves_raw_unibyte_character_codes() {
+fn composition_get_gstring_uses_gnu_subarray_bounds() {
+    crate::test_utils::init_test_tracing();
+    let result = builtin_composition_get_gstring(vec![
+        Value::fixnum(-2),
+        Value::fixnum(-1),
+        Value::NIL,
+        Value::string("abcd"),
+    ])
+    .unwrap();
+    let gs = result.as_vector_data().expect("gstring vector").clone();
+    let header = gs[0].as_vector_data().expect("gstring header").clone();
+    assert_eq!(
+        header,
+        vec![Value::symbol("utf-8-unix"), Value::fixnum('c' as i64)]
+    );
+}
+
+#[test]
+fn composition_get_gstring_nil_bounds_default_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = builtin_composition_get_gstring(vec![
+        Value::NIL,
+        Value::fixnum(2),
+        Value::NIL,
+        Value::string("abcd"),
+    ])
+    .unwrap();
+    let gs = result.as_vector_data().expect("gstring vector").clone();
+    let header = gs[0].as_vector_data().expect("gstring header").clone();
+    assert_eq!(
+        header,
+        vec![
+            Value::symbol("utf-8-unix"),
+            Value::fixnum('a' as i64),
+            Value::fixnum('b' as i64),
+        ]
+    );
+}
+
+#[test]
+fn composition_get_gstring_rejects_non_ascii_unibyte_like_gnu() {
     crate::test_utils::init_test_tracing();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     let result =
-        builtin_composition_get_gstring(vec![Value::fixnum(0), Value::fixnum(1), Value::NIL, raw])
-            .unwrap();
-    let gs = result.as_vector_data().expect("gstring vector").clone();
-    let glyph = gs[2].as_vector_data().expect("glyph entry").clone();
-    assert_eq!(glyph[2], Value::fixnum(0xFF));
-    assert_eq!(glyph[3], Value::fixnum(0xFF));
+        builtin_composition_get_gstring(vec![Value::fixnum(0), Value::fixnum(1), Value::NIL, raw]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|value| value.as_utf8_str()),
+                Some("Attempt to shape unibyte text")
+            );
+        }
+        other => panic!("expected unibyte shaping error, got {other:?}"),
+    }
 }
 
 #[test]

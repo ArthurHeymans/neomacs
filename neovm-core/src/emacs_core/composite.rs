@@ -254,33 +254,24 @@ pub(crate) fn builtin_find_composition_internal(args: Vec<Value>) -> EvalResult 
 /// Stub: return nil (let the display engine handle shaping).
 pub(crate) fn builtin_composition_get_gstring(args: Vec<Value>) -> EvalResult {
     expect_args("composition-get-gstring", &args, 4)?;
-    expect_integerp(&args[0])?;
-    expect_integerp(&args[1])?;
     if !args[3].is_string() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), args[3]],
         ));
     }
-    let from = match args[0].kind() {
-        ValueKind::Fixnum(n) => n,
-        _ => unreachable!("validated by expect_integerp"),
-    };
-    let to = match args[1].kind() {
-        ValueKind::Fixnum(n) => n,
-        _ => unreachable!("validated by expect_integerp"),
-    };
     let text = expect_string_value(&args[3])?;
-    let codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
-    let len = codes.len() as i64;
-
-    if from > to || from > len || to > len {
+    if !text.is_multibyte() && text.as_bytes().iter().any(|byte| *byte >= 0x80) {
         return Err(signal(
-            "args-out-of-range",
-            vec![args[3], Value::fixnum(from), Value::fixnum(to)],
+            "error",
+            vec![Value::string("Attempt to shape unibyte text")],
         ));
     }
-    if from < 0 || from == to {
+    let codes = crate::emacs_core::builtins::lisp_string_char_codes(text);
+    let len = codes.len() as i64;
+    let (from, to) = validate_subarray_indices(args[3], args[0], args[1], len)?;
+
+    if from == to {
         return Err(signal(
             "error",
             vec![Value::string("Attempt to shape zero-length text")],
@@ -289,13 +280,6 @@ pub(crate) fn builtin_composition_get_gstring(args: Vec<Value>) -> EvalResult {
 
     let from_usize = from as usize;
     let to_usize = to as usize;
-    if from_usize >= codes.len() || to_usize > codes.len() || from_usize >= to_usize {
-        return Err(signal(
-            "args-out-of-range",
-            vec![args[3], Value::fixnum(from), Value::fixnum(to)],
-        ));
-    }
-
     let segment = &codes[from_usize..to_usize];
     let mut encoded = vec![Value::symbol("utf-8-unix")];
     encoded.extend(segment.iter().map(|code| Value::fixnum(*code as i64)));
