@@ -409,7 +409,13 @@ impl WgpuGlyphAtlas {
                         continue;
                     }
 
-                    let bearing_x = image.placement.left as f32;
+                    // Position the bitmap at the glyph's PEN position within the
+                    // run (physical_glyph.x) plus its bitmap left-bearing. Using
+                    // only the bearing stacks every glyph of a multi-glyph
+                    // composite at the origin, collapsing a shaped Arabic/Indic
+                    // run (or base + combining marks) into ~one glyph width.
+                    // Single glyphs have pen x == 0, so they are unaffected.
+                    let bearing_x = physical_glyph.x as f32 + image.placement.left as f32;
                     let bearing_y = image.placement.top as f32;
 
                     let font_family_str = face.map(|f| f.font_family.as_str()).unwrap_or("(none)");
