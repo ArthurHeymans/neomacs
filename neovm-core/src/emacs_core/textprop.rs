@@ -83,11 +83,6 @@ fn string_char_len(len: usize) -> CharLen {
     CharLen::new(len)
 }
 
-#[inline]
-fn lisp_char_pos(pos: i64) -> LispCharPos1 {
-    LispCharPos1::new(pos)
-}
-
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
@@ -403,12 +398,17 @@ fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: LispCharPos1) -> 
     buffer_char_to_emacs_byte_pos(buf, pos.to_char_pos())
 }
 
+fn validated_lisp_char_pos(pos: i64) -> LispCharPos1 {
+    debug_assert!(pos >= 1);
+    LispCharPos1::from_one_based_usize(usize::try_from(pos).expect("Lisp position fits usize"))
+}
+
 fn elisp_pos_to_byte_clipped_full(
     buf: &crate::buffer::buffer::Buffer,
     pos: LispCharPos1,
 ) -> EmacsBytePos {
     let max = buf.z_lisp_char_pos().as_i64();
-    let clipped = LispCharPos1::new(pos.as_i64().clamp(1, max));
+    let clipped = validated_lisp_char_pos(pos.as_i64().clamp(1, max));
     elisp_pos_to_byte(buf, clipped)
 }
 
@@ -424,8 +424,8 @@ fn elisp_range_to_byte_clipped_full(
     let clipped_beg = beg.clamp(1, max);
     let clipped_end = end.clamp(clipped_beg, max);
     EmacsByteRange::new(
-        elisp_pos_to_byte(buf, LispCharPos1::new(clipped_beg)),
-        elisp_pos_to_byte(buf, LispCharPos1::new(clipped_end)),
+        elisp_pos_to_byte(buf, validated_lisp_char_pos(clipped_beg)),
+        elisp_pos_to_byte(buf, validated_lisp_char_pos(clipped_end)),
     )
 }
 
@@ -514,7 +514,7 @@ pub(crate) fn validate_buffer_point_emacs_byte_pos_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point(pos));
     }
-    Ok(elisp_pos_to_byte(buf, LispCharPos1::new(pos)))
+    Ok(elisp_pos_to_byte(buf, validated_lisp_char_pos(pos)))
 }
 
 fn validate_buffer_property_point_emacs_byte_pos_raw(
@@ -527,7 +527,7 @@ fn validate_buffer_property_point_emacs_byte_pos_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point_pair(pos0));
     }
-    Ok(elisp_pos_to_byte(buf, LispCharPos1::new(pos)))
+    Ok(elisp_pos_to_byte(buf, validated_lisp_char_pos(pos)))
 }
 
 fn validate_buffer_property_range(
@@ -557,8 +557,8 @@ fn validate_buffer_property_emacs_byte_range(
         return Err(args_out_of_range_range(beg0, end0));
     }
     Ok(Some(EmacsByteRange::new(
-        elisp_pos_to_byte(buf, LispCharPos1::new(start)),
-        elisp_pos_to_byte(buf, LispCharPos1::new(finish)),
+        elisp_pos_to_byte(buf, validated_lisp_char_pos(start)),
+        elisp_pos_to_byte(buf, validated_lisp_char_pos(finish)),
     )))
 }
 
