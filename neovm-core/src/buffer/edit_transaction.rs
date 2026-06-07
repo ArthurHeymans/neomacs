@@ -542,6 +542,11 @@ pub(in crate::buffer) enum SharedTextEditMetadata {
         edit: MeasuredSameLenEdit,
         preserve_modified_state: bool,
     },
+    Transposition {
+        edit: MeasuredSameLenEdit,
+        transposition: TextTransposition,
+        preserve_modified_state: bool,
+    },
 }
 
 /// Backend-neutral plan for GNU `subst-char-in-region`.

@@ -657,6 +657,9 @@ Completed so far:
 - Collapsed shared-buffer edit metadata propagation onto a single typed edit
   enum for insert/delete/replace/same-length edits, reducing manager-level
   dispatch duplication while preserving the existing GNU-shaped edit ordering.
+- Routed shared transposition propagation through that same typed edit metadata,
+  including sibling point remapping, so this same-length edit case no longer
+  leaves transaction-specific state adjustment inline in the manager loop.
 
 Next work:
 

@@ -797,6 +797,17 @@ impl BufferManager {
                 edit,
                 preserve_modified_state,
             } => buf.apply_same_len_edit_side_effects(edit, preserve_modified_state),
+            SharedTextEditMetadata::Transposition {
+                edit,
+                transposition,
+                preserve_modified_state,
+            } => {
+                if update_state_fields {
+                    let point = transposition.transpose_anchor(buf.point_anchor());
+                    buf.set_point_anchor_unchecked(point);
+                }
+                buf.apply_same_len_edit_side_effects(edit, preserve_modified_state);
+            }
         }
     }
 
@@ -1101,14 +1112,11 @@ impl BufferManager {
         let edit = MeasuredSameLenEdit::covering(transposition.span_edit_range());
 
         self.apply_shared_text_edit_to_siblings(scope, |sibling, update_state_fields| {
-            if update_state_fields {
-                let point = transposition.transpose_anchor(sibling.point_anchor());
-                sibling.set_point_anchor_unchecked(point);
-            }
             Self::apply_shared_text_edit_metadata(
                 sibling,
-                SharedTextEditMetadata::SameLen {
+                SharedTextEditMetadata::Transposition {
                     edit,
+                    transposition,
                     preserve_modified_state: false,
                 },
                 update_state_fields,
