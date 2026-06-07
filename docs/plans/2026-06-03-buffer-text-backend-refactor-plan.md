@@ -250,6 +250,9 @@ Progress:
   tree-sitter, XML/zlib helpers, display queries, and navigation helpers must
   explicitly cross the Lisp-position boundary before converting to
   `EmacsBytePos`.
+- Raw `CharRange::from_usize` and `EmacsByteRange::from_usize` constructors
+  are test-only, so production range construction now has to name typed
+  endpoints or lengths at the semantic boundary.
 - Text-property and overlay byte conversion helpers now accept typed
   `LispCharPos1` internally after GNU-style range validation, while preserving
   original Lisp argument values in error payloads.

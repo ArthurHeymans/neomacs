@@ -23,7 +23,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange, LispCharPos1};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
@@ -3065,9 +3065,9 @@ impl LayoutEngine {
                     let accessible_end_byte = b.accessible_emacs_byte_region().end();
                     let overlays = b.overlays();
                     let overlay_lines: usize = overlays
-                        .overlays_in_emacs_byte_range(EmacsByteRange::from_usize(
-                            0,
-                            b.total_emacs_byte_len().get(),
+                        .overlays_in_emacs_byte_range(EmacsByteRange::new(
+                            EmacsBytePos::ZERO,
+                            EmacsBytePos::ZERO.add_len(b.total_emacs_byte_len()),
                         ))
                         .iter()
                         .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {

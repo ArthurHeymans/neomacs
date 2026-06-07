@@ -398,6 +398,7 @@ impl CharRange {
         }
     }
 
+    #[cfg(test)]
     pub const fn from_usize(start: usize, end: usize) -> Self {
         Self {
             start: CharPos0::new(start),
@@ -527,6 +528,7 @@ impl EmacsByteRange {
         }
     }
 
+    #[cfg(test)]
     pub const fn from_usize(start: usize, end: usize) -> Self {
         Self {
             start: EmacsBytePos::new(start),
