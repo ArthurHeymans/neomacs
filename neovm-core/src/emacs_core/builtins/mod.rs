@@ -4938,13 +4938,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "define-fringe-bitmap",
-        |_ctx, args| builtin_define_fringe_bitmap(args),
+        |ctx, args| builtin_define_fringe_bitmap(ctx, args),
         2,
         Some(5),
     );
     ctx.defsubr(
         "destroy-fringe-bitmap",
-        |_ctx, args| builtin_destroy_fringe_bitmap(args),
+        |ctx, args| builtin_destroy_fringe_bitmap(ctx, args),
         1,
         Some(1),
     );
@@ -5944,7 +5944,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-fringe-bitmap-face",
-        |_ctx, args| builtin_set_fringe_bitmap_face(args),
+        |ctx, args| builtin_set_fringe_bitmap_face(ctx, args),
         1,
         Some(2),
     );

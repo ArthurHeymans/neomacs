@@ -1058,7 +1058,10 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
     }
 }
 
-pub(crate) fn builtin_define_fringe_bitmap(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_define_fringe_bitmap(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("define-fringe-bitmap", &args, 2, 5)?;
     if args[0].as_symbol_name().is_none() {
         return Err(signal(
@@ -1089,11 +1092,23 @@ pub(crate) fn builtin_define_fringe_bitmap(args: Vec<Value>) -> EvalResult {
     // GNU fringe.c: ALIGN can be a symbol (top, bottom, center) or a
     // list of alignment flags like (top repeat). Accept any non-nil value.
     // The actual fringe rendering is a stub; just validate minimally.
+    ctx.note_macro_expansion_mutation();
+    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
+    super::symbols::put_in_obarray_values(
+        ctx.obarray_mut(),
+        args[0],
+        Value::symbol("fringe"),
+        Value::fixnum(1),
+        symbols_with_pos_enabled,
+    )?;
 
     Ok(args[0])
 }
 
-pub(crate) fn builtin_destroy_fringe_bitmap(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_destroy_fringe_bitmap(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("destroy-fringe-bitmap", &args, 1)?;
     if args[0].as_symbol_name().is_none() {
         return Err(signal(
@@ -1101,6 +1116,15 @@ pub(crate) fn builtin_destroy_fringe_bitmap(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
+    ctx.note_macro_expansion_mutation();
+    let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
+    super::symbols::put_in_obarray_values(
+        ctx.obarray_mut(),
+        args[0],
+        Value::symbol("fringe"),
+        Value::NIL,
+        symbols_with_pos_enabled,
+    )?;
     Ok(Value::NIL)
 }
 
