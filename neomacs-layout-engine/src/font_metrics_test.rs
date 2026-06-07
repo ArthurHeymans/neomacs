@@ -1299,6 +1299,8 @@ fn shape_run_returns_per_glyph_clusters_for_ascii() {
     // Positive advances; the pen advances left to right for LTR text.
     assert!(glyphs.iter().all(|g| g.x_advance > 0.0));
     assert!(glyphs[2].x >= glyphs[0].x);
+    // LTR text: every glyph has an even bidi level (0 here).
+    assert!(glyphs.iter().all(|g| g.level % 2 == 0));
 }
 
 #[test]

@@ -66,6 +66,11 @@ pub struct ShapedGlyph {
     pub cluster_start: usize,
     /// End byte index (exclusive) of the source cluster in the shaped text.
     pub cluster_end: usize,
+    /// Unicode bidi embedding level: even = left-to-right, odd = right-to-left.
+    /// cosmic-text resolves the bidi algorithm and lays the run out visually, so
+    /// `x` is already the visual position; `level` lets the caller right-align
+    /// RTL paragraphs and reason about direction without re-running bidi.
+    pub level: u8,
 }
 
 /// Cache key for font metrics lookups.
@@ -307,6 +312,7 @@ impl FontMetricsService {
                     x_advance: glyph.w,
                     cluster_start: glyph.start,
                     cluster_end: glyph.end,
+                    level: glyph.level.number(),
                 });
             }
         }
