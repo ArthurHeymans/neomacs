@@ -894,19 +894,27 @@ impl Window {
     }
 
     /// Stored Lisp-visible `window-end` for this leaf window.
-    pub fn window_end_charpos(&self, buffer_z: usize) -> Option<usize> {
+    pub fn window_end_charpos(&self, buffer_z: LispCharPos1) -> Option<LispCharPos1> {
         match self {
-            Window::Leaf { window_end_pos, .. } => Some(buffer_z.saturating_sub(*window_end_pos)),
+            Window::Leaf { window_end_pos, .. } => {
+                let buffer_z = usize::try_from(buffer_z.as_i64().max(1))
+                    .expect("Lisp character position fits usize");
+                Some(LispCharPos1::from_one_based_usize(
+                    buffer_z.saturating_sub(*window_end_pos),
+                ))
+            }
             Window::Internal { .. } => None,
         }
     }
 
     /// Stored byte-position `window-end` for this leaf window.
-    pub fn window_end_bytepos(&self, buffer_z_byte: usize) -> Option<usize> {
+    pub fn window_end_bytepos(&self, buffer_z_byte: EmacsBytePos) -> Option<EmacsBytePos> {
         match self {
             Window::Leaf {
                 window_end_bytepos, ..
-            } => Some(buffer_z_byte.saturating_sub(*window_end_bytepos)),
+            } => Some(EmacsBytePos::new(
+                buffer_z_byte.get().saturating_sub(*window_end_bytepos),
+            )),
             Window::Internal { .. } => None,
         }
     }
