@@ -8,6 +8,7 @@
 
 pub mod bidi;
 pub mod bidi_layout;
+pub(crate) mod coords;
 pub mod display_backend;
 pub mod display_iterator;
 pub mod display_pixel_calc;

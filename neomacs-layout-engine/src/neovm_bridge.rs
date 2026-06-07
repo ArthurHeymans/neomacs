@@ -22,6 +22,10 @@ use neovm_core::window::{
 };
 
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
+use crate::coords::{
+    clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
+    lisp_charpos_to_layout_char_pos,
+};
 use crate::fontconfig::face_height_to_pixels;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
@@ -1557,27 +1561,6 @@ impl InvisibleStatus {
         hidden: true,
         ellipsis: true,
     };
-}
-
-fn layout_char_pos_from_i64(charpos: i64) -> Option<CharPos0> {
-    usize::try_from(charpos).ok().map(CharPos0::new)
-}
-
-fn lisp_charpos_to_layout_char_pos(charpos: i64) -> Option<CharPos0> {
-    usize::try_from(charpos.checked_sub(1)?)
-        .ok()
-        .map(CharPos0::new)
-}
-
-#[inline]
-fn clamped_lisp_charpos_to_layout_i64(charpos: i64) -> i64 {
-    lisp_charpos_to_layout_char_pos(charpos)
-        .map(|pos| pos.get() as i64)
-        .unwrap_or(0)
-}
-
-fn layout_emacs_byte_pos_from_i64(bytepos: i64) -> Option<EmacsBytePos> {
-    usize::try_from(bytepos).ok().map(EmacsBytePos::new)
 }
 
 fn layout_total_emacs_byte_end_pos<B: LayoutBufferView>(buffer: &B) -> EmacsBytePos {
