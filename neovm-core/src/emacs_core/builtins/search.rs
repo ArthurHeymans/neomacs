@@ -1278,8 +1278,8 @@ pub(crate) fn builtin_match_string(
         return Ok(Value::NIL);
     }
 
-    let start_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(start as i64));
-    let end_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(end as i64));
+    let start_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(start));
+    let end_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(end));
     if end_byte.get() <= buf.total_emacs_byte_len().get() && start_byte <= end_byte {
         Ok(buf.buffer_substring_value_range(EmacsByteRange::new(start_byte, end_byte)))
     } else {
