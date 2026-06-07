@@ -4434,6 +4434,16 @@ fn dump_buffer_byte_to_char_pos(text: &BufferText, byte_pos: EmacsBytePos) -> Ch
     text.emacs_byte_pos_to_char_pos(byte_pos)
 }
 
+#[inline]
+fn dump_emacs_byte_pos(byte_pos: usize) -> EmacsBytePos {
+    EmacsBytePos::new(byte_pos)
+}
+
+#[inline]
+fn dump_text_position_anchor(char_pos: usize, byte_pos: usize) -> TextPositionAnchor {
+    TextPositionAnchor::new(CharPos0::new(char_pos), dump_emacs_byte_pos(byte_pos))
+}
+
 fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
     let text = BufferText::from_snapshot_with_backend_kind(
         BufferTextBytesSnapshot::new(db.text.text.clone(), db.multibyte),
@@ -4442,12 +4452,12 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
     let total_chars = text.char_count().get();
     let begv_char = db
         .begv_char
-        .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.begv)).get());
+        .unwrap_or_else(|| dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(db.begv)).get());
     let zv_char = db.zv_char.unwrap_or_else(|| {
         if db.zv == text.emacs_byte_len().get() {
             total_chars
         } else {
-            dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.zv)).get()
+            dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(db.zv)).get()
         }
     });
     let pt_char = db.pt_char.unwrap_or_else(|| {
@@ -4456,7 +4466,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         } else if db.pt == db.zv {
             zv_char
         } else {
-            dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(db.pt)).get()
+            dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(db.pt)).get()
         }
     });
     let mark_char = match db.mark {
@@ -4466,7 +4476,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             } else if mark == db.zv {
                 zv_char
             } else {
-                dump_buffer_byte_to_char_pos(&text, EmacsBytePos::new(mark)).get()
+                dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(mark)).get()
             }
         })),
         None => None,
@@ -4700,14 +4710,11 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         last_name,
         base_buffer: db.base_buffer.map(|id| BufferId(id.0)),
         text,
-        point: TextPositionAnchor::new(CharPos0::new(pt_char), EmacsBytePos::new(db.pt)),
+        point: dump_text_position_anchor(pt_char, db.pt),
         mark_marker_id: None,
         mark_marker_ptr: std::ptr::null_mut(),
-        accessible_start: TextPositionAnchor::new(
-            CharPos0::new(begv_char),
-            EmacsBytePos::new(db.begv),
-        ),
-        accessible_end: TextPositionAnchor::new(CharPos0::new(zv_char), EmacsBytePos::new(db.zv)),
+        accessible_start: dump_text_position_anchor(begv_char, db.begv),
+        accessible_end: dump_text_position_anchor(zv_char, db.zv),
         autosave_modified_tick,
         modtime_sec: db.modtime_sec,
         modtime_nsec: db.modtime_nsec,
