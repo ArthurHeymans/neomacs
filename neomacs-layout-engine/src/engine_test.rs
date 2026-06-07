@@ -1516,6 +1516,30 @@ fn implemented_text_backends_match_layout_frame_bidi_row_output() {
 }
 
 #[test]
+fn arabic_run_composes_into_one_glyph_in_layout() {
+    // ا ل م (U+0627 U+0644 U+0645) — an Arabic run. The layout walk must grow
+    // it into ONE composed glyph so the renderer joins it, rather than three
+    // isolated Char cells. (Structural: holds regardless of font availability,
+    // since grouping is driven by complex_script, not by shaping success.)
+    let trace = backend_layout_trace_with_buffer_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-backend-arabic",
+        "\u{0627}\u{0644}\u{0645}\n",
+        360,
+        140,
+        |_buffer, _buf_id, _text| {},
+    );
+    let composites = trace_composite_texts(&trace);
+    assert!(
+        composites
+            .iter()
+            .any(|t| t.contains('\u{0627}') && t.contains('\u{0645}')),
+        "Arabic run should compose into one Composite glyph spanning the run, \
+         composites={composites:?}"
+    );
+}
+
+#[test]
 fn implemented_text_backends_match_selective_display_output() {
     let baseline = selective_display_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let rows = trace_text_rows(&baseline);
