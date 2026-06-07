@@ -4376,10 +4376,12 @@ pub(crate) fn builtin_set_window_buffer(
                         && window_displays_buffer(frames, last_selected_window, old_buffer_id)
                 });
             if !preserve_old_buffer_point {
-                let _ = buffers.goto_buffer_emacs_byte_pos(
-                    old_buffer_id,
-                    EmacsBytePos::new(old_point.saturating_sub(1)),
-                );
+                let old_point_byte_pos = buffers.get(old_buffer_id).map(|buffer| {
+                    buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(old_point.max(1) as i64))
+                });
+                if let Some(old_point_byte_pos) = old_point_byte_pos {
+                    let _ = buffers.goto_buffer_emacs_byte_pos(old_buffer_id, old_point_byte_pos);
+                }
             }
             if old_buffer_id != buf_id
                 && let Some(buffer) = buffers.get_mut(old_buffer_id)
