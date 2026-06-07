@@ -771,6 +771,10 @@ Completed so far:
   transaction path instead of spelling replacement as direct point movement,
   delete, then insert; backend parity tests now exercise the same replace
   machinery used by runtime callers.
+- Added `BufferText` backend matrix coverage for typed newline scanning after
+  edits, comparing `next_newline_emacs_byte`, `prev_newline_emacs_byte`, and
+  `count_newlines_emacs_byte` against the gap backend for every implemented
+  storage backend.
 
 Next work:
 

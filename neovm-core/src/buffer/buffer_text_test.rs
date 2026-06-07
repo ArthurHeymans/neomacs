@@ -325,6 +325,65 @@ fn edit_measurement_boundary_is_backend_neutral() {
 }
 
 #[test]
+fn newline_scans_match_gap_backend_after_edits() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::implemented_variants() {
+        let mut text =
+            BufferText::from_str_with_backend_kind("α\nβγ\n🙂\nend", implemented_kind(kind));
+        let mut gap = BufferText::from_str_with_backend_kind(
+            "α\nβγ\n🙂\nend",
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
+        );
+
+        let insert_pos = emacs_byte_pos("α\nβ".len());
+        insert_storage_string(&mut text, insert_pos, "x\ny");
+        insert_storage_string(&mut gap, insert_pos, "x\ny");
+
+        let delete_start = emacs_byte_pos("α\nβx\n".len());
+        let delete_end = emacs_byte_pos("α\nβx\nyγ".len());
+        delete_emacs_byte_range(&mut text, EmacsByteRange::new(delete_start, delete_end));
+        delete_emacs_byte_range(&mut gap, EmacsByteRange::new(delete_start, delete_end));
+
+        assert_eq!(text.to_string(), gap.to_string(), "{kind:?}");
+        let len = text.emacs_byte_len().get();
+        let ranges = [
+            (0, len),
+            (0, "α\n".len()),
+            (1, len.saturating_sub(1)),
+            ("α\n".len(), len),
+            ("α\nβx\n".len(), len),
+            (len, len),
+        ];
+
+        for (from, limit) in ranges {
+            let from = EmacsBytePos::new(from);
+            let limit = EmacsBytePos::new(limit);
+            assert_eq!(
+                text.next_newline_emacs_byte(from, limit),
+                gap.next_newline_emacs_byte(from, limit),
+                "{kind:?} next newline diverged for {}..{}",
+                from.get(),
+                limit.get()
+            );
+            assert_eq!(
+                text.prev_newline_emacs_byte(limit, from),
+                gap.prev_newline_emacs_byte(limit, from),
+                "{kind:?} previous newline diverged for {}..{}",
+                from.get(),
+                limit.get()
+            );
+            assert_eq!(
+                text.count_newlines_emacs_byte(from, limit),
+                gap.count_newlines_emacs_byte(from, limit),
+                "{kind:?} newline count diverged for {}..{}",
+                from.get(),
+                limit.get()
+            );
+        }
+    }
+}
+
+#[test]
 fn non_gap_position_conversion_forward_scan_crosses_backend_chunks() {
     crate::test_utils::init_test_tracing();
     for kind in BufferTextBackendKind::non_gap_implemented_variants() {
