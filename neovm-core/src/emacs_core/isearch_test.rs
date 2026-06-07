@@ -1121,6 +1121,46 @@ fn replace_string_and_regexp_preserve_unibyte_raw_bytes() {
 }
 
 #[test]
+fn replace_string_accepts_marker_bounds_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert("foo foo");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let start = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buffer_id,
+        crate::buffer::LispCharPos1::new(1),
+        false,
+    );
+    let end = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buffer_id,
+        crate::buffer::LispCharPos1::new(4),
+        false,
+    );
+
+    builtin_replace_string(
+        &mut eval,
+        vec![
+            Value::string("foo"),
+            Value::string("bar"),
+            Value::NIL,
+            start,
+            end,
+        ],
+    )
+    .unwrap();
+
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    let text = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
+    assert_eq!(runtime_text(&text), "bar foo");
+}
+
+#[test]
 fn keep_and_flush_lines_preserve_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

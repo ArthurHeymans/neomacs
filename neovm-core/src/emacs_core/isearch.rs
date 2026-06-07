@@ -108,10 +108,16 @@ fn expect_string(val: &Value) -> Result<String, Flow> {
     }
 }
 
-fn expect_integer_or_marker(val: &Value) -> Result<i64, Flow> {
+fn expect_integer_or_marker(
+    buffers: &crate::buffer::BufferManager,
+    val: &Value,
+) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _ if super::marker::is_marker(val) => {
+            super::marker::marker_position_as_int_with_buffers(buffers, val)
+        }
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
@@ -133,16 +139,18 @@ fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, pos: LispCharPos1) -> EmacsByte
 }
 
 fn lisp_pos_value_to_byte(
+    buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     value: &Value,
 ) -> Result<EmacsBytePos, Flow> {
     Ok(lisp_pos_to_byte(
         buf,
-        LispCharPos1::new(expect_integer_or_marker(value)?),
+        LispCharPos1::new(expect_integer_or_marker(buffers, value)?),
     ))
 }
 
 fn replacement_region_bounds(
+    buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
     end_arg: Option<&Value>,
@@ -164,12 +172,12 @@ fn replacement_region_bounds(
     }
 
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buffers, buf, v)?,
         _ if backward => accessible.start(),
         _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buffers, buf, v)?,
         _ if backward => buf.point_emacs_byte_pos(),
         _ => accessible.end(),
     };
@@ -177,17 +185,18 @@ fn replacement_region_bounds(
 }
 
 fn line_operation_region_bounds(
+    buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
     end_arg: Option<&Value>,
 ) -> Result<EmacsByteRange, Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buffers, buf, v)?,
         _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buffers, buf, v)?,
         _ => accessible.end(),
     };
     Ok(EmacsByteRange::ordered(start, end))
@@ -1601,6 +1610,7 @@ fn replace_string_eval_impl(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = replacement_region_bounds(
+            &eval.buffers,
             buf,
             args.get(3),
             args.get(4),
@@ -1881,6 +1891,7 @@ fn replace_regexp_eval_impl(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = replacement_region_bounds(
+            &eval.buffers,
             buf,
             args.get(3),
             args.get(4),
@@ -2079,7 +2090,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
         let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
         (accessible.start(), range, source_text, source)
@@ -2170,7 +2181,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
         let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
         (accessible.start(), range, source_text, source)
@@ -2255,7 +2266,7 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         buffer_region_storage_string(buf, range)
     };
 
@@ -2283,7 +2294,7 @@ pub(crate) fn builtin_count_matches(
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let range = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         buffer_region_storage_string(buf, range)
     };
 
