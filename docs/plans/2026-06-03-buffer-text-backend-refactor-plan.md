@@ -256,6 +256,11 @@ Progress:
 - The unused `CharPos0::from_usize` alias was removed; production code now uses
   `CharPos0::new` as the single explicit constructor for internal 0-based
   character positions.
+- `TextInsertion` no longer exposes raw byte/character position accessors;
+  callers must use the typed `EmacsBytePos` and `CharPos0` accessors.
+- Shared `BufferText` aliases now have coverage for backend conversion,
+  semantic edits, and text-property visibility, while deep clones are checked
+  to remain independent.
 - Text-property and overlay byte conversion helpers now accept typed
   `LispCharPos1` internally after GNU-style range validation, while preserving
   original Lisp argument values in error payloads.

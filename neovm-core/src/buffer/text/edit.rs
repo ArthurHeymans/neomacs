@@ -217,14 +217,6 @@ impl TextInsertion {
     pub const fn extent(self) -> TextExtent {
         self.extent
     }
-
-    pub const fn byte_pos_usize(self) -> usize {
-        self.byte_pos.get()
-    }
-
-    pub const fn char_pos_usize(self) -> usize {
-        self.char_pos.get()
-    }
 }
 
 impl TextReplacement {
