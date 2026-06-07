@@ -714,6 +714,9 @@ Completed so far:
 - Added a typed shared-edit executor and `SharedTextEditOutcome`, so public
   manager edit entry points describe the current-buffer mutation result while
   `edit_transaction.rs` owns shared scope capture and sibling propagation.
+- Routed minibuffer prompt and initial text installation through the
+  `BufferManager` edit transaction path, keeping GNU minibuffer erase/insert
+  ordering while centralizing shared-buffer side effects.
 
 Next work:
 

@@ -4527,15 +4527,13 @@ fn vm_minibuffer_builtins_use_shared_runtime_state() {
                   (catch 'exit (abort-minibuffers))))"#,
             |eval| {
                 let minibuf_id = eval.buffers.create_buffer(" *Minibuf-1*");
-                {
-                    let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
-                    crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-                        buf,
-                        &crate::heap_types::LispString::from_utf8("Prompt: "),
-                        Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
-                        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
-                    );
-                }
+                crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+                    &mut eval.buffers,
+                    minibuf_id,
+                    &crate::heap_types::LispString::from_utf8("Prompt: "),
+                    Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
+                    crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+                );
                 eval.buffers.set_current(minibuf_id);
                 eval.minibuffers
                     .read_from_minibuffer(minibuf_id, "Prompt: ", Some("vm-mini"), None)

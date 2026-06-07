@@ -2824,17 +2824,15 @@ fn bootstrap_minibuffer_complete_and_exit_accepts_exact_must_match_input() {
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-exact*");
-    {
-        let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
-        crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-            buf,
-            &crate::heap_types::LispString::from_utf8("Insert buffer: "),
-            Some(&crate::heap_types::LispString::from_utf8(
-                "insert-buffer-source",
-            )),
-            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
-        );
-    }
+    crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+        &mut eval.buffers,
+        minibuf_id,
+        &crate::heap_types::LispString::from_utf8("Insert buffer: "),
+        Some(&crate::heap_types::LispString::from_utf8(
+            "insert-buffer-source",
+        )),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+    );
     eval.buffers.set_current(minibuf_id);
     eval.minibuffers
         .read_from_minibuffer(

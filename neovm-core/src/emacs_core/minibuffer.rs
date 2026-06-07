@@ -312,7 +312,8 @@ impl MinibufferState {
 }
 
 pub(crate) fn install_minibuffer_buffer_text(
-    buf: &mut crate::buffer::Buffer,
+    buffers: &mut BufferManager,
+    buffer_id: BufferId,
     prompt: &LispString,
     initial: Option<&LispString>,
     prompt_properties: Value,
@@ -320,17 +321,31 @@ pub(crate) fn install_minibuffer_buffer_text(
     // Match GNU `read_minibuf` / `erase-buffer`: clear the minibuffer through
     // the buffer edit pipeline so point, narrowing, and sibling state reset
     // together before we insert the new prompt and initial contents.
-    buf.widen();
-    let old_text_range = buf.full_emacs_byte_range();
+    let old_text_range = {
+        let buf = buffers.get_mut(buffer_id).expect("minibuffer buffer");
+        buf.widen();
+        buf.full_emacs_byte_range()
+    };
     if !old_text_range.is_empty() {
-        buf.delete_emacs_byte_range(old_text_range);
+        buffers
+            .delete_buffer_emacs_byte_range(buffer_id, old_text_range)
+            .expect("minibuffer buffer delete");
     }
-    buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(0))
+        .expect("minibuffer buffer goto");
 
-    buf.insert_lisp_string(prompt);
-    let prompt_end = buf.full_emacs_byte_range().end();
+    buffers
+        .insert_lisp_string_into_buffer(buffer_id, prompt)
+        .expect("minibuffer prompt insert");
+    let prompt_end = buffers
+        .get(buffer_id)
+        .expect("minibuffer buffer")
+        .full_emacs_byte_range()
+        .end();
     if prompt_end.get() > 0 {
         let prompt_range = EmacsByteRange::new(EmacsBytePos::new(0), prompt_end);
+        let buf = buffers.get_mut(buffer_id).expect("minibuffer buffer");
         buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
             Value::symbol("field"),
@@ -350,10 +365,17 @@ pub(crate) fn install_minibuffer_buffer_text(
     }
 
     if let Some(initial) = initial {
-        buf.insert_lisp_string(initial);
+        buffers
+            .insert_lisp_string_into_buffer(buffer_id, initial)
+            .expect("minibuffer initial input insert");
     }
 
-    let full_end = buf.full_emacs_byte_range().end();
+    let full_end = buffers
+        .get(buffer_id)
+        .expect("minibuffer buffer")
+        .full_emacs_byte_range()
+        .end();
+    let buf = buffers.get_mut(buffer_id).expect("minibuffer buffer");
     buf.widen();
     buf.goto_emacs_byte_pos(full_end);
     prompt_end

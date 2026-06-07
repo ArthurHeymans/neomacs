@@ -990,19 +990,17 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
 
     // Clear the minibuffer buffer and insert prompt + initial input
     let prompt_byte_pos;
-    {
-        let buf = buffers.get_mut(minibuf_id).unwrap();
-        let prompt_properties = obarray
-            .symbol_value("minibuffer-prompt-properties")
-            .copied()
-            .unwrap_or(Value::NIL);
-        prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
-            buf,
-            &prompt,
-            initial_input.as_ref(),
-            prompt_properties,
-        );
-    }
+    let prompt_properties = obarray
+        .symbol_value("minibuffer-prompt-properties")
+        .copied()
+        .unwrap_or(Value::NIL);
+    prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+        buffers,
+        minibuf_id,
+        &prompt,
+        initial_input.as_ref(),
+        prompt_properties,
+    );
 
     let active_window_state = activate_minibuffer_window_in_state(
         frames,
@@ -1539,20 +1537,18 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
     let prompt_byte_pos;
-    {
-        let buf = shared.buffers.get_mut(minibuf_id).unwrap();
-        let prompt_properties = shared
-            .obarray
-            .symbol_value("minibuffer-prompt-properties")
-            .copied()
-            .unwrap_or(Value::NIL);
-        prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
-            buf,
-            &prompt,
-            initial_input.as_ref(),
-            prompt_properties,
-        );
-    }
+    let prompt_properties = shared
+        .obarray
+        .symbol_value("minibuffer-prompt-properties")
+        .copied()
+        .unwrap_or(Value::NIL);
+    prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+        &mut shared.buffers,
+        minibuf_id,
+        &prompt,
+        initial_input.as_ref(),
+        prompt_properties,
+    );
 
     let active_window_state = activate_minibuffer_window_in_state(
         &mut shared.frames,

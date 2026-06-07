@@ -871,15 +871,13 @@ fn eval_minibuffer_runtime_state_tracks_active_prompt_and_contents() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-1*");
-    {
-        let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
-        crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-            buf,
-            &crate::heap_types::LispString::from_utf8("Prompt: "),
-            Some(&crate::heap_types::LispString::from_utf8("value")),
-            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
-        );
-    }
+    crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+        &mut eval.buffers,
+        minibuf_id,
+        &crate::heap_types::LispString::from_utf8("Prompt: "),
+        Some(&crate::heap_types::LispString::from_utf8("value")),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+    );
     eval.buffers.set_current(minibuf_id);
     eval.minibuffers
         .read_from_minibuffer(minibuf_id, "Prompt: ", Some("value"), None)
@@ -925,15 +923,13 @@ fn eval_minibuffer_runtime_state_preserves_raw_unibyte_prompt_and_contents() {
     let mut eval = crate::emacs_core::eval::Context::new();
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-raw*");
     let raw_prompt = crate::heap_types::LispString::from_unibyte(vec![0xFF, b':', b' ']);
-    {
-        let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
-        crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-            buf,
-            &raw_prompt,
-            Some(&crate::heap_types::LispString::from_utf8("value")),
-            crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
-        );
-    }
+    crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+        &mut eval.buffers,
+        minibuf_id,
+        &raw_prompt,
+        Some(&crate::heap_types::LispString::from_utf8("value")),
+        crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+    );
     eval.buffers.set_current(minibuf_id);
     eval.minibuffers
         .read_from_minibuffer_lisp(
@@ -956,13 +952,14 @@ fn install_minibuffer_buffer_text_applies_gnu_prompt_properties() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-props*");
-    let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
     let prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-        buf,
+        &mut eval.buffers,
+        minibuf_id,
         &crate::heap_types::LispString::from_utf8("Prompt: "),
         Some(&crate::heap_types::LispString::from_utf8("value")),
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
     );
+    let buf = eval.buffers.get(minibuf_id).expect("minibuffer buffer");
 
     assert_eq!(
         prompt_end,
@@ -1015,13 +1012,14 @@ fn builtin_minibuffer_prompt_end_falls_back_to_point_min_without_prompt_field() 
     let mut eval = crate::emacs_core::eval::Context::new();
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-1*");
     {
-        let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
         let prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-            buf,
+            &mut eval.buffers,
+            minibuf_id,
             &crate::heap_types::LispString::from_utf8("Prompt: "),
             Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
             crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
         );
+        let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
         let _ = buf.text_props_remove_property_in_emacs_byte_range(
             crate::buffer::EmacsByteRange::new(crate::buffer::EmacsBytePos::new(0), prompt_end),
             Value::symbol("field"),
@@ -1049,10 +1047,10 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let minibuf_id = eval.buffers.create_buffer(" *Minibuf-reinstall*");
-    let buf = eval.buffers.get_mut(minibuf_id).expect("minibuffer buffer");
 
     let first_prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-        buf,
+        &mut eval.buffers,
+        minibuf_id,
         &crate::heap_types::LispString::from_utf8("Prompt: "),
         Some(&crate::heap_types::LispString::from_utf8("stale")),
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
@@ -1061,10 +1059,18 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         first_prompt_end,
         crate::buffer::EmacsBytePos::new("Prompt: ".len())
     );
-    assert_eq!(buf.point_emacs_byte_pos().get(), "Prompt: stale".len());
+    assert_eq!(
+        eval.buffers
+            .get(minibuf_id)
+            .expect("minibuffer buffer")
+            .point_emacs_byte_pos()
+            .get(),
+        "Prompt: stale".len()
+    );
 
     let second_prompt_end = crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
-        buf,
+        &mut eval.buffers,
+        minibuf_id,
         &crate::heap_types::LispString::from_utf8("Switch to buffer: "),
         Some(&crate::heap_types::LispString::from_utf8("*Messages*")),
         crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
@@ -1074,6 +1080,7 @@ fn install_minibuffer_buffer_text_reuses_existing_buffer_via_buffer_edit_pipelin
         second_prompt_end,
         crate::buffer::EmacsBytePos::new("Switch to buffer: ".len())
     );
+    let buf = eval.buffers.get(minibuf_id).expect("minibuffer buffer");
     assert_eq!(buf.buffer_string(), "Switch to buffer: *Messages*");
     assert_eq!(
         buf.point_emacs_byte_pos().get(),
