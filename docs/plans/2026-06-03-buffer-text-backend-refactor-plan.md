@@ -664,6 +664,8 @@ Completed so far:
   `SharedTextEditMetadata` dispatch.  The metadata now states whether an edit
   can update point/narrowing fields, preserving same-length substitution's
   no-refresh behavior while routing all shared edits through one manager path.
+- Moved the shared edit sibling scope type next to the transaction metadata, so
+  `insdel.rs` no longer owns the shape of an indirect-buffer edit transaction.
 
 Next work:
 

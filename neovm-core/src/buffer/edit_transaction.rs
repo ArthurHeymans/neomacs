@@ -7,8 +7,9 @@
 
 use crate::buffer::text::TextExtentDelta;
 use crate::buffer::{
-    BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
-    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
+    BufferId, BufferText, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    TextEditRange, TextExtent, TextInsertion, TextPositionAnchor, TextReplacement,
+    TextTransposition,
 };
 use crate::heap_types::LispString;
 
@@ -557,6 +558,28 @@ impl SharedTextEditMetadata {
             }
             Self::SameLen { .. } => false,
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::buffer) struct SharedTextEditScope {
+    edited_id: BufferId,
+    buffer_ids: Vec<BufferId>,
+}
+
+impl SharedTextEditScope {
+    pub(in crate::buffer) fn new(edited_id: BufferId, buffer_ids: Vec<BufferId>) -> Self {
+        Self {
+            edited_id,
+            buffer_ids,
+        }
+    }
+
+    pub(in crate::buffer) fn siblings(&self) -> impl Iterator<Item = BufferId> + '_ {
+        self.buffer_ids
+            .iter()
+            .copied()
+            .filter(|buffer_id| *buffer_id != self.edited_id)
     }
 }
 

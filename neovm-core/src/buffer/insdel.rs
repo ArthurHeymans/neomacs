@@ -9,8 +9,9 @@ use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
     MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
-    TranspositionStoragePlan, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
-    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
+    SharedTextEditScope, TranspositionStoragePlan, char_pos_for_emacs_byte,
+    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
+    modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -18,21 +19,6 @@ use crate::buffer::{
     TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
-
-#[derive(Clone, Debug)]
-struct SharedTextEditScope {
-    edited_id: BufferId,
-    buffer_ids: Vec<BufferId>,
-}
-
-impl SharedTextEditScope {
-    fn siblings(&self) -> impl Iterator<Item = BufferId> + '_ {
-        self.buffer_ids
-            .iter()
-            .copied()
-            .filter(|buffer_id| *buffer_id != self.edited_id)
-    }
-}
 
 impl Buffer {
     fn edit_state(&self) -> BufferEditState {
@@ -765,10 +751,10 @@ impl BufferManager {
 
     fn shared_text_edit_scope(&self, edited_id: BufferId) -> Option<SharedTextEditScope> {
         let root_id = self.shared_text_root_id(edited_id)?;
-        Some(SharedTextEditScope {
+        Some(SharedTextEditScope::new(
             edited_id,
-            buffer_ids: self.buffers_sharing_root_ids(root_id),
-        })
+            self.buffers_sharing_root_ids(root_id),
+        ))
     }
 
     fn shared_sibling_updates_state_fields(&self, sibling_id: BufferId) -> bool {
