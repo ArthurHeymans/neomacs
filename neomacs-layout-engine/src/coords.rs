@@ -18,12 +18,10 @@ pub(crate) fn lisp_char_pos_to_layout_i64(pos: LispCharPos1) -> i64 {
         .unwrap_or(0)
 }
 
-pub(crate) fn layout_i64_char_pos_to_lisp_i64(charpos: i64) -> i64 {
-    charpos.saturating_add(1)
-}
-
 pub(crate) fn layout_i64_char_pos_to_lisp_char_pos(charpos: i64) -> LispCharPos1 {
-    LispCharPos1::new(layout_i64_char_pos_to_lisp_i64(charpos))
+    let one_based = usize::try_from(charpos.saturating_add(1).max(1))
+        .expect("layout character position fits usize");
+    LispCharPos1::from_one_based_usize(one_based)
 }
 
 #[inline]
@@ -35,4 +33,23 @@ pub(crate) fn clamped_lisp_charpos_to_layout_i64(charpos: i64) -> i64 {
 
 pub(crate) fn layout_emacs_byte_pos_from_i64(bytepos: i64) -> Option<EmacsBytePos> {
     usize::try_from(bytepos).ok().map(EmacsBytePos::new)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_char_position_boundary_is_lisp_one_based() {
+        assert_eq!(layout_i64_char_pos_to_lisp_char_pos(0), LispCharPos1::ONE);
+        assert_eq!(
+            layout_i64_char_pos_to_lisp_char_pos(4),
+            LispCharPos1::from_one_based_usize(5)
+        );
+    }
+
+    #[test]
+    fn layout_char_position_boundary_clamps_negative_positions() {
+        assert_eq!(layout_i64_char_pos_to_lisp_char_pos(-1), LispCharPos1::ONE);
+    }
 }
