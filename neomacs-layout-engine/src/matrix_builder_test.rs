@@ -553,7 +553,83 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
         .expect("cursor slot glyph must be present");
     match slot {
         neomacs_display_protocol::frame_glyphs::FrameGlyph::Char { char, .. } => {
-            assert_eq!(*char, 'l', "cursor must resolve to the buffer glyph at point");
+            assert_eq!(
+                *char, 'l',
+                "cursor must resolve to the buffer glyph at point"
+            );
+        }
+        other => panic!("expected a Char glyph at the cursor slot, got {other:?}"),
+    }
+}
+
+#[test]
+fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
+    // Regression for the Doom `gg`-to-title "two cursors on the heading" bug.
+    //
+    // An org heading/title collapses its leading markup (`#+title: ` or the
+    // leading stars) with the `invisible` property, so point at the line start
+    // (charpos 0) has NO Text glyph -- the first visible glyph ('D') carries a
+    // later charpos. The cursor must resolve to that first visible glyph (GNU's
+    // set_cursor_from_row places the cursor on the glyph that follows the hidden
+    // run), NOT fall back to the captured column 0, which would snap it onto the
+    // line-number gutter and draw a stray second cursor.
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    // Three-column line-number gutter (cols 0, 1, 2).
+    builder.push_left_margin_char('1', 1);
+    builder.push_left_margin_char(' ', 1);
+    builder.push_left_margin_stretch(1, 1);
+    // Visible title text "Doom" begins at charpos 9: charpos 0..=8 is the hidden
+    // "#+title: " prefix that produced no glyphs. 'D' is at materialize col 3.
+    builder.push_char('D', 0, 9);
+    builder.push_char('o', 0, 10);
+    builder.push_char('o', 0, 11);
+    builder.push_char('m', 0, 12);
+    builder.end_row();
+
+    // Point at the hidden line start (charpos 0); the capture passes column 0.
+    builder.set_phys_cursor(PhysCursor {
+        window_id: 1,
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: DisplaySlotId {
+            window_id: 1,
+            row: 0,
+            col: 0,
+        },
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+
+    // The first visible glyph 'D' sits at materialize col 3 (after the 3-col
+    // gutter); the cursor must land there, never on the gutter (col 0).
+    assert_eq!(
+        cursor.slot_id.col, 3,
+        "cursor on hidden-prefix point must resolve to the first visible glyph, not the gutter"
+    );
+
+    let buf = state.materialize();
+    let slot = buf
+        .slot_glyph(cursor.slot_id)
+        .expect("cursor slot glyph must be present");
+    match slot {
+        neomacs_display_protocol::frame_glyphs::FrameGlyph::Char { char, .. } => {
+            assert_eq!(
+                *char, 'D',
+                "cursor must resolve to the first visible title glyph"
+            );
         }
         other => panic!("expected a Char glyph at the cursor slot, got {other:?}"),
     }

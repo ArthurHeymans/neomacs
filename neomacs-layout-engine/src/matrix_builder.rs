@@ -906,6 +906,15 @@ impl GlyphMatrixBuilder {
                 }
                 col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
             }
+            // An exact charpos match places the cursor on point's own glyph.
+            // When point sits on invisible/hidden text (e.g. an org heading's
+            // collapsed `#+title:` or leading stars produce no glyph for that
+            // charpos), GNU's set_cursor_from_row instead places the cursor on
+            // the first visible glyph that follows point. Track the glyph with
+            // the smallest charpos greater than point as that fallback, so the
+            // cursor never reverts to the captured column (which would land on
+            // the line-number gutter and draw a stray second cursor).
+            let mut nearest_after: Option<(usize, u16)> = None;
             for glyph in &row.glyphs[GlyphArea::Text.index()] {
                 if glyph.padding {
                     continue;
@@ -914,7 +923,15 @@ impl GlyphMatrixBuilder {
                     visual_col = Some(col_acc);
                     break;
                 }
+                if glyph.charpos > cursor.charpos
+                    && nearest_after.is_none_or(|(charpos, _)| glyph.charpos < charpos)
+                {
+                    nearest_after = Some((glyph.charpos, col_acc));
+                }
                 col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+            }
+            if visual_col.is_none() {
+                visual_col = nearest_after.map(|(_, col)| col);
             }
 
             if let Some(col) = visual_col {
