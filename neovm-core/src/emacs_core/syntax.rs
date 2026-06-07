@@ -15,7 +15,8 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
 use crate::buffer::{
-    Buffer, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
 };
 
 #[inline]
@@ -26,6 +27,11 @@ fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: EmacsBytePos) -> usize {
 #[inline]
 fn buffer_char_to_emacs_byte_pos(buf: &Buffer, char_pos: CharPos0) -> EmacsBytePos {
     buf.char_pos_to_emacs_byte_pos_clamped(char_pos)
+}
+
+#[inline]
+fn offset_char_pos(base: CharPos0, idx: usize) -> CharPos0 {
+    base.add_len(CharLen::new(idx))
 }
 
 #[inline]
@@ -742,7 +748,7 @@ fn syntax_char_from_code(code: u32) -> char {
 /// difference.
 struct BufferChars<'a> {
     buf: &'a Buffer,
-    base_char: usize,
+    base_char: CharPos0,
     multibyte: bool,
     /// Byte cursor for sequential reads: `(char_idx, emacs_byte_pos of that
     /// char, byte width of that char)`.  Lets a forward scan advance
@@ -750,11 +756,11 @@ struct BufferChars<'a> {
     /// `FETCH_CHAR`, which walks byte positions directly -- instead of a
     /// char->byte conversion per char.  Random access falls back to the
     /// (cached) conversion, so this only ever helps.
-    cursor: Cell<Option<(usize, usize, usize)>>,
+    cursor: Cell<Option<(usize, EmacsBytePos, EmacsByteLen)>>,
 }
 
 impl<'a> BufferChars<'a> {
-    fn new(buf: &'a Buffer, base_char: usize) -> Self {
+    fn new(buf: &'a Buffer, base_char: CharPos0) -> Self {
         Self {
             buf,
             base_char,
@@ -771,13 +777,10 @@ impl<'a> BufferChars<'a> {
         // carry the byte position and bump it by the char width.
         let byte_pos = match self.cursor.get() {
             Some((c_idx, c_byte, _)) if idx == c_idx => c_byte,
-            Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte + c_width,
-            _ => buffer_char_to_emacs_byte_pos(self.buf, CharPos0::new(self.base_char + idx)).get(),
+            Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte.add_len(c_width),
+            _ => buffer_char_to_emacs_byte_pos(self.buf, self.base_char.add_len(CharLen::new(idx))),
         };
-        let code = self
-            .buf
-            .char_code_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
-            .unwrap_or(0);
+        let code = self.buf.char_code_at_emacs_byte_pos(byte_pos).unwrap_or(0);
         // A unibyte buffer stores one byte per char; a multibyte buffer stores
         // the char's internal multibyte length (raw bytes included -- see
         // `emacs_char::char_bytes`).
@@ -786,7 +789,8 @@ impl<'a> BufferChars<'a> {
         } else {
             1
         };
-        self.cursor.set(Some((idx, byte_pos, width)));
+        self.cursor
+            .set(Some((idx, byte_pos, EmacsByteLen::new(width))));
         syntax_char_from_code(code)
     }
 }
@@ -803,7 +807,7 @@ fn forward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start().get());
+    let chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -827,11 +831,8 @@ fn forward_word_with_options(
             idx += 1;
         }
         if idx == accessible_len {
-            let abs_char = accessible_char_start + idx;
-            return (
-                buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
-                false,
-            );
+            let abs_char = offset_char_pos(accessible_chars.start(), idx);
+            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
         }
         // Skip word characters
         while idx < accessible_len
@@ -852,11 +853,8 @@ fn forward_word_with_options(
     }
 
     // Convert char index back to byte position (absolute).
-    let abs_char = accessible_char_start + idx;
-    (
-        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
-        true,
-    )
+    let abs_char = offset_char_pos(accessible_chars.start(), idx);
+    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
 }
 
 /// Move backward over `count` words.  Returns the resulting Emacs byte position.
@@ -876,7 +874,7 @@ fn backward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start().get());
+    let chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -899,11 +897,8 @@ fn backward_word_with_options(
             idx -= 1;
         }
         if idx == 0 {
-            let abs_char = accessible_char_start + idx;
-            return (
-                buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
-                false,
-            );
+            let abs_char = offset_char_pos(accessible_chars.start(), idx);
+            return (buffer_char_to_emacs_byte_pos(buf, abs_char), false);
         }
         // Skip word characters backward
         while idx > 0
@@ -923,11 +918,8 @@ fn backward_word_with_options(
         }
     }
 
-    let abs_char = accessible_char_start + idx;
-    (
-        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)),
-        true,
-    )
+    let abs_char = offset_char_pos(accessible_chars.start(), idx);
+    (buffer_char_to_emacs_byte_pos(buf, abs_char), true)
 }
 
 /// Skip forward over characters whose syntax class matches any character in
@@ -953,7 +945,7 @@ fn skip_syntax_forward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start().get());
+    let chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -981,8 +973,8 @@ fn skip_syntax_forward_with_options(
         idx += 1;
     }
 
-    let abs_char = accessible_char_start + idx;
-    buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)).get()
+    let abs_char = offset_char_pos(accessible_chars.start(), idx);
+    buffer_char_to_emacs_byte_pos(buf, abs_char).get()
 }
 
 /// Skip backward over characters whose syntax class matches any character in
@@ -1007,7 +999,7 @@ fn skip_syntax_backward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start().get());
+    let chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -1034,8 +1026,8 @@ fn skip_syntax_backward_with_options(
         idx -= 1;
     }
 
-    let abs_char = accessible_char_start + idx;
-    buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char)).get()
+    let abs_char = offset_char_pos(accessible_chars.start(), idx);
+    buffer_char_to_emacs_byte_pos(buf, abs_char).get()
 }
 
 fn parse_skip_syntax_classes(syntax_chars: &str) -> (Vec<SyntaxClass>, bool) {
@@ -1076,7 +1068,7 @@ fn scan_sexps_with_options(
         return Ok(Some(from));
     }
 
-    let chars = BufferChars::new(buf, 0);
+    let chars = BufferChars::new(buf, CharPos0::ZERO);
     let accessible_chars = buf.accessible_char_region();
     let start_bound = accessible_chars.start().get();
     let stop_bound = accessible_chars.end().get();
@@ -1105,7 +1097,7 @@ fn scan_sexps_with_options(
     }
 
     Ok(Some(
-        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(idx)).get(),
+        buffer_char_to_emacs_byte_pos(buf, CharPos0::ZERO.add_len(CharLen::new(idx))).get(),
     ))
 }
 
@@ -1229,7 +1221,7 @@ fn scan_lists_with_options(
     initial_depth: i64,
     honor_properties: bool,
 ) -> Result<Option<usize>, ScanListError> {
-    let chars = BufferChars::new(buf, 0);
+    let chars = BufferChars::new(buf, CharPos0::ZERO);
     let mut idx = from;
     let accessible_chars = buf.accessible_char_region();
     let start = accessible_chars.start().get();
@@ -2075,6 +2067,7 @@ impl SyntaxPropRange {
     /// against a fresh interval lookup, the same safety net the byte<->char
     /// cache uses.
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
+        let char_pos = offset_char_pos(CharPos0::ZERO, pos);
         {
             let cache = self.cache.borrow();
             if let Some((start, end, ref value)) = *cache
@@ -2083,10 +2076,8 @@ impl SyntaxPropRange {
             {
                 #[cfg(debug_assertions)]
                 {
-                    let (fresh, _, _) = buf.get_property_run_at_char_pos(
-                        CharPos0::new(pos),
-                        Value::symbol("syntax-table"),
-                    );
+                    let (fresh, _, _) =
+                        buf.get_property_run_at_char_pos(char_pos, Value::symbol("syntax-table"));
                     debug_assert!(
                         *value == fresh,
                         "SyntaxPropRange stale syntax-table at char {pos} in [{start}, {end})"
@@ -2096,7 +2087,7 @@ impl SyntaxPropRange {
             }
         }
         let (value, start, end) =
-            buf.get_property_run_at_char_pos(CharPos0::new(pos), Value::symbol("syntax-table"));
+            buf.get_property_run_at_char_pos(char_pos, Value::symbol("syntax-table"));
         self.cache
             .replace(Some((start.get(), end.get(), value.clone())));
         value
@@ -2156,7 +2147,7 @@ fn effective_syntax_entry_for_abs_char(
     abs_char: usize,
     honor_properties: bool,
 ) -> SyntaxEntry {
-    let byte_pos = buffer_char_to_emacs_byte_pos(buf, CharPos0::new(abs_char));
+    let byte_pos = buffer_char_to_emacs_byte_pos(buf, offset_char_pos(CharPos0::ZERO, abs_char));
     effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties)
 }
 
@@ -4048,7 +4039,7 @@ fn parse_state_from_range_with_options(
         .to_char_pos()
         .get()
         .clamp(point_min, point_max);
-    let chars = BufferChars::new(buf, from_char);
+    let chars = BufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
     let to_idx = to_char - from_char;
     let prop_cache = SyntaxPropRange::new();
 
