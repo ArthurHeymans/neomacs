@@ -672,6 +672,9 @@ Completed so far:
 - Moved shared edit side-effect application from the manager loop onto
   `Buffer`, so `BufferManager` now selects affected siblings while `Buffer`
   owns the edit-policy-to-side-effect mapping.
+- Replaced nullable shared edit state policy plumbing with a typed
+  `SharedTextEditStatePolicy`, so same-length edits explicitly declare that
+  they do not participate in point/narrowing state updates.
 
 Next work:
 

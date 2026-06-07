@@ -9,9 +9,9 @@ use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
     MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
-    SharedTextEditMetadata, SharedTextEditScope, TranspositionStoragePlan, char_pos_for_emacs_byte,
-    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
-    modification_tick_delta,
+    SharedTextEditMetadata, SharedTextEditScope, SharedTextEditStatePolicy,
+    TranspositionStoragePlan, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
+    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -240,26 +240,20 @@ impl Buffer {
     fn apply_shared_text_edit_side_effects(
         &mut self,
         edit: SharedTextEditMetadata,
-        state_update: Option<SharedBufferStateUpdate>,
+        state_policy: SharedTextEditStatePolicy,
     ) {
         match edit {
             SharedTextEditMetadata::Insert(edit) => self.apply_byte_insert_side_effects(
                 edit,
-                InsertSideEffectPolicy::shared_buffer(
-                    state_update.expect("insert shared edit requires state update policy"),
-                ),
+                InsertSideEffectPolicy::shared_buffer(state_policy.expect_state_update("insert")),
             ),
             SharedTextEditMetadata::Delete(edit) => self.apply_byte_delete_side_effects(
                 edit,
-                DeleteSideEffectPolicy::shared_buffer(
-                    state_update.expect("delete shared edit requires state update policy"),
-                ),
+                DeleteSideEffectPolicy::shared_buffer(state_policy.expect_state_update("delete")),
             ),
             SharedTextEditMetadata::Replace(edit) => self.apply_replace_side_effects(
                 edit,
-                ReplaceSideEffectPolicy::shared_buffer(
-                    state_update.expect("replace shared edit requires state update policy"),
-                ),
+                ReplaceSideEffectPolicy::shared_buffer(state_policy.expect_state_update("replace")),
             ),
             SharedTextEditMetadata::SameLen {
                 edit,
@@ -270,8 +264,8 @@ impl Buffer {
                 transposition,
                 preserve_modified_state,
             } => {
-                if state_update
-                    .expect("transposition shared edit requires state update policy")
+                if state_policy
+                    .expect_state_update("transposition")
                     .update_state_fields()
                 {
                     let point = transposition.transpose_anchor(self.point_anchor());
@@ -817,13 +811,16 @@ impl BufferManager {
     ) -> Option<()> {
         let can_update_state_fields = edit.can_update_buffer_state_fields();
         for sibling_id in scope.siblings() {
-            let state_update =
-                can_update_state_fields.then(|| self.shared_sibling_state_update(sibling_id));
+            let state_policy = if can_update_state_fields {
+                SharedTextEditStatePolicy::StateFields(self.shared_sibling_state_update(sibling_id))
+            } else {
+                SharedTextEditStatePolicy::NoStateFields
+            };
             {
                 let sibling = self.buffers.get_mut(&sibling_id)?;
-                sibling.apply_shared_text_edit_side_effects(edit, state_update);
+                sibling.apply_shared_text_edit_side_effects(edit, state_policy);
             }
-            if let Some(state_update) = state_update {
+            if let Some(state_update) = state_policy.state_update() {
                 self.refresh_shared_buffer_state_cache(sibling_id, state_update)?;
             }
         }

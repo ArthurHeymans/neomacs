@@ -599,6 +599,33 @@ impl SharedBufferStateUpdate {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum SharedTextEditStatePolicy {
+    NoStateFields,
+    StateFields(SharedBufferStateUpdate),
+}
+
+impl SharedTextEditStatePolicy {
+    pub(in crate::buffer) const fn state_update(self) -> Option<SharedBufferStateUpdate> {
+        match self {
+            Self::NoStateFields => None,
+            Self::StateFields(state_update) => Some(state_update),
+        }
+    }
+
+    pub(in crate::buffer) fn expect_state_update(
+        self,
+        edit_kind: &'static str,
+    ) -> SharedBufferStateUpdate {
+        match self {
+            Self::StateFields(state_update) => state_update,
+            Self::NoStateFields => {
+                panic!("shared {edit_kind} edit requires state update policy")
+            }
+        }
+    }
+}
+
 /// Backend-neutral plan for GNU `subst-char-in-region`.
 ///
 /// GNU scans the buffer once to find each single-character replacement, records
