@@ -902,6 +902,46 @@ fn cluster_continuation_without_base_falls_back_to_standalone() {
 // --- complex-script run grouping (Phase 3) ---
 
 #[test]
+fn engine_style_loop_clusters_zwj_family_emoji() {
+    use neomacs_display_protocol::glyph_matrix::GlyphType;
+    // Replicate the engine's per-char decision loop (engine.rs ~5565): for each
+    // char, derive is_cluster_continuation from continues_cluster(ch, tail) and
+    // dispatch to push_cluster_continuation vs push_wide_char/push_char exactly
+    // as the buffer-text walk does. The family is 👨 ZWJ 👩 ZWJ 👧.
+    let mut builder = cluster_builder();
+    let seq = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+    for (i, ch) in seq.chars().enumerate() {
+        let tail = builder.last_text_cluster_tail();
+        let is_cont = crate::composition::continues_cluster(ch, tail);
+        if is_cont {
+            builder.push_cluster_continuation(ch, 0, i);
+        } else if crate::composition::base_width_cols(ch) == 2 {
+            builder.push_wide_char(ch, 0, i);
+        } else {
+            builder.push_char(ch, 0, i);
+        }
+    }
+    let area = finish_text_area(builder);
+    let composites: Vec<&str> = area
+        .iter()
+        .filter_map(|g| match &g.glyph_type {
+            GlyphType::Composite { text } => Some(text.as_ref()),
+            _ => None,
+        })
+        .collect();
+    // The whole sequence must collapse into ONE composed cell so the renderer
+    // shapes it as a unit (HarfBuzz forms the family ligature).
+    assert_eq!(
+        composites,
+        vec![seq],
+        "ZWJ family did not cluster; row = {:?}",
+        area.iter()
+            .map(|g| (g.glyph_type.clone(), g.padding))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn complex_run_grows_into_one_composite_with_per_char_padding() {
     let mut builder = cluster_builder();
     // Arabic run: ا (U+0627) ل (U+0644) م (U+0645) => "الم".

@@ -5427,9 +5427,27 @@ impl LayoutEngine {
                     _ => {} // mode 0 or unknown: fall through to normal rendering
                 }
             }
+            // Grapheme-cluster continuation is decided BEFORE glyphless
+            // handling: a zero-width joiner / non-joiner / variation selector
+            // that continues an emoji composition (the ZWJs in 👨‍👩‍👧, VS-16 in
+            // ❤️ or keycaps) is a format char that check_glyphless_char would
+            // otherwise SKIP, splitting the composition. GNU consumes such
+            // characters into the active composition instead of drawing them
+            // glyphless. Only suppress glyphless handling when there is a
+            // preceding glyph to merge into — a standalone joiner still renders
+            // glyphless.
+            let cluster_tail = self.matrix_builder.last_text_cluster_tail();
+            let is_cluster_continuation =
+                crate::composition::continues_cluster(ch, cluster_tail);
+            // Only emoji/text composition joiners (ZWJ, variation selectors,
+            // tag chars) are absorbed — not C1 controls, bidi marks, or
+            // separators, which must still render as their glyphless glyph.
+            let absorbed_into_cluster =
+                cluster_tail.is_some() && crate::composition::is_composition_joiner(ch);
+
             // Glyphless character detection (C1 controls, format chars, etc.)
             let glyphless = check_glyphless_char(ch);
-            if glyphless > 0 {
+            if glyphless > 0 && !absorbed_into_cluster {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let replacement_start_x = x;
@@ -5549,18 +5567,12 @@ impl LayoutEngine {
                 super::neovm_bridge::buffer_local_bool(buffer, "ctl-arrow"),
             );
 
-            // Grapheme-cluster extenders (combining marks, ZWJ,
-            // variation selectors) share the preceding base char's
-            // cell — zero columns, zero advance. CJK chars occupy 2
-            // columns. Everything else occupies 1.
-            // Grapheme-cluster composition: combining marks, ZWJ emoji
-            // sequences (👨‍👩‍👧), and regional-indicator flag pairs (🇯🇵)
-            // share the base char's cell. The rule lives in `composition`
-            // so every layout walk groups clusters identically — neomacs's
-            // stand-in for GNU's shared `composition_it` (src/composite.c).
-            let cluster_tail = self.matrix_builder.last_text_cluster_tail();
-            let is_cluster_continuation =
-                crate::composition::continues_cluster(ch, cluster_tail);
+            // Grapheme-cluster extenders (combining marks, ZWJ, variation
+            // selectors) share the preceding base char's cell — zero columns,
+            // zero advance — grouping clusters identically across every layout
+            // walk (neomacs's stand-in for GNU's shared `composition_it`,
+            // src/composite.c). `cluster_tail` / `is_cluster_continuation` were
+            // computed above (before glyphless handling) and are reused here.
             // Arabic/Indic run member: a same-script char continuing the
             // previous glyph. It grows the composed run (one column each) so
             // the renderer shapes the run as a unit, while per-char padding

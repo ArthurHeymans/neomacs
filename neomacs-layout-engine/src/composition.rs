@@ -46,6 +46,25 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
         || (is_regional_indicator(ch as u32) && matches!(tail, Some((_, true))))
 }
 
+/// A zero-width *composition joiner / selector*: a format character that the
+/// generic glyphless-char check would skip, but which actually binds an emoji
+/// or text composition together and so must be absorbed into the active
+/// cluster instead (GNU consumes these via `composition_it`). Covers ZWJ/ZWNJ,
+/// variation selectors (incl. the supplement), and tag characters (subdivision
+/// flag tag sequences). Deliberately EXCLUDES bidi controls (LRM/RLM), spaces
+/// (ZWSP/ZWNBSP), line/paragraph separators, and C1 controls — those stay
+/// glyphless so they still display as their own replacement glyph.
+pub(crate) fn is_composition_joiner(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x200C | 0x200D            // ZERO WIDTH NON-JOINER / JOINER
+            | 0xFE00..=0xFE0F      // variation selectors 1-16
+            | 0xE0001              // language tag
+            | 0xE0020..=0xE007F    // tag characters (tag sequences)
+            | 0xE0100..=0xE01EF    // variation selectors supplement
+    )
+}
+
 /// A contextual-shaping script: one whose letters change form based on
 /// neighbours (Arabic joining) or reorder (Indic), so per-character isolated
 /// shaping is wrong and the run must be shaped together with `shape_run`.
