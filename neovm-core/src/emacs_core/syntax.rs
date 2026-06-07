@@ -2549,11 +2549,10 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let char_index = LispCharPos1::new(pos).to_char_pos().get();
-    let byte_index = buffer_char_to_emacs_byte_pos(
-        buf,
-        CharPos0::new(char_index.min(buf.total_char_len().get())),
-    );
+    let char_index = LispCharPos1::new(pos)
+        .to_char_pos()
+        .min(buf.total_char_end_pos());
+    let byte_index = buffer_char_to_emacs_byte_pos(buf, char_index);
     let Some(unit) = buffer_syntax_char_after(buf, byte_index) else {
         return Ok(Value::NIL);
     };
@@ -3733,11 +3732,10 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
 
-    let from_char = LispCharPos1::new(from).to_char_pos().get();
-    let from_byte = buffer_char_to_emacs_byte_pos(
-        buf,
-        CharPos0::new(from_char.min(buf.total_char_len().get())),
-    );
+    let from_char = LispCharPos1::new(from)
+        .to_char_pos()
+        .min(buf.total_char_end_pos());
+    let from_byte = buffer_char_to_emacs_byte_pos(buf, from_char);
 
     match scan_sexps_with_options(buf, &table, from_byte.get(), count, honor_properties) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(

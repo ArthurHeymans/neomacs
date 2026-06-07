@@ -180,8 +180,8 @@ fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
 }
 
 /// Count newlines in the Emacs-byte range [start, end).
-fn count_newlines(buf: &crate::buffer::Buffer, start: usize, end: usize) -> usize {
-    buf.count_newlines_emacs_byte(EmacsBytePos::new(start), EmacsBytePos::new(end.max(start)))
+fn count_newlines(buf: &crate::buffer::Buffer, start: EmacsBytePos, end: EmacsBytePos) -> usize {
+    buf.count_newlines_emacs_byte(start, end.max(start))
 }
 
 /// Like `move_by_lines` but confined to the narrowed region `[begv, zv)`.
@@ -726,11 +726,11 @@ pub(crate) fn builtin_line_number_at_pos(
     let _absolute = args.get(1).is_some_and(|v| v.is_truthy());
     // Count newlines from start of buffer to byte_pos.
     let start = if _absolute {
-        0
+        EmacsBytePos::ZERO
     } else {
-        buf.accessible_emacs_byte_region().start().get()
+        buf.accessible_emacs_byte_region().start()
     };
-    let line_num = count_newlines(buf, start, byte_pos.get()) + 1;
+    let line_num = count_newlines(buf, start, byte_pos) + 1;
     Ok(Value::fixnum(line_num as i64))
 }
 
@@ -748,7 +748,7 @@ pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Val
     } else {
         (byte_end, byte_beg)
     };
-    let mut n = count_newlines(buf, s.get(), e.get());
+    let mut n = count_newlines(buf, s, e);
     // GNU Emacs: "can be one more if START is not equal to END and the
     // greater of them is not at the start of a line."
     // i.e., if the region is non-empty and the char before `e` is not '\n'.

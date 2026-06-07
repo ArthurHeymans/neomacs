@@ -4340,7 +4340,7 @@ fn restore_point_after_file_replace(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let point_char = CharPos0::new(new_point_char.min(buf.total_char_len().get()));
+        let point_char = CharPos0::new(new_point_char).min(buf.total_char_end_pos());
         TextPositionAnchor::new(
             point_char,
             buf.char_pos_to_emacs_byte_pos_clamped(point_char),
