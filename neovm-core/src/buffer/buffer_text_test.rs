@@ -164,6 +164,47 @@ fn public_backend_kind_helpers_select_and_convert_storage() {
 }
 
 #[test]
+fn shared_clone_observes_backend_conversion_and_semantic_edits() {
+    crate::test_utils::init_test_tracing();
+    let text = BufferText::from_str("aé\nz");
+    let mut shared = text.shared_clone();
+    let deep = text.clone();
+    assert!(text.shares_storage_with(&shared));
+    assert!(!text.shares_storage_with(&deep));
+
+    text.try_convert_backend_kind(BufferTextBackendKind::Rope)
+        .expect("rope backend should be available");
+    assert_eq!(shared.backend_kind(), BufferTextBackendKind::Rope);
+    assert_eq!(deep.backend_kind(), BufferTextBackendKind::GapBuffer);
+
+    let insert_at = emacs_byte_pos("aé".len());
+    insert_storage_string(&mut shared, insert_at, "Ω");
+    assert_eq!(text.to_string(), "aéΩ\nz");
+    assert_eq!(shared.metrics(), text.metrics());
+    assert_eq!(deep.to_string(), "aé\nz");
+
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let prop_start = emacs_byte_pos(char_pos_to_byte_pos(&text, 1));
+    let prop_end = emacs_byte_pos(char_pos_to_byte_pos(&text, 4));
+    assert!(text.text_props_put_property_in_emacs_byte_range(
+        EmacsByteRange::new(prop_start, prop_end),
+        face,
+        bold,
+    ));
+
+    let inside_prop = emacs_byte_pos(char_pos_to_byte_pos(&shared, 2));
+    assert_eq!(
+        shared.text_props_get_property_at_emacs_byte_pos(inside_prop, face),
+        Some(bold)
+    );
+    assert_eq!(
+        deep.text_props_get_property_at_emacs_byte_pos(inside_prop, face),
+        None
+    );
+}
+
+#[test]
 fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
     crate::test_utils::init_test_tracing();
     let non_gap = BufferTextBackendKind::non_gap_implemented_variants().collect::<Vec<_>>();
