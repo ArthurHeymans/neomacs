@@ -707,9 +707,10 @@ impl Window {
 
     /// Set the window's point from a buffer position.
     /// GNU Emacs xdisp.c:20616 syncs w->pointm from buffer PT before redisplay.
-    pub fn set_point(&mut self, pos: usize) {
+    pub fn set_point(&mut self, pos: LispCharPos1) {
         if let Window::Leaf { point, .. } = self {
-            *point = pos;
+            *point =
+                usize::try_from(pos.as_i64().max(1)).expect("Lisp character position fits usize");
         }
     }
 

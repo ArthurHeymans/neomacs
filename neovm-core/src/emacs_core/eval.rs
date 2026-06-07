@@ -6324,7 +6324,7 @@ impl Context {
         // reflected even when no text edit occurred.
         if let Some(buffer) = self.buffers.current_buffer() {
             if buffer.is_modified() {
-                let pt = buffer.point_char_pos().get();
+                let pt = buffer.point_char_pos().to_lisp();
                 if let Some(frame) = self.frames.selected_frame_mut() {
                     if let Some(win) = frame.selected_window_mut() {
                         win.set_point(pt);
