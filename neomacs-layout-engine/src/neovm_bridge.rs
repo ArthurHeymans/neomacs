@@ -24,7 +24,7 @@ use neovm_core::window::{
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
 use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
-    lisp_charpos_to_layout_char_pos,
+    lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
 };
 use crate::fontconfig::face_height_to_pixels;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
@@ -1189,7 +1189,7 @@ pub fn window_params_from_neovm(
         is_minibuffer,
         // Window::window_start tracks GNU marker positions (1-based).
         // Normalize to the layout engine's internal 0-based char positions.
-        window_start: clamped_lisp_charpos_to_layout_i64(window_start as i64),
+        window_start: lisp_char_pos_to_layout_i64(window_start),
         // Previous visible end converted back to the layout engine's internal
         // 0-based char position space.  GNU stores this as an offset from Z.
         window_end: if window_end_valid {
@@ -1225,7 +1225,7 @@ pub fn window_params_from_neovm(
         point: if is_selected {
             buffer.point_char_pos().get() as i64
         } else {
-            clamped_lisp_charpos_to_layout_i64(point as i64)
+            lisp_char_pos_to_layout_i64(point)
         },
         buffer_size: buffer.point_max_char_pos().get() as i64,
         buffer_begv: buffer.point_min_char_pos().get() as i64,
