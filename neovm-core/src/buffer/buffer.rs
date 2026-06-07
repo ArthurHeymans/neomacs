@@ -4463,7 +4463,7 @@ impl BufferManager {
         Some(killed_ids)
     }
 
-    fn full_buffer_emacs_byte_range(&self, id: BufferId) -> Option<EmacsByteRange> {
+    pub fn full_buffer_emacs_byte_range(&self, id: BufferId) -> Option<EmacsByteRange> {
         let buf = self.buffers.get(&id)?;
         Some(buf.full_emacs_byte_range())
     }
@@ -5107,6 +5107,30 @@ impl BufferManager {
         range: EmacsByteRange,
     ) -> Option<()> {
         self.buffers.get_mut(&id)?.narrow_to_emacs_byte_range(range);
+        let _ = self.record_buffer_state_markers(id);
+        Some(())
+    }
+
+    pub fn restore_buffer_accessible_region(
+        &mut self,
+        id: BufferId,
+        snapshot: AccessibleBufferRegionSnapshot,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .restore_accessible_region(snapshot);
+        let _ = self.record_buffer_state_markers(id);
+        Some(())
+    }
+
+    pub fn restore_buffer_accessible_region_with_current_full_end(
+        &mut self,
+        id: BufferId,
+        snapshot: AccessibleBufferRegionSnapshot,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .restore_accessible_region_with_current_full_end(snapshot);
         let _ = self.record_buffer_state_markers(id);
         Some(())
     }

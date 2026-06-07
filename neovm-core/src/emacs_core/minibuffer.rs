@@ -321,11 +321,12 @@ pub(crate) fn install_minibuffer_buffer_text(
     // Match GNU `read_minibuf` / `erase-buffer`: clear the minibuffer through
     // the buffer edit pipeline so point, narrowing, and sibling state reset
     // together before we insert the new prompt and initial contents.
-    let old_text_range = {
-        let buf = buffers.get_mut(buffer_id).expect("minibuffer buffer");
-        buf.widen();
-        buf.full_emacs_byte_range()
-    };
+    let old_text_range = buffers
+        .full_buffer_emacs_byte_range(buffer_id)
+        .expect("minibuffer buffer");
+    buffers
+        .restore_buffer_emacs_byte_restriction(buffer_id, old_text_range)
+        .expect("minibuffer buffer widen");
     if !old_text_range.is_empty() {
         buffers
             .delete_buffer_emacs_byte_range(buffer_id, old_text_range)
@@ -375,9 +376,17 @@ pub(crate) fn install_minibuffer_buffer_text(
         .expect("minibuffer buffer")
         .full_emacs_byte_range()
         .end();
-    let buf = buffers.get_mut(buffer_id).expect("minibuffer buffer");
-    buf.widen();
-    buf.goto_emacs_byte_pos(full_end);
+    buffers
+        .restore_buffer_emacs_byte_restriction(
+            buffer_id,
+            buffers
+                .full_buffer_emacs_byte_range(buffer_id)
+                .expect("minibuffer buffer"),
+        )
+        .expect("minibuffer buffer widen");
+    buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, full_end)
+        .expect("minibuffer buffer goto");
     prompt_end
 }
 

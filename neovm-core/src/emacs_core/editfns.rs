@@ -1176,13 +1176,10 @@ pub(crate) fn erase_buffer_impl(
     }
 
     let _ = buffers.clear_buffer_labeled_restrictions(current_id);
-    let byte_range = {
-        let Some(buf) = buffers.get_mut(current_id) else {
-            return Ok(Value::NIL);
-        };
-        buf.widen();
-        buf.full_emacs_byte_range()
+    let Some(byte_range) = buffers.full_buffer_emacs_byte_range(current_id) else {
+        return Ok(Value::NIL);
     };
+    let _ = buffers.restore_buffer_emacs_byte_restriction(current_id, byte_range);
     if !byte_range.is_empty() {
         let delete_range =
             buffer_edit_range_for_byte_range_in_manager(buffers, current_id, byte_range)?;

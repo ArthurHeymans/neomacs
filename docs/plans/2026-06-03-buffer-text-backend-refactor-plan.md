@@ -738,6 +738,10 @@ Completed so far:
 - Routed coding-system buffer-destination point preservation through the same
   manager-owned point-anchor API, leaving direct point-anchor mutation confined
   to the buffer/manager layer.
+- Added manager-owned full-range and accessible-region snapshot restoration
+  APIs, then routed erase-buffer, minibuffer setup, and `*Messages*` logging
+  widen/restore behavior through them so narrowing state-marker updates stay
+  above concrete text storage.
 
 Next work:
 

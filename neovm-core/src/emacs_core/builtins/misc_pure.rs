@@ -45,14 +45,12 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     let old_buf = ctx.buffers.current_buffer().map(|b| b.id);
     let _ = ctx.set_current_buffer_unrecorded(buf_id);
     let Some((old_pt_byte, old_accessible, old_full_end, point_at_end, zv_at_end)) =
-        ctx.buffers.get_mut(buf_id).map(|buf| {
+        ctx.buffers.get(buf_id).map(|buf| {
             let old_pt_byte = buf.point_emacs_byte_pos();
             let old_accessible = buf.accessible_region_snapshot();
             let old_full_end = buf.full_emacs_byte_range().end();
             let point_at_end = old_pt_byte == old_full_end;
             let zv_at_end = old_accessible.end_emacs_byte() == old_full_end;
-
-            buf.widen();
             (
                 old_pt_byte,
                 old_accessible,
@@ -67,6 +65,11 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         }
         return;
     };
+    if let Some(full_range) = ctx.buffers.full_buffer_emacs_byte_range(buf_id) {
+        let _ = ctx
+            .buffers
+            .restore_buffer_emacs_byte_restriction(buf_id, full_range);
+    }
     if ctx
         .buffers
         .goto_buffer_emacs_byte_pos(buf_id, old_full_end)
@@ -86,19 +89,28 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
     }
 
-    if let Some(buf) = ctx.buffers.get_mut(buf_id) {
-        let new_full_end = buf.full_emacs_byte_range().end();
+    if let Some(new_full_end) = ctx
+        .buffers
+        .get(buf_id)
+        .map(|buf| buf.full_emacs_byte_range().end())
+    {
         if zv_at_end {
-            buf.restore_accessible_region_with_current_full_end(old_accessible);
+            let _ = ctx
+                .buffers
+                .restore_buffer_accessible_region_with_current_full_end(buf_id, old_accessible);
         } else {
-            buf.restore_accessible_region(old_accessible);
+            let _ = ctx
+                .buffers
+                .restore_buffer_accessible_region(buf_id, old_accessible);
         }
         let restored_point = if point_at_end {
             new_full_end
         } else {
             old_pt_byte
         };
-        buf.goto_emacs_byte_pos(restored_point);
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(buf_id, restored_point);
     }
     if let Some(old) = old_buf {
         ctx.restore_current_buffer_if_live(old);
