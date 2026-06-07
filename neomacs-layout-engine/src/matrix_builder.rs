@@ -553,12 +553,23 @@ impl GlyphMatrixBuilder {
             if self.current_row < matrix.rows.len() {
                 let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
                 if merge_extender_into_last_glyph(area, ch) {
-                    let mut pad = Glyph::padding_for(face_id, charpos);
-                    pad.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+                    let member_width = if pixel_width.is_finite() && pixel_width > 0.0 {
                         pixel_width
                     } else {
                         0.0
                     };
+                    // The run renders as ONE Composite cell (the merged base);
+                    // the per-member padding cells draw nothing and are skipped
+                    // by materialize. So the base cell must carry the whole run's
+                    // advance, or the run reserves only its first letter's width
+                    // and the following text overlaps it. Accumulate each member's
+                    // advance onto the base; keep the per-member width on the
+                    // padding for per-letter cursor mapping.
+                    if let Some(base) = area.iter_mut().rev().find(|g| !g.padding) {
+                        base.pixel_width += member_width;
+                    }
+                    let mut pad = Glyph::padding_for(face_id, charpos);
+                    pad.pixel_width = member_width;
                     area.push(pad);
                     return;
                 }

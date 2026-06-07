@@ -923,3 +923,74 @@ fn complex_run_grows_into_one_composite_with_per_char_padding() {
     assert_eq!(area[1].charpos, 11);
     assert_eq!(area[2].charpos, 12);
 }
+
+#[test]
+fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphType};
+    // Build the Text row exactly as the engine does for
+    // "Mixed: hello العربية world": ASCII as Char glyphs, the Arabic word as
+    // ONE Composite{full run text} followed by one padding cell per extra char.
+    // The paragraph's first strong char is L, so the lone Arabic run is a single
+    // odd-level bidi unit among even-level units: UAX#9 L2 must leave it where it
+    // is (mid-line), not push it to the paragraph edge.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let mut cp = 0usize;
+    {
+        let text = &mut row.glyphs[GlyphArea::Text.index()];
+        for ch in "Mixed: hello ".chars() {
+            text.push(Glyph::char(ch, 0, cp));
+            cp += 1;
+        }
+        let word = "\u{0627}\u{0644}\u{0639}\u{0631}\u{0628}\u{064a}\u{0629}";
+        text.push(Glyph {
+            glyph_type: GlyphType::Composite { text: word.into() },
+            face_id: 0,
+            charpos: cp,
+            bidi_level: 0,
+            wide: false,
+            pixel_width: 0.0,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
+            padding: false,
+        });
+        cp += 1;
+        for _ in word.chars().skip(1) {
+            text.push(Glyph::padding_for(0, cp));
+            cp += 1;
+        }
+        for ch in " world".chars() {
+            text.push(Glyph::char(ch, 0, cp));
+            cp += 1;
+        }
+    }
+    let before = render_row_text(&row);
+    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    let after = render_row_text(&row);
+    // Reorder is a no-op here: the Arabic word keeps its mid-line slot, between
+    // "hello " and " world". (When this rendered wrong it was a draw-side bug,
+    // not reordering.)
+    assert_eq!(before, "Mixed: hello {العربية}...... world");
+    assert_eq!(after, before);
+}
+
+#[cfg(test)]
+fn render_row_text(row: &GlyphRow) -> String {
+    use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+    let mut s = String::new();
+    for g in &row.glyphs[GlyphArea::Text.index()] {
+        if g.padding {
+            s.push('.');
+            continue;
+        }
+        match &g.glyph_type {
+            GlyphType::Char { ch } => s.push(*ch),
+            GlyphType::Composite { text } => {
+                s.push('{');
+                s.push_str(text);
+                s.push('}');
+            }
+            _ => s.push('?'),
+        }
+    }
+    s
+}
