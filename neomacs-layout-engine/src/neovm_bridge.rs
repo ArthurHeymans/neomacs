@@ -862,7 +862,7 @@ fn parse_visual_cursor_spec(
         let value = pair[1];
         match key {
             ":position" | ":pos" => {
-                charpos = value.as_int().map(|pos| pos.saturating_sub(1).max(0));
+                charpos = value.as_int().map(clamped_lisp_charpos_to_layout_i64);
             }
             ":cursor-type" | ":type" => {
                 cursor_type = value;
@@ -1185,7 +1185,7 @@ pub fn window_params_from_neovm(
         is_minibuffer,
         // Window::window_start tracks GNU marker positions (1-based).
         // Normalize to the layout engine's internal 0-based char positions.
-        window_start: window_start.saturating_sub(1) as i64,
+        window_start: clamped_lisp_charpos_to_layout_i64(window_start as i64),
         // Previous visible end converted back to the layout engine's internal
         // 0-based char position space.  GNU stores this as an offset from Z.
         window_end: if window_end_valid {
@@ -1221,7 +1221,7 @@ pub fn window_params_from_neovm(
         point: if is_selected {
             buffer.point_char_pos().get() as i64
         } else {
-            point.saturating_sub(1) as i64
+            clamped_lisp_charpos_to_layout_i64(point as i64)
         },
         buffer_size: buffer.point_max_char_pos().get() as i64,
         buffer_begv: buffer.point_min_char_pos().get() as i64,
@@ -1567,6 +1567,13 @@ fn lisp_charpos_to_layout_char_pos(charpos: i64) -> Option<CharPos0> {
     usize::try_from(charpos.checked_sub(1)?)
         .ok()
         .map(CharPos0::new)
+}
+
+#[inline]
+fn clamped_lisp_charpos_to_layout_i64(charpos: i64) -> i64 {
+    lisp_charpos_to_layout_char_pos(charpos)
+        .map(|pos| pos.get() as i64)
+        .unwrap_or(0)
 }
 
 fn layout_emacs_byte_pos_from_i64(bytepos: i64) -> Option<EmacsBytePos> {
