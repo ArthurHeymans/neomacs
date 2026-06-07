@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::LispCharPos1;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
@@ -898,6 +899,37 @@ fn test_dump_buffers_use_symbol_ids_for_buffer_local_bindings() {
     assert!(
         dumped.local_binding_names.is_empty(),
         "fresh dumps should not record buffer-local ordering via legacy string names"
+    );
+}
+
+#[test]
+fn pdump_round_trip_preserves_last_window_start_lisp_position() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .get_mut(current)
+        .expect("current buffer mut")
+        .last_window_start = LispCharPos1::from_one_based_usize(7);
+
+    let dump = crate::emacs_core::pdump::convert::dump_evaluator(&eval);
+    let dumped = dump
+        .buffers
+        .buffers
+        .iter()
+        .find(|(id, _)| id.0 == current.0)
+        .map(|(_, buffer)| buffer)
+        .expect("dumped current buffer");
+    assert_eq!(dumped.last_window_start, Some(7));
+
+    let loaded = restore_snapshot(&dump).expect("restore snapshot should succeed");
+    let restored = loaded
+        .buffers
+        .get(current)
+        .expect("restored current buffer");
+    assert_eq!(
+        restored.last_window_start,
+        LispCharPos1::from_one_based_usize(7)
     );
 }
 

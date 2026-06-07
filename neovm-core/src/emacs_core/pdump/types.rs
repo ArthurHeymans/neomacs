@@ -691,6 +691,9 @@ pub struct DumpBuffer {
     pub modtime_nsec: Option<i32>,
     #[serde(default)]
     pub modtime_size: Option<i64>,
+    /// GNU `last_window_start` serialized as a Lisp-visible one-based
+    /// character position. Runtime code uses `LispCharPos1`; pdump keeps the
+    /// numeric payload for format compatibility.
     #[serde(default)]
     pub last_window_start: Option<usize>,
     pub read_only: bool,
