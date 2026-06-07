@@ -1,6 +1,6 @@
 //! Coordinate conversions at the VM/layout boundary.
 
-use neovm_core::buffer::{CharPos0, EmacsBytePos};
+use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1};
 
 pub(crate) fn layout_char_pos_from_i64(charpos: i64) -> Option<CharPos0> {
     usize::try_from(charpos).ok().map(CharPos0::new)
@@ -10,6 +10,22 @@ pub(crate) fn lisp_charpos_to_layout_char_pos(charpos: i64) -> Option<CharPos0> 
     usize::try_from(charpos.checked_sub(1)?)
         .ok()
         .map(CharPos0::new)
+}
+
+pub(crate) fn lisp_buffer_pos_usize_to_layout_i64(pos: usize) -> i64 {
+    pos.saturating_sub(1) as i64
+}
+
+pub(crate) fn layout_i64_char_pos_to_lisp_i64(charpos: i64) -> i64 {
+    charpos.saturating_add(1)
+}
+
+pub(crate) fn layout_i64_char_pos_to_lisp_char_pos(charpos: i64) -> LispCharPos1 {
+    LispCharPos1::new(layout_i64_char_pos_to_lisp_i64(charpos))
+}
+
+pub(crate) fn layout_usize_char_pos_to_lisp_usize(charpos: usize) -> usize {
+    charpos.saturating_add(1)
 }
 
 #[inline]
