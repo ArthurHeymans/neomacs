@@ -12,12 +12,10 @@ pub(crate) fn lisp_charpos_to_layout_char_pos(charpos: i64) -> Option<CharPos0> 
         .map(CharPos0::new)
 }
 
-pub(crate) fn lisp_buffer_pos_usize_to_layout_i64(pos: usize) -> i64 {
-    pos.saturating_sub(1) as i64
-}
-
 pub(crate) fn lisp_char_pos_to_layout_i64(pos: LispCharPos1) -> i64 {
-    lisp_buffer_pos_usize_to_layout_i64(pos.as_i64() as usize)
+    lisp_charpos_to_layout_char_pos(pos.as_i64())
+        .map(|pos| pos.get() as i64)
+        .unwrap_or(0)
 }
 
 pub(crate) fn layout_i64_char_pos_to_lisp_i64(charpos: i64) -> i64 {
