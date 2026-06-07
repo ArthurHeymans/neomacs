@@ -1465,6 +1465,30 @@ fn test_window_text_pixel_size_arg_validation() {
         other => panic!("expected wrong-type-argument, got {:?}", other),
     }
 
+    assert!(builtin_window_text_pixel_size(vec![Value::NIL, Value::T]).is_ok());
+    assert!(
+        builtin_window_text_pixel_size(vec![
+            Value::NIL,
+            Value::cons(Value::fixnum(1), Value::fixnum(0)),
+        ])
+        .is_ok()
+    );
+    let err = builtin_window_text_pixel_size(vec![
+        Value::NIL,
+        Value::cons(Value::fixnum(1), Value::symbol("bad-offset")),
+    ])
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("integerp"), Value::symbol("bad-offset")]
+            );
+        }
+        other => panic!("expected wrong-type-argument integerp, got {:?}", other),
+    }
+
     // X-LIMIT / Y-LIMIT / MODE / PIXELWISE are accepted without strict type checks.
     assert!(
         builtin_window_text_pixel_size(vec![
@@ -1478,6 +1502,35 @@ fn test_window_text_pixel_size_arg_validation() {
         ])
         .is_ok()
     );
+}
+
+#[test]
+fn test_window_text_pixel_size_from_t_starts_at_first_non_empty_line() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    {
+        let buffer = eval.buffers.get_mut(buf_id).expect("buffer");
+        buffer.insert("\n\n  abc\n");
+    }
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::fixnum(selected_window), Value::T],
+    )
+    .unwrap();
+    assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
+    assert_eq!(result.cons_car(), Value::fixnum(5));
+    assert_eq!(result.cons_cdr(), Value::fixnum(1));
 }
 
 #[test]

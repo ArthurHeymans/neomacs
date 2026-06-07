@@ -57,11 +57,27 @@ fn expect_args_range(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 }
 
 fn expect_integer_or_marker(arg: &Value) -> Result<(), Flow> {
+    if arg.is_marker() {
+        return Ok(());
+    }
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
         _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *arg],
+        )),
+    }
+}
+
+fn integer_or_marker_value(arg: Value) -> Result<i64, Flow> {
+    if arg.is_marker() {
+        return super::marker::marker_position_as_int(&arg);
+    }
+    match arg.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _other => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integer-or-marker-p"), arg],
         )),
     }
 }
@@ -74,6 +90,25 @@ fn expect_fixnum_arg(name: &str, arg: &Value) -> Result<(), Flow> {
             vec![Value::symbol(name), *arg],
         )),
     }
+}
+
+fn validate_window_text_pixel_size_from_arg(from: Value) -> Result<(), Flow> {
+    if from.is_nil() || from.is_t() {
+        return Ok(());
+    }
+    if from.is_cons() {
+        expect_integer_or_marker(&from.cons_car())?;
+        expect_fixnum_arg("integerp", &from.cons_cdr())?;
+        return Ok(());
+    }
+    expect_integer_or_marker(&from)
+}
+
+fn validate_window_text_pixel_size_to_arg(to: Value) -> Result<(), Flow> {
+    if to.is_nil() || to.is_t() {
+        return Ok(());
+    }
+    expect_integer_or_marker(&to)
 }
 
 fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
@@ -2597,17 +2632,97 @@ pub(crate) fn builtin_window_text_pixel_size(args: Vec<Value>) -> EvalResult {
         }
     }
     if let Some(from) = args.get(1) {
-        if !from.is_nil() {
-            expect_integer_or_marker(from)?;
-        }
+        validate_window_text_pixel_size_from_arg(*from)?;
     }
     if let Some(to) = args.get(2) {
-        if !to.is_nil() {
-            expect_integer_or_marker(to)?;
-        }
+        validate_window_text_pixel_size_to_arg(*to)?;
     }
 
     Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)))
+}
+
+fn buffer_lisp_pos_to_emacs_byte_pos_clipped(
+    buf: &Buffer,
+    pos: i64,
+    lower: LispCharPos1,
+) -> EmacsBytePos {
+    let max = buf.point_max_lisp_char_pos().as_i64();
+    let lower = lower.as_i64().clamp(1, max);
+    let clipped = pos.clamp(lower, max);
+    buf.char_pos_to_emacs_byte_pos_clamped(
+        LispCharPos1::from_one_based_usize(
+            usize::try_from(clipped).expect("Lisp character position fits usize"),
+        )
+        .to_char_pos(),
+    )
+}
+
+fn first_non_empty_line_start_in_region(buf: &Buffer, region: EmacsByteRange) -> EmacsBytePos {
+    let mut bytes = Vec::new();
+    buf.copy_emacs_byte_range_to(region, &mut bytes);
+
+    let mut offset = 0;
+    while offset < bytes.len() && matches!(bytes[offset], b' ' | b'\t' | b'\n' | b'\r') {
+        offset += 1;
+    }
+    while offset > 0 && matches!(bytes[offset - 1], b' ' | b'\t') {
+        offset -= 1;
+    }
+    region
+        .start()
+        .add_len(crate::buffer::EmacsByteLen::new(offset))
+}
+
+fn window_text_pixel_size_from_pos(
+    buf: &Buffer,
+    from: Option<&Value>,
+) -> Result<EmacsBytePos, Flow> {
+    let beg = buf.point_min_lisp_char_pos();
+    let end = buf.point_max_lisp_char_pos();
+    let beg_byte = buf.lisp_pos_to_emacs_byte_pos(beg);
+    let end_byte = buf.lisp_pos_to_emacs_byte_pos(end);
+
+    match from {
+        None => Ok(beg_byte),
+        Some(value) if value.is_nil() => Ok(beg_byte),
+        Some(value) if value.is_t() => Ok(first_non_empty_line_start_in_region(
+            buf,
+            EmacsByteRange::new(beg_byte, end_byte),
+        )),
+        Some(value) if value.is_cons() => {
+            let pos = integer_or_marker_value(value.cons_car())?;
+            expect_fixnum_arg("integerp", &value.cons_cdr())?;
+            Ok(buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg))
+        }
+        Some(value) => {
+            let pos = integer_or_marker_value(*value)?;
+            Ok(buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg))
+        }
+    }
+}
+
+fn window_text_pixel_size_to_pos(
+    buf: &Buffer,
+    to: Option<&Value>,
+    from_pos: EmacsBytePos,
+) -> Result<EmacsBytePos, Flow> {
+    let end = buf.point_max_lisp_char_pos();
+    let end_byte = buf.lisp_pos_to_emacs_byte_pos(end);
+    match to {
+        None => Ok(end_byte),
+        Some(value) if value.is_nil() || value.is_t() => Ok(end_byte),
+        Some(value) => {
+            let pos = integer_or_marker_value(*value)?;
+            Ok(buffer_lisp_pos_to_emacs_byte_pos_clipped(
+                buf,
+                pos,
+                LispCharPos1::from_one_based_usize(
+                    buf.emacs_byte_pos_to_lisp_char_pos(from_pos)
+                        .to_one_based_usize(),
+                ),
+            ))
+        }
+    }
 }
 
 /// `(window-text-pixel-size &optional WINDOW FROM TO X-LIMIT Y-LIMIT MODE)` evaluator-backed variant.
@@ -2637,41 +2752,15 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
 
-    // Determine FROM/TO range
-    let from_pos = args
-        .get(1)
-        .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| {
-            buf.char_pos_to_emacs_byte_pos_clamped(
-                LispCharPos1::from_one_based_usize(
-                    usize::try_from(i.max(1)).expect("Lisp character position fits usize"),
-                )
-                .to_char_pos(),
-            )
-        })
-        .unwrap_or(EmacsBytePos::ZERO);
-    let buffer_end = EmacsBytePos::ZERO.add_len(buf.total_emacs_byte_len());
-    let to_pos = args
-        .get(2)
-        .and_then(|v| if v.is_nil() { None } else { v.as_int() })
-        .map(|i| {
-            buf.char_pos_to_emacs_byte_pos_clamped(
-                LispCharPos1::from_one_based_usize(
-                    usize::try_from(i.max(1)).expect("Lisp character position fits usize"),
-                )
-                .to_char_pos(),
-            )
-        })
-        .unwrap_or(buffer_end);
+    // Determine FROM/TO range.
+    let from_pos = window_text_pixel_size_from_pos(buf, args.get(1))?;
+    let to_pos = window_text_pixel_size_to_pos(buf, args.get(2), from_pos)?;
 
     // Count lines and max columns in the region.  GNU's TO=t means
     // measure through the line ending the last non-empty line, not
     // through trailing blank lines.
     let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(
-        EmacsByteRange::new(from_pos, to_pos.min(buffer_end)),
-        &mut bytes,
-    );
+    buf.copy_emacs_byte_range_to(EmacsByteRange::new(from_pos, to_pos), &mut bytes);
     let measured = if args
         .get(2)
         .is_some_and(|v| v.is_t() || v.is_symbol_named("t"))
