@@ -3091,8 +3091,9 @@ pub(crate) fn builtin_set_fringe_bitmap_face(
 ) -> EvalResult {
     expect_range_args("set-fringe-bitmap-face", &args, 1, 2)?;
     let bitmap = args[0].as_symbol_name();
-    let has_fringe_property =
-        symbol_property_get(ctx, args[0], Value::symbol("fringe"))?.1.is_some_and(|v| !v.is_nil());
+    let has_fringe_property = symbol_property_get(ctx, args[0], Value::symbol("fringe"))?
+        .1
+        .is_some_and(|v| !v.is_nil());
     if !bitmap.is_some_and(is_known_fringe_bitmap) && !has_fringe_property {
         return Err(signal(
             "error",

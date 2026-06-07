@@ -10023,10 +10023,7 @@ fn set_fringe_bitmap_face_rejects_non_symbol_bitmap_like_gnu() {
     match err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(
-                sig.data,
-                vec![Value::symbol("symbolp"), Value::fixnum(1)]
-            );
+            assert_eq!(sig.data, vec![Value::symbol("symbolp"), Value::fixnum(1)]);
         }
         other => panic!("expected signal, got {other:?}"),
     }
