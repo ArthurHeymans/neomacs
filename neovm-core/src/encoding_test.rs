@@ -663,6 +663,13 @@ fn encoding_utf8() {
 }
 
 #[test]
+fn encoding_utf8_with_signature_consumes_leading_bom() {
+    crate::test_utils::init_test_tracing();
+    let decoded = decode_bytes(b"\xEF\xBB\xBF;;; fixture\n", "utf-8-with-signature-unix");
+    assert_eq!(decoded, ";;; fixture\n");
+}
+
+#[test]
 fn encoding_utf16_gnu_compatible_signatures_and_endianness() {
     crate::test_utils::init_test_tracing();
     assert_eq!(encode_string("a", "utf-16"), vec![0xfe, 0xff, 0x00, 0x61]);

@@ -3636,6 +3636,29 @@ fn insert_file_contents_preserves_lone_cr_in_lf_text() {
 }
 
 #[test]
+fn insert_file_contents_consumes_utf8_signature() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("bom-source.el");
+    fs::write(&path, b"\xEF\xBB\xBF;;; bom-source.el --- fixture\n")
+        .expect("write utf-8 signature fixture");
+    let path_str = path.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    builtin_insert_file_contents(&mut eval, vec![Value::string(&path_str)])
+        .expect("insert-file-contents should consume UTF-8 signature");
+
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    assert_eq!(buf.buffer_string(), ";;; bom-source.el --- fixture\n");
+    assert_eq!(
+        eval.visible_variable_value_or_nil("last-coding-system-used")
+            .as_symbol_name(),
+        Some("utf-8-with-signature-unix")
+    );
+}
+
+#[test]
 fn decode_insert_file_contents_source_load_normalizes_detected_eols() {
     crate::test_utils::init_test_tracing();
     let coding_systems = crate::emacs_core::coding::CodingSystemManager::new();

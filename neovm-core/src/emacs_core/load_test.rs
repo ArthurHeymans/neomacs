@@ -9580,6 +9580,32 @@ fn partial_bootstrap_load_with_code_conversion_preserves_utf8_emacs_extended_sou
 }
 
 #[test]
+fn partial_bootstrap_load_with_code_conversion_consumes_utf8_signature() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = partial_bootstrap_eval_until("emacs-lisp/macroexp", false);
+    eval.set_variable(
+        "load-source-file-function",
+        Value::symbol("load-with-code-conversion"),
+    );
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("utf8-signature-source.el");
+    fs::write(
+        &path,
+        b"\xEF\xBB\xBF;;; utf8-signature-source.el --- fixture -*- lexical-binding: t; -*-\n\
+          (setq vm-source-load-utf8-signature 'ok)\n",
+    )
+    .expect("write utf-8 signature source fixture");
+
+    let result = load_file(&mut eval, &path);
+    assert_eq!(format_eval_result(&result), "OK t");
+    assert_eq!(
+        eval_rendered(&mut eval, "vm-source-load-utf8-signature"),
+        "OK ok"
+    );
+}
+
+#[test]
 fn partial_bootstrap_source_load_restores_current_buffer_after_eval_buffer_switches_buffer() {
     crate::test_utils::init_test_tracing();
     let mut eval = partial_bootstrap_eval_until("emacs-lisp/macroexp", false);

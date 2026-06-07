@@ -4712,6 +4712,57 @@ impl DecodedFileContents {
     }
 }
 
+fn detected_default_eol_suffix(bytes: &[u8]) -> &'static str {
+    let mut saw_lf = false;
+    let mut saw_crlf = false;
+    let mut saw_lone_cr = false;
+    let mut idx = 0;
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'\n' => saw_lf = true,
+            b'\r' => {
+                if bytes.get(idx + 1) == Some(&b'\n') {
+                    saw_crlf = true;
+                    idx += 1;
+                } else {
+                    saw_lone_cr = true;
+                }
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+
+    if saw_lf {
+        "-unix"
+    } else if saw_crlf {
+        "-dos"
+    } else if saw_lone_cr {
+        "-mac"
+    } else {
+        "-unix"
+    }
+}
+
+fn coding_base_name(coding: &str) -> &str {
+    coding
+        .strip_suffix("-unix")
+        .or_else(|| coding.strip_suffix("-dos"))
+        .or_else(|| coding.strip_suffix("-mac"))
+        .unwrap_or(coding)
+}
+
+fn is_utf8_like_source_coding(coding: &str) -> bool {
+    matches!(
+        coding_base_name(coding),
+        "utf-8" | "utf-8-emacs" | "utf-8-with-signature"
+    )
+}
+
+fn has_utf8_signature(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xEF, 0xBB, 0xBF])
+}
+
 fn decode_insert_file_contents(
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     bytes: &[u8],
@@ -4719,52 +4770,18 @@ fn decode_insert_file_contents(
     source_load_context: bool,
     coding_system_for_read: Option<&str>,
 ) -> Result<DecodedFileContents, Flow> {
-    let detected_default_eol_suffix = |bytes: &[u8]| {
-        let mut saw_lf = false;
-        let mut saw_crlf = false;
-        let mut saw_lone_cr = false;
-        let mut idx = 0;
-        while idx < bytes.len() {
-            match bytes[idx] {
-                b'\n' => saw_lf = true,
-                b'\r' => {
-                    if bytes.get(idx + 1) == Some(&b'\n') {
-                        saw_crlf = true;
-                        idx += 1;
-                    } else {
-                        saw_lone_cr = true;
-                    }
-                }
-                _ => {}
-            }
-            idx += 1;
-        }
-
-        if saw_lf {
-            "-unix"
-        } else if saw_crlf {
-            "-dos"
-        } else if saw_lone_cr {
-            "-mac"
-        } else {
-            "-unix"
-        }
-    };
-
-    let is_utf8_like_source_coding = |coding: &str| {
-        let family = coding
-            .strip_suffix("-unix")
-            .or_else(|| coding.strip_suffix("-dos"))
-            .or_else(|| coding.strip_suffix("-mac"))
-            .unwrap_or(coding);
-        matches!(family, "utf-8" | "utf-8-emacs")
-    };
-
     let Some(coding) =
         coding_system_for_read.filter(|coding| !coding.is_empty() && *coding != "nil")
     else {
+        let eol_suffix = detected_default_eol_suffix(bytes);
+        if multibyte && has_utf8_signature(bytes) {
+            let coding = format!("utf-8-with-signature{eol_suffix}");
+            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+                bytes, coding,
+            ));
+        }
+
         if source_load_context && multibyte {
-            let eol_suffix = detected_default_eol_suffix(bytes);
             let coding = format!("utf-8-emacs{eol_suffix}");
             return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
                 bytes, coding,
@@ -4778,7 +4795,6 @@ fn decode_insert_file_contents(
             ));
         }
 
-        let eol_suffix = detected_default_eol_suffix(bytes);
         if bytes.is_ascii() {
             let coding = format!("undecided{eol_suffix}");
             return Ok(DecodedFileContents::from_decoded_multibyte_bytes(

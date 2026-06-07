@@ -678,12 +678,8 @@ fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
 }
 
 fn coding_system_family(coding_system: &str) -> &str {
-    match coding_system
-        .strip_suffix("-unix")
-        .or_else(|| coding_system.strip_suffix("-dos"))
-        .or_else(|| coding_system.strip_suffix("-mac"))
-        .unwrap_or(coding_system)
-    {
+    match coding_system_base(coding_system) {
+        "utf-8-with-signature" => "utf-8",
         "latin-1" | "iso-8859-1" | "iso-latin-1" => "iso-latin-1",
         "latin-5" | "iso-8859-9" | "iso-latin-5" => "iso-latin-5",
         "latin-0" | "latin-9" | "iso-8859-15" | "iso-latin-9" => "iso-latin-9",
@@ -695,6 +691,18 @@ fn coding_system_family(coding_system: &str) -> &str {
         "emacs-internal" => "utf-8-emacs",
         family => family,
     }
+}
+
+fn coding_system_base(coding_system: &str) -> &str {
+    coding_system
+        .strip_suffix("-unix")
+        .or_else(|| coding_system.strip_suffix("-dos"))
+        .or_else(|| coding_system.strip_suffix("-mac"))
+        .unwrap_or(coding_system)
+}
+
+fn coding_system_consumes_utf8_signature(coding_system: &str) -> bool {
+    coding_system_base(coding_system) == "utf-8-with-signature"
 }
 
 #[derive(Clone, Copy)]
@@ -1146,7 +1154,12 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
         return decode_utf16_bytes(bytes, endian);
     }
 
-    let bytes = decode_eol_text(bytes, coding_system);
+    let mut bytes = decode_eol_text(bytes, coding_system);
+    if coding_system_consumes_utf8_signature(coding_system)
+        && bytes.starts_with(&[0xEF, 0xBB, 0xBF])
+    {
+        bytes.drain(..3);
+    }
     match coding_system_family(coding_system) {
         "utf-8" | "utf-8-emacs" => decode_utf8_emacs_bytes(&bytes),
         "chinese-big5" | "chinese-big5-hkscs" => {
