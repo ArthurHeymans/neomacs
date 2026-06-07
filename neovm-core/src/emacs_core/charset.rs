@@ -832,6 +832,68 @@ fn expect_int_or_marker(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CharsetLispRegion {
+    beg: LispCharPos1,
+    end: LispCharPos1,
+}
+
+impl CharsetLispRegion {
+    fn from_values(beg: &Value, end: &Value) -> Result<Self, Flow> {
+        Ok(Self {
+            beg: LispCharPos1::new(expect_int_or_marker(beg)?),
+            end: LispCharPos1::new(expect_int_or_marker(end)?),
+        })
+    }
+
+    fn validate_accessible(self, buf: &crate::buffer::Buffer) -> Result<Self, Flow> {
+        let point_min = buf.point_min_lisp_char_pos();
+        let point_max = buf.point_max_lisp_char_pos();
+        if self.beg < point_min
+            || self.beg > point_max
+            || self.end < point_min
+            || self.end > point_max
+        {
+            return Err(signal(
+                "args-out-of-range",
+                vec![
+                    Value::fixnum(self.beg.as_i64()),
+                    Value::fixnum(self.end.as_i64()),
+                ],
+            ));
+        }
+        Ok(self)
+    }
+
+    fn to_accessible_byte_range(self, buf: &crate::buffer::Buffer) -> EmacsByteRange {
+        let (from, to) = if self.beg <= self.end {
+            (self.beg, self.end)
+        } else {
+            (self.end, self.beg)
+        };
+        EmacsByteRange::new(
+            buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+        )
+    }
+}
+
+fn optional_charset_lisp_pos_to_byte(
+    buf: &crate::buffer::Buffer,
+    pos: Option<&Value>,
+) -> Result<Option<EmacsBytePos>, Flow> {
+    let Some(pos) = pos else {
+        return Ok(Some(buf.point_emacs_byte_pos()));
+    };
+    let pos = LispCharPos1::new(expect_int_or_marker(pos)?);
+    let point_min = buf.point_min_lisp_char_pos();
+    let point_max = buf.point_max_lisp_char_pos();
+    if pos < point_min || pos > point_max {
+        return Ok(None);
+    }
+    Ok(Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos)))
+}
+
 fn require_known_charset(value: &Value) -> Result<SymId, Flow> {
     let name = match value.kind() {
         ValueKind::Symbol(id) => id,
@@ -1499,33 +1561,16 @@ pub(crate) fn builtin_find_charset_region(
 ) -> EvalResult {
     expect_min_args("find-charset-region", &args, 2)?;
     expect_max_args("find-charset-region", &args, 3)?;
-    let beg = LispCharPos1::new(expect_int_or_marker(&args[0])?);
-    let end = LispCharPos1::new(expect_int_or_marker(&args[1])?);
+    let region = CharsetLispRegion::from_values(&args[0], &args[1])?;
 
     let buf = ctx
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if beg.as_i64() < point_min
-        || beg.as_i64() > point_max
-        || end.as_i64() < point_min
-        || end.as_i64() > point_max
-    {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::fixnum(beg.as_i64()), Value::fixnum(end.as_i64())],
-        ));
-    }
-
-    let (from, to) = if beg <= end { (beg, end) } else { (end, beg) };
-
-    let byte_range = EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
-    );
+    let byte_range = region
+        .validate_accessible(buf)?
+        .to_accessible_byte_range(buf);
     if byte_range.is_empty() {
         return Ok(Value::list(vec![Value::symbol("ascii")]));
     }
@@ -1763,16 +1808,8 @@ pub(crate) fn builtin_charset_after(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let target_byte = if let Some(pos) = args.first() {
-        let pos = LispCharPos1::new(expect_int_or_marker(pos)?);
-        let point_min = buf.point_min_lisp_char_pos().as_i64();
-        let point_max = buf.point_max_lisp_char_pos().as_i64();
-        if pos.as_i64() < point_min || pos.as_i64() > point_max {
-            return Ok(Value::NIL);
-        }
-        buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
-    } else {
-        buf.point_emacs_byte_pos()
+    let Some(target_byte) = optional_charset_lisp_pos_to_byte(buf, args.first())? else {
+        return Ok(Value::NIL);
     };
 
     let point_max_byte = buf.accessible_emacs_byte_region().end();
