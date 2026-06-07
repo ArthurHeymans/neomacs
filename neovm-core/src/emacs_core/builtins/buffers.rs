@@ -764,16 +764,13 @@ pub(crate) fn builtin_buffer_substring(
         .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start < point_min || start > point_max || end < point_min || end > point_max {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::make_buffer(buf.id), args[0], args[1]],
-        ));
-    }
-    let byte_range =
-        accessible_lisp_range_to_byte_range(buf, LispCharPos1::new(start), LispCharPos1::new(end));
+    let (start, end) = checked_accessible_lisp_range_from_raw(
+        buf,
+        start,
+        end,
+        vec![Value::make_buffer(buf.id), args[0], args[1]],
+    )?;
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(buffer_slice_value_range(buf, byte_range))
 }
 
@@ -878,6 +875,32 @@ fn accessible_lisp_range_to_byte_range(
     )
 }
 
+fn validate_accessible_lisp_range(
+    buf: &Buffer,
+    start: LispCharPos1,
+    end: LispCharPos1,
+    error_values: Vec<Value>,
+) -> Result<(), Flow> {
+    let point_min = buf.point_min_lisp_char_pos();
+    let point_max = buf.point_max_lisp_char_pos();
+    if start < point_min || start > point_max || end < point_min || end > point_max {
+        return Err(signal("args-out-of-range", error_values));
+    }
+    Ok(())
+}
+
+fn checked_accessible_lisp_range_from_raw(
+    buf: &Buffer,
+    start: i64,
+    end: i64,
+    error_values: Vec<Value>,
+) -> Result<(LispCharPos1, LispCharPos1), Flow> {
+    let start = LispCharPos1::new(start);
+    let end = LispCharPos1::new(end);
+    validate_accessible_lisp_range(buf, start, end, error_values)?;
+    Ok((start, end))
+}
+
 fn checked_buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
@@ -893,15 +916,7 @@ fn checked_buffer_slice_for_char_region(
         return Ok(String::new());
     };
 
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if start.as_i64() < point_min
-        || start.as_i64() > point_max
-        || end.as_i64() < point_min
-        || end.as_i64() > point_max
-    {
-        return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
-    }
+    validate_accessible_lisp_range(buf, start, end, vec![start_arg, end_arg])?;
 
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
@@ -1166,11 +1181,13 @@ fn replace_region_source_value_in_state(
             }
             let start = expect_integer_or_marker_in_buffers(buffers, &items[1])?;
             let end = expect_integer_or_marker_in_buffers(buffers, &items[2])?;
+            let start = LispCharPos1::new(start);
+            let end = LispCharPos1::new(end);
             checked_buffer_substring_for_char_region_in_manager(
                 buffers,
                 Some(buffer_id),
-                LispCharPos1::new(start),
-                LispCharPos1::new(end),
+                start,
+                end,
                 items[1],
                 items[2],
             )
