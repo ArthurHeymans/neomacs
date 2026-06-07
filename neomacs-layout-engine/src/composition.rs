@@ -46,6 +46,66 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
         || (is_regional_indicator(ch as u32) && matches!(tail, Some((_, true))))
 }
 
+/// A contextual-shaping script: one whose letters change form based on
+/// neighbours (Arabic joining) or reorder (Indic), so per-character isolated
+/// shaping is wrong and the run must be shaped together with `shape_run`.
+/// The concrete value only matters for grouping consecutive same-script
+/// characters into one shaped run.
+#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComplexScript {
+    Arabic,
+    Syriac,
+    Devanagari,
+    Bengali,
+    Gurmukhi,
+    Gujarati,
+    Oriya,
+    Tamil,
+    Telugu,
+    Kannada,
+    Malayalam,
+    Thai,
+    Lao,
+    Tibetan,
+    Myanmar,
+}
+
+/// Identify the contextual-shaping script of `ch`, if any. Scripts not listed
+/// (Latin, CJK, …) render correctly per character and return `None`, so they
+/// stay on the fast per-char path. Mirrors the coverage GNU's default
+/// `composition-function-table` provides for these scripts.
+#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
+pub(crate) fn complex_script(ch: char) -> Option<ComplexScript> {
+    use ComplexScript::*;
+    let cp = ch as u32;
+    Some(match cp {
+        0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF
+        | 0xFE70..=0xFEFF => Arabic,
+        0x0700..=0x074F => Syriac,
+        0x0900..=0x097F => Devanagari,
+        0x0980..=0x09FF => Bengali,
+        0x0A00..=0x0A7F => Gurmukhi,
+        0x0A80..=0x0AFF => Gujarati,
+        0x0B00..=0x0B7F => Oriya,
+        0x0B80..=0x0BFF => Tamil,
+        0x0C00..=0x0C7F => Telugu,
+        0x0C80..=0x0CFF => Kannada,
+        0x0D00..=0x0D7F => Malayalam,
+        0x0E00..=0x0E7F => Thai,
+        0x0E80..=0x0EFF => Lao,
+        0x0F00..=0x0FFF => Tibetan,
+        0x1000..=0x109F => Myanmar,
+        _ => return None,
+    })
+}
+
+/// Whether `ch` belongs to a script that needs run-level contextual shaping.
+#[allow(dead_code)] // consumed by the gstring layout integration (Phase 3.2)
+pub(crate) fn needs_complex_shaping(ch: char) -> bool {
+    complex_script(ch).is_some()
+}
+
 #[cfg(test)]
 #[path = "composition_test.rs"]
 mod tests;

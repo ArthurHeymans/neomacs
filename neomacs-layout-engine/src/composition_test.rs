@@ -67,3 +67,23 @@ fn zwj_itself_continues_as_extender() {
     // The ZWJ joins the base it follows.
     assert!(continues_cluster('\u{200D}', Some(('\u{1F468}', false))));
 }
+
+// --- complex-script detection (Phase 3) ---
+
+#[test]
+fn complex_script_classifies_arabic_and_indic() {
+    assert_eq!(complex_script('\u{0627}'), Some(ComplexScript::Arabic)); // ا
+    assert_eq!(complex_script('\u{FE8D}'), Some(ComplexScript::Arabic)); // presentation form
+    assert_eq!(complex_script('\u{0905}'), Some(ComplexScript::Devanagari)); // अ
+    assert_eq!(complex_script('\u{0B95}'), Some(ComplexScript::Tamil)); // க
+    assert_eq!(complex_script('\u{0E01}'), Some(ComplexScript::Thai)); // ก
+}
+
+#[test]
+fn complex_script_is_none_for_latin_and_cjk() {
+    assert_eq!(complex_script('a'), None);
+    assert_eq!(complex_script('\u{4E2D}'), None); // 中 (CJK)
+    assert_eq!(complex_script('\u{1F468}'), None); // emoji
+    assert!(!needs_complex_shaping('a'));
+    assert!(needs_complex_shaping('\u{0627}'));
+}
