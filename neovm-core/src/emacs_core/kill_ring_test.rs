@@ -514,27 +514,28 @@ fn upcase_initials_region_unicode_armenian_titlecase() {
 }
 
 #[test]
-fn upcase_region_noncontiguous_requires_mark() {
+fn upcase_region_noncontiguous_rejects_bad_region_extract_function() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_one(
         r#"(with-temp-buffer
              (insert "abc")
+             (setq region-extract-function (lambda (_op) 42))
              (upcase-region 1 3 t))"#,
     );
-    assert!(result.starts_with("ERR (error"));
-    assert!(result.contains("The mark is not set now, so there is no region"));
+    assert!(result.starts_with("ERR (wrong-type-argument"));
+    assert!(result.contains("listp"));
 }
 
 #[test]
-fn upcase_region_noncontiguous_accepts_live_mark() {
+fn upcase_region_noncontiguous_uses_region_extract_bounds() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
-        r#"(insert "abc")
-           (set-mark 2)
-           (upcase-region 1 3 t)
+        r#"(insert "abcde")
+           (setq region-extract-function (lambda (_op) (list (cons 2 4))))
+           (upcase-region 1 5 t)
            (buffer-string)"#,
     );
-    assert_eq!(results[3], r#"OK "aBC""#);
+    assert_eq!(results[3], r#"OK "aBCde""#);
 }
 
 // -- downcase-word tests --

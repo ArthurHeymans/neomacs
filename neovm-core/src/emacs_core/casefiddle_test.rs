@@ -267,19 +267,19 @@ fn upcase_initials_unicode_edge_semantics() {
 }
 
 #[test]
-fn eval_upcase_region_noncontiguous_uses_live_mark() {
+fn eval_upcase_region_noncontiguous_uses_region_extract_bounds() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();
     let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
-    ev.buffers.insert_into_buffer(buffer_id, "abc");
-    ev.buffers
-        .set_buffer_mark_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(1));
+    ev.eval_str("(setq region-extract-function (lambda (_op) (list (cons 2 4))))")
+        .expect("region-extract-function setup");
+    ev.buffers.insert_into_buffer(buffer_id, "abcde");
 
-    super::builtin_upcase_region(&mut ev, vec![Value::fixnum(1), Value::fixnum(3), Value::T])
+    super::builtin_upcase_region(&mut ev, vec![Value::fixnum(1), Value::fixnum(5), Value::T])
         .expect("upcase-region");
 
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
-    assert_eq!(buffer.buffer_string(), "aBC");
+    assert_eq!(buffer.buffer_string(), "aBCde");
 }
 
 #[test]
