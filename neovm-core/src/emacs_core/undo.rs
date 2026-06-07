@@ -87,6 +87,23 @@ fn char_pos1_to_byte_clamped(buf: &Buffer, pos1: LispCharPos1) -> EmacsBytePos {
     buf.char_pos_to_emacs_byte_pos_clamped(char_pos1_to_char0(pos1))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct UndoLispPosition(i64);
+
+impl UndoLispPosition {
+    fn from_entry(raw: i64) -> Self {
+        Self(raw)
+    }
+
+    fn absolute_from_signed_deletion(raw: i64) -> Self {
+        Self(raw.abs())
+    }
+
+    fn to_lisp_char_pos(self) -> LispCharPos1 {
+        LispCharPos1::new(self.0)
+    }
+}
+
 fn accessible_lisp_char_bounds(buf: &Buffer) -> (LispCharPos1, LispCharPos1) {
     let accessible = buf.accessible_char_region();
     (accessible.start().to_lisp(), accessible.end().to_lisp())
@@ -232,7 +249,10 @@ fn primitive_undo_inner(
             // Integer POS: goto-char
             if let Some(pos1) = entry.as_fixnum() {
                 if let Some(buf) = ctx.buffers.get(buf_id) {
-                    let byte = char_pos1_to_byte_clamped(buf, LispCharPos1::new(pos1));
+                    let byte = char_pos1_to_byte_clamped(
+                        buf,
+                        UndoLispPosition::from_entry(pos1).to_lisp_char_pos(),
+                    );
                     ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, byte);
                 }
                 continue;
@@ -249,8 +269,8 @@ fn primitive_undo_inner(
             match (car.kind(), cdr.kind()) {
                 // (BEG . END) both integers — undo an insertion by deleting.
                 (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
-                    let beg_pos = LispCharPos1::new(beg1);
-                    let end_pos = LispCharPos1::new(end1);
+                    let beg_pos = UndoLispPosition::from_entry(beg1).to_lisp_char_pos();
+                    let end_pos = UndoLispPosition::from_entry(end1).to_lisp_char_pos();
                     let delete_range = if let Some(buf) = ctx.buffers.get(buf_id) {
                         ensure_undo_lisp_range_is_visible(buf, beg_pos, end_pos)?;
                         Some(buf.edit_range_for_char_range(CharRange::new(
@@ -266,7 +286,8 @@ fn primitive_undo_inner(
                 }
                 // (TEXT . POS) string + int — undo a deletion by re-inserting.
                 (ValueKind::String, ValueKind::Fixnum(pos1)) => {
-                    let apos1 = LispCharPos1::new(pos1.abs());
+                    let apos1 =
+                        UndoLispPosition::absolute_from_signed_deletion(pos1).to_lisp_char_pos();
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         if !lisp_char_position_is_visible(buf, apos1) {
                             return Err(signal(
@@ -406,8 +427,10 @@ fn primitive_undo_inner(
                                 if let (Some(b), Some(e)) =
                                     (beg_val.as_fixnum(), end_val.as_fixnum())
                                 {
-                                    let beg_pos = LispCharPos1::new(b);
-                                    let end_pos = LispCharPos1::new(e);
+                                    let beg_pos =
+                                        UndoLispPosition::from_entry(b).to_lisp_char_pos();
+                                    let end_pos =
+                                        UndoLispPosition::from_entry(e).to_lisp_char_pos();
                                     if let Some(buf) = ctx.buffers.get(buf_id) {
                                         ensure_undo_lisp_range_is_visible(buf, beg_pos, end_pos)?;
                                         let accessible_start =
@@ -462,8 +485,9 @@ fn primitive_undo_inner(
                             if let (Some(start1), Some(end1)) =
                                 (start_v.as_fixnum(), end_v.as_fixnum())
                             {
-                                let start_pos = LispCharPos1::new(start1);
-                                let end_pos = LispCharPos1::new(end1);
+                                let start_pos =
+                                    UndoLispPosition::from_entry(start1).to_lisp_char_pos();
+                                let end_pos = UndoLispPosition::from_entry(end1).to_lisp_char_pos();
                                 if let Some(buf) = ctx.buffers.get(buf_id) {
                                     ensure_undo_lisp_range_is_visible(buf, start_pos, end_pos)?;
                                 }
