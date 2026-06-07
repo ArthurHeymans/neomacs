@@ -3494,6 +3494,12 @@ impl LayoutEngine {
         let mut trailing_ws_start_col: i32 = -1; // -1 = no trailing ws
         let mut trailing_ws_start_x: f32 = 0.0;
         let mut trailing_ws_row: usize = 0;
+        // Exact joined-form advances for the current contextual-shaping run,
+        // shaped once via shape_run and keyed by absolute byte offset (robust
+        // to wrap re-processing). Empty/unused for non-complex text.
+        let mut complex_run_adv: Vec<(usize, f32)> = Vec::new();
+        let mut complex_run_start: usize = usize::MAX;
+        let mut complex_run_end: usize = 0;
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -5559,6 +5565,87 @@ impl LayoutEngine {
                 2.0 * face_char_w
             } else if is_cluster_continuation {
                 0.0
+            } else if crate::composition::needs_complex_shaping(ch) {
+                // Use the joined-form advance from shaping the whole run, so
+                // composed Arabic/Indic text is tight and cursor columns line
+                // up with the rendered letters (isolated-form widths over-
+                // reserve). Shape the run once and cache advances by absolute
+                // byte offset.
+                if !(complex_run_start <= ch_start_byte_idx
+                    && ch_start_byte_idx < complex_run_end)
+                {
+                    let script = crate::composition::complex_script(ch);
+                    let mut end = ch_start_byte_idx;
+                    let mut run_text = String::new();
+                    while end < text.len() {
+                        let (c, clen) = decode_utf8(&text[end..]);
+                        if crate::composition::complex_script(c) == script
+                            || (end > ch_start_byte_idx && is_cluster_extender(c))
+                        {
+                            run_text.push(c);
+                            end += clen;
+                        } else {
+                            break;
+                        }
+                    }
+                    let fam = self.current_resolved_family.clone();
+                    let shaped = self
+                        .font_metrics
+                        .as_mut()
+                        .map(|fm| {
+                            fm.shape_run(
+                                &run_text,
+                                &fam,
+                                current_font_weight,
+                                current_font_italic,
+                                current_font_size_px as f32,
+                            )
+                        })
+                        .unwrap_or_default();
+                    complex_run_adv.clear();
+                    // Leave the cache empty when shaping yields nothing (no
+                    // font / unavailable) so each char falls back to its
+                    // isolated width rather than collapsing to zero.
+                    if !shaped.is_empty() {
+                        for (rel, c) in run_text.char_indices() {
+                            if is_cluster_extender(c) {
+                                continue;
+                            }
+                            let a: f32 = shaped
+                                .iter()
+                                .filter(|g| g.cluster_start == rel)
+                                .map(|g| g.x_advance)
+                                .sum();
+                            complex_run_adv.push((ch_start_byte_idx + rel, a));
+                        }
+                    }
+                    complex_run_start = ch_start_byte_idx;
+                    complex_run_end = end;
+                }
+                match complex_run_adv
+                    .iter()
+                    .find(|(b, _)| *b == ch_start_byte_idx)
+                    .map(|(_, a)| *a)
+                {
+                    // In the shaped run: use it, including 0 for a character
+                    // covered by a preceding ligature glyph (no double-count).
+                    Some(a) => a,
+                    // Not cached (shaping unavailable / no font): fall back to
+                    // the isolated-form width.
+                    None => char_advance(
+                        &mut self.ascii_width_cache,
+                        frame_params.window_system,
+                        &mut self.font_metrics,
+                        ch,
+                        char_cols as i32,
+                        char_w,
+                        current_font_size_px,
+                        face_char_w,
+                        &self.current_resolved_family,
+                        current_font_weight,
+                        current_font_italic,
+                    ),
+                }
             } else {
                 char_advance(
                     &mut self.ascii_width_cache,
