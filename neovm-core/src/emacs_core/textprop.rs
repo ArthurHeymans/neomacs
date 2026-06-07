@@ -2080,7 +2080,10 @@ pub(crate) fn builtin_next_single_property_change_in_state(
 /// would land mid-character and trip the Emacs-char-boundary assertion in
 /// `emacs_byte_pos_to_char_pos`.  `byte_pos` must already be a character
 /// boundary (validated points and interval boundaries always are).
-fn emacs_byte_pos_of_preceding_char(buf: &Buffer, byte_pos: EmacsBytePos) -> EmacsBytePos {
+pub(crate) fn emacs_byte_pos_of_preceding_char(
+    buf: &Buffer,
+    byte_pos: EmacsBytePos,
+) -> EmacsBytePos {
     if byte_pos <= EmacsBytePos::ZERO {
         return EmacsBytePos::ZERO;
     }

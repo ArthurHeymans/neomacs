@@ -237,7 +237,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         _ => (None, None),
     };
 
-    let ref_byte = EmacsBytePos::new(byte_pos).saturating_sub_len(EmacsByteLen::new(1));
+    let ref_byte = textprop::emacs_byte_pos_of_preceding_char(buf, EmacsBytePos::new(byte_pos));
     let current_props = buf.text_props_get_properties_at_emacs_byte_pos(ref_byte);
     let mut cursor = EmacsBytePos::new(byte_pos);
 
@@ -250,7 +250,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                     }
                 }
 
-                let check = prev.saturating_sub_len(EmacsByteLen::new(1));
+                let check = textprop::emacs_byte_pos_of_preceding_char(buf, prev);
                 let new_props = buf.text_props_get_properties_at_emacs_byte_pos(check);
                 if new_props != current_props {
                     return Ok(Value::fixnum(textprop::byte_to_elisp_pos(buf, prev)));
@@ -262,7 +262,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                 cursor = if prev < cursor {
                     prev
                 } else {
-                    prev.saturating_sub_len(EmacsByteLen::new(1))
+                    textprop::emacs_byte_pos_of_preceding_char(buf, prev)
                 };
             }
             None => break,

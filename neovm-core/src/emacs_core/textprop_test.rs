@@ -110,6 +110,27 @@ fn previous_single_property_change_steps_back_over_multibyte_char() {
 }
 
 #[test]
+fn previous_property_change_steps_back_over_multibyte_char() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("a汉b"); // 汉 = U+6C49, 3 internal bytes
+    builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ],
+    )
+    .expect("put-text-property");
+
+    let result = eval
+        .eval_str("(previous-property-change 4)")
+        .expect("previous-property-change must not step into a multibyte char");
+    assert_eq!(result, Value::fixnum(3));
+}
+
+#[test]
 fn get_text_property_uses_category_symbol_identity() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
