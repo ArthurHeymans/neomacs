@@ -2120,35 +2120,36 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             }
             _ => (None, None),
         };
-        let ref_char = char_pos.get().saturating_sub(1);
-        let current_val = lookup_string_text_property(obarray, buffers, &table, ref_char, prop);
+        let ref_char = char_pos.saturating_sub_len(CharLen::new(1));
+        let current_val =
+            lookup_string_text_property(obarray, buffers, &table, ref_char.get(), prop);
         let mut cursor = char_pos;
         loop {
             match table.previous_interval_boundary_before_char_pos(cursor) {
                 Some(prev) => {
-                    let prev = prev.get();
                     if let Some(lim) = limit_pos {
-                        if (prev as i64) <= lim {
+                        if (prev.get() as i64) <= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
                             });
                         }
                     }
-                    let check = if prev > 0 { prev - 1 } else { 0 };
+                    let check = prev.saturating_sub_len(CharLen::new(1));
                     let new_val =
-                        lookup_string_text_property(obarray, buffers, &table, check, prop);
+                        lookup_string_text_property(obarray, buffers, &table, check.get(), prop);
                     let changed = !eq_value(&current_val, &new_val);
                     if changed {
-                        return Ok(Value::fixnum(string_char_to_elisp_pos(
-                            s,
-                            string_char_pos(prev),
-                        )));
+                        return Ok(Value::fixnum(string_char_to_elisp_pos(s, prev)));
                     }
-                    if prev == 0 {
+                    if prev == CharPos0::ZERO {
                         break;
                     }
-                    cursor = string_char_pos(if prev < cursor.get() { prev } else { prev - 1 });
+                    cursor = if prev < cursor {
+                        prev
+                    } else {
+                        prev.saturating_sub_len(CharLen::new(1))
+                    };
                 }
                 None => break,
             }
