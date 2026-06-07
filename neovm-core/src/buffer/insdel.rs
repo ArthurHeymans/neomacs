@@ -237,6 +237,51 @@ impl Buffer {
         self.record_char_modification(edit.changed_chars());
     }
 
+    fn apply_shared_text_edit_side_effects(
+        &mut self,
+        edit: SharedTextEditMetadata,
+        state_update: Option<SharedBufferStateUpdate>,
+    ) {
+        match edit {
+            SharedTextEditMetadata::Insert(edit) => self.apply_byte_insert_side_effects(
+                edit,
+                InsertSideEffectPolicy::shared_buffer(
+                    state_update.expect("insert shared edit requires state update policy"),
+                ),
+            ),
+            SharedTextEditMetadata::Delete(edit) => self.apply_byte_delete_side_effects(
+                edit,
+                DeleteSideEffectPolicy::shared_buffer(
+                    state_update.expect("delete shared edit requires state update policy"),
+                ),
+            ),
+            SharedTextEditMetadata::Replace(edit) => self.apply_replace_side_effects(
+                edit,
+                ReplaceSideEffectPolicy::shared_buffer(
+                    state_update.expect("replace shared edit requires state update policy"),
+                ),
+            ),
+            SharedTextEditMetadata::SameLen {
+                edit,
+                preserve_modified_state,
+            } => self.apply_same_len_edit_side_effects(edit, preserve_modified_state),
+            SharedTextEditMetadata::Transposition {
+                edit,
+                transposition,
+                preserve_modified_state,
+            } => {
+                if state_update
+                    .expect("transposition shared edit requires state update policy")
+                    .update_state_fields()
+                {
+                    let point = transposition.transpose_anchor(self.point_anchor());
+                    self.set_point_anchor_unchecked(point);
+                }
+                self.apply_same_len_edit_side_effects(edit, preserve_modified_state);
+            }
+        }
+    }
+
     fn record_char_modification(&mut self, changed_chars: CharLen) {
         self.text
             .record_char_modification(modification_tick_delta(changed_chars));
@@ -765,51 +810,6 @@ impl BufferManager {
         }
     }
 
-    fn apply_shared_text_edit_metadata(
-        buf: &mut Buffer,
-        edit: SharedTextEditMetadata,
-        state_update: Option<SharedBufferStateUpdate>,
-    ) {
-        match edit {
-            SharedTextEditMetadata::Insert(edit) => buf.apply_byte_insert_side_effects(
-                edit,
-                InsertSideEffectPolicy::shared_buffer(
-                    state_update.expect("insert shared edit requires state update policy"),
-                ),
-            ),
-            SharedTextEditMetadata::Delete(edit) => buf.apply_byte_delete_side_effects(
-                edit,
-                DeleteSideEffectPolicy::shared_buffer(
-                    state_update.expect("delete shared edit requires state update policy"),
-                ),
-            ),
-            SharedTextEditMetadata::Replace(edit) => buf.apply_replace_side_effects(
-                edit,
-                ReplaceSideEffectPolicy::shared_buffer(
-                    state_update.expect("replace shared edit requires state update policy"),
-                ),
-            ),
-            SharedTextEditMetadata::SameLen {
-                edit,
-                preserve_modified_state,
-            } => buf.apply_same_len_edit_side_effects(edit, preserve_modified_state),
-            SharedTextEditMetadata::Transposition {
-                edit,
-                transposition,
-                preserve_modified_state,
-            } => {
-                if state_update
-                    .expect("transposition shared edit requires state update policy")
-                    .update_state_fields()
-                {
-                    let point = transposition.transpose_anchor(buf.point_anchor());
-                    buf.set_point_anchor_unchecked(point);
-                }
-                buf.apply_same_len_edit_side_effects(edit, preserve_modified_state);
-            }
-        }
-    }
-
     fn apply_shared_text_edit_to_siblings(
         &mut self,
         scope: SharedTextEditScope,
@@ -821,7 +821,7 @@ impl BufferManager {
                 can_update_state_fields.then(|| self.shared_sibling_state_update(sibling_id));
             {
                 let sibling = self.buffers.get_mut(&sibling_id)?;
-                Self::apply_shared_text_edit_metadata(sibling, edit, state_update);
+                sibling.apply_shared_text_edit_side_effects(edit, state_update);
             }
             if let Some(state_update) = state_update {
                 self.refresh_shared_buffer_state_cache(sibling_id, state_update)?;

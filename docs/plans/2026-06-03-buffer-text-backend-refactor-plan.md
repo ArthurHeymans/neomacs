@@ -669,6 +669,9 @@ Completed so far:
 - Replaced the shared-buffer state-update boolean with a typed
   `SharedBufferStateUpdate` enum, making the distinction between direct field
   updates and state-marker refresh explicit in transaction policy code.
+- Moved shared edit side-effect application from the manager loop onto
+  `Buffer`, so `BufferManager` now selects affected siblings while `Buffer`
+  owns the edit-policy-to-side-effect mapping.
 
 Next work:
 
