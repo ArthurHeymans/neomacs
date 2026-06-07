@@ -132,6 +132,16 @@ fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, pos: LispCharPos1) -> EmacsByte
     buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
 }
 
+fn lisp_pos_value_to_byte(
+    buf: &crate::buffer::Buffer,
+    value: &Value,
+) -> Result<EmacsBytePos, Flow> {
+    Ok(lisp_pos_to_byte(
+        buf,
+        LispCharPos1::new(expect_integer_or_marker(value)?),
+    ))
+}
+
 fn replacement_region_bounds(
     buf: &crate::buffer::Buffer,
     start_arg: Option<&Value>,
@@ -154,16 +164,12 @@ fn replacement_region_bounds(
     }
 
     let start = match start_arg {
-        Some(v) if !v.is_nil() => {
-            lisp_pos_to_byte(buf, LispCharPos1::new(expect_integer_or_marker(v)?))
-        }
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
         _ if backward => accessible.start(),
         _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => {
-            lisp_pos_to_byte(buf, LispCharPos1::new(expect_integer_or_marker(v)?))
-        }
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
         _ if backward => buf.point_emacs_byte_pos(),
         _ => accessible.end(),
     };
@@ -177,15 +183,11 @@ fn line_operation_region_bounds(
 ) -> Result<EmacsByteRange, Flow> {
     let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
-        Some(v) if !v.is_nil() => {
-            lisp_pos_to_byte(buf, LispCharPos1::new(expect_integer_or_marker(v)?))
-        }
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
         _ => buf.point_emacs_byte_pos(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => {
-            lisp_pos_to_byte(buf, LispCharPos1::new(expect_integer_or_marker(v)?))
-        }
+        Some(v) if !v.is_nil() => lisp_pos_value_to_byte(buf, v)?,
         _ => accessible.end(),
     };
     Ok(EmacsByteRange::ordered(start, end))
