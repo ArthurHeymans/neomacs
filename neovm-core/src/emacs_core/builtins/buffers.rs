@@ -2683,8 +2683,21 @@ pub(crate) fn builtin_goto_char(eval: &mut super::eval::Context, args: Vec<Value
     builtin_goto_char_1(eval, args[0])
 }
 
+fn expect_goto_char_position(buffers: &BufferManager, value: &Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ if super::marker::is_marker(value) => {
+            super::marker::marker_position_as_int_with_buffers(buffers, value)
+        }
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("integer-or-marker-p"), *value],
+        )),
+    }
+}
+
 pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &arg)?;
+    let pos = expect_goto_char_position(&eval.buffers, &arg)?;
     let current_id = eval
         .buffers
         .current_buffer_id()

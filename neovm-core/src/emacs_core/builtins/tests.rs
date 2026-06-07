@@ -16,6 +16,7 @@ use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::{
     load_minimal_gnu_backquote_runtime, runtime_startup_context, runtime_startup_eval_all,
 };
+use malachite::integer::Integer;
 use std::fs;
 use tree_sitter::Language;
 
@@ -8057,6 +8058,48 @@ fn buffer_region_negative_bounds_signal_without_panicking() {
     );
     assert_eq!(
         builtin_char_before(&mut eval, vec![Value::fixnum(0)]).expect("char-before should succeed"),
+        Value::NIL
+    );
+}
+
+#[test]
+fn goto_char_rejects_bignum_but_fix_position_builtins_clamp_it() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    builtin_insert(&mut eval, vec![Value::string("abc")]).expect("insert should succeed");
+
+    let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
+    let negative_big = Value::bignum(-(Integer::from(1u64) << 100u32));
+
+    let goto_err = builtin_goto_char(&mut eval, vec![positive_big])
+        .expect_err("GNU goto-char rejects bignum even though fix_position accepts it");
+    match goto_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("integer-or-marker-p"), positive_big]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+
+    assert_eq!(
+        builtin_char_after(&mut eval, vec![positive_big]).expect("char-after should succeed"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_char_after(&mut eval, vec![negative_big]).expect("char-after should succeed"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_position_bytes(&mut eval, vec![positive_big])
+            .expect("position-bytes should clamp positive bignum"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_position_bytes(&mut eval, vec![negative_big])
+            .expect("position-bytes should clamp negative bignum"),
         Value::NIL
     );
 }
