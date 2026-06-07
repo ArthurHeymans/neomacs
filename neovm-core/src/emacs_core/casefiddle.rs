@@ -6,7 +6,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::syntax::forward_word;
 use super::value::*;
-use crate::buffer::{Buffer, EmacsByteRange, LispCharPos1};
+use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -42,22 +42,6 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
         other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
-        )),
-    }
-}
-
-fn expect_integer_or_marker(
-    buffers: &crate::buffer::BufferManager,
-    value: Value,
-) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if value.is_marker() => {
-            super::marker::marker_position_as_int_with_buffers(buffers, &value)
-        }
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), value],
         )),
     }
 }
@@ -455,74 +439,9 @@ fn preserve_upcase_case_string_payload(code: i64) -> bool {
     )
 }
 
-#[derive(Clone, Copy, Debug)]
-struct CaseLispRegion {
-    beg: LispCharPos1,
-    end: LispCharPos1,
-    beg_arg: Value,
-    end_arg: Value,
-}
-
-impl CaseLispRegion {
-    fn from_values(
-        buffers: &crate::buffer::BufferManager,
-        beg: Value,
-        end: Value,
-    ) -> Result<Self, Flow> {
-        Ok(Self {
-            beg: LispCharPos1::new(expect_integer_or_marker(buffers, beg)?),
-            end: LispCharPos1::new(expect_integer_or_marker(buffers, end)?),
-            beg_arg: beg,
-            end_arg: end,
-        })
-    }
-
-    fn from_bounds_value(
-        buffers: &crate::buffer::BufferManager,
-        value: Value,
-    ) -> Result<Self, Flow> {
-        if !value.is_cons() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("consp"), value],
-            ));
-        }
-        Self::from_values(buffers, value.cons_car(), value.cons_cdr())
-    }
-
-    fn validate_accessible(self, buf: &Buffer) -> Result<Self, Flow> {
-        let point_min = buf.point_min_lisp_char_pos();
-        let point_max = buf.point_max_lisp_char_pos();
-        let (lo, hi) = self.ordered_positions();
-        if lo < point_min || hi > point_max {
-            return Err(signal(
-                "args-out-of-range",
-                vec![Value::make_buffer(buf.id), self.beg_arg, self.end_arg],
-            ));
-        }
-        Ok(self)
-    }
-
-    fn ordered_positions(self) -> (LispCharPos1, LispCharPos1) {
-        if self.beg <= self.end {
-            (self.beg, self.end)
-        } else {
-            (self.end, self.beg)
-        }
-    }
-
-    fn to_accessible_byte_range(self, buf: &Buffer) -> EmacsByteRange {
-        let (beg, end) = self.ordered_positions();
-        EmacsByteRange::new(
-            buf.lisp_pos_to_accessible_emacs_byte_pos(beg),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(end),
-        )
-    }
-}
-
 fn noncontiguous_case_regions(
     eval: &mut super::eval::Context,
-) -> Result<Vec<CaseLispRegion>, Flow> {
+) -> Result<Vec<super::position::LispRegionArgs>, Flow> {
     let extractor = eval
         .eval_symbol("region-extract-function")
         .unwrap_or(Value::symbol("buffer-substring"));
@@ -531,7 +450,19 @@ fn noncontiguous_case_regions(
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), bounds]))?;
     bounds_list
         .into_iter()
-        .map(|value| CaseLispRegion::from_bounds_value(&eval.buffers, value))
+        .map(|value| {
+            if !value.is_cons() {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("consp"), value],
+                ));
+            }
+            super::position::LispRegionArgs::from_values(
+                &eval.buffers,
+                value.cons_car(),
+                value.cons_cdr(),
+            )
+        })
         .collect()
 }
 
@@ -584,7 +515,7 @@ fn casify_region_in_state(
     let regions = if args.get(2).is_some_and(|value| !value.is_nil()) {
         noncontiguous_case_regions(eval)?
     } else {
-        vec![CaseLispRegion::from_values(
+        vec![super::position::LispRegionArgs::from_values(
             &eval.buffers,
             args[0],
             args[1],
@@ -597,8 +528,7 @@ fn casify_region_in_state(
                 .buffers
                 .current_buffer()
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            let region = region.validate_accessible(buf)?;
-            let byte_range = region.to_accessible_byte_range(buf);
+            let byte_range = region.accessible_byte_range(buf)?;
             if byte_range.is_empty() {
                 continue;
             }
