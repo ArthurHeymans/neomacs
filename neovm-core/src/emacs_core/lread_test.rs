@@ -1,5 +1,6 @@
 use super::*;
 use crate::emacs_core::eval::Context;
+use malachite::integer::Integer;
 
 /// Test helper: create a fresh eval context for locate-file tests.
 fn test_eval_ctx() -> Context {
@@ -367,6 +368,43 @@ fn eval_region_nil_or_reversed_bounds_are_noop() {
 }
 
 #[test]
+fn eval_region_accepts_marker_bounds_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    {
+        let buf = ev.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert("(setq lread-er-marker 17)");
+    }
+    let buffer_id = ev.buffers.current_buffer_id().expect("current buffer");
+    let start = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut ev.buffers,
+        buffer_id,
+        crate::buffer::LispCharPos1::new(1),
+        false,
+    );
+    let end = {
+        let point_max = ev
+            .buffers
+            .current_buffer()
+            .expect("current buffer")
+            .z_lisp_char_pos();
+        crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut ev.buffers,
+            buffer_id,
+            point_max,
+            false,
+        )
+    };
+
+    let result = builtin_eval_region(&mut ev, vec![start, end]).unwrap();
+    assert!(result.is_nil());
+    assert_eq!(
+        ev.obarray.symbol_value("lread-er-marker").cloned(),
+        Some(Value::fixnum(17))
+    );
+}
+
+#[test]
 fn eval_region_reports_type_range_and_arity_errors() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -396,6 +434,15 @@ fn eval_region_reports_type_range_and_arity_errors() {
             if sig.symbol_name() == "wrong-type-argument"
                 && sig.data
                     == vec![Value::symbol("integer-or-marker-p"), Value::string("2")]
+    ));
+
+    let big = Value::make_integer(Integer::from(1u64) << 100u32);
+    let bad_big = builtin_eval_region(&mut ev, vec![big, Value::fixnum(point_max)]);
+    assert!(matches!(
+        bad_big,
+        Err(Flow::Signal(sig))
+            if sig.symbol_name() == "wrong-type-argument"
+                && sig.data.first() == Some(&Value::symbol("integer-or-marker-p"))
     ));
 
     let range = builtin_eval_region(&mut ev, vec![Value::fixnum(1), Value::fixnum(999)]);

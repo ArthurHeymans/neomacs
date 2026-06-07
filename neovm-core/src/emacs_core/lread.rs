@@ -36,10 +36,16 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
+fn expect_integer_or_marker_in_buffers(
+    buffers: &crate::buffer::BufferManager,
+    value: &Value,
+) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _ if super::marker::is_marker(value) => {
+            super::marker::marker_position_as_int_with_buffers(buffers, value)
+        }
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
@@ -367,12 +373,12 @@ pub(crate) fn eval_region_source_text_in_state(
         let raw_start = if args[0].is_nil() {
             point_char_pos
         } else {
-            expect_integer_or_marker(&args[0])?
+            expect_integer_or_marker_in_buffers(buffers, &args[0])?
         };
         let raw_end = if args[1].is_nil() {
             point_char_pos
         } else {
-            expect_integer_or_marker(&args[1])?
+            expect_integer_or_marker_in_buffers(buffers, &args[1])?
         };
 
         if raw_start < 1 || raw_start > max_char_pos || raw_end < 1 || raw_end > max_char_pos {
