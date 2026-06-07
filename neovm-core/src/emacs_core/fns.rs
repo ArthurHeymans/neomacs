@@ -498,38 +498,111 @@ pub(crate) fn normalize_current_buffer_region_bounds_in_manager(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    let point_min_char = buf.point_min_lisp_char_pos().as_i64();
-    let point_max_char = buf.point_max_lisp_char_pos().as_i64();
-    let start = LispCharPos1::new(require_int_or_marker(start_arg)?);
-    let end = LispCharPos1::new(require_int_or_marker(end_arg)?);
-    if start.as_i64() < point_min_char
-        || start.as_i64() > point_max_char
-        || end.as_i64() < point_min_char
-        || end.as_i64() > point_max_char
-    {
+    let region = ValidatedBufferLispRegion::from_values(start_arg, end_arg)?;
+    if !region.within_accessible(buf) {
         return Err(signal(
             "args-out-of-range",
             vec![Value::make_buffer(buffer_id), *start_arg, *end_arg],
         ));
     }
 
-    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
-    Ok((buffer_id, byte_range))
+    Ok((buffer_id, region.to_accessible_byte_range(buf)))
 }
 
-fn lisp_range_to_accessible_byte_range(
-    buf: &crate::buffer::Buffer,
+#[derive(Clone, Copy, Debug)]
+struct ValidatedBufferLispRegion {
     start: LispCharPos1,
     end: LispCharPos1,
-) -> EmacsByteRange {
-    let (lo, hi) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    EmacsByteRange::new(
-        buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
-        buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+}
+
+impl ValidatedBufferLispRegion {
+    fn from_values(start_arg: &Value, end_arg: &Value) -> Result<Self, Flow> {
+        Ok(Self {
+            start: LispCharPos1::new(require_int_or_marker(start_arg)?),
+            end: LispCharPos1::new(require_int_or_marker(end_arg)?),
+        })
+    }
+
+    fn from_optional_values(
+        start_raw: Option<&Value>,
+        end_raw: Option<&Value>,
+        default_start: LispCharPos1,
+        default_end: LispCharPos1,
+        start_arg: &Value,
+        end_arg: &Value,
+    ) -> Result<Self, Flow> {
+        Ok(Self {
+            start: normalize_optional_lisp_region_position(start_raw, default_start)?,
+            end: normalize_optional_lisp_region_position(end_raw, default_end)?,
+        }
+        .validate_bounds(default_start, default_end, start_arg, end_arg)?)
+    }
+
+    fn validate_bounds(
+        self,
+        point_min: LispCharPos1,
+        point_max: LispCharPos1,
+        start_arg: &Value,
+        end_arg: &Value,
+    ) -> Result<Self, Flow> {
+        if self.start < point_min
+            || self.start > point_max
+            || self.end < point_min
+            || self.end > point_max
+        {
+            return Err(signal("args-out-of-range", vec![*start_arg, *end_arg]));
+        }
+        Ok(self)
+    }
+
+    fn within_accessible(&self, buf: &crate::buffer::Buffer) -> bool {
+        let point_min = buf.point_min_lisp_char_pos();
+        let point_max = buf.point_max_lisp_char_pos();
+        self.start >= point_min
+            && self.start <= point_max
+            && self.end >= point_min
+            && self.end <= point_max
+    }
+
+    fn ordered(self) -> (LispCharPos1, LispCharPos1) {
+        if self.start <= self.end {
+            (self.start, self.end)
+        } else {
+            (self.end, self.start)
+        }
+    }
+
+    fn to_accessible_byte_range(self, buf: &crate::buffer::Buffer) -> EmacsByteRange {
+        let (lo, hi) = self.ordered();
+        EmacsByteRange::new(
+            buf.lisp_pos_to_accessible_emacs_byte_pos(lo),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(hi),
+        )
+    }
+}
+
+fn normalize_optional_lisp_region_position(
+    val: Option<&Value>,
+    default: LispCharPos1,
+) -> Result<LispCharPos1, Flow> {
+    match val {
+        None => Ok(default),
+        Some(v) if v.is_nil() => Ok(default),
+        Some(v) => Ok(LispCharPos1::new(require_int_or_marker(v)?)),
+    }
+}
+
+fn checked_buffer_hash_lisp_region(
+    buf: &crate::buffer::Buffer,
+    start_raw: Option<&Value>,
+    end_raw: Option<&Value>,
+) -> Result<ValidatedBufferLispRegion, Flow> {
+    let point_min = buf.point_min_lisp_char_pos();
+    let point_max = buf.point_max_lisp_char_pos();
+    let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
+    let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
+    ValidatedBufferLispRegion::from_optional_values(
+        start_raw, end_raw, point_min, point_max, &start_arg, &end_arg,
     )
 }
 
@@ -865,25 +938,6 @@ fn md5_hex_for_string(
     Ok(md5_hash(&bytes[byte_from..byte_to]))
 }
 
-fn normalize_md5_buffer_position(
-    val: Option<&Value>,
-    default: i64,
-    point_min: i64,
-    point_max: i64,
-    start_arg: &Value,
-    end_arg: &Value,
-) -> Result<i64, Flow> {
-    let raw = match val {
-        None => default,
-        Some(v) if v.is_nil() => default,
-        Some(v) => require_int_or_marker(v)?,
-    };
-    if raw < point_min || raw > point_max {
-        return Err(signal("args-out-of-range", vec![*start_arg, *end_arg]));
-    }
-    Ok(raw)
-}
-
 fn hash_slice_for_buffer_in_manager(
     buffers: &BufferManager,
     buffer_id: crate::buffer::BufferId,
@@ -894,19 +948,8 @@ fn hash_slice_for_buffer_in_manager(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
 
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-
-    let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
-    let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
-    let start = LispCharPos1::new(normalize_md5_buffer_position(
-        start_raw, point_min, point_min, point_max, &start_arg, &end_arg,
-    )?);
-    let end = LispCharPos1::new(normalize_md5_buffer_position(
-        end_raw, point_max, point_min, point_max, &start_arg, &end_arg,
-    )?);
-
-    let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
+    let byte_range =
+        checked_buffer_hash_lisp_region(buf, start_raw, end_raw)?.to_accessible_byte_range(buf);
     Ok(buf.buffer_substring_bytes_range(byte_range))
 }
 
@@ -921,17 +964,8 @@ fn md5_hex_for_buffer_in_manager(
         let buf = buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-        let point_min = buf.point_min_lisp_char_pos().as_i64();
-        let point_max = buf.point_max_lisp_char_pos().as_i64();
-        let start_arg = start_raw.cloned().unwrap_or(Value::NIL);
-        let end_arg = end_raw.cloned().unwrap_or(Value::NIL);
-        let start = LispCharPos1::new(normalize_md5_buffer_position(
-            start_raw, point_min, point_min, point_max, &start_arg, &end_arg,
-        )?);
-        let end = LispCharPos1::new(normalize_md5_buffer_position(
-            end_raw, point_max, point_min, point_max, &start_arg, &end_arg,
-        )?);
-        let byte_range = lisp_range_to_accessible_byte_range(buf, start, end);
+        let byte_range =
+            checked_buffer_hash_lisp_region(buf, start_raw, end_raw)?.to_accessible_byte_range(buf);
         let text = buf.buffer_substring_lisp_string_range(byte_range);
         if text.is_multibyte() {
             return Ok(md5_hash(&crate::encoding::encode_lisp_string(
