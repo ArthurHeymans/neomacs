@@ -7,7 +7,7 @@ use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1};
 use std::io::Write;
 use std::time::Duration;
 use strum::{EnumString, IntoStaticStr};
@@ -432,12 +432,12 @@ fn restore_minibuffer_window_in_state(
                 crate::window::window_markers::set_window_start_with_marker(
                     buffers,
                     window,
-                    saved.previous_minibuffer_window_start.max(1),
+                    LispCharPos1::from_one_based_usize(saved.previous_minibuffer_window_start),
                 );
                 crate::window::window_markers::set_window_point_with_marker(
                     buffers,
                     window,
-                    saved.previous_minibuffer_point.max(1),
+                    LispCharPos1::from_one_based_usize(saved.previous_minibuffer_point),
                 );
             }
         }

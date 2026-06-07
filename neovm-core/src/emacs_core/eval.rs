@@ -7274,8 +7274,7 @@ impl Context {
             crate::window::window_markers::set_window_start_with_marker(
                 buffers,
                 window,
-                usize::try_from(window_start_lisp.as_i64().max(1))
-                    .expect("Lisp character position fits usize"),
+                window_start_lisp,
             );
             window.set_window_end_from_positions(
                 buffer_z_char,
