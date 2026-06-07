@@ -172,12 +172,33 @@ cp -a "$app_bundle" "$dmg_staging/"
 
 ln -sf /Applications "$dmg_staging/Applications"
 
-hdiutil create \
-  -volname "$app_bundle_name" \
-  -srcfolder "$dmg_staging" \
-  -ov \
-  -format UDZO \
-  "$dmg"
+# hdiutil can intermittently fail with "hdiutil: create failed - Resource
+# busy" on CI runners (a leftover mount of the same volume, or Spotlight/mds
+# indexing the source folder while it is read). Detach any stale volume and
+# retry a few times before giving up.
+create_dmg() {
+  local vol="/Volumes/$app_bundle_name"
+  [[ -d "$vol" ]] && hdiutil detach "$vol" -force >/dev/null 2>&1 || true
+  hdiutil create \
+    -volname "$app_bundle_name" \
+    -srcfolder "$dmg_staging" \
+    -ov \
+    -format UDZO \
+    "$dmg"
+}
+
+dmg_attempts=5
+for attempt in $(seq 1 "$dmg_attempts"); do
+  if create_dmg; then
+    break
+  fi
+  if [[ "$attempt" -eq "$dmg_attempts" ]]; then
+    echo "hdiutil create failed after $dmg_attempts attempts" >&2
+    exit 1
+  fi
+  echo "hdiutil create failed (attempt $attempt/$dmg_attempts); retrying in 5s..." >&2
+  sleep 5
+done
 
 rm -rf "$dmg_staging"
 
