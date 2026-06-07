@@ -8,7 +8,9 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::{BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::buffer::{
+    BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -487,12 +489,12 @@ pub(crate) fn adjust_for_intangible(
         loop {
             match previous_char_property_change(buf, cursor) {
                 Some(prev) => {
-                    let check = prev.get().saturating_sub(1);
+                    let check = prev.saturating_sub_len(EmacsByteLen::new(1));
                     let prop = lookup_buffer_char_property(
                         &eval.obarray,
                         &eval.buffers,
                         buf,
-                        check,
+                        check.get(),
                         Value::symbol("intangible"),
                     );
                     cursor = prev;

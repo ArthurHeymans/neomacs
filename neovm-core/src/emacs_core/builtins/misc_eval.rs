@@ -167,37 +167,33 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
             _ => (None, None),
         };
 
-        let ref_char = if char_pos > 0 { char_pos - 1 } else { 0 };
-        let current_props = table.get_properties_at_char_pos(CharPos0::new(ref_char));
+        let ref_char = CharPos0::new(char_pos).saturating_sub_len(CharLen::new(1));
+        let current_props = table.get_properties_at_char_pos(ref_char);
         let mut cursor = CharPos0::new(char_pos);
 
         loop {
             match table.previous_property_change_before_char_pos(cursor) {
                 Some(prev) => {
-                    let prev_raw = prev.get();
                     if let Some(lim) = limit_pos {
-                        if (prev_raw as i64) <= lim {
+                        if (prev.get() as i64) <= lim {
                             return Ok(match limit_val {
                                 Some(lv) => Value::fixnum(lv),
                                 None => Value::NIL,
                             });
                         }
                     }
-                    let check = if prev_raw > 0 { prev_raw - 1 } else { 0 };
-                    let new_props = table.get_properties_at_char_pos(CharPos0::new(check));
+                    let check = prev.saturating_sub_len(CharLen::new(1));
+                    let new_props = table.get_properties_at_char_pos(check);
                     if new_props != current_props {
-                        return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(
-                            s,
-                            CharPos0::new(prev_raw),
-                        )));
+                        return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(s, prev)));
                     }
-                    if prev_raw == 0 {
+                    if prev == CharPos0::ZERO {
                         break;
                     }
-                    cursor = if prev_raw < cursor.get() {
+                    cursor = if prev < cursor {
                         prev
                     } else {
-                        CharPos0::new(prev_raw - 1)
+                        prev.saturating_sub_len(CharLen::new(1))
                     };
                 }
                 None => break,
@@ -241,9 +237,8 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         _ => (None, None),
     };
 
-    let ref_byte = if byte_pos > 0 { byte_pos - 1 } else { 0 };
-    let current_props =
-        buf.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(ref_byte));
+    let ref_byte = EmacsBytePos::new(byte_pos).saturating_sub_len(EmacsByteLen::new(1));
+    let current_props = buf.text_props_get_properties_at_emacs_byte_pos(ref_byte);
     let mut cursor = EmacsBytePos::new(byte_pos);
 
     loop {
@@ -255,10 +250,8 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                     }
                 }
 
-                let prev_raw = prev.get();
-                let check = if prev_raw > 0 { prev_raw - 1 } else { 0 };
-                let new_props =
-                    buf.text_props_get_properties_at_emacs_byte_pos(EmacsBytePos::new(check));
+                let check = prev.saturating_sub_len(EmacsByteLen::new(1));
+                let new_props = buf.text_props_get_properties_at_emacs_byte_pos(check);
                 if new_props != current_props {
                     return Ok(Value::fixnum(textprop::byte_to_elisp_pos(buf, prev)));
                 }
@@ -269,7 +262,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                 cursor = if prev < cursor {
                     prev
                 } else {
-                    EmacsBytePos::new(prev_raw - 1)
+                    prev.saturating_sub_len(EmacsByteLen::new(1))
                 };
             }
             None => break,
