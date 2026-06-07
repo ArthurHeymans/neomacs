@@ -1284,3 +1284,25 @@ fn two_fontsystems_identical_org_heading_sizes() {
         }
     }
 }
+
+// --- shape_run (gstring foundation) ---
+
+#[test]
+fn shape_run_returns_per_glyph_clusters_for_ascii() {
+    let mut svc = make_svc();
+    let glyphs = svc.shape_run("abc", "monospace", 400, false, 16.0);
+    assert_eq!(glyphs.len(), 3, "ascii 'abc' should shape to 3 glyphs");
+    // Each ASCII char is its own one-byte cluster, in logical order.
+    assert_eq!((glyphs[0].cluster_start, glyphs[0].cluster_end), (0, 1));
+    assert_eq!((glyphs[1].cluster_start, glyphs[1].cluster_end), (1, 2));
+    assert_eq!((glyphs[2].cluster_start, glyphs[2].cluster_end), (2, 3));
+    // Positive advances; the pen advances left to right for LTR text.
+    assert!(glyphs.iter().all(|g| g.x_advance > 0.0));
+    assert!(glyphs[2].x >= glyphs[0].x);
+}
+
+#[test]
+fn shape_run_empty_text_is_empty() {
+    let mut svc = make_svc();
+    assert!(svc.shape_run("", "monospace", 400, false, 16.0).is_empty());
+}

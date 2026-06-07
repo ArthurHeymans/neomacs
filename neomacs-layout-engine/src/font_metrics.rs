@@ -43,6 +43,31 @@ pub struct SelectedFontInfo {
     pub width: FontWidth,
 }
 
+/// One shaped glyph produced by [`FontMetricsService::shape_run`]: the
+/// resolved font glyph plus its position, advance, and the byte range of
+/// the source text it covers (its cluster). This is neomacs's layout-side
+/// equivalent of a GNU lglyph (CODE / WIDTH / cluster FROM..TO) — the
+/// per-glyph output of running HarfBuzz-class shaping over a text run.
+/// It is the building block of the composed glyph rows that contextual
+/// scripts (Arabic, Indic) and programming ligatures need.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShapedGlyph {
+    /// Resolved font the glyph belongs to (after fallback).
+    pub font_id: fontdb::ID,
+    /// Glyph index within `font_id`.
+    pub glyph_id: u16,
+    /// Pen x offset of the glyph within the run, in pixels from the origin.
+    pub x: f32,
+    /// Pen y offset (baseline-relative), in pixels.
+    pub y: f32,
+    /// Horizontal advance of the glyph, in pixels.
+    pub x_advance: f32,
+    /// Start byte index (inclusive) of the source cluster in the shaped text.
+    pub cluster_start: usize,
+    /// End byte index (exclusive) of the source cluster in the shaped text.
+    pub cluster_end: usize,
+}
+
 /// Cache key for font metrics lookups.
 /// Groups: (family, weight, italic, font_size_centipx)
 /// font_size is stored as integer centipixels (size * 100) to avoid float key issues.
@@ -223,6 +248,69 @@ impl FontMetricsService {
         }
 
         (None, font_size * 0.6)
+    }
+
+    /// Shape a run of `text` with the given face attributes and return its
+    /// glyphs in visual order, with positions, advances, and source-cluster
+    /// byte ranges.
+    ///
+    /// This is the layout-side counterpart of GNU's `font-shape-gstring` and
+    /// the font driver's `->shape` method: it runs cosmic-text's
+    /// `Shaping::Advanced` (HarfBuzz-class) so contextual scripts (Arabic
+    /// joining, Indic reordering) and ligatures resolve correctly across the
+    /// whole run rather than per character. The cluster byte ranges map each
+    /// glyph back to the characters it covers, which a composed glyph row
+    /// needs for cursor positioning. Returns an empty vec for empty text.
+    pub fn shape_run(
+        &mut self,
+        text: &str,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Vec<ShapedGlyph> {
+        if text.is_empty() {
+            return Vec::new();
+        }
+        let attrs = self.build_attrs(
+            family,
+            weight,
+            if italic {
+                FontSlant::Italic
+            } else {
+                FontSlant::Normal
+            },
+        );
+        let metrics = safe_metrics(font_size, font_size * 1.3);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        // No width bound: lay the whole run out on a single line so shaping
+        // spans the entire run instead of wrapping mid-word.
+        buffer.set_size(&mut self.font_system, None, None);
+        buffer.set_text(
+            &mut self.font_system,
+            text,
+            &attrs,
+            cosmic_text::Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+
+        let mut glyphs = Vec::new();
+        for run in buffer.layout_runs() {
+            for glyph in run.glyphs.iter() {
+                let phys = glyph.physical((0.0, 0.0), 1.0);
+                glyphs.push(ShapedGlyph {
+                    font_id: phys.cache_key.font_id,
+                    glyph_id: phys.cache_key.glyph_id,
+                    x: phys.x as f32,
+                    y: phys.y as f32,
+                    x_advance: glyph.w,
+                    cluster_start: glyph.start,
+                    cluster_end: glyph.end,
+                });
+            }
+        }
+        glyphs
     }
 
     fn font_metrics_from_selected_face(
