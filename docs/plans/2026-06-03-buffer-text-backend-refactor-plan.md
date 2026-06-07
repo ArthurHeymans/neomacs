@@ -681,6 +681,9 @@ Completed so far:
 - Replaced raw side-effect policy booleans with named transaction enums for
   buffer state fields, accessible-start movement, point-at-insertion behavior,
   and shared text side-data adjustment.
+- Replaced the same-length edit modified-state boolean with a named policy, so
+  same-length substitutions and transpositions explicitly choose whether they
+  record a change or preserve a clean modified state.
 
 Next work:
 

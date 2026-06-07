@@ -541,12 +541,12 @@ pub(in crate::buffer) enum SharedTextEditMetadata {
     Replace(MeasuredReplaceEdit),
     SameLen {
         edit: MeasuredSameLenEdit,
-        preserve_modified_state: bool,
+        modified_state: SameLenModifiedStatePolicy,
     },
     Transposition {
         edit: MeasuredSameLenEdit,
         transposition: TextTransposition,
-        preserve_modified_state: bool,
+        modified_state: SameLenModifiedStatePolicy,
     },
 }
 
@@ -884,6 +884,18 @@ impl SharedTextSideDataPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum SameLenModifiedStatePolicy {
+    RecordChange,
+    PreserveUnmodifiedIfClean,
+}
+
+impl SameLenModifiedStatePolicy {
+    pub(in crate::buffer) const fn preserve_unmodified_if_clean(self) -> bool {
+        matches!(self, Self::PreserveUnmodifiedIfClean)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) struct InsertSideEffectPolicy {
     pub(in crate::buffer) state_fields: BufferStateFieldUpdatePolicy,
     pub(in crate::buffer) accessible_start: AccessibleStartUpdatePolicy,
@@ -1047,7 +1059,7 @@ mod tests {
             state_policy_for_shared_sibling(SharedTextEditMetadata::Transposition {
                 edit: same_len_edit(),
                 transposition: TextTransposition::from_usize(2, 5, 1, 3, 8, 10, 5, 7),
-                preserve_modified_state: true,
+                modified_state: SameLenModifiedStatePolicy::PreserveUnmodifiedIfClean,
             }),
             SharedTextEditStatePolicy::StateFields(
                 SharedBufferStateUpdate::RefreshFromStateMarkers
@@ -1056,7 +1068,7 @@ mod tests {
         assert_eq!(
             state_policy_for_shared_sibling(SharedTextEditMetadata::SameLen {
                 edit: same_len_edit(),
-                preserve_modified_state: true,
+                modified_state: SameLenModifiedStatePolicy::PreserveUnmodifiedIfClean,
             }),
             SharedTextEditStatePolicy::NoStateFields
         );

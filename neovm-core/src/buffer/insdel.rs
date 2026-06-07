@@ -8,10 +8,11 @@ use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
 use crate::buffer::edit_transaction::{
     BufferEditState, DeleteSideEffectPolicy, InsertMarkerAdjustment, InsertMarkerPlacement,
     InsertSideEffectPolicy, MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit,
-    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenSubstitutionPlan, SharedBufferStateUpdate,
-    SharedTextEditMetadata, SharedTextEditScope, SharedTextEditStatePolicy,
-    TranspositionStoragePlan, char_pos_for_emacs_byte, convert_lisp_string_for_buffer_mode,
-    emacs_byte_for_char_pos, lisp_string_from_buffer_bytes, modification_tick_delta,
+    MeasuredSameLenEdit, ReplaceSideEffectPolicy, SameLenModifiedStatePolicy,
+    SameLenSubstitutionPlan, SharedBufferStateUpdate, SharedTextEditMetadata, SharedTextEditScope,
+    SharedTextEditStatePolicy, TranspositionStoragePlan, char_pos_for_emacs_byte,
+    convert_lisp_string_for_buffer_mode, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
+    modification_tick_delta,
 };
 use crate::buffer::undo;
 use crate::buffer::{
@@ -197,14 +198,14 @@ impl Buffer {
     fn apply_same_len_edit_side_effects(
         &mut self,
         edit: MeasuredSameLenEdit,
-        preserve_modified_state: bool,
+        modified_state: SameLenModifiedStatePolicy,
     ) {
         if edit.is_empty() {
             return;
         }
         let old_state = self.modified_state_value();
         self.record_char_modification(edit.changed_chars());
-        if preserve_modified_state && old_state.is_nil() {
+        if modified_state.preserve_unmodified_if_clean() && old_state.is_nil() {
             self.text.set_save_modified_tick(self.text.modified_tick());
         }
     }
@@ -257,18 +258,18 @@ impl Buffer {
             ),
             SharedTextEditMetadata::SameLen {
                 edit,
-                preserve_modified_state,
-            } => self.apply_same_len_edit_side_effects(edit, preserve_modified_state),
+                modified_state,
+            } => self.apply_same_len_edit_side_effects(edit, modified_state),
             SharedTextEditMetadata::Transposition {
                 edit,
                 transposition,
-                preserve_modified_state,
+                modified_state,
             } => {
                 if state_policy.structural_state_update().update_state_fields() {
                     let point = transposition.transpose_anchor(self.point_anchor());
                     self.set_point_anchor_unchecked(point);
                 }
-                self.apply_same_len_edit_side_effects(edit, preserve_modified_state);
+                self.apply_same_len_edit_side_effects(edit, modified_state);
             }
         }
     }
@@ -594,7 +595,7 @@ impl Buffer {
             plan.replacement_for_range(range, self.get_multibyte()),
             plan.replacement_bytes(),
         );
-        self.apply_same_len_edit_side_effects(edit, false);
+        self.apply_same_len_edit_side_effects(edit, SameLenModifiedStatePolicy::RecordChange);
         true
     }
 
@@ -758,7 +759,10 @@ impl Buffer {
         }
 
         self.set_point_anchor_unchecked(new_point);
-        self.apply_same_len_edit_side_effects(plan.edit(), false);
+        self.apply_same_len_edit_side_effects(
+            plan.edit(),
+            SameLenModifiedStatePolicy::RecordChange,
+        );
     }
 }
 
@@ -1042,7 +1046,7 @@ impl BufferManager {
             scope,
             SharedTextEditMetadata::SameLen {
                 edit,
-                preserve_modified_state: false,
+                modified_state: SameLenModifiedStatePolicy::RecordChange,
             },
         )?;
         Some(true)
@@ -1066,7 +1070,7 @@ impl BufferManager {
             SharedTextEditMetadata::Transposition {
                 edit,
                 transposition,
-                preserve_modified_state: false,
+                modified_state: SameLenModifiedStatePolicy::RecordChange,
             },
         )
     }
