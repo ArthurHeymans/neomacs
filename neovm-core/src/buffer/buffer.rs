@@ -2297,12 +2297,8 @@ impl Buffer {
     /// to the accessible region.
     pub fn lisp_pos_to_accessible_emacs_byte_pos(&self, lisp_pos: LispCharPos1) -> EmacsBytePos {
         let char_pos = lisp_pos.to_char_pos();
-        let clamped_char = char_pos.get().clamp(
-            self.point_min_char_pos().get(),
-            self.point_max_char_pos().get(),
-        );
-        self.text
-            .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+        let clamped_char = char_pos.clamp(self.point_min_char_pos(), self.point_max_char_pos());
+        self.text.char_pos_to_emacs_byte_pos(clamped_char)
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
@@ -2776,11 +2772,11 @@ impl Buffer {
 
     /// Restrict the accessible portion to the Emacs-byte range.
     pub fn narrow_to_emacs_byte_range(&mut self, range: EmacsByteRange) {
-        let total = self.total_emacs_byte_len().get();
-        let s = range.start().get().min(total);
-        let e = range.end().get().clamp(s, total);
-        let start = self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(s));
-        let end = self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(e));
+        let total = EmacsBytePos::new(self.total_emacs_byte_len().get());
+        let start_byte = range.start().min(total);
+        let end_byte = range.end().clamp(start_byte, total);
+        let start = self.text_anchor_for_emacs_byte_pos(start_byte);
+        let end = self.text_anchor_for_emacs_byte_pos(end_byte);
         self.set_accessible_region_anchors_unchecked(start, end);
         // Clamp point into the new accessible region.
         self.goto_emacs_byte_pos(self.point_emacs_byte_pos());
@@ -2864,28 +2860,26 @@ impl Buffer {
     }
 
     fn text_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
-        let clamped = pos.get().min(self.total_emacs_byte_len().get());
-        let char_pos = if clamped == self.total_emacs_byte_len().get() {
-            self.total_char_len().get()
+        let clamped = pos.min(EmacsBytePos::new(self.total_emacs_byte_len().get()));
+        let char_pos = if clamped == EmacsBytePos::new(self.total_emacs_byte_len().get()) {
+            CharPos0::new(self.total_char_len().get())
         } else {
-            self.text
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(clamped))
-                .get()
+            self.text.emacs_byte_pos_to_char_pos(clamped)
         };
-        TextPositionAnchor::new(CharPos0::new(char_pos), EmacsBytePos::new(clamped))
+        TextPositionAnchor::new(char_pos, clamped)
     }
 
     fn accessible_anchor_for_emacs_byte_pos(&self, pos: EmacsBytePos) -> TextPositionAnchor {
-        let clamped = pos.get().clamp(
-            self.point_min_emacs_byte_pos().get(),
-            self.point_max_emacs_byte_pos().get(),
+        let clamped = pos.clamp(
+            self.point_min_emacs_byte_pos(),
+            self.point_max_emacs_byte_pos(),
         );
-        if clamped == self.point_min_emacs_byte_pos().get() {
+        if clamped == self.point_min_emacs_byte_pos() {
             self.point_min_anchor()
-        } else if clamped == self.point_max_emacs_byte_pos().get() {
+        } else if clamped == self.point_max_emacs_byte_pos() {
             self.point_max_anchor()
         } else {
-            self.text_anchor_for_emacs_byte_pos(EmacsBytePos::new(clamped))
+            self.text_anchor_for_emacs_byte_pos(clamped)
         }
     }
 

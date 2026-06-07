@@ -264,6 +264,9 @@ Progress:
 - Buffer byte-range clamping now clamps typed `EmacsBytePos` endpoints and
   constructs the final `EmacsByteRange` without round-tripping through raw
   endpoint integers.
+- Narrowing, marker anchor construction, accessible point clamping, and
+  Lisp-to-accessible byte conversion now clamp typed `CharPos0` or
+  `EmacsBytePos` values until the final `BufferText` conversion.
 - Shared `BufferText` aliases now have coverage for backend conversion,
   semantic edits, and text-property visibility, while deep clones are checked
   to remain independent.
