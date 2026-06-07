@@ -22,7 +22,7 @@ use crate::window::{
 use std::collections::HashSet;
 use strum::{EnumString, IntoStaticStr};
 
-fn lisp_pos_usize(pos: usize) -> LispCharPos1 {
+fn lisp_char_pos_from_one_based_usize(pos: usize) -> LispCharPos1 {
     LispCharPos1::from_one_based_usize(pos)
 }
 
@@ -285,22 +285,13 @@ fn expect_number_or_marker_count(value: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn clamped_window_position(
-    eval: &super::eval::Context,
-    fid: FrameId,
-    wid: WindowId,
-    pos: i64,
-) -> Option<usize> {
-    clamped_window_position_in_state(&eval.frames, &eval.buffers, fid, wid, pos)
-}
-
 fn clamped_window_position_in_state(
     frames: &FrameManager,
     buffers: &BufferManager,
     fid: FrameId,
     wid: WindowId,
     pos: i64,
-) -> Option<usize> {
+) -> Option<LispCharPos1> {
     if pos <= 0 {
         return None;
     }
@@ -308,13 +299,15 @@ fn clamped_window_position_in_state(
     let Some(Window::Leaf { buffer_id, .. }) =
         frames.get(fid).and_then(|frame| frame.find_window(wid))
     else {
-        return Some(requested);
+        return Some(LispCharPos1::from_one_based_usize(requested));
     };
     let buffer_end = buffers
         .get(*buffer_id)
         .map(|buf| buf.total_char_len().get().saturating_add(1))
         .unwrap_or(requested);
-    Some(requested.min(buffer_end.max(1)))
+    Some(LispCharPos1::from_one_based_usize(
+        requested.min(buffer_end.max(1)),
+    ))
 }
 
 /// Extract a fixnum-like integer from a Value.
@@ -2156,9 +2149,7 @@ pub(crate) fn builtin_set_window_start(
                             .and_then(|frame| frame.find_window_mut(wid))
                         {
                             crate::window::window_markers::set_window_start_with_marker(
-                                buffers,
-                                window,
-                                lisp_pos_usize(clamped),
+                                buffers, window, clamped,
                             );
                         }
                     }
@@ -2176,9 +2167,7 @@ pub(crate) fn builtin_set_window_start(
                                 .and_then(|frame| frame.find_window_mut(wid))
                             {
                                 crate::window::window_markers::set_window_start_with_marker(
-                                    buffers,
-                                    window,
-                                    lisp_pos_usize(clamped),
+                                    buffers, window, clamped,
                                 );
                             }
                         }
@@ -2217,9 +2206,7 @@ pub(crate) fn builtin_set_window_group_start(
                         .and_then(|frame| frame.find_window_mut(wid))
                     {
                         crate::window::window_markers::set_window_start_with_marker(
-                            buffers,
-                            window,
-                            lisp_pos_usize(clamped),
+                            buffers, window, clamped,
                         );
                     }
                 }
@@ -2237,14 +2224,10 @@ pub(crate) fn builtin_set_window_group_start(
                             .and_then(|frame| frame.find_window_mut(wid))
                         {
                             crate::window::window_markers::set_window_start_with_marker(
-                                buffers,
-                                window,
-                                lisp_pos_usize(clamped),
+                                buffers, window, clamped,
                             );
                             crate::window::window_markers::set_window_point_with_marker(
-                                buffers,
-                                window,
-                                lisp_pos_usize(clamped),
+                                buffers, window, clamped,
                             );
                         }
                     }
@@ -2283,20 +2266,14 @@ pub(crate) fn builtin_set_window_point(
                     {
                         let buffer_id = window.buffer_id();
                         crate::window::window_markers::set_window_point_with_marker(
-                            buffers,
-                            window,
-                            lisp_pos_usize(clamped),
+                            buffers, window, clamped,
                         );
                         if selected_live_window {
                             if let Some(buffer_id) = buffer_id
                                 && let Some(buffer) = buffers.get(buffer_id)
                             {
-                                buffer_to_move = Some((
-                                    buffer_id,
-                                    buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(
-                                        clamped as i64,
-                                    )),
-                                ));
+                                buffer_to_move =
+                                    Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
                             }
                         }
                     }
@@ -2329,25 +2306,21 @@ pub(crate) fn builtin_set_window_point(
                 {
                     let buffer_id = window.buffer_id();
                     crate::window::window_markers::set_window_point_with_marker(
-                        buffers,
-                        window,
-                        lisp_pos_usize(clamped),
+                        buffers, window, clamped,
                     );
                     if selected_live_window {
                         if let Some(buffer_id) = buffer_id
                             && let Some(buffer) = buffers.get(buffer_id)
                         {
-                            buffer_to_move = Some((
-                                buffer_id,
-                                buffer.lisp_pos_to_emacs_byte_pos(lisp_pos_usize(clamped)),
-                            ));
+                            buffer_to_move =
+                                Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
                         }
                     }
                 }
                 if let Some((buffer_id, byte_pos)) = buffer_to_move {
                     let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
                 }
-                Ok(Value::fixnum(clamped as i64))
+                Ok(Value::fixnum(clamped.as_i64()))
             } else {
                 Ok(Value::fixnum(1))
             }
@@ -4047,7 +4020,7 @@ pub(crate) fn remember_selected_window_point_in_state(
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(selected_wid))
     {
-        *window_point = lisp_pos_usize(point);
+        *window_point = lisp_char_pos_from_one_based_usize(point);
     }
 }
 
@@ -4538,7 +4511,9 @@ pub(crate) fn builtin_set_window_buffer(
                 .map(|buf| {
                     (
                         buf.last_window_start.max(LispCharPos1::ONE),
-                        lisp_pos_usize(buf.point_char_pos().get().saturating_add(1).max(1)),
+                        lisp_char_pos_from_one_based_usize(
+                            buf.point_char_pos().get().saturating_add(1).max(1),
+                        ),
                     )
                 })
                 .unwrap_or((LispCharPos1::ONE, LispCharPos1::ONE))
@@ -5579,7 +5554,11 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 }
                 let point = buffers
                     .get(*buffer_id)
-                    .map(|buf| lisp_pos_usize(buf.point_char_pos().get().saturating_add(1)))
+                    .map(|buf| {
+                        lisp_char_pos_from_one_based_usize(
+                            buf.point_char_pos().get().saturating_add(1),
+                        )
+                    })
                     .unwrap_or(*point);
                 (*buffer_id, point)
             }
@@ -5623,9 +5602,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 .and_then(|frame| frame.find_window_mut(wid))
             {
                 crate::window::window_markers::set_window_start_with_marker(
-                    buffers,
-                    window,
-                    lisp_pos_usize(clamped),
+                    buffers, window, clamped,
                 );
                 if let Window::Leaf {
                     window_end_valid,
