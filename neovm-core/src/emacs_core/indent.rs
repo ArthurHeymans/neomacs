@@ -275,8 +275,8 @@ fn scan_for_column(
             };
             let char_len = buf
                 .char_after_emacs_byte_len(scan_pos)
-                .map(|len| len.get().max(1))
-                .unwrap_or(1);
+                .map(|len| len.max(EmacsByteLen::new(1)))
+                .unwrap_or(EmacsByteLen::new(1));
             let width = buffer_char_display_width(buf, scan_pos, code);
             (code, char_len, width)
         };
@@ -289,7 +289,7 @@ fn scan_for_column(
         previous_column = column;
         previous_code = Some(code);
         column = next_column_for_code(column, code, width, tab_width);
-        scan += char_len;
+        scan += char_len.get();
     }
 
     Ok(ColumnScan {
@@ -420,7 +420,7 @@ fn delete_horizontal_space_at_point(
         let Some(char_len) = buf.char_before_emacs_byte_len(left) else {
             break;
         };
-        left = left.saturating_sub_len(EmacsByteLen::new(char_len.get().max(1)));
+        left = left.saturating_sub_len(char_len.max(EmacsByteLen::new(1)));
     }
 
     let mut right = pt;
@@ -435,7 +435,7 @@ fn delete_horizontal_space_at_point(
             let Some(char_len) = buf.char_after_emacs_byte_len(right) else {
                 break;
             };
-            right = right.add_len(EmacsByteLen::new(char_len.get().max(1)));
+            right = right.add_len(char_len.max(EmacsByteLen::new(1)));
         }
     }
 

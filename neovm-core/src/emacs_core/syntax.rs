@@ -49,7 +49,9 @@ struct BufferSyntaxChar {
 impl BufferSyntaxChar {
     #[inline]
     fn byte_len(self) -> EmacsByteLen {
-        EmacsByteLen::new(self.end.get().saturating_sub(self.start.get()).max(1))
+        self.end
+            .saturating_offset_from(self.start)
+            .max(EmacsByteLen::new(1))
     }
 }
 
@@ -58,12 +60,12 @@ fn buffer_syntax_char_after(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<Buff
     let ch = buf.char_after_emacs_byte_pos(byte_pos)?;
     let len = buf
         .char_after_emacs_byte_len(byte_pos)
-        .map(|len| len.get().max(1))
-        .unwrap_or_else(|| ch.len_utf8().max(1));
+        .map(|len| len.max(EmacsByteLen::new(1)))
+        .unwrap_or_else(|| EmacsByteLen::new(ch.len_utf8().max(1)));
     Some(BufferSyntaxChar {
         ch,
         start: byte_pos,
-        end: byte_pos.add_len(EmacsByteLen::new(len)),
+        end: byte_pos.add_len(len),
     })
 }
 
@@ -72,11 +74,11 @@ fn buffer_syntax_char_before(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<Buf
     let ch = buf.char_before_emacs_byte_pos(byte_pos)?;
     let len = buf
         .char_before_emacs_byte_len(byte_pos)
-        .map(|len| len.get().max(1))
-        .unwrap_or_else(|| ch.len_utf8().max(1));
+        .map(|len| len.max(EmacsByteLen::new(1)))
+        .unwrap_or_else(|| EmacsByteLen::new(ch.len_utf8().max(1)));
     Some(BufferSyntaxChar {
         ch,
-        start: byte_pos.saturating_sub_len(EmacsByteLen::new(len)),
+        start: byte_pos.saturating_sub_len(len),
         end: byte_pos,
     })
 }

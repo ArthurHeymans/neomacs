@@ -2292,17 +2292,19 @@ impl<'a> Reader<'a> {
         // so both paths read identical bytes.
         let range =
             EmacsByteRange::from_start_len(EmacsBytePos::new(pos), EmacsByteLen::new(available));
-        let (code, width) =
-            match input.with_contiguous_emacs_byte_range(range, emacs_char::string_char) {
-                Some(decoded) => decoded,
-                None => {
-                    let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
-                    for (idx, slot) in tmp[..available].iter_mut().enumerate() {
-                        *slot = input.emacs_byte_at_pos(EmacsBytePos::new(pos + idx))?;
-                    }
-                    emacs_char::string_char(&tmp[..available])
+        let range_start = range.start();
+        let (code, width) = match input
+            .with_contiguous_emacs_byte_range(range, emacs_char::string_char)
+        {
+            Some(decoded) => decoded,
+            None => {
+                let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
+                for (idx, slot) in tmp[..available].iter_mut().enumerate() {
+                    *slot = input.emacs_byte_at_pos(range_start.add_len(EmacsByteLen::new(idx)))?;
                 }
-            };
+                emacs_char::string_char(&tmp[..available])
+            }
+        };
         if pos + width > self.limit {
             return None;
         }
