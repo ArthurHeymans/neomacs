@@ -1383,3 +1383,118 @@ fn full_round_trip_simple_text() {
     assert!(s.contains('H'), "Missing H in output");
     assert!(s.contains('i'), "Missing i in output");
 }
+
+// ---------------------------------------------------------------------------
+// Complex-run (Arabic/Indic) TTY decomposition
+// ---------------------------------------------------------------------------
+
+/// Build a one-row state whose text area is `glyphs`.
+fn state_with_text_glyphs(cols: usize, glyphs: Vec<Glyph>) -> FrameDisplayState {
+    let mut state = FrameDisplayState::new(cols, 5, 8.0, 16.0);
+    state.background = Color::rgb(0.0, 0.0, 0.0);
+    let mut matrix = GlyphMatrix::new(5, cols);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.glyphs[GlyphArea::Text as usize] = glyphs;
+    matrix.rows[0] = row;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),
+        selected: true,
+    });
+    state
+}
+
+fn run_composite(text: &str, bidi_level: u8) -> Glyph {
+    Glyph {
+        glyph_type: GlyphType::Composite { text: text.into() },
+        face_id: 0,
+        charpos: 0,
+        bidi_level,
+        wide: false,
+        pixel_width: 0.0,
+        pixel_height: 0.0,
+        pixel_ascent: 0.0,
+        padding: false,
+    }
+}
+
+fn run_member_padding(ch: char, charpos: usize) -> Glyph {
+    let mut g = Glyph::char(ch, 0, charpos);
+    g.padding = true;
+    g
+}
+
+#[test]
+fn rtl_run_decomposes_into_reversed_per_letter_cells() {
+    // Arabic "اب" (alef, beh) as the GUI emits it: one Composite holding the
+    // whole run plus one per-letter grapheme padding, flagged right-to-left.
+    let glyphs = vec![
+        run_composite("\u{0627}\u{0628}", 1),
+        run_member_padding('\u{0628}', 1),
+    ];
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state_with_text_glyphs(10, glyphs));
+    // Visual order is reversed: beh then alef.
+    assert_eq!(desired_char(&rif, 0, 0), '\u{0628}'); // beh
+    assert_eq!(desired_char(&rif, 0, 1), '\u{0627}'); // alef
+}
+
+#[test]
+fn ltr_run_decomposes_in_logical_order() {
+    // Same structure but left-to-right (e.g. an Indic run): not reversed.
+    let glyphs = vec![
+        run_composite("\u{0627}\u{0628}", 0),
+        run_member_padding('\u{0628}', 1),
+    ];
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state_with_text_glyphs(10, glyphs));
+    assert_eq!(desired_char(&rif, 0, 0), '\u{0627}'); // alef
+    assert_eq!(desired_char(&rif, 0, 1), '\u{0628}'); // beh
+}
+
+#[test]
+fn rtl_run_keeps_combining_mark_on_its_letter() {
+    // Run "سّل": seen+shadda forms one grapheme, then lam. The shadda rides on
+    // seen's padding cell; reversed visual order is lam, then seen+shadda.
+    let glyphs = vec![
+        run_composite("\u{0633}\u{0651}\u{0644}", 1),
+        run_member_padding_cluster("\u{0633}\u{0651}", 1),
+        run_member_padding('\u{0644}', 2),
+    ];
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state_with_text_glyphs(10, glyphs));
+    assert_eq!(desired_char(&rif, 0, 0), '\u{0644}'); // lam (leftmost)
+    let seen_cell = &rif.desired.cells[1];
+    assert_eq!(seen_cell.ch, '\u{0633}'); // seen base
+    assert_eq!(seen_cell.extenders.as_deref(), Some("\u{0651}")); // shadda rides along
+}
+
+fn run_member_padding_cluster(text: &str, charpos: usize) -> Glyph {
+    let mut g = Glyph {
+        glyph_type: GlyphType::Composite { text: text.into() },
+        face_id: 0,
+        charpos,
+        bidi_level: 1,
+        wide: false,
+        pixel_width: 0.0,
+        pixel_height: 0.0,
+        pixel_ascent: 0.0,
+        padding: false,
+    };
+    g.padding = true;
+    g
+}
+
+#[test]
+fn plain_cluster_composite_stays_one_cell_and_skips_joiners() {
+    // A ZWJ emoji family with no grapheme paddings stays a single cell; the
+    // zero-width joiners are not drawn as their own characters.
+    let glyphs = vec![run_composite("\u{1F468}\u{200D}\u{1F469}", 0)];
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state_with_text_glyphs(10, glyphs));
+    assert_eq!(rif.desired.cells[0].ch, '\u{1F468}');
+    // The ZWJ is dropped; extenders hold only the second emoji.
+    assert_eq!(rif.desired.cells[0].extenders.as_deref(), Some("\u{1F469}"));
+}

@@ -62,6 +62,42 @@ fn merge_extender_into_last_glyph(area: &mut Vec<Glyph>, ch: char) -> bool {
     false
 }
 
+/// Append `ch` to a glyph's character/cluster text (Char → Composite, Composite
+/// grows). Used to extend the per-cell grapheme of a complex run's member.
+fn extend_glyph_grapheme(glyph: &mut Glyph, ch: char) {
+    match &mut glyph.glyph_type {
+        GlyphType::Char { ch: base } => {
+            let mut s = String::with_capacity(base.len_utf8() + ch.len_utf8());
+            s.push(*base);
+            s.push(ch);
+            glyph.glyph_type = GlyphType::Composite {
+                text: s.into_boxed_str(),
+            };
+        }
+        GlyphType::Composite { text } => {
+            let mut s = String::with_capacity(text.len() + ch.len_utf8());
+            s.push_str(text);
+            s.push(ch);
+            glyph.glyph_type = GlyphType::Composite {
+                text: s.into_boxed_str(),
+            };
+        }
+        _ => {}
+    }
+}
+
+/// Whether `glyph` is a complex-run member's padding cell carrying its own
+/// per-cell grapheme (a non-blank Char or a Composite), as opposed to a
+/// blank wide-char padding slot. Such cells let the TTY decompose the run.
+fn is_run_member_padding(glyph: &Glyph) -> bool {
+    glyph.padding
+        && match &glyph.glyph_type {
+            GlyphType::Char { ch } => *ch != ' ',
+            GlyphType::Composite { .. } => true,
+            _ => false,
+        }
+}
+
 pub struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -510,6 +546,15 @@ impl GlyphMatrixBuilder {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
+                // If this combining mark falls on a complex-run member (the
+                // last cell is that member's per-cell grapheme padding), attach
+                // it there too, so the TTY draws the mark on the right letter
+                // when it lays the run out one column at a time.
+                if let Some(last) = area.last_mut()
+                    && is_run_member_padding(last)
+                {
+                    extend_glyph_grapheme(last, ch);
+                }
                 if merge_extender_into_last_glyph(area, ch) {
                     return;
                 }
@@ -569,6 +614,12 @@ impl GlyphMatrixBuilder {
                         base.pixel_width += member_width;
                     }
                     let mut pad = Glyph::padding_for(face_id, charpos);
+                    // Carry this member's own character on its padding cell. The
+                    // GUI ignores padding (it shapes the whole run from the base
+                    // Composite), but the TTY cannot shape — it reads these
+                    // per-cell graphemes to lay the run out one letter per column,
+                    // visually reversed for right-to-left, like GNU's term.c.
+                    pad.glyph_type = GlyphType::Char { ch };
                     pad.pixel_width = member_width;
                     area.push(pad);
                     return;

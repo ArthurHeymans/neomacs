@@ -574,6 +574,19 @@ impl TtyRif {
         }
     }
 
+    /// Write one grapheme into the cell at `*col` (advancing it), as a base
+    /// character plus combining extenders. Zero-width format joiners/selectors
+    /// (ZWJ, ZWNJ, variation selectors) that the GUI shaper would consume are
+    /// dropped — a terminal would otherwise show them as their own mark.
+    fn write_grapheme_cell(&mut self, row: usize, col: &mut usize, text: &str, attrs: CellAttrs) {
+        let mut chars = text.chars().filter(|c| !is_tty_skippable_format(*c));
+        let base = chars.next().unwrap_or(' ');
+        let rest: String = chars.collect();
+        self.desired
+            .set_cluster(row, *col, base, &rest, attrs, false);
+        *col += 1;
+    }
+
     /// Diff the desired grid against the current grid and generate ANSI escape
     /// sequences for the changed cells.
     ///
@@ -709,12 +722,43 @@ impl TtyRif {
                 // cluster string, mirroring GNU's COMPOSITE_GLYPH.
                 match &glyph.glyph_type {
                     GlyphType::Composite { text } => {
-                        let mut iter = text.chars();
-                        let base = iter.next().unwrap_or(' ');
-                        let rest: String = iter.collect();
-                        self.desired
-                            .set_cluster(screen_row, col, base, &rest, attrs, false);
-                        col += 1;
+                        // A contextual-shaping run (Arabic, Indic) is the base
+                        // Composite followed by one per-letter grapheme padding
+                        // cell per following letter. The GUI shapes the whole
+                        // run from the base Composite, but a terminal cannot —
+                        // so lay the run out one grapheme per column, visually
+                        // reversed for right-to-left, mirroring GNU's term.c.
+                        // A plain grapheme cluster (emoji, base+combining) has no
+                        // such grapheme paddings and stays a single cell.
+                        let run_paddings: Vec<String> = glyphs[glyph_idx + 1..]
+                            .iter()
+                            .take_while(|g| is_run_member_padding_cell(g))
+                            .map(cell_grapheme_string)
+                            .collect();
+                        if run_paddings.is_empty() {
+                            self.write_grapheme_cell(screen_row, &mut col, text, attrs);
+                        } else {
+                            // Paddings hold the run's letters after the base, in
+                            // logical order; the base cell's own grapheme is the
+                            // run text with that suffix removed.
+                            let tail: String = run_paddings.concat();
+                            let g0 = text.strip_suffix(tail.as_str()).unwrap_or(text);
+                            let mut graphemes: Vec<&str> =
+                                Vec::with_capacity(run_paddings.len() + 1);
+                            graphemes.push(g0);
+                            graphemes.extend(run_paddings.iter().map(String::as_str));
+                            if glyph.bidi_level & 1 == 1 {
+                                graphemes.reverse();
+                            }
+                            let consumed = graphemes.len() - 1;
+                            for grapheme in graphemes {
+                                if col >= self.desired.width {
+                                    break;
+                                }
+                                self.write_grapheme_cell(screen_row, &mut col, grapheme, attrs);
+                            }
+                            glyph_idx += consumed;
+                        }
                     }
                     GlyphType::Stretch { width_cols } => {
                         let width_cols = usize::from((*width_cols).max(1));
@@ -873,6 +917,37 @@ fn write_cell_contents(buf: &mut Vec<u8>, cell: &TtyCell) {
 }
 
 /// Convert a `Glyph` to its display character.
+/// Whether `glyph` is a complex-run member's padding cell carrying its own
+/// per-cell grapheme (a non-blank `Char` or a `Composite`), as opposed to a
+/// blank wide-character padding slot. These cells let the terminal decompose
+/// a contextual-shaping run that the GUI renders as one shaped Composite.
+fn is_run_member_padding_cell(glyph: &Glyph) -> bool {
+    glyph.padding
+        && match &glyph.glyph_type {
+            GlyphType::Char { ch } => *ch != ' ',
+            GlyphType::Composite { .. } => true,
+            _ => false,
+        }
+}
+
+/// The per-cell grapheme text carried by a run-member padding cell.
+fn cell_grapheme_string(glyph: &Glyph) -> String {
+    match &glyph.glyph_type {
+        GlyphType::Char { ch } => ch.to_string(),
+        GlyphType::Composite { text } => text.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Zero-width format joiners/selectors a terminal should not draw as their own
+/// glyph: ZWJ, ZWNJ, and the variation selectors (incl. the supplement).
+fn is_tty_skippable_format(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0100..=0xE01EF
+    )
+}
+
 fn glyph_to_char(glyph: &Glyph) -> char {
     match &glyph.glyph_type {
         GlyphType::Char { ch } => *ch,
