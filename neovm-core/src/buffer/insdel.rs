@@ -245,15 +245,15 @@ impl Buffer {
         match edit {
             SharedTextEditMetadata::Insert(edit) => self.apply_byte_insert_side_effects(
                 edit,
-                InsertSideEffectPolicy::shared_buffer(state_policy.expect_state_update("insert")),
+                InsertSideEffectPolicy::shared_buffer(state_policy.structural_state_update()),
             ),
             SharedTextEditMetadata::Delete(edit) => self.apply_byte_delete_side_effects(
                 edit,
-                DeleteSideEffectPolicy::shared_buffer(state_policy.expect_state_update("delete")),
+                DeleteSideEffectPolicy::shared_buffer(state_policy.structural_state_update()),
             ),
             SharedTextEditMetadata::Replace(edit) => self.apply_replace_side_effects(
                 edit,
-                ReplaceSideEffectPolicy::shared_buffer(state_policy.expect_state_update("replace")),
+                ReplaceSideEffectPolicy::shared_buffer(state_policy.structural_state_update()),
             ),
             SharedTextEditMetadata::SameLen {
                 edit,
@@ -264,10 +264,7 @@ impl Buffer {
                 transposition,
                 preserve_modified_state,
             } => {
-                if state_policy
-                    .expect_state_update("transposition")
-                    .update_state_fields()
-                {
+                if state_policy.structural_state_update().update_state_fields() {
                     let point = transposition.transpose_anchor(self.point_anchor());
                     self.set_point_anchor_unchecked(point);
                 }
@@ -809,13 +806,9 @@ impl BufferManager {
         scope: SharedTextEditScope,
         edit: SharedTextEditMetadata,
     ) -> Option<()> {
-        let can_update_state_fields = edit.can_update_buffer_state_fields();
         for sibling_id in scope.siblings() {
-            let state_policy = if can_update_state_fields {
-                SharedTextEditStatePolicy::StateFields(self.shared_sibling_state_update(sibling_id))
-            } else {
-                SharedTextEditStatePolicy::NoStateFields
-            };
+            let state_policy = edit
+                .state_policy_for_shared_sibling(|| self.shared_sibling_state_update(sibling_id));
             {
                 let sibling = self.buffers.get_mut(&sibling_id)?;
                 sibling.apply_shared_text_edit_side_effects(edit, state_policy);

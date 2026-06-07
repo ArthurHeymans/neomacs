@@ -551,12 +551,15 @@ pub(in crate::buffer) enum SharedTextEditMetadata {
 }
 
 impl SharedTextEditMetadata {
-    pub(in crate::buffer) const fn can_update_buffer_state_fields(self) -> bool {
+    pub(in crate::buffer) fn state_policy_for_shared_sibling(
+        self,
+        state_update: impl FnOnce() -> SharedBufferStateUpdate,
+    ) -> SharedTextEditStatePolicy {
         match self {
             Self::Insert(_) | Self::Delete(_) | Self::Replace(_) | Self::Transposition { .. } => {
-                true
+                SharedTextEditStatePolicy::StateFields(state_update())
             }
-            Self::SameLen { .. } => false,
+            Self::SameLen { .. } => SharedTextEditStatePolicy::NoStateFields,
         }
     }
 }
@@ -613,14 +616,11 @@ impl SharedTextEditStatePolicy {
         }
     }
 
-    pub(in crate::buffer) fn expect_state_update(
-        self,
-        edit_kind: &'static str,
-    ) -> SharedBufferStateUpdate {
+    pub(in crate::buffer) const fn structural_state_update(self) -> SharedBufferStateUpdate {
         match self {
             Self::StateFields(state_update) => state_update,
             Self::NoStateFields => {
-                panic!("shared {edit_kind} edit requires state update policy")
+                panic!("shared structural edit requires state update policy")
             }
         }
     }
@@ -951,6 +951,66 @@ mod tests {
 
     fn deleted_range() -> TextEditRange {
         TextEditRange::from_usize(20, 36, 10, 18)
+    }
+
+    fn measured_insert_edit() -> MeasuredInsertEdit {
+        MeasuredInsertEdit::by_insertion_type(insertion(), InsertMarkerPlacement::AfterMarkers)
+    }
+
+    fn measured_delete_edit() -> MeasuredDeleteEdit {
+        MeasuredDeleteEdit::new(deleted_range())
+    }
+
+    fn measured_replace_edit() -> MeasuredReplaceEdit {
+        MeasuredReplaceEdit::new(TextReplacement::new(
+            deleted_range(),
+            TextExtent::from_usize(3, 5),
+        ))
+    }
+
+    fn state_policy_for_shared_sibling(edit: SharedTextEditMetadata) -> SharedTextEditStatePolicy {
+        edit.state_policy_for_shared_sibling(|| SharedBufferStateUpdate::RefreshFromStateMarkers)
+    }
+
+    #[test]
+    fn shared_edit_metadata_derives_sibling_state_policy() {
+        assert_eq!(
+            state_policy_for_shared_sibling(SharedTextEditMetadata::Insert(measured_insert_edit())),
+            SharedTextEditStatePolicy::StateFields(
+                SharedBufferStateUpdate::RefreshFromStateMarkers
+            )
+        );
+        assert_eq!(
+            state_policy_for_shared_sibling(SharedTextEditMetadata::Delete(measured_delete_edit())),
+            SharedTextEditStatePolicy::StateFields(
+                SharedBufferStateUpdate::RefreshFromStateMarkers
+            )
+        );
+        assert_eq!(
+            state_policy_for_shared_sibling(SharedTextEditMetadata::Replace(
+                measured_replace_edit()
+            )),
+            SharedTextEditStatePolicy::StateFields(
+                SharedBufferStateUpdate::RefreshFromStateMarkers
+            )
+        );
+        assert_eq!(
+            state_policy_for_shared_sibling(SharedTextEditMetadata::Transposition {
+                edit: same_len_edit(),
+                transposition: TextTransposition::from_usize(2, 5, 1, 3, 8, 10, 5, 7),
+                preserve_modified_state: true,
+            }),
+            SharedTextEditStatePolicy::StateFields(
+                SharedBufferStateUpdate::RefreshFromStateMarkers
+            )
+        );
+        assert_eq!(
+            state_policy_for_shared_sibling(SharedTextEditMetadata::SameLen {
+                edit: same_len_edit(),
+                preserve_modified_state: true,
+            }),
+            SharedTextEditStatePolicy::NoStateFields
+        );
     }
 
     #[test]

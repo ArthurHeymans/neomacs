@@ -675,6 +675,9 @@ Completed so far:
 - Replaced nullable shared edit state policy plumbing with a typed
   `SharedTextEditStatePolicy`, so same-length edits explicitly declare that
   they do not participate in point/narrowing state updates.
+- Moved shared sibling state-policy derivation onto `SharedTextEditMetadata`,
+  removing the remaining manager-level boolean that decided whether an edit
+  could touch point/narrowing fields.
 
 Next work:
 
