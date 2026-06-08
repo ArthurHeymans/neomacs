@@ -3729,23 +3729,27 @@ fn text_row_append_context_derives_layout_output_and_bounds() {
 #[test]
 fn text_row_append_frame_builds_positioned_context() {
     let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
-    let frame = TextRowAppendFrame {
-        row: 3,
-        glyph_y: 22.0,
-        geometry: DisplayRowGeometry {
+    let frame = TextRowAppendFrame::from_parts(
+        TextRowAppendPlacement {
+            row: 3,
             y: 20.0,
-            width: 120.0,
-            height: 16.0,
-            char_width: 9.0,
-            ascent: 11.0,
-            tab_policy,
+            glyph_y: 22.0,
         },
-        default_row_height: 14.0,
-        content_x: 8.0,
-        text_width: 150.0,
-        line_number_width: 10.0,
-        face_space_width: 7.0,
-    };
+        TextRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        TextRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        tab_policy,
+    );
 
     let spec = frame
         .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
@@ -3755,6 +3759,51 @@ fn text_row_append_frame_builds_positioned_context() {
     assert_eq!(spec.max_x, 128.0);
     assert_eq!(spec.layout.base_face, RenderFaceRef::FaceId(42));
     assert_eq!(spec.output.row, 3);
+}
+
+#[test]
+fn text_row_append_frame_from_parts_preserves_geometry_and_area() {
+    let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
+    let frame = TextRowAppendFrame::from_parts(
+        TextRowAppendPlacement {
+            row: 3,
+            y: 20.0,
+            glyph_y: 22.0,
+        },
+        TextRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        TextRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        tab_policy.clone(),
+    );
+
+    assert_eq!(frame.row, 3);
+    assert_eq!(frame.glyph_y, 22.0);
+    assert_eq!(
+        frame.geometry,
+        DisplayRowGeometry {
+            y: 20.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 9.0,
+            ascent: 11.0,
+            tab_policy,
+        }
+    );
+    assert_eq!(frame.default_row_height, 14.0);
+    assert_eq!(frame.content_x, 8.0);
+    assert_eq!(frame.text_width, 150.0);
+    assert_eq!(frame.line_number_width, 10.0);
+    assert_eq!(frame.face_space_width, 7.0);
 }
 
 #[test]
