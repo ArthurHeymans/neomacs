@@ -490,6 +490,21 @@ impl GlyphMatrixBuilder {
         self.push_char_with_pixel_width(ch, face_id, charpos, 0.0);
     }
 
+    pub(crate) fn push_char_to_row(
+        row: &mut GlyphRow,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
+        let area = &mut row.glyphs[GlyphArea::Text.index()];
+        if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
+            return;
+        }
+        area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
+        row.displays_text = true;
+    }
+
     pub fn push_char_with_pixel_width(
         &mut self,
         ch: char,
@@ -499,26 +514,42 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
-                if crate::unicode::is_cluster_extender(ch)
-                    && merge_extender_into_last_glyph(area, ch)
-                {
-                    // Merged into the previous base character's
-                    // glyph — no new cell, matches GNU's behavior
-                    // where combining marks don't produce their own
-                    // CHAR_GLYPHs (see `append_glyph` at `src/term.c`
-                    // and `produce_composite_glyph` for the
-                    // composition path).
-                    return;
-                }
-                area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
-                matrix.rows[self.current_row].displays_text = true;
+                Self::push_char_to_row(
+                    &mut matrix.rows[self.current_row],
+                    ch,
+                    face_id,
+                    charpos,
+                    pixel_width,
+                );
             }
         }
     }
 
     pub fn push_wide_char(&mut self, ch: char, face_id: u32, charpos: usize) {
         self.push_wide_char_with_pixel_width(ch, face_id, charpos, 0.0);
+    }
+
+    pub(crate) fn push_wide_char_to_row(
+        row: &mut GlyphRow,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
+        let area = &mut row.glyphs[GlyphArea::Text.index()];
+        if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
+            return;
+        }
+        let mut glyph = Glyph::char(ch, face_id, charpos);
+        glyph.wide = true;
+        glyph.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+            pixel_width
+        } else {
+            0.0
+        };
+        area.push(glyph);
+        area.push(Glyph::padding_for(face_id, charpos));
+        row.displays_text = true;
     }
 
     pub fn push_wide_char_with_pixel_width(
@@ -530,23 +561,13 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let row = &mut matrix.rows[self.current_row];
-                let area = &mut row.glyphs[GlyphArea::Text.index()];
-                if crate::unicode::is_cluster_extender(ch)
-                    && merge_extender_into_last_glyph(area, ch)
-                {
-                    return;
-                }
-                let mut glyph = Glyph::char(ch, face_id, charpos);
-                glyph.wide = true;
-                glyph.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
-                    pixel_width
-                } else {
-                    0.0
-                };
-                area.push(glyph);
-                area.push(Glyph::padding_for(face_id, charpos));
-                row.displays_text = true;
+                Self::push_wide_char_to_row(
+                    &mut matrix.rows[self.current_row],
+                    ch,
+                    face_id,
+                    charpos,
+                    pixel_width,
+                );
             }
         }
     }
@@ -561,24 +582,34 @@ impl GlyphMatrixBuilder {
     /// Mirrors GNU's automatic composition, which collapses a grapheme
     /// cluster into a single `COMPOSITE_GLYPH` (see `src/composite.c` and
     /// `produce_composite_glyph` in `src/term.c`).
+    pub(crate) fn push_cluster_continuation_to_row(
+        row: &mut GlyphRow,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+    ) {
+        let area = &mut row.glyphs[GlyphArea::Text.index()];
+        if let Some(last) = area.last_mut()
+            && is_run_member_padding(last)
+        {
+            extend_glyph_grapheme(last, ch);
+        }
+        if merge_extender_into_last_glyph(area, ch) {
+            return;
+        }
+        area.push(Glyph::char(ch, face_id, charpos));
+        row.displays_text = true;
+    }
+
     pub fn push_cluster_continuation(&mut self, ch: char, face_id: u32, charpos: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
-                // If this combining mark falls on a complex-run member (the
-                // last cell is that member's per-cell grapheme padding), attach
-                // it there too, so the TTY draws the mark on the right letter
-                // when it lays the run out one column at a time.
-                if let Some(last) = area.last_mut()
-                    && is_run_member_padding(last)
-                {
-                    extend_glyph_grapheme(last, ch);
-                }
-                if merge_extender_into_last_glyph(area, ch) {
-                    return;
-                }
-                area.push(Glyph::char(ch, face_id, charpos));
-                matrix.rows[self.current_row].displays_text = true;
+                Self::push_cluster_continuation_to_row(
+                    &mut matrix.rows[self.current_row],
+                    ch,
+                    face_id,
+                    charpos,
+                );
             }
         }
     }
@@ -590,9 +621,7 @@ impl GlyphMatrixBuilder {
     /// ZWJ emoji sequences (the char after a `U+200D`) and flag pairs
     /// (a second regional indicator following a lone one). Returns `None`
     /// at a row start or when the last glyph cannot host a cluster.
-    pub fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
-        let matrix = self.current_matrix.as_ref()?;
-        let row = matrix.rows.get(self.current_row)?;
+    pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
         let area = &row.glyphs[GlyphArea::Text.index()];
         let glyph = area.iter().rev().find(|g| !g.padding)?;
         match &glyph.glyph_type {
@@ -604,6 +633,12 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    pub fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
+        let matrix = self.current_matrix.as_ref()?;
+        let row = matrix.rows.get(self.current_row)?;
+        Self::last_text_cluster_tail_in_row(row)
+    }
+
     /// Grow a contextual-shaping run (Arabic, Indic) by appending `ch` to the
     /// last text glyph's composed cluster AND pushing a padding cell carrying
     /// `ch`'s own buffer position. The run becomes one `Composite` glyph that
@@ -612,45 +647,66 @@ impl GlyphMatrixBuilder {
     /// positions. Mirrors GNU emitting a multi-character composition while
     /// each character keeps a distinct buffer position. Falls back to a
     /// standalone glyph when there is no base to merge into (run start).
+    pub(crate) fn push_run_member_to_row(
+        row: &mut GlyphRow,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
+        let area = &mut row.glyphs[GlyphArea::Text.index()];
+        if merge_extender_into_last_glyph(area, ch) {
+            let member_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+                pixel_width
+            } else {
+                0.0
+            };
+            if let Some(base) = area.iter_mut().rev().find(|g| !g.padding) {
+                base.pixel_width += member_width;
+            }
+            let mut pad = Glyph::padding_for(face_id, charpos);
+            pad.glyph_type = GlyphType::Char { ch };
+            pad.pixel_width = member_width;
+            area.push(pad);
+            return;
+        }
+        area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
+        row.displays_text = true;
+    }
+
     pub fn push_run_member(&mut self, ch: char, face_id: u32, charpos: usize, pixel_width: f32) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
-                if merge_extender_into_last_glyph(area, ch) {
-                    let member_width = if pixel_width.is_finite() && pixel_width > 0.0 {
-                        pixel_width
-                    } else {
-                        0.0
-                    };
-                    // The run renders as ONE Composite cell (the merged base);
-                    // the per-member padding cells draw nothing and are skipped
-                    // by materialize. So the base cell must carry the whole run's
-                    // advance, or the run reserves only its first letter's width
-                    // and the following text overlaps it. Accumulate each member's
-                    // advance onto the base; keep the per-member width on the
-                    // padding for per-letter cursor mapping.
-                    if let Some(base) = area.iter_mut().rev().find(|g| !g.padding) {
-                        base.pixel_width += member_width;
-                    }
-                    let mut pad = Glyph::padding_for(face_id, charpos);
-                    // Carry this member's own character on its padding cell. The
-                    // GUI ignores padding (it shapes the whole run from the base
-                    // Composite), but the TTY cannot shape — it reads these
-                    // per-cell graphemes to lay the run out one letter per column,
-                    // visually reversed for right-to-left, like GNU's term.c.
-                    pad.glyph_type = GlyphType::Char { ch };
-                    pad.pixel_width = member_width;
-                    area.push(pad);
-                    return;
-                }
-                area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
-                matrix.rows[self.current_row].displays_text = true;
+                Self::push_run_member_to_row(
+                    &mut matrix.rows[self.current_row],
+                    ch,
+                    face_id,
+                    charpos,
+                    pixel_width,
+                );
             }
         }
     }
 
     pub fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
         self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
+    }
+
+    pub(crate) fn push_stretch_to_row(
+        row: &mut GlyphRow,
+        width_cols: u16,
+        face_id: u32,
+        pixel_width: f32,
+        pixel_height: f32,
+        pixel_ascent: f32,
+    ) {
+        let glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
+            pixel_width,
+            pixel_height,
+            pixel_ascent,
+        );
+        row.glyphs[GlyphArea::Text.index()].push(glyph);
+        row.displays_text = true;
     }
 
     pub fn push_stretch_with_pixel_width(
@@ -672,14 +728,14 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
+                Self::push_stretch_to_row(
+                    &mut matrix.rows[self.current_row],
+                    width_cols,
+                    face_id,
                     pixel_width,
                     pixel_height,
                     pixel_ascent,
                 );
-                let row = &mut matrix.rows[self.current_row];
-                row.glyphs[GlyphArea::Text.index()].push(glyph);
-                row.displays_text = true;
             }
         }
     }
@@ -1419,7 +1475,10 @@ impl GlyphMatrixBuilder {
         remapped_phys_cursor_col
     }
 
-    fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>) -> Option<u16> {
+    pub(crate) fn reorder_row_bidi(
+        row: &mut GlyphRow,
+        phys_cursor_col: Option<u16>,
+    ) -> Option<u16> {
         let original_text = row.glyphs[GlyphArea::Text.index()].clone();
         if original_text.is_empty() {
             return None;
