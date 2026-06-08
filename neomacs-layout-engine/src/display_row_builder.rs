@@ -227,6 +227,39 @@ pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
     max_x_px: f32,
 }
 
+pub(crate) fn append_display_item_to_current_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    item: DisplayItem,
+    position: DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<DisplayRowAppendProgress> {
+    builder.with_current_row_mut(|row| {
+        let mut writer = DisplayRowProgressWriter::new(layout, row, position, max_x_px);
+        writer.push_item(item)
+    })
+}
+
+pub(crate) fn append_measured_display_item_to_current_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    item: DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+    position: DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<DisplayRowAppendProgress> {
+    builder.with_current_row_mut(|row| {
+        let mut writer = DisplayRowProgressWriter::with_glyph_measurer(
+            layout,
+            row,
+            glyph_measurer,
+            position,
+            max_x_px,
+        );
+        writer.push_item(item)
+    })
+}
+
 impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);

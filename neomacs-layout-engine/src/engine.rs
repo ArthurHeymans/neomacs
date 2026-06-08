@@ -19,6 +19,9 @@ use super::window_output::{
     ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::display_row_builder::{
+    append_display_item_to_current_matrix_row, append_measured_display_item_to_current_matrix_row,
+};
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1287,41 +1290,6 @@ fn parse_display_height_factor(prop_val: &neovm_core::emacs_core::Value) -> Opti
     None
 }
 
-fn append_display_item_to_current_row_with_progress(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    layout: &crate::display_row_builder::DisplayRowLayout,
-    item: crate::display_item::DisplayItem,
-    position: crate::display_row_builder::DisplayRowPosition,
-    max_x_px: f32,
-) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    builder.with_current_row_mut(|row| {
-        let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
-            layout, row, position, max_x_px,
-        );
-        writer.push_item(item)
-    })
-}
-
-fn append_display_item_to_current_row_with_measured_progress(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    layout: &crate::display_row_builder::DisplayRowLayout,
-    item: crate::display_item::DisplayItem,
-    glyph_measurer: &mut dyn crate::display_row_builder::DisplayGlyphMeasurer,
-    position: crate::display_row_builder::DisplayRowPosition,
-    max_x_px: f32,
-) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    builder.with_current_row_mut(|row| {
-        let mut writer = crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
-            layout,
-            row,
-            glyph_measurer,
-            position,
-            max_x_px,
-        );
-        writer.push_item(item)
-    })
-}
-
 #[derive(Clone, Copy, Debug)]
 struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
@@ -1394,7 +1362,7 @@ fn append_buffer_display_stretch_to_current_row(
     position: crate::display_row_builder::DisplayRowPosition,
     max_x_px: f32,
 ) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    append_display_item_to_current_row_with_progress(
+    append_display_item_to_current_matrix_row(
         builder,
         layout,
         source.item(
@@ -1425,7 +1393,7 @@ fn append_buffer_source_mapped_text_to_current_row(
     position: crate::display_row_builder::DisplayRowPosition,
     max_x_px: f32,
 ) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    append_display_item_to_current_row_with_progress(
+    append_display_item_to_current_matrix_row(
         builder,
         layout,
         source.item(
@@ -1715,9 +1683,8 @@ fn render_overlay_string(
             x_px: *x,
             col: *col,
         };
-        let progress = append_display_item_to_current_row_with_progress(
-            builder, &layout, item, position, max_x,
-        );
+        let progress =
+            append_display_item_to_current_matrix_row(builder, &layout, item, position, max_x);
         let Some(progress) = progress else {
             break;
         };
@@ -4397,14 +4364,14 @@ impl LayoutEngine {
                                                     col,
                                                 };
                                             let progress =
-                                                append_display_item_to_current_row_with_measured_progress(
+                                                append_measured_display_item_to_current_matrix_row(
                                                     &mut self.matrix_builder,
                                                     &layout,
                                                     item,
                                                     &mut measurer,
                                                     position,
                                                     right_limit,
-                                            );
+                                                );
                                             let Some(progress) = progress else {
                                                 break;
                                             };
@@ -4449,7 +4416,7 @@ impl LayoutEngine {
                                                     col,
                                                 };
                                             let progress =
-                                                append_display_item_to_current_row_with_progress(
+                                                append_display_item_to_current_matrix_row(
                                                     &mut self.matrix_builder,
                                                     &layout,
                                                     item,
@@ -4586,7 +4553,7 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_display_item_to_current_row_with_progress(
+                            if let Some(progress) = append_display_item_to_current_matrix_row(
                                 &mut self.matrix_builder,
                                 &layout,
                                 item,
@@ -5659,7 +5626,7 @@ impl LayoutEngine {
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
-                if let Some(progress) = append_display_item_to_current_row_with_progress(
+                if let Some(progress) = append_display_item_to_current_matrix_row(
                     &mut self.matrix_builder,
                     &layout,
                     item,
@@ -5725,7 +5692,7 @@ impl LayoutEngine {
                         text_display_tab_policy(content_x, params),
                         current_text_face_id,
                     );
-                    if let Some(progress) = append_display_item_to_current_row_with_progress(
+                    if let Some(progress) = append_display_item_to_current_matrix_row(
                         &mut self.matrix_builder,
                         &layout,
                         item,
@@ -5804,7 +5771,7 @@ impl LayoutEngine {
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
-                if let Some(progress) = append_display_item_to_current_row_with_progress(
+                if let Some(progress) = append_display_item_to_current_matrix_row(
                     &mut self.matrix_builder,
                     &layout,
                     item,
@@ -6297,7 +6264,7 @@ impl LayoutEngine {
                 advance_px: advance,
             };
             let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
-            let progress = append_display_item_to_current_row_with_measured_progress(
+            let progress = append_measured_display_item_to_current_matrix_row(
                 &mut self.matrix_builder,
                 &layout,
                 item,

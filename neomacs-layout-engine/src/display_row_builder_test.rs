@@ -5,8 +5,10 @@ use crate::display_item::{
     RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{DisplaySourceContext, LispStringSourceCursor};
+use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::{Context, Value};
 
 fn layout() -> DisplayRowLayout {
@@ -257,6 +259,78 @@ fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
     assert_eq!(progress.slots[0].width_px, 16.0);
     assert_eq!(progress.slots[0].width_cols, 2);
     assert_eq!(row_text(&row), "^A");
+}
+
+#[test]
+fn append_display_item_to_current_matrix_row_returns_progress_and_updates_row() {
+    let row_layout = layout();
+    let mut matrix = GlyphMatrixBuilder::new();
+    matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    matrix.begin_row(0, GlyphRowRole::Text);
+
+    let progress = append_display_item_to_current_matrix_row(
+        &mut matrix,
+        &row_layout,
+        text_item("ab"),
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        80.0,
+    )
+    .expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.slots.len(), 2);
+    matrix
+        .with_current_row_mut(|row| {
+            assert_eq!(row_text(row), "ab");
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_measured_display_item_to_current_matrix_row_uses_glyph_measurer() {
+    struct TestMeasurer;
+
+    impl DisplayGlyphMeasurer for TestMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            ch: char,
+            _face_id: u32,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            match ch {
+                'm' => Some(12.0),
+                'i' => Some(4.0),
+                _ => None,
+            }
+        }
+    }
+
+    let row_layout = layout();
+    let mut matrix = GlyphMatrixBuilder::new();
+    let mut measurer = TestMeasurer;
+    matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    matrix.begin_row(0, GlyphRowRole::Text);
+
+    let progress = append_measured_display_item_to_current_matrix_row(
+        &mut matrix,
+        &row_layout,
+        text_item("mi"),
+        &mut measurer,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    )
+    .expect("append progress");
+
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    matrix
+        .with_current_row_mut(|row| {
+            let glyphs = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(glyphs[0].pixel_width, 12.0);
+            assert_eq!(glyphs[1].pixel_width, 4.0);
+        })
+        .expect("current row");
 }
 
 #[test]
