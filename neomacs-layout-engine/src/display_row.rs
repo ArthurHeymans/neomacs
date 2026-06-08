@@ -1,11 +1,12 @@
 use crate::display_item::RenderFaceRef;
-use crate::display_row_builder::{DisplayRowBuilder, DisplayRowLayout};
+use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowBuilder, DisplayRowLayout};
 use crate::display_source::{
     DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
     parse_display_length_expr,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
 use crate::engine::LayoutEngine;
+use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -258,6 +259,69 @@ impl StatusLineFace {
             background_gradient: None,
         }
     }
+}
+
+struct StatusLineGlyphMeasurer<'a> {
+    faces: &'a [StatusLineFace],
+    font_metrics: Option<&'a mut FontMetricsService>,
+    fallback_char_width: f32,
+}
+
+impl<'a> StatusLineGlyphMeasurer<'a> {
+    fn new(
+        faces: &'a [StatusLineFace],
+        font_metrics: Option<&'a mut FontMetricsService>,
+        fallback_char_width: f32,
+    ) -> Self {
+        Self {
+            faces,
+            font_metrics,
+            fallback_char_width,
+        }
+    }
+
+    fn face(&self, face_id: u32) -> Option<&StatusLineFace> {
+        self.faces.iter().find(|face| face.face_id == face_id)
+    }
+}
+
+impl DisplayGlyphMeasurer for StatusLineGlyphMeasurer<'_> {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        columns: u8,
+        fallback_advance_px: f32,
+    ) -> Option<f32> {
+        if columns == 0 {
+            return Some(0.0);
+        }
+
+        let face = self.face(face_id)?;
+        let face_char_width = face.font_char_width.max(self.fallback_char_width).max(1.0);
+        let min_advance = f32::from(columns) * face_char_width;
+        let font_family = face.font_family.clone();
+        let font_weight = face.font_weight;
+        let italic = face.italic;
+        let font_size = face.font_size.max(1.0);
+        let measured = self
+            .font_metrics
+            .as_mut()
+            .map(|svc| svc.char_width(ch, &font_family, font_weight, italic, font_size));
+
+        Some(snap_glyph_advance(
+            measured.unwrap_or(fallback_advance_px.max(min_advance)),
+            min_advance,
+        ))
+    }
+}
+
+fn snap_glyph_advance(advance: f32, min_advance: f32) -> f32 {
+    let snapped_min = min_advance.round().max(1.0);
+    if !advance.is_finite() || advance <= 0.0 {
+        return snapped_min;
+    }
+    advance.round().max(snapped_min)
 }
 
 /// A face run within an overlay/display string: byte offset + fg/bg colors + face_id.
@@ -568,7 +632,7 @@ impl LayoutEngine {
             .into_iter()
             .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
             .collect();
-        let mut row_builder = DisplayRowBuilder::new(DisplayRowLayout {
+        let row_layout = DisplayRowLayout {
             role,
             y_px: y,
             width_px: width,
@@ -577,11 +641,17 @@ impl LayoutEngine {
             char_width_px: char_width,
             base_face: RenderFaceRef::FaceId(status_face.face_id),
             symbol_values: parsed_symbol_values,
-        });
-        for item in items {
-            row_builder.push_item(item);
-        }
-        let row = row_builder.finish();
+        };
+        let row = {
+            let mut glyph_measurer =
+                StatusLineGlyphMeasurer::new(&status_faces, self.font_metrics.as_mut(), char_width);
+            let mut row_builder =
+                DisplayRowBuilder::with_glyph_measurer(row_layout, &mut glyph_measurer);
+            for item in items {
+                row_builder.push_item(item);
+            }
+            row_builder.finish()
+        };
         let progress = display_source_row_progress(&row, width, char_width, y, height);
         let faces = status_faces
             .into_iter()

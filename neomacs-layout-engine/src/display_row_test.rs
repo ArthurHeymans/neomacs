@@ -53,6 +53,22 @@ fn render_lisp_display_row(rendered: Value, role: GlyphRowRole) -> GlyphRow {
 }
 
 #[test]
+fn status_line_glyph_measurer_uses_face_specific_widths() {
+    let mut base = base_face();
+    base.font_char_width = 5.0;
+    let mut wide = base.clone();
+    wide.font_char_width = 9.0;
+    let faces = vec![
+        StatusLineFace::from_resolved(1, &base),
+        StatusLineFace::from_resolved(2, &wide),
+    ];
+    let mut measurer = StatusLineGlyphMeasurer::new(&faces, None, 5.0);
+
+    assert_eq!(measurer.glyph_advance_px('a', 1, 1, 5.0), Some(5.0));
+    assert_eq!(measurer.glyph_advance_px('中', 2, 2, 10.0), Some(18.0));
+}
+
+#[test]
 fn display_row_request_accepts_window_chrome_roles() {
     let _eval = Context::new();
     for role in [
@@ -423,6 +439,58 @@ fn display_row_baseline_mode_line_display_space_align_expands_to_spaces() {
 
     assert_eq!(row.role, GlyphRowRole::ModeLine);
     assert_eq!(row_text_expanding_stretches(&row), "A   B");
+}
+
+#[test]
+fn render_display_source_row_uses_face_specific_glyph_widths() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let rendered = Value::string_with_text_properties(
+        "AB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("JetBrains Mono"),
+                    Value::keyword("height"),
+                    Value::make_float(2.0),
+                ]),
+            ]),
+        }],
+    );
+    let mut next_face_id = 1;
+
+    let row = engine
+        .render_display_source_row(
+            0.0,
+            240.0,
+            32.0,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            &base_face,
+            rendered,
+            &resolver,
+            std::collections::HashMap::new(),
+            GlyphRowRole::TabLine,
+        )
+        .expect("display source row")
+        .row;
+    let glyphs = &row.glyphs[1];
+
+    assert_eq!(glyphs.len(), 2);
+    assert!(
+        glyphs[1].pixel_width > glyphs[0].pixel_width,
+        "face-height run should be measured wider than base run: {glyphs:?}"
+    );
 }
 
 #[test]
