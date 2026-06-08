@@ -639,3 +639,15 @@ fn display_row_builder_emits_stretch_with_pixel_width() {
     assert_eq!(glyph.pixel_height, 16.0);
     assert_eq!(glyph.pixel_ascent, 12.0);
 }
+
+#[test]
+fn display_row_builder_ceil_pixel_stretch_columns() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(stretch_item(DisplayLength::Pixels(9.0)));
+
+    let row = builder.finish();
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+
+    assert_eq!(glyph.glyph_type, GlyphType::Stretch { width_cols: 2 });
+    assert_eq!(glyph.pixel_width, 9.0);
+}

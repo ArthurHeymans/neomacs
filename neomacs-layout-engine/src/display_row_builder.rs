@@ -723,7 +723,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayStretchWidth::Length(length) => {
                 let pixels = self.length_pixels(length, self.layout.char_width_px)?;
                 let cols = (pixels / self.layout.char_width_px.max(1.0))
-                    .round()
+                    .ceil()
                     .max(1.0) as u16;
                 Some((cols, pixels))
             }

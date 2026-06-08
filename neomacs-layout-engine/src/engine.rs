@@ -193,11 +193,6 @@ fn update_cursor_info_for_main_char(
     cursor.slot_width = Some(advance.max(1.0));
 }
 
-fn display_width_cols(pixel_width: f32, frame_column_width: f32) -> u16 {
-    let column_width = frame_column_width.max(1.0);
-    (pixel_width.max(0.0) / column_width).ceil().max(1.0) as u16
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct DisplaySpaceGeometry {
     width: f32,
@@ -4425,8 +4420,6 @@ impl LayoutEngine {
 
                     // Case 2: Space spec — (space :width …) or (space :align-to …)
                     if is_display_space_spec(&prop_val) {
-                        let replacement_start_x = x;
-                        let replacement_start_col = col;
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
                         let display_ch_cols = if is_cluster_extender(display_ch) {
                             0
@@ -4489,30 +4482,62 @@ impl LayoutEngine {
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
-                            let width_cols = display_width_cols(space_width, params.char_width);
-                            self.matrix_builder.push_stretch_with_pixel_geometry(
-                                width_cols,
-                                current_text_face_id,
-                                space_width,
-                                space_geometry.height,
-                                space_geometry.ascent,
+                            let item = crate::display_item::DisplayItem::new(
+                                crate::display_item::SourceSpan::new(
+                                    crate::display_item::DisplaySourcePosition::buffer(
+                                        buf_id,
+                                        CharPos0::new(charpos as usize),
+                                        EmacsBytePos::new(text_start_byte + byte_idx),
+                                    ),
+                                    crate::display_item::DisplaySourcePosition::buffer(
+                                        buf_id,
+                                        CharPos0::new(charpos.saturating_add(1) as usize),
+                                        EmacsBytePos::new(text_start_byte + byte_idx),
+                                    ),
+                                ),
+                                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                                crate::display_item::DisplayItemKind::Stretch(
+                                    crate::display_item::DisplayStretch {
+                                        width: crate::display_item::DisplayStretchWidth::Length(
+                                            crate::display_item::DisplayLength::Pixels(space_width),
+                                        ),
+                                        height: Some(crate::display_item::DisplayLength::Pixels(
+                                            space_geometry.height,
+                                        )),
+                                        ascent: Some(crate::display_item::DisplayLength::Pixels(
+                                            space_geometry.ascent,
+                                        )),
+                                    },
+                                ),
                             );
-                            x += space_width;
-                            col += width_cols as usize;
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
+                            );
+                            if let Some(progress) = append_display_item_to_current_row_with_progress(
+                                &mut self.matrix_builder,
+                                &layout,
+                                item,
+                                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                                content_x + avail_width,
+                            ) {
+                                x = progress.end.x_px;
+                                col = progress.end.col;
+                                emit_text_progress_slots(
+                                    &mut output_emitter,
+                                    evaluator,
+                                    &progress,
                                     row,
                                     y,
                                     y + raise_y_offset,
                                     face_h,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
-                                ),
-                            );
+                                );
+                            }
                         }
 
                         // Skip covered buffer text
