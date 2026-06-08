@@ -707,6 +707,36 @@ fn set_phys_cursor_syncs_the_redundant_window_cursor_slot() {
 }
 
 #[test]
+fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
+    // Direct contract for the one method that both the phys cursor and the
+    // redundant window cursor resolve through, so neither re-derives the column.
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_left_margin_char('1', 1);
+    builder.push_left_margin_char('2', 1);
+    builder.push_left_margin_stretch(1, 1); // three-column line-number gutter
+    builder.push_char('H', 0, 100);
+    builder.push_char('e', 0, 101);
+    builder.push_char('l', 0, 102);
+    builder.end_row();
+
+    // Matching window/row, point on 'l': 3 gutter columns + Text index 2 = 5.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 102), Some(5));
+    // Point on the first buffer glyph lands just past the gutter at column 3.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 100), Some(3));
+    // Point on hidden text (charpos 101 has a glyph here, but charpos 50 does
+    // not) resolves to the first following visible glyph, never the captured
+    // column: smallest charpos > 50 is 'H' at gutter column 3.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 50), Some(3));
+    // A cursor reported against another window has no slot here -> decline.
+    assert_eq!(builder.resolve_cursor_visual_col(2, 0, 102), None);
+    // An out-of-range row also declines rather than inventing a column.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 99, 102), None);
+    builder.end_window();
+}
+
+#[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);

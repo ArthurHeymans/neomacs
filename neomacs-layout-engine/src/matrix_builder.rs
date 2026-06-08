@@ -880,70 +880,78 @@ impl GlyphMatrixBuilder {
         });
     }
 
+    /// Resolve the materialize-grid column the cursor at `cursor.charpos` on
+    /// `cursor.row` actually occupies, or `None` when the cursor is not on the
+    /// current window's matrix. This is the single authority for "which display
+    /// column is point on"; `set_phys_cursor` applies it to the cursor and the
+    /// redundant per-window cursor visual so neither re-derives it independently.
+    ///
+    /// The column must equal the one `FrameDisplayState::materialize_grid_row`
+    /// assigns to point's glyph: a single running counter over the LeftMargin
+    /// (line numbers, fringe) area and then the Text area, skipping padding
+    /// cells and weighting each glyph by its cell span. Counting only the
+    /// Text-area index drops the line-number gutter, so the renderer would snap
+    /// the cursor to a glyph `lnum_cols` cells to the left (or into the gutter
+    /// on short lines), drawing a stray second cursor. GNU accounts for the same
+    /// gutter in `set_cursor_from_row`, where the line-number glyphs live at the
+    /// start of TEXT_AREA (src/xdisp.c).
+    ///
+    /// An exact charpos match places the cursor on point's own glyph. When point
+    /// sits on invisible/hidden text (e.g. an org heading's collapsed `#+title:`
+    /// or leading stars produce no glyph for that charpos), GNU's
+    /// set_cursor_from_row instead places the cursor on the first visible glyph
+    /// that follows point. We track the glyph with the smallest charpos greater
+    /// than point as that fallback, so the cursor never reverts to the captured
+    /// column (which would land on the line-number gutter and draw a stray
+    /// second cursor).
+    fn resolve_cursor_visual_col(&self, window_id: i64, row: usize, charpos: usize) -> Option<u16> {
+        if !cursor_window_matches_current(window_id, self.current_window_id) {
+            return None;
+        }
+        let matrix = self.current_matrix.as_ref()?;
+        let row = matrix.rows.get(row)?;
+
+        let mut col_acc: u16 = 0;
+        for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
+            if glyph.padding {
+                continue;
+            }
+            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+        }
+
+        let mut nearest_after: Option<(usize, u16)> = None;
+        for glyph in &row.glyphs[GlyphArea::Text.index()] {
+            if glyph.padding {
+                continue;
+            }
+            if glyph.charpos == charpos {
+                return Some(col_acc);
+            }
+            if glyph.charpos > charpos
+                && nearest_after.is_none_or(|(after, _)| glyph.charpos < after)
+            {
+                nearest_after = Some((glyph.charpos, col_acc));
+            }
+            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+        }
+        nearest_after.map(|(_, col)| col)
+    }
+
     pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
         let original_slot_id = cursor.slot_id;
-        let mut visual_col = None;
+        let visual_col = self.resolve_cursor_visual_col(cursor.window_id, cursor.row, cursor.charpos);
 
-        if cursor_window_matches_current(cursor.window_id, self.current_window_id)
-            && let Some(ref matrix) = self.current_matrix
-            && cursor.row < matrix.rows.len()
+        if let Some(col) = visual_col
+            && col != cursor.col
         {
-            let row = &matrix.rows[cursor.row];
-            // The cursor's `slot_id.col` must equal the column
-            // `FrameDisplayState::materialize_grid_row` assigns to the glyph at
-            // point: a single running counter over the LeftMargin (line numbers,
-            // fringe) area and then the Text area, skipping padding cells and
-            // weighting each glyph by its cell span. Counting only the Text-area
-            // index drops the line-number gutter, so the renderer would snap the
-            // cursor to a glyph `lnum_cols` cells to the left (or into the gutter
-            // on short lines), drawing a stray second cursor. GNU accounts for
-            // the same gutter in `set_cursor_from_row`, where the line-number
-            // glyphs live at the start of TEXT_AREA (src/xdisp.c).
-            let mut col_acc: u16 = 0;
-            for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
-                if glyph.padding {
-                    continue;
-                }
-                col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
-            }
-            // An exact charpos match places the cursor on point's own glyph.
-            // When point sits on invisible/hidden text (e.g. an org heading's
-            // collapsed `#+title:` or leading stars produce no glyph for that
-            // charpos), GNU's set_cursor_from_row instead places the cursor on
-            // the first visible glyph that follows point. Track the glyph with
-            // the smallest charpos greater than point as that fallback, so the
-            // cursor never reverts to the captured column (which would land on
-            // the line-number gutter and draw a stray second cursor).
-            let mut nearest_after: Option<(usize, u16)> = None;
-            for glyph in &row.glyphs[GlyphArea::Text.index()] {
-                if glyph.padding {
-                    continue;
-                }
-                if glyph.charpos == cursor.charpos {
-                    visual_col = Some(col_acc);
-                    break;
-                }
-                if glyph.charpos > cursor.charpos
-                    && nearest_after.is_none_or(|(charpos, _)| glyph.charpos < charpos)
-                {
-                    nearest_after = Some((glyph.charpos, col_acc));
-                }
-                col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
-            }
-            if visual_col.is_none() {
-                visual_col = nearest_after.map(|(_, col)| col);
-            }
-
-            if let Some(col) = visual_col {
-                if col != cursor.col {
-                    cursor.col = col;
-                    cursor.slot_id.col = col;
-                    if matrix.ncols > 0 {
-                        let char_w = self.current_pixel_bounds.width / matrix.ncols as f32;
-                        cursor.x = self.current_pixel_bounds.x + col as f32 * char_w;
-                    }
-                }
+            cursor.col = col;
+            cursor.slot_id.col = col;
+            if let Some(matrix) = self.current_matrix.as_ref()
+                && matrix.ncols > 0
+            {
+                let char_w = self.current_pixel_bounds.width / matrix.ncols as f32;
+                cursor.x = self.current_pixel_bounds.x + col as f32 * char_w;
             }
         }
 
