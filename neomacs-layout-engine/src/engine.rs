@@ -1411,6 +1411,35 @@ fn text_display_row_layout(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn text_output_span_from_coords(
+    buffer_pos: LispCharPos1,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+    start_x: f32,
+    start_col: usize,
+    end_x: f32,
+    end_col: usize,
+) -> TextOutputSpan {
+    TextOutputSpan {
+        buffer_pos,
+        row,
+        row_y,
+        glyph_y,
+        height,
+        start: crate::display_row_builder::DisplayRowPosition {
+            x_px: start_x,
+            col: start_col,
+        },
+        end: crate::display_row_builder::DisplayRowPosition {
+            x_px: end_x,
+            col: end_col,
+        },
+    }
+}
+
 struct SingleGlyphAdvance {
     ch: char,
     face_id: u32,
@@ -4382,21 +4411,17 @@ impl LayoutEngine {
                         if x > replacement_start_x || col > replacement_start_col {
                             output_emitter.emit_text_output_span(
                                 evaluator,
-                                TextOutputSpan {
-                                    buffer_pos: layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
                                     row,
-                                    row_y: y,
-                                    glyph_y: y + raise_y_offset,
-                                    height: face_h,
-                                    start: crate::display_row_builder::DisplayRowPosition {
-                                        x_px: replacement_start_x,
-                                        col: replacement_start_col,
-                                    },
-                                    end: crate::display_row_builder::DisplayRowPosition {
-                                        x_px: x,
-                                        col,
-                                    },
-                                },
+                                    y,
+                                    y + raise_y_offset,
+                                    face_h,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         }
 
@@ -4485,17 +4510,19 @@ impl LayoutEngine {
                             );
                             x += space_width;
                             col += width_cols as usize;
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                y + raise_y_offset,
-                                x - replacement_start_x,
-                                face_h,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    y + raise_y_offset,
+                                    face_h,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         }
 
@@ -4577,17 +4604,19 @@ impl LayoutEngine {
                             row_max_ascent = row_max_ascent.max(display_height);
                             x += display_width;
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                image_y,
-                                x - replacement_start_x,
-                                display_height,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    image_y,
+                                    display_height,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         } else {
                             if point_in_display_replacement {
@@ -4630,17 +4659,19 @@ impl LayoutEngine {
                                 col += 1;
                             }
                             if x > replacement_start_x || col > replacement_start_col {
-                                output_emitter.emit_text_span(
+                                output_emitter.emit_text_output_span(
                                     evaluator,
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    replacement_start_x,
-                                    y + raise_y_offset,
-                                    x - replacement_start_x,
-                                    face_h,
-                                    replacement_start_col,
-                                    col,
+                                    text_output_span_from_coords(
+                                        layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                        row,
+                                        y,
+                                        y + raise_y_offset,
+                                        face_h,
+                                        replacement_start_x,
+                                        replacement_start_col,
+                                        x,
+                                        col,
+                                    ),
                                 );
                             }
                         }
@@ -4714,17 +4745,19 @@ impl LayoutEngine {
                             row_max_ascent = row_max_ascent.max(display_height);
                             x += display_width;
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                video_y,
-                                x - replacement_start_x,
-                                display_height,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    video_y,
+                                    display_height,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         } else {
                             if point_in_display_replacement {
@@ -4747,17 +4780,19 @@ impl LayoutEngine {
                             }
                             x += face_char_w * 5.0;
                             col += 5;
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                y + raise_y_offset,
-                                x - replacement_start_x,
-                                face_h,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    y + raise_y_offset,
+                                    face_h,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         }
 
@@ -4813,17 +4848,19 @@ impl LayoutEngine {
                             row_max_ascent = row_max_ascent.max(display_height);
                             x += display_width;
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                xwidget_y,
-                                x - replacement_start_x,
-                                display_height,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    xwidget_y,
+                                    display_height,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
 
                             while charpos < skip_to && byte_idx < text.len() {
@@ -4893,17 +4930,19 @@ impl LayoutEngine {
                             row_max_ascent = row_max_ascent.max(display_height);
                             x += display_width;
                             col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                webkit_y,
-                                x - replacement_start_x,
-                                display_height,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    webkit_y,
+                                    display_height,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         } else {
                             if point_in_display_replacement {
@@ -4926,17 +4965,19 @@ impl LayoutEngine {
                             }
                             x += face_char_w * 5.0;
                             col += 5;
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                y + raise_y_offset,
-                                x - replacement_start_x,
-                                face_h,
-                                replacement_start_col,
-                                col,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    y + raise_y_offset,
+                                    face_h,
+                                    replacement_start_x,
+                                    replacement_start_col,
+                                    x,
+                                    col,
+                                ),
                             );
                         }
 
@@ -5335,17 +5376,19 @@ impl LayoutEngine {
                         },
                     );
                 }
-                output_emitter.emit_text_span(
+                output_emitter.emit_text_output_span(
                     evaluator,
-                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                    row,
-                    y,
-                    x_before_tab,
-                    y + raise_y_offset,
-                    advance,
-                    char_h,
-                    col,
-                    next_tab_col,
+                    text_output_span_from_coords(
+                        layout_i64_char_pos_to_lisp_char_pos(charpos),
+                        row,
+                        y,
+                        y + raise_y_offset,
+                        char_h,
+                        x_before_tab,
+                        col,
+                        x_before_tab + advance,
+                        next_tab_col,
+                    ),
                 );
                 self.matrix_builder.push_stretch_with_pixel_width(
                     (next_tab_col.saturating_sub(col)).max(1) as u16,
@@ -5480,17 +5523,19 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     current_face_id += 1;
                 }
-                output_emitter.emit_text_span(
+                output_emitter.emit_text_output_span(
                     evaluator,
-                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                    row,
-                    y,
-                    x,
-                    y + raise_y_offset,
-                    needed_width,
-                    char_h,
-                    col,
-                    col + 2,
+                    text_output_span_from_coords(
+                        layout_i64_char_pos_to_lisp_char_pos(charpos),
+                        row,
+                        y,
+                        y + raise_y_offset,
+                        char_h,
+                        x,
+                        col,
+                        x + needed_width,
+                        col + 2,
+                    ),
                 );
                 x += char_pixel_advance(
                     &mut self.ascii_width_cache,
@@ -5538,17 +5583,19 @@ impl LayoutEngine {
                         }
                         // Render as visible space or hyphen
                         let display_ch = if ch == '\u{00A0}' { ' ' } else { '-' };
-                        output_emitter.emit_text_span(
+                        output_emitter.emit_text_output_span(
                             evaluator,
-                            layout_i64_char_pos_to_lisp_char_pos(charpos),
-                            row,
-                            y,
-                            x,
-                            y + raise_y_offset,
-                            face_char_w,
-                            char_h,
-                            col,
-                            col + 1,
+                            text_output_span_from_coords(
+                                layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                row,
+                                y,
+                                y + raise_y_offset,
+                                char_h,
+                                x,
+                                col,
+                                x + face_char_w,
+                                col + 1,
+                            ),
                         );
                         x += char_pixel_advance(
                             &mut self.ascii_width_cache,
@@ -5579,17 +5626,19 @@ impl LayoutEngine {
                         // Check if 2 columns fit
                         let needed = 2.0 * face_char_w;
                         if x + needed <= content_x + avail_width {
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                x,
-                                y + raise_y_offset,
-                                needed,
-                                char_h,
-                                col,
-                                col + 2,
+                                text_output_span_from_coords(
+                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    y,
+                                    y + raise_y_offset,
+                                    char_h,
+                                    x,
+                                    col,
+                                    x + needed,
+                                    col + 2,
+                                ),
                             );
                             x += char_pixel_advance(
                                 &mut self.ascii_width_cache,
@@ -5741,17 +5790,19 @@ impl LayoutEngine {
                     _ => {}
                 }
                 if x > replacement_start_x || col > replacement_start_col {
-                    output_emitter.emit_text_span(
+                    output_emitter.emit_text_output_span(
                         evaluator,
-                        layout_i64_char_pos_to_lisp_char_pos(charpos),
-                        row,
-                        y,
-                        replacement_start_x,
-                        y + raise_y_offset,
-                        x - replacement_start_x,
-                        face_h,
-                        replacement_start_col,
-                        col,
+                        text_output_span_from_coords(
+                            layout_i64_char_pos_to_lisp_char_pos(charpos),
+                            row,
+                            y,
+                            y + raise_y_offset,
+                            face_h,
+                            replacement_start_x,
+                            replacement_start_col,
+                            x,
+                            col,
+                        ),
                     );
                 }
                 charpos += 1;
@@ -6261,17 +6312,19 @@ impl LayoutEngine {
             } else {
                 x += advance;
                 col += char_cols as usize;
-                output_emitter.emit_text_span(
+                output_emitter.emit_text_output_span(
                     evaluator,
-                    buffer_pos,
-                    row,
-                    y,
-                    glyph_x,
-                    y + raise_y_offset,
-                    advance,
-                    face_h,
-                    glyph_col,
-                    col,
+                    text_output_span_from_coords(
+                        buffer_pos,
+                        row,
+                        y,
+                        y + raise_y_offset,
+                        face_h,
+                        glyph_x,
+                        glyph_col,
+                        glyph_x + advance,
+                        col,
+                    ),
                 );
             }
             charpos += 1;
