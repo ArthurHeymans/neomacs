@@ -4,13 +4,14 @@ use crate::display_item::{
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
-    DisplayRowPosition, DisplayTabPolicy,
+    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
 };
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::neovm_bridge::{FaceResolver, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::buffer::{BufferId, CharLen, CharPos0};
 use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
@@ -173,6 +174,45 @@ pub(crate) fn append_lisp_string_to_text_row(
         }
     }
     position
+}
+
+pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    buffer_id: BufferId,
+    buffer: &B,
+    char_pos: CharPos0,
+    face_id: u32,
+    ch: char,
+    advance: f32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buffer_id,
+        buffer,
+        char_pos,
+        char_pos.add_len(CharLen::new(1)),
+        RenderFaceRef::FaceId(face_id),
+    );
+    let mut context = DisplaySourceContext::empty();
+    let append_spec = frame.at(position, face_id).append_spec(if ch == '\t' {
+        DisplayRowAppendKind::Tab
+    } else {
+        DisplayRowAppendKind::SourceText
+    });
+    let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
+    source.next_item(&mut context).and_then(|item| {
+        append_measured_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+            &mut measurer,
+        )
+    })
 }
 
 pub(crate) struct DisplayRowAppendOutput {

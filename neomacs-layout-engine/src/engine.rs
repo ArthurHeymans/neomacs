@@ -20,17 +20,17 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendKind, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
-    DisplayRowAppendSurface, append_display_row_spec_item, append_display_row_spec_item_and_emit,
-    append_lisp_string_to_text_row, append_measured_display_row_spec_item_and_emit,
-    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
-    render_face_ref_id, synthetic_display_text_item,
+    DisplayRowAppendSurface, append_buffer_text_char_to_text_row, append_display_row_spec_item,
+    append_display_row_spec_item_and_emit, append_lisp_string_to_text_row,
+    append_measured_display_row_spec_item_and_emit, append_synthetic_text_to_display_row,
+    emit_text_progress_slots, next_layout_string_source_item, render_face_ref_id,
+    synthetic_display_text_item,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayItemSource,
-    DisplayReplacementBox,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6053,49 +6053,33 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let start = CharPos0::new(charpos as usize);
-            let end = CharPos0::new(charpos.saturating_add(1) as usize);
-            let mut source = crate::display_source::BufferTextSourceCursor::new(
+            let frame = text_append_surface.frame(
+                DisplayRowAppendPlacement {
+                    row,
+                    y,
+                    glyph_y: y + raise_y_offset,
+                },
+                DisplayRowAppendMetrics {
+                    height: face_h,
+                    ascent: face_ascent_val,
+                    char_width: face_char_w,
+                    space_width: face_space_w,
+                    default_row_height: char_h,
+                },
+            );
+            let Some((_progress, position)) = append_buffer_text_char_to_text_row(
+                &mut self.matrix_builder,
+                &mut output_emitter,
+                evaluator,
                 buf_id,
                 buffer,
-                start,
-                end,
-                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-            );
-            let mut context = crate::display_source::DisplaySourceContext::empty();
-            let append_spec = text_append_surface
-                .frame(
-                    DisplayRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
-                    DisplayRowAppendMetrics {
-                        height: face_h,
-                        ascent: face_ascent_val,
-                        char_width: face_char_w,
-                        space_width: face_space_w,
-                        default_row_height: char_h,
-                    },
-                )
-                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                .append_spec(if ch == '\t' {
-                    DisplayRowAppendKind::Tab
-                } else {
-                    DisplayRowAppendKind::SourceText
-                });
-            let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
-            let progress = source.next_item(&mut context).and_then(|item| {
-                append_measured_display_row_spec_item_and_emit(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    append_spec,
-                    item,
-                    &mut measurer,
-                )
-            });
-            let Some((_progress, position)) = progress else {
+                CharPos0::new(charpos as usize),
+                current_text_face_id,
+                ch,
+                advance,
+                frame,
+                DisplayRowPosition { x_px: x, col },
+            ) else {
                 break;
             };
 

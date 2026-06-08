@@ -2,6 +2,7 @@ use super::*;
 use crate::display_item::{DisplayItemKind, DisplaySourcePosition, RenderFaceRef};
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::neovm_bridge::LayoutBufferSnapshot;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
@@ -462,6 +463,89 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
             let text = &row.glyphs[1];
             assert_eq!(text[0].face_id, 0);
             assert_eq!(text[1].face_id, 20);
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_buffer_text_char_to_text_row_appends_source_char() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ab");
+    }
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("append-buffer-char", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    };
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let (_progress, end) = append_buffer_text_char_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        7,
+        'a',
+        8.0,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("appended buffer char");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert_eq!(text[0].face_id, 7);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
+            ));
         })
         .expect("current row");
 }
