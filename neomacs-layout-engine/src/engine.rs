@@ -1415,6 +1415,34 @@ impl crate::display_row_builder::DisplayGlyphMeasurer for SingleGlyphAdvance {
     }
 }
 
+struct DisplayRunGlyphAdvances {
+    advances: std::collections::HashMap<(char, u32), f32>,
+}
+
+impl DisplayRunGlyphAdvances {
+    fn new() -> Self {
+        Self {
+            advances: std::collections::HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, ch: char, face_id: u32, advance_px: f32) {
+        self.advances.insert((ch, face_id), advance_px);
+    }
+}
+
+impl crate::display_row_builder::DisplayGlyphMeasurer for DisplayRunGlyphAdvances {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        self.advances.get(&(ch, face_id)).copied()
+    }
+}
+
 struct LayoutStringFaceResolver<'a> {
     face_resolver: &'a super::neovm_bridge::FaceResolver,
     base_face: &'a super::neovm_bridge::ResolvedFace,
@@ -4272,43 +4300,31 @@ impl LayoutEngine {
                                     let Some(item) = item else {
                                         break;
                                     };
-                                    let item_face = item.face;
-                                    match item.kind {
+                                    let crate::display_item::DisplayItem {
+                                        span,
+                                        face: item_face,
+                                        kind,
+                                    } = item;
+                                    match kind {
                                         crate::display_item::DisplayItemKind::TextRun(run) => {
                                             let face_id =
                                                 render_face_ref_id(item_face, current_text_face_id);
+                                            let mut measurer = DisplayRunGlyphAdvances::new();
                                             for rch in run.text.chars() {
-                                                let tail =
-                                                    self.matrix_builder.last_text_cluster_tail();
-                                                let is_cont = crate::composition::continues_cluster(
-                                                    rch, tail,
-                                                );
-                                                let rch_cols = if is_cont {
-                                                    0usize
-                                                } else if rch == '\t' {
-                                                    let tab_width =
-                                                        params.tab_width.max(1) as usize;
-                                                    let remainder = col % tab_width;
-                                                    if remainder == 0 {
-                                                        tab_width
-                                                    } else {
-                                                        tab_width - remainder
-                                                    }
-                                                } else {
-                                                    crate::composition::base_width_cols(rch)
-                                                        as usize
-                                                };
-                                                let rch_advance = if rch_cols == 0 {
+                                                if rch == '\t' {
+                                                    continue;
+                                                }
+                                                let cols =
+                                                    crate::composition::base_width_cols(rch) as i32;
+                                                let advance = if cols == 0 {
                                                     0.0
-                                                } else if rch == '\t' {
-                                                    rch_cols as f32 * face_space_w
                                                 } else {
                                                     char_pixel_advance(
                                                         &mut self.ascii_width_cache,
                                                         frame_params.window_system,
                                                         &mut self.font_metrics,
                                                         rch,
-                                                        rch_cols as i32,
+                                                        cols,
                                                         char_w,
                                                         current_font_size_px,
                                                         face_char_w,
@@ -4317,65 +4333,65 @@ impl LayoutEngine {
                                                         current_font_italic,
                                                     )
                                                 };
-                                                if x + rch_advance > right_limit {
-                                                    break;
-                                                }
-                                                let item =
-                                                    crate::display_item::DisplayItem::new(
-                                                        crate::display_item::SourceSpan::new(
-                                                            crate::display_item::DisplaySourcePosition::buffer(
-                                                                buf_id,
-                                                                CharPos0::new(charpos as usize),
-                                                                EmacsBytePos::new(
-                                                                    text_start_byte + byte_idx,
-                                                                ),
-                                                            ),
-                                                            crate::display_item::DisplaySourcePosition::buffer(
-                                                                buf_id,
-                                                                CharPos0::new(
-                                                                    charpos.saturating_add(1)
-                                                                        as usize,
-                                                                ),
-                                                            EmacsBytePos::new(
-                                                                text_start_byte + byte_idx,
-                                                            ),
+                                                measurer.insert(rch, face_id, advance);
+                                            }
+                                            let item = crate::display_item::DisplayItem::new(
+                                                crate::display_item::SourceSpan::new(
+                                                    crate::display_item::DisplaySourcePosition::buffer(
+                                                        buf_id,
+                                                        CharPos0::new(charpos as usize),
+                                                        EmacsBytePos::new(
+                                                            text_start_byte + byte_idx,
                                                         ),
                                                     ),
-                                                    crate::display_item::RenderFaceRef::FaceId(
-                                                        face_id,
-                                                    ),
-                                                    crate::display_item::DisplayItemKind::TextRun(
-                                                        crate::display_item::DisplayTextRun::new(
-                                                            rch.to_string(),
-                                                            ),
+                                                    crate::display_item::DisplaySourcePosition::buffer(
+                                                        buf_id,
+                                                        CharPos0::new(
+                                                            charpos.saturating_add(1) as usize,
                                                         ),
-                                                    );
-                                                let layout = text_display_row_layout(
-                                                    y,
-                                                    right_limit - content_x,
-                                                    face_h,
-                                                    face_ascent_val,
-                                                    face_space_w,
-                                                    params.tab_width,
-                                                    face_id,
-                                                );
-                                                let mut measurer = SingleGlyphAdvance {
-                                                    ch: rch,
-                                                    face_id,
-                                                    advance_px: rch_advance,
+                                                        EmacsBytePos::new(
+                                                            text_start_byte + byte_idx,
+                                                        ),
+                                                    ),
+                                                ),
+                                                crate::display_item::RenderFaceRef::FaceId(face_id),
+                                                crate::display_item::DisplayItemKind::TextRun(run),
+                                            );
+                                            let layout = text_display_row_layout(
+                                                y,
+                                                right_limit - content_x,
+                                                face_h,
+                                                face_ascent_val,
+                                                face_space_w,
+                                                params.tab_width,
+                                                face_id,
+                                            );
+                                            let position =
+                                                crate::display_row_builder::DisplayRowPosition {
+                                                    x_px: x,
+                                                    col,
                                                 };
-                                                if append_display_item_to_current_row_with_shared_builder(
-                                                    &mut self.matrix_builder,
-                                                    layout,
-                                                    item,
-                                                    Some(&mut measurer),
-                                                )
-                                                .is_none()
-                                                {
-                                                    break;
-                                                }
-                                                x += rch_advance;
-                                                col += rch_cols;
+                                            let progress = self.matrix_builder.with_current_row_mut(
+                                                |row| {
+                                                    let mut writer = crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
+                                                        &layout,
+                                                        row,
+                                                        &mut measurer,
+                                                        position,
+                                                        right_limit,
+                                                    );
+                                                    writer.push_item(item)
+                                                },
+                                            );
+                                            let Some(progress) = progress else {
+                                                break;
+                                            };
+                                            x = progress.end.x_px;
+                                            col = progress.end.col;
+                                            if progress.status
+                                                == crate::display_row_builder::DisplayRowAppendStatus::Clipped
+                                            {
+                                                break;
                                             }
                                         }
                                         crate::display_item::DisplayItemKind::RowBreak(_) => break,
@@ -4392,7 +4408,7 @@ impl LayoutEngine {
                                                 face_id,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
-                                                item.span,
+                                                span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
