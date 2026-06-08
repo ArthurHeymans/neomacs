@@ -19,14 +19,13 @@ use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmit
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendKind, DisplayRowAppendMeasurement,
-    DisplayRowAppendMetrics, DisplayRowAppendPlacement, DisplayRowAppendSurface,
-    append_buffer_text_char_to_text_row, append_display_item_to_text_row_and_emit,
-    append_display_replacement_item_to_text_row,
+    DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
+    DisplayRowAppendPlacement, DisplayRowAppendSurface, append_buffer_text_char_to_text_row,
+    append_display_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
-    append_display_replacement_string_item_to_text_row, append_display_row_spec_item,
-    append_lisp_string_to_text_row, append_synthetic_text_to_display_row, emit_text_progress_slots,
-    next_layout_string_source_item, render_face_ref_id,
+    append_display_replacement_string_item_to_text_row, append_lisp_string_to_text_row,
+    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
+    render_face_ref_id,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -1436,7 +1435,6 @@ fn render_overlay_string(
         if *x >= max_x {
             break;
         }
-        let face_id = render_face_ref_id(item.face, overlay_base_face_id);
         let overlay_surface = DisplayRowAppendSurface::new(
             DisplayRowAppendArea {
                 content_x,
@@ -1446,36 +1444,30 @@ fn render_overlay_string(
             },
             text_display_tab_policy(content_x, params),
         );
-        let append_spec = overlay_surface
-            .frame(
-                DisplayRowAppendPlacement {
-                    row: *row,
-                    y: *y,
-                    glyph_y: *y,
-                },
-                DisplayRowAppendMetrics {
-                    height: char_h,
-                    ascent: default_row_ascent,
-                    char_width: face_char_w,
-                    space_width: face_char_w,
-                    default_row_height: char_h,
-                },
-            )
-            .at(
-                DisplayRowPosition {
-                    x_px: *x,
-                    col: *col,
-                },
-                face_id,
-            )
-            .append_spec(DisplayRowAppendKind::DisplayReplacement);
-        let item = crate::display_item::DisplayItem::new(
-            item.span,
-            crate::display_item::RenderFaceRef::FaceId(face_id),
-            item.kind,
+        let overlay_frame = overlay_surface.frame(
+            DisplayRowAppendPlacement {
+                row: *row,
+                y: *y,
+                glyph_y: *y,
+            },
+            DisplayRowAppendMetrics {
+                height: char_h,
+                ascent: default_row_ascent,
+                char_width: face_char_w,
+                space_width: face_char_w,
+                default_row_height: char_h,
+            },
         );
-        let Some((progress, position)) = append_display_row_spec_item(builder, &append_spec, item)
-        else {
+        let Some((progress, position)) = append_display_replacement_item_to_text_row(
+            builder,
+            item,
+            overlay_base_face_id,
+            overlay_frame,
+            DisplayRowPosition {
+                x_px: *x,
+                col: *col,
+            },
+        ) else {
             break;
         };
         for slot in &progress.slots {
