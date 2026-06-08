@@ -7,7 +7,7 @@
 //! - The **selected window** is the one receiving input.
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
-use crate::buffer::{BufferId, EmacsBytePos, LispCharPos1};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::face::Face as RuntimeFace;
 use crate::gc_trace::GcTrace;
@@ -702,6 +702,36 @@ impl Window {
             Window::Leaf { normal_cols, .. } | Window::Internal { normal_cols, .. } => {
                 *normal_cols = value;
             }
+        }
+    }
+
+    /// Record this leaf as width-fixed at COLS columns.  A value of 0 clears
+    /// the fixed-width constraint.
+    pub fn set_fixed_width_cols(&mut self, cols: usize) {
+        if let Window::Leaf { fixed_width, .. } = self {
+            *fixed_width = cols;
+        }
+    }
+
+    /// Record this leaf as height-fixed at LINES rows.  A value of 0 clears
+    /// the fixed-height constraint.
+    pub fn set_fixed_height_lines(&mut self, lines: usize) {
+        if let Window::Leaf { fixed_height, .. } = self {
+            *fixed_height = lines;
+        }
+    }
+
+    pub fn fixed_width_cols(&self) -> usize {
+        match self {
+            Window::Leaf { fixed_width, .. } => *fixed_width,
+            Window::Internal { .. } => 0,
+        }
+    }
+
+    pub fn fixed_height_lines(&self) -> usize {
+        match self {
+            Window::Leaf { fixed_height, .. } => *fixed_height,
+            Window::Internal { .. } => 0,
         }
     }
 
@@ -2310,6 +2340,85 @@ impl Frame {
         );
     }
 
+    /// Refresh fixed-size constraints from buffers currently displayed in the
+    /// window tree.
+    ///
+    /// GNU's `window-size-fixed-p` reads the buffer-local `window-size-fixed`
+    /// of a live window's buffer. Display backends only report physical frame
+    /// sizes, so Neomacs materializes that dynamic Lisp state onto the window
+    /// tree immediately before low-level frame resize layout.
+    pub fn sync_window_size_fixed_from_buffers(&mut self, buffers: &BufferManager) {
+        let char_width = self.char_width.max(1.0);
+        let char_height = self.char_height.max(1.0);
+
+        fn fixed_axes(buffers: &BufferManager, buffer_id: BufferId) -> (bool, bool) {
+            let value = buffers
+                .get(buffer_id)
+                .and_then(|buffer| buffer.buffer_local_value("window-size-fixed"))
+                .unwrap_or(Value::NIL);
+            if value.is_nil() {
+                return (false, false);
+            }
+            if value == Value::T {
+                return (true, true);
+            }
+            match value.as_symbol_name() {
+                Some("width") => (true, false),
+                Some("height") => (false, true),
+                _ => (true, true),
+            }
+        }
+
+        fn sync_window(
+            window: &mut Window,
+            buffers: &BufferManager,
+            char_width: f32,
+            char_height: f32,
+        ) {
+            match window {
+                Window::Leaf {
+                    buffer_id, bounds, ..
+                } => {
+                    let (fixed_width, fixed_height) = fixed_axes(buffers, *buffer_id);
+                    let fixed_cols = if fixed_width {
+                        (bounds.width / char_width).round().max(1.0) as usize
+                    } else {
+                        0
+                    };
+                    let fixed_lines = if fixed_height {
+                        (bounds.height / char_height).round().max(1.0) as usize
+                    } else {
+                        0
+                    };
+                    window.set_fixed_width_cols(fixed_cols);
+                    window.set_fixed_height_lines(fixed_lines);
+                }
+                Window::Internal { children, .. } => {
+                    for child in children {
+                        sync_window(child, buffers, char_width, char_height);
+                    }
+                }
+            }
+        }
+
+        sync_window(&mut self.root_window, buffers, char_width, char_height);
+        if let Some(minibuffer) = self.minibuffer_leaf.as_mut() {
+            sync_window(minibuffer, buffers, char_width, char_height);
+        }
+    }
+
+    /// Apply a live physical frame resize while honoring Lisp-visible window
+    /// constraints carried by displayed buffers.
+    pub fn resize_pixelwise_with_buffer_constraints(
+        &mut self,
+        buffers: &BufferManager,
+        width: u32,
+        height: u32,
+    ) {
+        self.sync_window_size_fixed_from_buffers(buffers);
+        self.resize_pixelwise(width, height);
+    }
+
     /// Grow the minibuffer window by `delta_rows` character-cell rows.
     ///
     /// Mirrors GNU `grow_mini_window` at `src/window.c:5896-5930`.
@@ -2765,6 +2874,7 @@ impl FrameManager {
         direction: SplitDirection,
         new_buffer_id: BufferId,
         size: Option<i64>,
+        new_before_old: bool,
     ) -> Option<WindowId> {
         let internal_id = self.alloc_window_id();
         let new_id = self.alloc_window_id();
@@ -2778,6 +2888,7 @@ impl FrameManager {
             new_id,
             new_buffer_id,
             size,
+            new_before_old,
         )?;
 
         frame.recalculate_minibuffer_bounds();
@@ -2973,6 +3084,7 @@ fn split_window_in_tree(
     new_id: WindowId,
     new_buffer_id: BufferId,
     size: Option<i64>,
+    new_before_old: bool,
 ) -> Option<()> {
     fn split_sizes(total: f32, requested_new_size: Option<i64>) -> (f32, f32) {
         let total_px = total.round().max(0.0) as i64;
@@ -2994,35 +3106,44 @@ fn split_window_in_tree(
             buffer_id: buf_id, ..
         } = old_window
         {
-            let (left_bounds, right_bounds) = match direction {
+            let (first_bounds, second_bounds) = match direction {
                 SplitDirection::Horizontal => {
                     let (old_size, new_size) = split_sizes(old_bounds.width, size);
+                    let first_width = if new_before_old { new_size } else { old_size };
+                    let second_width = if new_before_old { old_size } else { new_size };
                     (
-                        Rect::new(old_bounds.x, old_bounds.y, old_size, old_bounds.height),
+                        Rect::new(old_bounds.x, old_bounds.y, first_width, old_bounds.height),
                         Rect::new(
-                            old_bounds.x + old_size,
+                            old_bounds.x + first_width,
                             old_bounds.y,
-                            new_size,
+                            second_width,
                             old_bounds.height,
                         ),
                     )
                 }
                 SplitDirection::Vertical => {
                     let (old_size, new_size) = split_sizes(old_bounds.height, size);
+                    let first_height = if new_before_old { new_size } else { old_size };
+                    let second_height = if new_before_old { old_size } else { new_size };
                     (
-                        Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, old_size),
+                        Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, first_height),
                         Rect::new(
                             old_bounds.x,
-                            old_bounds.y + old_size,
+                            old_bounds.y + first_height,
                             old_bounds.width,
-                            new_size,
+                            second_height,
                         ),
                     )
                 }
             };
+            let (old_leaf_bounds, new_leaf_bounds) = if new_before_old {
+                (second_bounds, first_bounds)
+            } else {
+                (first_bounds, second_bounds)
+            };
 
             let mut old_leaf = old_window;
-            old_leaf.set_bounds(left_bounds);
+            old_leaf.set_bounds(old_leaf_bounds);
 
             let mut new_leaf = old_leaf.clone();
             if let Window::Leaf {
@@ -3048,7 +3169,7 @@ fn split_window_in_tree(
             {
                 *id = new_id;
                 *buffer_id = new_buffer_id;
-                *bounds = right_bounds;
+                *bounds = new_leaf_bounds;
                 parameters.clear();
                 *history = WindowHistoryState::default();
                 *window_start = LispCharPos1::ONE;
@@ -3085,12 +3206,12 @@ fn split_window_in_tree(
             };
             let (old_fraction, new_fraction) = if parent_size > 0.0 {
                 let old_frac = match direction {
-                    SplitDirection::Horizontal => left_bounds.width / parent_size,
-                    SplitDirection::Vertical => left_bounds.height / parent_size,
+                    SplitDirection::Horizontal => old_leaf_bounds.width / parent_size,
+                    SplitDirection::Vertical => old_leaf_bounds.height / parent_size,
                 };
                 let new_frac = match direction {
-                    SplitDirection::Horizontal => right_bounds.width / parent_size,
-                    SplitDirection::Vertical => right_bounds.height / parent_size,
+                    SplitDirection::Horizontal => new_leaf_bounds.width / parent_size,
+                    SplitDirection::Vertical => new_leaf_bounds.height / parent_size,
                 };
                 (old_frac as f64, new_frac as f64)
             } else {
@@ -3115,7 +3236,11 @@ fn split_window_in_tree(
             *tree = Window::Internal {
                 id: internal_id,
                 direction,
-                children: vec![old_leaf, new_leaf],
+                children: if new_before_old {
+                    vec![new_leaf, old_leaf]
+                } else {
+                    vec![old_leaf, new_leaf]
+                },
                 bounds: old_bounds,
                 parameters: Vec::new(),
                 combination_limit: false,
@@ -3131,6 +3256,103 @@ fn split_window_in_tree(
 
             return Some(());
         }
+
+        let (first_bounds, second_bounds) = match direction {
+            SplitDirection::Horizontal => {
+                let (old_size, new_size) = split_sizes(old_bounds.width, size);
+                let first_width = if new_before_old { new_size } else { old_size };
+                let second_width = if new_before_old { old_size } else { new_size };
+                (
+                    Rect::new(old_bounds.x, old_bounds.y, first_width, old_bounds.height),
+                    Rect::new(
+                        old_bounds.x + first_width,
+                        old_bounds.y,
+                        second_width,
+                        old_bounds.height,
+                    ),
+                )
+            }
+            SplitDirection::Vertical => {
+                let (old_size, new_size) = split_sizes(old_bounds.height, size);
+                let first_height = if new_before_old { new_size } else { old_size };
+                let second_height = if new_before_old { old_size } else { new_size };
+                (
+                    Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, first_height),
+                    Rect::new(
+                        old_bounds.x,
+                        old_bounds.y + first_height,
+                        old_bounds.width,
+                        second_height,
+                    ),
+                )
+            }
+        };
+        let (old_subtree_bounds, new_leaf_bounds) = if new_before_old {
+            (second_bounds, first_bounds)
+        } else {
+            (first_bounds, second_bounds)
+        };
+
+        let inherited_normal_lines = old_window.normal_lines();
+        let inherited_normal_cols = old_window.normal_cols();
+
+        let mut old_subtree = old_window;
+        resize_window_subtree(&mut old_subtree, old_subtree_bounds);
+
+        let mut new_leaf = Window::new_leaf(new_id, new_buffer_id, new_leaf_bounds);
+
+        let parent_size = match direction {
+            SplitDirection::Horizontal => old_bounds.width,
+            SplitDirection::Vertical => old_bounds.height,
+        };
+        let (old_fraction, new_fraction) = if parent_size > 0.0 {
+            let old_frac = match direction {
+                SplitDirection::Horizontal => old_subtree_bounds.width / parent_size,
+                SplitDirection::Vertical => old_subtree_bounds.height / parent_size,
+            };
+            let new_frac = match direction {
+                SplitDirection::Horizontal => new_leaf_bounds.width / parent_size,
+                SplitDirection::Vertical => new_leaf_bounds.height / parent_size,
+            };
+            (old_frac as f64, new_frac as f64)
+        } else {
+            (0.5, 0.5)
+        };
+
+        match direction {
+            SplitDirection::Horizontal => {
+                old_subtree.set_normal_cols(Value::make_float(old_fraction));
+                old_subtree.set_normal_lines(Value::make_float(1.0));
+                new_leaf.set_normal_cols(Value::make_float(new_fraction));
+                new_leaf.set_normal_lines(Value::make_float(1.0));
+            }
+            SplitDirection::Vertical => {
+                old_subtree.set_normal_lines(Value::make_float(old_fraction));
+                old_subtree.set_normal_cols(Value::make_float(1.0));
+                new_leaf.set_normal_lines(Value::make_float(new_fraction));
+                new_leaf.set_normal_cols(Value::make_float(1.0));
+            }
+        }
+
+        *tree = Window::Internal {
+            id: internal_id,
+            direction,
+            children: if new_before_old {
+                vec![new_leaf, old_subtree]
+            } else {
+                vec![old_subtree, new_leaf]
+            },
+            bounds: old_bounds,
+            parameters: Vec::new(),
+            combination_limit: false,
+            new_pixel: None,
+            new_total: None,
+            new_normal: Value::NIL,
+            normal_lines: inherited_normal_lines,
+            normal_cols: inherited_normal_cols,
+        };
+
+        return Some(());
     }
 
     // Recurse into children.
@@ -3144,6 +3366,7 @@ fn split_window_in_tree(
                 new_id,
                 new_buffer_id,
                 size,
+                new_before_old,
             )
             .is_some()
             {
@@ -3521,6 +3744,75 @@ fn redistribute_bounds(children: &mut [Window], parent: Rect) {
             .collect()
     }
 
+    fn distributed_sizes_preserving_fixed(
+        total: f32,
+        children: &[Window],
+        horizontal: bool,
+    ) -> Vec<f32> {
+        let total_px = total.round().max(0.0);
+        let mut sizes = vec![0.0; children.len()];
+        let mut flexible = Vec::new();
+        let mut fixed_total = 0.0;
+        let mut flexible_current_total = 0.0;
+
+        for (idx, child) in children.iter().enumerate() {
+            let fixed_cells = if horizontal {
+                child.fixed_width_cols()
+            } else {
+                child.fixed_height_lines()
+            };
+            let current = if horizontal {
+                child.bounds().width
+            } else {
+                child.bounds().height
+            }
+            .round()
+            .max(0.0);
+            if fixed_cells > 0 {
+                sizes[idx] = current;
+                fixed_total += current;
+            } else {
+                flexible.push(idx);
+                flexible_current_total += current;
+            }
+        }
+
+        if flexible.is_empty() || fixed_total >= total_px {
+            return distributed_sizes(total, children.len());
+        }
+
+        let flexible_total = total_px - fixed_total;
+        if flexible_current_total <= 0.0 {
+            let flexible_sizes = distributed_sizes(flexible_total, flexible.len());
+            for (idx, size) in flexible.into_iter().zip(flexible_sizes) {
+                sizes[idx] = size;
+            }
+            return sizes;
+        }
+
+        let mut assigned = 0.0;
+        let last_flexible = flexible.len().saturating_sub(1);
+        for (flex_idx, idx) in flexible.into_iter().enumerate() {
+            let current = if horizontal {
+                children[idx].bounds().width
+            } else {
+                children[idx].bounds().height
+            }
+            .round()
+            .max(0.0);
+            let size = if flex_idx == last_flexible {
+                (flexible_total - assigned).max(0.0)
+            } else {
+                (flexible_total * (current / flexible_current_total))
+                    .round()
+                    .max(0.0)
+            };
+            sizes[idx] = size;
+            assigned += size;
+        }
+        sizes
+    }
+
     // Detect direction from first two children if possible.
     if children.len() >= 2 {
         let first = children[0].bounds();
@@ -3528,7 +3820,7 @@ fn redistribute_bounds(children: &mut [Window], parent: Rect) {
 
         if (first.x - second.x).abs() > 0.1 {
             // Horizontal split
-            let widths = distributed_sizes(parent.width, children.len());
+            let widths = distributed_sizes_preserving_fixed(parent.width, children, true);
             let mut edge = parent.x.round();
             for (child, width) in children.iter_mut().zip(widths.into_iter()) {
                 child.set_bounds(Rect::new(
@@ -3541,7 +3833,7 @@ fn redistribute_bounds(children: &mut [Window], parent: Rect) {
             }
         } else {
             // Vertical split
-            let heights = distributed_sizes(parent.height, children.len());
+            let heights = distributed_sizes_preserving_fixed(parent.height, children, false);
             let mut edge = parent.y.round();
             for (child, height) in children.iter_mut().zip(heights.into_iter()) {
                 child.set_bounds(Rect::new(

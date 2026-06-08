@@ -394,7 +394,14 @@ fn split_window_horizontal() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().window_list()[0];
 
-    let new_wid = mgr.split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None);
+    let new_wid = mgr.split_window(
+        fid,
+        wid,
+        SplitDirection::Horizontal,
+        BufferId(2),
+        None,
+        false,
+    );
     assert!(new_wid.is_some());
 
     let frame = mgr.get(fid).unwrap();
@@ -408,7 +415,7 @@ fn split_window_vertical() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().window_list()[0];
 
-    let new_wid = mgr.split_window(fid, wid, SplitDirection::Vertical, BufferId(2), None);
+    let new_wid = mgr.split_window(fid, wid, SplitDirection::Vertical, BufferId(2), None, false);
     assert!(new_wid.is_some());
 
     let frame = mgr.get(fid).unwrap();
@@ -449,6 +456,7 @@ fn split_window_copies_window_display_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
+            false,
         )
         .expect("split");
 
@@ -512,6 +520,7 @@ fn split_window_resets_new_leaf_vscroll_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
+            false,
         )
         .expect("split");
 
@@ -548,7 +557,14 @@ fn delete_window() {
 
     // Split first.
     let new_wid = mgr
-        .split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            wid,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .unwrap();
 
     // Delete the new window.
@@ -574,7 +590,14 @@ fn select_window() {
     let wid = mgr.get(fid).unwrap().window_list()[0];
 
     let new_wid = mgr
-        .split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            wid,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .unwrap();
 
     assert!(mgr.get_mut(fid).unwrap().select_window(new_wid));
@@ -588,7 +611,14 @@ fn window_at_coordinates() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().window_list()[0];
 
-    mgr.split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None);
+    mgr.split_window(
+        fid,
+        wid,
+        SplitDirection::Horizontal,
+        BufferId(2),
+        None,
+        false,
+    );
 
     let frame = mgr.get(fid).unwrap();
     // Left half
@@ -714,7 +744,14 @@ fn split_window_does_not_copy_window_parameters() {
 
     mgr.set_window_parameter(wid, key, Value::fixnum(42));
     let new_wid = mgr
-        .split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            wid,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .expect("split");
 
     assert_eq!(mgr.window_parameter(wid, &key), Some(Value::fixnum(42)));
@@ -728,7 +765,14 @@ fn deleted_window_retains_window_parameters() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().window_list()[0];
     let other = mgr
-        .split_window(fid, wid, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            wid,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .expect("split");
     let key = Value::symbol("deleted-param");
 
@@ -770,12 +814,19 @@ fn deep_split_and_delete() {
 
     // Split w1 horizontally → w2
     let w2 = mgr
-        .split_window(fid, w1, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            w1,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .unwrap();
 
     // Split w2 vertically → w3
     let w3 = mgr
-        .split_window(fid, w2, SplitDirection::Vertical, BufferId(3), None)
+        .split_window(fid, w2, SplitDirection::Vertical, BufferId(3), None, false)
         .unwrap();
 
     assert_eq!(mgr.get(fid).unwrap().window_count(), 3);
@@ -799,7 +850,14 @@ fn note_window_selected_updates_use_time() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let w1 = mgr.get(fid).unwrap().window_list()[0];
     let w2 = mgr
-        .split_window(fid, w1, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            w1,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .unwrap();
 
     let t1 = mgr.note_window_selected(w1);
@@ -887,7 +945,14 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let w1 = mgr.get(fid).unwrap().window_list()[0];
     let w2 = mgr
-        .split_window(fid, w1, SplitDirection::Horizontal, BufferId(2), None)
+        .split_window(
+            fid,
+            w1,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            None,
+            false,
+        )
         .unwrap();
 
     let frame = mgr.get_mut(fid).unwrap();
@@ -969,6 +1034,77 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     assert_eq!(
         frame.minibuffer_leaf.as_ref().unwrap().window_end_valid(),
         Some(false)
+    );
+}
+
+#[test]
+fn frame_resize_pixelwise_preserves_fixed_width_side_window() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 400, 260, BufferId(1));
+    let frame = mgr.get_mut(fid).unwrap();
+    frame.char_width = 10.0;
+    frame.char_height = 20.0;
+    let w1 = mgr.get(fid).unwrap().window_list()[0];
+    let side = mgr
+        .split_window(
+            fid,
+            w1,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            Some(200),
+            true,
+        )
+        .unwrap();
+
+    let frame = mgr.get_mut(fid).unwrap();
+    frame
+        .find_window_mut(side)
+        .unwrap()
+        .set_fixed_width_cols(20);
+
+    frame.resize_pixelwise(800, 260);
+
+    assert_eq!(
+        frame.find_window(side).unwrap().bounds(),
+        &Rect::new(0.0, 0.0, 200.0, 244.0)
+    );
+    assert_eq!(
+        frame.find_window(w1).unwrap().bounds(),
+        &Rect::new(200.0, 0.0, 600.0, 244.0)
+    );
+}
+
+#[test]
+fn frame_resize_pixelwise_preserves_flexible_window_proportions() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let frame = mgr.get_mut(fid).unwrap();
+    frame.char_width = 10.0;
+    frame.char_height = 20.0;
+    let main = mgr.get(fid).unwrap().window_list()[0];
+    let side = mgr
+        .split_window(
+            fid,
+            main,
+            SplitDirection::Horizontal,
+            BufferId(2),
+            Some(200),
+            true,
+        )
+        .unwrap();
+
+    let frame = mgr.get_mut(fid).unwrap();
+    frame.resize_pixelwise(800, 260);
+
+    assert_eq!(
+        frame.find_window(side).unwrap().bounds(),
+        &Rect::new(0.0, 0.0, 200.0, 244.0)
+    );
+    assert_eq!(
+        frame.find_window(main).unwrap().bounds(),
+        &Rect::new(200.0, 0.0, 600.0, 244.0)
     );
 }
 

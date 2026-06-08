@@ -1776,6 +1776,7 @@ impl crate::gc_trace::GcTrace for CommandLoop {
 
 fn apply_resize_input_event_in_keyboard_runtime(
     frames: &mut crate::window::FrameManager,
+    buffers: &crate::buffer::BufferManager,
     width: u32,
     height: u32,
     emacs_frame_id: u64,
@@ -1789,7 +1790,7 @@ fn apply_resize_input_event_in_keyboard_runtime(
     if let Some(fid) = target_fid
         && let Some(frame) = frames.get_mut(fid)
     {
-        frame.resize_pixelwise(width, height);
+        frame.resize_pixelwise_with_buffer_constraints(buffers, width, height);
     }
 }
 
@@ -1809,6 +1810,7 @@ fn pending_live_gui_resize_target(
 
 fn sync_pending_resize_events_in_keyboard_runtime(
     frames: &mut crate::window::FrameManager,
+    buffers: &crate::buffer::BufferManager,
     input_rx: &mut Option<crossbeam_channel::Receiver<InputEvent>>,
     keyboard: &mut KeyboardRuntime,
 ) -> bool {
@@ -1833,7 +1835,13 @@ fn sync_pending_resize_events_in_keyboard_runtime(
                 }
                 let (width, height, emacs_frame_id) = (*width, *height, *emacs_frame_id);
                 pending_input_events.pop_front();
-                apply_resize_input_event_in_keyboard_runtime(frames, width, height, emacs_frame_id);
+                apply_resize_input_event_in_keyboard_runtime(
+                    frames,
+                    buffers,
+                    width,
+                    height,
+                    emacs_frame_id,
+                );
                 applied_resize = true;
             }
             _ => break,
@@ -1871,7 +1879,13 @@ fn sync_pending_resize_events_in_keyboard_runtime(
                     });
                     break;
                 }
-                apply_resize_input_event_in_keyboard_runtime(frames, width, height, emacs_frame_id);
+                apply_resize_input_event_in_keyboard_runtime(
+                    frames,
+                    buffers,
+                    width,
+                    height,
+                    emacs_frame_id,
+                );
                 applied_resize = true;
             }
             Ok(event @ InputEvent::Focus { .. }) => {
@@ -1897,11 +1911,12 @@ fn sync_pending_resize_events_in_keyboard_runtime(
 
 fn wait_for_pending_resize_events_in_keyboard_runtime(
     frames: &mut crate::window::FrameManager,
+    buffers: &crate::buffer::BufferManager,
     input_rx: &mut Option<crossbeam_channel::Receiver<InputEvent>>,
     keyboard: &mut KeyboardRuntime,
     timeout: Duration,
 ) -> bool {
-    if sync_pending_resize_events_in_keyboard_runtime(frames, input_rx, keyboard) {
+    if sync_pending_resize_events_in_keyboard_runtime(frames, buffers, input_rx, keyboard) {
         return true;
     }
 
@@ -1921,7 +1936,13 @@ fn wait_for_pending_resize_events_in_keyboard_runtime(
                 height,
                 emacs_frame_id,
             }) => {
-                apply_resize_input_event_in_keyboard_runtime(frames, width, height, emacs_frame_id);
+                apply_resize_input_event_in_keyboard_runtime(
+                    frames,
+                    buffers,
+                    width,
+                    height,
+                    emacs_frame_id,
+                );
                 return true;
             }
             Ok(event) => pending_input_events.push_back(event),
@@ -1960,6 +1981,7 @@ pub(crate) struct WaitPathSpecialInputOutcome {
 
 fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
     frames: &mut crate::window::FrameManager,
+    buffers: &crate::buffer::BufferManager,
     display_host: Option<&dyn crate::emacs_core::eval::DisplayHost>,
 ) {
     let trace_host_sync = std::env::var("NEOMACS_TRACE_HOST_SYNC")
@@ -2038,7 +2060,7 @@ fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
         size.width,
         size.height
     );
-    frame.resize_pixelwise(size.width, size.height);
+    frame.resize_pixelwise_with_buffer_constraints(buffers, size.width, size.height);
 }
 
 fn pending_gnu_timer_in_keyboard_runtime(
@@ -2753,6 +2775,7 @@ impl crate::emacs_core::eval::Context {
             }
             apply_resize_input_event_in_keyboard_runtime(
                 &mut self.frames,
+                &self.buffers,
                 width,
                 height,
                 emacs_frame_id,
@@ -2785,11 +2808,13 @@ impl crate::emacs_core::eval::Context {
     pub(crate) fn sync_pending_resize_events(&mut self) -> bool {
         let applied_resize = sync_pending_resize_events_in_keyboard_runtime(
             &mut self.frames,
+            &self.buffers,
             &mut self.input_rx,
             &mut self.command_loop.keyboard,
         );
         sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
             &mut self.frames,
+            &self.buffers,
             self.display_host.as_deref(),
         );
         applied_resize
@@ -2798,12 +2823,14 @@ impl crate::emacs_core::eval::Context {
     pub(crate) fn wait_for_pending_resize_events(&mut self, timeout: Duration) -> bool {
         let applied_resize = wait_for_pending_resize_events_in_keyboard_runtime(
             &mut self.frames,
+            &self.buffers,
             &mut self.input_rx,
             &mut self.command_loop.keyboard,
             timeout,
         );
         sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
             &mut self.frames,
+            &self.buffers,
             self.display_host.as_deref(),
         );
         applied_resize

@@ -1498,6 +1498,142 @@ fn split_window_internal_side_t_splits_horizontally_like_gnu() {
 }
 
 #[test]
+fn split_window_preserves_requested_normal_size_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(let* ((old (selected-window))
+                (new (split-window old 20 'right)))
+           (list (window-total-width old)
+                 (window-total-width new)
+                 (window-normal-size old t)
+                 (window-normal-size new t)
+                 (window-normal-size old)
+                 (window-normal-size new)))",
+    );
+    assert_eq!(results[0], "OK (20 60 0.25 0.75 1.0 1.0)");
+}
+
+#[test]
+fn display_buffer_in_left_side_window_places_window_on_left_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(let ((side-window
+                (display-buffer-in-side-window
+                 (get-buffer-create \"*side*\")
+                 '((side . left)))))
+           (list (window-edges side-window)
+                 (window-total-width side-window)
+                 (window-parameter side-window 'window-side)
+                 (mapcar (lambda (w)
+                           (list (buffer-name (window-buffer w))
+                                 (window-edges w)))
+                         (window-list nil 'no-minibuf nil))))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((0 0 20 24) 20 left ((\"*scratch*\" (20 0 80 24)) (\"*side*\" (0 0 20 24))))"
+    );
+}
+
+#[test]
+fn display_buffer_respects_requested_width_when_buffer_width_is_fixed() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(let ((buffer (get-buffer-create \"*fixed-side*\")))
+           (with-current-buffer buffer
+             (setq-local window-size-fixed 'width))
+           (let ((side-window
+                  (display-buffer-in-side-window
+                   buffer
+                   '((side . left) (window-width . 20)))))
+             (list (window-edges side-window)
+                   (window-total-width side-window)
+                   (window-size-fixed-p side-window t)
+                   (mapcar (lambda (w)
+                             (list (buffer-name (window-buffer w))
+                                   (window-edges w)))
+                           (window-list nil 'no-minibuf nil)))))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((0 0 20 24) 20 (width t) ((\"*scratch*\" (20 0 80 24)) (\"*fixed-side*\" (0 0 20 24))))"
+    );
+}
+
+#[test]
+fn display_buffer_side_window_splits_internal_root_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(progn
+           (display-buffer (get-buffer-create \"*Warnings*\"))
+           (let ((buffer (get-buffer-create \"*fixed-side*\")))
+             (with-current-buffer buffer
+               (setq-local window-size-fixed 'width))
+             (let ((side-window
+                    (display-buffer-in-side-window
+                     buffer
+                     '((side . left) (window-width . 20)))))
+               (list (window-live-p side-window)
+                     (window-edges side-window)
+                     (window-total-width side-window)
+                     (window-size-fixed-p side-window t)
+                     (mapcar (lambda (w)
+                               (list (buffer-name (window-buffer w))
+                                     (window-edges w)
+                                     (window-width w)
+                                     (window-parameter w 'window-side)))
+                             (window-list nil 'no-minibuf nil))))))",
+    );
+    assert_eq!(
+        results[0],
+        "OK (t (0 0 20 24) 20 (width t) ((\"*scratch*\" (20 0 80 12) 60 nil) (\"*Warnings*\" (20 12 80 24) 60 nil) (\"*fixed-side*\" (0 0 20 24) 20 left)))"
+    );
+}
+
+#[test]
+fn split_window_accepts_internal_root_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(progn
+           (split-window (selected-window) nil 'below)
+           (let ((new (split-window (frame-root-window) nil 'left)))
+             (list (window-live-p new)
+                   (window-valid-p (frame-root-window))
+                   (window-edges new)
+                   (mapcar (lambda (w)
+                             (list (buffer-name (window-buffer w))
+                                   (window-edges w)))
+                           (window-list nil 'no-minibuf nil)))))",
+    );
+    assert_eq!(
+        results[0],
+        "OK (t t (0 0 40 24) ((\"*scratch*\" (40 0 80 12)) (\"*scratch*\" (40 12 80 24)) (\"*scratch*\" (0 0 40 24))))"
+    );
+}
+
+#[test]
+fn display_buffer_in_top_side_window_places_window_on_top_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_with_frame(
+        "(let ((side-window
+                (display-buffer-in-side-window
+                 (get-buffer-create \"*side*\")
+                 '((side . top)))))
+           (list (window-edges side-window)
+                 (window-total-height side-window)
+                 (window-parameter side-window 'window-side)
+                 (mapcar (lambda (w)
+                           (list (buffer-name (window-buffer w))
+                                 (window-edges w)))
+                         (window-list nil 'no-minibuf nil))))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((0 0 80 6) 6 top ((\"*scratch*\" (0 6 80 24)) (\"*side*\" (0 0 80 6))))"
+    );
+}
+
+#[test]
 fn split_window_internal_enforces_arity() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -5099,6 +5235,50 @@ fn set_frame_size_builtins_resize_live_gui_frames_and_notify_host() {
     assert_eq!(
         frame.parameter("neovm--frame-text-lines"),
         Some(Value::fixnum(34))
+    );
+}
+
+#[test]
+fn resize_input_preserves_buffer_local_fixed_width_side_window() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    let fid = ev
+        .frames
+        .selected_frame()
+        .expect("selected frame should exist")
+        .id;
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame should exist");
+        frame.char_width = 10.0;
+        frame.char_height = 20.0;
+        frame.resize_pixelwise(400, 260);
+    }
+
+    ev.eval_str(
+        r#"(let ((buf (get-buffer-create "*fixed-side*")))
+             (display-buffer-in-side-window
+              buf '((side . left) (window-width . 20)))
+             (with-current-buffer buf
+               (setq-local window-size-fixed 'width)))"#,
+    )
+    .expect("display fixed side window");
+
+    ev.apply_resize_input_event(800, 260, fid.0, false);
+
+    let result = ev
+        .eval_str(
+            r#"(let ((side (get-buffer-window "*fixed-side*")))
+                 (list (window-total-width side)
+                       (window-edges side)
+                       (mapcar (lambda (w)
+                                 (list (buffer-name (window-buffer w))
+                                       (window-edges w)))
+                               (window-list nil 'no-minibuf nil))))"#,
+        )
+        .expect("inspect window state");
+    assert_eq!(
+        format_eval_result(&Ok(result)),
+        "OK (20 (0 0 20 12) ((\"*scratch*\" (20 0 80 12)) (\"*fixed-side*\" (0 0 20 12))))"
     );
 }
 

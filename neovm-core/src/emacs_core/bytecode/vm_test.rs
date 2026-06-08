@@ -1800,6 +1800,7 @@ fn vm_save_window_excursion_restores_selected_window() {
             SplitDirection::Vertical,
             buffer_id,
             None,
+            false,
         )
         .expect("split window");
 
@@ -3738,11 +3739,18 @@ fn vm_window_tree_and_list_builtins_use_shared_runtime_state() {
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
                 let right = eval
                     .frames
-                    .split_window(fid, left, SplitDirection::Horizontal, buffer_id, None)
+                    .split_window(
+                        fid,
+                        left,
+                        SplitDirection::Horizontal,
+                        buffer_id,
+                        None,
+                        false,
+                    )
                     .expect("horizontal split");
                 let _bottom = eval
                     .frames
-                    .split_window(fid, right, SplitDirection::Vertical, buffer_id, None)
+                    .split_window(fid, right, SplitDirection::Vertical, buffer_id, None, false)
                     .expect("vertical split");
             }
         ),
@@ -3852,7 +3860,7 @@ fn vm_window_selection_and_buffer_builtins_use_shared_runtime_state() {
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
                 let _w2 = eval
                     .frames
-                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None)
+                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None, false)
                     .expect("horizontal split");
             }
         ),
@@ -3888,7 +3896,7 @@ fn vm_window_deletion_and_frame_builtins_use_shared_runtime_state() {
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
                 let _w2 = eval
                     .frames
-                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None)
+                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None, false)
                     .expect("horizontal split");
             }
         ),

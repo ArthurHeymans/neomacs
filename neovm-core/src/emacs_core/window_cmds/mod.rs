@@ -570,7 +570,7 @@ fn resolve_window_id_or_error_in_state(
             vec![Value::symbol("windowp"), *value],
         ));
     };
-    if let Some(fid) = frames.find_window_frame_id(wid) {
+    if let Some(fid) = frames.find_valid_window_frame_id(wid) {
         Ok((fid, wid))
     } else {
         Err(signal(
@@ -3403,13 +3403,13 @@ pub(crate) fn window_total_width_impl(
     let cw = frames.get(fid).map(|f| f.char_width).unwrap_or(8.0);
     Ok(Value::fixnum(window_width_cols(w, cw)))
 }
-/// `(window-list &optional FRAME MINIBUF ALL-FRAMES)` -> list of window objects.
+/// `(window-list &optional FRAME MINIBUF WINDOW)` -> list of window objects.
 pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("window-list", &args, 3)?;
     let selected_fid = ensure_selected_frame_id_in_state(frames, buffers);
-    // GNU Emacs validates ALL-FRAMES before FRAME mismatch checks.
-    let all_frames_fid = if args.get(2).is_none_or(|v| v.is_nil()) {
+    // GNU validates WINDOW before FRAME mismatch checks.
+    let requested_start_window = if args.get(2).is_none_or(|v| v.is_nil()) {
         None
     } else {
         let arg = args.get(2).unwrap();
@@ -3419,8 +3419,8 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
                 vec![Value::symbol("windowp"), *arg],
             ));
         };
-        if let Some(fid) = frames.find_window_frame_id(wid) {
-            Some(fid)
+        if let Some(window_fid) = frames.find_window_frame_id(wid) {
+            Some((wid, window_fid))
         } else if frames.is_window_object_id(wid) {
             return Err(signal(
                 "wrong-type-argument",
@@ -3433,7 +3433,7 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
             ));
         }
     };
-    let mut fid = if args.first().is_none_or(|v| v.is_nil()) {
+    let fid = if args.first().is_none_or(|v| v.is_nil()) {
         selected_fid
     } else {
         let val = args.first().unwrap();
@@ -3469,14 +3469,26 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
             }
         }
     };
-    if let Some(all_frames_fid) = all_frames_fid {
-        fid = all_frames_fid;
-    }
     let include_minibuffer = args.get(1).is_some_and(|v| *v == Value::T);
     let frame = frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    let mut ids: Vec<Value> = frame.window_list().into_iter().map(window_value).collect();
+    let start_wid = if let Some((wid, window_fid)) = requested_start_window {
+        if window_fid != fid {
+            return Err(signal(
+                "error",
+                vec![Value::string("Window is on a different frame")],
+            ));
+        }
+        wid
+    } else {
+        frame.selected_window
+    };
+    let mut window_ids = frame.window_list();
+    if let Some(pos) = window_ids.iter().position(|wid| *wid == start_wid) {
+        window_ids.rotate_left(pos);
+    }
+    let mut ids: Vec<Value> = window_ids.into_iter().map(window_value).collect();
     if include_minibuffer {
         if let Some(minibuffer_wid) = frame.minibuffer_window {
             ids.push(window_value(minibuffer_wid));
@@ -3791,11 +3803,13 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
 
     // GNU `Fsplit_window_internal` treats SIDE t as `right`, nil as
     // `below`, and unknown symbols like the vertical/default side.
-    let direction = if SplitWindowSide::from_lisp_value(&side).is_some_and(|s| s.is_horizontal()) {
+    let side_kind = SplitWindowSide::from_lisp_value(&side).unwrap_or(SplitWindowSide::Below);
+    let direction = if side_kind.is_horizontal() {
         SplitDirection::Horizontal
     } else {
         SplitDirection::Vertical
     };
+    let new_before_old = matches!(side_kind, SplitWindowSide::Above | SplitWindowSide::Left);
 
     // Parse SIZE: positive means new window gets SIZE units, negative means
     // old window keeps |SIZE| units, nil/0 means 50/50.
@@ -3806,12 +3820,20 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
 
     // Use the same buffer as the window being split.
     let buf_id = {
-        let w = get_leaf(frames, fid, wid)?;
-        w.buffer_id().unwrap_or(BufferId(0))
+        let w = get_window(frames, fid, wid)?;
+        if let Some(buffer_id) = w.buffer_id() {
+            buffer_id
+        } else {
+            frames
+                .get(fid)
+                .and_then(|frame| frame.find_window(frame.selected_window))
+                .and_then(Window::buffer_id)
+                .unwrap_or(BufferId(0))
+        }
     };
 
     let new_wid = frames
-        .split_window(fid, wid, direction, buf_id, size_opt)
+        .split_window(fid, wid, direction, buf_id, size_opt, new_before_old)
         .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
 
     // GNU `Fsplit_window_internal` (`src/window.c:5517-5644`)
@@ -4728,7 +4750,7 @@ pub(crate) fn builtin_display_buffer(
     if action_contains("display-buffer-pop-up-window") {
         let new_wid = eval
             .frames
-            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None)
+            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None, false)
             .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
         display_in_window(eval, new_wid, buf_id)?;
         eval.frames.set_window_parameter(
@@ -4761,7 +4783,7 @@ pub(crate) fn builtin_display_buffer(
         // Only one window -- split it.
         let new_wid = eval
             .frames
-            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None)
+            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None, false)
             .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
         display_in_window(eval, new_wid, buf_id)?;
         eval.frames.set_window_parameter(
@@ -5040,6 +5062,7 @@ fn live_gui_resize_pixels_from_logical_size(
 
 fn resize_live_gui_frame(
     frames: &mut FrameManager,
+    buffers: &BufferManager,
     display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
     fid: FrameId,
     text_width_px: u32,
@@ -5083,7 +5106,11 @@ fn resize_live_gui_frame(
         if pretend {
             set_frame_text_size(frame, cols, text_lines);
         } else {
-            frame.resize_pixelwise(total_width_px, total_height_px);
+            frame.resize_pixelwise_with_buffer_constraints(
+                buffers,
+                total_width_px,
+                total_height_px,
+            );
             frame.set_parameter(
                 Value::symbol(FRAME_TEXT_LINES_PARAM),
                 Value::fixnum(text_lines),
@@ -5124,6 +5151,7 @@ fn resize_live_gui_frame(
 
 fn request_live_gui_frame_resize(
     frames: &mut FrameManager,
+    buffers: &BufferManager,
     display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
     fid: FrameId,
     text_width_px: u32,
@@ -5196,7 +5224,7 @@ fn request_live_gui_frame_resize(
     let frame = frames
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    frame.resize_pixelwise(total_width_px, total_height_px);
+    frame.resize_pixelwise_with_buffer_constraints(buffers, total_width_px, total_height_px);
     frame.set_parameter(
         Value::symbol(FRAME_TEXT_LINES_PARAM),
         Value::fixnum(text_lines),
@@ -5206,6 +5234,7 @@ fn request_live_gui_frame_resize(
 
 fn request_live_gui_frame_resize_and_keep_pending(
     frames: &mut FrameManager,
+    buffers: &BufferManager,
     display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
     fid: FrameId,
     desired_cols: i64,
@@ -5233,6 +5262,7 @@ fn request_live_gui_frame_resize_and_keep_pending(
     let Some(host) = display_host.as_mut().filter(|_| !is_child_frame) else {
         return request_live_gui_frame_resize(
             frames,
+            buffers,
             display_host,
             fid,
             text_width_px,
@@ -5295,6 +5325,7 @@ fn flush_pending_live_gui_resize(
                 .is_some_and(|frame| frame.parent_frame.as_frame_id().is_none());
         request_live_gui_frame_resize(
             &mut eval.frames,
+            &eval.buffers,
             &mut eval.display_host,
             fid,
             text_width_px,
@@ -6169,6 +6200,7 @@ pub(crate) fn builtin_set_frame_height(
                 .max(1.0) as i64;
             request_live_gui_frame_resize_and_keep_pending(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 desired_cols,
@@ -6177,6 +6209,7 @@ pub(crate) fn builtin_set_frame_height(
         } else {
             request_live_gui_frame_resize(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 current_text_width_px,
@@ -6244,6 +6277,7 @@ pub(crate) fn builtin_set_frame_width(
             };
             request_live_gui_frame_resize_and_keep_pending(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 desired_cols,
@@ -6252,6 +6286,7 @@ pub(crate) fn builtin_set_frame_width(
         } else {
             request_live_gui_frame_resize(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 text_width_px,
@@ -6325,6 +6360,7 @@ pub(crate) fn builtin_set_frame_size(
         if ctx.display_host.is_some() {
             request_live_gui_frame_resize_and_keep_pending(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 desired_cols,
@@ -6333,6 +6369,7 @@ pub(crate) fn builtin_set_frame_size(
         } else {
             request_live_gui_frame_resize(
                 &mut ctx.frames,
+                &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
                 text_width_px,
@@ -7843,6 +7880,7 @@ pub(crate) fn builtin_modify_frame_parameters(
                     .unwrap_or(current_text_height_px);
                 resize_live_gui_frame(
                     &mut eval.frames,
+                    &eval.buffers,
                     &mut eval.display_host,
                     fid,
                     text_width_px,
