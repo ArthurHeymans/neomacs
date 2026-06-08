@@ -1834,6 +1834,14 @@ fn font_name_value(font_like: &Value) -> Option<Value> {
     }
 }
 
+pub(crate) fn public_frame_font_parameter_value(font_like: Value) -> Value {
+    if is_font(&font_like) {
+        font_name_value(&font_like).unwrap_or(font_like)
+    } else {
+        font_like
+    }
+}
+
 fn font_value_matches_frame_font_parameter(
     frame: &crate::window::Frame,
     requested: &Value,

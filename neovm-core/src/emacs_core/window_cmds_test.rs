@@ -6,6 +6,7 @@ use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format
 use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_context, runtime_startup_eval_all};
+use crate::window::FrameParam;
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -4641,6 +4642,57 @@ fn tty_frame_font_and_cursor_parameters_match_gnu_defaults() {
     assert_eq!(
         r,
         r#"OK ("tty" "tty" "white" "unspecified-fg" "unspecified-bg")"#
+    );
+}
+
+#[test]
+fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    let font_object = Value::vector(vec![
+        Value::keyword("font-object"),
+        Value::keyword("name"),
+        Value::string("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*"),
+        Value::keyword("family"),
+        Value::string("Hack"),
+        Value::keyword("weight"),
+        Value::symbol("regular"),
+        Value::keyword("slant"),
+        Value::symbol("normal"),
+        Value::keyword("size"),
+        Value::fixnum(27),
+    ]);
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_known_parameter(FrameParam::Font, font_object);
+    }
+
+    let frame_value = Value::make_frame(fid.0);
+    let direct = super::builtin_frame_parameter(
+        &mut ev,
+        vec![frame_value, FrameParam::Font.symbol()],
+    )
+    .expect("frame-parameter");
+    assert_eq!(
+        direct.as_utf8_str(),
+        Some("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*")
+    );
+
+    let via_lisp = ev
+        .eval_str_each(
+            r#"(list (frame-parameter (selected-frame) 'font)
+                     (cdr (assq 'font (frame-parameters (selected-frame)))))"#,
+        )
+        .iter()
+        .map(format_eval_result)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        via_lisp[0],
+        r#"OK ("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*" "-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*")"#
     );
 }
 

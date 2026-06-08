@@ -7412,6 +7412,61 @@ pub(crate) fn builtin_set_frame_window_state_change(
 }
 
 /// `(frame-parameter FRAME PARAMETER)` -> value or nil.
+fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey) -> Value {
+    match param_key {
+        FrameParamKey::Known(FrameParam::Name) => return frame.name_value(),
+        FrameParamKey::Known(FrameParam::Title) => return frame.title_value(),
+        FrameParamKey::Known(FrameParam::IconName) => return frame.icon_name_value(),
+        FrameParamKey::Known(FrameParam::Visibility) => {
+            return if frame.visible { Value::T } else { Value::NIL };
+        }
+        FrameParamKey::Known(FrameParam::Font) if frame.effective_window_system().is_none() => {
+            return Value::string("tty");
+        }
+        FrameParamKey::Known(FrameParam::Font) => {
+            return frame
+                .known_parameter(FrameParam::Font)
+                .map(super::font::public_frame_font_parameter_value)
+                .unwrap_or(Value::NIL);
+        }
+        _ => {}
+    }
+
+    match param_key.name() {
+        "explicit-name" => frame.explicit_name_value(),
+        // In Emacs, frame parameter width/height are text columns/lines.
+        // For the bootstrap batch frame, explicit parameter overrides preserve
+        // the 80x25 report shape.
+        "width" => frame
+            .parameter("width")
+            .unwrap_or(Value::fixnum(frame.columns() as i64)),
+        "height" => frame
+            .parameter("height")
+            .unwrap_or(Value::fixnum(frame.lines() as i64)),
+        // GNU frame.c:4117 — buffer-list frame parameter stored
+        // directly from f->buffer_list (most-recently-shown first).
+        "buffer-list" => {
+            let vals: Vec<Value> = frame
+                .buffer_list
+                .iter()
+                .map(|id| Value::make_buffer(*id))
+                .collect();
+            Value::list(vals)
+        }
+        // GNU frame.c:4118 — buried-buffer-list frame parameter
+        // stored from f->buried_buffer_list (most-recently-buried first).
+        "buried-buffer-list" => {
+            let vals: Vec<Value> = frame
+                .buried_buffer_list
+                .iter()
+                .map(|id| Value::make_buffer(*id))
+                .collect();
+            Value::list(vals)
+        }
+        _ => frame.parameter_key(param_key).unwrap_or(Value::NIL),
+    }
+}
+
 pub(crate) fn builtin_frame_parameter(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -7427,59 +7482,7 @@ pub(crate) fn builtin_frame_parameter(
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
 
-    // Check built-in properties first.
-    match param_key {
-        FrameParamKey::Known(FrameParam::Name) => return Ok(frame.name_value()),
-        FrameParamKey::Known(FrameParam::Title) => return Ok(frame.title_value()),
-        FrameParamKey::Known(FrameParam::IconName) => return Ok(frame.icon_name_value()),
-        FrameParamKey::Known(FrameParam::Visibility) => {
-            return Ok(if frame.visible { Value::T } else { Value::NIL });
-        }
-        FrameParamKey::Known(FrameParam::Font) if frame.effective_window_system().is_none() => {
-            return Ok(Value::string("tty"));
-        }
-        _ => {}
-    }
-
-    match param_key.name() {
-        "explicit-name" => return Ok(frame.explicit_name_value()),
-        // In Emacs, frame parameter width/height are text columns/lines.
-        // For the bootstrap batch frame, explicit parameter overrides preserve
-        // the 80x25 report shape.
-        "width" => {
-            return Ok(frame
-                .parameter("width")
-                .unwrap_or(Value::fixnum(frame.columns() as i64)));
-        }
-        "height" => {
-            return Ok(frame
-                .parameter("height")
-                .unwrap_or(Value::fixnum(frame.lines() as i64)));
-        }
-        // GNU frame.c:4117 — buffer-list frame parameter stored
-        // directly from f->buffer_list (most-recently-shown first).
-        "buffer-list" => {
-            let vals: Vec<Value> = frame
-                .buffer_list
-                .iter()
-                .map(|id| Value::make_buffer(*id))
-                .collect();
-            return Ok(Value::list(vals));
-        }
-        // GNU frame.c:4118 — buried-buffer-list frame parameter
-        // stored from f->buried_buffer_list (most-recently-buried first).
-        "buried-buffer-list" => {
-            let vals: Vec<Value> = frame
-                .buried_buffer_list
-                .iter()
-                .map(|id| Value::make_buffer(*id))
-                .collect();
-            return Ok(Value::list(vals));
-        }
-        _ => {}
-    }
-    // User-set parameters.
-    Ok(frame.parameter_key(param_key).unwrap_or(Value::NIL))
+    Ok(frame_parameter_value(frame, param_key))
 }
 /// `(frame-parameters &optional FRAME)` -> alist.
 pub(crate) fn builtin_frame_parameters(
@@ -7552,7 +7555,12 @@ pub(crate) fn builtin_frame_parameters(
         {
             continue;
         }
-        pairs.push(Value::cons(*k, *v));
+        let value = k
+            .as_symbol_id()
+            .and_then(FrameParam::from_symbol_id)
+            .filter(|param| *param == FrameParam::Font)
+            .map_or(*v, |_| super::font::public_frame_font_parameter_value(*v));
+        pairs.push(Value::cons(*k, value));
     }
     Ok(Value::list(pairs))
 }

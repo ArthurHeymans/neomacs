@@ -3438,31 +3438,7 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_frame_parameter_fast(&mut self, args: &[Value]) -> EvalResult {
-        builtins::expect_args("frame-parameter", args, 2)?;
-        let fid = self.resolve_frame_id(args.first(), "framep")?;
-        let param_name = match args[1].kind() {
-            ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-            _ => return Ok(Value::NIL),
-        };
-        let frame = self
-            .ctx
-            .frames
-            .get(fid)
-            .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-        match param_name.as_str() {
-            "name" => Ok(frame.name_value()),
-            "icon-name" => Ok(frame.icon_name_value()),
-            "title" => Ok(frame.title_value()),
-            "explicit-name" => Ok(frame.explicit_name_value()),
-            "width" => Ok(frame
-                .parameter("width")
-                .unwrap_or(Value::fixnum(frame.columns() as i64))),
-            "height" => Ok(frame
-                .parameter("height")
-                .unwrap_or(Value::fixnum(frame.lines() as i64))),
-            "visibility" => Ok(if frame.visible { Value::T } else { Value::NIL }),
-            _ => Ok(frame.parameter(&param_name).unwrap_or(Value::NIL)),
-        }
+        crate::emacs_core::window_cmds::builtin_frame_parameter(self.ctx, args.to_vec())
     }
 
     fn builtin_fboundp_fast(&mut self, args: &[Value]) -> EvalResult {
