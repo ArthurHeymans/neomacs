@@ -612,6 +612,30 @@ Document that full buffer text source parity still requires:
 - `GlyphMatrixBuilder` API cleanup,
 - and a much larger test matrix.
 
+**Current endpoint after Tasks 8-10**
+
+The display pipeline now has the intended explicit source split:
+
+```text
+LispStringSource  -> DisplayRowRequest -> DisplayRowSpec -> GlyphRow
+BufferTextSource  -> typed source adapter, with buffer row transitions extracted
+```
+
+Chrome rows that naturally start from Lisp strings (tab-bar and echo area) now cross the VM/render boundary as `LispStringSource`, preserving text properties before producing `DisplayRowSpec`. Main-buffer text has a `BufferTextSource` type and a centralized row transition helper, but the existing walker still owns glyph production because it carries GNU-visible state that is not yet representable in a single pure row spec.
+
+**Remaining `BufferTextSource -> DisplayRowSpec` parity work**
+
+Before main-buffer text can fully use the same `DisplayRowSpec -> GlyphRow` builder, the buffer source side needs typed intermediate structures for:
+
+- source positions: buffer char position, Emacs byte position, display column, matrix row, and visual slot id must stay distinct;
+- display properties: replacement strings, `(space ...)`, images, videos, xwidgets, glyphless chars, and invisible text need one source-neutral representation;
+- overlays and text properties: before/after strings, zero-length EOB overlays, face remapping, cursor properties, line/wrap prefixes, and display specs need deterministic precedence;
+- bidi and clusters: bidi reordering, wide glyph padding, ZWJ/combining clusters, and RTL stretch behavior must remain owned by one row-normalization layer;
+- cursor/output snapshots: display points, hit rows, physical cursor geometry, visual cursors, and window-end publication must move with the row source rather than with ad hoc walker side effects;
+- matrix builder API cleanup: main-buffer rows should eventually install a completed `GlyphRow`, matching the chrome path, instead of mutating the current builder row throughout the walker.
+
+The next safe implementation phase is to introduce a `BufferDisplayRowSpec`/`BufferTextRowSpec` that can be produced by the existing walker for one completed visual row, then converted into `GlyphRow`. Only after that should the walker start emitting `DisplayRowSpec` directly.
+
 **Step 2: Commit**
 
 ```bash
