@@ -3428,6 +3428,38 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
 }
 
 #[test]
+fn layout_string_face_resolver_records_pending_faces_without_builder() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut string_face_cache = std::collections::HashMap::new();
+    let mut current_face_id = 20;
+    let mut pending_faces = Vec::new();
+    let mut resolver = LayoutStringFaceResolver {
+        face_resolver: &face_resolver,
+        base_face: &base_face,
+        string_face_cache: &mut string_face_cache,
+        current_face_id: &mut current_face_id,
+        pending_faces: &mut pending_faces,
+    };
+    let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
+
+    let face = crate::display_source::DisplayItemFaceResolver::resolve_face_ref(
+        &mut resolver,
+        RenderFaceRef::FaceId(0),
+        face_value,
+    );
+
+    assert_eq!(face, RenderFaceRef::FaceId(20));
+    assert_eq!(current_face_id, 21);
+    assert_eq!(pending_faces.len(), 1);
+    assert_eq!(pending_faces[0].face_id, 20);
+    assert_eq!(pending_faces[0].resolved.fg, 0x00ff0000);
+}
+
+#[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval

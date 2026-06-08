@@ -1484,7 +1484,22 @@ struct LayoutStringFaceResolver<'a> {
     base_face: &'a super::neovm_bridge::ResolvedFace,
     string_face_cache: &'a mut std::collections::HashMap<Value, u32>,
     current_face_id: &'a mut u32,
-    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    pending_faces: &'a mut Vec<LayoutStringPendingFace>,
+}
+
+#[derive(Clone, Debug)]
+struct LayoutStringPendingFace {
+    face_id: u32,
+    resolved: super::neovm_bridge::ResolvedFace,
+}
+
+fn apply_pending_string_faces(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    pending_faces: &mut Vec<LayoutStringPendingFace>,
+) {
+    for pending in pending_faces.drain(..) {
+        apply_resolved_face(builder, pending.face_id, &pending.resolved, None);
+    }
 }
 
 impl crate::display_source::DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
@@ -1504,9 +1519,10 @@ impl crate::display_source::DisplayItemFaceResolver for LayoutStringFaceResolver
         };
 
         let face_id = *self.current_face_id;
-        apply_resolved_face(self.builder, face_id, &resolved, None);
         *self.current_face_id += 1;
         self.string_face_cache.insert(face_value, face_id);
+        self.pending_faces
+            .push(LayoutStringPendingFace { face_id, resolved });
         crate::display_item::RenderFaceRef::FaceId(face_id)
     }
 }
@@ -1609,18 +1625,20 @@ fn render_overlay_string(
     };
 
     while *row < max_rows {
+        let mut pending_faces = Vec::new();
         let item = {
             let mut resolver = LayoutStringFaceResolver {
                 face_resolver,
                 base_face: overlay_base_face,
                 string_face_cache: &mut string_face_cache,
                 current_face_id,
-                builder,
+                pending_faces: &mut pending_faces,
             };
             let mut context =
                 crate::display_source::DisplaySourceContext::with_face_resolver(&mut resolver);
             source.next_item(&mut context)
         };
+        apply_pending_string_faces(builder, &mut pending_faces);
         let Some(item) = item else {
             break;
         };
@@ -4256,13 +4274,14 @@ impl LayoutEngine {
                                 );
                                 let mut string_face_cache = std::collections::HashMap::new();
                                 loop {
+                                    let mut pending_faces = Vec::new();
                                     let item = {
                                         let mut resolver = LayoutStringFaceResolver {
                                             face_resolver,
                                             base_face: &current_resolved_face,
                                             string_face_cache: &mut string_face_cache,
                                             current_face_id: &mut current_face_id,
-                                            builder: &mut self.matrix_builder,
+                                            pending_faces: &mut pending_faces,
                                         };
                                         let mut context =
                                             crate::display_source::DisplaySourceContext::with_face_resolver(
@@ -4270,6 +4289,10 @@ impl LayoutEngine {
                                             );
                                         source.next_item(&mut context)
                                     };
+                                    apply_pending_string_faces(
+                                        &mut self.matrix_builder,
+                                        &mut pending_faces,
+                                    );
                                     let Some(item) = item else {
                                         break;
                                     };
