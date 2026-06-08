@@ -5751,13 +5751,6 @@ impl LayoutEngine {
             // walk (neomacs's stand-in for GNU's shared `composition_it`,
             // src/composite.c). `cluster_tail` / `is_cluster_continuation` were
             // computed above (before glyphless handling) and are reused here.
-            // Arabic/Indic run member: a same-script char continuing the
-            // previous glyph. It grows the composed run (one column each) so
-            // the renderer shapes the run as a unit, while per-char padding
-            // cells keep per-letter cursor positions.
-            let is_run_member = !is_cluster_continuation
-                && control_display.is_none()
-                && crate::composition::continues_complex_run(ch, cluster_tail);
             let char_cols = if control_display.is_some() {
                 2
             } else if is_cluster_continuation {
@@ -6173,38 +6166,51 @@ impl LayoutEngine {
                     charpos as usize,
                     face_char_w,
                 );
-            } else if is_cluster_continuation {
-                self.run_buf.push(ch, advance);
-                self.matrix_builder.push_cluster_continuation(
-                    ch,
-                    current_text_face_id,
-                    charpos as usize,
-                );
-            } else if is_run_member {
-                self.run_buf.push(ch, advance);
-                self.matrix_builder.push_run_member(
-                    ch,
-                    current_text_face_id,
-                    charpos as usize,
-                    advance,
-                );
             } else {
                 self.run_buf.push(ch, advance);
-                // Record character into GlyphMatrix builder
-                if char_cols == 2 {
-                    self.matrix_builder.push_wide_char_with_pixel_width(
-                        ch,
-                        current_text_face_id,
-                        charpos as usize,
-                        advance,
-                    );
-                } else {
-                    self.matrix_builder.push_char_with_pixel_width(
-                        ch,
-                        current_text_face_id,
-                        charpos as usize,
-                        advance,
-                    );
+                let item = crate::display_item::DisplayItem::new(
+                    crate::display_item::SourceSpan::new(
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos as usize),
+                            EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
+                        ),
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos.saturating_add(1) as usize),
+                            EmacsBytePos::new(text_start_byte + byte_idx),
+                        ),
+                    ),
+                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                    crate::display_item::DisplayItemKind::TextRun(
+                        crate::display_item::DisplayTextRun::new(ch.to_string()),
+                    ),
+                );
+                let layout = crate::display_row_builder::DisplayRowLayout {
+                    role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+                    y_px: y,
+                    width_px: avail_width.max(1.0),
+                    height_px: face_h,
+                    ascent_px: face_ascent_val,
+                    char_width_px: face_char_w,
+                    tab_width_cols: params.tab_width.max(1).min(i32::from(u16::MAX)) as u16,
+                    base_face: crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                    symbol_values: std::collections::HashMap::new(),
+                };
+                let mut measurer = SingleGlyphAdvance {
+                    ch,
+                    face_id: current_text_face_id,
+                    advance_px: advance,
+                };
+                if append_display_item_to_current_row_with_shared_builder(
+                    &mut self.matrix_builder,
+                    layout,
+                    item,
+                    Some(&mut measurer),
+                )
+                .is_none()
+                {
+                    break;
                 }
             }
 
