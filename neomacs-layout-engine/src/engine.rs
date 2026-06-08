@@ -1489,6 +1489,38 @@ struct TextRowAppendOutput {
     height: f32,
 }
 
+fn append_text_row_item(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: crate::display_item::DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_item_to_current_matrix_row(builder, layout, item)?;
+    let position = append_cursor.position();
+    Some((progress, position))
+}
+
+fn append_measured_text_row_item(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: crate::display_item::DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_measured_item_to_current_matrix_row(
+        builder,
+        layout,
+        item,
+        glyph_measurer,
+    )?;
+    let position = append_cursor.position();
+    Some((progress, position))
+}
+
 fn append_text_row_item_and_emit(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -1499,9 +1531,7 @@ fn append_text_row_item_and_emit(
     item: crate::display_item::DisplayItem,
     output: TextRowAppendOutput,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
-    let progress = append_cursor.append_item_to_current_matrix_row(builder, layout, item)?;
-    let position = append_cursor.position();
+    let (progress, position) = append_text_row_item(builder, layout, position, max_x, item)?;
     emit_text_progress_slots(
         output_emitter,
         evaluator,
@@ -1525,14 +1555,8 @@ fn append_measured_text_row_item_and_emit(
     glyph_measurer: &mut dyn DisplayGlyphMeasurer,
     output: TextRowAppendOutput,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
-    let progress = append_cursor.append_measured_item_to_current_matrix_row(
-        builder,
-        layout,
-        item,
-        glyph_measurer,
-    )?;
-    let position = append_cursor.position();
+    let (progress, position) =
+        append_measured_text_row_item(builder, layout, position, max_x, item, glyph_measurer)?;
     emit_text_progress_slots(
         output_emitter,
         evaluator,
@@ -1754,15 +1778,16 @@ fn render_overlay_string(
             crate::display_item::RenderFaceRef::FaceId(face_id),
             item.kind,
         );
-        let mut append_cursor = DisplayRowAppendCursor::new(
-            crate::display_row_builder::DisplayRowPosition {
+        let Some((progress, position)) = append_text_row_item(
+            builder,
+            &layout,
+            DisplayRowPosition {
                 x_px: *x,
                 col: *col,
             },
             max_x,
-        );
-        let progress = append_cursor.append_item_to_current_matrix_row(builder, &layout, item);
-        let Some(progress) = progress else {
+            item,
+        ) else {
             break;
         };
         for slot in &progress.slots {
@@ -1778,7 +1803,6 @@ fn render_overlay_string(
                 Color::from_pixel(overlay_base_face.bg),
             );
         }
-        let position = append_cursor.position();
         *x = position.x_px;
         *col = position.col;
         output_emitter.emit_synthetic_text_span(
@@ -4696,8 +4720,6 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4706,9 +4728,11 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((progress, position)) = append_text_row_item(
                                 &mut self.matrix_builder,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
                             ) {
                                 if progress.status
@@ -4734,7 +4758,6 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    let position = append_cursor.position();
                                     x = position.x_px;
                                     col = position.col;
                                     emit_text_progress_slots(
@@ -4777,27 +4800,25 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, placeholder);
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((_progress, position)) = append_text_row_item_and_emit(
                                 &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
+                                TextRowAppendOutput {
+                                    row,
+                                    row_y: y,
+                                    glyph_y: y + raise_y_offset,
+                                    height: face_h,
+                                },
                             ) {
-                                let position = append_cursor.position();
                                 x = position.x_px;
                                 col = position.col;
-                                emit_text_progress_slots(
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &progress,
-                                    row,
-                                    y,
-                                    y + raise_y_offset,
-                                    face_h,
-                                );
                             }
                         }
 
@@ -4868,8 +4889,6 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4878,9 +4897,11 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((progress, position)) = append_text_row_item(
                                 &mut self.matrix_builder,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
                             ) {
                                 if progress.status
@@ -4902,7 +4923,6 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    let position = append_cursor.position();
                                     x = position.x_px;
                                     col = position.col;
                                     emit_text_progress_slots(
@@ -4944,27 +4964,25 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((_progress, position)) = append_text_row_item_and_emit(
                                 &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
+                                TextRowAppendOutput {
+                                    row,
+                                    row_y: y,
+                                    glyph_y: y + raise_y_offset,
+                                    height: face_h,
+                                },
                             ) {
-                                let position = append_cursor.position();
                                 x = position.x_px;
                                 col = position.col;
-                                emit_text_progress_slots(
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &progress,
-                                    row,
-                                    y,
-                                    y + raise_y_offset,
-                                    face_h,
-                                );
                             }
                         }
 
@@ -5020,8 +5038,6 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5030,9 +5046,11 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((progress, position)) = append_text_row_item(
                                 &mut self.matrix_builder,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
                             ) {
                                 if progress.status
@@ -5052,7 +5070,6 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    let position = append_cursor.position();
                                     x = position.x_px;
                                     col = position.col;
                                     emit_text_progress_slots(
@@ -5134,8 +5151,6 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5144,9 +5159,11 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((progress, position)) = append_text_row_item(
                                 &mut self.matrix_builder,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
                             ) {
                                 if progress.status
@@ -5166,7 +5183,6 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    let position = append_cursor.position();
                                     x = position.x_px;
                                     col = position.col;
                                     emit_text_progress_slots(
@@ -5208,27 +5224,25 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            let mut append_cursor =
-                                DisplayRowAppendCursor::new(replacement_position, right_limit);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                            if let Some((_progress, position)) = append_text_row_item_and_emit(
                                 &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
                                 &layout,
+                                replacement_position,
+                                right_limit,
                                 item,
+                                TextRowAppendOutput {
+                                    row,
+                                    row_y: y,
+                                    glyph_y: y + raise_y_offset,
+                                    height: face_h,
+                                },
                             ) {
-                                let position = append_cursor.position();
                                 x = position.x_px;
                                 col = position.col;
-                                emit_text_progress_slots(
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &progress,
-                                    row,
-                                    y,
-                                    y + raise_y_offset,
-                                    face_h,
-                                );
                             }
                         }
 
