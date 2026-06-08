@@ -5244,14 +5244,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "gnutls-asynchronous-parameters",
         |_ctx, args| gnutls::builtin_gnutls_asynchronous_parameters(args),
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "gnutls-bye",
         |_ctx, args| gnutls::builtin_gnutls_bye(args),
-        0,
-        None,
+        2,
+        Some(2),
     );
     ctx.defsubr(
         "gnutls-ciphers",
@@ -5292,8 +5292,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "gnutls-format-certificate",
         |_ctx, args| gnutls::builtin_gnutls_format_certificate(args),
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "gnutls-get-initstage",
