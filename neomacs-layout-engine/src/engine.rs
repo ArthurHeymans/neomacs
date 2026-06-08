@@ -22,11 +22,10 @@ use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, append_display_row_spec_item,
     append_display_row_spec_item_and_emit, append_measured_display_row_spec_item_and_emit,
-    emit_text_progress_slots,
+    append_synthetic_text_to_display_row, emit_text_progress_slots, synthetic_display_text_item,
 };
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowPosition, DisplayTabPolicy,
-    FixedGlyphAdvance, FixedGlyphAdvances,
+    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -1445,56 +1444,6 @@ fn text_display_tab_policy(
         params.tab_width,
         &params.tab_stop_list,
     )
-}
-
-fn synthetic_text_item(
-    source_id: u64,
-    text: impl Into<Box<str>>,
-    face_id: u32,
-) -> crate::display_item::DisplayItem {
-    let text = text.into();
-    let char_len = text.chars().count();
-    crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(source_id, 0, char_len),
-        crate::display_item::RenderFaceRef::FaceId(face_id),
-        crate::display_item::DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new(
-            text,
-        )),
-    )
-}
-
-fn append_synthetic_text_to_text_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    source_id: u64,
-    text: impl Into<Box<str>>,
-    face_id: u32,
-    glyph_measurer: Option<&mut dyn DisplayGlyphMeasurer>,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let append_spec = frame
-        .at(position, face_id)
-        .append_spec(DisplayRowAppendKind::SourceText);
-    let item = synthetic_text_item(source_id, text, face_id);
-    match glyph_measurer {
-        Some(measurer) => append_measured_display_row_spec_item_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            append_spec,
-            item,
-            measurer,
-        ),
-        None => append_display_row_spec_item_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            append_spec,
-            item,
-        ),
-    }
 }
 
 fn append_lisp_string_to_text_row(
@@ -4122,7 +4071,7 @@ impl LayoutEngine {
                             )
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
                             .append_spec(DisplayRowAppendKind::SourceText);
-                        let item = synthetic_text_item(
+                        let item = synthetic_display_text_item(
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
                             current_text_face_id,
@@ -4303,7 +4252,7 @@ impl LayoutEngine {
                             },
                         );
                         let mut measurer = FixedGlyphAdvance::new('$', trunc_face_id, char_w);
-                        if let Some((_progress, position)) = append_synthetic_text_to_text_row(
+                        if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
@@ -5418,7 +5367,7 @@ impl LayoutEngine {
                     },
                 );
                 let mut measurer = FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
-                if let Some((_progress, position)) = append_synthetic_text_to_text_row(
+                if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,

@@ -1,10 +1,23 @@
 use super::*;
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItemKind, DisplaySourcePosition, RenderFaceRef};
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
+
+#[test]
+fn synthetic_display_text_item_builds_synthetic_text_run() {
+    let item = synthetic_display_text_item(9, "...", 7);
+
+    assert_eq!(item.face, RenderFaceRef::FaceId(7));
+    assert_eq!(item.span.start, DisplaySourcePosition::synthetic(9, 0));
+    assert_eq!(item.span.end, DisplaySourcePosition::synthetic(9, 3));
+    match item.kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "..."),
+        other => panic!("expected text run, got {other:?}"),
+    }
+}
 
 #[test]
 fn display_row_append_surface_builds_positioned_specs() {

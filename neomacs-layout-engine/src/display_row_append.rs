@@ -1,4 +1,6 @@
-use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
@@ -29,6 +31,20 @@ pub(crate) fn emit_text_progress_slots(
         },
         progress,
     );
+}
+
+pub(crate) fn synthetic_display_text_item(
+    source_id: u64,
+    text: impl Into<Box<str>>,
+    face_id: u32,
+) -> DisplayItem {
+    let text = text.into();
+    let char_len = text.chars().count();
+    DisplayItem::new(
+        SourceSpan::synthetic(source_id, 0, char_len),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+    )
 }
 
 pub(crate) struct DisplayRowAppendOutput {
@@ -371,6 +387,40 @@ pub(crate) fn append_measured_display_row_item_and_emit(
         output.height,
     );
     Some((progress, position))
+}
+
+pub(crate) fn append_synthetic_text_to_display_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    source_id: u64,
+    text: impl Into<Box<str>>,
+    face_id: u32,
+    glyph_measurer: Option<&mut dyn DisplayGlyphMeasurer>,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let append_spec = frame
+        .at(position, face_id)
+        .append_spec(DisplayRowAppendKind::SourceText);
+    let item = synthetic_display_text_item(source_id, text, face_id);
+    match glyph_measurer {
+        Some(measurer) => append_measured_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+            measurer,
+        ),
+        None => append_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ),
+    }
 }
 
 #[cfg(test)]
