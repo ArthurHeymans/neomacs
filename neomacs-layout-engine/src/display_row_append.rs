@@ -215,6 +215,47 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
     })
 }
 
+pub(crate) enum DisplayRowAppendMeasurement<'a> {
+    Default,
+    Measured(&'a mut dyn DisplayGlyphMeasurer),
+}
+
+pub(crate) fn append_display_replacement_string_item_to_text_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    mut item: DisplayItem,
+    fallback_face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    measurement: DisplayRowAppendMeasurement<'_>,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let face_id = render_face_ref_id(item.face, fallback_face_id);
+    item.face = RenderFaceRef::FaceId(face_id);
+    let append_spec = frame
+        .at(position, face_id)
+        .append_spec(DisplayRowAppendKind::DisplayReplacementString);
+    match measurement {
+        DisplayRowAppendMeasurement::Default => append_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ),
+        DisplayRowAppendMeasurement::Measured(measurer) => {
+            append_measured_display_row_spec_item_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                append_spec,
+                item,
+                measurer,
+            )
+        }
+    }
+}
+
 pub(crate) struct DisplayRowAppendOutput {
     pub(crate) row: usize,
     pub(crate) row_y: f32,
