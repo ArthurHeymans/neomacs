@@ -559,17 +559,26 @@ fn make_node_value_for_parser(
     runtime::make_node_value(id, parser_value)
 }
 
-fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
+fn treesit_check_position(buf: &Buffer, value: Value) -> Result<i64, Flow> {
+    let pos = expect_int(&value)?;
     let accessible_chars = buf.accessible_char_region();
     let min = accessible_chars.start_lisp().as_i64();
     let max = accessible_chars.end_lisp().as_i64();
     if pos < min || pos > max {
-        return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
+        return Err(signal("args-out-of-range", vec![value]));
     }
-    Ok(buf
-        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos))
+    Ok(pos)
+}
+
+fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> usize {
+    buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos))
         .saturating_offset_from(buf.accessible_emacs_byte_region().start())
-        .get())
+        .get()
+}
+
+fn treesit_position_to_relative_byte(buf: &Buffer, value: Value) -> Result<usize, Flow> {
+    let pos = treesit_check_position(buf, value)?;
+    Ok(lisp_pos_to_relative_byte(buf, pos))
 }
 
 fn treesit_invalid_range(ranges: Value) -> Flow {
@@ -888,8 +897,8 @@ fn query_range_bytes(
     if beg.is_nil() || end.is_nil() {
         return Ok(None);
     }
-    let start = lisp_pos_to_relative_byte(buf, expect_integer_or_marker(&beg)?)?;
-    let finish = lisp_pos_to_relative_byte(buf, expect_integer_or_marker(&end)?)?;
+    let start = treesit_position_to_relative_byte(buf, beg)?;
+    let finish = treesit_position_to_relative_byte(buf, end)?;
     Ok(Some(start..finish))
 }
 
@@ -1686,8 +1695,8 @@ pub(crate) fn builtin_treesit_node_descendant_for_range(
         .buffers
         .get(parser.orig_buffer_id)
         .ok_or_else(|| node_buffer_killed_error(args[0]))?;
-    let start_byte = lisp_pos_to_relative_byte(buf, expect_integer_or_marker(&args[1])?)?;
-    let end_byte = lisp_pos_to_relative_byte(buf, expect_integer_or_marker(&args[2])?)?;
+    let start_byte = treesit_position_to_relative_byte(buf, args[1])?;
+    let end_byte = treesit_position_to_relative_byte(buf, args[2])?;
     let named = args.get(3).is_some_and(|value| !value.is_nil());
     let node = unsafe { tree_sitter::Node::from_raw(handle.raw) };
     let descendant = if named {
@@ -1784,7 +1793,7 @@ pub(crate) fn builtin_treesit_node_first_child_for_pos(
         .buffers
         .get(parser.orig_buffer_id)
         .ok_or_else(|| node_buffer_killed_error(args[0]))?;
-    let byte = lisp_pos_to_relative_byte(buf, expect_integer_or_marker(&args[1])?)?;
+    let byte = treesit_position_to_relative_byte(buf, args[1])?;
     let named = args.get(2).is_some_and(|value| !value.is_nil());
     let node = unsafe { tree_sitter::Node::from_raw(handle.raw) };
     let child = if named {
@@ -2241,8 +2250,8 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         for value in range_values {
             let (start_pos, end_pos) =
                 validate_treesit_included_range(buffer, value, args[1], &mut last_point)?;
-            let start = lisp_pos_to_relative_byte(buffer, start_pos)?;
-            let end = lisp_pos_to_relative_byte(buffer, end_pos)?;
+            let start = lisp_pos_to_relative_byte(buffer, start_pos);
+            let end = lisp_pos_to_relative_byte(buffer, end_pos);
             let start_point = byte_offset_to_point(&source, start, hint);
             let next_hint = byte_offset_to_linecol(&source, end, hint);
             let end_point = Point {
@@ -2755,7 +2764,7 @@ pub(crate) fn builtin_treesit_linecol_at(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let source = treesit_buffer_source(buffer);
-    let byte_offset = lisp_pos_to_relative_byte(buffer, pos)?;
+    let byte_offset = lisp_pos_to_relative_byte(buffer, pos);
     let hint = eval
         .treesit
         .linecol_cache(buffer_id)
@@ -3049,5 +3058,34 @@ mod tests {
                 ranges,
             ]
         );
+    }
+
+    #[test]
+    fn treesit_node_position_apis_reject_markers_like_gnu() {
+        let (mut eval, parser) = eval_with_json_parser("{}");
+        let root = builtin_treesit_parser_root_node(&mut eval, vec![parser])
+            .expect("root node for json parser");
+        let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+        let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            LispCharPos1::new(1),
+            false,
+        );
+
+        let sig = expect_signal(
+            builtin_treesit_node_first_child_for_pos(&mut eval, vec![root, marker]),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("integerp"), marker]);
+
+        let sig = expect_signal(
+            builtin_treesit_node_descendant_for_range(
+                &mut eval,
+                vec![root, marker, Value::fixnum(2)],
+            ),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("integerp"), marker]);
     }
 }
