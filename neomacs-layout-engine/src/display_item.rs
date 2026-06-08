@@ -122,6 +122,7 @@ impl DisplayItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayItemKind {
     TextRun(DisplayTextRun),
+    SourceMappedText(DisplaySourceMappedText),
     ControlChar { ch: char },
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
@@ -139,6 +140,17 @@ pub(crate) struct DisplayTextRun {
 }
 
 impl DisplayTextRun {
+    pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
+        Self { text: text.into() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DisplaySourceMappedText {
+    pub(crate) text: Box<str>,
+}
+
+impl DisplaySourceMappedText {
     pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
         Self { text: text.into() }
     }

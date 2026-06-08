@@ -1,8 +1,8 @@
 use super::*;
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
-    SourceSpan,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{DisplaySourceContext, LispStringSourceCursor};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -53,6 +53,17 @@ fn control_item(ch: char) -> DisplayItem {
         ),
         RenderFaceRef::FaceId(2),
         DisplayItemKind::ControlChar { ch },
+    )
+}
+
+fn mapped_text_item(text: &str) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            DisplaySourcePosition::lisp_string(1, 1, text.len()),
+        ),
+        RenderFaceRef::FaceId(2),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text)),
     )
 }
 
@@ -246,6 +257,40 @@ fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
     assert_eq!(progress.slots[0].width_px, 16.0);
     assert_eq!(progress.slots[0].width_cols, 2);
     assert_eq!(row_text(&row), "^A");
+}
+
+#[test]
+fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(mapped_text_item("\\ "));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+
+    assert_eq!(row_text(&row), "\\ ");
+    assert_eq!(glyphs.len(), 2);
+    assert!(glyphs.iter().all(|glyph| glyph.charpos == 0));
+}
+
+#[test]
+fn display_row_progress_writer_reports_source_mapped_text_as_single_source_slot() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        80.0,
+    );
+
+    let progress = writer.push_item(mapped_text_item("\\-"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.slots.len(), 1);
+    assert_eq!(progress.slots[0].width_px, 16.0);
+    assert_eq!(progress.slots[0].width_cols, 2);
+    assert_eq!(row_text(&row), "\\-");
 }
 
 #[test]

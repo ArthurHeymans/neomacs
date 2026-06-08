@@ -5458,106 +5458,66 @@ impl LayoutEngine {
             if params.nobreak_char_display > 0 && (ch == '\u{00A0}' || ch == '\u{00AD}') {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                match params.nobreak_char_display {
-                    1 => {
-                        // Highlight mode: render with nobreak face color
-                        if params.nobreak_char_fg != 0 {
-                            let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                            current_face_id += 1;
-                        }
-                        // Render as visible space or hyphen
-                        let display_ch = if ch == '\u{00A0}' { ' ' } else { '-' };
-                        output_emitter.emit_text_output_span(
-                            evaluator,
-                            text_output_span_from_coords(
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                y + raise_y_offset,
-                                char_h,
-                                x,
-                                col,
-                                x + face_char_w,
-                                col + 1,
+                let mapped_text = match params.nobreak_char_display {
+                    1 => Some(if ch == '\u{00A0}' { " " } else { "-" }),
+                    2 => Some(if ch == '\u{00A0}' { "\\ " } else { "\\-" }),
+                    _ => None,
+                };
+                if let Some(mapped_text) = mapped_text {
+                    if params.nobreak_char_fg != 0 {
+                        let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
+                        current_face_id += 1;
+                    }
+                    let item = crate::display_item::DisplayItem::new(
+                        crate::display_item::SourceSpan::new(
+                            crate::display_item::DisplaySourcePosition::buffer(
+                                buf_id,
+                                CharPos0::new(charpos as usize),
+                                EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
                             ),
+                            crate::display_item::DisplaySourcePosition::buffer(
+                                buf_id,
+                                CharPos0::new(charpos.saturating_add(1) as usize),
+                                EmacsBytePos::new(text_start_byte + byte_idx),
+                            ),
+                        ),
+                        crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                        crate::display_item::DisplayItemKind::SourceMappedText(
+                            crate::display_item::DisplaySourceMappedText::new(mapped_text),
+                        ),
+                    );
+                    let layout = text_display_row_layout(
+                        y,
+                        avail_width,
+                        face_h,
+                        face_ascent_val,
+                        face_char_w,
+                        text_display_tab_policy(content_x, params),
+                        current_text_face_id,
+                    );
+                    if let Some(progress) = append_display_item_to_current_row_with_progress(
+                        &mut self.matrix_builder,
+                        &layout,
+                        item,
+                        crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                        content_x + avail_width,
+                    ) {
+                        x = progress.end.x_px;
+                        col = progress.end.col;
+                        emit_text_progress_slots(
+                            &mut output_emitter,
+                            evaluator,
+                            &progress,
+                            row,
+                            y,
+                            y + raise_y_offset,
+                            char_h,
                         );
-                        x += char_pixel_advance(
-                            &mut self.ascii_width_cache,
-                            frame_params.window_system,
-                            &mut self.font_metrics,
-                            display_ch,
-                            1,
-                            char_w,
-                            current_font_size_px,
-                            face_char_w,
-                            &self.current_resolved_family,
-                            current_font_weight,
-                            current_font_italic,
-                        );
-                        col += 1;
-                        charpos += 1;
-                        word_wrap_may_wrap = false;
-                        face_next_check = 0; // restore face on next char
-                        continue;
                     }
-                    2 => {
-                        // Escape notation mode: show as "\\ " for NBSP, "\\-" for soft hyphen
-                        let indicator = if ch == '\u{00A0}' { ' ' } else { '-' };
-                        if params.nobreak_char_fg != 0 {
-                            let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                            current_face_id += 1;
-                        }
-                        // Check if 2 columns fit
-                        let needed = 2.0 * face_char_w;
-                        if x + needed <= content_x + avail_width {
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    y + raise_y_offset,
-                                    char_h,
-                                    x,
-                                    col,
-                                    x + needed,
-                                    col + 2,
-                                ),
-                            );
-                            x += char_pixel_advance(
-                                &mut self.ascii_width_cache,
-                                frame_params.window_system,
-                                &mut self.font_metrics,
-                                '\\',
-                                1,
-                                char_w,
-                                current_font_size_px,
-                                face_char_w,
-                                &self.current_resolved_family,
-                                current_font_weight,
-                                current_font_italic,
-                            );
-                            x += char_pixel_advance(
-                                &mut self.ascii_width_cache,
-                                frame_params.window_system,
-                                &mut self.font_metrics,
-                                indicator,
-                                1,
-                                char_w,
-                                current_font_size_px,
-                                face_char_w,
-                                &self.current_resolved_family,
-                                current_font_weight,
-                                current_font_italic,
-                            );
-                            col += 2;
-                        }
-                        charpos += 1;
-                        word_wrap_may_wrap = false;
-                        face_next_check = 0;
-                        continue;
-                    }
-                    _ => {} // mode 0 or unknown: fall through to normal rendering
+                    charpos += 1;
+                    word_wrap_may_wrap = false;
+                    face_next_check = 0;
+                    continue;
                 }
             }
             // Grapheme-cluster continuation is decided BEFORE glyphless

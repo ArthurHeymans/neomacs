@@ -1803,6 +1803,101 @@ fn layout_frame_rust_renders_buffer_control_chars_with_caret_notation() {
 }
 
 #[test]
+fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::T);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\u{00a0}b\u{00ad}c");
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-nobreak-text", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert_eq!(glyphs_logical_text(&text_row.glyphs[1]), "a b-c");
+}
+
+#[test]
+fn layout_frame_rust_renders_nobreak_chars_in_escape_mode_as_mapped_text() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::fixnum(2));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\u{00a0}b\u{00ad}c");
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-buffer-nobreak-escape-text",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert_eq!(glyphs_logical_text(&text_row.glyphs[1]), "a\\ b\\-c");
+}
+
+#[test]
 fn implemented_text_backends_match_composite_glyph_output() {
     let baseline = composition_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let composites = trace_composite_texts(&baseline);

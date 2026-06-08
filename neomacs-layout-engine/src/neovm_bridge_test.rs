@@ -90,6 +90,33 @@ fn test_collect_layout_params_basic() {
 }
 
 #[test]
+fn collect_layout_params_reads_nobreak_char_display_global() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*nobreak*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("nobreak-frame", 800, 600, buf_id);
+
+    evaluator
+        .obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::NIL);
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    assert_eq!(wps[0].nobreak_char_display, 0);
+
+    evaluator
+        .obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::T);
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    assert_eq!(wps[0].nobreak_char_display, 1);
+
+    evaluator
+        .obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::fixnum(2));
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    assert_eq!(wps[0].nobreak_char_display, 2);
+}
+
+#[test]
 fn test_frame_params_from_neovm() {
     let _runtime = neovm_core::emacs_core::Context::new();
 
