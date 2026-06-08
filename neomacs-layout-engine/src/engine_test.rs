@@ -3530,9 +3530,8 @@ fn next_layout_string_source_item_installs_pending_faces() {
 
 #[test]
 fn body_text_row_append_context_derives_layout_output_and_bounds() {
-    let mut params = test_window_params();
-    params.tab_width = 4;
-    params.tab_stop_list = vec![6, 10];
+    let tab_policy =
+        crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
     let context = BodyTextRowAppendContext {
         row: 3,
         row_y: 20.0,
@@ -3548,10 +3547,11 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
         line_number_width: 10.0,
         face_char_width: 9.0,
         face_space_width: 7.0,
+        tab_policy: tab_policy.clone(),
         face_id: 42,
     };
 
-    let ordinary = context.append_spec(&params, BodyTextAppendKind::SourceText);
+    let ordinary = context.append_spec(BodyTextAppendKind::SourceText);
     assert_eq!(ordinary.position, DisplayRowPosition { x_px: 8.0, col: 0 });
     assert_eq!(ordinary.max_x, 128.0);
     assert_eq!(ordinary.layout.char_width_px, 9.0);
@@ -3560,31 +3560,30 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
     assert_eq!(ordinary.output.glyph_y, 22.0);
     assert_eq!(ordinary.output.height, 16.0);
 
-    let tab = context.append_spec(&params, BodyTextAppendKind::Tab);
+    let tab = context.append_spec(BodyTextAppendKind::Tab);
     assert_eq!(tab.max_x, f32::INFINITY);
     assert_eq!(tab.layout.char_width_px, 7.0);
     assert_eq!(tab.output.height, 14.0);
 
-    let control = context.append_spec(&params, BodyTextAppendKind::ControlChar);
+    let control = context.append_spec(BodyTextAppendKind::ControlChar);
     assert_eq!(control.max_x, 148.0);
     assert_eq!(control.layout.char_width_px, 9.0);
     assert_eq!(control.output.height, 14.0);
 
-    let mapped = context.append_spec(&params, BodyTextAppendKind::SourceMappedText);
+    let mapped = context.append_spec(BodyTextAppendKind::SourceMappedText);
     assert_eq!(mapped.max_x, 128.0);
     assert_eq!(mapped.output.height, 14.0);
 
-    let glyphless = context.append_spec(&params, BodyTextAppendKind::Glyphless);
+    let glyphless = context.append_spec(BodyTextAppendKind::Glyphless);
     assert_eq!(glyphless.max_x, 128.0);
     assert_eq!(glyphless.output.height, 16.0);
 
-    let replacement = context.append_spec(&params, BodyTextAppendKind::DisplayReplacement);
+    let replacement = context.append_spec(BodyTextAppendKind::DisplayReplacement);
     assert_eq!(replacement.max_x, 128.0);
     assert_eq!(replacement.layout.char_width_px, 9.0);
     assert_eq!(replacement.output.height, 16.0);
 
-    let replacement_string =
-        context.append_spec(&params, BodyTextAppendKind::DisplayReplacementString);
+    let replacement_string = context.append_spec(BodyTextAppendKind::DisplayReplacementString);
     assert_eq!(replacement_string.max_x, 128.0);
     assert_eq!(replacement_string.layout.char_width_px, 7.0);
     assert_eq!(replacement_string.output.height, 16.0);
@@ -3592,8 +3591,7 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
 
 #[test]
 fn body_text_row_append_frame_builds_positioned_context() {
-    let mut params = test_window_params();
-    params.tab_width = 4;
+    let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
     let frame = BodyTextRowAppendFrame {
         row: 3,
         row_y: 20.0,
@@ -3607,11 +3605,12 @@ fn body_text_row_append_frame_builds_positioned_context() {
         line_number_width: 10.0,
         face_char_width: 9.0,
         face_space_width: 7.0,
+        tab_policy,
     };
 
     let spec = frame
         .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
-        .append_spec(&params, BodyTextAppendKind::SourceText);
+        .append_spec(BodyTextAppendKind::SourceText);
 
     assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
     assert_eq!(spec.max_x, 128.0);
@@ -3621,7 +3620,6 @@ fn body_text_row_append_frame_builds_positioned_context() {
 
 #[test]
 fn body_text_row_append_spec_appends_item_to_matrix_row() {
-    let params = test_window_params();
     let context = BodyTextRowAppendContext {
         row: 0,
         row_y: 0.0,
@@ -3637,9 +3635,10 @@ fn body_text_row_append_spec_appends_item_to_matrix_row() {
         line_number_width: 0.0,
         face_char_width: 8.0,
         face_space_width: 8.0,
+        tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         face_id: 7,
     };
-    let spec = context.append_spec(&params, BodyTextAppendKind::SourceText);
+    let spec = context.append_spec(BodyTextAppendKind::SourceText);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
