@@ -3,10 +3,12 @@ use super::*;
 use crate::buffer::{CharLen, CharRange};
 use crate::emacs_core::builtins::{
     builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
-    builtin_make_indirect_buffer,
+    builtin_make_indirect_buffer, builtin_next_char_property_change,
+    builtin_previous_char_property_change, builtin_previous_property_change,
 };
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
+use malachite::Integer;
 
 /// Helper: create an evaluator with a buffer containing the given text.
 fn eval_with_text(text: &str) -> Context {
@@ -1329,6 +1331,33 @@ fn next_property_change_no_change() {
     let mut eval = eval_with_text("hello");
     let result = builtin_next_property_change(&mut eval, vec![Value::fixnum(1)]).unwrap();
     assert!(result.is_nil());
+}
+
+#[test]
+fn property_change_limits_coerce_bignums_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abc");
+    let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
+    let negative_big = Value::bignum(-(Integer::from(1u64) << 100u32));
+
+    assert_eq!(
+        builtin_next_char_property_change(&mut eval, vec![Value::fixnum(1), positive_big])
+            .expect("next-char-property-change should clamp positive bignum limit")
+            .as_fixnum(),
+        Some(4)
+    );
+    assert_eq!(
+        builtin_previous_char_property_change(&mut eval, vec![Value::fixnum(4), negative_big])
+            .expect("previous-char-property-change should clamp negative bignum limit")
+            .as_fixnum(),
+        Some(1)
+    );
+
+    let s = Value::string("abc");
+    let previous =
+        builtin_previous_property_change(&mut eval, vec![Value::fixnum(3), s, negative_big])
+            .expect("previous-property-change string limit should coerce negative bignum");
+    assert!(previous.is_fixnum());
 }
 
 // -----------------------------------------------------------------------

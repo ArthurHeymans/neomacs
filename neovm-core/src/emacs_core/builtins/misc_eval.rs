@@ -104,7 +104,7 @@ pub(crate) fn builtin_next_char_property_change_in_buffers(
     let mut temp = overlay_next;
     if let Some(limit) = args.get(1) {
         if !limit.is_nil() {
-            let lim_int = expect_integer_or_marker(limit)?;
+            let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
             if let Some(temp_int) = (|| temp.as_fixnum())() {
                 if lim_int < temp_int {
                     temp = Value::fixnum(lim_int);
@@ -161,7 +161,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         let char_pos = textprop::validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(2) {
             Some(v) if !v.is_nil() => {
-                let lim_int = expect_integer_or_marker(v)?;
+                let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
@@ -296,7 +296,7 @@ pub(crate) fn builtin_previous_char_property_change_in_buffers(
     let mut temp = overlay_prev;
     if let Some(limit) = args.get(1) {
         if !limit.is_nil() {
-            let lim_int = expect_integer_or_marker(limit)?;
+            let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
             if let Some(temp_int) = temp.as_fixnum() {
                 if lim_int > temp_int {
                     temp = Value::fixnum(lim_int);
