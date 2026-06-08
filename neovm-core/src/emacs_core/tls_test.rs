@@ -1,7 +1,7 @@
 use super::tls::{
-    TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus, der_certificate_to_pem,
-    format_x509_certificate_pem, gnutls_available_capabilities, gnutls_close_notify_result_value,
-    gnutls_peer_status_to_value,
+    GnutlsCredentialType, TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus,
+    der_certificate_to_pem, format_x509_certificate_pem, gnutls_available_capabilities,
+    gnutls_close_notify_result_value, gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::value::Value;
 use crate::emacs_core::builtins::builtin_gnutls_peer_status_warning_describe;
@@ -59,6 +59,58 @@ fn backend_errors_render_boundary_messages() {
 #[test]
 fn rustls_backend_advertises_conservative_gnutls_compatibility() {
     assert_eq!(gnutls_available_capabilities(), &["gnutls3", "gnutls"]);
+}
+
+#[test]
+fn gnutls_boot_parameters_parse_x509_hostname() {
+    let parameters = parse_gnutls_boot_parameters(
+        Value::symbol("gnutls-x509pki"),
+        Value::list(vec![
+            Value::keyword(":hostname"),
+            Value::string("example.org"),
+        ]),
+    )
+    .expect("valid parameters");
+    assert_eq!(parameters.credential_type, GnutlsCredentialType::X509Pki);
+    assert_eq!(parameters.hostname, "example.org");
+}
+
+#[test]
+fn gnutls_boot_parameters_validate_gnu_argument_shape() {
+    let type_error = parse_gnutls_boot_parameters(Value::fixnum(1), Value::NIL).unwrap_err();
+    match type_error {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("symbolp"), Value::fixnum(1)]);
+        }
+        other => panic!("expected wrong-type-argument, got {other:?}"),
+    }
+
+    let list_error =
+        parse_gnutls_boot_parameters(Value::symbol("gnutls-x509pki"), Value::fixnum(1))
+            .unwrap_err();
+    match list_error {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(sig.data, vec![Value::symbol("listp"), Value::fixnum(1)]);
+        }
+        other => panic!("expected wrong-type-argument, got {other:?}"),
+    }
+
+    let hostname_error =
+        parse_gnutls_boot_parameters(Value::symbol("gnutls-x509pki"), Value::NIL).unwrap_err();
+    match hostname_error {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string(
+                    "gnutls-boot: invalid :hostname parameter (not a string)"
+                )]
+            );
+        }
+        other => panic!("expected error, got {other:?}"),
+    }
 }
 
 #[test]

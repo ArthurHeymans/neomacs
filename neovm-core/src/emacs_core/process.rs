@@ -37,7 +37,7 @@ use strum::{EnumString, IntoStaticStr};
 
 use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
-    gnutls_peer_status_to_value,
+    gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 
 /// OS socket owned by a network process.
@@ -4385,34 +4385,16 @@ pub(crate) fn builtin_internal_default_process_sentinel(
 ///
 /// Upgrade a network process to TLS through the GNU-compatible `gnutls-boot` API.
 /// PROCESS must be a network process with an open TCP socket.
-/// TYPE is ignored (GNU uses it for credential type).
-/// PROPLIST is a keyword plist; we extract `:hostname` for SNI.
+/// TYPE is the credential type.  PROPLIST is a keyword plist; `:hostname`
+/// supplies SNI and certificate hostname validation.
 pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-boot", &args, 3)?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
-
-    // Extract :hostname from plist for SNI.
-    let plist = &args[2];
-    let mut hostname: Option<String> = None;
-    if let Some(items) = list_to_vec(plist) {
-        let mut i = 0;
-        while i + 1 < items.len() {
-            if let Some(kw) = keyword_name(&items[i]) {
-                if kw == ":hostname" {
-                    hostname = items[i + 1]
-                        .is_string()
-                        .then(|| process_owned_runtime_string(items[i + 1]));
-                }
-            }
-            i += 2;
-        }
-    }
-
-    let host = hostname.unwrap_or_else(|| "localhost".to_string());
+    let parameters = parse_gnutls_boot_parameters(args[1], args[2])?;
     upgrade_process_to_tls::<RustlsBackend>(
         eval,
         id,
-        &host,
+        &parameters.hostname,
         "gnutls-boot",
         signal_gnutls_boot_error,
     )?;

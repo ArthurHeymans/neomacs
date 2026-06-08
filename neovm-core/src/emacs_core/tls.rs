@@ -4,8 +4,10 @@
 //! this module so process management and Elisp builtins do not depend on
 //! rustls-specific types.
 
-use super::builtins::{EvalResult, expect_args};
+use super::builtins::{EvalResult, expect_args, signal};
+use super::error::Flow;
 use super::value::Value;
+use super::value::list_to_vec;
 use base64::Engine;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -19,6 +21,77 @@ pub(crate) fn gnutls_available_capabilities() -> &'static [&'static str] {
 pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("neomacs-tls-available-p", &args, 0)?;
     Ok(Value::T)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GnutlsCredentialType {
+    X509Pki,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GnutlsBootParameters {
+    pub(crate) credential_type: GnutlsCredentialType,
+    pub(crate) hostname: String,
+}
+
+pub(crate) fn parse_gnutls_boot_parameters(
+    credential_type: Value,
+    proplist: Value,
+) -> Result<GnutlsBootParameters, Flow> {
+    let credential_type = match credential_type.as_symbol_name() {
+        Some("gnutls-x509pki") => GnutlsCredentialType::X509Pki,
+        Some("gnutls-anon") => {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "GnuTLS anonymous credentials are not available",
+                )],
+            ));
+        }
+        Some(_) => {
+            return Err(signal(
+                "error",
+                vec![Value::string("Invalid GnuTLS credential type")],
+            ));
+        }
+        None => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("symbolp"), credential_type],
+            ));
+        }
+    };
+
+    let Some(items) = list_to_vec(&proplist) else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("listp"), proplist],
+        ));
+    };
+
+    let mut hostname = None;
+    let mut i = 0;
+    while i + 1 < items.len() {
+        if items[i].as_symbol_name() == Some(":hostname") {
+            hostname = Some(items[i + 1]);
+            break;
+        }
+        i += 2;
+    }
+
+    let Some(hostname) = hostname.and_then(Value::as_runtime_string_owned) else {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "gnutls-boot: invalid :hostname parameter (not a string)",
+            )],
+        ));
+    };
+
+    Ok(GnutlsBootParameters {
+        credential_type,
+        hostname,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
