@@ -326,20 +326,56 @@ impl FrameGlyph {
         }
     }
 
-    /// Left edge (in physical pixels) of the cell this glyph occupies. This is
-    /// the position the physical cursor is actually drawn at (see the
-    /// renderer's `cursor_glyph_slot_rect`); the cursor's grid-derived
-    /// `PhysCursor::x` is only an approximation that diverges from the glyph
-    /// under scaled fonts.
-    pub fn cell_x(&self) -> Option<f32> {
+    /// Pixel rect `(x, y, width, height)` of the cell this glyph occupies. This
+    /// is the authoritative position at which a cursor sitting on the glyph is
+    /// drawn; the cursor's grid-derived `PhysCursor` geometry is only an
+    /// approximation that diverges from the glyph under scaled fonts. Returns
+    /// `None` for glyph kinds that do not occupy a cursor cell (backgrounds,
+    /// borders, scroll bars).
+    pub fn cell_rect(&self) -> Option<(f32, f32, f32, f32)> {
         match self {
-            FrameGlyph::Char { x, .. }
-            | FrameGlyph::Stretch { x, .. }
-            | FrameGlyph::Image { x, .. }
-            | FrameGlyph::Video { x, .. }
-            | FrameGlyph::Xwidget { x, .. } => Some(*x),
+            FrameGlyph::Char {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Stretch {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Image {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Video {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Xwidget {
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => Some((*x, *y, *width, *height)),
             _ => None,
         }
+    }
+
+    /// Left edge of this glyph's cell; see [`FrameGlyph::cell_rect`].
+    pub fn cell_x(&self) -> Option<f32> {
+        self.cell_rect().map(|(x, ..)| x)
     }
 }
 
@@ -1375,6 +1411,25 @@ impl FrameGlyphBuffer {
         self.glyphs
             .iter()
             .find(|glyph| glyph.slot_id().is_some_and(|slot| slot == slot_id))
+    }
+
+    /// THE single source of truth for where a cursor is drawn: the pixel cell
+    /// rect `(x, y, width, height)` of the glyph occupying `slot_id`. When no
+    /// glyph occupies the slot (e.g. an empty line) the layout-supplied
+    /// `fallback` rect is returned. All cursor consumers -- the static draw, the
+    /// window-cursor draw, the slide-animation target, and effects -- resolve
+    /// their position through here so they cannot drift apart (the cursor's
+    /// grid-derived `PhysCursor`/`CursorItem` geometry is only an approximation
+    /// that diverges from the glyph under scaled fonts). Style- and bidi-aware
+    /// shaping (bar width, RTL alignment) is layered on top by the renderer.
+    pub fn cursor_cell_rect(
+        &self,
+        slot_id: DisplaySlotId,
+        fallback: (f32, f32, f32, f32),
+    ) -> (f32, f32, f32, f32) {
+        self.slot_glyph(slot_id)
+            .and_then(FrameGlyph::cell_rect)
+            .unwrap_or(fallback)
     }
 
     /// Add border

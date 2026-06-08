@@ -288,6 +288,46 @@ fn add_char_appends_char_glyph() {
 }
 
 #[test]
+fn cell_rect_returns_glyph_cell_and_none_for_non_cells() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
+    assert_eq!(buf.glyphs[0].cell_rect(), Some((30.0, 40.0, 18.0, 33.0)));
+    assert_eq!(buf.glyphs[0].cell_x(), Some(30.0));
+
+    // A border occupies no cursor cell.
+    buf.add_border(0.0, 0.0, 100.0, 100.0, Color::BLACK);
+    let border = buf.glyphs.last().expect("border glyph");
+    assert_eq!(border.cell_rect(), None);
+    assert_eq!(border.cell_x(), None);
+}
+
+#[test]
+fn cursor_cell_rect_resolves_slot_glyph_else_fallback() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
+    let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
+
+    // Slot occupied -> the glyph's actual cell, never the grid fallback.
+    assert_eq!(
+        buf.cursor_cell_rect(slot, (999.0, 999.0, 1.0, 1.0)),
+        (30.0, 40.0, 18.0, 33.0)
+    );
+
+    // No glyph on the slot -> the layout-supplied fallback rect.
+    let empty_slot = DisplaySlotId {
+        window_id: 7,
+        row: 9,
+        col: 9,
+    };
+    assert_eq!(
+        buf.cursor_cell_rect(empty_slot, (5.0, 6.0, 7.0, 8.0)),
+        (5.0, 6.0, 7.0, 8.0)
+    );
+}
+
+#[test]
 fn add_char_uses_current_face_attributes() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(1.0, 0.0, 0.0);
