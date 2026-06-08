@@ -4,6 +4,7 @@ use super::tls::{
     gnutls_peer_status_to_value,
 };
 use super::value::Value;
+use crate::emacs_core::builtins::builtin_gnutls_peer_status_warning_describe;
 
 const TEST_CERTIFICATE_PEM: &str = concat!(
     "-----BEGIN CERTIFICATE-----\n",
@@ -133,5 +134,24 @@ fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
             .as_utf8_str()
             .expect("utf-8 certificate details")
             .contains("Subject: CN=lists.for-our.info")
+    );
+}
+
+#[test]
+fn gnutls_peer_status_warning_descriptions_match_gnu() {
+    assert_eq!(
+        builtin_gnutls_peer_status_warning_describe(vec![Value::keyword(":unknown-ca")])
+            .expect("description"),
+        Value::string("the certificate was signed by an unknown and therefore untrusted authority")
+    );
+    assert_eq!(
+        builtin_gnutls_peer_status_warning_describe(vec![Value::keyword(":expired")])
+            .expect("description"),
+        Value::string("certificate has expired")
+    );
+    assert_eq!(
+        builtin_gnutls_peer_status_warning_describe(vec![Value::keyword(":not-a-warning")])
+            .expect("unknown warning"),
+        Value::NIL
     );
 }

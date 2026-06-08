@@ -71,13 +71,46 @@ pub(crate) fn builtin_gnutls_peer_status_warning_describe(args: Vec<Value>) -> E
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
-    if args[0].as_symbol_name().is_none() {
+    let Some(symbol) = args[0].as_symbol_name() else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[0]],
         ));
+    };
+    let Some(description) = gnutls_peer_status_warning_description(symbol) else {
+        return Ok(Value::NIL);
+    };
+    Ok(Value::string(description))
+}
+
+fn gnutls_peer_status_warning_description(symbol: &str) -> Option<&'static str> {
+    match symbol {
+        ":invalid" => Some("certificate could not be verified"),
+        ":revoked" => Some("certificate was revoked (CRL)"),
+        ":self-signed" => Some("certificate signer was not found (self-signed)"),
+        ":unknown-ca" => {
+            Some("the certificate was signed by an unknown and therefore untrusted authority")
+        }
+        ":not-ca" => Some("certificate signer is not a CA"),
+        ":insecure" => Some("certificate was signed with an insecure algorithm"),
+        ":not-activated" => Some("certificate is not yet activated"),
+        ":expired" => Some("certificate has expired"),
+        ":no-host-match" => Some("certificate host does not match hostname"),
+        ":signature-failure" => Some("certificate signature could not be verified"),
+        ":revocation-data-superseded" => {
+            Some("certificate revocation data are old and have been superseded")
+        }
+        ":revocation-data-issued-in-future" => {
+            Some("certificate revocation data have a future issue date")
+        }
+        ":signer-constraints-failure" => Some("certificate signer constraints were violated"),
+        ":purpose-mismatch" => Some("certificate does not match the intended purpose"),
+        ":missing-ocsp-status" => Some(
+            "certificate requires the server to send a OCSP certificate status, but no status was received",
+        ),
+        ":invalid-ocsp-status" => Some("the received OCSP certificate status is invalid"),
+        _ => None,
     }
-    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_gnutls_format_certificate(args: Vec<Value>) -> EvalResult {
