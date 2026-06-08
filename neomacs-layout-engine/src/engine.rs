@@ -1502,6 +1502,31 @@ fn apply_pending_string_faces(
     }
 }
 
+fn next_layout_string_source_item(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    source: &mut impl DisplayItemSource,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    base_face: &super::neovm_bridge::ResolvedFace,
+    string_face_cache: &mut std::collections::HashMap<Value, u32>,
+    current_face_id: &mut u32,
+) -> Option<crate::display_item::DisplayItem> {
+    let mut pending_faces = Vec::new();
+    let item = {
+        let mut resolver = LayoutStringFaceResolver {
+            face_resolver,
+            base_face,
+            string_face_cache,
+            current_face_id,
+            pending_faces: &mut pending_faces,
+        };
+        let mut context =
+            crate::display_source::DisplaySourceContext::with_face_resolver(&mut resolver);
+        source.next_item(&mut context)
+    };
+    apply_pending_string_faces(builder, &mut pending_faces);
+    item
+}
+
 impl crate::display_source::DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
     fn resolve_face_ref(
         &mut self,
@@ -1625,20 +1650,14 @@ fn render_overlay_string(
     };
 
     while *row < max_rows {
-        let mut pending_faces = Vec::new();
-        let item = {
-            let mut resolver = LayoutStringFaceResolver {
-                face_resolver,
-                base_face: overlay_base_face,
-                string_face_cache: &mut string_face_cache,
-                current_face_id,
-                pending_faces: &mut pending_faces,
-            };
-            let mut context =
-                crate::display_source::DisplaySourceContext::with_face_resolver(&mut resolver);
-            source.next_item(&mut context)
-        };
-        apply_pending_string_faces(builder, &mut pending_faces);
+        let item = next_layout_string_source_item(
+            builder,
+            &mut source,
+            face_resolver,
+            overlay_base_face,
+            &mut string_face_cache,
+            current_face_id,
+        );
         let Some(item) = item else {
             break;
         };
@@ -4274,24 +4293,13 @@ impl LayoutEngine {
                                 );
                                 let mut string_face_cache = std::collections::HashMap::new();
                                 loop {
-                                    let mut pending_faces = Vec::new();
-                                    let item = {
-                                        let mut resolver = LayoutStringFaceResolver {
-                                            face_resolver,
-                                            base_face: &current_resolved_face,
-                                            string_face_cache: &mut string_face_cache,
-                                            current_face_id: &mut current_face_id,
-                                            pending_faces: &mut pending_faces,
-                                        };
-                                        let mut context =
-                                            crate::display_source::DisplaySourceContext::with_face_resolver(
-                                                &mut resolver,
-                                            );
-                                        source.next_item(&mut context)
-                                    };
-                                    apply_pending_string_faces(
+                                    let item = next_layout_string_source_item(
                                         &mut self.matrix_builder,
-                                        &mut pending_faces,
+                                        &mut source,
+                                        face_resolver,
+                                        &current_resolved_face,
+                                        &mut string_face_cache,
+                                        &mut current_face_id,
                                     );
                                     let Some(item) = item else {
                                         break;
