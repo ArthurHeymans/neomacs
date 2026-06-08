@@ -2,9 +2,9 @@
 
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
-    DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, RenderFaceRef,
-    SourceSpan, glyphless_method_for_char,
+    DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
+    GlyphlessJoinerPolicy, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
 use crate::neovm_bridge::LayoutBufferView;
@@ -53,6 +53,110 @@ pub(crate) trait DisplayItemSource {
 
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DisplayReplacementBox {
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+}
+
+impl DisplayReplacementBox {
+    pub(crate) fn new(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
+        Self {
+            width_px: width_px.max(0.0),
+            height_px: height_px.max(0.0),
+            ascent_px: ascent_px.max(0.0),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferDisplayReplacementSource {
+    buffer_id: BufferId,
+    char_pos: i64,
+    byte_pos: usize,
+}
+
+impl BufferDisplayReplacementSource {
+    pub(crate) const fn new(buffer_id: BufferId, char_pos: i64, byte_pos: usize) -> Self {
+        Self {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        }
+    }
+
+    fn span(self) -> SourceSpan {
+        let start = CharPos0::new(self.char_pos.max(0) as usize);
+        let end = CharPos0::new(self.char_pos.saturating_add(1).max(0) as usize);
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(self.buffer_id, start, EmacsBytePos::new(self.byte_pos)),
+            DisplaySourcePosition::buffer(self.buffer_id, end, EmacsBytePos::new(self.byte_pos)),
+        )
+    }
+
+    pub(crate) fn item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
+        self.item_with_face(RenderFaceRef::FaceId(face_id), kind)
+    }
+
+    fn item_with_face(self, face: RenderFaceRef, kind: DisplayItemKind) -> DisplayItem {
+        DisplayItem::new(self.span(), face, kind)
+    }
+
+    pub(crate) fn stretch_item(self, face_id: u32, geometry: DisplayReplacementBox) -> DisplayItem {
+        self.item(
+            face_id,
+            DisplayItemKind::Stretch(DisplayStretch {
+                width: DisplayStretchWidth::Length(DisplayLength::Pixels(geometry.width_px)),
+                height: Some(DisplayLength::Pixels(geometry.height_px)),
+                ascent: Some(DisplayLength::Pixels(geometry.ascent_px)),
+            }),
+        )
+    }
+
+    pub(crate) fn source_mapped_text_item(
+        self,
+        face_id: u32,
+        text: impl Into<Box<str>>,
+    ) -> DisplayItem {
+        self.item(
+            face_id,
+            DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text)),
+        )
+    }
+}
+
+pub(crate) struct BufferDisplayReplacementStringSource<S> {
+    replacement_source: BufferDisplayReplacementSource,
+    source: S,
+}
+
+impl<S> BufferDisplayReplacementStringSource<S> {
+    pub(crate) const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
+        Self {
+            replacement_source,
+            source,
+        }
+    }
+}
+
+impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringSource<S> {
+    fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        let item = self.source.next_item(context)?;
+        let kind = match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(run.text))
+            }
+            kind => kind,
+        };
+        Some(self.replacement_source.item_with_face(item.face, kind))
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.replacement_source.span().start
+    }
 }
 
 pub(crate) struct LispStringSourceCursor {

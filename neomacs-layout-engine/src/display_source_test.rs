@@ -5,7 +5,7 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
-use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
 
@@ -46,6 +46,57 @@ fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) 
     let end = buffer.total_char_end_pos();
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     (buffer_id, snapshot, end)
+}
+
+#[test]
+fn buffer_display_replacement_source_builds_items_without_appending() {
+    let source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+
+    let stretch_item = source.stretch_item(42, DisplayReplacementBox::new(16.0, 9.0, 7.0));
+    assert_eq!(stretch_item.face, RenderFaceRef::FaceId(42));
+    assert!(matches!(
+        stretch_item.kind,
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(16.0)),
+            height: Some(DisplayLength::Pixels(9.0)),
+            ascent: Some(DisplayLength::Pixels(7.0)),
+        })
+    ));
+
+    let text_item = source.source_mapped_text_item(43, "fallback");
+    assert_eq!(text_item.face, RenderFaceRef::FaceId(43));
+    assert!(matches!(
+        text_item.kind,
+        DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
+    ));
+}
+
+#[test]
+fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
+    let _eval = Context::new();
+    let replacement_source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+    let string_source =
+        LispStringSourceCursor::new(1, Value::string("fallback"), RenderFaceRef::FaceId(42))
+            .expect("string source");
+    let mut source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
+    let mut context = DisplaySourceContext::empty();
+
+    let item = source.next_item(&mut context).expect("replacement item");
+
+    assert_eq!(item.face, RenderFaceRef::FaceId(42));
+    assert_eq!(
+        item.span.start,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12))
+    );
+    assert_eq!(
+        item.span.end,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(4), EmacsBytePos::new(12))
+    );
+    assert!(matches!(
+        item.kind,
+        DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
+    ));
+    assert!(source.next_item(&mut context).is_none());
 }
 
 #[test]

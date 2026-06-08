@@ -28,7 +28,10 @@ use crate::display_row_append::{
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
-use crate::display_source::DisplayItemSource;
+use crate::display_source::{
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayItemSource,
+    DisplayReplacementBox,
+};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -1297,143 +1300,6 @@ fn parse_display_height_factor(prop_val: &neovm_core::emacs_core::Value) -> Opti
         }
     }
     None
-}
-
-#[derive(Clone, Copy, Debug)]
-struct BufferDisplayReplacementSource {
-    buffer_id: BufferId,
-    char_pos: i64,
-    byte_pos: usize,
-}
-
-impl BufferDisplayReplacementSource {
-    const fn new(buffer_id: BufferId, char_pos: i64, byte_pos: usize) -> Self {
-        Self {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        }
-    }
-
-    fn span(self) -> crate::display_item::SourceSpan {
-        let start = CharPos0::new(self.char_pos.max(0) as usize);
-        let end = CharPos0::new(self.char_pos.saturating_add(1).max(0) as usize);
-        crate::display_item::SourceSpan::new(
-            crate::display_item::DisplaySourcePosition::buffer(
-                self.buffer_id,
-                start,
-                EmacsBytePos::new(self.byte_pos),
-            ),
-            crate::display_item::DisplaySourcePosition::buffer(
-                self.buffer_id,
-                end,
-                EmacsBytePos::new(self.byte_pos),
-            ),
-        )
-    }
-
-    fn item(
-        self,
-        face_id: u32,
-        kind: crate::display_item::DisplayItemKind,
-    ) -> crate::display_item::DisplayItem {
-        self.item_with_face(crate::display_item::RenderFaceRef::FaceId(face_id), kind)
-    }
-
-    fn item_with_face(
-        self,
-        face: crate::display_item::RenderFaceRef,
-        kind: crate::display_item::DisplayItemKind,
-    ) -> crate::display_item::DisplayItem {
-        crate::display_item::DisplayItem::new(self.span(), face, kind)
-    }
-
-    fn stretch_item(
-        self,
-        face_id: u32,
-        geometry: DisplayReplacementBox,
-    ) -> crate::display_item::DisplayItem {
-        self.item(
-            face_id,
-            crate::display_item::DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
-                width: crate::display_item::DisplayStretchWidth::Length(
-                    crate::display_item::DisplayLength::Pixels(geometry.width_px),
-                ),
-                height: Some(crate::display_item::DisplayLength::Pixels(
-                    geometry.height_px,
-                )),
-                ascent: Some(crate::display_item::DisplayLength::Pixels(
-                    geometry.ascent_px,
-                )),
-            }),
-        )
-    }
-
-    fn source_mapped_text_item(
-        self,
-        face_id: u32,
-        text: impl Into<Box<str>>,
-    ) -> crate::display_item::DisplayItem {
-        self.item(
-            face_id,
-            crate::display_item::DisplayItemKind::SourceMappedText(
-                crate::display_item::DisplaySourceMappedText::new(text),
-            ),
-        )
-    }
-}
-
-struct BufferDisplayReplacementStringSource<S> {
-    replacement_source: BufferDisplayReplacementSource,
-    source: S,
-}
-
-impl<S> BufferDisplayReplacementStringSource<S> {
-    const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
-        Self {
-            replacement_source,
-            source,
-        }
-    }
-}
-
-impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringSource<S> {
-    fn next_item(
-        &mut self,
-        context: &mut crate::display_source::DisplaySourceContext<'_>,
-    ) -> Option<crate::display_item::DisplayItem> {
-        let item = self.source.next_item(context)?;
-        let kind = match item.kind {
-            crate::display_item::DisplayItemKind::TextRun(run) => {
-                crate::display_item::DisplayItemKind::SourceMappedText(
-                    crate::display_item::DisplaySourceMappedText::new(run.text),
-                )
-            }
-            kind => kind,
-        };
-        Some(self.replacement_source.item_with_face(item.face, kind))
-    }
-
-    fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
-        self.replacement_source.span().start
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct DisplayReplacementBox {
-    width_px: f32,
-    height_px: f32,
-    ascent_px: f32,
-}
-
-impl DisplayReplacementBox {
-    fn new(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
-        Self {
-            width_px: width_px.max(0.0),
-            height_px: height_px.max(0.0),
-            ascent_px: ascent_px.max(0.0),
-        }
-    }
 }
 
 fn text_display_tab_policy(
