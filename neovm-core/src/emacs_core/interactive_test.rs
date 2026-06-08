@@ -5295,3 +5295,19 @@ fn command_remapping_resolves_remap_bindings_on_lisp_keymaps() {
         "OK nil"
     );
 }
+
+#[test]
+fn command_remapping_resolves_remap_bindings_across_composed_keymap_members() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(let ((map '(keymap
+                          (keymap (remap keymap (act . y-or-n-p-insert-y)))
+                          keymap
+                          (121 . act))))
+               (list (lookup-key map \"y\")
+                     (command-remapping 'act nil map)))"
+        ),
+        "OK (act y-or-n-p-insert-y)"
+    );
+}

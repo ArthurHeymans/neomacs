@@ -2530,6 +2530,13 @@ pub(crate) fn command_remapping_lookup_in_lisp_keymap(
 
         let car = cursor.cons_car();
         let cdr = cursor.cons_cdr();
+        if is_list_keymap(&car) {
+            if let Some(child) = command_remapping_lookup_in_lisp_keymap(&car, command) {
+                return Some(child);
+            }
+            cursor = cdr;
+            continue;
+        }
         if let Some(remap) = command_remapping_lookup_in_lisp_remap_entry(&car, command) {
             return Some(remap);
         }
