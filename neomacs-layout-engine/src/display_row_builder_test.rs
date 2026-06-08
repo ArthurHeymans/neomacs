@@ -191,6 +191,27 @@ fn display_row_progress_writer_reports_source_slots_for_text_run() {
 }
 
 #[test]
+fn display_row_progress_writer_uses_position_column_for_tabs() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 0.0, col: 2 },
+        80.0,
+    );
+
+    let progress = writer.push_item(text_item("\tb"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 5 });
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Stretch { width_cols: 2 }
+    );
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 
