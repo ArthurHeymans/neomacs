@@ -6618,6 +6618,22 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         tab_bar_text.contains("*tb-2*"),
         "expected tab-bar row to render tab captions from tab-bar keymap, got {tab_bar_text:?}; tabs={tabs_debug}; format={format_debug}; keymap={keymap_debug}"
     );
+    let tab_bar_glyphs = engine
+        .last_frame_display_state
+        .as_ref()
+        .map(|state| {
+            state
+                .frame_chrome_rows
+                .iter()
+                .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
+                .flat_map(|row| row.row.glyphs[1].iter())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    assert!(
+        tab_bar_glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        "expected tab-bar glyphs to carry display-row pixel widths: {tab_bar_glyphs:?}"
+    );
     let window_tab_bar_rows = engine
         .last_frame_display_state
         .as_ref()

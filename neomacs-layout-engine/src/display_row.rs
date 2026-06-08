@@ -13,13 +13,6 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
-pub(crate) enum DisplaySource {
-    PropertizedString(Value),
-    PlainString(String),
-}
-
-#[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub(crate) struct DisplayRowRequest {
     pub role: GlyphRowRole,
     pub x: f32,
@@ -29,7 +22,7 @@ pub(crate) struct DisplayRowRequest {
     pub window_id: i64,
     pub matrix_row: Option<usize>,
     pub base_face: ResolvedFace,
-    pub source: DisplaySource,
+    pub string: Value,
 }
 
 fn char_index_to_byte(text: &[u8], char_index: usize) -> usize {
@@ -373,79 +366,58 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
 }
 
 impl LayoutEngine {
-    /// Step 3.5: backend-routed twin of `render_display_row_spec`.
-    ///
-    /// Walks a pre-built `DisplayRowSpec` the same way
-    /// `render_display_row_spec` does, but emits every character and
-    /// stretch glyph through a `TtyDisplayBackend` before bridging
-    /// the produced `GlyphRow` back into the caller's
-    /// `GlyphMatrixBuilder` via `push_status_line_char` /
-    /// `push_status_line_stretch`.
-    ///
-    /// The bridging step is intentional architectural scaffolding:
-    /// the glyphs traverse the `DisplayBackend::produce_glyph` call
-    /// (exercising the trait-object boundary that GNU's `RIF`
-    /// abstracts), and the bridge feeds them into the matrix
-    /// builder in the same shape the old path produced. Step 3.6
-    /// will delete `push_status_line_*` and have the backend feed
-    /// the frame matrix directly.
-    ///
-    /// Preserves every 3.3′ behavior bit-for-bit: align-to gaps
-    /// emit `N` individual space glyphs (matching `TtyRif::glyph_to_char`
-    /// which renders a `Stretch` glyph as a single cell regardless of
-    /// `width_cols`), display-property stretch entries advance
-    /// `sl_x_offset` without producing a visible glyph, face runs
-    /// update `active_run_face` exactly as before.
-    pub(crate) fn render_display_row_spec_via_backend(
+    pub(crate) fn build_display_row_spec_from_request(
+        &mut self,
+        request: DisplayRowRequest,
+        next_face_id: &mut u32,
+        face_resolver: &FaceResolver,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Option<DisplayRowSpec> {
+        let char_w = request.base_face.font_char_width.max(1.0);
+        let ascent = request.base_face.font_ascent.max(request.height * 0.8);
+        self.build_propertized_display_row_spec(
+            request.x,
+            request.y,
+            request.width,
+            request.height,
+            request.window_id,
+            char_w,
+            ascent,
+            next_face_id,
+            &request.base_face,
+            request.string,
+            face_resolver,
+            symbol_values,
+            request.role,
+        )
+    }
+
+    pub(crate) fn render_display_row_spec_to_glyph_row(
         &mut self,
         spec: &DisplayRowSpec,
-        matrix_row: Option<usize>,
-        mut builder: Option<&mut crate::matrix_builder::GlyphMatrixBuilder>,
         mut on_progress: Option<&mut dyn FnMut(StatusLineOutputProgress)>,
-    ) -> Option<StatusLineOutputProgress> {
+    ) -> Option<(
+        neomacs_display_protocol::glyph_matrix::GlyphRow,
+        StatusLineOutputProgress,
+    )> {
         use crate::display_backend::{DisplayBackend, GlyphKind, TtyDisplayBackend};
         use neomacs_display_protocol::glyph_matrix::GlyphRow;
 
-        // Face registration on the matrix builder runs on the same
-        // schedule as the old path so the builder's face cache has
-        // the right entries when rasterization resolves face ids.
-        if let Some(ref mut b) = builder {
-            if let Some(row) = matrix_row {
-                b.begin_row(row, spec.role);
-                let row_ascent = if spec.face.font_ascent > 0.0 {
-                    spec.face.font_ascent
-                } else {
-                    spec.ascent
-                }
-                .max(0.0)
-                .min(spec.height.max(1.0));
-                b.set_current_row_metrics(spec.y, spec.height, row_ascent);
-            } else if b.begin_status_line_row(spec.role) {
-                let row_ascent = if spec.face.font_ascent > 0.0 {
-                    spec.face.font_ascent
-                } else {
-                    spec.ascent
-                }
-                .max(0.0)
-                .min(spec.height.max(1.0));
-                b.set_current_window_last_row_metrics(spec.y, spec.height, row_ascent);
-            }
-        }
-
-        {
-            let rendered = spec.face.render_face();
-            if let Some(ref mut b) = builder {
-                b.insert_face(spec.face.face_id, rendered);
-            }
-        }
-
         if spec.text.is_empty() {
-            return Some(StatusLineOutputProgress {
-                end_x: 0.0,
-                end_col: 0,
-                y: spec.y,
-                height: spec.height,
-            });
+            let mut row = GlyphRow::new(spec.role);
+            row.enabled = true;
+            row.mode_line = true;
+            row.height_px = spec.height.max(1.0);
+            row.ascent_px = spec.face.font_ascent.max(0.0).min(row.height_px);
+            return Some((
+                row,
+                StatusLineOutputProgress {
+                    end_x: 0.0,
+                    end_col: 0,
+                    y: spec.y,
+                    height: spec.height,
+                },
+            ));
         }
 
         // The backend collects all character / stretch glyphs for
@@ -561,9 +533,6 @@ impl LayoutEngine {
                     let run = &spec.face_runs[current_run];
                     if run.fg != 0 || run.bg != 0 {
                         if let Some(run_face) = spec.run_faces.get(&run.face_id) {
-                            if let Some(ref mut b) = builder {
-                                b.insert_face(run_face.face_id, run_face.render_face());
-                            }
                             current_render_face = run_face.render_face();
                         } else if run.face_id != 0 {
                             let rf = spec.face.with_color_override(
@@ -571,9 +540,6 @@ impl LayoutEngine {
                                 Some(Color::from_pixel(run.fg)),
                                 Some(Color::from_pixel(run.bg)),
                             );
-                            if let Some(ref mut b) = builder {
-                                b.insert_face(run.face_id, rf.render_face());
-                            }
                             current_render_face = rf.render_face();
                         } else {
                             current_render_face = spec.face.render_face();
@@ -635,24 +601,68 @@ impl LayoutEngine {
         let mut flush_row = GlyphRow::new(spec.role);
         flush_row.enabled = true;
         flush_row.mode_line = true;
+        flush_row.pixel_y = spec.y;
+        flush_row.height_px = spec.height.max(1.0);
+        flush_row.ascent_px = spec.face.font_ascent.max(0.0).min(flush_row.height_px);
         backend.finish_row(flush_row);
-        if let Some(ref mut b) = builder {
-            for mut row in backend.take_rows() {
-                let text_glyphs = std::mem::take(&mut row.glyphs[1]);
-                if matrix_row.is_some() {
-                    b.install_current_row_glyphs(text_glyphs);
-                    b.end_row();
-                } else {
-                    b.install_status_line_row_glyphs(text_glyphs);
-                }
-            }
-        }
-        Some(StatusLineOutputProgress {
+        let mut rows = backend.take_rows();
+        let mut row = rows.pop()?;
+        crate::matrix_builder::GlyphMatrixBuilder::normalize_external_row(&mut row);
+        let progress = StatusLineOutputProgress {
             end_x: sl_x_offset.min(spec.width).max(0.0),
             end_col: (sl_x_offset / spec.char_width.max(1.0)).round().max(0.0) as i64,
             y: spec.y,
             height: spec.height,
-        })
+        };
+        Some((row, progress))
+    }
+
+    pub(crate) fn render_display_row_spec_via_backend(
+        &mut self,
+        spec: &DisplayRowSpec,
+        matrix_row: Option<usize>,
+        mut builder: Option<&mut crate::matrix_builder::GlyphMatrixBuilder>,
+        on_progress: Option<&mut dyn FnMut(StatusLineOutputProgress)>,
+    ) -> Option<StatusLineOutputProgress> {
+        if let Some(ref mut b) = builder {
+            if let Some(row) = matrix_row {
+                b.begin_row(row, spec.role);
+                let row_ascent = if spec.face.font_ascent > 0.0 {
+                    spec.face.font_ascent
+                } else {
+                    spec.ascent
+                }
+                .max(0.0)
+                .min(spec.height.max(1.0));
+                b.set_current_row_metrics(spec.y, spec.height, row_ascent);
+            } else if b.begin_status_line_row(spec.role) {
+                let row_ascent = if spec.face.font_ascent > 0.0 {
+                    spec.face.font_ascent
+                } else {
+                    spec.ascent
+                }
+                .max(0.0)
+                .min(spec.height.max(1.0));
+                b.set_current_window_last_row_metrics(spec.y, spec.height, row_ascent);
+            }
+
+            b.insert_face(spec.face.face_id, spec.face.render_face());
+            for run_face in spec.run_faces.values() {
+                b.insert_face(run_face.face_id, run_face.render_face());
+            }
+        }
+
+        let (mut row, progress) = self.render_display_row_spec_to_glyph_row(spec, on_progress)?;
+        if let Some(ref mut b) = builder {
+            let text_glyphs = std::mem::take(&mut row.glyphs[1]);
+            if matrix_row.is_some() {
+                b.install_current_row_glyphs(text_glyphs);
+                b.end_row();
+            } else {
+                b.install_status_line_row_glyphs(text_glyphs);
+            }
+        }
+        Some(progress)
     }
 
     /// Step 3.5 entry point: equivalent to `render_rust_status_line_value`

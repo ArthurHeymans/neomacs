@@ -309,13 +309,14 @@ fn eval_status_line_format_value(
     }
 }
 
-fn tab_bar_menu_item_caption(entry: Value) -> Option<String> {
+fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
     if let Some(items) = list_to_vec(&entry) {
         if items
             .get(1)
             .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
         {
-            return items.get(2)?.as_runtime_string_owned();
+            let caption = *items.get(2)?;
+            return caption.is_string().then_some(caption);
         }
     }
 
@@ -330,11 +331,12 @@ fn tab_bar_menu_item_caption(entry: Value) -> Option<String> {
     {
         return None;
     }
-    items.get(1)?.as_runtime_string_owned()
+    let caption = *items.get(1)?;
+    caption.is_string().then_some(caption)
 }
 
 struct BuiltTabBar {
-    text: String,
+    text: Value,
     items: Vec<neomacs_display_protocol::ui_types::TabBarItem>,
 }
 
@@ -371,7 +373,7 @@ fn build_tab_bar_display(
         .ok()
         .and_then(|keymap| list_to_vec(&keymap))
         .and_then(|entries| {
-            let mut text = String::new();
+            let mut text_values = Vec::new();
             let mut items = Vec::new();
             for (index, entry) in entries.iter().enumerate() {
                 if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
@@ -383,10 +385,11 @@ fn build_tab_bar_display(
                 }
 
                 if let Some(caption) = tab_bar_menu_item_caption(*entry) {
-                    text.push_str(&caption);
+                    let label = caption.as_runtime_string_owned().unwrap_or_default();
+                    text_values.push(caption);
                     items.push(neomacs_display_protocol::ui_types::TabBarItem {
                         index: items.len() as u32,
-                        label: caption,
+                        label,
                         help: String::new(),
                         enabled: true,
                         selected: false,
@@ -395,7 +398,16 @@ fn build_tab_bar_display(
                 }
             }
 
-            (!text.is_empty()).then_some(BuiltTabBar { text, items })
+            if text_values.is_empty() {
+                return None;
+            }
+            let mut concat_form = Vec::with_capacity(text_values.len() + 1);
+            concat_form.push(Value::symbol("concat"));
+            concat_form.extend(text_values);
+            let text = evaluator.eval_form(Value::list(concat_form)).ok()?;
+            text.as_runtime_string_owned()
+                .is_some_and(|text| !text.is_empty())
+                .then_some(BuiltTabBar { text, items })
         });
 
     if let Some(frame) = saved_frame {
@@ -7150,55 +7162,55 @@ impl LayoutEngine {
         frame_params: &FrameParams,
         tab_bar_height: f32,
     ) {
-        use crate::display_backend::{
-            DisplayBackend, GuiDisplayBackend, TtyDisplayBackend, display_text_plain_via_backend,
-        };
+        use crate::display_row::DisplayRowRequest;
 
         let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64) else {
             return;
         };
 
         let width = frame_params.width;
-        let tab_bar_face = face_resolver.resolve_named_face("tab-bar");
-        let face_id = tab_bar_face.face_id;
-
-        let sl_face = self.realize_status_line_face(
-            face_id,
-            &tab_bar_face,
-            frame_params.char_width,
-            frame_params.char_height * 0.8,
-            tab_bar_height,
-        );
-        let rendered_face = sl_face.render_face();
-        self.matrix_builder
-            .insert_face(face_id, rendered_face.clone());
-        let char_width = self.status_line_char_width(&sl_face, frame_params.char_width);
-
-        // Dispatch between GUI (cosmic-text) and TTY (cell-grid)
-        // backends based on whether cosmic metrics are enabled on
-        // this LayoutEngine.
-        let mut tty_backend = TtyDisplayBackend::new();
-        let mut gui_backend = self.font_metrics.as_mut().map(GuiDisplayBackend::new);
-        let backend: &mut dyn DisplayBackend = match gui_backend {
-            Some(ref mut g) => g,
-            None => &mut tty_backend,
+        let mut tab_bar_face = face_resolver.resolve_named_face("tab-bar");
+        if tab_bar_face.font_char_width <= 0.0 {
+            tab_bar_face.font_char_width = frame_params.char_width;
+        }
+        if tab_bar_face.font_ascent <= 0.0 {
+            tab_bar_face.font_ascent = frame_params.char_height * 0.8;
+        }
+        let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
+        let request = DisplayRowRequest {
+            role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
+            x: 0.0,
+            y: 0.0,
+            width,
+            height: tab_bar_height,
+            window_id: frame_window_id,
+            matrix_row: None,
+            base_face: tab_bar_face,
+            string: tab_bar.text,
         };
-        display_text_plain_via_backend(backend, &tab_bar.text, &rendered_face, char_width, width);
-        let glyphs: Vec<_> = backend.pending_glyphs().to_vec();
-        if glyphs.is_empty() {
+        let Some(spec) = self.build_display_row_spec_from_request(
+            request,
+            &mut current_face_id,
+            face_resolver,
+            std::collections::HashMap::new(),
+        ) else {
             return;
+        };
+        self.frame_face_id_counter = current_face_id;
+        self.matrix_builder
+            .insert_face(spec.face.face_id, spec.face.render_face());
+        for run_face in spec.run_faces.values() {
+            self.matrix_builder
+                .insert_face(run_face.face_id, run_face.render_face());
         }
 
-        let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(
-            neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
-        );
-        row.enabled = true;
-        row.mode_line = true;
-        row.pixel_y = 0.0;
-        row.height_px = tab_bar_height.max(1.0);
-        row.ascent_px = sl_face.font_ascent.max(0.0).min(row.height_px);
-        row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()] = glyphs;
-        crate::matrix_builder::GlyphMatrixBuilder::normalize_external_row(&mut row);
+        let Some((mut row, _progress)) = self.render_display_row_spec_to_glyph_row(&spec, None)
+        else {
+            return;
+        };
+        if row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].is_empty() {
+            return;
+        }
 
         let chrome_before_tab = frame_params.menu_bar_height
             + frame_params.tool_bar_height
@@ -7211,6 +7223,7 @@ impl LayoutEngine {
             0
         };
         let tab_bar_y = chrome_before_tab;
+        row.pixel_y = tab_bar_y;
 
         self.pending_frame_chrome_rows.push(
             neomacs_display_protocol::glyph_matrix::FrameChromeRow {

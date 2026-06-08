@@ -28,7 +28,7 @@ fn display_row_request_accepts_window_chrome_roles() {
             window_id: 7,
             matrix_row: Some(0),
             base_face: base_face(),
-            source: DisplaySource::PropertizedString(Value::string("row")),
+            string: Value::string("row"),
         };
 
         assert_eq!(request.role, role);
@@ -39,6 +39,7 @@ fn display_row_request_accepts_window_chrome_roles() {
 
 #[test]
 fn display_row_request_accepts_frame_and_minibuffer_roles() {
+    let _eval = Context::new();
     for role in [GlyphRowRole::TabBar, GlyphRowRole::Minibuffer] {
         let request = DisplayRowRequest {
             role,
@@ -49,7 +50,7 @@ fn display_row_request_accepts_frame_and_minibuffer_roles() {
             window_id: 0,
             matrix_row: None,
             base_face: base_face(),
-            source: DisplaySource::PlainString("plain".to_string()),
+            string: Value::string("plain"),
         };
 
         assert_eq!(request.role, role);
@@ -58,22 +59,28 @@ fn display_row_request_accepts_frame_and_minibuffer_roles() {
 }
 
 #[test]
-fn display_source_keeps_plain_and_propertized_inputs_distinct() {
+fn display_row_request_represents_plain_text_as_lisp_string_without_properties() {
     let _eval = Context::new();
-    let plain = DisplaySource::PlainString("plain".to_string());
-    let propertized = DisplaySource::PropertizedString(Value::string("prop"));
+    let request = DisplayRowRequest {
+        role: GlyphRowRole::TabBar,
+        x: 0.0,
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        window_id: 0,
+        matrix_row: None,
+        base_face: base_face(),
+        string: Value::string("plain"),
+    };
 
-    match plain {
-        DisplaySource::PlainString(text) => assert_eq!(text, "plain"),
-        DisplaySource::PropertizedString(_) => panic!("expected plain source"),
-    }
-
-    match propertized {
-        DisplaySource::PropertizedString(value) => {
-            assert_eq!(value.as_runtime_string_owned().as_deref(), Some("prop"));
-        }
-        DisplaySource::PlainString(_) => panic!("expected propertized source"),
-    }
+    assert_eq!(
+        request.string.as_runtime_string_owned().as_deref(),
+        Some("plain")
+    );
+    assert!(
+        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(request.string)
+            .is_none()
+    );
 }
 
 #[test]
@@ -116,4 +123,84 @@ fn render_propertized_display_row_preserves_pixel_widths() {
         glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
         "display row glyphs should carry measured/fallback pixel widths: {glyphs:?}"
     );
+}
+
+#[test]
+fn render_display_row_spec_to_glyph_row_returns_role_and_pixels() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let rendered = Value::string("TB");
+    let mut next_face_id = 1;
+    let spec = engine
+        .build_propertized_display_row_spec(
+            0.0,
+            0.0,
+            80.0,
+            16.0,
+            1,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            rendered,
+            &resolver,
+            std::collections::HashMap::new(),
+            GlyphRowRole::TabBar,
+        )
+        .expect("display row spec");
+
+    let (row, progress) = engine
+        .render_display_row_spec_to_glyph_row(&spec, None)
+        .expect("glyph row");
+
+    assert_eq!(row.role, GlyphRowRole::TabBar);
+    assert!(row.enabled);
+    assert_eq!(row.glyphs[1].len(), 2);
+    assert!(
+        row.glyphs[1].iter().all(|glyph| glyph.pixel_width > 0.0),
+        "direct display row glyphs should carry pixel widths: {:?}",
+        row.glyphs[1]
+    );
+    assert!(progress.end_x > 0.0);
+}
+
+#[test]
+fn render_plain_display_row_request_returns_glyph_row() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let request = DisplayRowRequest {
+        role: GlyphRowRole::TabBar,
+        x: 0.0,
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        window_id: 0,
+        matrix_row: None,
+        base_face,
+        string: Value::string("tab"),
+    };
+    let mut next_face_id = 1;
+    let spec = engine
+        .build_display_row_spec_from_request(
+            request,
+            &mut next_face_id,
+            &resolver,
+            std::collections::HashMap::new(),
+        )
+        .expect("display row request spec");
+    let (row, progress) = engine
+        .render_display_row_spec_to_glyph_row(&spec, None)
+        .expect("glyph row");
+
+    assert_eq!(row.role, GlyphRowRole::TabBar);
+    assert_eq!(row.glyphs[1].len(), 3);
+    assert!(row.glyphs[1].iter().all(|glyph| glyph.pixel_width > 0.0));
+    assert!(progress.end_x > 0.0);
 }
