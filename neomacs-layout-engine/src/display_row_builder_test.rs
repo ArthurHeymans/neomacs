@@ -45,6 +45,18 @@ fn glyphless_item(ch: char, method: GlyphlessMethod) -> DisplayItem {
     )
 }
 
+fn stretch_item(width: DisplayLength) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(2),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(width),
+            height: None,
+            ascent: None,
+        }),
+    )
+}
+
 fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
     let mut text = String::new();
     for glyph in row.glyphs[GlyphArea::Text.index()]
@@ -139,6 +151,46 @@ fn display_row_progress_writer_uses_thin_space_glyphless_width() {
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
     assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{2009}' });
     assert_eq!(glyph.pixel_width, 2.0);
+}
+
+#[test]
+fn display_row_progress_writer_clips_glyphless_before_row_mutation() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 40.0, col: 5 },
+        80.0,
+    );
+
+    let progress = writer.push_item(glyphless_item('\u{fff0}', GlyphlessMethod::HexCode));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 40.0, col: 5 });
+    assert!(progress.slots.is_empty());
+    assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
+    assert!(!row.displays_text);
+}
+
+#[test]
+fn display_row_progress_writer_clips_stretch_before_row_mutation() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 64.0, col: 8 },
+        80.0,
+    );
+
+    let progress = writer.push_item(stretch_item(DisplayLength::Pixels(24.0)));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 64.0, col: 8 });
+    assert!(progress.slots.is_empty());
+    assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
+    assert!(!row.displays_text);
 }
 
 #[test]

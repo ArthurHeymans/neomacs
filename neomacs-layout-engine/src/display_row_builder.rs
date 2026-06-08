@@ -152,6 +152,32 @@ impl DisplayRowWriteMetrics {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DisplayRowGlyphCheckpoint {
+    area_lengths: [usize; 3],
+    displays_text: bool,
+}
+
+impl DisplayRowGlyphCheckpoint {
+    fn capture(row: &GlyphRow) -> Self {
+        Self {
+            area_lengths: [
+                row.glyphs[GlyphArea::LeftMargin.index()].len(),
+                row.glyphs[GlyphArea::Text.index()].len(),
+                row.glyphs[GlyphArea::RightMargin.index()].len(),
+            ],
+            displays_text: row.displays_text,
+        }
+    }
+
+    fn restore(self, row: &mut GlyphRow) {
+        row.glyphs[GlyphArea::LeftMargin.index()].truncate(self.area_lengths[0]);
+        row.glyphs[GlyphArea::Text.index()].truncate(self.area_lengths[1]);
+        row.glyphs[GlyphArea::RightMargin.index()].truncate(self.area_lengths[2]);
+        row.displays_text = self.displays_text;
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DisplayRowPosition {
     pub(crate) x_px: f32,
@@ -353,7 +379,18 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             kind => {
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
+                let checkpoint = DisplayRowGlyphCheckpoint::capture(self.writer.row);
                 let written = self.writer.push_item(DisplayItem::new(span, face, kind));
+                if written.width_px > 0.0 && self.position.x_px + written.width_px > self.max_x_px {
+                    checkpoint.restore(self.writer.row);
+                    return DisplayRowAppendProgress {
+                        start,
+                        end: self.position,
+                        metrics,
+                        status: DisplayRowAppendStatus::Clipped,
+                        slots,
+                    };
+                }
                 if written.width_px > 0.0 || written.width_cols > 0 {
                     slots.push(DisplayRowGlyphSlot {
                         source: slot_source,
