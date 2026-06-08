@@ -2667,8 +2667,7 @@ impl LayoutEngine {
                                 // line; `mini_rows_used` already reflects any real
                                 // (multi-line) message, so a genuine tall message
                                 // is preserved by the `used < allocated` guard.
-                                let buf_id =
-                                    neovm_core::buffer::BufferId(mini_params.buffer_id);
+                                let buf_id = neovm_core::buffer::BufferId(mini_params.buffer_id);
                                 let visible_region_empty = evaluator
                                     .buffer_manager()
                                     .get(buf_id)

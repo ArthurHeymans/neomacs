@@ -940,7 +940,8 @@ impl GlyphMatrixBuilder {
     pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
         let original_slot_id = cursor.slot_id;
-        let visual_col = self.resolve_cursor_visual_col(cursor.window_id, cursor.row, cursor.charpos);
+        let visual_col =
+            self.resolve_cursor_visual_col(cursor.window_id, cursor.row, cursor.charpos);
 
         if let Some(col) = visual_col
             && col != cursor.col

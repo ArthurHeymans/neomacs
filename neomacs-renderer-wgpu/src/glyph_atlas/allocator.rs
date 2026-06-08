@@ -150,13 +150,19 @@ mod tests {
         // Fill the first shelf (x = 0, 12, 24, 36; the next would be 48+12 > 50).
         let fits = page_size / alloc_w;
         for _ in 0..fits {
-            alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+            alloc
+                .allocate(PixelSize::new(glyph_w, 10).unwrap())
+                .unwrap();
         }
 
         // This allocation wraps to a new shelf at (0, new_y)...
-        let wrapped = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+        let wrapped = alloc
+            .allocate(PixelSize::new(glyph_w, 10).unwrap())
+            .unwrap();
         // ...and this one must land to its right on the same shelf, not on top.
-        let next = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+        let next = alloc
+            .allocate(PixelSize::new(glyph_w, 10).unwrap())
+            .unwrap();
 
         assert_eq!(
             wrapped.allocation_rect.y(),
