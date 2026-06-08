@@ -479,11 +479,13 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
-        self.current_matrix
-            .as_ref()
-            .and_then(|matrix| matrix.rows.get(self.current_row))
-            .cloned()
+    pub(crate) fn with_current_row_mut<R>(
+        &mut self,
+        f: impl FnOnce(&mut GlyphRow) -> R,
+    ) -> Option<R> {
+        let matrix = self.current_matrix.as_mut()?;
+        let row = matrix.rows.get_mut(self.current_row)?;
+        Some(f(row))
     }
 
     /// Install a complete row whose glyph order and row-level metadata were

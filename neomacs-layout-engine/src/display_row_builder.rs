@@ -39,24 +39,16 @@ pub(crate) struct DisplayRowBuilder<'a> {
     glyph_measurer: Option<&'a mut dyn DisplayGlyphMeasurer>,
 }
 
+pub(crate) struct DisplayRowWriter<'layout, 'row, 'measurer> {
+    layout: &'layout DisplayRowLayout,
+    row: &'row mut GlyphRow,
+    glyph_measurer: Option<&'measurer mut dyn DisplayGlyphMeasurer>,
+}
+
 impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);
         row.enabled = true;
-        row.pixel_y = layout.y_px;
-        row.height_px = layout.height_px.max(1.0);
-        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
-        Self {
-            layout,
-            row,
-            glyph_measurer: None,
-        }
-    }
-
-    pub(crate) fn from_row(layout: DisplayRowLayout, mut row: GlyphRow) -> Self {
-        row.enabled = true;
-        row.role = layout.role;
-        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
         row.pixel_y = layout.y_px;
         row.height_px = layout.height_px.max(1.0);
         row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
@@ -78,14 +70,66 @@ impl<'a> DisplayRowBuilder<'a> {
         builder
     }
 
-    pub(crate) fn from_row_with_glyph_measurer(
-        layout: DisplayRowLayout,
-        row: GlyphRow,
-        glyph_measurer: &'a mut dyn DisplayGlyphMeasurer,
+    pub(crate) fn push_item(&mut self, item: DisplayItem) {
+        if let Some(glyph_measurer) = self.glyph_measurer.as_deref_mut() {
+            let mut writer =
+                DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
+            writer.push_item(item);
+        } else {
+            let mut writer = DisplayRowWriter::new(&self.layout, &mut self.row);
+            writer.push_item(item);
+        }
+    }
+
+    pub(crate) fn push_source(
+        &mut self,
+        source: &mut impl DisplayItemSource,
+        context: &mut DisplaySourceContext<'_>,
+    ) {
+        while let Some(item) = source.next_item(context) {
+            self.push_item(item);
+        }
+    }
+
+    pub(crate) fn finish(mut self) -> GlyphRow {
+        GlyphMatrixBuilder::normalize_external_row(&mut self.row);
+        self.row
+    }
+}
+
+impl<'layout, 'row> DisplayRowWriter<'layout, 'row, '_> {
+    pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
+        row.enabled = true;
+        row.role = layout.role;
+        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
+        row.pixel_y = layout.y_px;
+        row.height_px = layout.height_px.max(1.0);
+        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        Self {
+            layout,
+            row,
+            glyph_measurer: None,
+        }
+    }
+}
+
+impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
+    pub(crate) fn with_glyph_measurer(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
     ) -> Self {
-        let mut builder = Self::from_row(layout, row);
-        builder.glyph_measurer = Some(glyph_measurer);
-        builder
+        row.enabled = true;
+        row.role = layout.role;
+        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
+        row.pixel_y = layout.y_px;
+        row.height_px = layout.height_px.max(1.0);
+        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        Self {
+            layout,
+            row,
+            glyph_measurer: Some(glyph_measurer),
+        }
     }
 
     pub(crate) fn push_item(&mut self, item: DisplayItem) {
@@ -139,25 +183,6 @@ impl<'a> DisplayRowBuilder<'a> {
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }
-    }
-
-    pub(crate) fn push_source(
-        &mut self,
-        source: &mut impl DisplayItemSource,
-        context: &mut DisplaySourceContext<'_>,
-    ) {
-        while let Some(item) = source.next_item(context) {
-            self.push_item(item);
-        }
-    }
-
-    pub(crate) fn finish(mut self) -> GlyphRow {
-        GlyphMatrixBuilder::normalize_external_row(&mut self.row);
-        self.row
-    }
-
-    pub(crate) fn finish_preserving_order(self) -> GlyphRow {
-        self.row
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {

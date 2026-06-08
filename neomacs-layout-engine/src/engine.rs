@@ -1359,22 +1359,19 @@ fn append_display_item_to_current_row_with_shared_builder(
     item: crate::display_item::DisplayItem,
     glyph_measurer: Option<&mut dyn crate::display_row_builder::DisplayGlyphMeasurer>,
 ) -> Option<()> {
-    let Some(row) = builder.current_row_snapshot() else {
-        return None;
-    };
-    let mut row_builder = if let Some(glyph_measurer) = glyph_measurer {
-        crate::display_row_builder::DisplayRowBuilder::from_row_with_glyph_measurer(
-            layout,
-            row,
-            glyph_measurer,
-        )
-    } else {
-        crate::display_row_builder::DisplayRowBuilder::from_row(layout, row)
-    };
-    row_builder.push_item(item);
-    let row = row_builder.finish_preserving_order();
-    builder.install_prebuilt_current_row(&row);
-    Some(())
+    builder.with_current_row_mut(|row| {
+        if let Some(glyph_measurer) = glyph_measurer {
+            let mut writer = crate::display_row_builder::DisplayRowWriter::with_glyph_measurer(
+                &layout,
+                row,
+                glyph_measurer,
+            );
+            writer.push_item(item);
+        } else {
+            let mut writer = crate::display_row_builder::DisplayRowWriter::new(&layout, row);
+            writer.push_item(item);
+        }
+    })
 }
 
 struct SingleGlyphAdvance {

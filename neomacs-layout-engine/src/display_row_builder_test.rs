@@ -95,6 +95,21 @@ fn display_row_builder_emits_tab_as_stretch_to_next_tab_stop() {
 }
 
 #[test]
+fn display_row_writer_appends_items_to_existing_row_tab_context() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    crate::matrix_builder::GlyphMatrixBuilder::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
+
+    let row_layout = layout();
+    let mut writer = DisplayRowWriter::new(&row_layout, &mut row);
+    writer.push_item(text_item("a\tb"));
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(row_text(&row), "xa  b");
+    assert_eq!(glyphs[2].glyph_type, GlyphType::Stretch { width_cols: 2 });
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 
