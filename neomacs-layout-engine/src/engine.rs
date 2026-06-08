@@ -1490,7 +1490,7 @@ struct TextRowAppendOutput {
 }
 
 #[derive(Clone)]
-struct BodyTextRowAppendFrame {
+struct TextRowAppendFrame {
     row: usize,
     row_y: f32,
     glyph_y: f32,
@@ -1506,9 +1506,9 @@ struct BodyTextRowAppendFrame {
     tab_policy: DisplayTabPolicy,
 }
 
-impl BodyTextRowAppendFrame {
-    fn at(self, position: DisplayRowPosition, face_id: u32) -> BodyTextRowAppendContext {
-        BodyTextRowAppendContext {
+impl TextRowAppendFrame {
+    fn at(self, position: DisplayRowPosition, face_id: u32) -> TextRowAppendContext {
+        TextRowAppendContext {
             row: self.row,
             row_y: self.row_y,
             glyph_y: self.glyph_y,
@@ -1529,7 +1529,7 @@ impl BodyTextRowAppendFrame {
     }
 }
 
-struct BodyTextRowAppendContext {
+struct TextRowAppendContext {
     row: usize,
     row_y: f32,
     glyph_y: f32,
@@ -1549,7 +1549,7 @@ struct BodyTextRowAppendContext {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BodyTextAppendKind {
+enum TextRowAppendKind {
     SourceText,
     Tab,
     ControlChar,
@@ -1559,47 +1559,47 @@ enum BodyTextAppendKind {
     DisplayReplacementString,
 }
 
-struct BodyTextRowAppendSpec {
+struct TextRowAppendSpec {
     layout: DisplayRowLayout,
     position: DisplayRowPosition,
     max_x: f32,
     output: TextRowAppendOutput,
 }
 
-impl BodyTextRowAppendContext {
-    fn append_spec(&self, kind: BodyTextAppendKind) -> BodyTextRowAppendSpec {
+impl TextRowAppendContext {
+    fn append_spec(&self, kind: TextRowAppendKind) -> TextRowAppendSpec {
         let char_width = match kind {
-            BodyTextAppendKind::Tab | BodyTextAppendKind::DisplayReplacementString => {
+            TextRowAppendKind::Tab | TextRowAppendKind::DisplayReplacementString => {
                 self.face_space_width
             }
-            BodyTextAppendKind::SourceText
-            | BodyTextAppendKind::ControlChar
-            | BodyTextAppendKind::SourceMappedText
-            | BodyTextAppendKind::Glyphless
-            | BodyTextAppendKind::DisplayReplacement => self.face_char_width,
+            TextRowAppendKind::SourceText
+            | TextRowAppendKind::ControlChar
+            | TextRowAppendKind::SourceMappedText
+            | TextRowAppendKind::Glyphless
+            | TextRowAppendKind::DisplayReplacement => self.face_char_width,
         };
         let max_x = match kind {
-            BodyTextAppendKind::Tab => f32::INFINITY,
-            BodyTextAppendKind::ControlChar => {
+            TextRowAppendKind::Tab => f32::INFINITY,
+            TextRowAppendKind::ControlChar => {
                 self.content_x + (self.text_width - self.line_number_width)
             }
-            BodyTextAppendKind::SourceText
-            | BodyTextAppendKind::SourceMappedText
-            | BodyTextAppendKind::Glyphless
-            | BodyTextAppendKind::DisplayReplacement
-            | BodyTextAppendKind::DisplayReplacementString => self.content_x + self.avail_width,
+            TextRowAppendKind::SourceText
+            | TextRowAppendKind::SourceMappedText
+            | TextRowAppendKind::Glyphless
+            | TextRowAppendKind::DisplayReplacement
+            | TextRowAppendKind::DisplayReplacementString => self.content_x + self.avail_width,
         };
         let output_height = match kind {
-            BodyTextAppendKind::SourceText
-            | BodyTextAppendKind::Glyphless
-            | BodyTextAppendKind::DisplayReplacement
-            | BodyTextAppendKind::DisplayReplacementString => self.face_height,
-            BodyTextAppendKind::Tab
-            | BodyTextAppendKind::ControlChar
-            | BodyTextAppendKind::SourceMappedText => self.default_row_height,
+            TextRowAppendKind::SourceText
+            | TextRowAppendKind::Glyphless
+            | TextRowAppendKind::DisplayReplacement
+            | TextRowAppendKind::DisplayReplacementString => self.face_height,
+            TextRowAppendKind::Tab
+            | TextRowAppendKind::ControlChar
+            | TextRowAppendKind::SourceMappedText => self.default_row_height,
         };
 
-        BodyTextRowAppendSpec {
+        TextRowAppendSpec {
             layout: text_display_row_layout(
                 self.row_y,
                 self.avail_width,
@@ -1637,9 +1637,9 @@ fn append_text_row_item(
     Some((progress, position))
 }
 
-fn append_body_text_row_item(
+fn append_text_row_spec_item(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    spec: &BodyTextRowAppendSpec,
+    spec: &TextRowAppendSpec,
     item: crate::display_item::DisplayItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     append_text_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
@@ -1664,11 +1664,11 @@ fn append_measured_text_row_item(
     Some((progress, position))
 }
 
-fn append_body_text_row_item_and_emit(
+fn append_text_row_spec_item_and_emit(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    spec: BodyTextRowAppendSpec,
+    spec: TextRowAppendSpec,
     item: crate::display_item::DisplayItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     append_text_row_item_and_emit(
@@ -1683,11 +1683,11 @@ fn append_body_text_row_item_and_emit(
     )
 }
 
-fn append_measured_body_text_row_item_and_emit(
+fn append_measured_text_row_spec_item_and_emit(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    spec: BodyTextRowAppendSpec,
+    spec: TextRowAppendSpec,
     item: crate::display_item::DisplayItem,
     glyph_measurer: &mut dyn DisplayGlyphMeasurer,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -1947,7 +1947,7 @@ fn render_overlay_string(
             break;
         }
         let face_id = render_face_ref_id(item.face, overlay_base_face_id);
-        let append_spec = BodyTextRowAppendFrame {
+        let append_spec = TextRowAppendFrame {
             row: *row,
             row_y: *y,
             glyph_y: *y,
@@ -1969,13 +1969,13 @@ fn render_overlay_string(
             },
             face_id,
         )
-        .append_spec(BodyTextAppendKind::DisplayReplacement);
+        .append_spec(TextRowAppendKind::DisplayReplacement);
         let item = crate::display_item::DisplayItem::new(
             item.span,
             crate::display_item::RenderFaceRef::FaceId(face_id),
             item.kind,
         );
-        let Some((progress, position)) = append_body_text_row_item(builder, &append_spec, item)
+        let Some((progress, position)) = append_text_row_spec_item(builder, &append_spec, item)
         else {
             break;
         };
@@ -4627,7 +4627,7 @@ impl LayoutEngine {
                                                     text,
                                                 ),
                                             );
-                                            let append_spec = BodyTextRowAppendFrame {
+                                            let append_spec = TextRowAppendFrame {
                                                 row,
                                                 row_y: y,
                                                 glyph_y: y + raise_y_offset,
@@ -4646,10 +4646,10 @@ impl LayoutEngine {
                                             }
                                             .at(DisplayRowPosition { x_px: x, col }, face_id)
                                             .append_spec(
-                                                BodyTextAppendKind::DisplayReplacementString,
+                                                TextRowAppendKind::DisplayReplacementString,
                                             );
                                             let progress =
-                                                append_measured_body_text_row_item_and_emit(
+                                                append_measured_text_row_spec_item_and_emit(
                                                     &mut self.matrix_builder,
                                                     &mut output_emitter,
                                                     evaluator,
@@ -4672,7 +4672,7 @@ impl LayoutEngine {
                                         kind => {
                                             let face_id =
                                                 render_face_ref_id(item_face, current_text_face_id);
-                                            let append_spec = BodyTextRowAppendFrame {
+                                            let append_spec = TextRowAppendFrame {
                                                 row,
                                                 row_y: y,
                                                 glyph_y: y + raise_y_offset,
@@ -4691,14 +4691,14 @@ impl LayoutEngine {
                                             }
                                             .at(DisplayRowPosition { x_px: x, col }, face_id)
                                             .append_spec(
-                                                BodyTextAppendKind::DisplayReplacementString,
+                                                TextRowAppendKind::DisplayReplacementString,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
                                                 span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
-                                            let progress = append_body_text_row_item_and_emit(
+                                            let progress = append_text_row_spec_item_and_emit(
                                                 &mut self.matrix_builder,
                                                 &mut output_emitter,
                                                 evaluator,
@@ -4817,7 +4817,7 @@ impl LayoutEngine {
                                     },
                                 ),
                             );
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -4833,8 +4833,8 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
-                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
@@ -4906,7 +4906,7 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -4922,7 +4922,7 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4931,7 +4931,7 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_body_text_row_item(
+                            if let Some((progress, position)) = append_text_row_spec_item(
                                 &mut self.matrix_builder,
                                 &append_spec,
                                 item,
@@ -4992,7 +4992,7 @@ impl LayoutEngine {
                                 );
                             }
                             let placeholder = "[img]";
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5008,10 +5008,10 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, placeholder);
-                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
@@ -5078,7 +5078,7 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5094,7 +5094,7 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5103,7 +5103,7 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_body_text_row_item(
+                            if let Some((progress, position)) = append_text_row_spec_item(
                                 &mut self.matrix_builder,
                                 &append_spec,
                                 item,
@@ -5159,7 +5159,7 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5175,10 +5175,10 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
@@ -5230,7 +5230,7 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5246,7 +5246,7 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5255,7 +5255,7 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_body_text_row_item(
+                            if let Some((progress, position)) = append_text_row_spec_item(
                                 &mut self.matrix_builder,
                                 &append_spec,
                                 item,
@@ -5346,7 +5346,7 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5362,7 +5362,7 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5371,7 +5371,7 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_body_text_row_item(
+                            if let Some((progress, position)) = append_text_row_spec_item(
                                 &mut self.matrix_builder,
                                 &append_spec,
                                 item,
@@ -5425,7 +5425,7 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = BodyTextRowAppendFrame {
+                            let append_spec = TextRowAppendFrame {
                                 row,
                                 row_y: y,
                                 glyph_y: y + raise_y_offset,
@@ -5441,10 +5441,10 @@ impl LayoutEngine {
                                 tab_policy: text_display_tab_policy(content_x, params),
                             }
                             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(BodyTextAppendKind::DisplayReplacement);
+                            .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
@@ -5906,7 +5906,7 @@ impl LayoutEngine {
                     crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
                     crate::display_item::DisplayItemKind::ControlChar { ch },
                 );
-                let append_spec = BodyTextRowAppendFrame {
+                let append_spec = TextRowAppendFrame {
                     row,
                     row_y: y,
                     glyph_y: y + raise_y_offset,
@@ -5922,8 +5922,8 @@ impl LayoutEngine {
                     tab_policy: text_display_tab_policy(content_x, params),
                 }
                 .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                .append_spec(BodyTextAppendKind::ControlChar);
-                if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                .append_spec(TextRowAppendKind::ControlChar);
+                if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
@@ -5971,7 +5971,7 @@ impl LayoutEngine {
                             crate::display_item::DisplaySourceMappedText::new(mapped_text),
                         ),
                     );
-                    let append_spec = BodyTextRowAppendFrame {
+                    let append_spec = TextRowAppendFrame {
                         row,
                         row_y: y,
                         glyph_y: y + raise_y_offset,
@@ -5987,8 +5987,8 @@ impl LayoutEngine {
                         tab_policy: text_display_tab_policy(content_x, params),
                     }
                     .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                    .append_spec(BodyTextAppendKind::SourceMappedText);
-                    if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                    .append_spec(TextRowAppendKind::SourceMappedText);
+                    if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -6049,7 +6049,7 @@ impl LayoutEngine {
                         crate::display_item::DisplayGlyphless { ch, method },
                     ),
                 );
-                let append_spec = BodyTextRowAppendFrame {
+                let append_spec = TextRowAppendFrame {
                     row,
                     row_y: y,
                     glyph_y: y + raise_y_offset,
@@ -6065,8 +6065,8 @@ impl LayoutEngine {
                     tab_policy: text_display_tab_policy(content_x, params),
                 }
                 .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                .append_spec(BodyTextAppendKind::Glyphless);
-                if let Some((_progress, position)) = append_body_text_row_item_and_emit(
+                .append_spec(TextRowAppendKind::Glyphless);
+                if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
@@ -6510,7 +6510,7 @@ impl LayoutEngine {
                 crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
             );
             let mut context = crate::display_source::DisplaySourceContext::empty();
-            let append_spec = BodyTextRowAppendFrame {
+            let append_spec = TextRowAppendFrame {
                 row,
                 row_y: y,
                 glyph_y: y + raise_y_offset,
@@ -6527,13 +6527,13 @@ impl LayoutEngine {
             }
             .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
             .append_spec(if ch == '\t' {
-                BodyTextAppendKind::Tab
+                TextRowAppendKind::Tab
             } else {
-                BodyTextAppendKind::SourceText
+                TextRowAppendKind::SourceText
             });
             let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
             let progress = source.next_item(&mut context).and_then(|item| {
-                append_measured_body_text_row_item_and_emit(
+                append_measured_text_row_spec_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,

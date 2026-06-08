@@ -3529,10 +3529,10 @@ fn next_layout_string_source_item_installs_pending_faces() {
 }
 
 #[test]
-fn body_text_row_append_context_derives_layout_output_and_bounds() {
+fn text_row_append_context_derives_layout_output_and_bounds() {
     let tab_policy =
         crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
-    let context = BodyTextRowAppendContext {
+    let context = TextRowAppendContext {
         row: 3,
         row_y: 20.0,
         glyph_y: 22.0,
@@ -3551,7 +3551,7 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
         face_id: 42,
     };
 
-    let ordinary = context.append_spec(BodyTextAppendKind::SourceText);
+    let ordinary: TextRowAppendSpec = context.append_spec(TextRowAppendKind::SourceText);
     assert_eq!(ordinary.position, DisplayRowPosition { x_px: 8.0, col: 0 });
     assert_eq!(ordinary.max_x, 128.0);
     assert_eq!(ordinary.layout.char_width_px, 9.0);
@@ -3560,39 +3560,39 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
     assert_eq!(ordinary.output.glyph_y, 22.0);
     assert_eq!(ordinary.output.height, 16.0);
 
-    let tab = context.append_spec(BodyTextAppendKind::Tab);
+    let tab = context.append_spec(TextRowAppendKind::Tab);
     assert_eq!(tab.max_x, f32::INFINITY);
     assert_eq!(tab.layout.char_width_px, 7.0);
     assert_eq!(tab.output.height, 14.0);
 
-    let control = context.append_spec(BodyTextAppendKind::ControlChar);
+    let control = context.append_spec(TextRowAppendKind::ControlChar);
     assert_eq!(control.max_x, 148.0);
     assert_eq!(control.layout.char_width_px, 9.0);
     assert_eq!(control.output.height, 14.0);
 
-    let mapped = context.append_spec(BodyTextAppendKind::SourceMappedText);
+    let mapped = context.append_spec(TextRowAppendKind::SourceMappedText);
     assert_eq!(mapped.max_x, 128.0);
     assert_eq!(mapped.output.height, 14.0);
 
-    let glyphless = context.append_spec(BodyTextAppendKind::Glyphless);
+    let glyphless = context.append_spec(TextRowAppendKind::Glyphless);
     assert_eq!(glyphless.max_x, 128.0);
     assert_eq!(glyphless.output.height, 16.0);
 
-    let replacement = context.append_spec(BodyTextAppendKind::DisplayReplacement);
+    let replacement = context.append_spec(TextRowAppendKind::DisplayReplacement);
     assert_eq!(replacement.max_x, 128.0);
     assert_eq!(replacement.layout.char_width_px, 9.0);
     assert_eq!(replacement.output.height, 16.0);
 
-    let replacement_string = context.append_spec(BodyTextAppendKind::DisplayReplacementString);
+    let replacement_string = context.append_spec(TextRowAppendKind::DisplayReplacementString);
     assert_eq!(replacement_string.max_x, 128.0);
     assert_eq!(replacement_string.layout.char_width_px, 7.0);
     assert_eq!(replacement_string.output.height, 16.0);
 }
 
 #[test]
-fn body_text_row_append_frame_builds_positioned_context() {
+fn text_row_append_frame_builds_positioned_context() {
     let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
-    let frame = BodyTextRowAppendFrame {
+    let frame = TextRowAppendFrame {
         row: 3,
         row_y: 20.0,
         glyph_y: 22.0,
@@ -3610,7 +3610,7 @@ fn body_text_row_append_frame_builds_positioned_context() {
 
     let spec = frame
         .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
-        .append_spec(BodyTextAppendKind::SourceText);
+        .append_spec(TextRowAppendKind::SourceText);
 
     assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
     assert_eq!(spec.max_x, 128.0);
@@ -3619,8 +3619,8 @@ fn body_text_row_append_frame_builds_positioned_context() {
 }
 
 #[test]
-fn body_text_row_append_spec_appends_item_to_matrix_row() {
-    let context = BodyTextRowAppendContext {
+fn text_row_append_spec_appends_item_to_matrix_row() {
+    let context = TextRowAppendContext {
         row: 0,
         row_y: 0.0,
         glyph_y: 0.0,
@@ -3638,7 +3638,7 @@ fn body_text_row_append_spec_appends_item_to_matrix_row() {
         tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         face_id: 7,
     };
-    let spec = context.append_spec(BodyTextAppendKind::SourceText);
+    let spec = context.append_spec(TextRowAppendKind::SourceText);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -3662,7 +3662,7 @@ fn body_text_row_append_spec_appends_item_to_matrix_row() {
     );
 
     let (progress, position) =
-        append_body_text_row_item(&mut builder, &spec, item).expect("append progress");
+        append_text_row_spec_item(&mut builder, &spec, item).expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(progress.end, DisplayRowPosition { x_px: 8.0, col: 1 });
