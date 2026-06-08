@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
-use std::io::Read as IoRead;
+use std::io::{Read as IoRead, Write as IoWrite};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -83,12 +83,61 @@ impl NetworkSocket {
         }
     }
 
-    fn is_listener(&self) -> bool {
+    fn register_readable(&self, poller: &polling::Poller, id: ProcessId) -> Result<(), String> {
         match self {
-            Self::TcpListener(_) => true,
+            Self::TcpStream(stream) => ProcessManager::register_readable_source(poller, stream, id),
+            Self::TcpListener(listener) => {
+                ProcessManager::register_readable_source(poller, listener, id)
+            }
             #[cfg(unix)]
-            Self::UnixListener(_) => true,
-            _ => false,
+            Self::UnixStream(stream) => {
+                ProcessManager::register_readable_source(poller, stream, id)
+            }
+            #[cfg(unix)]
+            Self::UnixListener(listener) => {
+                ProcessManager::register_readable_source(poller, listener, id)
+            }
+        }
+    }
+
+    fn unregister_readable(&self, poller: &polling::Poller) {
+        match self {
+            Self::TcpStream(stream) => {
+                let _ = poller.delete(stream);
+            }
+            Self::TcpListener(listener) => {
+                let _ = poller.delete(listener);
+            }
+            #[cfg(unix)]
+            Self::UnixStream(stream) => {
+                let _ = poller.delete(stream);
+            }
+            #[cfg(unix)]
+            Self::UnixListener(listener) => {
+                let _ = poller.delete(listener);
+            }
+        }
+    }
+
+    fn read_stream_output(&mut self, buf: &mut [u8]) -> Option<std::io::Result<usize>> {
+        match self {
+            Self::TcpStream(stream) => Some(stream.read(buf)),
+            Self::TcpListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixStream(stream) => Some(stream.read(buf)),
+            #[cfg(unix)]
+            Self::UnixListener(_) => None,
+        }
+    }
+
+    fn write_stream_input(&mut self, bytes: &[u8]) -> Option<std::io::Result<()>> {
+        match self {
+            Self::TcpStream(stream) => Some(stream.write_all(bytes).and_then(|_| stream.flush())),
+            Self::TcpListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixStream(stream) => Some(stream.write_all(bytes).and_then(|_| stream.flush())),
+            #[cfg(unix)]
+            Self::UnixListener(_) => None,
         }
     }
 }
@@ -901,22 +950,7 @@ impl ProcessManager {
             let _ = poller.delete(tls.tcp_stream());
         }
         if let Some(socket) = proc.network_socket.as_ref() {
-            match socket {
-                NetworkSocket::TcpStream(stream) => {
-                    let _ = poller.delete(stream);
-                }
-                NetworkSocket::TcpListener(listener) => {
-                    let _ = poller.delete(listener);
-                }
-                #[cfg(unix)]
-                NetworkSocket::UnixStream(stream) => {
-                    let _ = poller.delete(stream);
-                }
-                #[cfg(unix)]
-                NetworkSocket::UnixListener(listener) => {
-                    let _ = poller.delete(listener);
-                }
-            }
+            socket.unregister_readable(poller);
         }
         #[cfg(unix)]
         if let Some(master) = proc
@@ -1694,16 +1728,8 @@ impl ProcessManager {
             if let Some(ref mut tls) = proc.tls_stream {
                 tls.write_all_process_input(input_bytes)
                     .map_err(|err| signal_process_io("Writing to process", None, err))?;
-            } else if let Some(NetworkSocket::TcpStream(socket)) = proc.network_socket.as_mut() {
-                use std::io::Write;
-                let _ = socket.write_all(input_bytes);
-                let _ = socket.flush();
-            }
-            #[cfg(unix)]
-            if let Some(NetworkSocket::UnixStream(socket)) = proc.network_socket.as_mut() {
-                use std::io::Write;
-                let _ = socket.write_all(input_bytes);
-                let _ = socket.flush();
+            } else if let Some(socket) = proc.network_socket.as_mut() {
+                let _ = socket.write_stream_input(input_bytes);
             }
             Ok(true)
         } else {
@@ -1722,22 +1748,7 @@ impl ProcessManager {
             }
 
             let socket = proc.network_socket.as_ref().ok_or("No socket")?;
-            match socket {
-                NetworkSocket::TcpStream(stream) => {
-                    Self::register_readable_source(poller, stream, id)?;
-                }
-                NetworkSocket::TcpListener(listener) => {
-                    Self::register_readable_source(poller, listener, id)?;
-                }
-                #[cfg(unix)]
-                NetworkSocket::UnixStream(stream) => {
-                    Self::register_readable_source(poller, stream, id)?;
-                }
-                #[cfg(unix)]
-                NetworkSocket::UnixListener(listener) => {
-                    Self::register_readable_source(poller, listener, id)?;
-                }
-            }
+            socket.register_readable(poller, id)?;
         }
         Ok(())
     }
@@ -2006,47 +2017,21 @@ impl ProcessManager {
                 }
             }
 
-            if let Some(NetworkSocket::TcpStream(socket)) = proc.network_socket.as_mut() {
-                use std::io::Read;
+            if let Some(socket) = proc.network_socket.as_mut() {
                 let mut buf = vec![0u8; 4096];
-                match socket.read(&mut buf) {
-                    Ok(0) => return None,
-                    Ok(n) => {
+                return match socket.read_stream_output(&mut buf) {
+                    Some(Ok(0)) => None,
+                    Some(Ok(n)) => {
                         let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
                         proc.stdout.push_str(&process_output_runtime_string(&s));
-                        return Some(s);
+                        Some(s)
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(LispString::from_utf8(""));
+                    Some(Err(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        Some(LispString::from_utf8(""))
                     }
-                    Err(_) => return None,
-                }
-            }
-
-            #[cfg(unix)]
-            if let Some(NetworkSocket::UnixStream(socket)) = proc.network_socket.as_mut() {
-                use std::io::Read;
-                let mut buf = vec![0u8; 4096];
-                match socket.read(&mut buf) {
-                    Ok(0) => return None,
-                    Ok(n) => {
-                        let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&process_output_runtime_string(&s));
-                        return Some(s);
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(LispString::from_utf8(""));
-                    }
-                    Err(_) => return None,
-                }
-            }
-
-            if proc
-                .network_socket
-                .as_ref()
-                .is_some_and(NetworkSocket::is_listener)
-            {
-                return Some(LispString::from_utf8(""));
+                    Some(Err(_)) => None,
+                    None => Some(LispString::from_utf8("")),
+                };
             }
         }
 
