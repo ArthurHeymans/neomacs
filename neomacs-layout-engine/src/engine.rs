@@ -1600,6 +1600,14 @@ fn append_text_row_item(
     Some((progress, position))
 }
 
+fn append_body_text_row_item(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    spec: &BodyTextRowAppendSpec,
+    item: crate::display_item::DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_text_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
+}
+
 fn append_measured_text_row_item(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
@@ -1617,6 +1625,46 @@ fn append_measured_text_row_item(
     )?;
     let position = append_cursor.position();
     Some((progress, position))
+}
+
+fn append_body_text_row_item_and_emit(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    spec: BodyTextRowAppendSpec,
+    item: crate::display_item::DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_text_row_item_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &spec.layout,
+        spec.position,
+        spec.max_x,
+        item,
+        spec.output,
+    )
+}
+
+fn append_measured_body_text_row_item_and_emit(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    spec: BodyTextRowAppendSpec,
+    item: crate::display_item::DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_measured_text_row_item_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &spec.layout,
+        spec.position,
+        spec.max_x,
+        item,
+        glyph_measurer,
+        spec.output,
+    )
 }
 
 fn append_text_row_item_and_emit(
@@ -1885,13 +1933,8 @@ fn render_overlay_string(
             crate::display_item::RenderFaceRef::FaceId(face_id),
             item.kind,
         );
-        let Some((progress, position)) = append_text_row_item(
-            builder,
-            &append_spec.layout,
-            append_spec.position,
-            append_spec.max_x,
-            item,
-        ) else {
+        let Some((progress, position)) = append_body_text_row_item(builder, &append_spec, item)
+        else {
             break;
         };
         for slot in &progress.slots {
@@ -4563,17 +4606,15 @@ impl LayoutEngine {
                                                 params,
                                                 BodyTextAppendKind::DisplayReplacementString,
                                             );
-                                            let progress = append_measured_text_row_item_and_emit(
-                                                &mut self.matrix_builder,
-                                                &mut output_emitter,
-                                                evaluator,
-                                                &append_spec.layout,
-                                                append_spec.position,
-                                                append_spec.max_x,
-                                                item,
-                                                &mut measurer,
-                                                append_spec.output,
-                                            );
+                                            let progress =
+                                                append_measured_body_text_row_item_and_emit(
+                                                    &mut self.matrix_builder,
+                                                    &mut output_emitter,
+                                                    evaluator,
+                                                    append_spec,
+                                                    item,
+                                                    &mut measurer,
+                                                );
                                             let Some((progress, position)) = progress else {
                                                 break;
                                             };
@@ -4615,15 +4656,12 @@ impl LayoutEngine {
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
-                                            let progress = append_text_row_item_and_emit(
+                                            let progress = append_body_text_row_item_and_emit(
                                                 &mut self.matrix_builder,
                                                 &mut output_emitter,
                                                 evaluator,
-                                                &append_spec.layout,
-                                                append_spec.position,
-                                                append_spec.max_x,
+                                                append_spec,
                                                 item,
-                                                append_spec.output,
                                             );
                                             let Some((_progress, position)) = progress else {
                                                 break;
@@ -4755,15 +4793,12 @@ impl LayoutEngine {
                                 face_id: current_text_face_id,
                             }
                             .append_spec(params, BodyTextAppendKind::DisplayReplacement);
-                            if let Some((_progress, position)) = append_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                append_spec,
                                 item,
-                                append_spec.output,
                             ) {
                                 x = position.x_px;
                                 col = position.col;
@@ -4856,11 +4891,9 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_text_row_item(
+                            if let Some((progress, position)) = append_body_text_row_item(
                                 &mut self.matrix_builder,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                &append_spec,
                                 item,
                             ) {
                                 if progress.status
@@ -4939,15 +4972,12 @@ impl LayoutEngine {
                             .append_spec(params, BodyTextAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, placeholder);
-                            if let Some((_progress, position)) = append_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                append_spec,
                                 item,
-                                append_spec.output,
                             ) {
                                 x = position.x_px;
                                 col = position.col;
@@ -5035,11 +5065,9 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_text_row_item(
+                            if let Some((progress, position)) = append_body_text_row_item(
                                 &mut self.matrix_builder,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                &append_spec,
                                 item,
                             ) {
                                 if progress.status
@@ -5113,15 +5141,12 @@ impl LayoutEngine {
                             .append_spec(params, BodyTextAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some((_progress, position)) = append_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                append_spec,
                                 item,
-                                append_spec.output,
                             ) {
                                 x = position.x_px;
                                 col = position.col;
@@ -5194,11 +5219,9 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_text_row_item(
+                            if let Some((progress, position)) = append_body_text_row_item(
                                 &mut self.matrix_builder,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                &append_spec,
                                 item,
                             ) {
                                 if progress.status
@@ -5313,11 +5336,9 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_text_row_item(
+                            if let Some((progress, position)) = append_body_text_row_item(
                                 &mut self.matrix_builder,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                &append_spec,
                                 item,
                             ) {
                                 if progress.status
@@ -5389,15 +5410,12 @@ impl LayoutEngine {
                             .append_spec(params, BodyTextAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
-                            if let Some((_progress, position)) = append_text_row_item_and_emit(
+                            if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
-                                &append_spec.layout,
-                                append_spec.position,
-                                append_spec.max_x,
+                                append_spec,
                                 item,
-                                append_spec.output,
                             ) {
                                 x = position.x_px;
                                 col = position.col;
@@ -5872,15 +5890,12 @@ impl LayoutEngine {
                     face_id: current_text_face_id,
                 }
                 .append_spec(params, BodyTextAppendKind::ControlChar);
-                if let Some((_progress, position)) = append_text_row_item_and_emit(
+                if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    &append_spec.layout,
-                    append_spec.position,
-                    append_spec.max_x,
+                    append_spec,
                     item,
-                    append_spec.output,
                 ) {
                     x = position.x_px;
                     col = position.col;
@@ -5941,15 +5956,12 @@ impl LayoutEngine {
                         face_id: current_text_face_id,
                     }
                     .append_spec(params, BodyTextAppendKind::SourceMappedText);
-                    if let Some((_progress, position)) = append_text_row_item_and_emit(
+                    if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        &append_spec.layout,
-                        append_spec.position,
-                        append_spec.max_x,
+                        append_spec,
                         item,
-                        append_spec.output,
                     ) {
                         x = position.x_px;
                         col = position.col;
@@ -6023,15 +6035,12 @@ impl LayoutEngine {
                     face_id: current_text_face_id,
                 }
                 .append_spec(params, BodyTextAppendKind::Glyphless);
-                if let Some((_progress, position)) = append_text_row_item_and_emit(
+                if let Some((_progress, position)) = append_body_text_row_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    &append_spec.layout,
-                    append_spec.position,
-                    append_spec.max_x,
+                    append_spec,
                     item,
-                    append_spec.output,
                 ) {
                     x = position.x_px;
                     col = position.col;
@@ -6497,16 +6506,13 @@ impl LayoutEngine {
             );
             let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
             let progress = source.next_item(&mut context).and_then(|item| {
-                append_measured_text_row_item_and_emit(
+                append_measured_body_text_row_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    &append_spec.layout,
-                    append_spec.position,
-                    append_spec.max_x,
+                    append_spec,
                     item,
                     &mut measurer,
-                    append_spec.output,
                 )
             });
             let Some((_progress, position)) = progress else {

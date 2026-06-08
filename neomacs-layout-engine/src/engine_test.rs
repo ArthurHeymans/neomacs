@@ -3591,6 +3591,62 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
 }
 
 #[test]
+fn body_text_row_append_spec_appends_item_to_matrix_row() {
+    let params = test_window_params();
+    let context = BodyTextRowAppendContext {
+        row: 0,
+        row_y: 0.0,
+        glyph_y: 0.0,
+        x: 0.0,
+        col: 0,
+        face_height: 16.0,
+        face_ascent: 12.0,
+        default_row_height: 16.0,
+        content_x: 0.0,
+        avail_width: 80.0,
+        text_width: 80.0,
+        line_number_width: 0.0,
+        face_char_width: 8.0,
+        face_space_width: 8.0,
+        face_id: 7,
+    };
+    let spec = context.append_spec(&params, BodyTextAppendKind::SourceText);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            crate::display_item::DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(0),
+                EmacsBytePos::new(0),
+            ),
+            crate::display_item::DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(1),
+                EmacsBytePos::new(1),
+            ),
+        ),
+        RenderFaceRef::FaceId(7),
+        crate::display_item::DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new(
+            "a",
+        )),
+    );
+
+    let (progress, position) =
+        append_body_text_row_item(&mut builder, &spec, item).expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(position, DisplayRowPosition { x_px: 8.0, col: 1 });
+    builder
+        .with_current_row_mut(|row| {
+            assert_eq!(row.glyphs[1][0].face_id, 7);
+        })
+        .expect("current row");
+}
+
+#[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval
