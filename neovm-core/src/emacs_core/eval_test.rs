@@ -2834,7 +2834,7 @@ fn read_char_returns_lispy_select_window_for_transport_event() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -2872,7 +2872,7 @@ fn read_key_sequence_defers_select_window_until_after_current_key_sequence() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -2945,7 +2945,7 @@ fn read_key_sequence_can_return_select_window_at_sequence_start() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -3003,7 +3003,7 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let _ = ev
@@ -3099,7 +3099,7 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let _ = ev
@@ -3197,7 +3197,7 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let _ = ev
@@ -3711,7 +3711,7 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let _ = ev
@@ -3821,7 +3821,7 @@ fn read_key_sequence_prefixes_mode_line_mouse_click_for_lookup() {
             crate::window::SplitDirection::Horizontal,
             other_buffer,
             None,
-            false,
+            crate::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 

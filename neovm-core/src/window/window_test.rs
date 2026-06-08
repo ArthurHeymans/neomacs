@@ -400,7 +400,7 @@ fn split_window_horizontal() {
         SplitDirection::Horizontal,
         BufferId(2),
         None,
-        false,
+        SplitPlacement::AfterTarget,
     );
     assert!(new_wid.is_some());
 
@@ -415,7 +415,14 @@ fn split_window_vertical() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().window_list()[0];
 
-    let new_wid = mgr.split_window(fid, wid, SplitDirection::Vertical, BufferId(2), None, false);
+    let new_wid = mgr.split_window(
+        fid,
+        wid,
+        SplitDirection::Vertical,
+        BufferId(2),
+        None,
+        SplitPlacement::AfterTarget,
+    );
     assert!(new_wid.is_some());
 
     let frame = mgr.get(fid).unwrap();
@@ -456,7 +463,7 @@ fn split_window_copies_window_display_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split");
 
@@ -520,7 +527,7 @@ fn split_window_resets_new_leaf_vscroll_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split");
 
@@ -563,7 +570,7 @@ fn delete_window() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .unwrap();
 
@@ -596,7 +603,7 @@ fn select_window() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .unwrap();
 
@@ -617,7 +624,7 @@ fn window_at_coordinates() {
         SplitDirection::Horizontal,
         BufferId(2),
         None,
-        false,
+        SplitPlacement::AfterTarget,
     );
 
     let frame = mgr.get(fid).unwrap();
@@ -750,7 +757,7 @@ fn split_window_does_not_copy_window_parameters() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split");
 
@@ -771,7 +778,7 @@ fn deleted_window_retains_window_parameters() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split");
     let key = Value::symbol("deleted-param");
@@ -820,13 +827,20 @@ fn deep_split_and_delete() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .unwrap();
 
     // Split w2 vertically → w3
     let w3 = mgr
-        .split_window(fid, w2, SplitDirection::Vertical, BufferId(3), None, false)
+        .split_window(
+            fid,
+            w2,
+            SplitDirection::Vertical,
+            BufferId(3),
+            None,
+            SplitPlacement::AfterTarget,
+        )
         .unwrap();
 
     assert_eq!(mgr.get(fid).unwrap().window_count(), 3);
@@ -856,7 +870,7 @@ fn note_window_selected_updates_use_time() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .unwrap();
 
@@ -951,7 +965,7 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .unwrap();
 
@@ -1053,7 +1067,7 @@ fn frame_resize_pixelwise_preserves_fixed_width_side_window() {
             SplitDirection::Horizontal,
             BufferId(2),
             Some(200),
-            true,
+            SplitPlacement::BeforeTarget,
         )
         .unwrap();
 
@@ -1091,7 +1105,7 @@ fn frame_resize_pixelwise_preserves_flexible_window_proportions() {
             SplitDirection::Horizontal,
             BufferId(2),
             Some(200),
-            true,
+            SplitPlacement::BeforeTarget,
         )
         .unwrap();
 

@@ -14,8 +14,8 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
-    Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
-    WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
+    SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId,
+    WindowMargins, WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
@@ -3809,7 +3809,10 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     } else {
         SplitDirection::Vertical
     };
-    let new_before_old = matches!(side_kind, SplitWindowSide::Above | SplitWindowSide::Left);
+    let placement = match side_kind {
+        SplitWindowSide::Above | SplitWindowSide::Left => SplitPlacement::BeforeTarget,
+        SplitWindowSide::Below | SplitWindowSide::Right => SplitPlacement::AfterTarget,
+    };
 
     // Parse SIZE: positive means new window gets SIZE units, negative means
     // old window keeps |SIZE| units, nil/0 means 50/50.
@@ -3833,7 +3836,7 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     };
 
     let new_wid = frames
-        .split_window(fid, wid, direction, buf_id, size_opt, new_before_old)
+        .split_window(fid, wid, direction, buf_id, size_opt, placement)
         .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
 
     // GNU `Fsplit_window_internal` (`src/window.c:5517-5644`)
@@ -4750,7 +4753,14 @@ pub(crate) fn builtin_display_buffer(
     if action_contains("display-buffer-pop-up-window") {
         let new_wid = eval
             .frames
-            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None, false)
+            .split_window(
+                fid,
+                sel_wid,
+                SplitDirection::Vertical,
+                buf_id,
+                None,
+                SplitPlacement::AfterTarget,
+            )
             .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
         display_in_window(eval, new_wid, buf_id)?;
         eval.frames.set_window_parameter(
@@ -4783,7 +4793,14 @@ pub(crate) fn builtin_display_buffer(
         // Only one window -- split it.
         let new_wid = eval
             .frames
-            .split_window(fid, sel_wid, SplitDirection::Vertical, buf_id, None, false)
+            .split_window(
+                fid,
+                sel_wid,
+                SplitDirection::Vertical,
+                buf_id,
+                None,
+                SplitPlacement::AfterTarget,
+            )
             .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
         display_in_window(eval, new_wid, buf_id)?;
         eval.frames.set_window_parameter(

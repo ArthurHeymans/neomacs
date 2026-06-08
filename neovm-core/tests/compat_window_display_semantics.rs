@@ -1,6 +1,6 @@
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::{Context, Value, format_eval_result};
-use neovm_core::window::{FrameManager, SplitDirection, Window};
+use neovm_core::window::{FrameManager, SplitDirection, SplitPlacement, Window};
 
 fn run_neovm_gui_eval(body: &str) -> String {
     let mut eval = Context::new();
@@ -172,7 +172,7 @@ fn compat_split_window_copies_window_display_state() {
             SplitDirection::Horizontal,
             BufferId(2),
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split");
     let frame = frames.get(frame_id).expect("frame");

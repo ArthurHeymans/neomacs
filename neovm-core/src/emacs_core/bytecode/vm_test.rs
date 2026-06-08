@@ -4,7 +4,7 @@ use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, Context, GuiFrameHostSize, ResumeTarget};
 use crate::emacs_core::value::HashTableTest;
-use crate::window::SplitDirection;
+use crate::window::{SplitDirection, SplitPlacement};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -1800,7 +1800,7 @@ fn vm_save_window_excursion_restores_selected_window() {
             SplitDirection::Vertical,
             buffer_id,
             None,
-            false,
+            SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -3745,12 +3745,19 @@ fn vm_window_tree_and_list_builtins_use_shared_runtime_state() {
                         SplitDirection::Horizontal,
                         buffer_id,
                         None,
-                        false,
+                        SplitPlacement::AfterTarget,
                     )
                     .expect("horizontal split");
                 let _bottom = eval
                     .frames
-                    .split_window(fid, right, SplitDirection::Vertical, buffer_id, None, false)
+                    .split_window(
+                        fid,
+                        right,
+                        SplitDirection::Vertical,
+                        buffer_id,
+                        None,
+                        SplitPlacement::AfterTarget,
+                    )
                     .expect("vertical split");
             }
         ),
@@ -3860,7 +3867,14 @@ fn vm_window_selection_and_buffer_builtins_use_shared_runtime_state() {
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
                 let _w2 = eval
                     .frames
-                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None, false)
+                    .split_window(
+                        fid,
+                        w1,
+                        SplitDirection::Horizontal,
+                        buffer_id,
+                        None,
+                        SplitPlacement::AfterTarget,
+                    )
                     .expect("horizontal split");
             }
         ),
@@ -3896,7 +3910,14 @@ fn vm_window_deletion_and_frame_builtins_use_shared_runtime_state() {
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
                 let _w2 = eval
                     .frames
-                    .split_window(fid, w1, SplitDirection::Horizontal, buffer_id, None, false)
+                    .split_window(
+                        fid,
+                        w1,
+                        SplitDirection::Horizontal,
+                        buffer_id,
+                        None,
+                        SplitPlacement::AfterTarget,
+                    )
                     .expect("horizontal split");
             }
         ),

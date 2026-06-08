@@ -139,6 +139,18 @@ pub enum SplitDirection {
     Vertical,   // stacked
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SplitPlacement {
+    BeforeTarget,
+    AfterTarget,
+}
+
+impl SplitPlacement {
+    fn is_before_target(self) -> bool {
+        matches!(self, Self::BeforeTarget)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Window display state
 // ---------------------------------------------------------------------------
@@ -2867,6 +2879,11 @@ impl FrameManager {
     ///   columns), the old window gets the remainder.
     /// - `Some(n)` where n < 0: the **old** window gets `|n|` units, the new
     ///   window gets the remainder.
+    ///
+    /// `placement` controls whether the new window is inserted before or after
+    /// the split target in the parent child list. This mirrors GNU
+    /// `split-window-internal` side ordering: `above`/`left` insert before the
+    /// target, while `below`/`right` insert after it.
     pub fn split_window(
         &mut self,
         frame_id: FrameId,
@@ -2874,7 +2891,7 @@ impl FrameManager {
         direction: SplitDirection,
         new_buffer_id: BufferId,
         size: Option<i64>,
-        new_before_old: bool,
+        placement: SplitPlacement,
     ) -> Option<WindowId> {
         let internal_id = self.alloc_window_id();
         let new_id = self.alloc_window_id();
@@ -2888,7 +2905,7 @@ impl FrameManager {
             new_id,
             new_buffer_id,
             size,
-            new_before_old,
+            placement,
         )?;
 
         frame.recalculate_minibuffer_bounds();
@@ -3074,8 +3091,8 @@ impl Default for FrameManager {
 /// `size` semantics (lines for vertical, columns for horizontal — 1 unit = 1.0
 /// pixel in the abstract coordinate system):
 /// - `None` / `Some(0)`: 50/50 split.
-/// - `Some(n)` (n > 0): new window (right/bottom) gets `n` units.
-/// - `Some(n)` (n < 0): old window (left/top) keeps `|n|` units.
+/// - `Some(n)` (n > 0): the new window gets `n` units.
+/// - `Some(n)` (n < 0): the target window keeps `|n|` units.
 fn split_window_in_tree(
     tree: &mut Window,
     target: WindowId,
@@ -3084,7 +3101,7 @@ fn split_window_in_tree(
     new_id: WindowId,
     new_buffer_id: BufferId,
     size: Option<i64>,
-    new_before_old: bool,
+    placement: SplitPlacement,
 ) -> Option<()> {
     fn split_sizes(total: f32, requested_new_size: Option<i64>) -> (f32, f32) {
         let total_px = total.round().max(0.0) as i64;
@@ -3098,6 +3115,7 @@ fn split_window_in_tree(
     }
 
     if tree.id() == target {
+        let new_before_target = placement.is_before_target();
         let old_id = tree.id();
         let old_bounds = *tree.bounds();
         let old_window = tree.clone();
@@ -3109,8 +3127,16 @@ fn split_window_in_tree(
             let (first_bounds, second_bounds) = match direction {
                 SplitDirection::Horizontal => {
                     let (old_size, new_size) = split_sizes(old_bounds.width, size);
-                    let first_width = if new_before_old { new_size } else { old_size };
-                    let second_width = if new_before_old { old_size } else { new_size };
+                    let first_width = if new_before_target {
+                        new_size
+                    } else {
+                        old_size
+                    };
+                    let second_width = if new_before_target {
+                        old_size
+                    } else {
+                        new_size
+                    };
                     (
                         Rect::new(old_bounds.x, old_bounds.y, first_width, old_bounds.height),
                         Rect::new(
@@ -3123,8 +3149,16 @@ fn split_window_in_tree(
                 }
                 SplitDirection::Vertical => {
                     let (old_size, new_size) = split_sizes(old_bounds.height, size);
-                    let first_height = if new_before_old { new_size } else { old_size };
-                    let second_height = if new_before_old { old_size } else { new_size };
+                    let first_height = if new_before_target {
+                        new_size
+                    } else {
+                        old_size
+                    };
+                    let second_height = if new_before_target {
+                        old_size
+                    } else {
+                        new_size
+                    };
                     (
                         Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, first_height),
                         Rect::new(
@@ -3136,7 +3170,7 @@ fn split_window_in_tree(
                     )
                 }
             };
-            let (old_leaf_bounds, new_leaf_bounds) = if new_before_old {
+            let (old_leaf_bounds, new_leaf_bounds) = if new_before_target {
                 (second_bounds, first_bounds)
             } else {
                 (first_bounds, second_bounds)
@@ -3236,7 +3270,7 @@ fn split_window_in_tree(
             *tree = Window::Internal {
                 id: internal_id,
                 direction,
-                children: if new_before_old {
+                children: if new_before_target {
                     vec![new_leaf, old_leaf]
                 } else {
                     vec![old_leaf, new_leaf]
@@ -3260,8 +3294,16 @@ fn split_window_in_tree(
         let (first_bounds, second_bounds) = match direction {
             SplitDirection::Horizontal => {
                 let (old_size, new_size) = split_sizes(old_bounds.width, size);
-                let first_width = if new_before_old { new_size } else { old_size };
-                let second_width = if new_before_old { old_size } else { new_size };
+                let first_width = if new_before_target {
+                    new_size
+                } else {
+                    old_size
+                };
+                let second_width = if new_before_target {
+                    old_size
+                } else {
+                    new_size
+                };
                 (
                     Rect::new(old_bounds.x, old_bounds.y, first_width, old_bounds.height),
                     Rect::new(
@@ -3274,8 +3316,16 @@ fn split_window_in_tree(
             }
             SplitDirection::Vertical => {
                 let (old_size, new_size) = split_sizes(old_bounds.height, size);
-                let first_height = if new_before_old { new_size } else { old_size };
-                let second_height = if new_before_old { old_size } else { new_size };
+                let first_height = if new_before_target {
+                    new_size
+                } else {
+                    old_size
+                };
+                let second_height = if new_before_target {
+                    old_size
+                } else {
+                    new_size
+                };
                 (
                     Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, first_height),
                     Rect::new(
@@ -3287,7 +3337,7 @@ fn split_window_in_tree(
                 )
             }
         };
-        let (old_subtree_bounds, new_leaf_bounds) = if new_before_old {
+        let (old_subtree_bounds, new_leaf_bounds) = if new_before_target {
             (second_bounds, first_bounds)
         } else {
             (first_bounds, second_bounds)
@@ -3337,7 +3387,7 @@ fn split_window_in_tree(
         *tree = Window::Internal {
             id: internal_id,
             direction,
-            children: if new_before_old {
+            children: if new_before_target {
                 vec![new_leaf, old_subtree]
             } else {
                 vec![old_subtree, new_leaf]
@@ -3366,7 +3416,7 @@ fn split_window_in_tree(
                 new_id,
                 new_buffer_id,
                 size,
-                new_before_old,
+                placement,
             )
             .is_some()
             {
