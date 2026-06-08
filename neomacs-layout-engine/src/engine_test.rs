@@ -6246,6 +6246,124 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
 }
 
 #[test]
+fn layout_frame_rust_baseline_tab_line_unicode_uses_chrome_display_row_path() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+        buf.set_buffer_local("tab-line-format", Value::string("A中👨‍👩"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-tab-line-unicode-baseline", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let tab_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("tab-line row");
+    let glyphs = &tab_row.glyphs[1];
+    let cjk = glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
+        .expect("tab-line CJK glyph");
+
+    assert_eq!(enabled_window_row_texts(entry)[0], "A中👨‍👩");
+    assert!(
+        !cjk.wide && !cjk.padding,
+        "current tab-line chrome row records CJK as a plain char, unlike the main buffer path: {glyphs:?}"
+    );
+    assert!(
+        glyphs
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{200d}' })),
+        "current tab-line chrome row emits ZWJ as an individual char: {glyphs:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_baseline_buffer_text_uses_main_buffer_wide_and_cluster_glyphs() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("A中👨‍👩B\n");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-unicode-baseline", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_glyphs = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[1].iter())
+        .collect::<Vec<_>>();
+
+    assert!(
+        text_glyphs.iter().any(|glyph| {
+            matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }) && glyph.wide
+        }),
+        "main buffer path should record CJK as a wide glyph: {text_glyphs:?}"
+    );
+    assert!(
+        text_glyphs.iter().any(|glyph| glyph.padding),
+        "main buffer wide/cluster glyphs should retain padding cells: {text_glyphs:?}"
+    );
+    assert!(
+        text_glyphs.iter().any(|glyph| {
+            matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))
+        }),
+        "main buffer path should compose the ZWJ emoji sequence: {text_glyphs:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();
     let buf_id = eval
