@@ -10704,7 +10704,10 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
     let available = dispatch_builtin_pure("gnutls-available-p", vec![])
         .expect("gnutls-available-p should resolve")
         .expect("gnutls-available-p should evaluate");
-    assert_eq!(available, Value::NIL);
+    assert_eq!(
+        available,
+        Value::list(vec![Value::symbol("gnutls3"), Value::symbol("gnutls")])
+    );
 
     let ciphers_err = dispatch_builtin_pure("gnutls-ciphers", vec![])
         .expect("gnutls-ciphers should resolve")

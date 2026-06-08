@@ -220,7 +220,7 @@ pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
 fn ensure_gnutls_available() -> Result<(), Flow> {
     Err(signal(
         "error",
-        vec![Value::string("GnuTLS support is not available")],
+        vec![Value::string("GnuTLS crypto capability is not available")],
     ))
 }
 

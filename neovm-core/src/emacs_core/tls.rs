@@ -11,7 +11,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 pub(crate) fn gnutls_available_capabilities() -> &'static [&'static str] {
-    &[]
+    &["gnutls3", "gnutls"]
 }
 
 pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn rustls_is_not_advertised_as_gnutls() {
-        assert!(gnutls_available_capabilities().is_empty());
+    fn rustls_backend_advertises_conservative_gnutls_compatibility() {
+        assert_eq!(gnutls_available_capabilities(), &["gnutls3", "gnutls"]);
     }
 }

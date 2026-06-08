@@ -6534,7 +6534,8 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (null (neomacs-primary-selection-set "x"))
                  (equal (neomacs-primary-selection-get) "x")
                  (equal (neomacs-core-backend) "rust")
-                 (null (gnutls-available-p))
+                 (not (null (memq 'gnutls (gnutls-available-p))))
+                 (not (null (memq 'gnutls3 (gnutls-available-p))))
                  (neomacs-tls-available-p)
                  (featurep 'tls)
                  (fboundp 'open-tls-stream)
@@ -6567,7 +6568,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (condition-case nil (gnutls-symmetric-encrypt nil nil nil nil)
                    (error t)))"##
         ),
-        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
+        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
     );
 }
 
