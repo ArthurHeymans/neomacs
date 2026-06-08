@@ -587,7 +587,15 @@ fn display_source_row_progress(
     }
 }
 
-impl LayoutEngine {
+pub(crate) struct DisplayRowRenderer<'metrics> {
+    font_metrics: &'metrics mut Option<FontMetricsService>,
+}
+
+impl<'metrics> DisplayRowRenderer<'metrics> {
+    pub(crate) fn new(font_metrics: &'metrics mut Option<FontMetricsService>) -> Self {
+        Self { font_metrics }
+    }
+
     pub(crate) fn render_display_source_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -616,7 +624,7 @@ impl LayoutEngine {
             symbol_values,
         } = spec;
         *next_face_id = (*next_face_id).max(base_face_id.saturating_add(1));
-        let mut face_realizer = DisplayRowFaceRealizer::new(&mut self.font_metrics);
+        let mut face_realizer = DisplayRowFaceRealizer::new(&mut *self.font_metrics);
         let row_face = face_realizer.realize_face(
             base_face_id,
             base_face,
@@ -730,6 +738,23 @@ impl LayoutEngine {
             progress,
             faces,
         })
+    }
+}
+
+impl LayoutEngine {
+    pub(crate) fn render_display_source_row(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        rendered: Value,
+        face_resolver: &FaceResolver,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplaySourceRow> {
+        DisplayRowRenderer::new(&mut self.font_metrics).render_display_source_row(
+            spec,
+            rendered,
+            face_resolver,
+            next_face_id,
+        )
     }
 }
 

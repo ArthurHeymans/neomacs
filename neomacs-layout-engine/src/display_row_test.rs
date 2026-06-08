@@ -29,6 +29,38 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
     assert_eq!(rendered.font_descent, 0);
 }
 
+#[test]
+fn display_row_renderer_renders_lisp_string_without_layout_engine() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
+
+    let rendered = renderer
+        .render_display_source_row(spec, Value::string("A中"), &resolver, &mut next_face_id)
+        .expect("display source row");
+
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
+    assert_eq!(rendered.row.role, GlyphRowRole::TabLine);
+    assert_eq!(rendered.progress.end_col, 3);
+}
+
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()
@@ -84,8 +116,8 @@ fn render_lisp_display_row_with_symbols(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> GlyphRow {
-    let _eval = Context::new();
-    let mut engine = crate::engine::LayoutEngine::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
@@ -103,7 +135,7 @@ fn render_lisp_display_row_with_symbols(
         role,
         symbol_values,
     );
-    engine
+    renderer
         .render_display_source_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
         .row
@@ -122,7 +154,8 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         buf.insert("A中👨‍👩");
     }
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let mut engine = crate::engine::LayoutEngine::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
@@ -134,7 +167,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = engine
+    let rendered = renderer
         .render_display_item_source_row(
             DisplayRowSpec {
                 geometry: DisplayRowGeometry {
@@ -187,7 +220,8 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         buf.insert("\tX");
     }
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let mut engine = crate::engine::LayoutEngine::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
@@ -199,7 +233,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = engine
+    let rendered = renderer
         .render_display_item_source_row(
             DisplayRowSpec {
                 geometry: DisplayRowGeometry {
