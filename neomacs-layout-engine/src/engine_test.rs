@@ -3363,6 +3363,31 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
 }
 
 #[test]
+fn buffer_display_replacement_source_builds_items_without_appending() {
+    let source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+
+    let stretch_item = source.stretch_item(42, DisplayReplacementBox::new(16.0, 9.0, 7.0));
+    assert_eq!(stretch_item.face, RenderFaceRef::FaceId(42));
+    assert!(matches!(
+        stretch_item.kind,
+        crate::display_item::DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
+            width: crate::display_item::DisplayStretchWidth::Length(
+                crate::display_item::DisplayLength::Pixels(16.0)
+            ),
+            height: Some(crate::display_item::DisplayLength::Pixels(9.0)),
+            ascent: Some(crate::display_item::DisplayLength::Pixels(7.0)),
+        })
+    ));
+
+    let text_item = source.source_mapped_text_item(43, "fallback");
+    assert_eq!(text_item.face, RenderFaceRef::FaceId(43));
+    assert!(matches!(
+        text_item.kind,
+        crate::display_item::DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
+    ));
+}
+
+#[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval

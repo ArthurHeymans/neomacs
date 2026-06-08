@@ -19,10 +19,7 @@ use super::window_output::{
     ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
-use crate::display_row_builder::{
-    DisplayRowAppendCursor, FixedGlyphAdvance, FixedGlyphAdvances,
-    append_display_item_to_current_matrix_row,
-};
+use crate::display_row_builder::{DisplayRowAppendCursor, FixedGlyphAdvance, FixedGlyphAdvances};
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1335,6 +1332,40 @@ impl BufferDisplayReplacementSource {
             kind,
         )
     }
+
+    fn stretch_item(
+        self,
+        face_id: u32,
+        geometry: DisplayReplacementBox,
+    ) -> crate::display_item::DisplayItem {
+        self.item(
+            face_id,
+            crate::display_item::DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
+                width: crate::display_item::DisplayStretchWidth::Length(
+                    crate::display_item::DisplayLength::Pixels(geometry.width_px),
+                ),
+                height: Some(crate::display_item::DisplayLength::Pixels(
+                    geometry.height_px,
+                )),
+                ascent: Some(crate::display_item::DisplayLength::Pixels(
+                    geometry.ascent_px,
+                )),
+            }),
+        )
+    }
+
+    fn source_mapped_text_item(
+        self,
+        face_id: u32,
+        text: impl Into<Box<str>>,
+    ) -> crate::display_item::DisplayItem {
+        self.item(
+            face_id,
+            crate::display_item::DisplayItemKind::SourceMappedText(
+                crate::display_item::DisplaySourceMappedText::new(text),
+            ),
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1352,60 +1383,6 @@ impl DisplayReplacementBox {
             ascent_px: ascent_px.max(0.0),
         }
     }
-}
-
-fn append_buffer_display_stretch_to_current_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    layout: &crate::display_row_builder::DisplayRowLayout,
-    source: BufferDisplayReplacementSource,
-    face_id: u32,
-    geometry: DisplayReplacementBox,
-    position: crate::display_row_builder::DisplayRowPosition,
-    max_x_px: f32,
-) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    append_display_item_to_current_matrix_row(
-        builder,
-        layout,
-        source.item(
-            face_id,
-            crate::display_item::DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
-                width: crate::display_item::DisplayStretchWidth::Length(
-                    crate::display_item::DisplayLength::Pixels(geometry.width_px),
-                ),
-                height: Some(crate::display_item::DisplayLength::Pixels(
-                    geometry.height_px,
-                )),
-                ascent: Some(crate::display_item::DisplayLength::Pixels(
-                    geometry.ascent_px,
-                )),
-            }),
-        ),
-        position,
-        max_x_px,
-    )
-}
-
-fn append_buffer_source_mapped_text_to_current_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    layout: &crate::display_row_builder::DisplayRowLayout,
-    source: BufferDisplayReplacementSource,
-    face_id: u32,
-    text: impl Into<Box<str>>,
-    position: crate::display_row_builder::DisplayRowPosition,
-    max_x_px: f32,
-) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
-    append_display_item_to_current_matrix_row(
-        builder,
-        layout,
-        source.item(
-            face_id,
-            crate::display_item::DisplayItemKind::SourceMappedText(
-                crate::display_item::DisplaySourceMappedText::new(text),
-            ),
-        ),
-        position,
-        max_x_px,
-    )
 }
 
 fn text_display_row_layout(
@@ -4609,18 +4586,20 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
-                                &mut self.matrix_builder,
-                                &layout,
-                                replacement_source,
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
                                     display_width,
                                     display_height,
                                     display_height,
                                 ),
-                                replacement_position,
-                                right_limit,
+                            );
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                item,
                             ) {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
@@ -4645,8 +4624,9 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    x = progress.end.x_px;
-                                    col = progress.end.col;
+                                    let position = append_cursor.position();
+                                    x = position.x_px;
+                                    col = position.col;
                                     emit_text_progress_slots(
                                         &mut output_emitter,
                                         evaluator,
@@ -4687,17 +4667,18 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source
+                                .source_mapped_text_item(current_text_face_id, placeholder);
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                                 &mut self.matrix_builder,
                                 &layout,
-                                replacement_source,
-                                current_text_face_id,
-                                placeholder,
-                                replacement_position,
-                                right_limit,
+                                item,
                             ) {
-                                x = progress.end.x_px;
-                                col = progress.end.col;
+                                let position = append_cursor.position();
+                                x = position.x_px;
+                                col = position.col;
                                 emit_text_progress_slots(
                                     &mut output_emitter,
                                     evaluator,
@@ -4777,18 +4758,20 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
-                                &mut self.matrix_builder,
-                                &layout,
-                                replacement_source,
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
                                     display_width,
                                     display_height,
                                     display_height,
                                 ),
-                                replacement_position,
-                                right_limit,
+                            );
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                item,
                             ) {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
@@ -4809,8 +4792,9 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    x = progress.end.x_px;
-                                    col = progress.end.col;
+                                    let position = append_cursor.position();
+                                    x = position.x_px;
+                                    col = position.col;
                                     emit_text_progress_slots(
                                         &mut output_emitter,
                                         evaluator,
@@ -4850,17 +4834,18 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source
+                                .source_mapped_text_item(current_text_face_id, "     ");
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                                 &mut self.matrix_builder,
                                 &layout,
-                                replacement_source,
-                                current_text_face_id,
-                                "     ",
-                                replacement_position,
-                                right_limit,
+                                item,
                             ) {
-                                x = progress.end.x_px;
-                                col = progress.end.col;
+                                let position = append_cursor.position();
+                                x = position.x_px;
+                                col = position.col;
                                 emit_text_progress_slots(
                                     &mut output_emitter,
                                     evaluator,
@@ -4925,18 +4910,20 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
-                                &mut self.matrix_builder,
-                                &layout,
-                                replacement_source,
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
                                     display_width,
                                     display_height,
                                     display_height,
                                 ),
-                                replacement_position,
-                                right_limit,
+                            );
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                item,
                             ) {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
@@ -4955,8 +4942,9 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    x = progress.end.x_px;
-                                    col = progress.end.col;
+                                    let position = append_cursor.position();
+                                    x = position.x_px;
+                                    col = position.col;
                                     emit_text_progress_slots(
                                         &mut output_emitter,
                                         evaluator,
@@ -5036,18 +5024,20 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
-                                &mut self.matrix_builder,
-                                &layout,
-                                replacement_source,
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
                                     display_width,
                                     display_height,
                                     display_height,
                                 ),
-                                replacement_position,
-                                right_limit,
+                            );
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                item,
                             ) {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
@@ -5066,8 +5056,9 @@ impl LayoutEngine {
                                     );
                                     row_max_height = row_max_height.max(display_height);
                                     row_max_ascent = row_max_ascent.max(display_height);
-                                    x = progress.end.x_px;
-                                    col = progress.end.col;
+                                    let position = append_cursor.position();
+                                    x = position.x_px;
+                                    col = position.col;
                                     emit_text_progress_slots(
                                         &mut output_emitter,
                                         evaluator,
@@ -5107,17 +5098,18 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                            let mut append_cursor =
+                                DisplayRowAppendCursor::new(replacement_position, right_limit);
+                            let item = replacement_source
+                                .source_mapped_text_item(current_text_face_id, "     ");
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                                 &mut self.matrix_builder,
                                 &layout,
-                                replacement_source,
-                                current_text_face_id,
-                                "     ",
-                                replacement_position,
-                                right_limit,
+                                item,
                             ) {
-                                x = progress.end.x_px;
-                                col = progress.end.col;
+                                let position = append_cursor.position();
+                                x = position.x_px;
+                                col = position.col;
                                 emit_text_progress_slots(
                                     &mut output_emitter,
                                     evaluator,
