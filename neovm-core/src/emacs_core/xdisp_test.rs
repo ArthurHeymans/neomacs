@@ -7,6 +7,7 @@ use crate::emacs_core::value::{
     StringTextPropertyRun, ValueKind, get_string_text_properties_table_for_value,
     set_string_text_properties_for_value,
 };
+use malachite::Integer;
 
 fn interactive_context() -> Context {
     let mut eval = Context::new();
@@ -1473,6 +1474,18 @@ fn test_window_text_pixel_size_arg_validation() {
         ])
         .is_ok()
     );
+    let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
+    assert!(builtin_window_text_pixel_size(vec![Value::NIL, positive_big]).is_ok());
+    assert!(
+        builtin_window_text_pixel_size(vec![
+            Value::NIL,
+            Value::cons(positive_big, Value::fixnum(0)),
+        ])
+        .is_ok()
+    );
+    assert!(
+        builtin_window_text_pixel_size(vec![Value::NIL, Value::fixnum(1), positive_big]).is_ok()
+    );
     let err = builtin_window_text_pixel_size(vec![
         Value::NIL,
         Value::cons(Value::fixnum(1), Value::symbol("bad-offset")),
@@ -1590,6 +1603,45 @@ fn test_window_text_pixel_size_tty_frame_uses_char_cell_metrics() {
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     assert_eq!(result.cons_car(), Value::fixnum(4));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
+}
+
+#[test]
+fn test_window_text_pixel_size_ctx_coerces_bignum_positions_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("abc\n");
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
+    let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::fixnum(selected_window), positive_big],
+    )
+    .expect("GNU clips bignum FROM with fix_position");
+    assert!(result.is_cons());
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::fixnum(selected_window),
+            Value::fixnum(1),
+            positive_big,
+        ],
+    )
+    .expect("GNU clips bignum TO with fix_position");
+    assert!(result.is_cons());
 }
 
 #[test]
