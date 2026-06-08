@@ -2924,6 +2924,80 @@ fn layout_frame_rust_renders_display_replacement_tabs_as_stretches() {
 }
 
 #[test]
+fn layout_frame_rust_honors_display_replacement_string_display_properties() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("px");
+        let replacement = Value::string_with_text_properties(
+            "a b",
+            vec![StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword(":width"),
+                        Value::fixnum(3),
+                    ]),
+                ]),
+            }],
+        );
+        buf.put_text_property(1, 2, Value::symbol("display"), replacement);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-display-propertized-replacement",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
+    assert!(
+        logical_text.contains("pa   b"),
+        "display replacement string should honor its display space, text={logical_text:?}"
+    );
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 3 })),
+        "display replacement string display property should produce a stretch, row={:?}",
+        text_row.glyphs[1]
+    );
+}
+
+#[test]
 fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     let mut eval = Context::new();
     let requests = Arc::new(Mutex::new(Vec::new()));
