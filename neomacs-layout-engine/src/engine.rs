@@ -21,13 +21,13 @@ use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_dis
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendKind, DisplayRowAppendMeasurement,
     DisplayRowAppendMetrics, DisplayRowAppendPlacement, DisplayRowAppendSurface,
-    append_buffer_text_char_to_text_row, append_display_replacement_item_to_text_row,
+    append_buffer_text_char_to_text_row, append_display_item_to_text_row_and_emit,
+    append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_item_to_text_row, append_display_row_spec_item,
-    append_display_row_spec_item_and_emit, append_lisp_string_to_text_row,
-    append_measured_display_row_spec_item_and_emit, append_synthetic_text_to_display_row,
-    emit_text_progress_slots, next_layout_string_source_item, render_face_ref_id,
-    synthetic_display_text_item,
+    append_lisp_string_to_text_row, append_measured_display_row_spec_item_and_emit,
+    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
+    render_face_ref_id, synthetic_display_text_item,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -5456,29 +5456,28 @@ impl LayoutEngine {
                     crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
                     crate::display_item::DisplayItemKind::ControlChar { ch },
                 );
-                let append_spec = text_append_surface
-                    .frame(
-                        DisplayRowAppendPlacement {
-                            row,
-                            y,
-                            glyph_y: y + raise_y_offset,
-                        },
-                        DisplayRowAppendMetrics {
-                            height: face_h,
-                            ascent: face_ascent_val,
-                            char_width: face_char_w,
-                            space_width: face_space_w,
-                            default_row_height: char_h,
-                        },
-                    )
-                    .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                    .append_spec(DisplayRowAppendKind::ControlChar);
-                if let Some((_progress, position)) = append_display_row_spec_item_and_emit(
+                let text_item_frame = text_append_surface.frame(
+                    DisplayRowAppendPlacement {
+                        row,
+                        y,
+                        glyph_y: y + raise_y_offset,
+                    },
+                    DisplayRowAppendMetrics {
+                        height: face_h,
+                        ascent: face_ascent_val,
+                        char_width: face_char_w,
+                        space_width: face_space_w,
+                        default_row_height: char_h,
+                    },
+                );
+                if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    append_spec,
                     item,
+                    current_text_face_id,
+                    text_item_frame,
+                    DisplayRowPosition { x_px: x, col },
                 ) {
                     x = position.x_px;
                     col = position.col;
@@ -5521,29 +5520,28 @@ impl LayoutEngine {
                             crate::display_item::DisplaySourceMappedText::new(mapped_text),
                         ),
                     );
-                    let append_spec = text_append_surface
-                        .frame(
-                            DisplayRowAppendPlacement {
-                                row,
-                                y,
-                                glyph_y: y + raise_y_offset,
-                            },
-                            DisplayRowAppendMetrics {
-                                height: face_h,
-                                ascent: face_ascent_val,
-                                char_width: face_char_w,
-                                space_width: face_space_w,
-                                default_row_height: char_h,
-                            },
-                        )
-                        .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                        .append_spec(DisplayRowAppendKind::SourceMappedText);
-                    if let Some((_progress, position)) = append_display_row_spec_item_and_emit(
+                    let text_item_frame = text_append_surface.frame(
+                        DisplayRowAppendPlacement {
+                            row,
+                            y,
+                            glyph_y: y + raise_y_offset,
+                        },
+                        DisplayRowAppendMetrics {
+                            height: face_h,
+                            ascent: face_ascent_val,
+                            char_width: face_char_w,
+                            space_width: face_space_w,
+                            default_row_height: char_h,
+                        },
+                    );
+                    if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        append_spec,
                         item,
+                        current_text_face_id,
+                        text_item_frame,
+                        DisplayRowPosition { x_px: x, col },
                     ) {
                         x = position.x_px;
                         col = position.col;
@@ -5599,29 +5597,28 @@ impl LayoutEngine {
                         crate::display_item::DisplayGlyphless { ch, method },
                     ),
                 );
-                let append_spec = text_append_surface
-                    .frame(
-                        DisplayRowAppendPlacement {
-                            row,
-                            y,
-                            glyph_y: y + raise_y_offset,
-                        },
-                        DisplayRowAppendMetrics {
-                            height: face_h,
-                            ascent: face_ascent_val,
-                            char_width: face_char_w,
-                            space_width: face_space_w,
-                            default_row_height: char_h,
-                        },
-                    )
-                    .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                    .append_spec(DisplayRowAppendKind::Glyphless);
-                if let Some((_progress, position)) = append_display_row_spec_item_and_emit(
+                let text_item_frame = text_append_surface.frame(
+                    DisplayRowAppendPlacement {
+                        row,
+                        y,
+                        glyph_y: y + raise_y_offset,
+                    },
+                    DisplayRowAppendMetrics {
+                        height: face_h,
+                        ascent: face_ascent_val,
+                        char_width: face_char_w,
+                        space_width: face_space_w,
+                        default_row_height: char_h,
+                    },
+                );
+                if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    append_spec,
                     item,
+                    current_text_face_id,
+                    text_item_frame,
+                    DisplayRowPosition { x_px: x, col },
                 ) {
                     x = position.x_px;
                     col = position.col;
