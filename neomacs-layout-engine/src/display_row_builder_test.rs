@@ -3,8 +3,10 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_source::{DisplaySourceContext, LispStringSourceCursor};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neovm_core::emacs_core::{Context, Value};
 
 fn layout() -> DisplayRowLayout {
     DisplayRowLayout {
@@ -63,6 +65,20 @@ fn display_row_builder_emits_ascii_text_items() {
             .iter()
             .all(|glyph| glyph.face_id == 2)
     );
+}
+
+#[test]
+fn display_row_builder_consumes_display_item_source() {
+    let _eval = Context::new();
+    let mut source = LispStringSourceCursor::new(1, Value::string("abc"), RenderFaceRef::FaceId(2))
+        .expect("source");
+    let mut context = DisplaySourceContext::empty();
+    let mut builder = DisplayRowBuilder::new(layout());
+
+    builder.push_source(&mut source, &mut context);
+
+    let row = builder.finish();
+    assert_eq!(row_text(&row), "abc");
 }
 
 #[test]

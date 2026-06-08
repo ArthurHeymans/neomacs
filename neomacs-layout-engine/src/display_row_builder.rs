@@ -5,6 +5,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplaySourcePosition,
     DisplayStretch, DisplayStretchWidth, RenderFaceRef, SourceSpan,
 };
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
@@ -112,6 +113,16 @@ impl<'a> DisplayRowBuilder<'a> {
             | DisplayItemKind::RowBreak(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
+        }
+    }
+
+    pub(crate) fn push_source(
+        &mut self,
+        source: &mut impl DisplayItemSource,
+        context: &mut DisplaySourceContext<'_>,
+    ) {
+        while let Some(item) = source.next_item(context) {
+            self.push_item(item);
         }
     }
 
