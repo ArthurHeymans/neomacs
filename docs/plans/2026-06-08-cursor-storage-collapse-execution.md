@@ -237,3 +237,49 @@ Stages **A + B** deliver the structural win — one store, no redundancy, bug C
 impossible — at low/medium risk, and are a sensible first PR. Stages **C + D**
 (derive-only geometry, delete the old types) are the ideal end-state and a
 natural second PR once A+B are confirmed live.
+
+## 8. Status (2026-06-08)
+
+**Landed + GUI-verified:**
+- **Stage A** (`37a0c5485`): selected-window `push_cursor` guarded on
+  `!params.selected`; `set_phys_cursor` sync loop deleted;
+  `find_window_cursor_y_in_builder` consults the phys cursor. Behavior-preserving.
+- **Stage B** (`bbee33b15`): `FrameGlyphBuffer` now holds one
+  `window_cursors: Vec<WindowCursor>`, one entry per window, the selected one
+  `active`. `active_cursor()` replaces `phys_cursor`; every backend draws one
+  merged loop (no dedup, no separate phys draw). GUI-verified: single window
+  (single cursor, flush on the blank line) and a `C-x 3` split
+  (`window_cursors=1 active_cursors=1`, selected cursor drawn, no duplicate).
+- **Stage D substance** (folded into B): `window_cursor_visual_matches_phys` and
+  the dedup branches are gone; `WindowCursorVisual` is replaced by `WindowCursor`.
+  `PhysCursor` and `CursorItem` are NOT deleted — they remain the layout-internal
+  types (they carry `charpos`/`row`/`col` for column resolution and the
+  CursorItem decorative path).
+
+The two-representations-of-one-cursor bug class is now structurally impossible:
+there is one cursor per window, and `cursor_draw_rect` (slot-keyed) is the primary
+draw resolver for every backend.
+
+**Stage C — deferred (entangled, low marginal value).** Implementation revealed
+the stored geometry on `WindowCursor` is not vestigial; it carries two things the
+glyph matrix does not:
+1. **Cursor positioning/sizing policy.** `cursor_draw_rect` takes `y`/`height`
+   from the fallback (stored geometry), not the glyph. That geometry comes from
+   `resolve_cursor_geometry`, which encodes Hbar bottom-offset `y`, x-stretch
+   width clamping, EOB sizing, and row-height policy. The raw slot glyph does not
+   carry these, so deriving `y`/`height` from it would mis-place Hbar and stretch
+   cursors.
+2. **The slide-animation interpolation buffer.** `render_pass.rs:410` overwrites
+   the active cursor's geometry with `render.cursor`'s interpolated rect each
+   frame, and `emit_cursor_visual` draws the static box at that `static_rect`. So
+   the geometry fields ARE the slide's per-frame state.
+
+Deleting the fields therefore means re-deriving the cursor sizing policy from the
+matrix AND rewiring the slide so the static box reads render-local animation
+state — a GUI-visible-risk re-architecture, not a clean field deletion. Given A+B
+already removed the bug class and made `cursor_draw_rect` the primary path, the
+marginal value is low. Recommended as its own focused effort with dedicated
+animation (slide), Hbar, and stretch-cursor GUI verification. Until then,
+`cursor_draw_rect` deriving x/width from the glyph (done) already keeps the
+drawn cursor on its glyph; only the y/height fallback and the slide retain the
+stored geometry.
