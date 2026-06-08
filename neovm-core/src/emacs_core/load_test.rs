@@ -7797,6 +7797,53 @@ fn find_file_prefers_earlier_load_path_directory() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[cfg(unix)]
+#[test]
+fn require_expands_tilde_load_path_entries_before_later_directories() {
+    crate::test_utils::init_test_tracing();
+    let home = PathBuf::from(std::env::var_os("HOME").expect("HOME for tilde expansion"));
+    let root = tempfile::tempdir_in(&home).expect("tempdir under HOME");
+    let local = root.path().join("local");
+    let elpa = root.path().join("elpa");
+    fs::create_dir_all(&local).expect("create local fixture dir");
+    fs::create_dir_all(&elpa).expect("create elpa fixture dir");
+
+    let file_name = "vm-shadowed-require.el";
+    fs::write(
+        local.join(file_name),
+        "(setq vm-shadowed-require-source 'local)\n(provide 'vm-shadowed-require)\n",
+    )
+    .expect("write local fixture");
+    fs::write(
+        elpa.join(file_name),
+        "(setq vm-shadowed-require-source 'elpa)\n(provide 'vm-shadowed-require)\n",
+    )
+    .expect("write elpa fixture");
+
+    let relative_root = root
+        .path()
+        .file_name()
+        .expect("tempdir under HOME has file name")
+        .to_string_lossy();
+    let tilde_local = format!("~/{relative_root}/local");
+    let load_path = Value::list(vec![
+        Value::heap_string(runtime_path_entry(&tilde_local)),
+        Value::heap_string(runtime_path_entry(elpa.to_string_lossy().as_ref())),
+    ]);
+
+    let mut eval = Context::new();
+    eval.set_variable("load-path", load_path);
+    eval.require_value(Value::symbol("vm-shadowed-require"), None, None)
+        .expect("require should load the earlier tilde-expanded directory");
+
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-shadowed-require-source")
+            .and_then(|value| (*value).as_symbol_name()),
+        Some("local")
+    );
+}
+
 #[test]
 fn find_file_prefers_newer_source_when_enabled() {
     crate::test_utils::init_test_tracing();

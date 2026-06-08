@@ -819,7 +819,7 @@ fn find_lisp_file_in_load_path_with_flags(
     // Emacs searches load-path directory-by-directory; suffix preference
     // is evaluated within each directory.
     for dir in load_path {
-        let full = load_path_buf(dir).join(load_path_buf(name));
+        let full = expand_tilde_path_buf(dir).join(load_path_buf(name));
         if let Some(found) = find_for_base(&full, name, no_suffix, must_suffix, prefer_newer) {
             return Some(load_path_lisp_string(&found));
         }
