@@ -225,7 +225,7 @@ fn control_char_display_pair(ch: char, ctl_arrow: bool) -> Option<(char, char)> 
     }
 
     let code = ch as u32;
-    if code <= 0x1f || code == 0x7f {
+    if (code <= 0x1f && ch != '\t') || code == 0x7f {
         let suffix = char::from_u32(code ^ 0x40).unwrap_or('?');
         Some(('^', suffix))
     } else {
@@ -5362,111 +5362,8 @@ impl LayoutEngine {
                 continue;
             }
 
-            if ch == '\t' {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
-                // Tab: advance to next tab stop.
-                // GNU xdisp.c:33444 computes next_tab_x from pixel position x:
-                //   int tab_width = it->tab_width * font->space_width;
-                //   int next_tab_x = ((1 + x + tab_width - 1) / tab_width) * tab_width;
-                //   it->pixel_width = next_tab_x - x0;
-                // Do the same here with the iterator's text-area-relative
-                // pixel position.  `x` is frame-absolute in this layout
-                // engine, while GNU's `it->current_x` is relative to the
-                // displayed row/window text area.  Using frame-absolute x
-                // makes tabs in right-hand split windows jump to frame-global
-                // tab stops and pushes following text out of the window.
-                let x_before_tab = x;
-                let pixel_tab_width = params.tab_width as f32 * face_space_w;
-                let tab_x = (x - content_x).max(0.0);
-                let next_tab_x = if !params.tab_stop_list.is_empty() {
-                    // Custom tab stops in pixels
-                    params
-                        .tab_stop_list
-                        .iter()
-                        .map(|&stop| stop as f32 * face_space_w)
-                        .find(|&stop_px| stop_px > tab_x)
-                        .unwrap_or_else(|| {
-                            let last = *params.tab_stop_list.last().unwrap() as f32 * face_space_w;
-                            if tab_x >= last && pixel_tab_width > 0.0 {
-                                last + ((tab_x - last) / pixel_tab_width).floor() * pixel_tab_width
-                                    + pixel_tab_width
-                            } else {
-                                last
-                            }
-                        })
-                } else if pixel_tab_width > 0.0 {
-                    ((tab_x / pixel_tab_width).floor() + 1.0) * pixel_tab_width
-                } else {
-                    tab_x + face_space_w
-                };
-                // Ensure tab advances at least one space width (GNU: next_tab_x - x >= font->space_width)
-                let next_tab_x = if next_tab_x - tab_x < face_space_w {
-                    next_tab_x + pixel_tab_width
-                } else {
-                    next_tab_x
-                };
-                let advance = (next_tab_x - tab_x).max(face_space_w);
-                // col tracks column position on the fixed grid (multiples of
-                // face_space_w).  Recompute from the row-relative tab-stop pixel
-                // so per-character width drift before the tab is absorbed.
-                let next_tab_col = (next_tab_x / face_space_w.max(1.0)).round() as usize;
-                if cursor_info.is_none() && point_charpos == charpos {
-                    capture_cursor_info(
-                        &mut cursor_info,
-                        CapturedCursorInfo {
-                            x: x_before_tab,
-                            y,
-                            face_w: face_char_w,
-                            face_h,
-                            face_ascent: face_ascent_val,
-                            bg: current_bg,
-                            byte_idx: ch_start_byte_idx,
-                            col,
-                            matrix_row: row,
-                            slot_width: Some(advance.max(1.0)),
-                            stretch_like: true,
-                        },
-                    );
-                }
-                output_emitter.emit_text_output_span(
-                    evaluator,
-                    text_output_span_from_coords(
-                        layout_i64_char_pos_to_lisp_char_pos(charpos),
-                        row,
-                        y,
-                        y + raise_y_offset,
-                        char_h,
-                        x_before_tab,
-                        col,
-                        x_before_tab + advance,
-                        next_tab_col,
-                    ),
-                );
-                self.matrix_builder.push_stretch_with_pixel_width(
-                    (next_tab_col.saturating_sub(col)).max(1) as u16,
-                    current_text_face_id,
-                    advance,
-                );
-                x += advance;
-                col = next_tab_col;
-                charpos += 1;
-                if params.word_wrap {
-                    _wrap_break_col = col;
-                    _wrap_break_x = x - content_x;
-                }
-                word_wrap_may_wrap = char_can_wrap_after_basic(ch);
-                // Track trailing whitespace (tab counts as whitespace)
-                if trailing_ws_bg.is_some() && trailing_ws_start_col < 0 {
-                    trailing_ws_start_col = col as i32;
-                    trailing_ws_start_x = x_before_tab;
-                    trailing_ws_row = row;
-                }
-                continue;
-            }
-
             // Control characters: render as ^X notation
-            if ch < ' ' || ch == '\x7F' {
+            if (ch < ' ' && ch != '\t') || ch == '\x7F' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let ctrl_ch = if ch == '\x7F' {
@@ -5869,6 +5766,12 @@ impl LayoutEngine {
                 ch,
                 super::neovm_bridge::buffer_local_bool(buffer, "ctl-arrow"),
             );
+            let tab_advance = (ch == '\t').then(|| {
+                text_display_tab_policy(content_x, params).advance_from(
+                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                    face_space_w,
+                )
+            });
 
             // Grapheme-cluster extenders (combining marks, ZWJ, variation
             // selectors) share the preceding base char's cell — zero columns,
@@ -5876,14 +5779,18 @@ impl LayoutEngine {
             // walk (neomacs's stand-in for GNU's shared `composition_it`,
             // src/composite.c). `cluster_tail` / `is_cluster_continuation` were
             // computed above (before glyphless handling) and are reused here.
-            let char_cols = if control_display.is_some() {
+            let char_cols = if let Some(tab_advance) = tab_advance {
+                tab_advance.width_cols
+            } else if control_display.is_some() {
                 2
             } else if is_cluster_continuation {
                 0
             } else {
                 crate::composition::base_width_cols(ch) as usize
             };
-            let advance = if control_display.is_some() {
+            let advance = if let Some(tab_advance) = tab_advance {
+                tab_advance.pixel_width
+            } else if control_display.is_some() {
                 2.0 * face_char_w
             } else if is_cluster_continuation {
                 0.0
@@ -5983,7 +5890,7 @@ impl LayoutEngine {
                 )
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
-            if x + advance > content_x + avail_width {
+            if ch != '\t' && x + advance > content_x + avail_width {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
@@ -6202,7 +6109,7 @@ impl LayoutEngine {
                         col,
                         matrix_row: row,
                         slot_width: Some(advance.max(1.0)),
-                        stretch_like: false,
+                        stretch_like: ch == '\t',
                     },
                 );
             }
@@ -6260,8 +6167,12 @@ impl LayoutEngine {
                 }
             }
 
-            // Accumulate character into ligature run buffer
-            if self.run_buf.is_empty() {
+            // Accumulate drawable text into the ligature run buffer. Tabs are
+            // emitted as stretch glyphs through the display-row builder.
+            if ch == '\t' {
+                flush_run(&self.run_buf, ligatures);
+                self.run_buf.clear();
+            } else if self.run_buf.is_empty() {
                 let gy = y + raise_y_offset;
                 self.run_buf.start(
                     x,
@@ -6293,7 +6204,9 @@ impl LayoutEngine {
                 );
                 None
             } else {
-                self.run_buf.push(ch, advance);
+                if ch != '\t' {
+                    self.run_buf.push(ch, advance);
+                }
                 let start = CharPos0::new(charpos as usize);
                 let end = CharPos0::new(charpos.saturating_add(1) as usize);
                 let mut source = crate::display_source::BufferTextSourceCursor::new(
@@ -6330,7 +6243,11 @@ impl LayoutEngine {
                     avail_width,
                     face_h,
                     face_ascent_val,
-                    face_char_w,
+                    if ch == '\t' {
+                        face_space_w
+                    } else {
+                        face_char_w
+                    },
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
@@ -6346,7 +6263,11 @@ impl LayoutEngine {
                     item,
                     &mut measurer,
                     position,
-                    content_x + avail_width,
+                    if ch == '\t' {
+                        f32::INFINITY
+                    } else {
+                        content_x + avail_width
+                    },
                 );
                 let Some(progress) = progress else {
                     break;
@@ -6360,6 +6281,7 @@ impl LayoutEngine {
                 self.run_buf.clear();
             }
 
+            let output_span_height = if ch == '\t' { char_h } else { face_h };
             if let Some(progress) = progress {
                 x = progress.end.x_px;
                 col = progress.end.col;
@@ -6370,7 +6292,7 @@ impl LayoutEngine {
                     row,
                     y,
                     y + raise_y_offset,
-                    face_h,
+                    output_span_height,
                 );
             } else {
                 x += advance;
@@ -6382,7 +6304,7 @@ impl LayoutEngine {
                         row,
                         y,
                         y + raise_y_offset,
-                        face_h,
+                        output_span_height,
                         glyph_x,
                         glyph_col,
                         glyph_x + advance,
@@ -6450,7 +6372,11 @@ impl LayoutEngine {
             if trailing_ws_bg.is_some() {
                 if ch == ' ' || ch == '\t' {
                     if trailing_ws_start_col < 0 {
-                        trailing_ws_start_col = (col as i32) - 1;
+                        trailing_ws_start_col = if ch == '\t' {
+                            col as i32
+                        } else {
+                            (col as i32) - 1
+                        };
                         trailing_ws_start_x = x - advance;
                         trailing_ws_row = row;
                     }

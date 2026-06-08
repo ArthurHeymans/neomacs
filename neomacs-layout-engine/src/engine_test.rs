@@ -6699,6 +6699,95 @@ fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
 }
 
 #[test]
+fn buffer_text_source_shadow_matches_main_buffer_tab_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\tb\n");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-source-tab-shadow", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let main_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("main buffer text row");
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let line_end = CharPos0::new("a\tb".chars().count());
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        RenderFaceRef::FaceId(0),
+    );
+    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::new(
+        crate::display_row_builder::DisplayRowLayout {
+            role: GlyphRowRole::Text,
+            y_px: 0.0,
+            width_px: 640.0,
+            height_px: frame.char_height,
+            ascent_px: frame.char_height,
+            char_width_px: frame.char_width,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+            base_face: RenderFaceRef::FaceId(0),
+            symbol_values: std::collections::HashMap::new(),
+        },
+    );
+    let mut context = crate::display_source::DisplaySourceContext::empty();
+    while let Some(item) = source.next_item(&mut context) {
+        row_builder.push_item(item);
+    }
+    let shadow_row = row_builder.finish();
+
+    let main_glyphs = &main_row.glyphs[1];
+    let shadow_glyphs = &shadow_row.glyphs[1];
+    let main_tab = main_glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("main tab stretch");
+    let shadow_tab = shadow_glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("shadow tab stretch");
+
+    assert_eq!(
+        glyphs_logical_text(main_glyphs),
+        glyphs_logical_text(shadow_glyphs)
+    );
+    assert_eq!(main_tab.glyph_type, shadow_tab.glyph_type);
+    assert_eq!(main_tab.pixel_width, shadow_tab.pixel_width);
+}
+
+#[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();
     let buf_id = eval

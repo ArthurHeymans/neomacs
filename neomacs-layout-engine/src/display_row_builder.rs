@@ -32,9 +32,9 @@ pub(crate) struct DisplayTabPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct DisplayTabAdvance {
-    pixel_width: f32,
-    width_cols: usize,
+pub(crate) struct DisplayTabAdvance {
+    pub(crate) pixel_width: f32,
+    pub(crate) width_cols: usize,
 }
 
 impl DisplayTabPolicy {
@@ -63,7 +63,11 @@ impl DisplayTabPolicy {
         }
     }
 
-    fn advance_from(&self, position: DisplayRowPosition, char_width_px: f32) -> DisplayTabAdvance {
+    pub(crate) fn advance_from(
+        &self,
+        position: DisplayRowPosition,
+        char_width_px: f32,
+    ) -> DisplayTabAdvance {
         let char_width_px = char_width_px.max(1.0);
         let tab_width_px = f32::from(self.width_cols.max(1)) * char_width_px;
         let tab_x_px = (position.x_px - self.origin_x_px).max(0.0);
