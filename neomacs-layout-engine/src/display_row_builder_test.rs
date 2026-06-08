@@ -160,6 +160,37 @@ fn display_row_progress_writer_stops_text_before_right_limit() {
 }
 
 #[test]
+fn display_row_progress_writer_reports_source_slots_for_text_run() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 4.0, col: 2 },
+        80.0,
+    );
+
+    let progress = writer.push_item(text_item("aé"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.slots.len(), 2);
+    assert_eq!(
+        progress.slots[0].source,
+        DisplaySourcePosition::lisp_string(1, 0, 0)
+    );
+    assert_eq!(progress.slots[0].x_px, 4.0);
+    assert_eq!(progress.slots[0].col, 2);
+    assert_eq!(progress.slots[0].width_px, 8.0);
+    assert_eq!(
+        progress.slots[1].source,
+        DisplaySourcePosition::lisp_string(1, 1, 1)
+    );
+    assert_eq!(progress.slots[1].x_px, 12.0);
+    assert_eq!(progress.slots[1].col, 3);
+    assert_eq!(progress.slots[1].width_px, 8.0);
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 

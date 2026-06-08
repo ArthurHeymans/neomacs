@@ -9,6 +9,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowLayout {
@@ -78,12 +79,22 @@ pub(crate) enum DisplayRowAppendStatus {
     RowBreak,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowGlyphSlot {
+    pub(crate) source: DisplaySourcePosition,
+    pub(crate) x_px: f32,
+    pub(crate) col: usize,
+    pub(crate) width_px: f32,
+    pub(crate) width_cols: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendProgress {
     pub(crate) start: DisplayRowPosition,
     pub(crate) end: DisplayRowPosition,
     pub(crate) metrics: DisplayRowWriteMetrics,
     pub(crate) status: DisplayRowAppendStatus,
+    pub(crate) slots: Vec<DisplayRowGlyphSlot>,
 }
 
 pub(crate) struct DisplayRowBuilder<'a> {
@@ -214,12 +225,15 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
     pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowAppendProgress {
         let start = self.position;
         let mut metrics = DisplayRowWriteMetrics::default();
+        let mut slots = Vec::new();
         let DisplayItem { span, face, kind } = item;
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
             DisplayItemKind::TextRun(run) => {
                 let face_id = self.writer.face_id(face);
                 let mut charpos = source_span_start_char(&span);
+                let mut char_offset = 0usize;
+                let mut byte_offset = 0usize;
                 let mut status = DisplayRowAppendStatus::Complete;
                 for ch in run.text.chars() {
                     let advance = self.writer.text_char_advance_px(ch, face_id);
@@ -229,16 +243,35 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     }
 
                     let before_len = self.text_area_len();
+                    let slot_start = self.position;
                     self.writer.push_text_char(ch, face_id, charpos);
                     let written = self.metrics_since(before_len);
+                    slots.push(DisplayRowGlyphSlot {
+                        source: source_position_advance(&span.start, char_offset, byte_offset),
+                        x_px: slot_start.x_px,
+                        col: slot_start.col,
+                        width_px: written.width_px,
+                        width_cols: written.width_cols,
+                    });
                     self.advance(written);
                     metrics.add(written);
                     charpos += 1;
+                    char_offset += 1;
+                    byte_offset += ch.len_utf8();
                 }
                 status
             }
             kind => {
+                let slot_start = self.position;
+                let slot_source = span.start.clone();
                 let written = self.writer.push_item(DisplayItem::new(span, face, kind));
+                slots.push(DisplayRowGlyphSlot {
+                    source: slot_source,
+                    x_px: slot_start.x_px,
+                    col: slot_start.col,
+                    width_px: written.width_px,
+                    width_cols: written.width_cols,
+                });
                 self.advance(written);
                 metrics.add(written);
                 DisplayRowAppendStatus::Complete
@@ -250,6 +283,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             end: self.position,
             metrics,
             status,
+            slots,
         }
     }
 
@@ -576,6 +610,36 @@ fn source_span_start_char(span: &SourceSpan) -> usize {
         DisplaySourcePosition::Buffer { char_pos, .. } => char_pos.get(),
         DisplaySourcePosition::LispString { char_index, .. } => *char_index,
         DisplaySourcePosition::Synthetic { offset, .. } => *offset,
+    }
+}
+
+fn source_position_advance(
+    start: &DisplaySourcePosition,
+    char_offset: usize,
+    byte_offset: usize,
+) -> DisplaySourcePosition {
+    match start {
+        DisplaySourcePosition::Buffer {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        } => DisplaySourcePosition::buffer(
+            *buffer_id,
+            CharPos0::new(char_pos.get() + char_offset),
+            EmacsBytePos::new(byte_pos.get() + byte_offset),
+        ),
+        DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            byte_index,
+        } => DisplaySourcePosition::lisp_string(
+            source_id.get(),
+            char_index + char_offset,
+            byte_index + byte_offset,
+        ),
+        DisplaySourcePosition::Synthetic { source_id, offset } => {
+            DisplaySourcePosition::synthetic(source_id.get(), offset + char_offset)
+        }
     }
 }
 
