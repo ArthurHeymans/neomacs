@@ -586,13 +586,6 @@ fn effective_truncate_lines(
     }
 }
 
-pub(crate) fn buffer_local_string_owned<B: LayoutBufferView>(
-    buffer: &B,
-    name: &str,
-) -> Option<String> {
-    buffer_local_value(buffer, name).and_then(|v| v.as_runtime_string_owned())
-}
-
 fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f32 {
     // GNU Emacs frame.c:1184-1185 — non-window (TTY) frames have
     //   f->column_width = 1;
@@ -1962,15 +1955,6 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         self.buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, name)
-    }
-
-    /// Get a text property at `charpos` as a string.
-    ///
-    /// Returns `Some(String)` if the property exists and is a string value,
-    /// `None` otherwise.
-    pub fn get_text_prop_string(&self, charpos: i64, prop_name: &str) -> Option<String> {
-        self.get_property(charpos, Value::symbol(prop_name))
-            .and_then(|v| v.as_runtime_string_owned())
     }
 }
 

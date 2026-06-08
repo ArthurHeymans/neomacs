@@ -1523,6 +1523,26 @@ enum TextRowAppendKind {
     DisplayReplacementString,
 }
 
+impl TextRowAppendKind {
+    fn from_display_item_kind(kind: &crate::display_item::DisplayItemKind) -> Option<Self> {
+        match kind {
+            crate::display_item::DisplayItemKind::TextRun(_) => Some(Self::SourceText),
+            crate::display_item::DisplayItemKind::SourceMappedText(_) => {
+                Some(Self::SourceMappedText)
+            }
+            crate::display_item::DisplayItemKind::ControlChar { .. } => Some(Self::ControlChar),
+            crate::display_item::DisplayItemKind::Glyphless(_) => Some(Self::Glyphless),
+            crate::display_item::DisplayItemKind::Stretch(_)
+            | crate::display_item::DisplayItemKind::Image(_)
+            | crate::display_item::DisplayItemKind::Video(_)
+            | crate::display_item::DisplayItemKind::Xwidget(_) => Some(Self::DisplayReplacement),
+            crate::display_item::DisplayItemKind::RowBreak(_)
+            | crate::display_item::DisplayItemKind::CursorAnchor(_)
+            | crate::display_item::DisplayItemKind::HitTestAnchor(_) => None,
+        }
+    }
+}
+
 struct TextRowAppendSpec {
     layout: DisplayRowLayout,
     position: DisplayRowPosition,
@@ -1712,6 +1732,57 @@ fn append_measured_text_row_item_and_emit(
         output.height,
     );
     Some((progress, position))
+}
+
+fn append_lisp_string_to_text_row(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    text_value: Value,
+    source_id: u64,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    base_face: &super::neovm_bridge::ResolvedFace,
+    base_face_id: u32,
+    current_face_id: &mut u32,
+    frame: TextRowAppendFrame,
+    mut position: DisplayRowPosition,
+) -> DisplayRowPosition {
+    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+        source_id,
+        text_value,
+        crate::display_item::RenderFaceRef::FaceId(base_face_id),
+    ) else {
+        return position;
+    };
+    let mut string_face_cache = std::collections::HashMap::new();
+    while let Some(item) = next_layout_string_source_item(
+        builder,
+        &mut source,
+        face_resolver,
+        base_face,
+        &mut string_face_cache,
+        current_face_id,
+    ) {
+        let Some(kind) = TextRowAppendKind::from_display_item_kind(&item.kind) else {
+            continue;
+        };
+        let face_id = render_face_ref_id(item.face, base_face_id);
+        let append_spec = frame.clone().at(position, face_id).append_spec(kind);
+        let Some((progress, next_position)) = append_text_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ) else {
+            break;
+        };
+        position = next_position;
+        if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
+            break;
+        }
+    }
+    position
 }
 
 struct LayoutStringFaceResolver<'a> {
@@ -3370,10 +3441,13 @@ impl LayoutEngine {
         // t (True) = only CR hides rest of line (mapped to i32::MAX so indent check never triggers)
         let selective_display = super::neovm_bridge::buffer_selective_display(buffer);
 
-        // Line/wrap prefix: read from buffer-local variables
-        let line_prefix_str = super::neovm_bridge::buffer_local_string_owned(buffer, "line-prefix");
-        let wrap_prefix_str = super::neovm_bridge::buffer_local_string_owned(buffer, "wrap-prefix");
-        let has_prefix = line_prefix_str.is_some() || wrap_prefix_str.is_some();
+        // Line/wrap prefix: keep Lisp string values so display-time prefixes
+        // retain text properties while moving through the shared row builder.
+        let line_prefix_value = super::neovm_bridge::buffer_local_value(buffer, "line-prefix")
+            .filter(|value| value.as_lisp_string().is_some());
+        let wrap_prefix_value = super::neovm_bridge::buffer_local_value(buffer, "wrap-prefix")
+            .filter(|value| value.as_lisp_string().is_some());
+        let has_prefix = line_prefix_value.is_some() || wrap_prefix_value.is_some();
 
         // Use face_resolver's default face for this window.
         // Chrome row reservation must use the same realized face metrics as
@@ -3859,7 +3933,7 @@ impl LayoutEngine {
         let mut word_wrap_may_wrap = false;
 
         // Line/wrap prefix tracking: 0=none, 1=line-prefix, 2=wrap-prefix
-        let mut need_prefix: u8 = if has_prefix && line_prefix_str.is_some() {
+        let mut need_prefix: u8 = if has_prefix && line_prefix_value.is_some() {
             1
         } else {
             0
@@ -4156,32 +4230,53 @@ impl LayoutEngine {
                 let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
                 let prefix = if need_prefix == 2 {
                     text_props
-                        .get_text_prop_string(charpos, "wrap-prefix")
-                        .or_else(|| wrap_prefix_str.as_deref().map(|s| s.to_string()))
+                        .get_property(charpos, Value::symbol("wrap-prefix"))
+                        .filter(|value| value.as_lisp_string().is_some())
+                        .or(wrap_prefix_value)
                 } else {
                     text_props
-                        .get_text_prop_string(charpos, "line-prefix")
-                        .or_else(|| line_prefix_str.as_deref().map(|s| s.to_string()))
+                        .get_property(charpos, Value::symbol("line-prefix"))
+                        .filter(|value| value.as_lisp_string().is_some())
+                        .or(line_prefix_value)
                 };
 
-                if let Some(prefix_text) = prefix {
+                if let Some(prefix_value) = prefix {
                     // Flush ligature run before prefix
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
 
-                    let right_limit = content_x + avail_width;
-                    for pch in prefix_text.chars() {
-                        if pch == '\n' || pch == '\r' {
-                            continue;
-                        }
-                        let p_cols = if is_wide_char(pch) { 2 } else { 1 };
-                        let p_adv = p_cols as f32 * face_char_w;
-                        if x + p_adv > right_limit {
-                            break;
-                        }
-                        x += p_adv;
-                        col += p_cols as usize;
-                    }
+                    let append_frame = TextRowAppendFrame {
+                        row,
+                        glyph_y: y + raise_y_offset,
+                        geometry: DisplayRowGeometry {
+                            y,
+                            width: avail_width,
+                            height: face_h,
+                            char_width: face_char_w,
+                            ascent: face_ascent_val,
+                            tab_policy: text_display_tab_policy(content_x, params),
+                        },
+                        default_row_height: char_h,
+                        content_x,
+                        text_width,
+                        line_number_width: lnum_pixel_width,
+                        face_space_width: face_space_w,
+                    };
+                    let position = append_lisp_string_to_text_row(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        prefix_value,
+                        2,
+                        face_resolver,
+                        &current_resolved_face,
+                        current_text_face_id,
+                        &mut current_face_id,
+                        append_frame,
+                        DisplayRowPosition { x_px: x, col },
+                    );
+                    x = position.x_px;
+                    col = position.col;
                 }
                 need_prefix = 0;
             }

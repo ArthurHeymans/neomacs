@@ -1836,6 +1836,70 @@ fn layout_frame_rust_renders_buffer_control_chars_with_caret_notation() {
 }
 
 #[test]
+fn layout_frame_rust_renders_line_prefix_through_row_builder() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abc");
+        buf.set_buffer_local("line-prefix", Value::string("中\t"));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-line-prefix", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+    let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
+
+    assert!(
+        logical_text.starts_with("中      abc"),
+        "line-prefix should render through the shared row builder with wide/tab semantics, text={logical_text:?}, row={:?}",
+        text_row.glyphs[1]
+    );
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }) && glyph.wide),
+        "line-prefix wide char should carry wide glyph metadata, row={:?}",
+        text_row.glyphs[1]
+    );
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 6 })),
+        "line-prefix tab should expand to the next tab stop, row={:?}",
+        text_row.glyphs[1]
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
     let mut eval = Context::new();
     eval.obarray_mut()
