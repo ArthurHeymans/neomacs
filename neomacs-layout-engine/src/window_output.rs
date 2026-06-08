@@ -5,7 +5,7 @@
 //! while simultaneously recording immutable row snapshots for renderer
 //! handoff.
 
-use super::display_status_line::StatusLineOutputProgress;
+use super::display_status_line::DisplayRowOutputProgress;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
@@ -98,10 +98,10 @@ pub(crate) trait DisplayProgressSink {
         &mut self,
         evaluator: &mut Context,
         output: ChromeRowOutput,
-        progress: StatusLineOutputProgress,
+        progress: DisplayRowOutputProgress,
     );
 
-    fn finish_chrome_progress(&mut self, progress: StatusLineOutputProgress);
+    fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress);
 }
 
 pub(crate) struct WindowOutputEmitter {
@@ -154,12 +154,12 @@ impl DisplayProgressSink for WindowOutputEmitter {
         &mut self,
         evaluator: &mut Context,
         output: ChromeRowOutput,
-        progress: StatusLineOutputProgress,
+        progress: DisplayRowOutputProgress,
     ) {
         self.move_chrome_output_to(evaluator, output.row, progress);
     }
 
-    fn finish_chrome_progress(&mut self, progress: StatusLineOutputProgress) {
+    fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress) {
         self.push_chrome_row_progress(progress);
     }
 }
@@ -451,7 +451,7 @@ impl WindowOutputEmitter {
         &mut self,
         evaluator: &mut Context,
         row: i64,
-        progress: StatusLineOutputProgress,
+        progress: DisplayRowOutputProgress,
     ) {
         self.move_output_to(
             evaluator,
@@ -490,7 +490,7 @@ impl WindowOutputEmitter {
         self.rows.push(row);
     }
 
-    fn push_chrome_row_progress(&mut self, progress: StatusLineOutputProgress) {
+    fn push_chrome_row_progress(&mut self, progress: DisplayRowOutputProgress) {
         let row_progress = self
             .current_row_progress
             .take()

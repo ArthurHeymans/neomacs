@@ -517,7 +517,7 @@ fn apply_overlay_start_at_last_run() {
 }
 
 #[test]
-fn status_line_row_height_for_face_uses_realized_line_height_and_box() {
+fn display_row_height_for_face_uses_realized_line_height_and_box() {
     let mut engine = LayoutEngine::new();
     let mut face = ResolvedFace::default();
     face.font_family = "monospace".to_string();
@@ -528,13 +528,13 @@ fn status_line_row_height_for_face_uses_realized_line_height_and_box() {
     face.box_line_width = 1;
 
     assert_eq!(
-        engine.status_line_row_height_for_face(&face, 8.0, 12.0, 20.0),
+        engine.display_row_height_for_face(&face, 8.0, 12.0, 20.0),
         20.0
     );
 }
 
 #[test]
-fn status_line_face_preserves_gnu_box_type_codes() {
+fn display_row_face_preserves_gnu_box_type_codes() {
     let mut resolved = ResolvedFace::default();
     let boxes = [
         (0, BoxType::None),
@@ -545,8 +545,8 @@ fn status_line_face_preserves_gnu_box_type_codes() {
 
     for (code, box_type) in boxes {
         resolved.box_type = code;
-        let status_face = StatusLineFace::from_resolved(1, &resolved);
-        assert_eq!(status_face.box_type, box_type);
-        assert_eq!(status_face.render_face().box_type, box_type);
+        let row_face = DisplayRowFace::from_resolved(1, &resolved);
+        assert_eq!(row_face.box_type, box_type);
+        assert_eq!(row_face.render_face().box_type, box_type);
     }
 }

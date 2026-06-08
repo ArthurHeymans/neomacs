@@ -60,16 +60,16 @@ fn render_lisp_display_row_with_symbols(
 }
 
 #[test]
-fn status_line_glyph_measurer_uses_face_specific_widths() {
+fn display_row_glyph_measurer_uses_face_specific_widths() {
     let mut base = base_face();
     base.font_char_width = 5.0;
     let mut wide = base.clone();
     wide.font_char_width = 9.0;
     let faces = vec![
-        StatusLineFace::from_resolved(1, &base),
-        StatusLineFace::from_resolved(2, &wide),
+        DisplayRowFace::from_resolved(1, &base),
+        DisplayRowFace::from_resolved(2, &wide),
     ];
-    let mut measurer = StatusLineGlyphMeasurer::new(&faces, None, 5.0);
+    let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 5.0);
 
     assert_eq!(measurer.glyph_advance_px('a', 1, 1, 5.0), Some(5.0));
     assert_eq!(measurer.glyph_advance_px('中', 2, 2, 10.0), Some(18.0));

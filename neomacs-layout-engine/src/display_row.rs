@@ -21,9 +21,9 @@ fn underline_style_from_code(code: u8) -> UnderlineStyle {
     UnderlineStyle::from_gnu_code(code).unwrap_or_default()
 }
 
-/// Shared render-facing face spec for all status-line backends.
+/// Shared render-facing face spec for Lisp-string display rows.
 #[derive(Debug, Clone)]
-pub(crate) struct StatusLineFace {
+pub(crate) struct DisplayRowFace {
     pub(crate) face_id: u32,
     pub(crate) foreground: Color,
     pub(crate) background: Color,
@@ -56,7 +56,7 @@ pub(crate) struct StatusLineFace {
     pub(crate) underline_thickness: i32,
 }
 
-impl StatusLineFace {
+impl DisplayRowFace {
     pub(crate) fn from_resolved(face_id: u32, face: &ResolvedFace) -> Self {
         let font_descent = if face.font_line_height > 0.0 && face.font_ascent > 0.0 {
             (face.font_line_height - face.font_ascent).max(0.0).ceil() as i32
@@ -186,15 +186,15 @@ impl StatusLineFace {
     }
 }
 
-struct StatusLineGlyphMeasurer<'a> {
-    faces: &'a [StatusLineFace],
+struct DisplayRowGlyphMeasurer<'a> {
+    faces: &'a [DisplayRowFace],
     font_metrics: Option<&'a mut FontMetricsService>,
     fallback_char_width: f32,
 }
 
-impl<'a> StatusLineGlyphMeasurer<'a> {
+impl<'a> DisplayRowGlyphMeasurer<'a> {
     fn new(
-        faces: &'a [StatusLineFace],
+        faces: &'a [DisplayRowFace],
         font_metrics: Option<&'a mut FontMetricsService>,
         fallback_char_width: f32,
     ) -> Self {
@@ -205,12 +205,12 @@ impl<'a> StatusLineGlyphMeasurer<'a> {
         }
     }
 
-    fn face(&self, face_id: u32) -> Option<&StatusLineFace> {
+    fn face(&self, face_id: u32) -> Option<&DisplayRowFace> {
         self.faces.iter().find(|face| face.face_id == face_id)
     }
 }
 
-impl DisplayGlyphMeasurer for StatusLineGlyphMeasurer<'_> {
+impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     fn glyph_advance_px(
         &mut self,
         ch: char,
@@ -321,7 +321,7 @@ pub(crate) fn apply_overlay_face_run(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct StatusLineOutputProgress {
+pub(crate) struct DisplayRowOutputProgress {
     pub end_x: f32,
     pub end_col: i64,
     pub y: f32,
@@ -330,7 +330,7 @@ pub(crate) struct StatusLineOutputProgress {
 
 pub(crate) struct RenderedDisplaySourceRow {
     pub(crate) row: GlyphRow,
-    pub(crate) progress: StatusLineOutputProgress,
+    pub(crate) progress: DisplayRowOutputProgress,
     pub(crate) faces: Vec<Face>,
 }
 
@@ -373,7 +373,7 @@ fn display_source_row_progress(
     char_width: f32,
     y: f32,
     height: f32,
-) -> StatusLineOutputProgress {
+) -> DisplayRowOutputProgress {
     let fallback = char_width.max(1.0);
     let end_x: f32 = row.glyphs[GlyphArea::Text.index()]
         .iter()
@@ -391,7 +391,7 @@ fn display_source_row_progress(
             _ => fallback,
         })
         .sum();
-    StatusLineOutputProgress {
+    DisplayRowOutputProgress {
         end_x: end_x.min(width).max(0.0),
         end_col: (end_x / fallback).round().max(0.0) as i64,
         y,
@@ -421,12 +421,12 @@ impl LayoutEngine {
             *next_face_id += 1;
             id
         };
-        let status_face =
-            self.realize_status_line_face(base_face_id, base_face, char_w, ascent, height);
-        let char_width = self.status_line_char_width(&status_face, char_w).max(1.0);
-        let mut status_faces = vec![status_face.clone()];
+        let row_face =
+            self.realize_display_row_face(base_face_id, base_face, char_w, ascent, height);
+        let char_width = self.display_row_char_width(&row_face, char_w).max(1.0);
+        let mut row_faces = vec![row_face.clone()];
         let mut source =
-            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(status_face.face_id))?;
+            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(row_face.face_id))?;
         let mut items = Vec::new();
 
         struct RowFaceResolver<'a> {
@@ -438,7 +438,7 @@ impl LayoutEngine {
             char_w: f32,
             ascent: f32,
             height: f32,
-            status_faces: &'a mut Vec<StatusLineFace>,
+            row_faces: &'a mut Vec<DisplayRowFace>,
         }
 
         impl DisplayItemFaceResolver for RowFaceResolver<'_> {
@@ -459,14 +459,14 @@ impl LayoutEngine {
 
                 let face_id = *self.next_face_id;
                 *self.next_face_id += 1;
-                let status_face = self.engine.realize_status_line_face(
+                let row_face = self.engine.realize_display_row_face(
                     face_id,
                     &resolved,
                     self.char_w,
                     self.ascent,
                     self.height,
                 );
-                self.status_faces.push(status_face);
+                self.row_faces.push(row_face);
                 crate::display_item::RenderFaceRef::FaceId(face_id)
             }
         }
@@ -476,12 +476,12 @@ impl LayoutEngine {
                 engine: self,
                 face_resolver,
                 base_face,
-                base_face_id: status_face.face_id,
+                base_face_id: row_face.face_id,
                 next_face_id,
                 char_w,
                 ascent,
                 height,
-                status_faces: &mut status_faces,
+                row_faces: &mut row_faces,
             };
             let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
             while let Some(item) = source.next_item(&mut context) {
@@ -498,15 +498,15 @@ impl LayoutEngine {
             y_px: y,
             width_px: width,
             height_px: height,
-            ascent_px: status_face.font_ascent.max(ascent).min(height.max(1.0)),
+            ascent_px: row_face.font_ascent.max(ascent).min(height.max(1.0)),
             char_width_px: char_width,
             tab_policy: DisplayTabPolicy::every(8),
-            base_face: RenderFaceRef::FaceId(status_face.face_id),
+            base_face: RenderFaceRef::FaceId(row_face.face_id),
             symbol_values: parsed_symbol_values,
         };
         let row = {
             let mut glyph_measurer =
-                StatusLineGlyphMeasurer::new(&status_faces, self.font_metrics.as_mut(), char_width);
+                DisplayRowGlyphMeasurer::new(&row_faces, self.font_metrics.as_mut(), char_width);
             let mut row_builder =
                 DisplayRowBuilder::with_glyph_measurer(row_layout, &mut glyph_measurer);
             for item in items {
@@ -515,7 +515,7 @@ impl LayoutEngine {
             row_builder.finish()
         };
         let progress = display_source_row_progress(&row, width, char_width, y, height);
-        let faces = status_faces
+        let faces = row_faces
             .into_iter()
             .map(|face| face.render_face())
             .collect();

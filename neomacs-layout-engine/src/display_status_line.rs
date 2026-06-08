@@ -1,18 +1,12 @@
-//! Display-walker status-line rendering.
+//! Display-walker chrome row rendering.
 //!
-//! Mode-line, header-line, and tab-line flow through the
-//! walker defined here. The walker produces
-//! glyphs via TtyDisplayBackend::produce_glyph and installs the
-//! completed row into GlyphMatrixBuilder wholesale; above the
-//! backend trait boundary the code is frontend-agnostic, matching
-//! GNU Emacs's display_mode_line -> display_mode_element ->
-//! display_line -> PRODUCE_GLYPHS architecture.
+//! Mode-line, header-line, tab-line, tab-bar, and minibuffer echo rows share
+//! the face realization helpers defined here. The generic display-row spec,
+//! property harvester, and row renderer live in `display_row`; this module
+//! retains the status-line filename because it grew from the older
+//! mode-line-only path.
 //!
-//! Housed types include status-line face metric helpers. The generic
-//! display-row spec, property harvester, and row renderer live in
-//! `display_row`.
-//!
-//! History: this module started as status_line.rs, a divergent
+//! History: this module started as a divergent
 //! parallel implementation of display-line rendering that did not
 //! process display properties and dropped doom-modeline's
 //! (space :align-to ...) forms. Steps 3.3' through 3.6 of the
@@ -21,28 +15,28 @@
 
 use super::engine::LayoutEngine;
 use super::neovm_bridge::ResolvedFace;
+pub(crate) use crate::display_row::{DisplayRowFace, DisplayRowOutputProgress};
 #[cfg(test)]
 pub(crate) use crate::display_row::{
     OverlayFaceRun, apply_overlay_face_run, parse_overlay_face_runs,
 };
-pub(crate) use crate::display_row::{StatusLineFace, StatusLineOutputProgress};
 use neomacs_display_protocol::face::BoxType;
 
 impl LayoutEngine {
-    pub(crate) fn realize_status_line_face(
+    pub(crate) fn realize_display_row_face(
         &mut self,
         face_id: u32,
         face: &ResolvedFace,
         char_w: f32,
         ascent: f32,
         row_height: f32,
-    ) -> StatusLineFace {
-        let mut face = StatusLineFace::from_resolved(face_id, face);
-        self.ensure_status_line_face_metrics(&mut face, char_w, ascent, row_height);
+    ) -> DisplayRowFace {
+        let mut face = DisplayRowFace::from_resolved(face_id, face);
+        self.ensure_display_row_face_metrics(&mut face, char_w, ascent, row_height);
         face
     }
 
-    pub(crate) fn status_line_row_height_for_face(
+    pub(crate) fn display_row_height_for_face(
         &mut self,
         face: &ResolvedFace,
         char_w: f32,
@@ -68,7 +62,7 @@ impl LayoutEngine {
             return fallback_row_height.max(1.0);
         }
         let face =
-            self.realize_status_line_face(0, face, char_w, fallback_ascent, fallback_row_height);
+            self.realize_display_row_face(0, face, char_w, fallback_ascent, fallback_row_height);
         let line_height = (face.font_ascent + face.font_descent as f32)
             .max(1.0)
             .ceil();
@@ -81,9 +75,9 @@ impl LayoutEngine {
         (line_height + box_pixels).max(minimum_row_height)
     }
 
-    fn ensure_status_line_face_metrics(
+    fn ensure_display_row_face_metrics(
         &mut self,
-        face: &mut StatusLineFace,
+        face: &mut DisplayRowFace,
         fallback_char_width: f32,
         fallback_ascent: f32,
         row_height: f32,
@@ -93,7 +87,7 @@ impl LayoutEngine {
             || (face.font_ascent + face.font_descent as f32) <= 0.0;
 
         if needs_metrics {
-            let metrics = self.status_line_font_metrics(face);
+            let metrics = self.display_row_font_metrics(face);
 
             if face.font_char_width <= 0.0 && metrics.char_width > 0.0 {
                 face.font_char_width = metrics.char_width;

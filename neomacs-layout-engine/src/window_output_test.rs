@@ -7,7 +7,7 @@ use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
     DisplayRowWriteMetrics,
 };
-use crate::display_status_line::StatusLineOutputProgress;
+use crate::display_status_line::DisplayRowOutputProgress;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
@@ -263,7 +263,7 @@ fn display_progress_sink_records_chrome_row_progress() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     let output = ChromeRowOutput { row: 2, y: 18.0 };
-    let progress = StatusLineOutputProgress {
+    let progress = DisplayRowOutputProgress {
         end_x: 40.0,
         end_col: 5,
         y: 18.0,

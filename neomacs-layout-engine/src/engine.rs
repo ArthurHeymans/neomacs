@@ -1847,12 +1847,12 @@ fn capture_overlay_string_cursor(
     );
 }
 
-fn measured_face_status_line_face(
+fn measured_display_row_face(
     face_id: u32,
     face: &super::neovm_bridge::ResolvedFace,
     metrics: Option<FontMetrics>,
-) -> StatusLineFace {
-    let mut render_face = StatusLineFace::from_resolved(face_id, face);
+) -> DisplayRowFace {
+    let mut render_face = DisplayRowFace::from_resolved(face_id, face);
     if let Some(metrics) = metrics {
         render_face.font_char_width = metrics.char_width;
         render_face.font_ascent = metrics.ascent;
@@ -1867,7 +1867,7 @@ fn apply_resolved_face(
     face: &super::neovm_bridge::ResolvedFace,
     metrics: Option<FontMetrics>,
 ) {
-    let render_face = measured_face_status_line_face(face_id, face, metrics);
+    let render_face = measured_display_row_face(face_id, face, metrics);
     let rendered = render_face.render_face();
     builder.insert_face(render_face.face_id, rendered);
 }
@@ -2788,7 +2788,7 @@ impl LayoutEngine {
                         let border_face = face_resolver.resolve_named_face("vertical-border");
                         let border_face_id = border_face.face_id;
                         let realized_face =
-                            crate::display_status_line::StatusLineFace::from_resolved(
+                            crate::display_status_line::DisplayRowFace::from_resolved(
                                 border_face_id,
                                 &border_face,
                             );
@@ -3214,13 +3214,13 @@ impl LayoutEngine {
         };
 
         let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
-            self.status_line_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
+            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
         });
         let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
-            self.status_line_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
+            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
         });
         let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
-            self.status_line_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
+            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
         });
         let top_chrome_rows =
             usize::from(tab_line_height > 0.0) + usize::from(header_line_height > 0.0);
@@ -7317,9 +7317,9 @@ impl LayoutEngine {
         if base_face.font_ascent <= 0.0 {
             base_face.font_ascent = ascent.max(row_height * 0.8);
         }
-        let sl_face = self.realize_status_line_face(0, &base_face, char_w, ascent, row_height);
-        let base_render_face = sl_face.render_face();
-        let char_width = self.status_line_char_width(&sl_face, char_w);
+        let row_face = self.realize_display_row_face(0, &base_face, char_w, ascent, row_height);
+        let base_render_face = row_face.render_face();
+        let char_width = self.display_row_char_width(&row_face, char_w);
         let reserve_width = if reserve_right_special_col {
             char_width.max(1.0)
         } else {
@@ -7437,9 +7437,9 @@ impl LayoutEngine {
         (faces, rows)
     }
 
-    pub(crate) fn status_line_char_width(
+    pub(crate) fn display_row_char_width(
         &mut self,
-        face: &StatusLineFace,
+        face: &DisplayRowFace,
         fallback_char_width: f32,
     ) -> f32 {
         if face.font_char_width > 0.0 {
@@ -7457,9 +7457,9 @@ impl LayoutEngine {
         fallback_char_width
     }
 
-    pub(crate) fn status_line_font_metrics(
+    pub(crate) fn display_row_font_metrics(
         &mut self,
-        face: &StatusLineFace,
+        face: &DisplayRowFace,
     ) -> crate::font_metrics::FontMetrics {
         // If the engine was started in TTY mode (no
         // `enable_cosmic_metrics()` call), `self.font_metrics` is
