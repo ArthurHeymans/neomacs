@@ -1395,7 +1395,7 @@ fn text_display_row_layout(
     height_px: f32,
     ascent_px: f32,
     char_width_px: f32,
-    tab_width: i32,
+    tab_policy: crate::display_row_builder::DisplayTabPolicy,
     face_id: u32,
 ) -> crate::display_row_builder::DisplayRowLayout {
     crate::display_row_builder::DisplayRowLayout {
@@ -1405,10 +1405,21 @@ fn text_display_row_layout(
         height_px,
         ascent_px,
         char_width_px,
-        tab_width_cols: tab_width.max(1).min(i32::from(u16::MAX)) as u16,
+        tab_policy,
         base_face: crate::display_item::RenderFaceRef::FaceId(face_id),
         symbol_values: std::collections::HashMap::new(),
     }
+}
+
+fn text_display_tab_policy(
+    content_x: f32,
+    params: &WindowParams,
+) -> crate::display_row_builder::DisplayTabPolicy {
+    crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
+        content_x,
+        params.tab_width,
+        &params.tab_stop_list,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1692,7 +1703,7 @@ fn render_overlay_string(
             char_h,
             default_row_ascent,
             face_char_w,
-            params.tab_width,
+            text_display_tab_policy(content_x, params),
             face_id,
         );
         let item = crate::display_item::DisplayItem::new(
@@ -4380,7 +4391,7 @@ impl LayoutEngine {
                                                 face_h,
                                                 face_ascent_val,
                                                 face_space_w,
-                                                params.tab_width,
+                                                text_display_tab_policy(content_x, params),
                                                 face_id,
                                             );
                                             let position =
@@ -4418,7 +4429,7 @@ impl LayoutEngine {
                                                 face_h,
                                                 face_ascent_val,
                                                 face_space_w,
-                                                params.tab_width,
+                                                text_display_tab_policy(content_x, params),
                                                 face_id,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
@@ -6320,7 +6331,7 @@ impl LayoutEngine {
                     face_h,
                     face_ascent_val,
                     face_char_w,
-                    params.tab_width,
+                    text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
                 let mut measurer = SingleGlyphAdvance {

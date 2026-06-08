@@ -1,5 +1,7 @@
 use crate::display_item::RenderFaceRef;
-use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowBuilder, DisplayRowLayout};
+use crate::display_row_builder::{
+    DisplayGlyphMeasurer, DisplayRowBuilder, DisplayRowLayout, DisplayTabPolicy,
+};
 use crate::display_source::{
     DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
     parse_display_length_expr,
@@ -498,7 +500,7 @@ impl LayoutEngine {
             height_px: height,
             ascent_px: status_face.font_ascent.max(ascent).min(height.max(1.0)),
             char_width_px: char_width,
-            tab_width_cols: 8,
+            tab_policy: DisplayTabPolicy::every(8),
             base_face: RenderFaceRef::FaceId(status_face.face_id),
             symbol_values: parsed_symbol_values,
         };

@@ -19,9 +19,87 @@ pub(crate) struct DisplayRowLayout {
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
     pub(crate) char_width_px: f32,
-    pub(crate) tab_width_cols: u16,
+    pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: RenderFaceRef,
     pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayTabPolicy {
+    pub(crate) origin_x_px: f32,
+    pub(crate) width_cols: u16,
+    pub(crate) stop_cols: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayTabAdvance {
+    pixel_width: f32,
+    width_cols: usize,
+}
+
+impl DisplayTabPolicy {
+    pub(crate) fn every(width_cols: u16) -> Self {
+        Self {
+            origin_x_px: 0.0,
+            width_cols: width_cols.max(1),
+            stop_cols: Vec::new(),
+        }
+    }
+
+    pub(crate) fn from_tab_width_and_stops(
+        origin_x_px: f32,
+        tab_width: i32,
+        tab_stop_list: &[i32],
+    ) -> Self {
+        Self {
+            origin_x_px,
+            width_cols: tab_width.max(1).min(i32::from(u16::MAX)) as u16,
+            stop_cols: tab_stop_list
+                .iter()
+                .copied()
+                .filter(|stop| *stop >= 0)
+                .map(|stop| stop as usize)
+                .collect(),
+        }
+    }
+
+    fn advance_from(&self, position: DisplayRowPosition, char_width_px: f32) -> DisplayTabAdvance {
+        let char_width_px = char_width_px.max(1.0);
+        let tab_width_px = f32::from(self.width_cols.max(1)) * char_width_px;
+        let tab_x_px = (position.x_px - self.origin_x_px).max(0.0);
+        let next_tab_x_px = if !self.stop_cols.is_empty() {
+            self.stop_cols
+                .iter()
+                .copied()
+                .map(|stop| stop as f32 * char_width_px)
+                .find(|stop_px| *stop_px > tab_x_px)
+                .unwrap_or_else(|| {
+                    let last =
+                        self.stop_cols.last().copied().unwrap_or_default() as f32 * char_width_px;
+                    if tab_x_px >= last && tab_width_px > 0.0 {
+                        last + ((tab_x_px - last) / tab_width_px).floor() * tab_width_px
+                            + tab_width_px
+                    } else {
+                        last
+                    }
+                })
+        } else if tab_width_px > 0.0 {
+            ((tab_x_px / tab_width_px).floor() + 1.0) * tab_width_px
+        } else {
+            tab_x_px + char_width_px
+        };
+        let next_tab_x_px = if next_tab_x_px - tab_x_px < char_width_px {
+            next_tab_x_px + tab_width_px
+        } else {
+            next_tab_x_px
+        };
+        let pixel_width = (next_tab_x_px - tab_x_px).max(char_width_px);
+        let next_col = ((next_tab_x_px / char_width_px).round() as usize).max(position.col + 1);
+        DisplayTabAdvance {
+            pixel_width,
+            width_cols: next_col.saturating_sub(position.col).max(1),
+        }
+    }
 }
 
 pub(crate) trait DisplayGlyphMeasurer {
@@ -238,7 +316,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 for ch in run.text.chars() {
                     let advance =
                         self.writer
-                            .text_char_advance_px_at_col(ch, face_id, self.position.col);
+                            .text_char_advance_px_at_position(ch, face_id, self.position);
                     if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
                         status = DisplayRowAppendStatus::Clipped;
                         break;
@@ -247,7 +325,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     let before_len = self.text_area_len();
                     let slot_start = self.position;
                     self.writer
-                        .push_text_char_at_col(ch, face_id, charpos, self.position.col);
+                        .push_text_char_at_position(ch, face_id, charpos, self.position);
                     let written = self.metrics_since(before_len);
                     slots.push(DisplayRowGlyphSlot {
                         source: source_position_advance(&span.start, char_offset, byte_offset),
@@ -398,12 +476,18 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
-        self.push_text_char_at_col(ch, face_id, charpos, usize::from(self.current_text_cols()));
+        self.push_text_char_at_position(ch, face_id, charpos, self.current_text_position());
     }
 
-    fn push_text_char_at_col(&mut self, ch: char, face_id: u32, charpos: usize, col: usize) {
+    fn push_text_char_at_position(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        position: DisplayRowPosition,
+    ) {
         if ch == '\t' {
-            self.push_tab_at_col(face_id, col);
+            self.push_tab_at_position(face_id, position);
             return;
         }
 
@@ -438,14 +522,21 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn text_char_advance_px(&mut self, ch: char, face_id: u32) -> f32 {
-        self.text_char_advance_px_at_col(ch, face_id, usize::from(self.current_text_cols()))
+        self.text_char_advance_px_at_position(ch, face_id, self.current_text_position())
     }
 
-    fn text_char_advance_px_at_col(&mut self, ch: char, face_id: u32, col: usize) -> f32 {
+    fn text_char_advance_px_at_position(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        position: DisplayRowPosition,
+    ) -> f32 {
         if ch == '\t' {
-            let tab_width = usize::from(self.layout.tab_width_cols.max(1));
-            let width_cols = tab_width - (col % tab_width);
-            return width_cols as f32 * self.layout.char_width_px.max(1.0);
+            return self
+                .layout
+                .tab_policy
+                .advance_from(position, self.layout.char_width_px)
+                .pixel_width;
         }
 
         let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
@@ -459,20 +550,30 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_tab(&mut self, face_id: u32) {
-        self.push_tab_at_col(face_id, usize::from(self.current_text_cols()));
+        self.push_tab_at_position(face_id, self.current_text_position());
     }
 
-    fn push_tab_at_col(&mut self, face_id: u32, col: usize) {
-        let tab_width = usize::from(self.layout.tab_width_cols.max(1));
-        let width_cols = (tab_width - (col % tab_width)).min(usize::from(u16::MAX)) as u16;
+    fn push_tab_at_position(&mut self, face_id: u32, position: DisplayRowPosition) {
+        let advance = self
+            .layout
+            .tab_policy
+            .advance_from(position, self.layout.char_width_px);
+        let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
         GlyphMatrixBuilder::push_stretch_to_row(
             &mut self.row,
             width_cols,
             face_id,
-            f32::from(width_cols) * self.layout.char_width_px.max(1.0),
+            advance.pixel_width,
             0.0,
             0.0,
         );
+    }
+
+    fn current_text_position(&self) -> DisplayRowPosition {
+        DisplayRowPosition {
+            x_px: self.layout.tab_policy.origin_x_px + self.current_text_width_px(),
+            col: usize::from(self.current_text_cols()),
+        }
     }
 
     fn current_text_cols(&self) -> u16 {

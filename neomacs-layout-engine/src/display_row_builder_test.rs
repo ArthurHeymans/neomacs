@@ -16,7 +16,7 @@ fn layout() -> DisplayRowLayout {
         height_px: 16.0,
         ascent_px: 12.0,
         char_width_px: 8.0,
-        tab_width_cols: 4,
+        tab_policy: DisplayTabPolicy::every(4),
         base_face: RenderFaceRef::FaceId(1),
         symbol_values: std::collections::HashMap::new(),
     }
@@ -191,23 +191,89 @@ fn display_row_progress_writer_reports_source_slots_for_text_run() {
 }
 
 #[test]
-fn display_row_progress_writer_uses_position_column_for_tabs() {
+fn display_row_progress_writer_uses_position_for_tabs() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
     let mut writer = DisplayRowProgressWriter::new(
         &row_layout,
         &mut row,
-        DisplayRowPosition { x_px: 0.0, col: 2 },
+        DisplayRowPosition { x_px: 16.0, col: 2 },
         80.0,
     );
 
     let progress = writer.push_item(text_item("\tb"));
 
     assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
-    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 5 });
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 40.0, col: 5 });
     assert_eq!(
         row.glyphs[GlyphArea::Text.index()][0].glyph_type,
         GlyphType::Stretch { width_cols: 2 }
+    );
+}
+
+#[test]
+fn display_row_progress_writer_uses_tab_policy_origin_for_pixel_tabs() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::from_tab_width_and_stops(96.0, 8, &[]);
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition {
+            x_px: 96.0 + 24.0,
+            col: 3,
+        },
+        240.0,
+    );
+
+    let progress = writer.push_item(text_item("\tb"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Stretch { width_cols: 5 }
+    );
+    assert_eq!(progress.slots[0].x_px, 120.0);
+    assert_eq!(progress.slots[0].width_px, 40.0);
+    assert_eq!(
+        progress.end,
+        DisplayRowPosition {
+            x_px: 168.0,
+            col: 9
+        }
+    );
+}
+
+#[test]
+fn display_row_progress_writer_uses_tab_policy_explicit_stops() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::from_tab_width_and_stops(100.0, 8, &[4, 10]);
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition {
+            x_px: 100.0 + 24.0,
+            col: 3,
+        },
+        240.0,
+    );
+
+    let progress = writer.push_item(text_item("\tb"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Stretch { width_cols: 1 }
+    );
+    assert_eq!(progress.slots[0].x_px, 124.0);
+    assert_eq!(progress.slots[0].width_px, 8.0);
+    assert_eq!(
+        progress.end,
+        DisplayRowPosition {
+            x_px: 140.0,
+            col: 5
+        }
     );
 }
 

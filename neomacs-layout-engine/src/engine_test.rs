@@ -6659,7 +6659,7 @@ fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
             height_px: 16.0,
             ascent_px: 12.0,
             char_width_px: 8.0,
-            tab_width_cols: 8,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
             base_face: RenderFaceRef::FaceId(0),
             symbol_values: std::collections::HashMap::new(),
         },
