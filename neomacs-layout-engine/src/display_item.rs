@@ -153,9 +153,39 @@ pub(crate) enum GlyphlessMethod {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GlyphlessJoinerPolicy {
+    ClassifyAsGlyphless,
+    PreserveForComposition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayGlyphless {
     pub(crate) ch: char,
     pub(crate) method: GlyphlessMethod,
+}
+
+pub(crate) fn glyphless_method_for_char(
+    ch: char,
+    joiner_policy: GlyphlessJoinerPolicy,
+) -> Option<GlyphlessMethod> {
+    if joiner_policy == GlyphlessJoinerPolicy::PreserveForComposition
+        && crate::composition::is_composition_joiner(ch)
+    {
+        return None;
+    }
+
+    let cp = ch as u32;
+    match cp {
+        0x80..=0x9f | 0xfff0..=0xfff8 => Some(GlyphlessMethod::HexCode),
+        0xfffc => Some(GlyphlessMethod::EmptyBox),
+        0xfeff
+        | 0x200b..=0x200f
+        | 0x2028..=0x2029
+        | 0xe0001..=0xe007f
+        | 0xe0100..=0xe01ef
+        | 0xfe00..=0xfe0f => Some(GlyphlessMethod::ZeroWidth),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

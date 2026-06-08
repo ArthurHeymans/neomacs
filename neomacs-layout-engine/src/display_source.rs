@@ -3,8 +3,8 @@
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
     DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
-    SourceSpan,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
 use crate::neovm_bridge::LayoutBufferView;
@@ -183,7 +183,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if ch == '\n' || is_control_char(ch) || glyphless_method_for_char(ch).is_some() {
+            if ch == '\n'
+                || is_control_char(ch)
+                || glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
+                    .is_some()
+            {
                 break;
             }
             end = end.add_len(CharLen::new(1));
@@ -243,7 +247,9 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
                 ));
             }
 
-            if let Some(method) = glyphless_method_for_char(ch) {
+            if let Some(method) =
+                glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
+            {
                 self.char_pos = start.add_len(CharLen::new(1));
                 return Some(DisplayItem::new(
                     self.span(start, self.char_pos),
@@ -273,25 +279,6 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 fn is_control_char(ch: char) -> bool {
     let code = ch as u32;
     (code <= 0x1f && ch != '\n' && ch != '\t') || code == 0x7f
-}
-
-fn glyphless_method_for_char(ch: char) -> Option<GlyphlessMethod> {
-    if crate::composition::is_composition_joiner(ch) {
-        return None;
-    }
-
-    let cp = ch as u32;
-    match cp {
-        0x80..=0x9f | 0xfff0..=0xfff8 => Some(GlyphlessMethod::HexCode),
-        0xfffc => Some(GlyphlessMethod::EmptyBox),
-        0xfeff
-        | 0x200b..=0x200f
-        | 0x2028..=0x2029
-        | 0xe0001..=0xe007f
-        | 0xe0100..=0xe01ef
-        | 0xfe00..=0xfe0f => Some(GlyphlessMethod::ZeroWidth),
-        _ => None,
-    }
 }
 
 enum LispStringAction {
@@ -441,7 +428,9 @@ impl LispStringSourceFrame {
             ));
         }
 
-        if let Some(method) = glyphless_method_for_char(ch) {
+        if let Some(method) =
+            glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
+        {
             self.char_index = start + 1;
             return LispStringAction::Emit(DisplayItem::new(
                 self.span(start, start + 1),
@@ -516,7 +505,11 @@ impl LispStringSourceFrame {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if ch == '\n' || is_control_char(ch) || glyphless_method_for_char(ch).is_some() {
+            if ch == '\n'
+                || is_control_char(ch)
+                || glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
+                    .is_some()
+            {
                 break;
             }
             end += 1;

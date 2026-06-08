@@ -1290,56 +1290,6 @@ fn parse_display_height_factor(prop_val: &neovm_core::emacs_core::Value) -> Opti
     None
 }
 
-/// Check if a character should be displayed as a glyphless character.
-/// Returns: 0=normal, 1=thin_space, 2=empty_box, 3=hex_code, 5=zero_width
-fn check_glyphless_char(ch: char) -> u8 {
-    let cp = ch as u32;
-    // C1 control characters: U+0080 to U+009F — show as hex code
-    if cp >= 0x80 && cp <= 0x9F {
-        return 3;
-    }
-    // Byte-order marks and zero-width chars
-    if cp == 0xFEFF {
-        return 5;
-    } // BOM / ZWNBSP
-    if cp == 0x200B {
-        return 5;
-    } // zero-width space
-    if cp == 0x200C || cp == 0x200D {
-        return 5;
-    } // ZWNJ, ZWJ
-    if cp == 0x200E || cp == 0x200F {
-        return 5;
-    } // LRM, RLM
-    if cp == 0x2028 {
-        return 5;
-    } // line separator (in buffer text)
-    if cp == 0x2029 {
-        return 5;
-    } // paragraph separator
-    // Unicode specials block: U+FFF0-U+FFF8 (not assigned)
-    if cp >= 0xFFF0 && cp <= 0xFFF8 {
-        return 3;
-    }
-    // Object replacement character
-    if cp == 0xFFFC {
-        return 2;
-    } // empty box
-    // Language tags block U+E0001-U+E007F: zero-width
-    if cp >= 0xE0001 && cp <= 0xE007F {
-        return 5;
-    }
-    // Variation selectors supplement: zero-width
-    if cp >= 0xE0100 && cp <= 0xE01EF {
-        return 5;
-    }
-    // Basic variation selectors: zero-width
-    if cp >= 0xFE00 && cp <= 0xFE0F {
-        return 5;
-    }
-    0 // normal display
-}
-
 fn append_display_item_to_current_row_with_progress(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     layout: &crate::display_row_builder::DisplayRowLayout,
@@ -5615,7 +5565,7 @@ impl LayoutEngine {
             // Grapheme-cluster continuation is decided BEFORE glyphless
             // handling: a zero-width joiner / non-joiner / variation selector
             // that continues an emoji composition (the ZWJs in 👨‍👩‍👧, VS-16 in
-            // ❤️ or keycaps) is a format char that check_glyphless_char would
+            // ❤️ or keycaps) is a format char that glyphless classification would
             // otherwise SKIP, splitting the composition. GNU consumes such
             // characters into the active composition instead of drawing them
             // glyphless. Only suppress glyphless handling when there is a
@@ -5630,115 +5580,59 @@ impl LayoutEngine {
                 cluster_tail.is_some() && crate::composition::is_composition_joiner(ch);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
-            let glyphless = check_glyphless_char(ch);
-            if glyphless > 0 && !absorbed_into_cluster {
+            if let Some(method) = crate::display_item::glyphless_method_for_char(
+                ch,
+                crate::display_item::GlyphlessJoinerPolicy::ClassifyAsGlyphless,
+            )
+            .filter(|_| !absorbed_into_cluster)
+            {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let replacement_start_x = x;
-                let replacement_start_col = col;
 
-                match glyphless {
-                    1 => {
-                        // Thin space: advance by a small amount
-                        x += face_char_w * 0.25;
-                        col += 1;
-                    }
-                    2 => {
-                        // Empty box: render U+25A1 (□) character
-                        let adv = char_pixel_advance(
-                            &mut self.ascii_width_cache,
-                            frame_params.window_system,
-                            &mut self.font_metrics,
-                            '\u{25A1}',
-                            1,
-                            char_w,
-                            current_font_size_px,
-                            face_char_w,
-                            &self.current_resolved_family,
-                            current_font_weight,
-                            current_font_italic,
-                        );
-                        if x + adv <= content_x + avail_width {
-                            x += adv;
-                            col += 1;
-                        }
-                    }
-                    3 => {
-                        // Hex code: render as U+XXXX
-                        let hex_str = if (ch as u32) < 0x10000 {
-                            format!("U+{:04X}", ch as u32)
-                        } else {
-                            format!("U+{:06X}", ch as u32)
-                        };
-                        let needed = hex_str.len() as f32 * face_char_w;
-
-                        // Use glyphless-char face color if available
-                        if params.glyphless_char_fg != 0 {
-                            current_face_id += 1;
-                        }
-
-                        let right_limit = content_x + avail_width;
-                        if x + needed <= right_limit {
-                            for hch in hex_str.chars() {
-                                x += char_pixel_advance(
-                                    &mut self.ascii_width_cache,
-                                    frame_params.window_system,
-                                    &mut self.font_metrics,
-                                    hch,
-                                    1,
-                                    char_w,
-                                    current_font_size_px,
-                                    face_char_w,
-                                    &self.current_resolved_family,
-                                    current_font_weight,
-                                    current_font_italic,
-                                );
-                            }
-                            col += hex_str.len();
-                        } else {
-                            // Partial rendering: emit as many chars as fit
-                            for hch in hex_str.chars() {
-                                let adv = char_pixel_advance(
-                                    &mut self.ascii_width_cache,
-                                    frame_params.window_system,
-                                    &mut self.font_metrics,
-                                    hch,
-                                    1,
-                                    char_w,
-                                    current_font_size_px,
-                                    face_char_w,
-                                    &self.current_resolved_family,
-                                    current_font_weight,
-                                    current_font_italic,
-                                );
-                                if x + adv > right_limit {
-                                    break;
-                                }
-                                x += adv;
-                                col += 1;
-                            }
-                        }
-                        face_next_check = 0; // restore face on next char
-                    }
-                    5 => {
-                        // Zero width: skip entirely (no visual output)
-                    }
-                    _ => {}
-                }
-                if x > replacement_start_x || col > replacement_start_col {
-                    output_emitter.emit_text_output_span(
-                        evaluator,
-                        text_output_span_from_coords(
-                            layout_i64_char_pos_to_lisp_char_pos(charpos),
-                            row,
-                            y,
-                            y + raise_y_offset,
-                            face_h,
-                            replacement_start_x,
-                            replacement_start_col,
-                            x,
-                            col,
+                let item = crate::display_item::DisplayItem::new(
+                    crate::display_item::SourceSpan::new(
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos as usize),
+                            EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
                         ),
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos.saturating_add(1) as usize),
+                            EmacsBytePos::new(text_start_byte + byte_idx),
+                        ),
+                    ),
+                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                    crate::display_item::DisplayItemKind::Glyphless(
+                        crate::display_item::DisplayGlyphless { ch, method },
+                    ),
+                );
+                let layout = text_display_row_layout(
+                    y,
+                    avail_width,
+                    face_h,
+                    face_ascent_val,
+                    face_char_w,
+                    text_display_tab_policy(content_x, params),
+                    current_text_face_id,
+                );
+                if let Some(progress) = append_display_item_to_current_row_with_progress(
+                    &mut self.matrix_builder,
+                    &layout,
+                    item,
+                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                    content_x + avail_width,
+                ) {
+                    x = progress.end.x_px;
+                    col = progress.end.col;
+                    emit_text_progress_slots(
+                        &mut output_emitter,
+                        evaluator,
+                        &progress,
+                        row,
+                        y,
+                        y + raise_y_offset,
+                        face_h,
                     );
                 }
                 charpos += 1;
