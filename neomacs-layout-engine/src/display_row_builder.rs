@@ -21,19 +21,45 @@ pub(crate) struct DisplayRowLayout {
     pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
 }
 
-pub(crate) struct DisplayRowBuilder {
-    layout: DisplayRowLayout,
-    row: GlyphRow,
+pub(crate) trait DisplayGlyphMeasurer {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        columns: u8,
+        fallback_advance_px: f32,
+    ) -> Option<f32>;
 }
 
-impl DisplayRowBuilder {
+pub(crate) struct DisplayRowBuilder<'a> {
+    layout: DisplayRowLayout,
+    row: GlyphRow,
+    glyph_measurer: Option<&'a mut dyn DisplayGlyphMeasurer>,
+}
+
+impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);
         row.enabled = true;
         row.pixel_y = layout.y_px;
         row.height_px = layout.height_px.max(1.0);
         row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
-        Self { layout, row }
+        Self {
+            layout,
+            row,
+            glyph_measurer: None,
+        }
+    }
+}
+
+impl<'a> DisplayRowBuilder<'a> {
+    pub(crate) fn with_glyph_measurer(
+        layout: DisplayRowLayout,
+        glyph_measurer: &'a mut dyn DisplayGlyphMeasurer,
+    ) -> Self {
+        let mut builder = Self::new(layout);
+        builder.glyph_measurer = Some(glyph_measurer);
+        builder
     }
 
     pub(crate) fn push_item(&mut self, item: DisplayItem) {
@@ -95,7 +121,6 @@ impl DisplayRowBuilder {
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
-        let char_width = self.layout.char_width_px.max(1.0);
         let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
         if continues_cluster(ch, tail) {
             GlyphMatrixBuilder::push_cluster_continuation_to_row(
@@ -107,27 +132,32 @@ impl DisplayRowBuilder {
             return;
         }
         if continues_complex_run(ch, tail) {
+            let advance = self.glyph_advance_px(ch, face_id, 1);
             GlyphMatrixBuilder::push_run_member_to_row(
                 &mut self.row,
                 ch,
                 face_id,
                 charpos,
-                char_width,
+                advance,
             );
             return;
         }
         let cols = base_width_cols(ch);
+        let advance = self.glyph_advance_px(ch, face_id, cols);
         if cols > 1 {
-            GlyphMatrixBuilder::push_wide_char_to_row(
-                &mut self.row,
-                ch,
-                face_id,
-                charpos,
-                char_width * f32::from(cols),
-            );
+            GlyphMatrixBuilder::push_wide_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         } else {
-            GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, char_width);
+            GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         }
+    }
+
+    fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: u8) -> f32 {
+        let fallback = self.layout.char_width_px.max(1.0) * f32::from(columns.max(1));
+        self.glyph_measurer
+            .as_mut()
+            .and_then(|measurer| measurer.glyph_advance_px(ch, face_id, columns, fallback))
+            .filter(|advance| advance.is_finite() && *advance >= 0.0)
+            .unwrap_or(fallback)
     }
 
     fn push_stretch(&mut self, stretch: DisplayStretch, face_id: u32) {

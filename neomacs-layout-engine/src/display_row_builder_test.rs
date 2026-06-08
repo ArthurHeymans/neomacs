@@ -66,6 +66,37 @@ fn display_row_builder_emits_ascii_text_items() {
 }
 
 #[test]
+fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
+    struct TestMeasurer;
+
+    impl DisplayGlyphMeasurer for TestMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            ch: char,
+            _face_id: u32,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            match ch {
+                'm' => Some(12.0),
+                'i' => Some(4.0),
+                _ => None,
+            }
+        }
+    }
+
+    let mut measurer = TestMeasurer;
+    let mut builder = DisplayRowBuilder::with_glyph_measurer(layout(), &mut measurer);
+    builder.push_item(text_item("mi"));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+
+    assert_eq!(glyphs[0].pixel_width, 12.0);
+    assert_eq!(glyphs[1].pixel_width, 4.0);
+}
+
+#[test]
 fn display_row_builder_emits_cjk_wide_char_with_padding() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(text_item("A中B"));
