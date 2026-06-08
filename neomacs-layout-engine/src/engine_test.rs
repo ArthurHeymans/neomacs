@@ -3529,6 +3529,68 @@ fn next_layout_string_source_item_installs_pending_faces() {
 }
 
 #[test]
+fn body_text_row_append_context_derives_layout_output_and_bounds() {
+    let mut params = test_window_params();
+    params.tab_width = 4;
+    params.tab_stop_list = vec![6, 10];
+    let context = BodyTextRowAppendContext {
+        row: 3,
+        row_y: 20.0,
+        glyph_y: 22.0,
+        x: 8.0,
+        col: 0,
+        face_height: 16.0,
+        face_ascent: 11.0,
+        default_row_height: 14.0,
+        content_x: 8.0,
+        avail_width: 120.0,
+        text_width: 150.0,
+        line_number_width: 10.0,
+        face_char_width: 9.0,
+        face_space_width: 7.0,
+        face_id: 42,
+    };
+
+    let ordinary = context.append_spec(&params, BodyTextAppendKind::SourceText);
+    assert_eq!(ordinary.position, DisplayRowPosition { x_px: 8.0, col: 0 });
+    assert_eq!(ordinary.max_x, 128.0);
+    assert_eq!(ordinary.layout.char_width_px, 9.0);
+    assert_eq!(ordinary.output.row, 3);
+    assert_eq!(ordinary.output.row_y, 20.0);
+    assert_eq!(ordinary.output.glyph_y, 22.0);
+    assert_eq!(ordinary.output.height, 16.0);
+
+    let tab = context.append_spec(&params, BodyTextAppendKind::Tab);
+    assert_eq!(tab.max_x, f32::INFINITY);
+    assert_eq!(tab.layout.char_width_px, 7.0);
+    assert_eq!(tab.output.height, 14.0);
+
+    let control = context.append_spec(&params, BodyTextAppendKind::ControlChar);
+    assert_eq!(control.max_x, 148.0);
+    assert_eq!(control.layout.char_width_px, 9.0);
+    assert_eq!(control.output.height, 14.0);
+
+    let mapped = context.append_spec(&params, BodyTextAppendKind::SourceMappedText);
+    assert_eq!(mapped.max_x, 128.0);
+    assert_eq!(mapped.output.height, 14.0);
+
+    let glyphless = context.append_spec(&params, BodyTextAppendKind::Glyphless);
+    assert_eq!(glyphless.max_x, 128.0);
+    assert_eq!(glyphless.output.height, 16.0);
+
+    let replacement = context.append_spec(&params, BodyTextAppendKind::DisplayReplacement);
+    assert_eq!(replacement.max_x, 128.0);
+    assert_eq!(replacement.layout.char_width_px, 9.0);
+    assert_eq!(replacement.output.height, 16.0);
+
+    let replacement_string =
+        context.append_spec(&params, BodyTextAppendKind::DisplayReplacementString);
+    assert_eq!(replacement_string.max_x, 128.0);
+    assert_eq!(replacement_string.layout.char_width_px, 7.0);
+    assert_eq!(replacement_string.output.height, 16.0);
+}
+
+#[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval
