@@ -1440,6 +1440,48 @@ fn text_output_span_from_coords(
     }
 }
 
+fn emit_text_progress_slots(
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    progress: &crate::display_row_builder::DisplayRowAppendProgress,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+) {
+    let mut emitted = false;
+    for slot in &progress.slots {
+        let crate::display_item::DisplaySourcePosition::Buffer { char_pos, .. } = slot.source
+        else {
+            continue;
+        };
+        output_emitter.emit_text_output_span(
+            evaluator,
+            text_output_span_from_coords(
+                layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
+                row,
+                row_y,
+                glyph_y,
+                height,
+                slot.x_px,
+                slot.col,
+                slot.x_px + slot.width_px,
+                slot.col + slot.width_cols,
+            ),
+        );
+        emitted = true;
+    }
+    if !emitted {
+        output_emitter.move_text_output_to(
+            evaluator,
+            row,
+            progress.end.col,
+            row_y,
+            progress.end.x_px,
+        );
+    }
+}
+
 struct SingleGlyphAdvance {
     ch: char,
     face_id: u32,
@@ -6297,17 +6339,14 @@ impl LayoutEngine {
             if let Some(progress) = progress {
                 x = progress.end.x_px;
                 col = progress.end.col;
-                output_emitter.emit_text_output_span(
+                emit_text_progress_slots(
+                    &mut output_emitter,
                     evaluator,
-                    TextOutputSpan {
-                        buffer_pos,
-                        row,
-                        row_y: y,
-                        glyph_y: y + raise_y_offset,
-                        height: face_h,
-                        start: progress.start,
-                        end: progress.end,
-                    },
+                    &progress,
+                    row,
+                    y,
+                    y + raise_y_offset,
+                    face_h,
                 );
             } else {
                 x += advance;
