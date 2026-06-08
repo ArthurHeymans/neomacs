@@ -282,6 +282,58 @@ pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
     max_x_px: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendCursor {
+    position: DisplayRowPosition,
+    max_x_px: f32,
+}
+
+impl DisplayRowAppendCursor {
+    pub(crate) fn new(position: DisplayRowPosition, max_x_px: f32) -> Self {
+        Self { position, max_x_px }
+    }
+
+    pub(crate) fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    pub(crate) fn append_item_to_current_matrix_row(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        layout: &DisplayRowLayout,
+        item: DisplayItem,
+    ) -> Option<DisplayRowAppendProgress> {
+        let progress = append_display_item_to_current_matrix_row(
+            builder,
+            layout,
+            item,
+            self.position,
+            self.max_x_px,
+        )?;
+        self.position = progress.end;
+        Some(progress)
+    }
+
+    pub(crate) fn append_measured_item_to_current_matrix_row(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        layout: &DisplayRowLayout,
+        item: DisplayItem,
+        glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+    ) -> Option<DisplayRowAppendProgress> {
+        let progress = append_measured_display_item_to_current_matrix_row(
+            builder,
+            layout,
+            item,
+            glyph_measurer,
+            self.position,
+            self.max_x_px,
+        )?;
+        self.position = progress.end;
+        Some(progress)
+    }
+}
+
 pub(crate) fn append_display_item_to_current_matrix_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,

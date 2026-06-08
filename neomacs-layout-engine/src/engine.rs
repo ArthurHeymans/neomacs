@@ -20,8 +20,8 @@ use super::window_output::{
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row_builder::{
-    FixedGlyphAdvance, FixedGlyphAdvances, append_display_item_to_current_matrix_row,
-    append_measured_display_item_to_current_matrix_row,
+    DisplayRowAppendCursor, FixedGlyphAdvance, FixedGlyphAdvances,
+    append_display_item_to_current_matrix_row, append_measured_display_item_to_current_matrix_row,
 };
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -1634,12 +1634,14 @@ fn render_overlay_string(
             crate::display_item::RenderFaceRef::FaceId(face_id),
             item.kind,
         );
-        let position = crate::display_row_builder::DisplayRowPosition {
-            x_px: *x,
-            col: *col,
-        };
-        let progress =
-            append_display_item_to_current_matrix_row(builder, &layout, item, position, max_x);
+        let mut append_cursor = DisplayRowAppendCursor::new(
+            crate::display_row_builder::DisplayRowPosition {
+                x_px: *x,
+                col: *col,
+            },
+            max_x,
+        );
+        let progress = append_cursor.append_item_to_current_matrix_row(builder, &layout, item);
         let Some(progress) = progress else {
             break;
         };
@@ -1656,8 +1658,9 @@ fn render_overlay_string(
                 Color::from_pixel(overlay_base_face.bg),
             );
         }
-        *x = progress.end.x_px;
-        *col = progress.end.col;
+        let position = append_cursor.position();
+        *x = position.x_px;
+        *col = position.col;
         output_emitter.emit_synthetic_text_span(
             evaluator,
             *row,

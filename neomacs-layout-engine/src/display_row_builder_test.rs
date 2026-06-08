@@ -334,6 +334,81 @@ fn append_measured_display_item_to_current_matrix_row_uses_glyph_measurer() {
 }
 
 #[test]
+fn display_row_append_cursor_updates_position_after_append() {
+    let row_layout = layout();
+    let mut matrix = GlyphMatrixBuilder::new();
+    matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    matrix.begin_row(0, GlyphRowRole::Text);
+
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
+    let progress = cursor
+        .append_item_to_current_matrix_row(&mut matrix, &row_layout, text_item("ab"))
+        .expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 24.0, col: 3 });
+    matrix
+        .with_current_row_mut(|row| {
+            assert_eq!(row_text(row), "ab");
+        })
+        .expect("current row");
+}
+
+#[test]
+fn display_row_append_cursor_updates_position_to_clipped_end() {
+    let row_layout = layout();
+    let mut matrix = GlyphMatrixBuilder::new();
+    matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    matrix.begin_row(0, GlyphRowRole::Text);
+
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 16.0);
+    let progress = cursor
+        .append_item_to_current_matrix_row(&mut matrix, &row_layout, text_item("ab"))
+        .expect("append progress");
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    matrix
+        .with_current_row_mut(|row| {
+            assert_eq!(row_text(row), "a");
+        })
+        .expect("current row");
+}
+
+#[test]
+fn display_row_append_cursor_uses_glyph_measurer() {
+    let row_layout = layout();
+    let mut matrix = GlyphMatrixBuilder::new();
+    let mut measurer = FixedGlyphAdvances::new();
+    measurer.insert('m', 2, 12.0);
+    measurer.insert('i', 2, 4.0);
+    matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    matrix.begin_row(0, GlyphRowRole::Text);
+
+    let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
+    let progress = cursor
+        .append_measured_item_to_current_matrix_row(
+            &mut matrix,
+            &row_layout,
+            text_item("mi"),
+            &mut measurer,
+        )
+        .expect("append progress");
+
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    matrix
+        .with_current_row_mut(|row| {
+            let glyphs = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(glyphs[0].pixel_width, 12.0);
+            assert_eq!(glyphs[1].pixel_width, 4.0);
+        })
+        .expect("current row");
+}
+
+#[test]
 fn fixed_glyph_advance_matches_only_configured_glyph() {
     let mut measurer = FixedGlyphAdvance::new('m', 7, 13.0);
 
