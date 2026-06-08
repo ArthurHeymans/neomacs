@@ -186,6 +186,31 @@ impl DisplayRowFace {
     }
 }
 
+pub(crate) fn resolved_display_row_face(
+    face_id: u32,
+    face: &ResolvedFace,
+    metrics: Option<FontMetrics>,
+) -> DisplayRowFace {
+    let mut render_face = DisplayRowFace::from_resolved(face_id, face);
+    if let Some(metrics) = metrics {
+        render_face.font_char_width = metrics.char_width;
+        render_face.font_ascent = metrics.ascent;
+        render_face.font_descent = metrics.descent.max(0.0).ceil() as i32;
+    }
+    render_face
+}
+
+pub(crate) fn insert_resolved_display_row_face(
+    builder: &mut GlyphMatrixBuilder,
+    face_id: u32,
+    face: &ResolvedFace,
+    metrics: Option<FontMetrics>,
+) {
+    let render_face = resolved_display_row_face(face_id, face, metrics);
+    let rendered = render_face.render_face();
+    builder.insert_face(render_face.face_id, rendered);
+}
+
 pub(crate) struct DisplayRowFaceRealizer<'a> {
     font_metrics: &'a mut Option<FontMetricsService>,
 }

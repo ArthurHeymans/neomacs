@@ -30,6 +30,29 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
 }
 
 #[test]
+fn insert_resolved_display_row_face_applies_metric_overrides() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let face = base_face();
+
+    insert_resolved_display_row_face(
+        &mut builder,
+        9,
+        &face,
+        Some(FontMetrics {
+            ascent: 10.0,
+            descent: 3.0,
+            line_height: 13.0,
+            char_width: 7.0,
+        }),
+    );
+
+    let rendered = builder.faces().get(&9).expect("inserted face");
+    assert_eq!(rendered.id, 9);
+    assert_eq!(rendered.font_ascent, 10);
+    assert_eq!(rendered.font_descent, 3);
+}
+
+#[test]
 fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let _eval = Context::new();
     let mut font_metrics = None;

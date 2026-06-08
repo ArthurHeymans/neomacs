@@ -10,14 +10,14 @@ use super::display_spec::{
     parse_display_webkit_layout, parse_display_xwidget_layout,
 };
 use super::display_status_line::*;
-use super::font_metrics::{FontMetrics, FontMetricsService};
+use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
-use crate::display_row::{DisplayRowGeometry, DisplayRowSpec};
+use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, append_display_row_spec_item,
@@ -1516,7 +1516,7 @@ fn apply_pending_string_faces(
     pending_faces: &mut Vec<LayoutStringPendingFace>,
 ) {
     for pending in pending_faces.drain(..) {
-        apply_resolved_face(builder, pending.face_id, &pending.resolved, None);
+        insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
     }
 }
 
@@ -1615,7 +1615,7 @@ fn render_overlay_string(
 
     let (overlay_base_face, overlay_base_face_id) = if let Some(face) = overlay_face {
         let face_id = *current_face_id;
-        apply_resolved_face(builder, face_id, face, None);
+        insert_resolved_display_row_face(builder, face_id, face, None);
         *current_face_id += 1;
         (face, face_id)
     } else {
@@ -1849,31 +1849,6 @@ fn capture_overlay_string_cursor(
             stretch_like: false,
         },
     );
-}
-
-fn measured_display_row_face(
-    face_id: u32,
-    face: &super::neovm_bridge::ResolvedFace,
-    metrics: Option<FontMetrics>,
-) -> DisplayRowFace {
-    let mut render_face = DisplayRowFace::from_resolved(face_id, face);
-    if let Some(metrics) = metrics {
-        render_face.font_char_width = metrics.char_width;
-        render_face.font_ascent = metrics.ascent;
-        render_face.font_descent = metrics.descent.max(0.0).ceil() as i32;
-    }
-    render_face
-}
-
-fn apply_resolved_face(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    face_id: u32,
-    face: &super::neovm_bridge::ResolvedFace,
-    metrics: Option<FontMetrics>,
-) {
-    let render_face = measured_display_row_face(face_id, face, metrics);
-    let rendered = render_face.render_face();
-    builder.insert_face(render_face.face_id, rendered);
 }
 
 /// The main Rust layout engine.
@@ -2636,7 +2611,7 @@ impl LayoutEngine {
             self.display_snapshots.clear();
             let default_resolved = face_resolver.default_face();
 
-            apply_resolved_face(
+            insert_resolved_display_row_face(
                 &mut self.matrix_builder,
                 0,
                 default_resolved,
@@ -3824,7 +3799,12 @@ impl LayoutEngine {
                         current_font_italic,
                     );
 
-                    apply_resolved_face(&mut self.matrix_builder, face_id, &resolved, metrics);
+                    insert_resolved_display_row_face(
+                        &mut self.matrix_builder,
+                        face_id,
+                        &resolved,
+                        metrics,
+                    );
                     current_face_id += 1;
 
                     if resolved.extend {
@@ -3910,7 +3890,12 @@ impl LayoutEngine {
                 let _lnum_bg = Color::from_pixel(lnum_face.bg);
                 // Realize and register the line-number face so the renderer
                 // uses the same family/weight/slant the layout chose.
-                apply_resolved_face(&mut self.matrix_builder, current_face_id, &lnum_face, None);
+                insert_resolved_display_row_face(
+                    &mut self.matrix_builder,
+                    current_face_id,
+                    &lnum_face,
+                    None,
+                );
                 let lnum_face_id = current_face_id;
                 current_face_id += 1;
 
