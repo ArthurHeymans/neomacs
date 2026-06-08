@@ -42,6 +42,7 @@ smallvec.workspace = true
 rustls.workspace = true
 webpki-roots.workspace = true
 rustls-pki-types.workspace = true
+x509-parser.workspace = true
 parking_lot.workspace = true
 malachite.workspace = true
 itoa.workspace = true

@@ -2,6 +2,7 @@ use super::{
     EvalResult, Flow, Value, ValueKind, expect_args, expect_range_args, expect_strict_string,
     signal,
 };
+use crate::emacs_core::tls::format_x509_certificate_pem;
 
 pub(crate) fn builtin_gnutls_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-available-p", &args, 0)?;
@@ -126,8 +127,16 @@ pub(crate) fn builtin_gnutls_peer_status_warning_describe(args: Vec<Value>) -> E
 
 pub(crate) fn builtin_gnutls_format_certificate(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-format-certificate", &args, 1)?;
-    let _ = expect_strict_string(&args[0])?;
-    Ok(Value::string("Certificate"))
+    let cert = expect_strict_string(&args[0])?;
+    let formatted = format_x509_certificate_pem(cert.as_bytes()).map_err(|err| {
+        signal(
+            "error",
+            vec![Value::string(format!(
+                "gnutls-format-certificate error: {err}"
+            ))],
+        )
+    })?;
+    Ok(Value::string(formatted))
 }
 
 pub(crate) fn builtin_gnutls_hash_digest(args: Vec<Value>) -> EvalResult {

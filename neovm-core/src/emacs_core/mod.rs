@@ -116,6 +116,8 @@ pub mod threads;
 pub mod timefns;
 pub mod timer;
 pub(crate) mod tls;
+#[cfg(test)]
+mod tls_test;
 pub mod treesit;
 pub mod undo;
 pub mod value;

@@ -10,6 +10,7 @@ use base64::Engine;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
+use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_pem};
 
 pub(crate) fn gnutls_available_capabilities() -> &'static [&'static str] {
     &["gnutls3", "gnutls"]
@@ -18,6 +19,83 @@ pub(crate) fn gnutls_available_capabilities() -> &'static [&'static str] {
 pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("neomacs-tls-available-p", &args, 0)?;
     Ok(Value::T)
+}
+
+#[derive(Debug)]
+pub(crate) struct CertificateFormatError {
+    message: String,
+}
+
+impl CertificateFormatError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for CertificateFormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+pub(crate) fn format_x509_certificate_pem(
+    pem_bytes: &[u8],
+) -> Result<String, CertificateFormatError> {
+    let (_, pem) = parse_x509_pem(pem_bytes)
+        .map_err(|err| CertificateFormatError::new(format!("cannot import X.509 PEM: {err}")))?;
+    if pem.label != "CERTIFICATE" {
+        return Err(CertificateFormatError::new(format!(
+            "expected CERTIFICATE PEM block, got {}",
+            pem.label
+        )));
+    }
+
+    let (remaining, cert) = X509Certificate::from_der(&pem.contents)
+        .map_err(|err| CertificateFormatError::new(format!("cannot parse X.509 DER: {err}")))?;
+    if !remaining.is_empty() {
+        return Err(CertificateFormatError::new(
+            "trailing data after X.509 certificate",
+        ));
+    }
+
+    Ok(format_x509_certificate(&cert))
+}
+
+fn format_x509_certificate(cert: &X509Certificate<'_>) -> String {
+    let validity = cert.validity();
+    let mut out = String::new();
+    out.push_str("X.509 Certificate\n");
+    out.push_str(&format!("Version: {}\n", cert.version().0 + 1));
+    out.push_str(&format!("Serial Number: {}\n", cert.raw_serial_as_string()));
+    out.push_str(&format!("Issuer: {}\n", cert.issuer()));
+    out.push_str(&format!("Subject: {}\n", cert.subject()));
+    out.push_str(&format!("Not Before: {}\n", validity.not_before));
+    out.push_str(&format!("Not After: {}\n", validity.not_after));
+    out.push_str(&format!(
+        "Public Key Algorithm: {}\n",
+        cert.public_key().algorithm.algorithm
+    ));
+    out.push_str(&format!(
+        "Signature Algorithm: {}\n",
+        cert.signature_algorithm.algorithm
+    ));
+    if !cert.extensions().is_empty() {
+        out.push_str("Extensions:\n");
+        for extension in cert.extensions() {
+            out.push_str(&format!(
+                "  {}{}\n",
+                extension.oid,
+                if extension.critical {
+                    " (critical)"
+                } else {
+                    ""
+                }
+            ));
+        }
+    }
+    out
 }
 
 type RustlsClientStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
@@ -153,7 +231,7 @@ impl TlsClientBackend for RustlsBackend {
     }
 }
 
-fn der_certificate_to_pem(der: &[u8]) -> String {
+pub(crate) fn der_certificate_to_pem(der: &[u8]) -> String {
     let encoded = base64::engine::general_purpose::STANDARD.encode(der);
     let mut pem = String::from("-----BEGIN CERTIFICATE-----\n");
     for chunk in encoded.as_bytes().chunks(64) {
@@ -162,38 +240,4 @@ fn der_certificate_to_pem(der: &[u8]) -> String {
     }
     pem.push_str("-----END CERTIFICATE-----\n");
     pem
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{TlsBackendError, der_certificate_to_pem, gnutls_available_capabilities};
-
-    #[test]
-    fn backend_errors_render_boundary_messages() {
-        assert_eq!(
-            TlsBackendError::InvalidHostname("bad host".to_owned()).to_string(),
-            "Invalid hostname for TLS: bad host"
-        );
-        assert_eq!(
-            TlsBackendError::Connect("bad cert".to_owned()).to_string(),
-            "TLS handshake failed: bad cert"
-        );
-        assert_eq!(
-            TlsBackendError::UnexpectedEof.to_string(),
-            "TLS handshake: unexpected EOF"
-        );
-    }
-
-    #[test]
-    fn rustls_backend_advertises_conservative_gnutls_compatibility() {
-        assert_eq!(gnutls_available_capabilities(), &["gnutls3", "gnutls"]);
-    }
-
-    #[test]
-    fn der_certificates_are_formatted_as_pem_blocks() {
-        assert_eq!(
-            der_certificate_to_pem(&[1, 2, 3]),
-            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n"
-        );
-    }
 }
