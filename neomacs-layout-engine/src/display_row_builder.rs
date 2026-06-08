@@ -314,17 +314,6 @@ impl DisplayRowAppendCursor {
         Some(progress)
     }
 
-    pub(crate) fn append_next_source_item_to_current_matrix_row(
-        &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        layout: &DisplayRowLayout,
-        source: &mut impl DisplayItemSource,
-        context: &mut DisplaySourceContext<'_>,
-    ) -> Option<DisplayRowAppendProgress> {
-        let item = source.next_item(context)?;
-        self.append_item_to_current_matrix_row(builder, layout, item)
-    }
-
     pub(crate) fn append_measured_item_to_current_matrix_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
@@ -342,18 +331,6 @@ impl DisplayRowAppendCursor {
         )?;
         self.position = progress.end;
         Some(progress)
-    }
-
-    pub(crate) fn append_next_measured_source_item_to_current_matrix_row(
-        &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        layout: &DisplayRowLayout,
-        source: &mut impl DisplayItemSource,
-        context: &mut DisplaySourceContext<'_>,
-        glyph_measurer: &mut dyn DisplayGlyphMeasurer,
-    ) -> Option<DisplayRowAppendProgress> {
-        let item = source.next_item(context)?;
-        self.append_measured_item_to_current_matrix_row(builder, layout, item, glyph_measurer)
     }
 }
 

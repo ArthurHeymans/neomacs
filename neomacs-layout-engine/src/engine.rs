@@ -6274,13 +6274,14 @@ impl LayoutEngine {
                     content_x + avail_width
                 },
             );
-            let progress = append_cursor.append_next_measured_source_item_to_current_matrix_row(
-                &mut self.matrix_builder,
-                &layout,
-                &mut source,
-                &mut context,
-                &mut measurer,
-            );
+            let progress = source.next_item(&mut context).and_then(|item| {
+                append_cursor.append_measured_item_to_current_matrix_row(
+                    &mut self.matrix_builder,
+                    &layout,
+                    item,
+                    &mut measurer,
+                )
+            });
             let Some(progress) = progress else {
                 break;
             };

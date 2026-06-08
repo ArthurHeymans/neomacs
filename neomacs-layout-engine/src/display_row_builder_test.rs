@@ -4,7 +4,7 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
     RenderFaceRef, SourceSpan,
 };
-use crate::display_source::{DisplaySourceContext, LispStringSourceCursor};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
@@ -409,7 +409,7 @@ fn display_row_append_cursor_uses_glyph_measurer() {
 }
 
 #[test]
-fn display_row_append_cursor_appends_next_source_item() {
+fn display_row_append_cursor_appends_explicit_source_item() {
     let _eval = Context::new();
     let row_layout = layout();
     let mut matrix = GlyphMatrixBuilder::new();
@@ -420,13 +420,9 @@ fn display_row_append_cursor_appends_next_source_item() {
     let mut context = DisplaySourceContext::empty();
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
+    let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
-        .append_next_source_item_to_current_matrix_row(
-            &mut matrix,
-            &row_layout,
-            &mut source,
-            &mut context,
-        )
+        .append_item_to_current_matrix_row(&mut matrix, &row_layout, item)
         .expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 8.0, col: 1 });
@@ -440,7 +436,7 @@ fn display_row_append_cursor_appends_next_source_item() {
 }
 
 #[test]
-fn display_row_append_cursor_appends_next_source_item_with_glyph_measurer() {
+fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() {
     let _eval = Context::new();
     let row_layout = layout();
     let mut matrix = GlyphMatrixBuilder::new();
@@ -454,14 +450,9 @@ fn display_row_append_cursor_appends_next_source_item_with_glyph_measurer() {
     let mut context = DisplaySourceContext::empty();
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
+    let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
-        .append_next_measured_source_item_to_current_matrix_row(
-            &mut matrix,
-            &row_layout,
-            &mut source,
-            &mut context,
-            &mut measurer,
-        )
+        .append_measured_item_to_current_matrix_row(&mut matrix, &row_layout, item, &mut measurer)
         .expect("append progress");
 
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
