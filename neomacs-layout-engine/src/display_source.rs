@@ -429,6 +429,27 @@ impl LispStringSourceFrame {
             ));
         }
 
+        let Some(ch) = self.char_at(start) else {
+            return LispStringAction::PopFrame;
+        };
+        if is_control_char(ch) {
+            self.char_index = start + 1;
+            return LispStringAction::Emit(DisplayItem::new(
+                self.span(start, start + 1),
+                face,
+                DisplayItemKind::ControlChar { ch },
+            ));
+        }
+
+        if let Some(method) = glyphless_method_for_char(ch) {
+            self.char_index = start + 1;
+            return LispStringAction::Emit(DisplayItem::new(
+                self.span(start, start + 1),
+                face,
+                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+            ));
+        }
+
         let end = self.next_text_run_end(start, property_end);
         self.char_index = end;
         LispStringAction::Emit(DisplayItem::new(
@@ -492,7 +513,10 @@ impl LispStringSourceFrame {
     fn next_text_run_end(&self, start: usize, limit: usize) -> usize {
         let mut end = start;
         while end < limit {
-            if self.char_at(end) == Some('\n') {
+            let Some(ch) = self.char_at(end) else {
+                break;
+            };
+            if ch == '\n' || is_control_char(ch) || glyphless_method_for_char(ch).is_some() {
                 break;
             }
             end += 1;

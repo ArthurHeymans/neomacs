@@ -231,6 +231,29 @@ fn lisp_string_source_cursor_emits_explicit_newline_row_breaks() {
 }
 
 #[test]
+fn lisp_string_source_cursor_emits_control_and_glyphless_items() {
+    let _eval = Context::new();
+    let value = Value::string("a\u{0001}\u{fff0}b");
+    let mut source =
+        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(3)).expect("string source");
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["a", "b"]);
+    assert_eq!(
+        items[1].kind,
+        DisplayItemKind::ControlChar { ch: '\u{0001}' }
+    );
+    assert_eq!(
+        items[2].kind,
+        DisplayItemKind::Glyphless(DisplayGlyphless {
+            ch: '\u{fff0}',
+            method: GlyphlessMethod::HexCode,
+        })
+    );
+}
+
+#[test]
 fn lisp_string_source_cursor_pushes_display_string_replacement_source() {
     let _eval = Context::new();
     let replacement = Value::string("YZ");

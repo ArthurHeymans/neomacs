@@ -1452,11 +1452,9 @@ fn render_overlay_string(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     params: &WindowParams,
 ) {
-    let Some(text_string) = text_value.as_lisp_string() else {
+    if text_value.as_lisp_string().is_none() {
         return;
-    };
-    let text_bytes = text_string.as_bytes();
-    let total_chars = text_string.schars();
+    }
     let text_props = get_string_text_properties_table_for_value(text_value);
     let mut string_face_cache = std::collections::HashMap::new();
 
@@ -1469,8 +1467,6 @@ fn render_overlay_string(
         (base_face, base_face_id)
     };
 
-    let mut idx = 0;
-    let mut char_idx = 0usize;
     macro_rules! finish_overlay_string_row {
         () => {{
             hit_rows.push(HitRow {
@@ -1508,101 +1504,134 @@ fn render_overlay_string(
         }};
     }
 
-    while idx < text_bytes.len() {
-        if *row >= max_rows {
-            break;
-        }
-        if let Some(table) = text_props.as_ref()
-            && let Some(display_prop) =
-                table.get_property_at_char_pos(CharPos0::new(char_idx), Value::symbol("display"))
-        {
-            let next_char = table
-                .next_interval_boundary_after_char_pos(CharPos0::new(char_idx))
-                .map(CharPos0::get)
-                .unwrap_or(total_chars)
-                .min(total_chars)
-                .max(char_idx + 1);
+    struct OverlayStringFaceResolver<'a> {
+        face_resolver: &'a super::neovm_bridge::FaceResolver,
+        base_face: &'a super::neovm_bridge::ResolvedFace,
+        string_face_cache: &'a mut std::collections::HashMap<Value, u32>,
+        current_face_id: &'a mut u32,
+        builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    }
 
-            if display_prop.is_string() {
-                render_overlay_string(
-                    evaluator,
-                    output_emitter,
-                    display_prop,
-                    face_resolver,
-                    overlay_base_face,
-                    overlay_base_face_id,
-                    x,
-                    y,
-                    col,
-                    row,
-                    cursor_info,
-                    hit_rows,
-                    hit_row_charpos_start,
-                    anchor_charpos,
-                    row_y_positions,
-                    row_max_height,
-                    row_max_ascent,
-                    face_char_w,
-                    char_h,
-                    default_row_ascent,
-                    max_x,
-                    content_x,
-                    text_y,
-                    row_extra_y,
-                    row_base,
-                    max_rows,
-                    overlay_face,
-                    current_face_id,
-                    builder,
-                    params,
-                );
-                while char_idx < next_char && idx < text_bytes.len() {
-                    let (_, ch_len) = decode_utf8(&text_bytes[idx..]);
-                    idx += ch_len;
-                    char_idx += 1;
-                }
-                continue;
+    impl crate::display_source::DisplayItemFaceResolver for OverlayStringFaceResolver<'_> {
+        fn resolve_face_ref(
+            &mut self,
+            base: crate::display_item::RenderFaceRef,
+            face_value: Value,
+        ) -> crate::display_item::RenderFaceRef {
+            if let Some(face_id) = self.string_face_cache.get(&face_value) {
+                return crate::display_item::RenderFaceRef::FaceId(*face_id);
             }
+            let Some(resolved) = self
+                .face_resolver
+                .resolve_face_value_over(self.base_face, &face_value)
+            else {
+                return base;
+            };
 
-            if is_display_space_spec(&display_prop) {
-                let space_geometry = eval_display_space_geometry(
-                    &display_prop,
-                    *x,
-                    content_x,
-                    face_char_w,
-                    face_char_w,
+            let face_id = *self.current_face_id;
+            apply_resolved_face(self.builder, face_id, &resolved, None);
+            *self.current_face_id += 1;
+            self.string_face_cache.insert(face_value, face_id);
+            crate::display_item::RenderFaceRef::FaceId(face_id)
+        }
+    }
+
+    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+        1,
+        text_value,
+        crate::display_item::RenderFaceRef::FaceId(overlay_base_face_id),
+    ) else {
+        return;
+    };
+
+    while *row < max_rows {
+        let item = {
+            let mut resolver = OverlayStringFaceResolver {
+                face_resolver,
+                base_face: overlay_base_face,
+                string_face_cache: &mut string_face_cache,
+                current_face_id,
+                builder,
+            };
+            let mut context =
+                crate::display_source::DisplaySourceContext::with_face_resolver(&mut resolver);
+            source.next_item(&mut context)
+        };
+        let Some(item) = item else {
+            break;
+        };
+
+        if matches!(item.kind, crate::display_item::DisplayItemKind::RowBreak(_)) {
+            // End current row, start a new one — mirrors the main text loop.
+            if !finish_overlay_string_row!() {
+                break;
+            }
+            continue;
+        }
+
+        if let crate::display_item::DisplayItemKind::TextRun(run) = item.kind {
+            let face_id = render_face_ref_id(item.face, overlay_base_face_id);
+            let (source_id, mut char_idx, mut byte_idx) =
+                lisp_span_start_parts(&item.span).unwrap_or((1, 0, 0));
+            for ch in run.text.chars() {
+                let ch_len = ch.len_utf8();
+                // Grapheme-cluster composition for overlay-string text, using
+                // the same shared rule as buffer text (see `composition`):
+                // combining marks, ZWJ emoji sequences, and flag pairs cluster
+                // here too.
+                let cluster_tail = builder.last_text_cluster_tail();
+                let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
+                let cols = if is_continuation {
+                    0
+                } else if ch == '\t' {
+                    let tab_width = params.tab_width.max(1) as usize;
+                    let remainder = *col % tab_width;
+                    if remainder == 0 {
+                        tab_width
+                    } else {
+                        tab_width - remainder
+                    }
+                } else {
+                    crate::composition::base_width_cols(ch) as usize
+                };
+                let ch_advance = cols as f32 * face_char_w;
+                if *x + ch_advance > max_x {
+                    break;
+                }
+
+                let item = crate::display_item::DisplayItem::new(
+                    crate::display_item::SourceSpan::lisp_string(
+                        source_id,
+                        char_idx,
+                        char_idx + 1,
+                        byte_idx,
+                        byte_idx + ch_len,
+                    ),
+                    crate::display_item::RenderFaceRef::FaceId(face_id),
+                    crate::display_item::DisplayItemKind::TextRun(
+                        crate::display_item::DisplayTextRun::new(ch.to_string()),
+                    ),
+                );
+                let layout = text_display_row_layout(
+                    *y,
+                    max_x - content_x,
                     char_h,
                     default_row_ascent,
-                    params,
+                    face_char_w,
+                    params.tab_width,
+                    face_id,
                 );
-                let space_width = space_geometry.width;
-                if space_width > 0.0 && *x < max_x {
-                    include_glyph_vertical_metrics(
-                        row_max_height,
-                        row_max_ascent,
-                        space_geometry.height,
-                        space_geometry.ascent,
-                    );
-                    let width_cols = display_width_cols(space_width, params.char_width);
-                    let face_id = overlay_string_face_id_at(
-                        text_props.as_ref(),
-                        char_idx,
-                        face_resolver,
-                        overlay_base_face,
-                        overlay_base_face_id,
-                        &mut string_face_cache,
-                        current_face_id,
-                        builder,
-                    );
-                    builder.push_stretch_with_pixel_geometry(
-                        width_cols,
-                        face_id,
-                        space_width,
-                        space_geometry.height,
-                        space_geometry.ascent,
-                    );
-                    let glyph_start_x = *x;
-                    let glyph_start_col = *col;
+                if append_display_item_to_current_row_with_shared_builder(
+                    builder, layout, item, None,
+                )
+                .is_none()
+                {
+                    break;
+                }
+
+                let glyph_start_x = *x;
+                let glyph_start_col = *col;
+                if source_id == 1 {
                     capture_overlay_string_cursor(
                         text_props.as_ref(),
                         char_idx,
@@ -1615,101 +1644,31 @@ fn render_overlay_string(
                         Color::from_pixel(overlay_base_face.bg),
                         glyph_start_col,
                         *row,
-                        Some(space_width.max(1.0)),
-                    );
-                    *x += space_width;
-                    *col += width_cols as usize;
-                    output_emitter.emit_synthetic_text_span(
-                        evaluator,
-                        *row,
-                        *y,
-                        glyph_start_x,
-                        *x - glyph_start_x,
-                        glyph_start_col,
-                        *col,
+                        Some(ch_advance.max(1.0)),
                     );
                 }
-                while char_idx < next_char && idx < text_bytes.len() {
-                    let (_, ch_len) = decode_utf8(&text_bytes[idx..]);
-                    idx += ch_len;
-                    char_idx += 1;
-                }
-                continue;
-            }
-        }
-
-        let (ch, ch_len) = decode_utf8(&text_bytes[idx..]);
-        idx += ch_len;
-        char_idx += 1;
-
-        if ch == '\n' {
-            // End current row, start a new one — mirrors the main text loop.
-            if !finish_overlay_string_row!() {
-                break;
+                *x += ch_advance;
+                *col += cols;
+                output_emitter.emit_synthetic_text_span(
+                    evaluator,
+                    *row,
+                    *y,
+                    glyph_start_x,
+                    *x - glyph_start_x,
+                    glyph_start_col,
+                    *col,
+                );
+                char_idx += 1;
+                byte_idx += ch_len;
             }
             continue;
         }
 
-        // Grapheme-cluster composition for overlay-string text, using the
-        // same shared rule as buffer text (see `composition`): combining
-        // marks, ZWJ emoji sequences, and flag pairs cluster here too.
-        let cluster_tail = builder.last_text_cluster_tail();
-        let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
-        let cols = if is_continuation {
-            0
-        } else if ch == '\t' {
-            let tab_width = params.tab_width.max(1) as usize;
-            let remainder = *col % tab_width;
-            if remainder == 0 {
-                tab_width
-            } else {
-                tab_width - remainder
-            }
-        } else {
-            crate::composition::base_width_cols(ch) as usize
-        };
-        let ch_advance = cols as f32 * face_char_w;
-        if *x + ch_advance > max_x {
-            let mut found_newline = false;
-            while idx < text_bytes.len() {
-                let (skip_ch, skip_len) = decode_utf8(&text_bytes[idx..]);
-                idx += skip_len;
-                char_idx += 1;
-                if skip_ch == '\n' {
-                    found_newline = true;
-                    break;
-                }
-            }
-            if found_newline && finish_overlay_string_row!() {
-                continue;
-            }
+        if *x >= max_x {
             break;
         }
-
-        let face_id = overlay_string_face_id_at(
-            text_props.as_ref(),
-            char_idx - 1,
-            face_resolver,
-            overlay_base_face,
-            overlay_base_face_id,
-            &mut string_face_cache,
-            current_face_id,
-            builder,
-        );
-
-        let item = crate::display_item::DisplayItem::new(
-            crate::display_item::SourceSpan::lisp_string(
-                1,
-                char_idx.saturating_sub(1),
-                char_idx,
-                idx.saturating_sub(ch_len),
-                idx,
-            ),
-            crate::display_item::RenderFaceRef::FaceId(face_id),
-            crate::display_item::DisplayItemKind::TextRun(
-                crate::display_item::DisplayTextRun::new(ch.to_string()),
-            ),
-        );
+        let face_id = render_face_ref_id(item.face, overlay_base_face_id);
+        let cursor_char_idx = root_lisp_span_start_char(&item.span);
         let layout = text_display_row_layout(
             *y,
             max_x - content_x,
@@ -1719,30 +1678,31 @@ fn render_overlay_string(
             params.tab_width,
             face_id,
         );
-        if append_display_item_to_current_row_with_shared_builder(builder, layout, item, None)
-            .is_none()
-        {
+        let Some(metrics) =
+            append_display_item_to_current_row_with_shared_builder(builder, layout, item, None)
+        else {
             break;
-        }
-
+        };
         let glyph_start_x = *x;
         let glyph_start_col = *col;
-        capture_overlay_string_cursor(
-            text_props.as_ref(),
-            char_idx - 1,
-            cursor_info,
-            glyph_start_x,
-            *y,
-            face_char_w,
-            char_h,
-            default_row_ascent,
-            Color::from_pixel(overlay_base_face.bg),
-            glyph_start_col,
-            *row,
-            Some(ch_advance.max(1.0)),
-        );
-        *x += ch_advance;
-        *col += cols;
+        if let Some(char_idx) = cursor_char_idx {
+            capture_overlay_string_cursor(
+                text_props.as_ref(),
+                char_idx,
+                cursor_info,
+                glyph_start_x,
+                *y,
+                face_char_w,
+                char_h,
+                default_row_ascent,
+                Color::from_pixel(overlay_base_face.bg),
+                glyph_start_col,
+                *row,
+                Some(metrics.width_px.max(1.0)),
+            );
+        }
+        *x += metrics.width_px;
+        *col += metrics.width_cols;
         output_emitter.emit_synthetic_text_span(
             evaluator,
             *row,
@@ -1755,38 +1715,33 @@ fn render_overlay_string(
     }
 }
 
-fn overlay_string_face_id_at(
-    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
-    char_idx: usize,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    base_face: &super::neovm_bridge::ResolvedFace,
-    base_face_id: u32,
-    string_face_cache: &mut std::collections::HashMap<Value, u32>,
-    current_face_id: &mut u32,
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-) -> u32 {
-    let Some(props) = text_props else {
-        return base_face_id;
-    };
-    let char_idx = CharPos0::new(char_idx);
-    let face_prop = props.get_property_at_char_pos(char_idx, Value::symbol("face"));
-    let font_lock_face_prop =
-        props.get_property_at_char_pos(char_idx, Value::symbol("font-lock-face"));
-    let Some(value) = face_prop.or(font_lock_face_prop) else {
-        return base_face_id;
-    };
-    if let Some(face_id) = string_face_cache.get(&value) {
-        return *face_id;
+fn render_face_ref_id(face: crate::display_item::RenderFaceRef, fallback: u32) -> u32 {
+    match face {
+        crate::display_item::RenderFaceRef::FaceId(face_id) => face_id,
+        crate::display_item::RenderFaceRef::Inherit => fallback,
     }
-    let Some(resolved) = face_resolver.resolve_face_value_over(base_face, &value) else {
-        return base_face_id;
-    };
+}
 
-    let face_id = *current_face_id;
-    apply_resolved_face(builder, face_id, &resolved, None);
-    *current_face_id += 1;
-    string_face_cache.insert(value, face_id);
-    face_id
+fn lisp_span_start_parts(span: &crate::display_item::SourceSpan) -> Option<(u64, usize, usize)> {
+    match span.start {
+        crate::display_item::DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            byte_index,
+        } => Some((source_id.get(), char_index, byte_index)),
+        _ => None,
+    }
+}
+
+fn root_lisp_span_start_char(span: &crate::display_item::SourceSpan) -> Option<usize> {
+    match span.start {
+        crate::display_item::DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            ..
+        } if source_id.get() == 1 => Some(char_index),
+        _ => None,
+    }
 }
 
 fn capture_overlay_string_cursor(

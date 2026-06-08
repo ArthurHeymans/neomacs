@@ -6801,6 +6801,71 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
 }
 
 #[test]
+fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("after-string"),
+            Value::string("\u{fff0}"),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-glyphless-string", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' })),
+        "overlay glyphless source char should emit a glyphless glyph, row={:?}",
+        text_row.glyphs[1]
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     let mut eval = Context::new();
     let buf_id = eval
