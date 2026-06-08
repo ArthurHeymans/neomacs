@@ -58,21 +58,22 @@ fn render_lisp_display_row_with_symbols(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        role,
+        symbol_values,
+    );
     engine
-        .render_display_source_row(
-            0.0,
-            240.0,
-            16.0,
-            8.0,
-            12.0,
-            crate::display_row_builder::DisplayTabPolicy::every(8),
-            &mut next_face_id,
-            resolver.default_face(),
-            rendered,
-            &resolver,
-            symbol_values,
-            role,
-        )
+        .render_display_source_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
         .row
 }
@@ -205,22 +206,27 @@ fn render_display_source_row_uses_explicit_tab_policy() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
+                0.0,
+                4,
+                &[2],
+            ),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
 
     let rendered = engine
-        .render_display_source_row(
-            0.0,
-            240.0,
-            16.0,
-            8.0,
-            12.0,
-            crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(0.0, 4, &[2]),
-            &mut next_face_id,
-            resolver.default_face(),
-            Value::string("\tX"),
-            &resolver,
-            std::collections::HashMap::new(),
-            GlyphRowRole::TabLine,
-        )
+        .render_display_source_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -442,22 +448,23 @@ fn render_display_source_row_uses_face_specific_glyph_widths() {
         }],
     );
     let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 32.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        &base_face,
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
 
     let row = engine
-        .render_display_source_row(
-            0.0,
-            240.0,
-            32.0,
-            8.0,
-            12.0,
-            crate::display_row_builder::DisplayTabPolicy::every(8),
-            &mut next_face_id,
-            &base_face,
-            rendered,
-            &resolver,
-            std::collections::HashMap::new(),
-            GlyphRowRole::TabLine,
-        )
+        .render_display_source_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
         .row;
     let glyphs = &row.glyphs[1];
@@ -563,21 +570,22 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 80.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
     let rendered = engine
-        .render_display_source_row(
-            0.0,
-            80.0,
-            16.0,
-            8.0,
-            12.0,
-            crate::display_row_builder::DisplayTabPolicy::every(8),
-            &mut next_face_id,
-            resolver.default_face(),
-            Value::string("אב"),
-            &resolver,
-            std::collections::HashMap::new(),
-            GlyphRowRole::TabLine,
-        )
+        .render_display_source_row(spec, Value::string("אב"), &resolver, &mut next_face_id)
         .expect("display source row");
 
     assert!(rendered.row.reversed_p);

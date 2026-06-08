@@ -456,6 +456,15 @@ pub(crate) struct RenderedDisplaySourceRow {
     pub(crate) faces: Vec<Face>,
 }
 
+pub(crate) struct DisplayRowGeometry {
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) tab_policy: DisplayTabPolicy,
+}
+
 pub(crate) struct DisplayRowSpec<'a> {
     pub(crate) y: f32,
     pub(crate) width: f32,
@@ -467,6 +476,36 @@ pub(crate) struct DisplayRowSpec<'a> {
     pub(crate) base_face: &'a ResolvedFace,
     pub(crate) role: GlyphRowRole,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
+}
+
+impl<'a> DisplayRowSpec<'a> {
+    pub(crate) fn from_base_face(
+        geometry: DisplayRowGeometry,
+        next_face_id: &mut u32,
+        base_face: &'a ResolvedFace,
+        role: GlyphRowRole,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        let base_face_id = if base_face.face_id != 0 {
+            base_face.face_id
+        } else {
+            let id = *next_face_id;
+            *next_face_id += 1;
+            id
+        };
+        Self {
+            y: geometry.y,
+            width: geometry.width,
+            height: geometry.height,
+            char_width: geometry.char_width,
+            ascent: geometry.ascent,
+            tab_policy: geometry.tab_policy,
+            base_face_id,
+            base_face,
+            role,
+            symbol_values,
+        }
+    }
 }
 
 pub(crate) fn install_rendered_display_source_row(
@@ -537,45 +576,15 @@ fn display_source_row_progress(
 impl LayoutEngine {
     pub(crate) fn render_display_source_row(
         &mut self,
-        y: f32,
-        width: f32,
-        height: f32,
-        char_w: f32,
-        ascent: f32,
-        tab_policy: DisplayTabPolicy,
-        next_face_id: &mut u32,
-        base_face: &ResolvedFace,
+        spec: DisplayRowSpec<'_>,
         rendered: Value,
         face_resolver: &FaceResolver,
-        symbol_values: std::collections::HashMap<String, Value>,
-        role: GlyphRowRole,
+        next_face_id: &mut u32,
     ) -> Option<RenderedDisplaySourceRow> {
-        let base_face_id = if base_face.face_id != 0 {
-            base_face.face_id
-        } else {
-            let id = *next_face_id;
-            *next_face_id += 1;
-            id
-        };
+        let base_face_id = spec.base_face_id;
         let mut source =
             LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row(
-            DisplayRowSpec {
-                y,
-                width,
-                height,
-                char_width: char_w,
-                ascent,
-                tab_policy,
-                base_face_id,
-                base_face,
-                role,
-                symbol_values,
-            },
-            &mut source,
-            face_resolver,
-            next_face_id,
-        )
+        self.render_display_item_source_row(spec, &mut source, face_resolver, next_face_id)
     }
 
     pub(crate) fn render_display_item_source_row(

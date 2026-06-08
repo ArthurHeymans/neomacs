@@ -19,6 +19,7 @@ use super::window_output::{
     ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::display_row::{DisplayRowGeometry, DisplayRowSpec};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -7236,19 +7237,25 @@ impl LayoutEngine {
                 y: tl_y,
             };
             output_emitter.begin_chrome_progress(evaluator, tab_row_output);
-            let tab_output = self.render_display_source_row(
-                tl_y,
-                params.bounds.width,
-                tab_line_height,
-                char_w,
-                font_ascent,
-                text_display_tab_policy(0.0, params),
+            let tab_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: tl_y,
+                    width: params.bounds.width,
+                    height: tab_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
                 &mut current_face_id,
                 tl_face,
+                GlyphRowRole::TabLine,
+                status_line_symbol_values.clone(),
+            );
+            let tab_output = self.render_display_source_row(
+                tab_spec,
                 tab_text,
                 face_resolver,
-                status_line_symbol_values.clone(),
-                GlyphRowRole::TabLine,
+                &mut current_face_id,
             );
             if let Some(ref rendered) = tab_output {
                 crate::display_row::install_rendered_display_source_row(&mut builder, rendered, 0);
@@ -7292,19 +7299,25 @@ impl LayoutEngine {
                 y: hl_y,
             };
             output_emitter.begin_chrome_progress(evaluator, header_row_output);
-            let header_output = self.render_display_source_row(
-                hl_y,
-                params.bounds.width,
-                header_line_height,
-                char_w,
-                font_ascent,
-                text_display_tab_policy(0.0, params),
+            let header_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: hl_y,
+                    width: params.bounds.width,
+                    height: header_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
                 &mut current_face_id,
                 hl_face,
+                GlyphRowRole::HeaderLine,
+                status_line_symbol_values.clone(),
+            );
+            let header_output = self.render_display_source_row(
+                header_spec,
                 header_text,
                 face_resolver,
-                status_line_symbol_values.clone(),
-                GlyphRowRole::HeaderLine,
+                &mut current_face_id,
             );
             if let Some(ref rendered) = header_output {
                 crate::display_row::install_rendered_display_source_row(
@@ -7371,19 +7384,25 @@ impl LayoutEngine {
                 y: ml_y,
             };
             output_emitter.begin_chrome_progress(evaluator, mode_row_output);
-            let mode_output = self.render_display_source_row(
-                ml_y,
-                params.bounds.width,
-                mode_line_height,
-                char_w,
-                font_ascent,
-                text_display_tab_policy(0.0, params),
+            let mode_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: ml_y,
+                    width: params.bounds.width,
+                    height: mode_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
                 &mut current_face_id,
                 ml_face,
+                GlyphRowRole::ModeLine,
+                status_line_symbol_values.clone(),
+            );
+            let mode_output = self.render_display_source_row(
+                mode_spec,
                 mode_text,
                 face_resolver,
-                status_line_symbol_values.clone(),
-                GlyphRowRole::ModeLine,
+                &mut current_face_id,
             );
             if let Some(ref rendered) = mode_output {
                 crate::display_row::install_rendered_display_source_row(
@@ -7604,20 +7623,23 @@ impl LayoutEngine {
                     row_start,
                     offset,
                 );
-                let Some(rendered) = self.render_display_source_row(
-                    y + rows.len() as f32 * row_height,
-                    wrap_width,
-                    row_height,
-                    char_w,
-                    ascent,
-                    DisplayTabPolicy::every(8),
+                let row_spec = DisplayRowSpec::from_base_face(
+                    DisplayRowGeometry {
+                        y: y + rows.len() as f32 * row_height,
+                        width: wrap_width,
+                        height: row_height,
+                        char_width: char_w,
+                        ascent,
+                        tab_policy: DisplayTabPolicy::every(8),
+                    },
                     next_face_id,
                     &base_face,
-                    segment,
-                    face_resolver,
-                    std::collections::HashMap::new(),
                     GlyphRowRole::Minibuffer,
-                ) else {
+                    std::collections::HashMap::new(),
+                );
+                let Some(rendered) =
+                    self.render_display_source_row(row_spec, segment, face_resolver, next_face_id)
+                else {
                     break;
                 };
                 let special_face_id = rendered
@@ -7705,19 +7727,25 @@ impl LayoutEngine {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let Some(rendered) = self.render_display_source_row(
-            0.0,
-            width,
-            tab_bar_height,
-            frame_params.char_width,
-            tab_bar_face.font_ascent,
-            DisplayTabPolicy::every(8),
+        let tab_bar_spec = DisplayRowSpec::from_base_face(
+            DisplayRowGeometry {
+                y: 0.0,
+                width,
+                height: tab_bar_height,
+                char_width: frame_params.char_width,
+                ascent: tab_bar_face.font_ascent,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
             &mut current_face_id,
             &tab_bar_face,
+            neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
+            std::collections::HashMap::new(),
+        );
+        let Some(rendered) = self.render_display_source_row(
+            tab_bar_spec,
             tab_bar.text,
             face_resolver,
-            std::collections::HashMap::new(),
-            neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
+            &mut current_face_id,
         ) else {
             return;
         };
