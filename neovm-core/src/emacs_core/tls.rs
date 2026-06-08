@@ -21,6 +21,87 @@ pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::T)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TlsPeerStatus {
+    pub(crate) warnings: Vec<&'static str>,
+    pub(crate) certificates: Vec<String>,
+    pub(crate) protocol: Option<String>,
+    pub(crate) cipher: Option<String>,
+    pub(crate) mac: Option<String>,
+}
+
+impl TlsPeerStatus {
+    fn new() -> Self {
+        Self {
+            warnings: Vec::new(),
+            certificates: Vec::new(),
+            protocol: None,
+            cipher: None,
+            mac: None,
+        }
+    }
+}
+
+pub(crate) enum TlsCloseNotifyResult {
+    Success,
+    Again,
+    Interrupted,
+}
+
+pub(crate) fn gnutls_close_notify_result_value(result: TlsCloseNotifyResult) -> Value {
+    match result {
+        TlsCloseNotifyResult::Success => Value::T,
+        TlsCloseNotifyResult::Again => Value::symbol("gnutls-e-again"),
+        TlsCloseNotifyResult::Interrupted => Value::symbol("gnutls-e-interrupted"),
+    }
+}
+
+pub(crate) fn gnutls_peer_status_to_value(status: &TlsPeerStatus) -> Value {
+    let mut entries = Vec::new();
+
+    if !status.warnings.is_empty() {
+        entries.push(Value::keyword(":warnings"));
+        entries.push(Value::list(
+            status
+                .warnings
+                .iter()
+                .map(|warning| Value::keyword(warning))
+                .collect(),
+        ));
+    }
+
+    if !status.certificates.is_empty() {
+        let certificates = Value::list(
+            status
+                .certificates
+                .iter()
+                .map(|cert| Value::string(cert.clone()))
+                .collect(),
+        );
+        entries.push(Value::keyword(":certificates"));
+        entries.push(certificates);
+        entries.push(Value::keyword(":certificate"));
+        entries.push(Value::string(status.certificates[0].clone()));
+    }
+
+    if let Some(protocol) = &status.protocol {
+        entries.push(Value::keyword(":protocol"));
+        entries.push(Value::string(protocol.clone()));
+    }
+
+    if let Some(cipher) = &status.cipher {
+        entries.push(Value::keyword(":cipher"));
+        entries.push(Value::string(cipher.clone()));
+    }
+
+    if let Some(mac) = &status.mac {
+        entries.push(Value::keyword(":mac"));
+        entries.push(Value::string(mac.clone()));
+    }
+
+    Value::list(entries)
+}
+
 #[derive(Debug)]
 pub(crate) struct CertificateFormatError {
     message: String,
@@ -128,6 +209,117 @@ impl TlsStream {
         match self {
             Self::Rustls(stream) => &stream.peer_certificates_pem,
         }
+    }
+
+    pub(crate) fn peer_status(&self) -> TlsPeerStatus {
+        match self {
+            Self::Rustls(stream) => rustls_peer_status(stream),
+        }
+    }
+
+    pub(crate) fn send_close_notify(
+        &mut self,
+        _wait_for_peer: bool,
+    ) -> std::io::Result<TlsCloseNotifyResult> {
+        match self {
+            Self::Rustls(stream) => {
+                stream.inner.conn.send_close_notify();
+                rustls_complete_io_result(stream)
+            }
+        }
+    }
+}
+
+fn rustls_complete_io_result(
+    stream: &mut RustlsTlsStream,
+) -> std::io::Result<TlsCloseNotifyResult> {
+    match stream.inner.conn.complete_io(&mut stream.inner.sock) {
+        Ok(_) => Ok(TlsCloseNotifyResult::Success),
+        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(TlsCloseNotifyResult::Again),
+        Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {
+            Ok(TlsCloseNotifyResult::Interrupted)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn rustls_peer_status(stream: &RustlsTlsStream) -> TlsPeerStatus {
+    let mut status = TlsPeerStatus::new();
+    status.certificates = stream
+        .peer_certificates_pem
+        .iter()
+        .map(|cert| format_x509_certificate_pem(cert.as_bytes()).unwrap_or_else(|_| cert.clone()))
+        .collect();
+    status.protocol = stream
+        .inner
+        .conn
+        .protocol_version()
+        .map(rustls_protocol_name);
+    if let Some(suite) = stream.inner.conn.negotiated_cipher_suite() {
+        let cipher_suite = suite.suite();
+        status.cipher = Some(rustls_cipher_name(cipher_suite));
+        status.mac = Some(rustls_mac_name(cipher_suite));
+    }
+    status
+}
+
+fn rustls_protocol_name(version: rustls::ProtocolVersion) -> String {
+    match version {
+        rustls::ProtocolVersion::SSLv2 => "SSL2.0".to_owned(),
+        rustls::ProtocolVersion::SSLv3 => "SSL3.0".to_owned(),
+        rustls::ProtocolVersion::TLSv1_0 => "TLS1.0".to_owned(),
+        rustls::ProtocolVersion::TLSv1_1 => "TLS1.1".to_owned(),
+        rustls::ProtocolVersion::TLSv1_2 => "TLS1.2".to_owned(),
+        rustls::ProtocolVersion::TLSv1_3 => "TLS1.3".to_owned(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn rustls_cipher_name(cipher_suite: rustls::CipherSuite) -> String {
+    match cipher_suite {
+        rustls::CipherSuite::TLS13_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => "AES-128-GCM".to_owned(),
+        rustls::CipherSuite::TLS13_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => "AES-256-GCM".to_owned(),
+        rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => {
+            "CHACHA20-POLY1305".to_owned()
+        }
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => "AES-128-CBC".to_owned(),
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => "AES-256-CBC".to_owned(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn rustls_mac_name(cipher_suite: rustls::CipherSuite) -> String {
+    match cipher_suite {
+        rustls::CipherSuite::TLS13_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS13_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => "AEAD".to_owned(),
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => "SHA1".to_owned(),
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => "SHA256".to_owned(),
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => "SHA384".to_owned(),
+        other => format!("{other:?}"),
     }
 }
 

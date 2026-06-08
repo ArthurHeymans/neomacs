@@ -1,7 +1,9 @@
 use super::tls::{
-    TlsBackendError, der_certificate_to_pem, format_x509_certificate_pem,
-    gnutls_available_capabilities,
+    TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus, der_certificate_to_pem,
+    format_x509_certificate_pem, gnutls_available_capabilities, gnutls_close_notify_result_value,
+    gnutls_peer_status_to_value,
 };
+use super::value::Value;
 
 const TEST_CERTIFICATE_PEM: &str = concat!(
     "-----BEGIN CERTIFICATE-----\n",
@@ -78,5 +80,58 @@ fn der_certificates_are_formatted_as_pem_blocks() {
     assert_eq!(
         der_certificate_to_pem(&[1, 2, 3]),
         "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n"
+    );
+}
+
+#[test]
+fn gnutls_close_notify_results_use_gnu_error_symbols() {
+    assert_eq!(
+        gnutls_close_notify_result_value(TlsCloseNotifyResult::Success),
+        Value::T
+    );
+    assert_eq!(
+        gnutls_close_notify_result_value(TlsCloseNotifyResult::Again),
+        Value::symbol("gnutls-e-again")
+    );
+    assert_eq!(
+        gnutls_close_notify_result_value(TlsCloseNotifyResult::Interrupted),
+        Value::symbol("gnutls-e-interrupted")
+    );
+}
+
+#[test]
+fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
+    let status = TlsPeerStatus {
+        warnings: vec![":unknown-ca"],
+        certificates: vec![
+            format_x509_certificate_pem(TEST_CERTIFICATE_PEM.as_bytes()).expect("valid cert"),
+        ],
+        protocol: Some("TLS1.3".to_owned()),
+        cipher: Some("AES-256-GCM".to_owned()),
+        mac: Some("AEAD".to_owned()),
+    };
+
+    let plist = gnutls_peer_status_to_value(&status);
+    let items = crate::emacs_core::value::list_to_vec(&plist).expect("plist");
+    assert_eq!(items[0], Value::keyword(":warnings"));
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(&items[1]).expect("warnings"),
+        vec![Value::keyword(":unknown-ca")]
+    );
+    assert_eq!(items[2], Value::keyword(":certificates"));
+    assert_eq!(items[4], Value::keyword(":certificate"));
+    assert_eq!(items[6], Value::keyword(":protocol"));
+    assert_eq!(items[7], Value::string("TLS1.3"));
+    assert_eq!(items[8], Value::keyword(":cipher"));
+    assert_eq!(items[9], Value::string("AES-256-GCM"));
+    assert_eq!(items[10], Value::keyword(":mac"));
+    assert_eq!(items[11], Value::string("AEAD"));
+    assert!(
+        items[5]
+            .as_lisp_string()
+            .expect("certificate details")
+            .as_utf8_str()
+            .expect("utf-8 certificate details")
+            .contains("Subject: CN=lists.for-our.info")
     );
 }

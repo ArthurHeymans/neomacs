@@ -35,7 +35,10 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
-use super::tls::{RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream};
+use super::tls::{
+    RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
+    gnutls_peer_status_to_value,
+};
 
 /// OS socket owned by a network process.
 ///
@@ -4436,12 +4439,14 @@ pub(crate) fn builtin_gnutls_bye(eval: &mut super::eval::Context, args: Vec<Valu
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let proc = eval
         .processes
-        .get(id)
+        .get_mut(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
-    if proc.tls_stream.is_some() {
-        Ok(Value::T)
-    } else {
-        Ok(Value::NIL)
+    let Some(tls_stream) = proc.tls_stream.as_mut() else {
+        return Ok(Value::NIL);
+    };
+    match tls_stream.send_close_notify(args[1].is_nil()) {
+        Ok(result) => Ok(gnutls_close_notify_result_value(result)),
+        Err(err) => Err(signal_process_io("gnutls-bye", None, err)),
     }
 }
 
@@ -4488,32 +4493,11 @@ pub(crate) fn builtin_gnutls_peer_status(
         .get(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
     if proc.gnutls_initstage == GnutlsInitStage::Ready {
-        let certificates = proc
+        Ok(proc
             .tls_stream
             .as_ref()
-            .map(|tls| {
-                Value::list(
-                    tls.peer_certificates_pem()
-                        .iter()
-                        .map(|cert| Value::string(cert.clone()))
-                        .collect(),
-                )
-            })
-            .unwrap_or(Value::NIL);
-        let certificate = proc
-            .tls_stream
-            .as_ref()
-            .and_then(|tls| tls.peer_certificates_pem().first())
-            .map(|cert| Value::string(cert.clone()))
-            .unwrap_or(Value::NIL);
-        Ok(Value::list(vec![
-            Value::keyword(":warnings"),
-            Value::NIL,
-            Value::keyword(":certificates"),
-            certificates,
-            Value::keyword(":certificate"),
-            certificate,
-        ]))
+            .map(|tls| gnutls_peer_status_to_value(&tls.peer_status()))
+            .unwrap_or(Value::NIL))
     } else {
         Ok(Value::NIL)
     }
