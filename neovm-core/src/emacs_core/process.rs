@@ -34,7 +34,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
-use super::tls::{RustlsBackend, TlsBackendError, TlsStream};
+use super::tls::{RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream};
 
 /// OS socket owned by a network process.
 ///
@@ -4379,7 +4379,13 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     }
 
     let host = hostname.unwrap_or_else(|| "localhost".to_string());
-    upgrade_process_to_tls(eval, id, &host, "gnutls-boot", signal_gnutls_boot_error)?;
+    upgrade_process_to_tls::<RustlsBackend>(
+        eval,
+        id,
+        &host,
+        "gnutls-boot",
+        signal_gnutls_boot_error,
+    )?;
 
     Ok(Value::T)
 }
@@ -4409,7 +4415,7 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
         ],
     )?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &process)?;
-    upgrade_process_to_tls(
+    upgrade_process_to_tls::<RustlsBackend>(
         eval,
         id,
         &host,
@@ -4419,7 +4425,7 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
     Ok(process)
 }
 
-fn upgrade_process_to_tls(
+fn upgrade_process_to_tls<B: TlsClientBackend>(
     eval: &mut super::eval::Context,
     id: ProcessId,
     host: &str,
@@ -4460,7 +4466,7 @@ fn upgrade_process_to_tls(
         }
     };
 
-    let tls_stream = RustlsBackend::connect_client(tcp_stream, host).map_err(map_error)?;
+    let tls_stream = B::connect_client(tcp_stream, host).map_err(map_error)?;
 
     // Store the TLS stream. The poller still watches the underlying fd
     // (which is the same fd that was registered for the plain socket).

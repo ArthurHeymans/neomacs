@@ -19,36 +19,44 @@ pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::T)
 }
 
-/// Backend-neutral TLS stream owned by a Neomacs process.
-pub struct TlsStream {
-    inner: RustlsClientStream,
-}
-
 type RustlsClientStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
 
+/// Backend-neutral TLS stream owned by a Neomacs process.
+pub enum TlsStream {
+    Rustls(RustlsClientStream),
+}
+
 impl TlsStream {
-    fn new(inner: RustlsClientStream) -> Self {
-        Self { inner }
+    fn rustls(inner: RustlsClientStream) -> Self {
+        Self::Rustls(inner)
     }
 
     pub(crate) fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
-        self.inner.sock.set_nonblocking(nonblocking)
+        match self {
+            Self::Rustls(inner) => inner.sock.set_nonblocking(nonblocking),
+        }
     }
 }
 
 impl Read for TlsStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
+        match self {
+            Self::Rustls(inner) => inner.read(buf),
+        }
     }
 }
 
 impl Write for TlsStream {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner.write(buf)
+        match self {
+            Self::Rustls(inner) => inner.write(buf),
+        }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
+        match self {
+            Self::Rustls(inner) => inner.flush(),
+        }
     }
 }
 
@@ -72,14 +80,19 @@ impl std::fmt::Display for TlsBackendError {
     }
 }
 
+/// TLS transport backend boundary.
+///
+/// The process layer owns backend-neutral `TlsStream` values, while each
+/// backend handles its own handshake, certificate roots, and error conversion.
+pub(crate) trait TlsClientBackend {
+    fn connect_client(tcp_stream: TcpStream, hostname: &str) -> Result<TlsStream, TlsBackendError>;
+}
+
 /// Rustls-backed TLS transport implementation.
 pub(crate) struct RustlsBackend;
 
-impl RustlsBackend {
-    pub(crate) fn connect_client(
-        tcp_stream: TcpStream,
-        hostname: &str,
-    ) -> Result<TlsStream, TlsBackendError> {
+impl TlsClientBackend for RustlsBackend {
+    fn connect_client(tcp_stream: TcpStream, hostname: &str) -> Result<TlsStream, TlsBackendError> {
         let root_store =
             rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let config = rustls::ClientConfig::builder()
@@ -109,7 +122,7 @@ impl RustlsBackend {
             Err(err) => return Err(TlsBackendError::Io(err)),
         }
 
-        let stream = TlsStream::new(tls_stream);
+        let stream = TlsStream::rustls(tls_stream);
         stream.set_nonblocking(true).ok();
         Ok(stream)
     }
