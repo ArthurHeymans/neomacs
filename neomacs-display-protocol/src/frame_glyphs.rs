@@ -325,6 +325,22 @@ impl FrameGlyph {
             _ => None,
         }
     }
+
+    /// Left edge (in physical pixels) of the cell this glyph occupies. This is
+    /// the position the physical cursor is actually drawn at (see the
+    /// renderer's `cursor_glyph_slot_rect`); the cursor's grid-derived
+    /// `PhysCursor::x` is only an approximation that diverges from the glyph
+    /// under scaled fonts.
+    pub fn cell_x(&self) -> Option<f32> {
+        match self {
+            FrameGlyph::Char { x, .. }
+            | FrameGlyph::Stretch { x, .. }
+            | FrameGlyph::Image { x, .. }
+            | FrameGlyph::Video { x, .. }
+            | FrameGlyph::Xwidget { x, .. } => Some(*x),
+            _ => None,
+        }
+    }
 }
 
 /// Authoritative physical cursor snapshot for a frame.
