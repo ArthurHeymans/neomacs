@@ -21,7 +21,7 @@ use super::window_output::{
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row_builder::{
     DisplayRowAppendCursor, FixedGlyphAdvance, FixedGlyphAdvances,
-    append_display_item_to_current_matrix_row, append_measured_display_item_to_current_matrix_row,
+    append_display_item_to_current_matrix_row,
 };
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -4316,25 +4316,26 @@ impl LayoutEngine {
                                                 text_display_tab_policy(content_x, params),
                                                 face_id,
                                             );
-                                            let position =
+                                            let mut append_cursor = DisplayRowAppendCursor::new(
                                                 crate::display_row_builder::DisplayRowPosition {
                                                     x_px: x,
                                                     col,
-                                                };
-                                            let progress =
-                                                append_measured_display_item_to_current_matrix_row(
+                                                },
+                                                right_limit,
+                                            );
+                                            let progress = append_cursor
+                                                .append_measured_item_to_current_matrix_row(
                                                     &mut self.matrix_builder,
                                                     &layout,
                                                     item,
                                                     &mut measurer,
-                                                    position,
-                                                    right_limit,
                                                 );
                                             let Some(progress) = progress else {
                                                 break;
                                             };
-                                            x = progress.end.x_px;
-                                            col = progress.end.col;
+                                            let position = append_cursor.position();
+                                            x = position.x_px;
+                                            col = position.col;
                                             emit_text_progress_slots(
                                                 &mut output_emitter,
                                                 evaluator,
@@ -4368,24 +4369,25 @@ impl LayoutEngine {
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
-                                            let position =
+                                            let mut append_cursor = DisplayRowAppendCursor::new(
                                                 crate::display_row_builder::DisplayRowPosition {
                                                     x_px: x,
                                                     col,
-                                                };
-                                            let progress =
-                                                append_display_item_to_current_matrix_row(
+                                                },
+                                                right_limit,
+                                            );
+                                            let progress = append_cursor
+                                                .append_item_to_current_matrix_row(
                                                     &mut self.matrix_builder,
                                                     &layout,
                                                     item,
-                                                    position,
-                                                    right_limit,
                                                 );
                                             let Some(progress) = progress else {
                                                 break;
                                             };
-                                            x = progress.end.x_px;
-                                            col = progress.end.col;
+                                            let position = append_cursor.position();
+                                            x = position.x_px;
+                                            col = position.col;
                                             emit_text_progress_slots(
                                                 &mut output_emitter,
                                                 evaluator,
@@ -4511,15 +4513,18 @@ impl LayoutEngine {
                                 text_display_tab_policy(content_x, params),
                                 current_text_face_id,
                             );
-                            if let Some(progress) = append_display_item_to_current_matrix_row(
+                            let mut append_cursor = DisplayRowAppendCursor::new(
+                                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                                content_x + avail_width,
+                            );
+                            if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                                 &mut self.matrix_builder,
                                 &layout,
                                 item,
-                                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                                content_x + avail_width,
                             ) {
-                                x = progress.end.x_px;
-                                col = progress.end.col;
+                                let position = append_cursor.position();
+                                x = position.x_px;
+                                col = position.col;
                                 emit_text_progress_slots(
                                     &mut output_emitter,
                                     evaluator,
@@ -5584,15 +5589,18 @@ impl LayoutEngine {
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
-                if let Some(progress) = append_display_item_to_current_matrix_row(
+                let mut append_cursor = DisplayRowAppendCursor::new(
+                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                    content_x + (text_width - lnum_pixel_width),
+                );
+                if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                     &mut self.matrix_builder,
                     &layout,
                     item,
-                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    content_x + (text_width - lnum_pixel_width),
                 ) {
-                    x = progress.end.x_px;
-                    col = progress.end.col;
+                    let position = append_cursor.position();
+                    x = position.x_px;
+                    col = position.col;
                     emit_text_progress_slots(
                         &mut output_emitter,
                         evaluator,
@@ -5650,15 +5658,18 @@ impl LayoutEngine {
                         text_display_tab_policy(content_x, params),
                         current_text_face_id,
                     );
-                    if let Some(progress) = append_display_item_to_current_matrix_row(
+                    let mut append_cursor = DisplayRowAppendCursor::new(
+                        crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                        content_x + avail_width,
+                    );
+                    if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                         &mut self.matrix_builder,
                         &layout,
                         item,
-                        crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                        content_x + avail_width,
                     ) {
-                        x = progress.end.x_px;
-                        col = progress.end.col;
+                        let position = append_cursor.position();
+                        x = position.x_px;
+                        col = position.col;
                         emit_text_progress_slots(
                             &mut output_emitter,
                             evaluator,
@@ -5729,15 +5740,18 @@ impl LayoutEngine {
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
-                if let Some(progress) = append_display_item_to_current_matrix_row(
+                let mut append_cursor = DisplayRowAppendCursor::new(
+                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                    content_x + avail_width,
+                );
+                if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
                     &mut self.matrix_builder,
                     &layout,
                     item,
-                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    content_x + avail_width,
                 ) {
-                    x = progress.end.x_px;
-                    col = progress.end.col;
+                    let position = append_cursor.position();
+                    x = position.x_px;
+                    col = position.col;
                     emit_text_progress_slots(
                         &mut output_emitter,
                         evaluator,
@@ -6217,18 +6231,19 @@ impl LayoutEngine {
                 current_text_face_id,
             );
             let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
-            let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
-            let progress = append_measured_display_item_to_current_matrix_row(
-                &mut self.matrix_builder,
-                &layout,
-                item,
-                &mut measurer,
-                position,
+            let mut append_cursor = DisplayRowAppendCursor::new(
+                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
                 if ch == '\t' {
                     f32::INFINITY
                 } else {
                     content_x + avail_width
                 },
+            );
+            let progress = append_cursor.append_measured_item_to_current_matrix_row(
+                &mut self.matrix_builder,
+                &layout,
+                item,
+                &mut measurer,
             );
             let Some(progress) = progress else {
                 break;
@@ -6241,8 +6256,9 @@ impl LayoutEngine {
             }
 
             let output_span_height = if ch == '\t' { char_h } else { face_h };
-            x = progress.end.x_px;
-            col = progress.end.col;
+            let position = append_cursor.position();
+            x = position.x_px;
+            col = position.col;
             emit_text_progress_slots(
                 &mut output_emitter,
                 evaluator,
