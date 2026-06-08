@@ -334,6 +334,18 @@ pub(crate) struct RenderedDisplaySourceRow {
     pub(crate) faces: Vec<Face>,
 }
 
+pub(crate) struct DisplayRowSpec<'a> {
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) base_face_id: u32,
+    pub(crate) base_face: &'a ResolvedFace,
+    pub(crate) role: GlyphRowRole,
+    pub(crate) symbol_values: std::collections::HashMap<String, Value>,
+}
+
 pub(crate) fn install_rendered_display_source_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplaySourceRow,
@@ -421,12 +433,49 @@ impl LayoutEngine {
             *next_face_id += 1;
             id
         };
+        let mut source =
+            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
+        self.render_display_item_source_row(
+            DisplayRowSpec {
+                y,
+                width,
+                height,
+                char_width: char_w,
+                ascent,
+                base_face_id,
+                base_face,
+                role,
+                symbol_values,
+            },
+            &mut source,
+            face_resolver,
+            next_face_id,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        face_resolver: &FaceResolver,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplaySourceRow> {
+        let DisplayRowSpec {
+            y,
+            width,
+            height,
+            char_width: char_w,
+            ascent,
+            base_face_id,
+            base_face,
+            role,
+            symbol_values,
+        } = spec;
+        *next_face_id = (*next_face_id).max(base_face_id.saturating_add(1));
         let row_face =
             self.realize_display_row_face(base_face_id, base_face, char_w, ascent, height);
         let char_width = self.display_row_char_width(&row_face, char_w).max(1.0);
         let mut row_faces = vec![row_face.clone()];
-        let mut source =
-            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(row_face.face_id))?;
         let mut items = Vec::new();
 
         struct RowFaceResolver<'a> {

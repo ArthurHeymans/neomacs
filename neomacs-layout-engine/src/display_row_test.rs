@@ -1,5 +1,5 @@
 use super::*;
-use crate::neovm_bridge::FaceResolver;
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
@@ -57,6 +57,68 @@ fn render_lisp_display_row_with_symbols(
         )
         .expect("display source row")
         .row
+}
+
+#[test]
+fn render_display_item_source_row_accepts_buffer_text_source() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("A中👨‍👩");
+    }
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        buffer,
+        neovm_core::buffer::CharPos0::new(0),
+        buffer.layout_point_max_char_pos(),
+        RenderFaceRef::FaceId(1),
+    );
+
+    let rendered = engine
+        .render_display_item_source_row(
+            DisplayRowSpec {
+                y: 0.0,
+                width: 240.0,
+                height: 16.0,
+                char_width: 8.0,
+                ascent: 12.0,
+                base_face_id: 1,
+                base_face: resolver.default_face(),
+                role: GlyphRowRole::TabLine,
+                symbol_values: std::collections::HashMap::new(),
+            },
+            &mut source,
+            &resolver,
+            &mut next_face_id,
+        )
+        .expect("display source row");
+
+    let row = rendered.row;
+    let glyphs = &row.glyphs[1];
+    let cjk = glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
+        .expect("CJK glyph");
+
+    assert_eq!(row.role, GlyphRowRole::TabLine);
+    assert_eq!(row_text_expanding_stretches(&row), "A中👨‍👩");
+    assert!(cjk.wide);
+    assert!(glyphs.iter().any(|glyph| glyph.padding));
+    assert!(
+        glyphs
+            .iter()
+            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}')))
+    );
 }
 
 #[test]
