@@ -40,7 +40,7 @@ fn display_item_stretch_uses_typed_lengths() {
         SourceSpan::synthetic(1, 0, 1),
         RenderFaceRef::Inherit,
         DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayLength::Pixels(32.0),
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(32.0)),
             height: Some(DisplayLength::Pixels(14.0)),
             ascent: Some(DisplayLength::Pixels(10.0)),
         }),
@@ -49,7 +49,7 @@ fn display_item_stretch_uses_typed_lengths() {
     assert_eq!(
         item.kind,
         DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayLength::Pixels(32.0),
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(32.0)),
             height: Some(DisplayLength::Pixels(14.0)),
             ascent: Some(DisplayLength::Pixels(10.0)),
         })

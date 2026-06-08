@@ -158,15 +158,48 @@ pub(crate) struct DisplayGlyphless {
     pub(crate) method: GlyphlessMethod,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayLength {
     Columns(u16),
     Pixels(f32),
+    Em(f32),
+    Expr(DisplayLengthExpr),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayLengthSymbol {
+    Height,
+    Width,
+    Text,
+    Left,
+    Right,
+    Center,
+    LeftFringe,
+    RightFringe,
+    LeftMargin,
+    RightMargin,
+    ScrollBar,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayLengthExpr {
+    Pixels(f32),
+    Em(f32),
+    Symbol(DisplayLengthSymbol),
+    Variable(Box<str>),
+    Add(Vec<DisplayLengthExpr>),
+    Sub(Vec<DisplayLengthExpr>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayStretchWidth {
+    Length(DisplayLength),
+    AlignTo(DisplayLengthExpr),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayStretch {
-    pub(crate) width: DisplayLength,
+    pub(crate) width: DisplayStretchWidth,
     pub(crate) height: Option<DisplayLength>,
     pub(crate) ascent: Option<DisplayLength>,
 }
