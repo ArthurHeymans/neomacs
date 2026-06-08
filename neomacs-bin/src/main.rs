@@ -38,7 +38,7 @@ use neomacs_display_runtime::thread_comm::{
     LifecycleCommand, MediaSource, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
-use neomacs_layout_engine::fontconfig::face_height_to_pixels;
+use neomacs_layout_engine::fontconfig::{points_to_pixels_for_dpi, xft_dpi};
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
@@ -81,6 +81,40 @@ enum EarlyCliAction {
 pub(crate) enum FrontendKind {
     Gui,
     Tty,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct FontSizing {
+    layout_dpi: f32,
+}
+
+impl FontSizing {
+    const LOGICAL_DPI: f32 = 96.0;
+
+    fn xft() -> Self {
+        Self {
+            layout_dpi: xft_dpi(),
+        }
+    }
+
+    fn logical() -> Self {
+        Self {
+            layout_dpi: Self::LOGICAL_DPI,
+        }
+    }
+
+    fn face_height_to_layout_pixels(self, tenths: i32) -> f32 {
+        points_to_pixels_for_dpi(tenths as f32 / 10.0, self.layout_dpi)
+    }
+
+    fn font_size_px_for_face(self, face: &neovm_core::face::Face) -> f32 {
+        let default_font_size = self.face_height_to_layout_pixels(100);
+        match &face.height {
+            Some(FaceHeight::Absolute(tenths)) => self.face_height_to_layout_pixels(*tenths),
+            Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
+            None => default_font_size,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,9 +195,10 @@ pub(crate) struct StartupOptions {
     no_build_details: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct BootstrapDisplayConfig {
     frontend: FrontendKind,
+    font_sizing: FontSizing,
     color_cells: i64,
     background_mode: &'static str,
 }
@@ -670,6 +705,7 @@ fn bootstrap_display_config(frontend: FrontendKind) -> BootstrapDisplayConfig {
     match frontend {
         FrontendKind::Gui => BootstrapDisplayConfig {
             frontend,
+            font_sizing: gui_font_sizing(),
             color_cells: 16777216,
             // GNU `frame--current-background-mode` defaults GUI frames to
             // `light` unless a real background color or terminal default says
@@ -678,6 +714,7 @@ fn bootstrap_display_config(frontend: FrontendKind) -> BootstrapDisplayConfig {
         },
         FrontendKind::Tty => BootstrapDisplayConfig {
             frontend,
+            font_sizing: FontSizing::xft(),
             color_cells: tty_init::detect_tty_color_cells(),
             background_mode: tty_init::detect_tty_background_mode(),
         },
@@ -781,6 +818,7 @@ const GUI_EVALUATOR_THREAD_STACK_SIZE: usize = 64 * 1024 * 1024;
 struct PrimaryWindowDisplayHost {
     cmd_tx: crossbeam_channel::Sender<RenderCommand>,
     render_waker: Option<GuiEventLoopWaker>,
+    font_sizing: FontSizing,
     primary_window_adopted: bool,
     primary_frame_id: Option<neovm_core::window::FrameId>,
     last_window_titles: Mutex<HashMap<neovm_core::window::FrameId, LispString>>,
@@ -1291,7 +1329,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .slant
             .map(|slant| slant.is_italic())
             .unwrap_or(false);
-        let font_size = font_size_px_for_face(&request.face);
+        let font_size = self.font_sizing.font_size_px_for_face(&request.face);
         let selected = self
             .font_metrics
             .get_or_insert_with(FontMetricsService::new)
@@ -1332,7 +1370,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         let requested_family = requested_family_storage.as_deref().unwrap_or("Monospace");
         let requested_weight = face.weight.unwrap_or(FontWeight::NORMAL).css_weight();
         let requested_italic = face.slant.map(|slant| slant.is_italic()).unwrap_or(false);
-        let font_size = font_size_px_for_face(&face);
+        let font_size = self.font_sizing.font_size_px_for_face(&face);
         let selected = self
             .font_metrics
             .get_or_insert_with(FontMetricsService::new)
@@ -1893,12 +1931,18 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
     }
 }
 
-fn font_size_px_for_face(face: &neovm_core::face::Face) -> f32 {
-    let default_font_size = face_height_to_pixels(100);
-    match &face.height {
-        Some(FaceHeight::Absolute(tenths)) => face_height_to_pixels(*tenths),
-        Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
-        None => default_font_size,
+fn gui_font_sizing() -> FontSizing {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            FontSizing::logical()
+        } else {
+            FontSizing::xft()
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        FontSizing::logical()
     }
 }
 
@@ -2163,6 +2207,7 @@ fn run_gui_evaluator_worker(
     evaluator.set_display_host(Box::new(PrimaryWindowDisplayHost {
         cmd_tx: emacs_comms.cmd_tx.clone(),
         render_waker: Some(render_waker.clone()),
+        font_sizing: bootstrap_display.font_sizing,
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(HashMap::new()),
@@ -2360,7 +2405,7 @@ pub fn run(mode: RuntimeMode) {
     // This avoids ~500ms of FontMetricsService initialization at
     // startup. GUI mode computes real pixel dimensions from font
     // metrics via bootstrap_frame_metrics().
-    let frame_metrics = bootstrap_frame_metrics_for_frontend(startup.frontend);
+    let frame_metrics = bootstrap_frame_metrics_for_display(bootstrap_display);
     let (width, height) =
         startup_dimensions(startup.frontend, frame_metrics, startup.noninteractive);
 
@@ -2685,15 +2730,19 @@ fn bootstrap_default_font_name(font_pixel_size: f32) -> Value {
 }
 
 fn bootstrap_frame_metrics() -> BootstrapFrameMetrics {
-    // GNU X backends seed the first GUI frame from a 10pt default font and
-    // convert that through the active Xft DPI.
-    let font_pixel_size = face_height_to_pixels(100);
-    let mut metrics_svc = FontMetricsService::new();
-    let metrics = metrics_svc.font_metrics("Monospace", 400, false, font_pixel_size);
-    BootstrapFrameMetrics {
-        char_width: metrics.char_width.max(1.0),
-        char_height: metrics.line_height.max(1.0),
-        font_pixel_size,
+    FontSizing::xft().bootstrap_frame_metrics()
+}
+
+impl FontSizing {
+    fn bootstrap_frame_metrics(self) -> BootstrapFrameMetrics {
+        let font_pixel_size = self.face_height_to_layout_pixels(100);
+        let mut metrics_svc = FontMetricsService::new();
+        let metrics = metrics_svc.font_metrics("Monospace", 400, false, font_pixel_size);
+        BootstrapFrameMetrics {
+            char_width: metrics.char_width.max(1.0),
+            char_height: metrics.line_height.max(1.0),
+            font_pixel_size,
+        }
     }
 }
 
@@ -2709,13 +2758,21 @@ fn bootstrap_frame_metrics_for_frontend(frontend: FrontendKind) -> BootstrapFram
     }
 }
 
+fn bootstrap_frame_metrics_for_display(display: BootstrapDisplayConfig) -> BootstrapFrameMetrics {
+    if display.frontend == FrontendKind::Tty {
+        bootstrap_frame_metrics_for_frontend(FrontendKind::Tty)
+    } else {
+        display.font_sizing.bootstrap_frame_metrics()
+    }
+}
+
 fn bootstrap_buffers(
     eval: &mut Context,
     width: u32,
     height: u32,
     display: BootstrapDisplayConfig,
 ) -> BootstrapResult {
-    let frame_metrics = bootstrap_frame_metrics_for_frontend(display.frontend);
+    let frame_metrics = bootstrap_frame_metrics_for_display(display);
     let find_or_create_buffer = |eval: &mut Context, name: &str| {
         eval.buffer_manager()
             .find_buffer_by_name(name)

@@ -5,12 +5,12 @@ use super::tty_layout::{
     install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
 };
 use super::{
-    BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FrontendKind,
-    PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
+    BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FontSizing,
+    FrontendKind, PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
     adopt_existing_primary_gui_frame, bootstrap_buffers, bootstrap_default_font_name,
     bootstrap_display_config, bootstrap_frame_metrics, bootstrap_frame_metrics_for_frontend,
-    classify_early_cli_action, configure_gnu_startup_state, face_height_to_pixels,
-    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
+    classify_early_cli_action, configure_gnu_startup_state, parse_startup_options,
+    publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
@@ -19,6 +19,7 @@ use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
     WindowCommand,
 };
+use neomacs_layout_engine::fontconfig::face_height_to_pixels;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
@@ -603,6 +604,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -674,6 +676,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
         primary_frame_id: Some(FrameId(0x100000001)),
         last_window_titles: Mutex::new(std::collections::HashMap::from([
@@ -721,6 +724,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
         primary_frame_id: Some(FrameId(0x100000001)),
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -786,6 +790,7 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     let host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -851,6 +856,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     let host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -900,6 +906,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
     let host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -945,6 +952,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
     let host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -997,6 +1005,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
     let host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -1064,6 +1073,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
     eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -1126,6 +1136,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
         primary_frame_id: Some(FrameId(0x100000001)),
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -1186,6 +1197,7 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
         primary_frame_id: Some(FrameId(0x100000001)),
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -1223,6 +1235,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
     eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
         cmd_tx,
         render_waker: None,
+        font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
         primary_frame_id: None,
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
@@ -1936,6 +1949,37 @@ fn startup_dimensions_noninteractive_tty_matches_gnu_initial_frame() {
 fn bootstrap_frame_metrics_uses_default_face_height_pixels() {
     let metrics = bootstrap_frame_metrics();
     assert_eq!(metrics.font_pixel_size, face_height_to_pixels(100));
+}
+
+#[test]
+fn wayland_font_policy_uses_logical_dpi_not_xft_dpi() {
+    assert_eq!(
+        FontSizing::logical().face_height_to_layout_pixels(100),
+        13.0
+    );
+}
+
+#[test]
+fn wayland_bootstrap_frame_metrics_use_logical_default_font_size() {
+    let metrics = FontSizing::logical().bootstrap_frame_metrics();
+    assert_eq!(metrics.font_pixel_size, 13.0);
+}
+
+#[test]
+fn x11_font_policy_keeps_xft_dpi_conversion() {
+    assert_eq!(
+        FontSizing::xft().face_height_to_layout_pixels(100),
+        face_height_to_pixels(100)
+    );
+}
+
+#[test]
+fn relative_face_height_uses_policy_default_font_size() {
+    let face = neovm_core::face::Face {
+        height: Some(FaceHeight::Relative(2.0)),
+        ..Default::default()
+    };
+    assert_eq!(FontSizing::logical().font_size_px_for_face(&face), 26.0);
 }
 
 #[test]

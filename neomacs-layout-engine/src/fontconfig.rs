@@ -455,7 +455,7 @@ pub fn find_font_for_spec(
         })
 }
 
-fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {
+pub fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {
     (points * dpi / 72.0).round()
 }
 
