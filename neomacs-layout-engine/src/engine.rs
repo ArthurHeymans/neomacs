@@ -1320,6 +1320,123 @@ fn append_display_item_to_current_row_with_measured_progress(
     })
 }
 
+#[derive(Clone, Copy, Debug)]
+struct BufferDisplayReplacementSource {
+    buffer_id: BufferId,
+    char_pos: i64,
+    byte_pos: usize,
+}
+
+impl BufferDisplayReplacementSource {
+    const fn new(buffer_id: BufferId, char_pos: i64, byte_pos: usize) -> Self {
+        Self {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        }
+    }
+
+    fn span(self) -> crate::display_item::SourceSpan {
+        let start = CharPos0::new(self.char_pos.max(0) as usize);
+        let end = CharPos0::new(self.char_pos.saturating_add(1).max(0) as usize);
+        crate::display_item::SourceSpan::new(
+            crate::display_item::DisplaySourcePosition::buffer(
+                self.buffer_id,
+                start,
+                EmacsBytePos::new(self.byte_pos),
+            ),
+            crate::display_item::DisplaySourcePosition::buffer(
+                self.buffer_id,
+                end,
+                EmacsBytePos::new(self.byte_pos),
+            ),
+        )
+    }
+
+    fn item(
+        self,
+        face_id: u32,
+        kind: crate::display_item::DisplayItemKind,
+    ) -> crate::display_item::DisplayItem {
+        crate::display_item::DisplayItem::new(
+            self.span(),
+            crate::display_item::RenderFaceRef::FaceId(face_id),
+            kind,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DisplayReplacementBox {
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+}
+
+impl DisplayReplacementBox {
+    fn new(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
+        Self {
+            width_px: width_px.max(0.0),
+            height_px: height_px.max(0.0),
+            ascent_px: ascent_px.max(0.0),
+        }
+    }
+}
+
+fn append_buffer_display_stretch_to_current_row(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &crate::display_row_builder::DisplayRowLayout,
+    source: BufferDisplayReplacementSource,
+    face_id: u32,
+    geometry: DisplayReplacementBox,
+    position: crate::display_row_builder::DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
+    append_display_item_to_current_row_with_progress(
+        builder,
+        layout,
+        source.item(
+            face_id,
+            crate::display_item::DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
+                width: crate::display_item::DisplayStretchWidth::Length(
+                    crate::display_item::DisplayLength::Pixels(geometry.width_px),
+                ),
+                height: Some(crate::display_item::DisplayLength::Pixels(
+                    geometry.height_px,
+                )),
+                ascent: Some(crate::display_item::DisplayLength::Pixels(
+                    geometry.ascent_px,
+                )),
+            }),
+        ),
+        position,
+        max_x_px,
+    )
+}
+
+fn append_buffer_source_mapped_text_to_current_row(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &crate::display_row_builder::DisplayRowLayout,
+    source: BufferDisplayReplacementSource,
+    face_id: u32,
+    text: impl Into<Box<str>>,
+    position: crate::display_row_builder::DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
+    append_display_item_to_current_row_with_progress(
+        builder,
+        layout,
+        source.item(
+            face_id,
+            crate::display_item::DisplayItemKind::SourceMappedText(
+                crate::display_item::DisplaySourceMappedText::new(text),
+            ),
+        ),
+        position,
+        max_x_px,
+    )
+}
+
 fn text_display_row_layout(
     y_px: f32,
     width_px: f32,
@@ -4550,8 +4667,14 @@ impl LayoutEngine {
                     // Case 3: Image — emit a real inline image glyph when a GUI
                     // display host can resolve it, otherwise keep the TTY placeholder.
                     if DisplaySpecHead::Image.is_head_of(&prop_val) {
-                        let replacement_start_x = x;
-                        let replacement_start_col = col;
+                        let replacement_source = BufferDisplayReplacementSource::new(
+                            buf_id,
+                            charpos,
+                            text_start_byte + byte_idx,
+                        );
+                        let replacement_position =
+                            crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+                        let right_limit = content_x + avail_width;
                         let maybe_image = parse_display_image_layout(
                             &prop_val,
                             current_resolved_face.fg,
@@ -4595,41 +4718,64 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let slot_id = DisplaySlotId {
-                                window_id: params.window_id,
-                                row: window_text_row_u32(row),
-                                col: col as u16,
-                            };
-                            let image_y = y + raise_y_offset;
-                            self.matrix_builder.push_image_with_slot_id(
-                                params.window_id,
-                                GlyphRowRole::Text,
-                                Some(params.text_bounds),
-                                slot_id,
-                                resolved.image_id,
-                                x,
-                                image_y,
-                                display_width,
-                                display_height,
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
                             );
-                            row_max_height = row_max_height.max(display_height);
-                            row_max_ascent = row_max_ascent.max(display_height);
-                            x += display_width;
-                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    image_y,
+                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                DisplayReplacementBox::new(
+                                    display_width,
                                     display_height,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
+                                    display_height,
                                 ),
-                            );
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                if progress.status
+                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                                    && progress.metrics.width_px > 0.0
+                                {
+                                    let slot_id = DisplaySlotId {
+                                        window_id: params.window_id,
+                                        row: window_text_row_u32(row),
+                                        col: progress.start.col.min(usize::from(u16::MAX)) as u16,
+                                    };
+                                    let image_y = y + raise_y_offset;
+                                    self.matrix_builder.push_image_with_slot_id(
+                                        params.window_id,
+                                        GlyphRowRole::Text,
+                                        Some(params.text_bounds),
+                                        slot_id,
+                                        resolved.image_id,
+                                        progress.start.x_px,
+                                        image_y,
+                                        display_width,
+                                        display_height,
+                                    );
+                                    row_max_height = row_max_height.max(display_height);
+                                    row_max_ascent = row_max_ascent.max(display_height);
+                                    x = progress.end.x_px;
+                                    col = progress.end.col;
+                                    emit_text_progress_slots(
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &progress,
+                                        row,
+                                        y,
+                                        image_y,
+                                        display_height,
+                                    );
+                                }
+                            }
                         } else {
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4650,40 +4796,34 @@ impl LayoutEngine {
                                 );
                             }
                             let placeholder = "[img]";
-                            let right_limit = content_x + (text_width - lnum_pixel_width);
-                            for rch in placeholder.chars() {
-                                if x + face_char_w > right_limit {
-                                    break;
-                                }
-                                x += char_pixel_advance(
-                                    &mut self.ascii_width_cache,
-                                    frame_params.window_system,
-                                    &mut self.font_metrics,
-                                    rch,
-                                    1,
-                                    char_w,
-                                    current_font_size_px,
-                                    face_char_w,
-                                    &self.current_resolved_family,
-                                    current_font_weight,
-                                    current_font_italic,
-                                );
-                                col += 1;
-                            }
-                            if x > replacement_start_x || col > replacement_start_col {
-                                output_emitter.emit_text_output_span(
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
+                            );
+                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                placeholder,
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                x = progress.end.x_px;
+                                col = progress.end.col;
+                                emit_text_progress_slots(
+                                    &mut output_emitter,
                                     evaluator,
-                                    text_output_span_from_coords(
-                                        layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                        row,
-                                        y,
-                                        y + raise_y_offset,
-                                        face_h,
-                                        replacement_start_x,
-                                        replacement_start_col,
-                                        x,
-                                        col,
-                                    ),
+                                    &progress,
+                                    row,
+                                    y,
+                                    y + raise_y_offset,
+                                    face_h,
                                 );
                             }
                         }
@@ -4700,8 +4840,14 @@ impl LayoutEngine {
                     // Case 4: Video — resolve the declarative video source to a stable
                     // renderer handle, then emit an inline video glyph.
                     if DisplaySpecHead::Video.is_head_of(&prop_val) {
-                        let replacement_start_x = x;
-                        let replacement_start_col = col;
+                        let replacement_source = BufferDisplayReplacementSource::new(
+                            buf_id,
+                            charpos,
+                            text_start_byte + byte_idx,
+                        );
+                        let replacement_position =
+                            crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+                        let right_limit = content_x + avail_width;
                         let maybe_video = parse_display_video_layout(
                             &prop_val,
                             face_char_w * 40.0,
@@ -4740,37 +4886,60 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let video_y = y + raise_y_offset;
-                            self.matrix_builder.push_video(
-                                params.window_id,
-                                GlyphRowRole::Text,
-                                Some(params.text_bounds),
-                                resolved.video_id,
-                                x,
-                                video_y,
-                                display_width,
-                                display_height,
-                                spec.loop_count,
-                                spec.autoplay,
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
                             );
-                            row_max_height = row_max_height.max(display_height);
-                            row_max_ascent = row_max_ascent.max(display_height);
-                            x += display_width;
-                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    video_y,
+                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                DisplayReplacementBox::new(
+                                    display_width,
                                     display_height,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
+                                    display_height,
                                 ),
-                            );
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                if progress.status
+                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                                    && progress.metrics.width_px > 0.0
+                                {
+                                    let video_y = y + raise_y_offset;
+                                    self.matrix_builder.push_video(
+                                        params.window_id,
+                                        GlyphRowRole::Text,
+                                        Some(params.text_bounds),
+                                        resolved.video_id,
+                                        progress.start.x_px,
+                                        video_y,
+                                        display_width,
+                                        display_height,
+                                        spec.loop_count,
+                                        spec.autoplay,
+                                    );
+                                    row_max_height = row_max_height.max(display_height);
+                                    row_max_ascent = row_max_ascent.max(display_height);
+                                    x = progress.end.x_px;
+                                    col = progress.end.col;
+                                    emit_text_progress_slots(
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &progress,
+                                        row,
+                                        y,
+                                        video_y,
+                                        display_height,
+                                    );
+                                }
+                            }
                         } else {
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4790,22 +4959,36 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            x += face_char_w * 5.0;
-                            col += 5;
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
+                            );
+                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                "     ",
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                x = progress.end.x_px;
+                                col = progress.end.col;
+                                emit_text_progress_slots(
+                                    &mut output_emitter,
+                                    evaluator,
+                                    &progress,
                                     row,
                                     y,
                                     y + raise_y_offset,
                                     face_h,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
-                                ),
-                            );
+                                );
+                            }
                         }
 
                         // Skip covered buffer text
@@ -4821,8 +5004,14 @@ impl LayoutEngine {
                     // The model object already owns the native xwidget id and geometry.
                     if DisplaySpecHead::Xwidget.is_head_of(&prop_val) {
                         if let Some(spec) = parse_display_xwidget_layout(&prop_val) {
-                            let replacement_start_x = x;
-                            let replacement_start_col = col;
+                            let replacement_source = BufferDisplayReplacementSource::new(
+                                buf_id,
+                                charpos,
+                                text_start_byte + byte_idx,
+                            );
+                            let replacement_position =
+                                crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+                            let right_limit = content_x + avail_width;
                             let display_width = spec.width;
                             let display_height = spec.height;
 
@@ -4845,35 +5034,58 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let xwidget_y = y + raise_y_offset;
-                            self.matrix_builder.push_xwidget(
-                                params.window_id,
-                                GlyphRowRole::Text,
-                                Some(params.text_bounds),
-                                spec.xwidget_id,
-                                x,
-                                xwidget_y,
-                                display_width,
-                                display_height,
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
                             );
-                            row_max_height = row_max_height.max(display_height);
-                            row_max_ascent = row_max_ascent.max(display_height);
-                            x += display_width;
-                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    xwidget_y,
+                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                DisplayReplacementBox::new(
+                                    display_width,
                                     display_height,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
+                                    display_height,
                                 ),
-                            );
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                if progress.status
+                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                                    && progress.metrics.width_px > 0.0
+                                {
+                                    let xwidget_y = y + raise_y_offset;
+                                    self.matrix_builder.push_xwidget(
+                                        params.window_id,
+                                        GlyphRowRole::Text,
+                                        Some(params.text_bounds),
+                                        spec.xwidget_id,
+                                        progress.start.x_px,
+                                        xwidget_y,
+                                        display_width,
+                                        display_height,
+                                    );
+                                    row_max_height = row_max_height.max(display_height);
+                                    row_max_ascent = row_max_ascent.max(display_height);
+                                    x = progress.end.x_px;
+                                    col = progress.end.col;
+                                    emit_text_progress_slots(
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &progress,
+                                        row,
+                                        y,
+                                        xwidget_y,
+                                        display_height,
+                                    );
+                                }
+                            }
 
                             while charpos < skip_to && byte_idx < text.len() {
                                 let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
@@ -4887,8 +5099,14 @@ impl LayoutEngine {
                     // Case 6: WebKit — resolve the declarative browser source to a
                     // stable renderer handle, then emit an inline WebKit glyph.
                     if DisplaySpecHead::Webkit.is_head_of(&prop_val) {
-                        let replacement_start_x = x;
-                        let replacement_start_col = col;
+                        let replacement_source = BufferDisplayReplacementSource::new(
+                            buf_id,
+                            charpos,
+                            text_start_byte + byte_idx,
+                        );
+                        let replacement_position =
+                            crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+                        let right_limit = content_x + avail_width;
                         let maybe_webkit = parse_display_webkit_layout(
                             &prop_val,
                             face_char_w * 40.0,
@@ -4927,35 +5145,58 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let webkit_y = y + raise_y_offset;
-                            self.matrix_builder.push_xwidget(
-                                params.window_id,
-                                GlyphRowRole::Text,
-                                Some(params.text_bounds),
-                                resolved.webkit_id,
-                                x,
-                                webkit_y,
-                                display_width,
-                                display_height,
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
                             );
-                            row_max_height = row_max_height.max(display_height);
-                            row_max_ascent = row_max_ascent.max(display_height);
-                            x += display_width;
-                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    webkit_y,
+                            if let Some(progress) = append_buffer_display_stretch_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                DisplayReplacementBox::new(
+                                    display_width,
                                     display_height,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
+                                    display_height,
                                 ),
-                            );
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                if progress.status
+                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                                    && progress.metrics.width_px > 0.0
+                                {
+                                    let webkit_y = y + raise_y_offset;
+                                    self.matrix_builder.push_xwidget(
+                                        params.window_id,
+                                        GlyphRowRole::Text,
+                                        Some(params.text_bounds),
+                                        resolved.webkit_id,
+                                        progress.start.x_px,
+                                        webkit_y,
+                                        display_width,
+                                        display_height,
+                                    );
+                                    row_max_height = row_max_height.max(display_height);
+                                    row_max_ascent = row_max_ascent.max(display_height);
+                                    x = progress.end.x_px;
+                                    col = progress.end.col;
+                                    emit_text_progress_slots(
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &progress,
+                                        row,
+                                        y,
+                                        webkit_y,
+                                        display_height,
+                                    );
+                                }
+                            }
                         } else {
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4975,22 +5216,36 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            x += face_char_w * 5.0;
-                            col += 5;
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
+                            let layout = text_display_row_layout(
+                                y,
+                                avail_width,
+                                face_h,
+                                face_ascent_val,
+                                face_char_w,
+                                text_display_tab_policy(content_x, params),
+                                current_text_face_id,
+                            );
+                            if let Some(progress) = append_buffer_source_mapped_text_to_current_row(
+                                &mut self.matrix_builder,
+                                &layout,
+                                replacement_source,
+                                current_text_face_id,
+                                "     ",
+                                replacement_position,
+                                right_limit,
+                            ) {
+                                x = progress.end.x_px;
+                                col = progress.end.col;
+                                emit_text_progress_slots(
+                                    &mut output_emitter,
+                                    evaluator,
+                                    &progress,
                                     row,
                                     y,
                                     y + raise_y_offset,
                                     face_h,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
-                                ),
-                            );
+                                );
+                            }
                         }
 
                         // Skip covered buffer text

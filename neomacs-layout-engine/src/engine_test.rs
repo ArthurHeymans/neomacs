@@ -265,6 +265,39 @@ fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
         .join("")
 }
 
+fn assert_replacement_slot_between_neighbors(
+    eval: &Context,
+    frame_id: neovm_core::window::FrameId,
+    replacement_pos: usize,
+    expected_width: i64,
+) -> DisplayPointSnapshot {
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(frame.selected_window)
+        .expect("display snapshot");
+    let before = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(
+            replacement_pos.saturating_sub(1),
+        ))
+        .expect("previous point");
+    let replacement = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(replacement_pos))
+        .expect("replacement point");
+    let after = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(replacement_pos + 1))
+        .expect("following point");
+
+    assert_eq!(replacement.x, before.x + before.width);
+    assert_eq!(replacement.width, expected_width);
+    assert_eq!(replacement.row, before.row);
+    assert_eq!(replacement.row, after.row);
+    assert!(
+        replacement.x + replacement.width <= after.x,
+        "replacement slot should own the covered source geometry before following text; before={before:?} replacement={replacement:?} after={after:?}"
+    );
+    replacement.clone()
+}
+
 fn enabled_window_row_texts_expanding_stretches(
     entry: &neomacs_display_protocol::glyph_matrix::WindowMatrixEntry,
 ) -> Vec<String> {
@@ -3317,6 +3350,9 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(image.image_id, 77);
     assert_eq!(image.width, 32.0);
     assert_eq!(image.height, 24.0);
+    let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 32);
+    let slot_id = image.slot_id.expect("image slot id");
+    assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = requests.lock().expect("requests lock");
     assert_eq!(requests.len(), 1);
@@ -3324,6 +3360,70 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(requests[0].max_height, 24);
     assert_eq!(requests[0].fg_color, 0x112233);
     assert_eq!(requests[0].bg_color, 0xff0000);
+}
+
+#[test]
+fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aXb");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("image"),
+                Value::keyword("type"),
+                Value::symbol("png"),
+                Value::keyword("file"),
+                Value::string("/tmp/neomacs-inline-image.png"),
+            ]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-inline-image-fallback", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    assert!(state.images.is_empty());
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| {
+            entry.window_id
+                == eval
+                    .frame_manager()
+                    .get(frame_id)
+                    .expect("frame")
+                    .selected_window
+                    .0
+        })
+        .expect("selected window matrix");
+    assert!(
+        enabled_window_row_texts(entry)
+            .iter()
+            .any(|row| row.contains("a[img]b")),
+        "fallback placeholder should be rendered as row-builder text, rows={:?}",
+        enabled_window_row_texts(entry)
+    );
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let expected_width = (5.0 * frame.char_width).round() as i64;
+    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, expected_width);
 }
 
 #[test]
@@ -3381,6 +3481,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
     assert_eq!(video.height, 45.0);
     assert_eq!(video.loop_count, -1);
     assert!(video.autoplay);
+    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
 
     let requests = video_requests.lock().expect("video requests lock");
     assert_eq!(requests.len(), 1);
@@ -3437,6 +3538,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
     assert_eq!(xwidget.xwidget_id, 99);
     assert_eq!(xwidget.width, 80.0);
     assert_eq!(xwidget.height, 45.0);
+    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
     assert_eq!(requests.len(), 1);
@@ -3497,6 +3599,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
     assert_eq!(xwidget.xwidget_id, 1234);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
+    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 96);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
     assert!(requests.is_empty());
