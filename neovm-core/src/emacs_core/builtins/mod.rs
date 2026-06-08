@@ -155,6 +155,11 @@ pub(crate) fn reset_builtins_thread_locals() {
     symbols::reset_symbols_thread_locals();
 }
 
+pub(crate) use gnutls::{
+    builtin_gnutls_bye, builtin_gnutls_error_string, builtin_gnutls_format_certificate,
+    builtin_gnutls_hash_digest, builtin_gnutls_hash_mac,
+    builtin_gnutls_peer_status_warning_describe, builtin_gnutls_symmetric_encrypt,
+};
 pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_monitor_info};
 
 /// Expect exactly N arguments.
@@ -555,6 +560,7 @@ pub(crate) use types::*;
 
 mod buffers;
 mod file_notify;
+mod gnutls;
 pub(crate) mod higher_order;
 mod hooks;
 pub(crate) mod keymaps;
@@ -5213,104 +5219,109 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-available-p",
-        |_ctx, args| builtin_gnutls_available_p(args),
+        |_ctx, args| gnutls::builtin_gnutls_available_p(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "gnutls-asynchronous-parameters",
-        |_ctx, args| builtin_gnutls_asynchronous_parameters(args),
+        |_ctx, args| gnutls::builtin_gnutls_asynchronous_parameters(args),
         0,
         None,
     );
-    ctx.defsubr("gnutls-bye", |_ctx, args| builtin_gnutls_bye(args), 0, None);
+    ctx.defsubr(
+        "gnutls-bye",
+        |_ctx, args| gnutls::builtin_gnutls_bye(args),
+        0,
+        None,
+    );
     ctx.defsubr(
         "gnutls-ciphers",
-        |_ctx, args| builtin_gnutls_ciphers(args),
+        |_ctx, args| gnutls::builtin_gnutls_ciphers(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "gnutls-deinit",
-        |_ctx, args| builtin_gnutls_deinit(args),
+        |_ctx, args| gnutls::builtin_gnutls_deinit(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-digests",
-        |_ctx, args| builtin_gnutls_digests(args),
+        |_ctx, args| gnutls::builtin_gnutls_digests(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "gnutls-error-fatalp",
-        |_ctx, args| builtin_gnutls_error_fatalp(args),
+        |_ctx, args| gnutls::builtin_gnutls_error_fatalp(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-error-string",
-        |_ctx, args| builtin_gnutls_error_string(args),
+        |_ctx, args| gnutls::builtin_gnutls_error_string(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-errorp",
-        |_ctx, args| builtin_gnutls_errorp(args),
+        |_ctx, args| gnutls::builtin_gnutls_errorp(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-format-certificate",
-        |_ctx, args| builtin_gnutls_format_certificate(args),
+        |_ctx, args| gnutls::builtin_gnutls_format_certificate(args),
         0,
         None,
     );
     ctx.defsubr(
         "gnutls-get-initstage",
-        |_ctx, args| builtin_gnutls_get_initstage(args),
+        |_ctx, args| gnutls::builtin_gnutls_get_initstage(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-hash-digest",
-        |_ctx, args| builtin_gnutls_hash_digest(args),
+        |_ctx, args| gnutls::builtin_gnutls_hash_digest(args),
         2,
         Some(2),
     );
     ctx.defsubr(
         "gnutls-hash-mac",
-        |_ctx, args| builtin_gnutls_hash_mac(args),
+        |_ctx, args| gnutls::builtin_gnutls_hash_mac(args),
         3,
         Some(3),
     );
     ctx.defsubr(
         "gnutls-macs",
-        |_ctx, args| builtin_gnutls_macs(args),
+        |_ctx, args| gnutls::builtin_gnutls_macs(args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "gnutls-peer-status",
-        |_ctx, args| builtin_gnutls_peer_status(args),
+        |_ctx, args| gnutls::builtin_gnutls_peer_status(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-peer-status-warning-describe",
-        |_ctx, args| builtin_gnutls_peer_status_warning_describe(args),
+        |_ctx, args| gnutls::builtin_gnutls_peer_status_warning_describe(args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "gnutls-symmetric-decrypt",
-        |_ctx, args| builtin_gnutls_symmetric_decrypt(args),
+        |_ctx, args| gnutls::builtin_gnutls_symmetric_decrypt(args),
         4,
         Some(5),
     );
     ctx.defsubr(
         "gnutls-symmetric-encrypt",
-        |_ctx, args| builtin_gnutls_symmetric_encrypt(args),
+        |_ctx, args| gnutls::builtin_gnutls_symmetric_encrypt(args),
         4,
         Some(5),
     );

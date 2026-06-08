@@ -10736,10 +10736,45 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
         .expect("gnutls-errorp should evaluate");
     assert_eq!(errorp, Value::T);
 
+    let success = dispatch_builtin_pure("gnutls-errorp", vec![Value::T])
+        .expect("gnutls-errorp should resolve")
+        .expect("gnutls-errorp should evaluate");
+    assert_eq!(success, Value::NIL);
+
+    let again = dispatch_builtin_pure("gnutls-errorp", vec![Value::symbol("gnutls-e-again")])
+        .expect("gnutls-errorp should resolve")
+        .expect("gnutls-errorp should evaluate");
+    assert_eq!(again, Value::NIL);
+
     let success = dispatch_builtin_pure("gnutls-error-string", vec![Value::fixnum(0)])
         .expect("gnutls-error-string should resolve")
         .expect("gnutls-error-string should evaluate");
     assert_eq!(success, Value::string("Success."));
+
+    let success_sentinel = dispatch_builtin_pure("gnutls-error-string", vec![Value::T])
+        .expect("gnutls-error-string should resolve")
+        .expect("gnutls-error-string should evaluate");
+    assert_eq!(success_sentinel, Value::string("Not an error"));
+
+    let again_string =
+        dispatch_builtin_pure("gnutls-error-string", vec![Value::symbol("gnutls-e-again")])
+            .expect("gnutls-error-string should resolve")
+            .expect("gnutls-error-string should evaluate");
+    assert_eq!(
+        again_string,
+        Value::string("Resource temporarily unavailable, try again.")
+    );
+
+    let interrupted_string = dispatch_builtin_pure(
+        "gnutls-error-string",
+        vec![Value::symbol("gnutls-e-interrupted")],
+    )
+    .expect("gnutls-error-string should resolve")
+    .expect("gnutls-error-string should evaluate");
+    assert_eq!(
+        interrupted_string,
+        Value::string("Function was interrupted.")
+    );
 
     let fatal_err = dispatch_builtin_pure("gnutls-error-fatalp", vec![Value::NIL])
         .expect("gnutls-error-fatalp should resolve")
