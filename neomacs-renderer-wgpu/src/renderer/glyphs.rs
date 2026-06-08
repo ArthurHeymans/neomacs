@@ -1940,7 +1940,15 @@ impl WgpuRenderer {
                 .clone();
             self.emit_cursor_visual(
                 cursor.window_id,
-                (cursor.x, cursor.y, cursor.width, cursor.height),
+                // Same slot-snapping as the selected window's cursor: a
+                // non-selected window's box must also land on its glyph cell,
+                // not the grid-approximate column, under line numbers or
+                // scaled fonts.
+                frame_glyphs.cursor_draw_rect(
+                    cursor.slot_id,
+                    cursor.style,
+                    (cursor.x, cursor.y, cursor.width, cursor.height),
+                ),
                 cursor.style,
                 &cursor.color,
                 &cursor_effects,
