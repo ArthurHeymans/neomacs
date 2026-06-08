@@ -97,7 +97,11 @@ impl ShelfAllocator {
             return None;
         }
 
-        self.cursor_x = 0;
+        // Place this glyph at the start of the new shelf and advance the cursor
+        // past it, exactly like the same-shelf branch above. Leaving `cursor_x`
+        // at 0 here would place the NEXT glyph on top of this one, overlapping
+        // them in the atlas texture (they would render as each other).
+        self.cursor_x = alloc_w;
         self.cursor_y = new_y;
         self.shelf_height = alloc_h;
 
@@ -128,6 +132,46 @@ mod tests {
         let b = alloc.allocate(PixelSize::new(10, 10).unwrap()).unwrap();
 
         assert!(b.allocation_rect.x() >= a.allocation_rect.x() + a.allocation_rect.width());
+    }
+
+    #[test]
+    fn first_two_glyphs_on_a_wrapped_shelf_do_not_overlap() {
+        // Regression for the intermittent "wrong glyph" rendering bug: after a
+        // shelf fills and allocation wraps to a new shelf, `cursor_x` must
+        // advance past the glyph just placed at x=0. Otherwise the NEXT glyph is
+        // placed at the same (x, y) and the two glyphs overlap in the atlas
+        // texture, so one renders as the other.
+        let page_size = 50u32;
+        let padding = 1u32;
+        let glyph_w = 10u32;
+        let alloc_w = glyph_w + 2 * padding; // 12
+        let mut alloc = ShelfAllocator::new(page_size, padding);
+
+        // Fill the first shelf (x = 0, 12, 24, 36; the next would be 48+12 > 50).
+        let fits = page_size / alloc_w;
+        for _ in 0..fits {
+            alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+        }
+
+        // This allocation wraps to a new shelf at (0, new_y)...
+        let wrapped = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+        // ...and this one must land to its right on the same shelf, not on top.
+        let next = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap()).unwrap();
+
+        assert_eq!(
+            wrapped.allocation_rect.y(),
+            next.allocation_rect.y(),
+            "both glyphs belong to the freshly wrapped shelf"
+        );
+        assert!(
+            next.allocation_rect.x()
+                >= wrapped.allocation_rect.x() + wrapped.allocation_rect.width(),
+            "next glyph (x={}) must start after the wrapped glyph (x={}, w={}); \
+             overlapping allocations cause glyphs to render as each other",
+            next.allocation_rect.x(),
+            wrapped.allocation_rect.x(),
+            wrapped.allocation_rect.width(),
+        );
     }
 
     #[test]
