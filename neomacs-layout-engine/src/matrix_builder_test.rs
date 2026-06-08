@@ -737,6 +737,42 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
 }
 
 #[test]
+fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
+    // Regression for the "cursor in the line-number column on the blank line
+    // after an org #+title" bug. That row carries only line-number gutter
+    // glyphs and an empty Text area, so point on it matches no Text glyph. The
+    // resolver must still place the cursor at the first column past the gutter,
+    // never the captured Text-index 0 (which materialize maps into the gutter),
+    // matching GNU set_cursor_from_row placing the cursor in the empty area
+    // after a row's text.
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_left_margin_stretch(2, 1); // leading "  " before the digit
+    builder.push_left_margin_char('2', 1);
+    builder.push_left_margin_stretch(1, 1); // trailing one-column pad
+    // No push_char: the Text area is empty, as on a blank buffer line.
+    builder.end_row();
+
+    // The 4-column gutter (2 + 1 + 1) is fully walked; with no Text glyph the
+    // cursor lands at column 4, the first cell of the empty text area.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 34), Some(4));
+
+    // A non-empty row whose point is past the last glyph (end of line) lands in
+    // the same end-of-row cell rather than reverting to None.
+    builder.begin_row(1, GlyphRowRole::Text);
+    builder.push_left_margin_stretch(2, 1);
+    builder.push_left_margin_char('3', 1);
+    builder.push_left_margin_stretch(1, 1);
+    builder.push_char('H', 0, 40);
+    builder.push_char('i', 0, 41);
+    builder.end_row();
+    // Point at charpos 99 is past 'H'(40) and 'i'(41): 4 gutter + 2 text = col 6.
+    assert_eq!(builder.resolve_cursor_visual_col(1, 1, 99), Some(6));
+    builder.end_window();
+}
+
+#[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);

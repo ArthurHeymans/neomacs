@@ -934,7 +934,15 @@ impl GlyphMatrixBuilder {
             }
             col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
         }
-        nearest_after.map(|(_, col)| col)
+        // No glyph carries point's charpos. Point is either before the first
+        // visible glyph (a hidden prefix -- use the first following glyph's
+        // column, tracked in nearest_after) or past the row's last glyph (end
+        // of line, or a blank line that has only gutter glyphs -- use col_acc,
+        // the first cell after all the gutter and text). Returning col_acc
+        // rather than None keeps a blank/EOL cursor out of the line-number
+        // gutter (where the captured Text-index 0 would land it), matching GNU
+        // set_cursor_from_row placing the cursor in the empty area after a row.
+        Some(nearest_after.map_or(col_acc, |(_, col)| col))
     }
 
     pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
