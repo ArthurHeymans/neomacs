@@ -620,7 +620,12 @@ impl LayoutEngine {
                     // gaps remain materialized as explicit cells
                     // instead of a single aggregated stretch glyph.
                     for _ in 0..cols {
-                        backend.produce_glyph(GlyphKind::Char(' '), &current_render_face, 0);
+                        backend.produce_glyph_with_pixel_width(
+                            GlyphKind::Char(' '),
+                            &current_render_face,
+                            0,
+                            spec.char_width.max(1.0),
+                        );
                         sl_x_offset += spec.char_width.max(1.0);
                         emit_progress(sl_x_offset);
                     }
@@ -712,7 +717,12 @@ impl LayoutEngine {
                     continue;
                 }
                 let advance = fallback_width;
-                backend.produce_glyph(GlyphKind::Char(ch), &current_render_face, 0);
+                backend.produce_glyph_with_pixel_width(
+                    GlyphKind::Char(ch),
+                    &current_render_face,
+                    0,
+                    advance,
+                );
                 run_advance += advance;
                 emit_progress(sl_x_offset + run_advance);
             }

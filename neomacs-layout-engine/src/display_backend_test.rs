@@ -267,3 +267,20 @@ fn gui_display_text_plain_via_backend_breaks_at_pixel_width() {
         be.pending_glyphs().len()
     );
 }
+
+#[test]
+fn gui_display_text_plain_via_backend_stores_measured_pixel_widths() {
+    let mut svc = FontMetricsService::new();
+    let mut be = GuiDisplayBackend::new(&mut svc);
+    let f = gui_face();
+    let expected = be.char_advance(&f, 'x');
+
+    display_text_plain_via_backend(&mut be, "x", &f, 8.0, 100.0);
+
+    let glyph = be.pending_glyphs().first().expect("glyph");
+    assert!(
+        (glyph.pixel_width - expected).abs() < 0.001,
+        "glyph pixel_width={} should preserve measured advance={expected}",
+        glyph.pixel_width
+    );
+}

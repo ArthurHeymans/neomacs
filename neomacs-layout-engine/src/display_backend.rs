@@ -105,6 +105,18 @@ pub trait DisplayBackend {
     /// dispatches to the per-backend `produce_glyphs` function.
     fn produce_glyph(&mut self, kind: GlyphKind, face: &Face, charpos: usize);
 
+    /// Produce a glyph while preserving the pixel advance measured by
+    /// the shared walker/backend. GUI callers use this to carry
+    /// font-metric geometry through `GlyphMatrix` materialization;
+    /// TTY callers pass cell-width advances.
+    fn produce_glyph_with_pixel_width(
+        &mut self,
+        kind: GlyphKind,
+        face: &Face,
+        charpos: usize,
+        pixel_width: f32,
+    );
+
     // ----- Row completion -----
 
     /// Signal that the walker has finished producing glyphs for one
@@ -140,6 +152,68 @@ pub trait DisplayBackend {
 }
 
 // ---------------------------------------------------------------------------
+// GlyphRowSink
+// ---------------------------------------------------------------------------
+
+/// Neutral row accumulator shared by GUI and TTY metric backends.
+///
+/// It owns no measurement policy. Callers pass the already-measured
+/// pixel advance, and the sink stores it on the produced `Glyph` so
+/// later `FrameDisplayState` materialization does not need to
+/// reconstruct geometry from fallback cell widths.
+#[derive(Default)]
+struct GlyphRowSink {
+    /// Glyphs accumulated for the row currently being walked.
+    /// Flushed to `pending_rows` on `finish_row`.
+    pending_glyphs: Vec<Glyph>,
+    /// Completed rows from the current frame. Drained via `take_rows`.
+    pending_rows: Vec<GlyphRow>,
+}
+
+impl GlyphRowSink {
+    fn produce_glyph(
+        &mut self,
+        kind: GlyphKind,
+        face: &Face,
+        charpos: usize,
+        stretch_cell_width_px: f32,
+        pixel_width: f32,
+    ) {
+        let face_id = face.id;
+        let pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+            pixel_width
+        } else {
+            0.0
+        };
+        let glyph = match kind {
+            GlyphKind::Char(ch) => Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width),
+            GlyphKind::Glyphless(ch) => {
+                Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width)
+            }
+            GlyphKind::Stretch { width_px, .. } => {
+                let cols = (width_px / stretch_cell_width_px.max(1.0)).round() as u16;
+                Glyph::stretch(cols.max(1), face_id).with_pixel_width(width_px)
+            }
+        };
+        self.pending_glyphs.push(glyph);
+    }
+
+    fn finish_row(&mut self, mut row: GlyphRow) {
+        let text_glyphs = std::mem::take(&mut self.pending_glyphs);
+        row.glyphs[1] = text_glyphs;
+        self.pending_rows.push(row);
+    }
+
+    fn take_rows(&mut self) -> Vec<GlyphRow> {
+        std::mem::take(&mut self.pending_rows)
+    }
+
+    fn pending_glyphs(&self) -> &[Glyph] {
+        &self.pending_glyphs
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TtyDisplayBackend
 // ---------------------------------------------------------------------------
 
@@ -150,22 +224,13 @@ pub trait DisplayBackend {
 /// level: synchronous, single-threaded, emits glyphs into a row buffer
 /// that is later diffed and written as ANSI escape sequences.
 ///
-/// The backend accumulates glyphs in `pending_glyphs` as the walker
-/// calls `produce_glyph`. When the walker calls `finish_row`, the
-/// buffered glyphs are flushed into the caller-supplied
+/// The backend accumulates glyphs in a neutral `GlyphRowSink` as the
+/// walker calls `produce_glyph`. When the walker calls `finish_row`,
+/// the buffered glyphs are flushed into the caller-supplied
 /// `GlyphRow::glyphs[Text]` and the row is pushed onto `pending_rows`.
 /// Callers drain the completed rows via `take_rows`.
-///
-/// **Dormant at introduction.** Unit tests cover the basic push/drain
-/// cycle; no existing code routes glyphs through this backend yet.
-/// Steps 3.4+ wire it into the minibuffer-echo, tab-bar, and
-/// mode-line paths incrementally.
 pub struct TtyDisplayBackend {
-    /// Glyphs accumulated for the row currently being walked.
-    /// Flushed to `pending_rows` on `finish_row`.
-    pending_glyphs: Vec<Glyph>,
-    /// Completed rows from the current frame. Drained via `take_rows`.
-    pending_rows: Vec<GlyphRow>,
+    sink: GlyphRowSink,
     /// Default cell width in pixels, used for stretch-glyph width
     /// computation. Normally 1.0 for pure cell-grid TUI.
     cell_width_px: f32,
@@ -176,8 +241,7 @@ pub struct TtyDisplayBackend {
 impl TtyDisplayBackend {
     pub fn new() -> Self {
         Self {
-            pending_glyphs: Vec::new(),
-            pending_rows: Vec::new(),
+            sink: GlyphRowSink::default(),
             cell_width_px: 1.0,
             cell_height_px: 1.0,
         }
@@ -212,35 +276,22 @@ impl DisplayBackend for TtyDisplayBackend {
     }
 
     fn produce_glyph(&mut self, kind: GlyphKind, face: &Face, charpos: usize) {
-        // Build a `Glyph` from the kind and append to the in-progress
-        // row. For TTY we use the same glyph representation the rest
-        // of the layout engine uses, so downstream rasterization via
-        // TtyRif continues to work unchanged. The face_id comes from
-        // the caller's resolved face.
-        let face_id: u32 = face.id;
-        let glyph = match kind {
-            GlyphKind::Char(ch) => Glyph::char(ch, face_id, charpos),
-            GlyphKind::Glyphless(ch) => Glyph::char(ch, face_id, charpos),
-            GlyphKind::Stretch { width_px, .. } => {
-                // Convert pixel width to cell count using this
-                // backend's cell width (normally 1.0 for TTY).
-                let cols = (width_px / self.cell_width_px.max(1.0)).round() as u16;
-                Glyph::stretch(cols.max(1), face_id)
-            }
-        };
-        self.pending_glyphs.push(glyph);
+        self.produce_glyph_with_pixel_width(kind, face, charpos, 0.0);
     }
 
-    fn finish_row(&mut self, mut row: GlyphRow) {
-        // Move the accumulated glyphs into the row's Text area and
-        // push the row onto the completed-rows queue. The row's
-        // three glyph areas are [left_margin, text, right_margin]
-        // matching GNU's glyph_row layout (`dispextern.h`).
-        let text_glyphs = std::mem::take(&mut self.pending_glyphs);
-        // Index 1 is the text area (matches
-        // `neomacs_display_protocol::glyph_matrix::GlyphArea::Text`).
-        row.glyphs[1] = text_glyphs;
-        self.pending_rows.push(row);
+    fn produce_glyph_with_pixel_width(
+        &mut self,
+        kind: GlyphKind,
+        face: &Face,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
+        self.sink
+            .produce_glyph(kind, face, charpos, self.cell_width_px, pixel_width);
+    }
+
+    fn finish_row(&mut self, row: GlyphRow) {
+        self.sink.finish_row(row);
     }
 
     fn finish_frame(&mut self) {
@@ -248,11 +299,11 @@ impl DisplayBackend for TtyDisplayBackend {
     }
 
     fn take_rows(&mut self) -> Vec<GlyphRow> {
-        std::mem::take(&mut self.pending_rows)
+        self.sink.take_rows()
     }
 
     fn pending_glyphs(&self) -> &[Glyph] {
-        &self.pending_glyphs
+        self.sink.pending_glyphs()
     }
 }
 
@@ -285,7 +336,7 @@ impl DisplayBackend for TtyDisplayBackend {
 /// parameters passed in from GUI-mode call sites.
 pub struct GuiDisplayBackend<'a> {
     font_svc: &'a mut FontMetricsService,
-    inner: TtyDisplayBackend,
+    sink: GlyphRowSink,
 }
 
 impl<'a> GuiDisplayBackend<'a> {
@@ -295,7 +346,7 @@ impl<'a> GuiDisplayBackend<'a> {
     pub fn new(font_svc: &'a mut FontMetricsService) -> Self {
         Self {
             font_svc,
-            inner: TtyDisplayBackend::new(),
+            sink: GlyphRowSink::default(),
         }
     }
 }
@@ -335,27 +386,38 @@ impl<'a> DisplayBackend for GuiDisplayBackend<'a> {
     }
 
     fn produce_glyph(&mut self, kind: GlyphKind, face: &Face, charpos: usize) {
+        self.produce_glyph_with_pixel_width(kind, face, charpos, 0.0);
+    }
+
+    fn produce_glyph_with_pixel_width(
+        &mut self,
+        kind: GlyphKind,
+        face: &Face,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
         // Glyph accumulation is identical to the TTY path. The only
         // difference between GUI and TTY is measurement, which
         // already went through `char_advance` above before the
         // walker called back here.
-        self.inner.produce_glyph(kind, face, charpos);
+        self.sink
+            .produce_glyph(kind, face, charpos, 1.0, pixel_width);
     }
 
     fn finish_row(&mut self, row: GlyphRow) {
-        self.inner.finish_row(row);
+        self.sink.finish_row(row);
     }
 
     fn finish_frame(&mut self) {
-        self.inner.finish_frame();
+        // Rows stay queued until `take_rows` is called.
     }
 
     fn take_rows(&mut self) -> Vec<GlyphRow> {
-        self.inner.take_rows()
+        self.sink.take_rows()
     }
 
     fn pending_glyphs(&self) -> &[Glyph] {
-        self.inner.pending_glyphs()
+        self.sink.pending_glyphs()
     }
 }
 
@@ -414,7 +476,7 @@ pub fn display_text_plain_via_backend(
         if x_offset + advance > max_width {
             break;
         }
-        backend.produce_glyph(GlyphKind::Char(ch), face, charpos);
+        backend.produce_glyph_with_pixel_width(GlyphKind::Char(ch), face, charpos, advance);
         x_offset += advance;
         charpos += 1;
     }

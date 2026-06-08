@@ -745,6 +745,57 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
 }
 
 #[test]
+fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let mut engine = LayoutEngine::new();
+    let table = neovm_core::face::FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let rendered = Value::string("AB");
+
+    let mut next_face_id = 1;
+    let spec = engine
+        .build_rust_status_line_spec(
+            0.0,
+            0.0,
+            80.0,
+            16.0,
+            1,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            rendered,
+            &resolver,
+            HashMap::new(),
+            StatusLineKind::TabLine,
+        )
+        .expect("status line spec");
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    builder.end_row();
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    let glyphs = &row.glyphs[1];
+
+    assert_eq!(glyphs.len(), 2);
+    assert!(
+        glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        "status-line glyphs should carry measured/fallback pixel widths: {glyphs:?}"
+    );
+    assert!(
+        glyphs
+            .iter()
+            .all(|glyph| (glyph.pixel_width - spec.char_width).abs() < 0.001),
+        "status-line glyph pixel widths should match spec char width {}: {glyphs:?}",
+        spec.char_width
+    );
+}
+
+#[test]
 fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
