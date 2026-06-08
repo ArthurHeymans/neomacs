@@ -1353,26 +1353,53 @@ fn check_glyphless_char(ch: char) -> u8 {
     0 // normal display
 }
 
-/// Render overlay string bytes into the layout.
-///
-/// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
-/// and resets `x`/`col` — matching GNU `display_line()` behaviour for overlay
-/// strings that contain newlines (e.g. fido-vertical-mode completions).
 fn append_display_item_to_current_row_with_shared_builder(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     layout: crate::display_row_builder::DisplayRowLayout,
     item: crate::display_item::DisplayItem,
+    glyph_measurer: Option<&mut dyn crate::display_row_builder::DisplayGlyphMeasurer>,
 ) -> Option<()> {
     let Some(row) = builder.current_row_snapshot() else {
         return None;
     };
-    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::from_row(layout, row);
+    let mut row_builder = if let Some(glyph_measurer) = glyph_measurer {
+        crate::display_row_builder::DisplayRowBuilder::from_row_with_glyph_measurer(
+            layout,
+            row,
+            glyph_measurer,
+        )
+    } else {
+        crate::display_row_builder::DisplayRowBuilder::from_row(layout, row)
+    };
     row_builder.push_item(item);
     let row = row_builder.finish_preserving_order();
     builder.install_prebuilt_current_row(&row);
     Some(())
 }
 
+struct SingleGlyphAdvance {
+    ch: char,
+    face_id: u32,
+    advance_px: f32,
+}
+
+impl crate::display_row_builder::DisplayGlyphMeasurer for SingleGlyphAdvance {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        (self.ch == ch && self.face_id == face_id).then_some(self.advance_px)
+    }
+}
+
+/// Render overlay string bytes into the layout.
+///
+/// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
+/// and resets `x`/`col` — matching GNU `display_line()` behaviour for overlay
+/// strings that contain newlines (e.g. fido-vertical-mode completions).
 fn render_overlay_string(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
@@ -1674,7 +1701,9 @@ fn render_overlay_string(
             base_face: crate::display_item::RenderFaceRef::FaceId(face_id),
             symbol_values: std::collections::HashMap::new(),
         };
-        if append_display_item_to_current_row_with_shared_builder(builder, layout, item).is_none() {
+        if append_display_item_to_current_row_with_shared_builder(builder, layout, item, None)
+            .is_none()
+        {
             break;
         }
 
@@ -4242,28 +4271,38 @@ impl LayoutEngine {
                         }
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
+                            let mut replacement_byte_idx = 0usize;
+                            let mut replacement_char_idx = 0usize;
                             for rch in replacement.chars() {
                                 // Grapheme-cluster + Arabic/Indic run
                                 // composition for display-property replacement
                                 // text, via the shared `composition` rule.
                                 let tail = self.matrix_builder.last_text_cluster_tail();
                                 let is_cont = crate::composition::continues_cluster(rch, tail);
-                                let is_run = !is_cont
-                                    && crate::composition::continues_complex_run(rch, tail);
                                 let rch_cols = if is_cont {
-                                    0
+                                    0usize
+                                } else if rch == '\t' {
+                                    let tab_width = params.tab_width.max(1) as usize;
+                                    let remainder = col % tab_width;
+                                    if remainder == 0 {
+                                        tab_width
+                                    } else {
+                                        tab_width - remainder
+                                    }
                                 } else {
-                                    crate::composition::base_width_cols(rch) as i32
+                                    crate::composition::base_width_cols(rch) as usize
                                 };
                                 let rch_advance = if rch_cols == 0 {
                                     0.0
+                                } else if rch == '\t' {
+                                    rch_cols as f32 * face_space_w
                                 } else {
                                     char_pixel_advance(
                                         &mut self.ascii_width_cache,
                                         frame_params.window_system,
                                         &mut self.font_metrics,
                                         rch,
-                                        rch_cols,
+                                        rch_cols as i32,
                                         char_w,
                                         current_font_size_px,
                                         face_char_w,
@@ -4275,36 +4314,56 @@ impl LayoutEngine {
                                 if x + rch_advance > right_limit {
                                     break;
                                 }
-                                if is_cont {
-                                    self.matrix_builder.push_cluster_continuation(
-                                        rch,
+                                let rch_len = rch.len_utf8();
+                                let item = crate::display_item::DisplayItem::new(
+                                    crate::display_item::SourceSpan::lisp_string(
+                                        1,
+                                        replacement_char_idx,
+                                        replacement_char_idx + 1,
+                                        replacement_byte_idx,
+                                        replacement_byte_idx + rch_len,
+                                    ),
+                                    crate::display_item::RenderFaceRef::FaceId(
                                         current_text_face_id,
-                                        charpos as usize,
-                                    );
-                                } else if is_run {
-                                    self.matrix_builder.push_run_member(
-                                        rch,
+                                    ),
+                                    crate::display_item::DisplayItemKind::TextRun(
+                                        crate::display_item::DisplayTextRun::new(rch.to_string()),
+                                    ),
+                                );
+                                let layout = crate::display_row_builder::DisplayRowLayout {
+                                    role:
+                                        neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+                                    y_px: y,
+                                    width_px: (right_limit - content_x).max(1.0),
+                                    height_px: face_h,
+                                    ascent_px: face_ascent_val,
+                                    char_width_px: face_space_w,
+                                    tab_width_cols: params.tab_width.max(1).min(i32::from(u16::MAX))
+                                        as u16,
+                                    base_face: crate::display_item::RenderFaceRef::FaceId(
                                         current_text_face_id,
-                                        charpos as usize,
-                                        rch_advance,
-                                    );
-                                } else if rch_cols == 2 {
-                                    self.matrix_builder.push_wide_char_with_pixel_width(
-                                        rch,
-                                        current_text_face_id,
-                                        charpos as usize,
-                                        rch_advance,
-                                    );
-                                } else {
-                                    self.matrix_builder.push_char_with_pixel_width(
-                                        rch,
-                                        current_text_face_id,
-                                        charpos as usize,
-                                        rch_advance,
-                                    );
+                                    ),
+                                    symbol_values: std::collections::HashMap::new(),
+                                };
+                                let mut measurer = SingleGlyphAdvance {
+                                    ch: rch,
+                                    face_id: current_text_face_id,
+                                    advance_px: rch_advance,
+                                };
+                                if append_display_item_to_current_row_with_shared_builder(
+                                    &mut self.matrix_builder,
+                                    layout,
+                                    item,
+                                    Some(&mut measurer),
+                                )
+                                .is_none()
+                                {
+                                    break;
                                 }
                                 x += rch_advance;
-                                col += rch_cols as usize;
+                                col += rch_cols;
+                                replacement_byte_idx += rch_len;
+                                replacement_char_idx += 1;
                             }
                         }
 

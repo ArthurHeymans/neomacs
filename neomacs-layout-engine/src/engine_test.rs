@@ -2863,6 +2863,67 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
 }
 
 #[test]
+fn layout_frame_rust_renders_display_replacement_tabs_as_stretches() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("px");
+        buf.put_text_property(1, 2, Value::symbol("display"), Value::string("a\tb"));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-display-tab-replacement", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
+    assert!(
+        !logical_text.contains('\t'),
+        "display replacement tab should not render as a literal tab, row={:?}",
+        text_row.glyphs[1]
+    );
+    assert!(
+        logical_text.contains("pa      b"),
+        "display replacement tab should expand to the next row tab stop, text={logical_text:?}"
+    );
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 6 })),
+        "display replacement tab should be a stretch glyph, row={:?}",
+        text_row.glyphs[1]
+    );
+}
+
+#[test]
 fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     let mut eval = Context::new();
     let requests = Arc::new(Mutex::new(Vec::new()));

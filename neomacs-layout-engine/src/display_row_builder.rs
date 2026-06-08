@@ -78,6 +78,16 @@ impl<'a> DisplayRowBuilder<'a> {
         builder
     }
 
+    pub(crate) fn from_row_with_glyph_measurer(
+        layout: DisplayRowLayout,
+        row: GlyphRow,
+        glyph_measurer: &'a mut dyn DisplayGlyphMeasurer,
+    ) -> Self {
+        let mut builder = Self::from_row(layout, row);
+        builder.glyph_measurer = Some(glyph_measurer);
+        builder
+    }
+
     pub(crate) fn push_item(&mut self, item: DisplayItem) {
         let face_id = self.face_id(item.face);
         match item.kind {
