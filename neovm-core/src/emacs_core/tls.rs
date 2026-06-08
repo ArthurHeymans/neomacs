@@ -98,9 +98,11 @@ pub(crate) fn parse_gnutls_boot_parameters(
 pub(crate) struct TlsPeerStatus {
     pub(crate) warnings: Vec<&'static str>,
     pub(crate) certificates: Vec<Value>,
+    pub(crate) key_exchange: Option<String>,
     pub(crate) protocol: Option<String>,
     pub(crate) cipher: Option<String>,
     pub(crate) mac: Option<String>,
+    pub(crate) encrypt_then_mac: Option<bool>,
 }
 
 impl TlsPeerStatus {
@@ -108,9 +110,11 @@ impl TlsPeerStatus {
         Self {
             warnings: Vec::new(),
             certificates: Vec::new(),
+            key_exchange: None,
             protocol: None,
             cipher: None,
             mac: None,
+            encrypt_then_mac: None,
         }
     }
 }
@@ -151,6 +155,11 @@ pub(crate) fn gnutls_peer_status_to_value(status: &TlsPeerStatus) -> Value {
         entries.push(status.certificates[0]);
     }
 
+    if let Some(key_exchange) = &status.key_exchange {
+        entries.push(Value::keyword(":key-exchange"));
+        entries.push(Value::string(key_exchange.clone()));
+    }
+
     if let Some(protocol) = &status.protocol {
         entries.push(Value::keyword(":protocol"));
         entries.push(Value::string(protocol.clone()));
@@ -164,6 +173,15 @@ pub(crate) fn gnutls_peer_status_to_value(status: &TlsPeerStatus) -> Value {
     if let Some(mac) = &status.mac {
         entries.push(Value::keyword(":mac"));
         entries.push(Value::string(mac.clone()));
+    }
+
+    if let Some(encrypt_then_mac) = status.encrypt_then_mac {
+        entries.push(Value::keyword(":encrypt-then-mac"));
+        entries.push(if encrypt_then_mac {
+            Value::T
+        } else {
+            Value::NIL
+        });
     }
 
     Value::list(entries)
@@ -344,6 +362,33 @@ impl TlsStream {
         }
     }
 
+    pub(crate) fn tcp_stream(&self) -> &TcpStream {
+        match self {
+            Self::Rustls(stream) => &stream.inner.sock,
+        }
+    }
+
+    pub(crate) fn write_all_process_input(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        self.set_nonblocking(false)?;
+        let write_result = match self {
+            Self::Rustls(stream) => {
+                if let Err(err) = stream.inner.write_all(bytes) {
+                    Err(err)
+                } else {
+                    stream.inner.flush()
+                }
+            }
+        };
+        let restore_result = self.set_nonblocking(true);
+        write_result.and(restore_result)
+    }
+
+    pub(crate) fn read_process_output(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Rustls(stream) => rustls_read_process_output(stream, buf),
+        }
+    }
+
     pub(crate) fn peer_certificates_pem(&self) -> &[String] {
         match self {
             Self::Rustls(stream) => &stream.peer_certificates_pem,
@@ -367,6 +412,76 @@ impl TlsStream {
             }
         }
     }
+}
+
+fn rustls_read_process_output(
+    stream: &mut RustlsTlsStream,
+    buf: &mut [u8],
+) -> std::io::Result<usize> {
+    if buf.is_empty() {
+        return Ok(0);
+    }
+
+    if let Some(n) = rustls_read_decrypted_plaintext(stream, buf)? {
+        return Ok(n);
+    }
+
+    let mut saw_peer_close = false;
+    loop {
+        match stream.inner.conn.read_tls(&mut stream.inner.sock) {
+            Ok(0) => {
+                return if saw_peer_close {
+                    Ok(0)
+                } else {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                };
+            }
+            Ok(_) => {
+                let state = stream
+                    .inner
+                    .conn
+                    .process_new_packets()
+                    .map_err(rustls_record_error_to_io)?;
+                saw_peer_close |= state.peer_has_closed();
+
+                if let Some(n) = rustls_read_decrypted_plaintext(stream, buf)? {
+                    return Ok(n);
+                }
+                if saw_peer_close {
+                    return Ok(0);
+                }
+                if !stream.inner.conn.wants_read() {
+                    return Err(std::io::ErrorKind::WouldBlock.into());
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+fn rustls_read_decrypted_plaintext(
+    stream: &mut RustlsTlsStream,
+    buf: &mut [u8],
+) -> std::io::Result<Option<usize>> {
+    loop {
+        match stream.inner.conn.reader().read(buf) {
+            Ok(0) => return Ok(None),
+            Ok(n) => return Ok(Some(n)),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                return Ok(None);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+fn rustls_record_error_to_io(err: rustls::Error) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
 }
 
 fn rustls_complete_io_result(
@@ -396,8 +511,10 @@ fn rustls_peer_status(stream: &RustlsTlsStream) -> TlsPeerStatus {
         .map(rustls_protocol_name);
     if let Some(suite) = stream.inner.conn.negotiated_cipher_suite() {
         let cipher_suite = suite.suite();
+        status.key_exchange = Some(rustls_key_exchange_name(cipher_suite, stream));
         status.cipher = Some(rustls_cipher_name(cipher_suite));
         status.mac = Some(rustls_mac_name(cipher_suite));
+        status.encrypt_then_mac = Some(false);
     }
     status
 }
@@ -437,6 +554,46 @@ fn rustls_cipher_name(cipher_suite: rustls::CipherSuite) -> String {
         | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => "AES-256-CBC".to_owned(),
         other => format!("{other:?}"),
     }
+}
+
+fn rustls_key_exchange_name(cipher_suite: rustls::CipherSuite, stream: &RustlsTlsStream) -> String {
+    match cipher_suite {
+        rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => "ECDHE-ECDSA".to_owned(),
+        rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => "ECDHE-RSA".to_owned(),
+        rustls::CipherSuite::TLS13_AES_128_GCM_SHA256
+        | rustls::CipherSuite::TLS13_AES_256_GCM_SHA384
+        | rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256 => {
+            let auth = stream
+                .peer_certificates_pem
+                .first()
+                .and_then(|pem| certificate_public_key_exchange_name(pem).ok())
+                .unwrap_or_else(|| "UNKNOWN".to_owned());
+            format!("ECDHE-{auth}")
+        }
+        other => format!("{other:?}"),
+    }
+}
+
+fn certificate_public_key_exchange_name(pem: &str) -> Result<String, CertificateFormatError> {
+    with_x509_certificate_pem(pem.as_bytes(), |cert| {
+        match public_key_algorithm_name(cert).as_str() {
+            "RSA" => "RSA".to_owned(),
+            "EC/ECDSA" => "ECDSA".to_owned(),
+            other => other.to_owned(),
+        }
+    })
 }
 
 fn rustls_mac_name(cipher_suite: rustls::CipherSuite) -> String {

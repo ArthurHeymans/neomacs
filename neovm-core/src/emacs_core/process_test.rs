@@ -394,8 +394,8 @@ fn process_manager_send_input() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
     let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
-    assert!(pm.send_input(id, &LispString::from_utf8("hello ")));
-    assert!(pm.send_input(id, &LispString::from_utf8("world")));
+    assert!(pm.send_input(id, &LispString::from_utf8("hello ")).unwrap());
+    assert!(pm.send_input(id, &LispString::from_utf8("world")).unwrap());
     let expected = Value::list(vec![
         Value::cons(
             Value::heap_string(LispString::from_utf8("hello ")),
@@ -3830,4 +3830,14 @@ fn gnutls_log_level_is_defined_for_tls_negotiation() {
     crate::test_utils::init_test_tracing();
     let result = runtime_startup_eval_one("(list (boundp 'gnutls-log-level) gnutls-log-level)");
     assert_eq!(result, "OK (t 0)");
+}
+
+#[test]
+fn libgnutls_version_is_defined_for_nsm_tls_checks() {
+    // GNU `gnutls.c` DEFVAR_LISPs `libgnutls-version` even without GnuTLS,
+    // where its documented value is -1.  `nsm.el` reads it during TLS package
+    // refresh, so it must be bound even though Neomacs uses a Rust TLS backend.
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one("(list (boundp 'libgnutls-version) libgnutls-version)");
+    assert_eq!(result, "OK (t -1)");
 }

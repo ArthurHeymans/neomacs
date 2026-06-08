@@ -741,6 +741,20 @@ fn write_queue_push(queue: Value, input_obj: Value, front: bool) -> Value {
     Value::list(entries)
 }
 
+fn parse_make_network_tls_parameters(
+    value: Value,
+) -> Result<Option<super::tls::GnutlsBootParameters>, Flow> {
+    if value.is_nil() {
+        return Ok(None);
+    }
+    let items = list_to_vec(&value)
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), value]))?;
+    let Some((&credential_type, rest)) = items.split_first() else {
+        return Ok(None);
+    };
+    parse_gnutls_boot_parameters(credential_type, Value::list(rest.to_vec())).map(Some)
+}
+
 fn process_status_stop_value(signal_num: i64) -> Value {
     Value::list(vec![Value::symbol("stop"), Value::fixnum(signal_num)])
 }
@@ -794,6 +808,79 @@ fn process_contact_server_p(proc: &Process) -> bool {
 }
 
 impl ProcessManager {
+    fn register_readable_source(
+        poller: &polling::Poller,
+        source: impl polling::AsRawSource,
+        id: ProcessId,
+    ) -> Result<(), String> {
+        // SAFETY: ProcessManager only registers descriptors owned by the
+        // corresponding Process record.  `unregister_process_poll_sources`
+        // removes every registered descriptor from this poller before the
+        // Process drops or replaces the descriptor.
+        unsafe {
+            poller
+                .add_with_mode(
+                    source,
+                    polling::Event::readable(id as usize),
+                    polling::PollMode::Level,
+                )
+                .map_err(|e| format!("Failed to register socket: {e}"))
+        }
+    }
+
+    #[cfg(unix)]
+    fn register_readable_raw_fd(
+        poller: &polling::Poller,
+        fd: std::os::unix::io::RawFd,
+        id: ProcessId,
+    ) -> Result<(), String> {
+        // SAFETY: `fd` is borrowed from a process-owned descriptor that
+        // remains alive until `unregister_process_poll_sources` removes it
+        // from the poller.
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        Self::register_readable_source(poller, &borrowed, id)
+    }
+
+    fn unregister_process_poll_sources(poller: Option<&polling::Poller>, proc: &Process) {
+        let Some(poller) = poller else {
+            return;
+        };
+
+        if let Some(stdout) = proc.child_stdout.as_ref() {
+            let _ = poller.delete(stdout);
+        }
+        if let Some(tls) = proc.tls_stream.as_ref() {
+            let _ = poller.delete(tls.tcp_stream());
+        }
+        if let Some(socket) = proc.network_socket.as_ref() {
+            match socket {
+                NetworkSocket::TcpStream(stream) => {
+                    let _ = poller.delete(stream);
+                }
+                NetworkSocket::TcpListener(listener) => {
+                    let _ = poller.delete(listener);
+                }
+                #[cfg(unix)]
+                NetworkSocket::UnixStream(stream) => {
+                    let _ = poller.delete(stream);
+                }
+                #[cfg(unix)]
+                NetworkSocket::UnixListener(listener) => {
+                    let _ = poller.delete(listener);
+                }
+            }
+        }
+        #[cfg(unix)]
+        if let Some(master) = proc
+            .pty_master
+            .as_ref()
+            .and_then(|master| master.as_raw_fd())
+        {
+            let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
+            let _ = poller.delete(&borrowed);
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             processes: HashMap::new(),
@@ -1086,15 +1173,7 @@ impl ProcessManager {
                         libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
                     }
                     // Use process id as the event key so we know which process is ready.
-                    // Safety: fd is valid and owned by child_stdout which we keep alive.
-                    unsafe {
-                        let borrowed = std::os::unix::io::BorrowedFd::borrow_raw(fd);
-                        let _ = poller.add_with_mode(
-                            &borrowed,
-                            polling::Event::readable(id as usize),
-                            polling::PollMode::Level,
-                        );
-                    }
+                    let _ = Self::register_readable_raw_fd(poller, fd, id);
                 }
 
                 proc.child_stdout = stdout;
@@ -1213,14 +1292,7 @@ impl ProcessManager {
                 libc::fcntl(master_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
             }
             if let Some(ref poller) = self.poller {
-                unsafe {
-                    let borrowed = std::os::unix::io::BorrowedFd::borrow_raw(master_fd);
-                    let _ = poller.add_with_mode(
-                        &borrowed,
-                        polling::Event::readable(id as usize),
-                        polling::PollMode::Level,
-                    );
-                }
+                let _ = Self::register_readable_raw_fd(poller, master_fd, id);
             }
         }
 
@@ -1361,6 +1433,7 @@ impl ProcessManager {
     /// Kill (remove) a process by id.  Returns true if found.
     pub fn kill_process(&mut self, id: ProcessId) -> bool {
         if let Some(proc) = self.processes.get_mut(&id) {
+            Self::unregister_process_poll_sources(self.poller.as_ref(), proc);
             if let Some(child) = proc.child.as_mut() {
                 let _ = child.kill();
             }
@@ -1381,6 +1454,7 @@ impl ProcessManager {
     /// Delete a process entirely.
     pub fn delete_process(&mut self, id: ProcessId) -> bool {
         if let Some(mut proc) = self.processes.remove(&id) {
+            Self::unregister_process_poll_sources(self.poller.as_ref(), &proc);
             if let Some(child) = proc.child.as_mut() {
                 let _ = child.kill();
             }
@@ -1526,7 +1600,7 @@ impl ProcessManager {
     }
 
     /// Queue input for a process.
-    pub fn send_input(&mut self, id: ProcessId, input: &LispString) -> bool {
+    pub fn send_input(&mut self, id: ProcessId, input: &LispString) -> Result<bool, Flow> {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.write_queue =
                 write_queue_push(proc.write_queue, Value::heap_string(input.clone()), false);
@@ -1546,9 +1620,8 @@ impl ProcessManager {
             }
             // Write to TLS stream or plain socket for network processes.
             if let Some(ref mut tls) = proc.tls_stream {
-                use std::io::Write;
-                let _ = tls.write_all(input_bytes);
-                let _ = tls.flush();
+                tls.write_all_process_input(input_bytes)
+                    .map_err(|err| signal_process_io("Writing to process", None, err))?;
             } else if let Some(NetworkSocket::TcpStream(socket)) = proc.network_socket.as_mut() {
                 use std::io::Write;
                 let _ = socket.write_all(input_bytes);
@@ -1560,9 +1633,9 @@ impl ProcessManager {
                 let _ = socket.write_all(input_bytes);
                 let _ = socket.flush();
             }
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -1570,47 +1643,28 @@ impl ProcessManager {
     /// `wait_for_output` wakes up when data arrives.
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
-        let socket = proc.network_socket.as_ref().ok_or("No socket")?;
         if let Some(ref poller) = self.poller {
+            if let Some(tls) = proc.tls_stream.as_ref() {
+                Self::register_readable_source(poller, tls.tcp_stream(), id)?;
+                return Ok(());
+            }
+
+            let socket = proc.network_socket.as_ref().ok_or("No socket")?;
             match socket {
-                NetworkSocket::TcpStream(stream) => unsafe {
-                    poller
-                        .add_with_mode(
-                            stream,
-                            polling::Event::readable(id as usize),
-                            polling::PollMode::Level,
-                        )
-                        .map_err(|e| format!("Failed to register socket: {}", e))?;
-                },
-                NetworkSocket::TcpListener(listener) => unsafe {
-                    poller
-                        .add_with_mode(
-                            listener,
-                            polling::Event::readable(id as usize),
-                            polling::PollMode::Level,
-                        )
-                        .map_err(|e| format!("Failed to register socket: {}", e))?;
-                },
+                NetworkSocket::TcpStream(stream) => {
+                    Self::register_readable_source(poller, stream, id)?;
+                }
+                NetworkSocket::TcpListener(listener) => {
+                    Self::register_readable_source(poller, listener, id)?;
+                }
                 #[cfg(unix)]
-                NetworkSocket::UnixStream(stream) => unsafe {
-                    poller
-                        .add_with_mode(
-                            stream,
-                            polling::Event::readable(id as usize),
-                            polling::PollMode::Level,
-                        )
-                        .map_err(|e| format!("Failed to register socket: {}", e))?;
-                },
+                NetworkSocket::UnixStream(stream) => {
+                    Self::register_readable_source(poller, stream, id)?;
+                }
                 #[cfg(unix)]
-                NetworkSocket::UnixListener(listener) => unsafe {
-                    poller
-                        .add_with_mode(
-                            listener,
-                            polling::Event::readable(id as usize),
-                            polling::PollMode::Level,
-                        )
-                        .map_err(|e| format!("Failed to register socket: {}", e))?;
-                },
+                NetworkSocket::UnixListener(listener) => {
+                    Self::register_readable_source(poller, listener, id)?;
+                }
             }
         }
         Ok(())
@@ -1865,9 +1919,8 @@ impl ProcessManager {
 
             // TLS stream has priority over plain socket.
             if let Some(ref mut tls) = proc.tls_stream {
-                use std::io::Read;
                 let mut buf = vec![0u8; 4096];
-                match tls.read(&mut buf) {
+                match tls.read_process_output(&mut buf) {
                     Ok(0) => return None,
                     Ok(n) => {
                         let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
@@ -2894,6 +2947,13 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // thus `use-package`.  See https://github.com/eval-exec/neomacs/issues/121.
     obarray.set_symbol_value("gnutls-log-level", Value::fixnum(0));
     obarray.make_special("gnutls-log-level");
+    // GNU `gnutls.c` always DEFVAR_LISPs `libgnutls-version`; when Emacs is
+    // built without libgnutls, the documented value is -1.  Neomacs exposes a
+    // `gnutls-boot` compatibility API over Rust TLS rather than linking
+    // libgnutls, so keep the variable bound without pretending to have a
+    // libgnutls version.  `nsm.el` reads this during HTTPS package refresh.
+    obarray.set_symbol_value("libgnutls-version", Value::fixnum(-1));
+    obarray.make_special("libgnutls-version");
 }
 
 /// Check whether `process-connection-type` is truthy (non-nil).
@@ -5165,6 +5225,7 @@ pub(crate) fn builtin_make_network_process(
     let mut log_val = Value::NIL;
     let mut buffer_val = Value::NIL;
     let mut _coding_val = Value::NIL;
+    let mut tls_parameters_val = Value::NIL;
     let mut noquery = false;
 
     let mut i = 0usize;
@@ -5188,6 +5249,7 @@ pub(crate) fn builtin_make_network_process(
             ProcessKeyword::Log => log_val = value,
             ProcessKeyword::Buffer => buffer_val = value,
             ProcessKeyword::Coding => _coding_val = value,
+            ProcessKeyword::TlsParameters => tls_parameters_val = value,
             ProcessKeyword::Noquery => noquery = value.is_truthy(),
             ProcessKeyword::Local => local_address_value = value,
             ProcessKeyword::Remote => remote_address_value = value,
@@ -5209,6 +5271,7 @@ pub(crate) fn builtin_make_network_process(
             vec![Value::string("`:server' is incompatible with `:nowait'")],
         ));
     }
+    let tls_parameters = parse_make_network_tls_parameters(tls_parameters_val)?;
 
     // Resolve :buffer to a buffer name (creating buffer if needed).
     let buffer = if !buffer_val.is_nil() {
@@ -5381,6 +5444,15 @@ pub(crate) fn builtin_make_network_process(
                     if noquery {
                         proc.query_on_exit_flag = false;
                     }
+                }
+                if let Some(parameters) = tls_parameters.clone() {
+                    upgrade_process_to_tls::<RustlsBackend>(
+                        eval,
+                        id,
+                        &parameters.hostname,
+                        "make-network-process",
+                        signal_gnutls_boot_error,
+                    )?;
                 }
                 eval.processes.register_socket_fd(id).ok();
                 let sentinel = eval
@@ -5645,6 +5717,15 @@ pub(crate) fn builtin_make_network_process(
                         proc.query_on_exit_flag = false;
                     }
                 }
+                if let Some(parameters) = tls_parameters.clone() {
+                    upgrade_process_to_tls::<RustlsBackend>(
+                        eval,
+                        id,
+                        &parameters.hostname,
+                        "make-network-process",
+                        signal_gnutls_boot_error,
+                    )?;
+                }
                 eval.processes.register_socket_fd(id).ok();
                 return Ok(Value::fixnum(id as i64));
             }
@@ -5881,6 +5962,16 @@ pub(crate) fn builtin_make_network_process(
         if noquery {
             proc.query_on_exit_flag = false;
         }
+    }
+
+    if let Some(parameters) = tls_parameters {
+        upgrade_process_to_tls::<RustlsBackend>(
+            eval,
+            id,
+            &parameters.hostname,
+            "make-network-process",
+            signal_gnutls_boot_error,
+        )?;
     }
 
     eval.processes.register_socket_fd(id).ok();
@@ -7137,7 +7228,7 @@ pub(crate) fn builtin_process_send_string_impl(
         }
     }
     let id = resolve_process_or_missing_error_in_manager(processes, &args[0])?;
-    if !processes.send_input(id, &input) {
+    if !processes.send_input(id, &input)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }
     Ok(Value::NIL)
@@ -7757,7 +7848,7 @@ pub(crate) fn builtin_process_send_region_impl(
         buf.buffer_substring_lisp_string_range(region)
     };
 
-    if !processes.send_input(id, &region_text) {
+    if !processes.send_input(id, &region_text)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }
     Ok(Value::NIL)

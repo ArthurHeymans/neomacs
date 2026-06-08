@@ -184,9 +184,11 @@ fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
         certificates: vec![
             certificate_details_value_pem(TEST_CERTIFICATE_PEM).expect("valid cert"),
         ],
+        key_exchange: Some("ECDHE-RSA".to_owned()),
         protocol: Some("TLS1.3".to_owned()),
         cipher: Some("AES-256-GCM".to_owned()),
         mac: Some("AEAD".to_owned()),
+        encrypt_then_mac: Some(false),
     };
 
     let plist = gnutls_peer_status_to_value(&status);
@@ -198,12 +200,16 @@ fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
     );
     assert_eq!(items[2], Value::keyword(":certificates"));
     assert_eq!(items[4], Value::keyword(":certificate"));
-    assert_eq!(items[6], Value::keyword(":protocol"));
-    assert_eq!(items[7], Value::string("TLS1.3"));
-    assert_eq!(items[8], Value::keyword(":cipher"));
-    assert_eq!(items[9], Value::string("AES-256-GCM"));
-    assert_eq!(items[10], Value::keyword(":mac"));
-    assert_eq!(items[11], Value::string("AEAD"));
+    assert_eq!(items[6], Value::keyword(":key-exchange"));
+    assert_eq!(items[7], Value::string("ECDHE-RSA"));
+    assert_eq!(items[8], Value::keyword(":protocol"));
+    assert_eq!(items[9], Value::string("TLS1.3"));
+    assert_eq!(items[10], Value::keyword(":cipher"));
+    assert_eq!(items[11], Value::string("AES-256-GCM"));
+    assert_eq!(items[12], Value::keyword(":mac"));
+    assert_eq!(items[13], Value::string("AEAD"));
+    assert_eq!(items[14], Value::keyword(":encrypt-then-mac"));
+    assert_eq!(items[15], Value::NIL);
     let certificate = crate::emacs_core::value::list_to_vec(&items[5]).expect("certificate plist");
     assert!(certificate.contains(&Value::keyword(":subject")));
     assert!(certificate.contains(&Value::string("CN=lists.for-our.info")));
