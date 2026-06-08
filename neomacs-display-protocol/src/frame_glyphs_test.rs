@@ -392,6 +392,37 @@ fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
 }
 
 #[test]
+fn cursor_draw_rect_empty_slot_snaps_to_preceding_glyph_right_edge() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    // A line-number gutter glyph; the cursor targets the empty text cell that
+    // begins where this glyph ends (a blank line has no glyph of its own there).
+    buf.add_char('2', 40.0, 10.0, 18.0, 33.0, 26.0, false); // right edge x = 58
+    let gutter = buf.glyphs[0].slot_id().expect("char slot");
+    let empty = DisplaySlotId {
+        window_id: gutter.window_id,
+        row: gutter.row,
+        col: gutter.col + 1,
+    };
+
+    // With no glyph on the slot, the cursor snaps to the gutter glyph's right
+    // edge (58) -- flush with the text column -- not the grid-approximate
+    // fallback x (5), which would land it back inside the line-number gutter.
+    let (x, _y, _w, _h) =
+        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, (5.0, 11.0, 9.0, 33.0));
+    assert_eq!(x, 58.0);
+
+    // A slot with nothing before it (no gutter) keeps the layout fallback x.
+    let lonely = DisplaySlotId {
+        window_id: 9,
+        row: 9,
+        col: 3,
+    };
+    let (lx, _, _, _) = buf.cursor_draw_rect(lonely, CursorStyle::FilledBox, (5.0, 6.0, 7.0, 8.0));
+    assert_eq!(lx, 5.0);
+}
+
+#[test]
 fn add_char_uses_current_face_attributes() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(1.0, 0.0, 0.0);

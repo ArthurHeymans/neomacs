@@ -1413,6 +1413,33 @@ impl FrameGlyphBuffer {
             .find(|glyph| glyph.slot_id().is_some_and(|slot| slot == slot_id))
     }
 
+    /// The pixel x where a glyph in `slot_id`'s column would begin: the right
+    /// edge of the nearest glyph in the same window+row with a smaller column.
+    /// Used to place a cursor that occupies an empty slot (a blank line or the
+    /// end of a line) flush with the text column -- where the next glyph would
+    /// start -- instead of at a grid-approximate `col * average_width` x. This
+    /// mirrors GNU's end-of-line cursor, which sits at `row->x` plus the row's
+    /// used pixel widths. Returns None when nothing precedes the slot (e.g. an
+    /// empty line with no line-number gutter), leaving the caller's fallback x.
+    fn row_pen_x_before(&self, slot_id: DisplaySlotId) -> Option<f32> {
+        self.glyphs
+            .iter()
+            .filter_map(|glyph| {
+                let slot = glyph.slot_id()?;
+                if slot.window_id == slot_id.window_id
+                    && slot.row == slot_id.row
+                    && slot.col < slot_id.col
+                {
+                    let (gx, _gy, gw, _gh) = glyph.cell_rect()?;
+                    Some((slot.col, gx + gw))
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|(col, _)| *col)
+            .map(|(_, right_edge)| right_edge)
+    }
+
     /// THE single source of truth for where a cursor is drawn: the pixel cell
     /// rect `(x, y, width, height)` of the glyph occupying `slot_id`. When no
     /// glyph occupies the slot (e.g. an empty line) the layout-supplied
@@ -1497,6 +1524,15 @@ impl FrameGlyphBuffer {
                 }
                 _ => {}
             }
+        } else if let Some(end_x) = self.row_pen_x_before(slot_id) {
+            // No glyph occupies the slot (a blank line or the end of a line).
+            // Snap to the right edge of the nearest preceding glyph in the row
+            // -- where the next glyph would start -- rather than the layout's
+            // grid-approximate fallback x, so the cursor is flush with the text
+            // column instead of landing a few pixels into the line-number
+            // gutter. GNU's end-of-line cursor likewise sits at the row's used
+            // pixel width.
+            x = end_x;
         }
 
         if matches!(
