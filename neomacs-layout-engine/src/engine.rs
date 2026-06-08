@@ -1358,6 +1358,21 @@ fn check_glyphless_char(ch: char) -> u8 {
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
 /// and resets `x`/`col` — matching GNU `display_line()` behaviour for overlay
 /// strings that contain newlines (e.g. fido-vertical-mode completions).
+fn append_display_item_to_current_row_with_shared_builder(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: crate::display_row_builder::DisplayRowLayout,
+    item: crate::display_item::DisplayItem,
+) -> Option<()> {
+    let Some(row) = builder.current_row_snapshot() else {
+        return None;
+    };
+    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::from_row(layout, row);
+    row_builder.push_item(item);
+    let row = row_builder.finish_preserving_order();
+    builder.install_prebuilt_current_row(&row);
+    Some(())
+}
+
 fn render_overlay_string(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
@@ -1593,12 +1608,18 @@ fn render_overlay_string(
         // marks, ZWJ emoji sequences, and flag pairs cluster here too.
         let cluster_tail = builder.last_text_cluster_tail();
         let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
-        let is_run_member =
-            !is_continuation && crate::composition::continues_complex_run(ch, cluster_tail);
         let cols = if is_continuation {
             0
+        } else if ch == '\t' {
+            let tab_width = params.tab_width.max(1) as usize;
+            let remainder = *col % tab_width;
+            if remainder == 0 {
+                tab_width
+            } else {
+                tab_width - remainder
+            }
         } else {
-            crate::composition::base_width_cols(ch)
+            crate::composition::base_width_cols(ch) as usize
         };
         let ch_advance = cols as f32 * face_char_w;
         if *x + ch_advance > max_x {
@@ -1629,17 +1650,32 @@ fn render_overlay_string(
             builder,
         );
 
-        // Push into the matrix builder (charpos=0 for overlay text).
-        // Continuations merge into the preceding Char/Composite cluster;
-        // Arabic/Indic run members grow the composed run.
-        if is_continuation {
-            builder.push_cluster_continuation(ch, face_id, 0);
-        } else if is_run_member {
-            builder.push_run_member(ch, face_id, 0, ch_advance);
-        } else if cols == 2 {
-            builder.push_wide_char(ch, face_id, 0);
-        } else {
-            builder.push_char(ch, face_id, 0);
+        let item = crate::display_item::DisplayItem::new(
+            crate::display_item::SourceSpan::lisp_string(
+                1,
+                char_idx.saturating_sub(1),
+                char_idx,
+                idx.saturating_sub(ch_len),
+                idx,
+            ),
+            crate::display_item::RenderFaceRef::FaceId(face_id),
+            crate::display_item::DisplayItemKind::TextRun(
+                crate::display_item::DisplayTextRun::new(ch.to_string()),
+            ),
+        );
+        let layout = crate::display_row_builder::DisplayRowLayout {
+            role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+            y_px: *y,
+            width_px: (max_x - content_x).max(1.0),
+            height_px: char_h,
+            ascent_px: default_row_ascent,
+            char_width_px: face_char_w,
+            tab_width_cols: params.tab_width.max(1).min(i32::from(u16::MAX)) as u16,
+            base_face: crate::display_item::RenderFaceRef::FaceId(face_id),
+            symbol_values: std::collections::HashMap::new(),
+        };
+        if append_display_item_to_current_row_with_shared_builder(builder, layout, item).is_none() {
+            break;
         }
 
         let glyph_start_x = *x;
@@ -1659,7 +1695,7 @@ fn render_overlay_string(
             Some(ch_advance.max(1.0)),
         );
         *x += ch_advance;
-        *col += cols as usize;
+        *col += cols;
         output_emitter.emit_synthetic_text_span(
             evaluator,
             *row,

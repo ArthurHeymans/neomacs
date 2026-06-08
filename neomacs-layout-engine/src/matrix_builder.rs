@@ -479,6 +479,13 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
+        self.current_matrix
+            .as_ref()
+            .and_then(|matrix| matrix.rows.get(self.current_row))
+            .cloned()
+    }
+
     /// Install a complete row whose glyph order and row-level metadata were
     /// produced outside the matrix builder.
     ///

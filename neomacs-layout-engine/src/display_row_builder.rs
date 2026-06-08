@@ -52,6 +52,20 @@ impl DisplayRowBuilder<'_> {
             glyph_measurer: None,
         }
     }
+
+    pub(crate) fn from_row(layout: DisplayRowLayout, mut row: GlyphRow) -> Self {
+        row.enabled = true;
+        row.role = layout.role;
+        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
+        row.pixel_y = layout.y_px;
+        row.height_px = layout.height_px.max(1.0);
+        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        Self {
+            layout,
+            row,
+            glyph_measurer: None,
+        }
+    }
 }
 
 impl<'a> DisplayRowBuilder<'a> {
@@ -129,6 +143,10 @@ impl<'a> DisplayRowBuilder<'a> {
 
     pub(crate) fn finish(mut self) -> GlyphRow {
         GlyphMatrixBuilder::normalize_external_row(&mut self.row);
+        self.row
+    }
+
+    pub(crate) fn finish_preserving_order(self) -> GlyphRow {
         self.row
     }
 
