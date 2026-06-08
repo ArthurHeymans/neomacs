@@ -15,7 +15,9 @@ use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_b
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
-use super::window_output::{RowMetricsSnapshot, TextOutputSpan, WindowOutputEmitter};
+use super::window_output::{
+    DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
+};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -1470,35 +1472,6 @@ fn text_display_tab_policy(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn text_output_span_from_coords(
-    buffer_pos: LispCharPos1,
-    row: usize,
-    row_y: f32,
-    glyph_y: f32,
-    height: f32,
-    start_x: f32,
-    start_col: usize,
-    end_x: f32,
-    end_col: usize,
-) -> TextOutputSpan {
-    TextOutputSpan {
-        buffer_pos,
-        row,
-        row_y,
-        glyph_y,
-        height,
-        start: crate::display_row_builder::DisplayRowPosition {
-            x_px: start_x,
-            col: start_col,
-        },
-        end: crate::display_row_builder::DisplayRowPosition {
-            x_px: end_x,
-            col: end_col,
-        },
-    }
-}
-
 fn emit_text_progress_slots(
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -1508,37 +1481,16 @@ fn emit_text_progress_slots(
     glyph_y: f32,
     height: f32,
 ) {
-    let mut emitted = false;
-    for slot in &progress.slots {
-        let crate::display_item::DisplaySourcePosition::Buffer { char_pos, .. } = slot.source
-        else {
-            continue;
-        };
-        output_emitter.emit_text_output_span(
-            evaluator,
-            text_output_span_from_coords(
-                layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
-                row,
-                row_y,
-                glyph_y,
-                height,
-                slot.x_px,
-                slot.col,
-                slot.x_px + slot.width_px,
-                slot.col + slot.width_cols,
-            ),
-        );
-        emitted = true;
-    }
-    if !emitted {
-        output_emitter.move_text_output_to(
-            evaluator,
+    output_emitter.emit_text_progress(
+        evaluator,
+        TextRowOutput {
             row,
-            progress.end.col,
             row_y,
-            progress.end.x_px,
-        );
-    }
+            glyph_y,
+            height,
+        },
+        progress,
+    );
 }
 
 struct SingleGlyphAdvance {

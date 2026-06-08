@@ -1,7 +1,12 @@
-use super::TextOutputSpan;
+use super::DisplayProgressSink;
+use super::TextRowOutput;
 use super::WindowOutputEmitter;
-use crate::display_row_builder::DisplayRowPosition;
-use neovm_core::buffer::LispCharPos1;
+use crate::display_item::DisplaySourcePosition;
+use crate::display_row_builder::{
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
+    DisplayRowWriteMetrics,
+};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
 #[test]
@@ -97,7 +102,7 @@ fn emit_synthetic_text_span_advances_live_output_without_display_points() {
 }
 
 #[test]
-fn emit_text_output_span_advances_from_row_positions() {
+fn display_progress_sink_emits_buffer_slots_from_row_builder_progress() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -116,16 +121,33 @@ fn emit_text_output_span_advances_from_row_positions() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-    emitter.emit_text_output_span(
+    emitter.emit_text_progress(
         &mut eval,
-        TextOutputSpan {
-            buffer_pos: LispCharPos1::new(1),
+        TextRowOutput {
             row: 0,
             row_y: 0.0,
             glyph_y: 0.0,
             height: 16.0,
+        },
+        &DisplayRowAppendProgress {
             start: DisplayRowPosition { x_px: 8.0, col: 1 },
             end: DisplayRowPosition { x_px: 24.0, col: 3 },
+            metrics: DisplayRowWriteMetrics {
+                width_px: 16.0,
+                width_cols: 2,
+            },
+            status: DisplayRowAppendStatus::Complete,
+            slots: vec![DisplayRowGlyphSlot {
+                source: DisplaySourcePosition::buffer(
+                    BufferId(7),
+                    CharPos0::new(0),
+                    EmacsBytePos::new(0),
+                ),
+                x_px: 8.0,
+                col: 1,
+                width_px: 16.0,
+                width_cols: 2,
+            }],
         },
     );
 
@@ -137,6 +159,78 @@ fn emit_text_output_span_advances_from_row_positions() {
         .expect("window display state");
 
     assert_eq!(emitter.display_point_len(), 1);
+    assert_eq!(
+        emitter
+            .point_for_lisp_buffer_pos(LispCharPos1::ONE)
+            .expect("buffer display point")
+            .width,
+        16
+    );
+    assert_eq!(
+        display.output_cursor,
+        Some(neovm_core::window::WindowCursorPos {
+            x: 24,
+            y: 0,
+            row: 0,
+            col: 3,
+        })
+    );
+}
+
+#[test]
+fn display_progress_sink_advances_without_points_for_non_buffer_slots() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-lisp-string-slot", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    emitter.emit_text_progress(
+        &mut eval,
+        TextRowOutput {
+            row: 0,
+            row_y: 0.0,
+            glyph_y: 0.0,
+            height: 16.0,
+        },
+        &DisplayRowAppendProgress {
+            start: DisplayRowPosition { x_px: 0.0, col: 0 },
+            end: DisplayRowPosition { x_px: 24.0, col: 3 },
+            metrics: DisplayRowWriteMetrics {
+                width_px: 24.0,
+                width_cols: 3,
+            },
+            status: DisplayRowAppendStatus::Complete,
+            slots: vec![DisplayRowGlyphSlot {
+                source: DisplaySourcePosition::lisp_string(3, 0, 0),
+                x_px: 0.0,
+                col: 0,
+                width_px: 24.0,
+                width_cols: 3,
+            }],
+        },
+    );
+
+    let display = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.display())
+        .expect("window display state");
+
+    assert_eq!(emitter.display_point_len(), 0);
     assert_eq!(
         display.output_cursor,
         Some(neovm_core::window::WindowCursorPos {

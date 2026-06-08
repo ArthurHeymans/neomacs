@@ -6,7 +6,11 @@
 //! handoff.
 
 use super::display_status_line::StatusLineOutputProgress;
-use crate::display_row_builder::DisplayRowPosition;
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_item::DisplaySourcePosition;
+use crate::display_row_builder::{
+    DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
+};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
@@ -33,14 +37,54 @@ struct CurrentRowProgress {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextOutputSpan {
-    pub(crate) buffer_pos: LispCharPos1,
+struct TextOutputSpan {
+    buffer_pos: LispCharPos1,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+    start: DisplayRowPosition,
+    end: DisplayRowPosition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextRowOutput {
     pub(crate) row: usize,
     pub(crate) row_y: f32,
     pub(crate) glyph_y: f32,
     pub(crate) height: f32,
-    pub(crate) start: DisplayRowPosition,
-    pub(crate) end: DisplayRowPosition,
+}
+
+impl TextRowOutput {
+    fn span_for_buffer_slot(self, slot: &DisplayRowGlyphSlot) -> Option<TextOutputSpan> {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+            return None;
+        };
+        Some(TextOutputSpan {
+            buffer_pos: layout_i64_char_pos_to_lisp_char_pos(char_pos.get() as i64),
+            row: self.row,
+            row_y: self.row_y,
+            glyph_y: self.glyph_y,
+            height: self.height,
+            start: DisplayRowPosition {
+                x_px: slot.x_px,
+                col: slot.col,
+            },
+            end: DisplayRowPosition {
+                x_px: slot.x_px + slot.width_px,
+                col: slot.col + slot.width_cols,
+            },
+        })
+    }
+}
+
+pub(crate) trait DisplayProgressSink {
+    fn emit_text_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: TextRowOutput,
+        progress: &DisplayRowAppendProgress,
+    );
 }
 
 pub(crate) struct WindowOutputEmitter {
@@ -57,6 +101,33 @@ pub(crate) struct WindowOutputEmitter {
     current_row_first_display_pos: Option<LispCharPos1>,
     current_row_last_display_pos: Option<LispCharPos1>,
     current_row_progress: Option<CurrentRowProgress>,
+}
+
+impl DisplayProgressSink for WindowOutputEmitter {
+    fn emit_text_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: TextRowOutput,
+        progress: &DisplayRowAppendProgress,
+    ) {
+        let mut emitted = false;
+        for slot in &progress.slots {
+            let Some(span) = output.span_for_buffer_slot(slot) else {
+                continue;
+            };
+            self.emit_text_output_span(evaluator, span);
+            emitted = true;
+        }
+        if !emitted {
+            self.move_text_output_to(
+                evaluator,
+                output.row,
+                progress.end.col,
+                output.row_y,
+                progress.end.x_px,
+            );
+        }
+    }
 }
 
 impl WindowOutputEmitter {
@@ -240,7 +311,7 @@ impl WindowOutputEmitter {
         self.move_text_output_to(evaluator, row, end_col, row_y, glyph_x + width.max(0.0));
     }
 
-    pub(crate) fn emit_text_output_span(&mut self, evaluator: &mut Context, span: TextOutputSpan) {
+    fn emit_text_output_span(&mut self, evaluator: &mut Context, span: TextOutputSpan) {
         self.emit_text_span(
             evaluator,
             span.buffer_pos,
