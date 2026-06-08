@@ -1152,25 +1152,99 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
 
 #[test]
 fn minibuffer_echo_message_is_suppressed_while_minibuffer_is_active() {
+    let _eval = Context::new();
     assert_eq!(
-        minibuffer_echo_message_for_window(true, true, Some("C-h".to_string())),
+        minibuffer_echo_message_for_window(true, true, Some(Value::string("C-h"))),
         None
     );
 }
 
 #[test]
 fn minibuffer_echo_message_still_renders_when_minibuffer_is_inactive() {
+    let _eval = Context::new();
     assert_eq!(
-        minibuffer_echo_message_for_window(true, false, Some("Echo".to_string())),
+        minibuffer_echo_message_for_window(true, false, Some(Value::string("Echo")))
+            .and_then(Value::as_runtime_string_owned),
         Some("Echo".to_string())
     );
     assert_eq!(
-        minibuffer_echo_message_for_window(true, false, Some(String::new())),
+        minibuffer_echo_message_for_window(true, false, Some(Value::string(""))),
         None
     );
     assert_eq!(
-        minibuffer_echo_message_for_window(false, false, Some("Echo".to_string())),
+        minibuffer_echo_message_for_window(false, false, Some(Value::string("Echo"))),
         None
+    );
+}
+
+#[test]
+fn layout_frame_rust_preserves_propertized_echo_message_faces() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-propertized-echo", 320, 120, buf_id);
+    let echo = Value::string_with_text_properties(
+        "AB",
+        vec![StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+            ]),
+        }],
+    );
+    eval.set_current_message(echo.as_lisp_string().cloned());
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let minibuffer_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| {
+            entry
+                .matrix
+                .rows
+                .iter()
+                .any(|row| row.enabled && row.role == GlyphRowRole::Minibuffer)
+        })
+        .expect("minibuffer echo matrix");
+    let echo_glyphs = minibuffer_entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Minibuffer)
+        .expect("echo row")
+        .glyphs[1]
+        .clone();
+
+    assert_eq!(
+        echo_glyphs
+            .iter()
+            .filter_map(|glyph| match &glyph.glyph_type {
+                GlyphType::Char { ch } => Some(*ch),
+                _ => None,
+            })
+            .collect::<String>(),
+        "AB"
+    );
+    assert_ne!(
+        echo_glyphs[0].face_id, echo_glyphs[1].face_id,
+        "propertized echo character should receive its property face"
+    );
+    assert!(
+        echo_glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        "echo glyphs should carry real pixel widths: {echo_glyphs:?}"
     );
 }
 
