@@ -422,58 +422,9 @@ fn rustls_read_process_output(
         return Ok(0);
     }
 
-    if let Some(n) = rustls_read_decrypted_plaintext(stream, buf)? {
-        return Ok(n);
-    }
-
-    let mut saw_peer_close = false;
     loop {
-        match stream.inner.conn.read_tls(&mut stream.inner.sock) {
-            Ok(0) => {
-                return if saw_peer_close {
-                    Ok(0)
-                } else {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                };
-            }
-            Ok(_) => {
-                let state = stream
-                    .inner
-                    .conn
-                    .process_new_packets()
-                    .map_err(rustls_record_error_to_io)?;
-                saw_peer_close |= state.peer_has_closed();
-
-                if let Some(n) = rustls_read_decrypted_plaintext(stream, buf)? {
-                    return Ok(n);
-                }
-                if saw_peer_close {
-                    return Ok(0);
-                }
-                if !stream.inner.conn.wants_read() {
-                    return Err(std::io::ErrorKind::WouldBlock.into());
-                }
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                return Err(std::io::ErrorKind::WouldBlock.into());
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(err) => return Err(err),
-        }
-    }
-}
-
-fn rustls_read_decrypted_plaintext(
-    stream: &mut RustlsTlsStream,
-    buf: &mut [u8],
-) -> std::io::Result<Option<usize>> {
-    loop {
-        match stream.inner.conn.reader().read(buf) {
-            Ok(0) => return Ok(None),
-            Ok(n) => return Ok(Some(n)),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                return Ok(None);
-            }
+        match stream.inner.read(buf) {
+            Ok(n) => return Ok(n),
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(err) => return Err(err),
         }
@@ -685,23 +636,15 @@ impl TlsClientBackend for RustlsBackend {
             .try_into()
             .map_err(|_| TlsBackendError::InvalidHostname(hostname.to_owned()))?;
 
-        let tls_conn = rustls::ClientConnection::new(Arc::new(config), server_name)
+        let mut tls_conn = rustls::ClientConnection::new(Arc::new(config), server_name)
             .map_err(|err| TlsBackendError::Connect(err.to_string()))?;
 
         tcp_stream
             .set_nonblocking(false)
             .map_err(TlsBackendError::Io)?;
-        let mut tls_stream = rustls::StreamOwned::new(tls_conn, tcp_stream);
-
-        let mut dummy = [0u8; 0];
-        match tls_stream.read(&mut dummy) {
-            Ok(_) => {}
-            Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(ref err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(TlsBackendError::UnexpectedEof);
-            }
-            Err(err) => return Err(TlsBackendError::Io(err)),
-        }
+        let mut tcp_stream = tcp_stream;
+        rustls_complete_client_handshake(&mut tls_conn, &mut tcp_stream)?;
+        let tls_stream = rustls::StreamOwned::new(tls_conn, tcp_stream);
 
         let peer_certificates_pem = tls_stream
             .conn
@@ -717,6 +660,26 @@ impl TlsClientBackend for RustlsBackend {
         stream.set_nonblocking(true).ok();
         Ok(stream)
     }
+}
+
+fn rustls_complete_client_handshake(
+    tls_conn: &mut rustls::ClientConnection,
+    tcp_stream: &mut TcpStream,
+) -> Result<(), TlsBackendError> {
+    while tls_conn.is_handshaking() {
+        match tls_conn.complete_io(tcp_stream) {
+            Ok((0, 0)) if tls_conn.is_handshaking() => {
+                return Err(TlsBackendError::UnexpectedEof);
+            }
+            Ok(_) => {}
+            Err(ref err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(ref err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Err(TlsBackendError::UnexpectedEof);
+            }
+            Err(err) => return Err(TlsBackendError::Io(err)),
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn der_certificate_to_pem(der: &[u8]) -> String {

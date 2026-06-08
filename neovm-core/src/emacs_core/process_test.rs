@@ -1218,7 +1218,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     let mut output = String::new();
     while std::time::Instant::now() < deadline && !output.contains('\n') {
         if let Some(chunk) = processes.read_process_output(pid) {
-            output.push_str(&chunk);
+            output.push_str(&process_output_runtime_string(&chunk));
         }
         processes.check_child_exit(pid);
         std::thread::sleep(Duration::from_millis(10));
@@ -3126,6 +3126,7 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
                   (let ((np (make-network-process :name "proc-coding-tty-query-network" :server t :service 0)))
                     (unwind-protect
                         (list
+                         (equal (process-coding-system np) '(binary . binary))
                          (null (process-tty-name np))
                          (null (process-tty-name np nil))
                          (null (process-tty-name np 'stdin))
@@ -3149,7 +3150,7 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
     ));
     assert_eq!(
         results[0],
-        "OK (t nil nil t t t t t (error \"Unknown stream\" 0) (t t t t t) (t t t t t) nil nil)"
+        "OK (t nil nil t t t t t (error \"Unknown stream\" 0) (t t t t t) (t t t t t t) nil nil)"
     );
     assert_eq!(results[1], "OK (wrong-type-argument processp x)");
     assert_eq!(results[2], "OK (wrong-type-argument processp x)");

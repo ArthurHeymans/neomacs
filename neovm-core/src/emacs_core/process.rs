@@ -602,8 +602,25 @@ fn process_coding_symbol_name(value: Value) -> &'static str {
     }
 }
 
-fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> String {
-    crate::encoding::decode_bytes(bytes, process_coding_symbol_name(coding))
+fn process_coding_is_binary(coding: Value) -> bool {
+    coding.is_nil()
+        || matches!(
+            coding.as_symbol_name(),
+            Some("binary" | "no-conversion" | "raw-text")
+        )
+}
+
+fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> LispString {
+    if process_coding_is_binary(coding) {
+        LispString::from_unibyte(bytes.to_vec())
+    } else {
+        let decoded = crate::encoding::decode_bytes(bytes, process_coding_symbol_name(coding));
+        LispString::from_utf8(&decoded)
+    }
+}
+
+fn process_output_runtime_string(output: &LispString) -> String {
+    super::builtins::runtime_string_from_lisp_string(output)
 }
 
 #[cfg(unix)]
@@ -784,8 +801,39 @@ fn process_status_code_value(status: Value) -> i64 {
         .unwrap_or(0)
 }
 
+fn network_process_coding_pair(coding: Value) -> (Value, Value) {
+    if coding.is_cons() {
+        let decode = coding.cons_car();
+        let encode = coding.cons_cdr();
+        (decode, encode)
+    } else if coding.is_nil() {
+        let binary = Value::symbol("binary");
+        (binary, binary)
+    } else {
+        (coding, coding)
+    }
+}
+
+fn set_network_process_coding(proc: &mut Process, coding: Value) {
+    let (decode, encode) = network_process_coding_pair(coding);
+    proc.coding_decode = decode;
+    proc.coding_encode = encode;
+}
+
 fn process_status_is_run(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Run)
+}
+
+fn process_status_has_readable_process_io(status: &Value) -> bool {
+    matches!(
+        ProcessStatusSymbol::from_status_value(*status),
+        Some(
+            ProcessStatusSymbol::Run
+                | ProcessStatusSymbol::Open
+                | ProcessStatusSymbol::Listen
+                | ProcessStatusSymbol::Connect
+        )
+    )
 }
 
 fn process_uses_contact_plist(proc: &Process) -> bool {
@@ -1356,7 +1404,7 @@ impl ProcessManager {
 
     /// Read available output from a child process's stdout.
     /// Returns the data read (may be empty if nothing available).
-    pub fn read_child_stdout(&mut self, id: ProcessId) -> Option<String> {
+    pub fn read_child_stdout(&mut self, id: ProcessId) -> Option<LispString> {
         let proc = self.processes.get_mut(&id)?;
         let stdout = proc.child_stdout.as_mut()?;
 
@@ -1377,10 +1425,12 @@ impl ProcessManager {
             Ok(0) => None, // EOF
             Ok(n) => {
                 let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                proc.stdout.push_str(&s);
+                proc.stdout.push_str(&process_output_runtime_string(&s));
                 Some(s)
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Some(String::new()),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                Some(LispString::from_utf8(""))
+            }
             Err(_) => None,
         }
     }
@@ -1388,7 +1438,7 @@ impl ProcessManager {
     /// Read available output from a PTY master reader.
     /// Returns the data read (may be empty if nothing available).
     /// PTY combines stdout and stderr into a single stream.
-    fn read_pty_output(&mut self, id: ProcessId) -> Option<String> {
+    fn read_pty_output(&mut self, id: ProcessId) -> Option<LispString> {
         let proc = self.processes.get_mut(&id)?;
         let reader = proc.pty_reader.as_mut()?;
 
@@ -1397,10 +1447,12 @@ impl ProcessManager {
             Ok(0) => None, // EOF — slave closed
             Ok(n) => {
                 let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                proc.stdout.push_str(&s);
+                proc.stdout.push_str(&process_output_runtime_string(&s));
                 Some(s)
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Some(String::new()),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                Some(LispString::from_utf8(""))
+            }
             Err(_) => None,
         }
     }
@@ -1416,7 +1468,18 @@ impl ProcessManager {
         if let Some(ref poller) = self.poller {
             let mut events = polling::Events::new();
             match poller.wait(&mut events, Some(timeout)) {
-                Ok(_) => events.iter().map(|e| e.key as ProcessId).collect(),
+                Ok(_) => events
+                    .iter()
+                    .filter_map(|e| {
+                        let id = e.key as ProcessId;
+                        self.processes
+                            .get(&id)
+                            .filter(|process| {
+                                process_status_has_readable_process_io(&process.status)
+                            })
+                            .map(|_| id)
+                    })
+                    .collect(),
                 Err(_) => {
                     // Fallback: brief sleep
                     std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
@@ -1427,6 +1490,15 @@ impl ProcessManager {
             // No poller available — sleep fallback
             std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
             self.live_process_ids()
+        }
+    }
+
+    fn deactivate_network_process_io(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            Self::unregister_process_poll_sources(self.poller.as_ref(), proc);
+            proc.tls_stream = None;
+            proc.network_socket = None;
+            proc.gnutls_initstage = GnutlsInitStage::Empty;
         }
     }
 
@@ -1562,7 +1634,7 @@ impl ProcessManager {
         self.processes
             .iter()
             .filter(|(_, p)| {
-                if !process_status_is_run(&p.status) {
+                if !process_status_has_readable_process_io(&p.status) {
                     return false;
                 }
                 if p.child.is_some() || p.pty_child.is_some() {
@@ -1890,7 +1962,7 @@ impl ProcessManager {
     /// Read available output from a process — child stdout or network socket.
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
-    pub fn read_process_output(&mut self, id: ProcessId) -> Option<String> {
+    pub fn read_process_output(&mut self, id: ProcessId) -> Option<LispString> {
         // Check what kind of I/O source this process has, without holding
         // a long-lived mutable borrow.
         let has_pty_reader = self
@@ -1924,11 +1996,11 @@ impl ProcessManager {
                     Ok(0) => return None,
                     Ok(n) => {
                         let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&s);
+                        proc.stdout.push_str(&process_output_runtime_string(&s));
                         return Some(s);
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(String::new());
+                        return Some(LispString::from_utf8(""));
                     }
                     Err(_) => return None,
                 }
@@ -1941,11 +2013,11 @@ impl ProcessManager {
                     Ok(0) => return None,
                     Ok(n) => {
                         let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&s);
+                        proc.stdout.push_str(&process_output_runtime_string(&s));
                         return Some(s);
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(String::new());
+                        return Some(LispString::from_utf8(""));
                     }
                     Err(_) => return None,
                 }
@@ -1959,11 +2031,11 @@ impl ProcessManager {
                     Ok(0) => return None,
                     Ok(n) => {
                         let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&s);
+                        proc.stdout.push_str(&process_output_runtime_string(&s));
                         return Some(s);
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(String::new());
+                        return Some(LispString::from_utf8(""));
                     }
                     Err(_) => return None,
                 }
@@ -1974,7 +2046,7 @@ impl ProcessManager {
                 .as_ref()
                 .is_some_and(NetworkSocket::is_listener)
             {
-                return Some(String::new());
+                return Some(LispString::from_utf8(""));
             }
         }
 
@@ -2011,6 +2083,16 @@ pub(crate) struct WaitServiceOutcome {
     pub(crate) any_process_activity: bool,
     pub(crate) target_process_activity: bool,
     pub(crate) timers_fired: bool,
+}
+
+fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<ProcessId> {
+    let mut unique = Vec::new();
+    for id in process_ids {
+        if !unique.contains(&id) {
+            unique.push(id);
+        }
+    }
+    unique
 }
 
 impl super::eval::Context {
@@ -2118,9 +2200,9 @@ impl super::eval::Context {
         }
     }
 
-    fn run_process_filter_callback(&mut self, pid: ProcessId, filter: Value, data: &str) {
+    fn run_process_filter_callback(&mut self, pid: ProcessId, filter: Value, data: &LispString) {
         let proc_val = Value::fixnum(pid as i64);
-        let output_val = Value::string(data);
+        let output_val = Value::heap_string(data.clone());
         if filter.is_nil() || filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL) {
             let callback = Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL);
             self.run_async_process_callback_preserving_state(
@@ -2187,6 +2269,34 @@ impl super::eval::Context {
         } else {
             self.processes.live_process_ids()
         };
+        self.poll_process_output_for_ids(proc_ids, target_process, just_this_one)
+    }
+
+    pub(crate) fn poll_ready_process_output_with_wait_policy(
+        &mut self,
+        ready_processes: Vec<ProcessId>,
+        target_process: Option<ProcessId>,
+        just_this_one: bool,
+    ) -> WaitServiceOutcome {
+        let proc_ids = if just_this_one {
+            target_process
+                .filter(|target| ready_processes.contains(target))
+                .into_iter()
+                .collect::<Vec<_>>()
+        } else {
+            dedupe_process_ids(ready_processes)
+        };
+
+        self.poll_process_output_for_ids(proc_ids, target_process, just_this_one)
+    }
+
+    fn poll_process_output_for_ids(
+        &mut self,
+        proc_ids: Vec<ProcessId>,
+        target_process: Option<ProcessId>,
+        _just_this_one: bool,
+    ) -> WaitServiceOutcome {
+        let proc_ids = dedupe_process_ids(proc_ids);
 
         if proc_ids.is_empty() {
             return WaitServiceOutcome::default();
@@ -2195,6 +2305,14 @@ impl super::eval::Context {
         let mut outcome = WaitServiceOutcome::default();
 
         for pid in proc_ids {
+            if self
+                .processes
+                .get(pid)
+                .is_some_and(|process| !process_status_has_readable_process_io(&process.status))
+            {
+                continue;
+            }
+
             let is_target = target_process.map_or(true, |target| target == pid);
             let mut exited = self.processes.check_child_exit(pid);
             for event in self.processes.accept_network_server_connections(pid) {
@@ -2245,6 +2363,7 @@ impl super::eval::Context {
                     if let Some(proc) = self.processes.get_mut(pid) {
                         proc.status = process_status_exit_value(0);
                     }
+                    self.processes.deactivate_network_process_io(pid);
                     let sentinel = self
                         .processes
                         .get(pid)
@@ -2318,6 +2437,32 @@ impl super::eval::Context {
         }
         let process_outcome =
             self.poll_process_output_with_wait_policy(target_process, just_this_one);
+        outcome.any_process_activity = process_outcome.any_process_activity;
+        outcome.target_process_activity = process_outcome.target_process_activity;
+        if redisplay_timers && (special_input.redisplay_needed || outcome.timers_fired) {
+            self.redisplay();
+        }
+        Ok(outcome)
+    }
+
+    pub(crate) fn service_wait_path_ready_processes(
+        &mut self,
+        ready_processes: Vec<ProcessId>,
+        target_process: Option<ProcessId>,
+        just_this_one: bool,
+        allow_timers: bool,
+        redisplay_timers: bool,
+    ) -> Result<WaitServiceOutcome, Flow> {
+        let mut outcome = WaitServiceOutcome::default();
+        let special_input = self.service_wait_path_special_input_events()?;
+        if allow_timers {
+            outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
+        }
+        let process_outcome = self.poll_ready_process_output_with_wait_policy(
+            ready_processes,
+            target_process,
+            just_this_one,
+        );
         outcome.any_process_activity = process_outcome.any_process_activity;
         outcome.target_process_activity = process_outcome.target_process_activity;
         if redisplay_timers && (special_input.redisplay_needed || outcome.timers_fired) {
@@ -4289,7 +4434,10 @@ pub(crate) fn builtin_internal_default_process_filter(
 ) -> EvalResult {
     expect_args("internal-default-process-filter", &args, 2)?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
-    let text = expect_string_strict(&args[1])?;
+    let text = match args[1].as_lisp_string() {
+        Some(text) => text.clone(),
+        None => return Err(signal_wrong_type_string(args[1])),
+    };
     if text.is_empty() {
         return Ok(Value::NIL);
     }
@@ -4320,7 +4468,7 @@ pub(crate) fn builtin_internal_default_process_filter(
     let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
 
     // Insert text at point (which is now at the mark position).
-    eval.buffers.insert_into_buffer(buf_id, &text);
+    eval.buffers.insert_lisp_string_into_buffer(buf_id, &text);
 
     // The new mark is at point after insertion (insert advances point).
     // If the buffer vanished out from under us the fallback uses text.len()
@@ -4330,7 +4478,7 @@ pub(crate) fn builtin_internal_default_process_filter(
         .buffers
         .get(buf_id)
         .map(|b| b.point_emacs_byte_pos())
-        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.len())));
+        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.sbytes())));
 
     // Restore read-only flag.
     if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
@@ -5224,7 +5372,7 @@ pub(crate) fn builtin_make_network_process(
     let mut sentinel_val = Value::NIL;
     let mut log_val = Value::NIL;
     let mut buffer_val = Value::NIL;
-    let mut _coding_val = Value::NIL;
+    let mut coding_val = Value::NIL;
     let mut tls_parameters_val = Value::NIL;
     let mut noquery = false;
 
@@ -5248,7 +5396,7 @@ pub(crate) fn builtin_make_network_process(
             ProcessKeyword::Sentinel => sentinel_val = value,
             ProcessKeyword::Log => log_val = value,
             ProcessKeyword::Buffer => buffer_val = value,
-            ProcessKeyword::Coding => _coding_val = value,
+            ProcessKeyword::Coding => coding_val = value,
             ProcessKeyword::TlsParameters => tls_parameters_val = value,
             ProcessKeyword::Noquery => noquery = value.is_truthy(),
             ProcessKeyword::Local => local_address_value = value,
@@ -5332,6 +5480,7 @@ pub(crate) fn builtin_make_network_process(
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
+                        set_network_process_coding(proc, coding_val);
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.network_socket = Some(NetworkSocket::TcpListener(listener));
                         if !filter_val.is_nil() {
@@ -5417,6 +5566,7 @@ pub(crate) fn builtin_make_network_process(
                     proc.network_socket = Some(NetworkSocket::TcpStream(stream));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
+                    set_network_process_coding(proc, coding_val);
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -5497,6 +5647,7 @@ pub(crate) fn builtin_make_network_process(
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
+                        set_network_process_coding(proc, coding_val);
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.network_socket = Some(NetworkSocket::UnixListener(listener));
                         if !filter_val.is_nil() {
@@ -5577,6 +5728,7 @@ pub(crate) fn builtin_make_network_process(
                     proc.network_socket = Some(NetworkSocket::UnixStream(stream));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
+                    set_network_process_coding(proc, coding_val);
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -5680,6 +5832,7 @@ pub(crate) fn builtin_make_network_process(
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
+                    set_network_process_coding(proc, coding_val);
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.network_socket = Some(NetworkSocket::UnixListener(listener));
                     if !filter_val.is_nil() {
@@ -5769,6 +5922,7 @@ pub(crate) fn builtin_make_network_process(
                 proc.network_socket = Some(NetworkSocket::UnixStream(stream));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
+                set_network_process_coding(proc, coding_val);
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -5853,6 +6007,7 @@ pub(crate) fn builtin_make_network_process(
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.childp = contact;
+            set_network_process_coding(proc, coding_val);
             proc.thread = current_thread_handle(&eval.threads);
             proc.network_socket = Some(NetworkSocket::TcpListener(listener));
             if !filter_val.is_nil() {
@@ -5938,6 +6093,7 @@ pub(crate) fn builtin_make_network_process(
         proc.network_socket = Some(NetworkSocket::TcpStream(stream));
         proc.status = process_status_run_value();
         proc.childp = contact;
+        set_network_process_coding(proc, coding_val);
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;
@@ -7964,48 +8120,8 @@ pub(crate) fn builtin_accept_process_output(
             false,
         )?;
 
-        let got_output = if request.target_id.is_some() {
-            outcome.target_process_activity
-        } else {
-            outcome.any_process_activity
-        };
-        if got_output {
-            if request.target_id.is_some() {
-                // GNU's wait_reading_process_output keeps a target-process
-                // accept-process-output call alive for a minimum follow-up
-                // cycle after reading bytes, so a child that exits
-                // immediately after flushing output can run its sentinel
-                // before we return.
-                let mut idle_follow_up_polls = 0usize;
-                loop {
-                    let _ = eval.processes.wait_for_output(Duration::ZERO);
-                    let _ = eval.service_wait_path_special_input_events()?;
-                    let follow_up = eval.service_wait_path_once(
-                        request.target_id,
-                        request.just_this_one,
-                        request.allow_timers,
-                        false,
-                    )?;
-                    if follow_up.target_process_activity {
-                        idle_follow_up_polls = 0;
-                        continue;
-                    }
-
-                    let target_still_running = request
-                        .target_id
-                        .and_then(|pid| eval.processes.get(pid))
-                        .is_some_and(|process| process_status_is_run(&process.status));
-                    if !target_still_running {
-                        break;
-                    }
-
-                    idle_follow_up_polls += 1;
-                    if idle_follow_up_polls >= 4 {
-                        break;
-                    }
-                    std::thread::yield_now();
-                }
-            }
+        if accept_process_output_request_satisfied(&request, outcome) {
+            accept_process_output_run_target_follow_up(eval, request)?;
             return Ok(Value::T);
         }
 
@@ -8019,9 +8135,85 @@ pub(crate) fn builtin_accept_process_output(
         if wait_time.is_zero() {
             continue;
         }
-        let _ = eval.processes.wait_for_output(wait_time);
-        let _ = eval.service_wait_path_special_input_events()?;
+        let ready_processes = eval.processes.wait_for_output(wait_time);
+        let outcome = eval.service_wait_path_ready_processes(
+            ready_processes,
+            request.target_id,
+            request.just_this_one,
+            request.allow_timers,
+            false,
+        )?;
+
+        if accept_process_output_request_satisfied(&request, outcome) {
+            accept_process_output_run_target_follow_up(eval, request)?;
+            return Ok(Value::T);
+        }
     }
+}
+
+fn accept_process_output_request_satisfied(
+    request: &AcceptProcessOutputRequest,
+    outcome: WaitServiceOutcome,
+) -> bool {
+    if request.target_id.is_some() {
+        outcome.target_process_activity
+    } else {
+        outcome.any_process_activity
+    }
+}
+
+fn accept_process_output_run_target_follow_up(
+    eval: &mut super::eval::Context,
+    request: AcceptProcessOutputRequest,
+) -> Result<(), Flow> {
+    let Some(target_id) = request.target_id else {
+        return Ok(());
+    };
+
+    // GNU's wait_reading_process_output keeps a target-process
+    // accept-process-output call alive for a minimum follow-up cycle after
+    // reading bytes, so a child that exits immediately after flushing output
+    // can run its sentinel before we return.
+    let mut idle_follow_up_polls = 0usize;
+    loop {
+        let ready_processes = eval.processes.wait_for_output(Duration::ZERO);
+        let follow_up = if ready_processes.is_empty() {
+            eval.service_wait_path_once(
+                request.target_id,
+                request.just_this_one,
+                request.allow_timers,
+                false,
+            )?
+        } else {
+            eval.service_wait_path_ready_processes(
+                ready_processes,
+                request.target_id,
+                request.just_this_one,
+                request.allow_timers,
+                false,
+            )?
+        };
+        if follow_up.target_process_activity {
+            idle_follow_up_polls = 0;
+            continue;
+        }
+
+        let target_still_running = eval
+            .processes
+            .get(target_id)
+            .is_some_and(|process| process_status_has_readable_process_io(&process.status));
+        if !target_still_running {
+            break;
+        }
+
+        idle_follow_up_polls += 1;
+        if idle_follow_up_polls >= 4 {
+            break;
+        }
+        std::thread::yield_now();
+    }
+
+    Ok(())
 }
 
 /// (get-process NAME) -> process-or-nil
