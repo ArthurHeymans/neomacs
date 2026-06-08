@@ -109,6 +109,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
                 height: 16.0,
                 char_width: 8.0,
                 ascent: 12.0,
+                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 base_face_id: 1,
                 base_face: resolver.default_face(),
                 role: GlyphRowRole::TabLine,
@@ -132,9 +133,67 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     assert!(cjk.wide);
     assert!(glyphs.iter().any(|glyph| glyph.padding));
     assert!(
-        glyphs
-            .iter()
-            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}')))
+        glyphs.iter().any(
+            |glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))
+        )
+    );
+}
+
+#[test]
+fn render_display_item_source_row_uses_spec_tab_policy() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("\tX");
+    }
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        buffer,
+        neovm_core::buffer::CharPos0::new(0),
+        buffer.layout_point_max_char_pos(),
+        RenderFaceRef::FaceId(1),
+    );
+
+    let rendered = engine
+        .render_display_item_source_row(
+            DisplayRowSpec {
+                y: 0.0,
+                width: 240.0,
+                height: 16.0,
+                char_width: 8.0,
+                ascent: 12.0,
+                base_face_id: 1,
+                base_face: resolver.default_face(),
+                role: GlyphRowRole::TabLine,
+                symbol_values: std::collections::HashMap::new(),
+                tab_policy: crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
+                    0.0,
+                    4,
+                    &[2],
+                ),
+            },
+            &mut source,
+            &resolver,
+            &mut next_face_id,
+        )
+        .expect("display source row");
+
+    let glyphs = &rendered.row.glyphs[1];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
+    let emitted_width: f32 = glyphs.iter().map(|glyph| glyph.pixel_width).sum();
+    assert!(
+        (rendered.progress.end_x - emitted_width).abs() <= 0.01,
+        "row progress should include the emitted tab stretch and following character"
     );
 }
 
