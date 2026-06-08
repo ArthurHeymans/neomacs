@@ -3388,6 +3388,46 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
 }
 
 #[test]
+fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
+    let _eval = Context::new();
+    let replacement_source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+    let string_source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        Value::string("fallback"),
+        RenderFaceRef::FaceId(42),
+    )
+    .expect("string source");
+    let mut source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
+    let mut context = crate::display_source::DisplaySourceContext::empty();
+
+    let item = source.next_item(&mut context).expect("replacement item");
+
+    assert_eq!(item.face, RenderFaceRef::FaceId(42));
+    assert_eq!(
+        item.span.start,
+        crate::display_item::DisplaySourcePosition::buffer(
+            BufferId(7),
+            CharPos0::new(3),
+            EmacsBytePos::new(12)
+        )
+    );
+    assert_eq!(
+        item.span.end,
+        crate::display_item::DisplaySourcePosition::buffer(
+            BufferId(7),
+            CharPos0::new(4),
+            EmacsBytePos::new(12)
+        )
+    );
+    assert!(matches!(
+        item.kind,
+        crate::display_item::DisplayItemKind::SourceMappedText(text)
+            if text.text.as_ref() == "fallback"
+    ));
+    assert!(source.next_item(&mut context).is_none());
+}
+
+#[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval

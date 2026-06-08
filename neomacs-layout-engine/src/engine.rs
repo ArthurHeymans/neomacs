@@ -1326,11 +1326,15 @@ impl BufferDisplayReplacementSource {
         face_id: u32,
         kind: crate::display_item::DisplayItemKind,
     ) -> crate::display_item::DisplayItem {
-        crate::display_item::DisplayItem::new(
-            self.span(),
-            crate::display_item::RenderFaceRef::FaceId(face_id),
-            kind,
-        )
+        self.item_with_face(crate::display_item::RenderFaceRef::FaceId(face_id), kind)
+    }
+
+    fn item_with_face(
+        self,
+        face: crate::display_item::RenderFaceRef,
+        kind: crate::display_item::DisplayItemKind,
+    ) -> crate::display_item::DisplayItem {
+        crate::display_item::DisplayItem::new(self.span(), face, kind)
     }
 
     fn stretch_item(
@@ -1365,6 +1369,42 @@ impl BufferDisplayReplacementSource {
                 crate::display_item::DisplaySourceMappedText::new(text),
             ),
         )
+    }
+}
+
+struct BufferDisplayReplacementStringSource<S> {
+    replacement_source: BufferDisplayReplacementSource,
+    source: S,
+}
+
+impl<S> BufferDisplayReplacementStringSource<S> {
+    const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
+        Self {
+            replacement_source,
+            source,
+        }
+    }
+}
+
+impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringSource<S> {
+    fn next_item(
+        &mut self,
+        context: &mut crate::display_source::DisplaySourceContext<'_>,
+    ) -> Option<crate::display_item::DisplayItem> {
+        let item = self.source.next_item(context)?;
+        let kind = match item.kind {
+            crate::display_item::DisplayItemKind::TextRun(run) => {
+                crate::display_item::DisplayItemKind::SourceMappedText(
+                    crate::display_item::DisplaySourceMappedText::new(run.text),
+                )
+            }
+            kind => kind,
+        };
+        Some(self.replacement_source.item_with_face(item.face, kind))
+    }
+
+    fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
+        self.replacement_source.span().start
     }
 }
 
@@ -4200,15 +4240,20 @@ impl LayoutEngine {
                         }
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
-                            if let Some(mut source) =
-                                crate::display_source::LispStringSourceCursor::new(
-                                    1,
-                                    prop_val,
-                                    crate::display_item::RenderFaceRef::FaceId(
-                                        current_text_face_id,
-                                    ),
-                                )
-                            {
+                            let replacement_source = BufferDisplayReplacementSource::new(
+                                buf_id,
+                                charpos,
+                                text_start_byte + byte_idx,
+                            );
+                            if let Some(source) = crate::display_source::LispStringSourceCursor::new(
+                                1,
+                                prop_val,
+                                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                            ) {
+                                let mut source = BufferDisplayReplacementStringSource::new(
+                                    replacement_source,
+                                    source,
+                                );
                                 let mut string_face_cache = std::collections::HashMap::new();
                                 loop {
                                     let item = {
@@ -4229,28 +4274,18 @@ impl LayoutEngine {
                                         break;
                                     };
                                     let crate::display_item::DisplayItem {
+                                        span,
                                         face: item_face,
                                         kind,
-                                        ..
                                     } = item;
-                                    let replacement_span = crate::display_item::SourceSpan::new(
-                                        crate::display_item::DisplaySourcePosition::buffer(
-                                            buf_id,
-                                            CharPos0::new(charpos as usize),
-                                            EmacsBytePos::new(text_start_byte + byte_idx),
-                                        ),
-                                        crate::display_item::DisplaySourcePosition::buffer(
-                                            buf_id,
-                                            CharPos0::new(charpos.saturating_add(1) as usize),
-                                            EmacsBytePos::new(text_start_byte + byte_idx),
-                                        ),
-                                    );
                                     match kind {
-                                        crate::display_item::DisplayItemKind::TextRun(run) => {
+                                        crate::display_item::DisplayItemKind::SourceMappedText(
+                                            text,
+                                        ) => {
                                             let face_id =
                                                 render_face_ref_id(item_face, current_text_face_id);
                                             let mut measurer = FixedGlyphAdvances::new();
-                                            for rch in run.text.chars() {
+                                            for rch in text.text.chars() {
                                                 if rch == '\t' {
                                                     continue;
                                                 }
@@ -4276,12 +4311,10 @@ impl LayoutEngine {
                                                 measurer.insert(rch, face_id, advance);
                                             }
                                             let item = crate::display_item::DisplayItem::new(
-                                                replacement_span,
+                                                span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 crate::display_item::DisplayItemKind::SourceMappedText(
-                                                    crate::display_item::DisplaySourceMappedText::new(
-                                                        run.text,
-                                                    ),
+                                                    text,
                                                 ),
                                             );
                                             let layout = text_display_row_layout(
@@ -4342,7 +4375,7 @@ impl LayoutEngine {
                                                 face_id,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
-                                                replacement_span,
+                                                span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
