@@ -2655,9 +2655,31 @@ impl LayoutEngine {
                                 }
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
-                                let visible_region_empty =
-                                    mini_params.accessible_start_charpos().get()
-                                        >= mini_params.accessible_end_charpos().get();
+                                // GNU `resize_mini_window` shrinks a grow-only
+                                // mini-window when its buffer is empty
+                                // (`BEGV == ZV`). neomacs renders echo-area
+                                // messages from the evaluator's `current_message`
+                                // overlay rather than from the minibuffer buffer,
+                                // and leaves the idle ` *Minibuf-0*` buffer holding
+                                // a blank placeholder. Treat an empty OR
+                                // whitespace-only minibuffer buffer as empty so an
+                                // over-allocated idle echo area shrinks back to one
+                                // line; `mini_rows_used` already reflects any real
+                                // (multi-line) message, so a genuine tall message
+                                // is preserved by the `used < allocated` guard.
+                                let buf_id =
+                                    neovm_core::buffer::BufferId(mini_params.buffer_id);
+                                let visible_region_empty = evaluator
+                                    .buffer_manager()
+                                    .get(buf_id)
+                                    .map(|b| {
+                                        b.buffer_substring_bytes_range(
+                                            b.accessible_emacs_byte_range(),
+                                        )
+                                        .iter()
+                                        .all(|byte| byte.is_ascii_whitespace())
+                                    })
+                                    .unwrap_or(true);
                                 let should_shrink = resize_mode.should_shrink(visible_region_empty);
 
                                 if should_shrink {

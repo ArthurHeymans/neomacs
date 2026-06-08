@@ -4733,6 +4733,33 @@ fn modify_frame_parameters_width_height_resizes_live_gui_frame() {
 }
 
 #[test]
+fn gui_frame_metrics_default_minibuffer_is_one_line() {
+    // Regression for the Doom "echo area is two lines" bug. A frame without its
+    // own minibuffer_leaf (e.g. one sharing the parent's minibuffer) used to
+    // default its minibuffer height to TWO text lines. Every GUI frame seeded
+    // from those metrics then started with a two-line echo area, and grow-only
+    // `resize-mini-windows` never shrinks an over-allocated mini-window, so it
+    // stayed two lines forever. GNU `make-frame` defaults the minibuffer to a
+    // single line.
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.char_height = 20.0;
+        frame.minibuffer_leaf = None;
+    }
+    ev.frames.select_frame(fid);
+
+    let metrics = super::current_gui_frame_metrics_in_state(&ev.frames);
+    assert_eq!(
+        metrics.minibuffer_height, 20.0,
+        "a frame's default minibuffer must be one text line (char_height), not two"
+    );
+}
+
+#[test]
 fn modify_frame_parameters_after_live_font_change_defers_gui_resize_until_geometry_query() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

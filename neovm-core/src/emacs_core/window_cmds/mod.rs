@@ -6884,11 +6884,17 @@ fn current_gui_frame_metrics(eval: &super::eval::Context) -> GuiFrameMetrics {
 
 fn current_gui_frame_metrics_in_state(frames: &FrameManager) -> GuiFrameMetrics {
     if let Some(frame) = frames.selected_frame() {
+        // A frame's minibuffer defaults to a single text line (GNU
+        // `make-frame` / `Fframe_char_height`); the layout-engine
+        // `resize_mini_window` pass grows it on demand for multi-line
+        // messages. Falling back to two lines here seeded every GUI frame
+        // with a permanently two-line echo area, since grow-only never
+        // shrinks an over-allocated mini-window back down.
         let minibuffer_height = frame
             .minibuffer_leaf
             .as_ref()
             .map(|leaf| leaf.bounds().height.max(frame.char_height).max(1.0))
-            .unwrap_or_else(|| (frame.char_height * 2.0).max(1.0));
+            .unwrap_or_else(|| frame.char_height.max(1.0));
         return GuiFrameMetrics {
             width_px: frame.width.max(1),
             height_px: frame.height.max(minibuffer_height.ceil() as u32 + 1),
@@ -6978,7 +6984,9 @@ pub(crate) fn x_create_frame_impl(
                 .minibuffer_leaf
                 .as_ref()
                 .map(|leaf| leaf.bounds().height.max(parent.char_height).max(1.0))
-                .unwrap_or_else(|| (parent.char_height * 2.0).max(1.0)),
+                // A frame's minibuffer defaults to one text line (GNU
+                // `make-frame`); see current_gui_frame_metrics_in_state.
+                .unwrap_or_else(|| parent.char_height.max(1.0)),
         })
         .unwrap_or_else(|| current_gui_frame_metrics_in_state(frames));
     let host_size = current_primary_window_size(&*display_host);
