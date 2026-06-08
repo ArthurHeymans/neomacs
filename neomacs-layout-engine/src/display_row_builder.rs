@@ -2,8 +2,9 @@
 
 use crate::composition::{base_width_cols, continues_cluster, continues_complex_run};
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, RenderFaceRef, SourceSpan,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -127,6 +128,9 @@ impl DisplayRowWriteMetrics {
         glyphs.iter().fold(Self::default(), |mut metrics, glyph| {
             let width_cols = match glyph.glyph_type {
                 GlyphType::Stretch { width_cols } => usize::from(width_cols.max(1)),
+                GlyphType::Glyphless { .. } if glyph.pixel_width > 0.0 => {
+                    (glyph.pixel_width / char_width_px.max(1.0)).ceil().max(1.0) as usize
+                }
                 _ if glyph.padding && glyph.pixel_width <= 0.0 => 0,
                 _ if glyph.wide => 2,
                 _ => 1,
@@ -350,13 +354,15 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
                 let written = self.writer.push_item(DisplayItem::new(span, face, kind));
-                slots.push(DisplayRowGlyphSlot {
-                    source: slot_source,
-                    x_px: slot_start.x_px,
-                    col: slot_start.col,
-                    width_px: written.width_px,
-                    width_cols: written.width_cols,
-                });
+                if written.width_px > 0.0 || written.width_cols > 0 {
+                    slots.push(DisplayRowGlyphSlot {
+                        source: slot_source,
+                        x_px: slot_start.x_px,
+                        col: slot_start.col,
+                        width_px: written.width_px,
+                        width_cols: written.width_cols,
+                    });
+                }
                 self.advance(written);
                 metrics.add(written);
                 DisplayRowAppendStatus::Complete
@@ -441,19 +447,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, 0, 0.0);
             }
             DisplayItemKind::Glyphless(glyphless) => {
-                let glyph = Glyph {
-                    glyph_type: GlyphType::Glyphless { ch: glyphless.ch },
-                    face_id,
-                    charpos: source_span_start_char(&item.span),
-                    bidi_level: 0,
-                    wide: false,
-                    pixel_width: 0.0,
-                    pixel_height: 0.0,
-                    pixel_ascent: 0.0,
-                    padding: false,
-                };
-                self.row.glyphs[GlyphArea::Text.index()].push(glyph);
-                self.row.displays_text = true;
+                self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
             }
             DisplayItemKind::Video(_)
             | DisplayItemKind::Xwidget(_)
@@ -624,6 +618,45 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_height,
             pixel_ascent,
         );
+    }
+
+    fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: u32, charpos: usize) {
+        let Some(pixel_width) = self.glyphless_pixel_width(&glyphless) else {
+            return;
+        };
+        let glyph = Glyph {
+            glyph_type: GlyphType::Glyphless { ch: glyphless.ch },
+            face_id,
+            charpos,
+            bidi_level: 0,
+            wide: false,
+            pixel_width,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
+            padding: false,
+        };
+        self.row.glyphs[GlyphArea::Text.index()].push(glyph);
+        self.row.displays_text = true;
+    }
+
+    fn glyphless_pixel_width(&self, glyphless: &DisplayGlyphless) -> Option<f32> {
+        let char_width_px = self.layout.char_width_px.max(1.0);
+        match glyphless.method {
+            GlyphlessMethod::ZeroWidth => None,
+            GlyphlessMethod::ThinSpace => Some(char_width_px * 0.25),
+            GlyphlessMethod::EmptyBox => {
+                let width_cols = base_width_cols(glyphless.ch).clamp(1, 4);
+                Some(char_width_px * f32::from(width_cols))
+            }
+            GlyphlessMethod::HexCode => {
+                let label_cols = if (glyphless.ch as u32) < 0x10000 {
+                    6
+                } else {
+                    8
+                };
+                Some(char_width_px * label_cols as f32)
+            }
+        }
     }
 
     fn stretch_width(&self, width: &DisplayStretchWidth) -> Option<(u16, f32)> {

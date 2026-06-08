@@ -1,7 +1,8 @@
 use super::*;
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_source::{DisplaySourceContext, LispStringSourceCursor};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -33,6 +34,17 @@ fn text_item(text: &str) -> DisplayItem {
     )
 }
 
+fn glyphless_item(ch: char, method: GlyphlessMethod) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            DisplaySourcePosition::lisp_string(1, 1, ch.len_utf8()),
+        ),
+        RenderFaceRef::FaceId(2),
+        DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+    )
+}
+
 fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
     let mut text = String::new();
     for glyph in row.glyphs[GlyphArea::Text.index()]
@@ -49,6 +61,84 @@ fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
         }
     }
     text
+}
+
+#[test]
+fn display_row_progress_writer_skips_zero_width_glyphless_item() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+        80.0,
+    );
+
+    let progress = writer.push_item(glyphless_item('\u{200b}', GlyphlessMethod::ZeroWidth));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert!(progress.slots.is_empty());
+    assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
+}
+
+#[test]
+fn display_row_progress_writer_uses_empty_box_glyphless_width() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let progress = writer.push_item(glyphless_item('\u{fffc}', GlyphlessMethod::EmptyBox));
+
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' });
+    assert_eq!(glyph.pixel_width, 8.0);
+}
+
+#[test]
+fn display_row_progress_writer_uses_hex_code_glyphless_width() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let progress = writer.push_item(glyphless_item('\u{fff0}', GlyphlessMethod::HexCode));
+
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 48.0, col: 6 });
+    assert_eq!(progress.slots[0].width_px, 48.0);
+    assert_eq!(progress.slots[0].width_cols, 6);
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' });
+    assert_eq!(glyph.pixel_width, 48.0);
+}
+
+#[test]
+fn display_row_progress_writer_uses_thin_space_glyphless_width() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let progress = writer.push_item(glyphless_item('\u{2009}', GlyphlessMethod::ThinSpace));
+
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 2.0, col: 1 });
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{2009}' });
+    assert_eq!(glyph.pixel_width, 2.0);
 }
 
 #[test]
