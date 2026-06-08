@@ -65,6 +65,7 @@ fn render_lisp_display_row_with_symbols(
             16.0,
             8.0,
             12.0,
+            crate::display_row_builder::DisplayTabPolicy::every(8),
             &mut next_face_id,
             resolver.default_face(),
             rendered,
@@ -195,6 +196,35 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         (rendered.progress.end_x - emitted_width).abs() <= 0.01,
         "row progress should include the emitted tab stretch and following character"
     );
+}
+
+#[test]
+fn render_display_source_row_uses_explicit_tab_policy() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+
+    let rendered = engine
+        .render_display_source_row(
+            0.0,
+            240.0,
+            16.0,
+            8.0,
+            12.0,
+            crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(0.0, 4, &[2]),
+            &mut next_face_id,
+            resolver.default_face(),
+            Value::string("\tX"),
+            &resolver,
+            std::collections::HashMap::new(),
+            GlyphRowRole::TabLine,
+        )
+        .expect("display source row");
+
+    let glyphs = &rendered.row.glyphs[1];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
 }
 
 #[test]
@@ -420,6 +450,7 @@ fn render_display_source_row_uses_face_specific_glyph_widths() {
             32.0,
             8.0,
             12.0,
+            crate::display_row_builder::DisplayTabPolicy::every(8),
             &mut next_face_id,
             &base_face,
             rendered,
@@ -539,6 +570,7 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
             16.0,
             8.0,
             12.0,
+            crate::display_row_builder::DisplayTabPolicy::every(8),
             &mut next_face_id,
             resolver.default_face(),
             Value::string("אב"),
