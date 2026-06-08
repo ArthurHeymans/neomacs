@@ -164,6 +164,14 @@ pub(crate) struct DisplayGlyphless {
     pub(crate) method: GlyphlessMethod,
 }
 
+pub(crate) fn control_char_caret_char(ch: char) -> Option<char> {
+    match ch {
+        '\u{0000}'..='\u{001f}' => Some(char::from((ch as u8) + b'@')),
+        '\u{007f}' => Some('?'),
+        _ => None,
+    }
+}
+
 pub(crate) fn glyphless_method_for_char(
     ch: char,
     joiner_policy: GlyphlessJoinerPolicy,

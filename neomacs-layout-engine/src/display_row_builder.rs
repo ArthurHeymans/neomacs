@@ -4,7 +4,7 @@ use crate::composition::{base_width_cols, continues_cluster, continues_complex_r
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod, RenderFaceRef,
-    SourceSpan,
+    SourceSpan, control_char_caret_char,
 };
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -481,7 +481,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 self.row.displays_text = true;
             }
             DisplayItemKind::ControlChar { ch } => {
-                GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, 0, 0.0);
+                self.push_control_char(ch, face_id, source_span_start_char(&item.span));
             }
             DisplayItemKind::Glyphless(glyphless) => {
                 self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
@@ -655,6 +655,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_height,
             pixel_ascent,
         );
+    }
+
+    fn push_control_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+        let Some(caret_char) = control_char_caret_char(ch) else {
+            return;
+        };
+        self.push_text_char('^', face_id, charpos);
+        self.push_text_char(caret_char, face_id, charpos);
     }
 
     fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: u32, charpos: usize) {

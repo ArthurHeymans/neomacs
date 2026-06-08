@@ -45,6 +45,17 @@ fn glyphless_item(ch: char, method: GlyphlessMethod) -> DisplayItem {
     )
 }
 
+fn control_item(ch: char) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            DisplaySourcePosition::lisp_string(1, 1, ch.len_utf8()),
+        ),
+        RenderFaceRef::FaceId(2),
+        DisplayItemKind::ControlChar { ch },
+    )
+}
+
 fn stretch_item(width: DisplayLength) -> DisplayItem {
     DisplayItem::new(
         SourceSpan::synthetic(1, 0, 1),
@@ -191,6 +202,50 @@ fn display_row_progress_writer_clips_stretch_before_row_mutation() {
     assert!(progress.slots.is_empty());
     assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
     assert!(!row.displays_text);
+}
+
+#[test]
+fn display_row_builder_renders_control_char_as_caret_notation() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(control_item('\u{0001}'));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+
+    assert_eq!(row_text(&row), "^A");
+    assert_eq!(glyphs.len(), 2);
+    assert!(glyphs.iter().all(|glyph| glyph.charpos == 0));
+}
+
+#[test]
+fn display_row_builder_renders_delete_control_char_as_caret_question() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(control_item('\u{007f}'));
+
+    let row = builder.finish();
+
+    assert_eq!(row_text(&row), "^?");
+}
+
+#[test]
+fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        80.0,
+    );
+
+    let progress = writer.push_item(control_item('\u{0001}'));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.slots.len(), 1);
+    assert_eq!(progress.slots[0].width_px, 16.0);
+    assert_eq!(progress.slots[0].width_cols, 2);
+    assert_eq!(row_text(&row), "^A");
 }
 
 #[test]

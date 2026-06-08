@@ -5302,11 +5302,6 @@ impl LayoutEngine {
             if (ch < ' ' && ch != '\t') || ch == '\x7F' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let ctrl_ch = if ch == '\x7F' {
-                    '?'
-                } else {
-                    char::from((ch as u8) + b'@')
-                };
                 let needed_width = 2.0 * face_char_w;
 
                 // Check if we have room for ^X (2 columns)
@@ -5409,47 +5404,50 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     current_face_id += 1;
                 }
-                output_emitter.emit_text_output_span(
-                    evaluator,
-                    text_output_span_from_coords(
-                        layout_i64_char_pos_to_lisp_char_pos(charpos),
+                let item = crate::display_item::DisplayItem::new(
+                    crate::display_item::SourceSpan::new(
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos as usize),
+                            EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
+                        ),
+                        crate::display_item::DisplaySourcePosition::buffer(
+                            buf_id,
+                            CharPos0::new(charpos.saturating_add(1) as usize),
+                            EmacsBytePos::new(text_start_byte + byte_idx),
+                        ),
+                    ),
+                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                    crate::display_item::DisplayItemKind::ControlChar { ch },
+                );
+                let layout = text_display_row_layout(
+                    y,
+                    avail_width,
+                    face_h,
+                    face_ascent_val,
+                    face_char_w,
+                    text_display_tab_policy(content_x, params),
+                    current_text_face_id,
+                );
+                if let Some(progress) = append_display_item_to_current_row_with_progress(
+                    &mut self.matrix_builder,
+                    &layout,
+                    item,
+                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                    content_x + (text_width - lnum_pixel_width),
+                ) {
+                    x = progress.end.x_px;
+                    col = progress.end.col;
+                    emit_text_progress_slots(
+                        &mut output_emitter,
+                        evaluator,
+                        &progress,
                         row,
                         y,
                         y + raise_y_offset,
                         char_h,
-                        x,
-                        col,
-                        x + needed_width,
-                        col + 2,
-                    ),
-                );
-                x += char_pixel_advance(
-                    &mut self.ascii_width_cache,
-                    frame_params.window_system,
-                    &mut self.font_metrics,
-                    '^',
-                    1,
-                    char_w,
-                    current_font_size_px,
-                    face_char_w,
-                    &self.current_resolved_family,
-                    current_font_weight,
-                    current_font_italic,
-                );
-                x += char_pixel_advance(
-                    &mut self.ascii_width_cache,
-                    frame_params.window_system,
-                    &mut self.font_metrics,
-                    ctrl_ch,
-                    1,
-                    char_w,
-                    current_font_size_px,
-                    face_char_w,
-                    &self.current_resolved_family,
-                    current_font_weight,
-                    current_font_italic,
-                );
-                col += 2;
+                    );
+                }
                 charpos += 1;
                 word_wrap_may_wrap = false;
                 face_next_check = 0; // force face re-check to restore text face
