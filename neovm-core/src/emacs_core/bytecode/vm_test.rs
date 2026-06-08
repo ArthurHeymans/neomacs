@@ -6554,7 +6554,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                           (wrong-type-argument (car err)))
                         (condition-case err (gnutls-bye t nil)
                           (wrong-type-argument (car err)))
-                        (eq (gnutls-deinit p) t)
+                        (null (gnutls-deinit p))
                         (= (gnutls-get-initstage p) 0)
                         (null (gnutls-peer-status p)))
                      (condition-case nil (delete-process p) (error nil))))

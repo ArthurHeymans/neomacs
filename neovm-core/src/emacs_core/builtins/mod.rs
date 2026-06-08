@@ -156,9 +156,9 @@ pub(crate) fn reset_builtins_thread_locals() {
 }
 
 pub(crate) use gnutls::{
-    builtin_gnutls_bye, builtin_gnutls_error_string, builtin_gnutls_format_certificate,
-    builtin_gnutls_hash_digest, builtin_gnutls_hash_mac,
-    builtin_gnutls_peer_status_warning_describe, builtin_gnutls_symmetric_encrypt,
+    builtin_gnutls_error_string, builtin_gnutls_format_certificate, builtin_gnutls_hash_digest,
+    builtin_gnutls_hash_mac, builtin_gnutls_peer_status_warning_describe,
+    builtin_gnutls_symmetric_encrypt,
 };
 pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_monitor_info};
 
@@ -5243,16 +5243,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-asynchronous-parameters",
-        |_ctx, args| gnutls::builtin_gnutls_asynchronous_parameters(args),
+        super::process::builtin_gnutls_asynchronous_parameters,
         2,
         Some(2),
     );
-    ctx.defsubr(
-        "gnutls-bye",
-        |_ctx, args| gnutls::builtin_gnutls_bye(args),
-        2,
-        Some(2),
-    );
+    ctx.defsubr("gnutls-bye", super::process::builtin_gnutls_bye, 2, Some(2));
     ctx.defsubr(
         "gnutls-ciphers",
         |_ctx, args| gnutls::builtin_gnutls_ciphers(args),
@@ -5261,7 +5256,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-deinit",
-        |_ctx, args| gnutls::builtin_gnutls_deinit(args),
+        super::process::builtin_gnutls_deinit,
         1,
         Some(1),
     );
@@ -5297,7 +5292,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-get-initstage",
-        |_ctx, args| gnutls::builtin_gnutls_get_initstage(args),
+        super::process::builtin_gnutls_get_initstage,
         1,
         Some(1),
     );
@@ -5321,7 +5316,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "gnutls-peer-status",
-        |_ctx, args| gnutls::builtin_gnutls_peer_status(args),
+        super::process::builtin_gnutls_peer_status,
         1,
         Some(1),
     );

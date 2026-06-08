@@ -124,34 +124,10 @@ pub(crate) fn builtin_gnutls_peer_status_warning_describe(args: Vec<Value>) -> E
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_gnutls_asynchronous_parameters(args: Vec<Value>) -> EvalResult {
-    expect_args("gnutls-asynchronous-parameters", &args, 2)?;
-    expect_processp(&args[0])?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_gnutls_bye(args: Vec<Value>) -> EvalResult {
-    expect_args("gnutls-bye", &args, 2)?;
-    expect_processp(&args[0])?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_gnutls_deinit(args: Vec<Value>) -> EvalResult {
-    expect_args("gnutls-deinit", &args, 1)?;
-    expect_processp(&args[0])?;
-    Ok(Value::T)
-}
-
 pub(crate) fn builtin_gnutls_format_certificate(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-format-certificate", &args, 1)?;
     let _ = expect_strict_string(&args[0])?;
     Ok(Value::string("Certificate"))
-}
-
-pub(crate) fn builtin_gnutls_get_initstage(args: Vec<Value>) -> EvalResult {
-    expect_args("gnutls-get-initstage", &args, 1)?;
-    expect_processp(&args[0])?;
-    Ok(Value::fixnum(0))
 }
 
 pub(crate) fn builtin_gnutls_hash_digest(args: Vec<Value>) -> EvalResult {
@@ -197,12 +173,6 @@ pub(crate) fn builtin_gnutls_hash_mac(args: Vec<Value>) -> EvalResult {
     let _ = expect_strict_string(&args[1])?;
     let _ = expect_strict_string(&args[2])?;
     Ok(Value::string("mac"))
-}
-
-pub(crate) fn builtin_gnutls_peer_status(args: Vec<Value>) -> EvalResult {
-    expect_args("gnutls-peer-status", &args, 1)?;
-    expect_processp(&args[0])?;
-    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_gnutls_symmetric_decrypt(args: Vec<Value>) -> EvalResult {

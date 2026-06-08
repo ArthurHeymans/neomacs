@@ -599,8 +599,10 @@ fn inotify_rm_watch_invalid_descriptor_signals() {
 #[test]
 fn gnutls_bye_requires_process() {
     crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
     let err =
-        crate::emacs_core::builtins::builtin_gnutls_bye(vec![Value::NIL, Value::NIL]).unwrap_err();
+        crate::emacs_core::process::builtin_gnutls_bye(&mut eval, vec![Value::NIL, Value::NIL])
+            .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),

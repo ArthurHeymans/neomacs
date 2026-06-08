@@ -10815,15 +10815,21 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         other => panic!("expected signal, got {other:?}"),
     }
 
-    let deinit = dispatch_builtin_pure("gnutls-deinit", vec![Value::fixnum(1)])
+    let deinit_err = dispatch_builtin_pure("gnutls-deinit", vec![Value::fixnum(1)])
         .expect("gnutls-deinit should resolve")
-        .expect("gnutls-deinit should evaluate");
-    assert_eq!(deinit, Value::T);
+        .unwrap_err();
+    match deinit_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
-    let initstage = dispatch_builtin_pure("gnutls-get-initstage", vec![Value::fixnum(1)])
+    let initstage_err = dispatch_builtin_pure("gnutls-get-initstage", vec![Value::fixnum(1)])
         .expect("gnutls-get-initstage should resolve")
-        .expect("gnutls-get-initstage should evaluate");
-    assert_eq!(initstage, Value::fixnum(0));
+        .unwrap_err();
+    match initstage_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
     let cert_err = dispatch_builtin_pure("gnutls-format-certificate", vec![Value::NIL])
         .expect("gnutls-format-certificate should resolve")

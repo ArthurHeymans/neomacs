@@ -18,6 +18,7 @@
 //! present. Mozilla root certificates are used by the default rustls backend
 //! for verification.
 
+use num_enum::IntoPrimitive;
 use std::collections::HashMap;
 #[cfg(not(target_os = "windows"))]
 use std::ffi::CStr;
@@ -49,6 +50,22 @@ pub enum NetworkSocket {
     UnixStream(UnixStream),
     #[cfg(unix)]
     UnixListener(UnixListener),
+}
+
+/// GNU-compatible GnuTLS process initialization stage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
+#[repr(i64)]
+pub(crate) enum GnutlsInitStage {
+    Empty = 0,
+    CredAlloc = 1,
+    Files = 2,
+    Callbacks = 3,
+    Init = 4,
+    Priority = 5,
+    CredSet = 6,
+    TransportPointersSet = 7,
+    HandshakeTried = 8,
+    Ready = 9,
 }
 
 impl NetworkSocket {
@@ -296,6 +313,10 @@ pub struct Process {
     /// TLS-wrapped stream for encrypted network connections.
     /// When `Some`, reads/writes go through this instead of `socket`.
     pub tls_stream: Option<TlsStream>,
+    /// GNU-compatible GnuTLS initialization stage for this process.
+    pub(crate) gnutls_initstage: GnutlsInitStage,
+    /// Deferred parameters set by `gnutls-asynchronous-parameters`.
+    pub(crate) gnutls_boot_parameters: Value,
     /// End-of-output marker, matching GNU's `p->mark`.
     pub mark: Value,
 }
@@ -921,6 +942,8 @@ impl ProcessManager {
             pty_writer: None,
             network_socket: None,
             tls_stream: None,
+            gnutls_initstage: GnutlsInitStage::Empty,
+            gnutls_boot_parameters: Value::NIL,
             mark: super::marker::make_marker_value(None, None, false),
         };
         self.processes.insert(id, proc);
@@ -1342,6 +1365,8 @@ impl ProcessManager {
                 let _ = pty_child.kill();
             }
             proc.tls_stream.take();
+            proc.gnutls_initstage = GnutlsInitStage::Empty;
+            proc.gnutls_boot_parameters = Value::NIL;
             proc.network_socket.take();
             proc.status = process_status_signal_value(9);
             true
@@ -1360,6 +1385,8 @@ impl ProcessManager {
                 let _ = pty_child.kill();
             }
             proc.tls_stream.take();
+            proc.gnutls_initstage = GnutlsInitStage::Empty;
+            proc.gnutls_boot_parameters = Value::NIL;
             proc.network_socket.take();
             proc.status = process_status_signal_value(9);
             self.deleted_processes.insert(id, proc);
@@ -4390,6 +4417,90 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     Ok(Value::T)
 }
 
+pub(crate) fn builtin_gnutls_asynchronous_parameters(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-asynchronous-parameters", &args, 2)?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let proc = eval
+        .processes
+        .get_mut(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
+    proc.gnutls_boot_parameters = args[1];
+    Ok(Value::NIL)
+}
+
+pub(crate) fn builtin_gnutls_bye(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    expect_args("gnutls-bye", &args, 2)?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let proc = eval
+        .processes
+        .get(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
+    if proc.tls_stream.is_some() {
+        Ok(Value::T)
+    } else {
+        Ok(Value::NIL)
+    }
+}
+
+pub(crate) fn builtin_gnutls_deinit(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-deinit", &args, 1)?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let proc = eval
+        .processes
+        .get_mut(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
+    if proc.tls_stream.take().is_some() {
+        proc.gnutls_initstage = GnutlsInitStage::Callbacks;
+        proc.gnutls_boot_parameters = Value::NIL;
+        Ok(Value::T)
+    } else {
+        Ok(Value::NIL)
+    }
+}
+
+pub(crate) fn builtin_gnutls_get_initstage(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-get-initstage", &args, 1)?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let proc = eval
+        .processes
+        .get(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
+    Ok(Value::fixnum(i64::from(proc.gnutls_initstage)))
+}
+
+pub(crate) fn builtin_gnutls_peer_status(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("gnutls-peer-status", &args, 1)?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let proc = eval
+        .processes
+        .get(id)
+        .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
+    if proc.gnutls_initstage == GnutlsInitStage::Ready {
+        Ok(Value::list(vec![
+            Value::keyword(":warnings"),
+            Value::NIL,
+            Value::keyword(":certificates"),
+            Value::NIL,
+            Value::keyword(":certificate"),
+            Value::NIL,
+        ]))
+    } else {
+        Ok(Value::NIL)
+    }
+}
+
 /// (neomacs-open-tls-stream NAME BUFFER HOST PORT) -> process
 ///
 /// Open a TCP network process and immediately upgrade it through Neomacs'
@@ -4466,11 +4577,14 @@ fn upgrade_process_to_tls<B: TlsClientBackend>(
         }
     };
 
+    proc.gnutls_initstage = GnutlsInitStage::HandshakeTried;
     let tls_stream = B::connect_client(tcp_stream, host).map_err(map_error)?;
 
     // Store the TLS stream. The poller still watches the underlying fd
     // (which is the same fd that was registered for the plain socket).
     proc.tls_stream = Some(tls_stream);
+    proc.gnutls_initstage = GnutlsInitStage::Ready;
+    proc.gnutls_boot_parameters = Value::NIL;
 
     Ok(())
 }
