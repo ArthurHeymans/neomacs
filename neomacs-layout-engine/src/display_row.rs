@@ -6,10 +6,55 @@ use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::{CharPos0, text_props::TextPropertyTable};
+use neovm_core::buffer::{BufferId, CharPos0, text_props::TextPropertyTable};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use std::collections::HashMap;
+
+#[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
+pub(crate) struct LispStringSource {
+    pub string: Value,
+}
+
+#[allow(dead_code)]
+impl LispStringSource {
+    pub(crate) fn text(self) -> Option<String> {
+        self.string.as_runtime_string_owned()
+    }
+
+    pub(crate) fn build_row_spec(
+        self,
+        engine: &mut LayoutEngine,
+        request: DisplayRowRequest,
+        next_face_id: &mut u32,
+        face_resolver: &FaceResolver,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Option<DisplayRowSpec> {
+        engine.build_display_row_spec_from_lisp_source(
+            self,
+            request,
+            next_face_id,
+            face_resolver,
+            symbol_values,
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSource {
+    pub buffer_id: BufferId,
+    pub window_id: i64,
+    pub start: CharPos0,
+    pub end: CharPos0,
+}
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub(crate) enum DisplayRowSourceKind {
+    LispString(LispStringSource),
+    BufferText(BufferTextSource),
+}
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -366,6 +411,26 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
 }
 
 impl LayoutEngine {
+    #[allow(dead_code)]
+    pub(crate) fn build_display_row_spec_from_lisp_source(
+        &mut self,
+        source: LispStringSource,
+        request: DisplayRowRequest,
+        next_face_id: &mut u32,
+        face_resolver: &FaceResolver,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Option<DisplayRowSpec> {
+        self.build_display_row_spec_from_request(
+            DisplayRowRequest {
+                string: source.string,
+                ..request
+            },
+            next_face_id,
+            face_resolver,
+            symbol_values,
+        )
+    }
+
     pub(crate) fn build_display_row_spec_from_request(
         &mut self,
         request: DisplayRowRequest,

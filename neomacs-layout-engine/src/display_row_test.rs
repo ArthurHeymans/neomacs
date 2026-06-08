@@ -2,6 +2,7 @@ use super::*;
 use crate::neovm_bridge::FaceResolver;
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::buffer::{BufferId, CharPos0};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 
@@ -81,6 +82,76 @@ fn display_row_request_represents_plain_text_as_lisp_string_without_properties()
         neovm_core::emacs_core::value::get_string_text_properties_table_for_value(request.string)
             .is_none()
     );
+}
+
+#[test]
+fn display_row_source_lisp_string_represents_unpropertized_text_as_lisp_string() {
+    let _eval = Context::new();
+    let source = LispStringSource {
+        string: Value::string("plain"),
+    };
+
+    assert_eq!(source.text().as_deref(), Some("plain"));
+    assert!(
+        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(source.string)
+            .is_none()
+    );
+}
+
+#[test]
+fn display_row_source_lisp_string_builds_existing_row_spec() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let source = LispStringSource {
+        string: Value::string("row"),
+    };
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let request = DisplayRowRequest {
+        role: GlyphRowRole::TabLine,
+        x: 0.0,
+        y: 2.0,
+        width: 80.0,
+        height: 16.0,
+        window_id: 7,
+        matrix_row: Some(0),
+        base_face,
+        string: source.string,
+    };
+    let mut next_face_id = 1;
+
+    let spec = source
+        .build_row_spec(
+            &mut engine,
+            request,
+            &mut next_face_id,
+            &resolver,
+            std::collections::HashMap::new(),
+        )
+        .expect("row spec from lisp source");
+
+    assert_eq!(spec.role, GlyphRowRole::TabLine);
+    assert_eq!(spec.text, b"row");
+}
+
+#[test]
+fn display_row_source_buffer_text_is_typed_separately_from_lisp_string() {
+    let source = BufferTextSource {
+        buffer_id: BufferId(3),
+        window_id: 9,
+        start: CharPos0::new(4),
+        end: CharPos0::new(12),
+    };
+    let kind = DisplayRowSourceKind::BufferText(source.clone());
+
+    assert_eq!(source.buffer_id, BufferId(3));
+    assert_eq!(source.window_id, 9);
+    assert_eq!(source.start, CharPos0::new(4));
+    assert_eq!(source.end, CharPos0::new(12));
+    assert!(matches!(kind, DisplayRowSourceKind::BufferText(_)));
 }
 
 #[test]
