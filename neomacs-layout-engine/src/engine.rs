@@ -1354,27 +1354,6 @@ fn check_glyphless_char(ch: char) -> u8 {
     0 // normal display
 }
 
-fn append_display_item_to_current_row_with_shared_builder(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    layout: crate::display_row_builder::DisplayRowLayout,
-    item: crate::display_item::DisplayItem,
-    glyph_measurer: Option<&mut dyn crate::display_row_builder::DisplayGlyphMeasurer>,
-) -> Option<crate::display_row_builder::DisplayRowWriteMetrics> {
-    builder.with_current_row_mut(|row| {
-        if let Some(glyph_measurer) = glyph_measurer {
-            let mut writer = crate::display_row_builder::DisplayRowWriter::with_glyph_measurer(
-                &layout,
-                row,
-                glyph_measurer,
-            );
-            writer.push_item(item)
-        } else {
-            let mut writer = crate::display_row_builder::DisplayRowWriter::new(&layout, row);
-            writer.push_item(item)
-        }
-    })
-}
-
 fn text_display_row_layout(
     y_px: f32,
     width_px: f32,
@@ -6161,7 +6140,7 @@ impl LayoutEngine {
             let glyph_x = x;
             let glyph_col = col;
             let buffer_pos = layout_i64_char_pos_to_lisp_char_pos(charpos);
-            if let Some((prefix, suffix)) = control_display {
+            let progress = if let Some((prefix, suffix)) = control_display {
                 self.run_buf.push(prefix, face_char_w);
                 self.run_buf.push(suffix, face_char_w);
                 self.matrix_builder.push_char_with_pixel_width(
@@ -6176,6 +6155,7 @@ impl LayoutEngine {
                     charpos as usize,
                     face_char_w,
                 );
+                None
             } else {
                 self.run_buf.push(ch, advance);
                 let item = crate::display_item::DisplayItem::new(
@@ -6210,17 +6190,23 @@ impl LayoutEngine {
                     face_id: current_text_face_id,
                     advance_px: advance,
                 };
-                if append_display_item_to_current_row_with_shared_builder(
-                    &mut self.matrix_builder,
-                    layout,
-                    item,
-                    Some(&mut measurer),
-                )
-                .is_none()
-                {
+                let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+                let progress = self.matrix_builder.with_current_row_mut(|row| {
+                    let mut writer =
+                        crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
+                            &layout,
+                            row,
+                            &mut measurer,
+                            position,
+                            content_x + avail_width,
+                        );
+                    writer.push_item(item)
+                });
+                let Some(progress) = progress else {
                     break;
-                }
-            }
+                };
+                Some(progress)
+            };
 
             // Flush if run is too long
             if self.run_buf.len() >= MAX_LIGATURE_RUN_LEN {
@@ -6228,8 +6214,13 @@ impl LayoutEngine {
                 self.run_buf.clear();
             }
 
-            x += advance;
-            col += char_cols as usize;
+            if let Some(progress) = progress {
+                x = progress.end.x_px;
+                col = progress.end.col;
+            } else {
+                x += advance;
+                col += char_cols as usize;
+            }
             output_emitter.emit_text_span(
                 evaluator,
                 buffer_pos,
