@@ -1354,6 +1354,41 @@ fn check_glyphless_char(ch: char) -> u8 {
     0 // normal display
 }
 
+fn append_display_item_to_current_row_with_progress(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &crate::display_row_builder::DisplayRowLayout,
+    item: crate::display_item::DisplayItem,
+    position: crate::display_row_builder::DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
+    builder.with_current_row_mut(|row| {
+        let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
+            layout, row, position, max_x_px,
+        );
+        writer.push_item(item)
+    })
+}
+
+fn append_display_item_to_current_row_with_measured_progress(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    layout: &crate::display_row_builder::DisplayRowLayout,
+    item: crate::display_item::DisplayItem,
+    glyph_measurer: &mut dyn crate::display_row_builder::DisplayGlyphMeasurer,
+    position: crate::display_row_builder::DisplayRowPosition,
+    max_x_px: f32,
+) -> Option<crate::display_row_builder::DisplayRowAppendProgress> {
+    builder.with_current_row_mut(|row| {
+        let mut writer = crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
+            layout,
+            row,
+            glyph_measurer,
+            position,
+            max_x_px,
+        );
+        writer.push_item(item)
+    })
+}
+
 fn text_display_row_layout(
     y_px: f32,
     width_px: f32,
@@ -1598,12 +1633,9 @@ fn render_overlay_string(
             x_px: *x,
             col: *col,
         };
-        let progress = builder.with_current_row_mut(|glyph_row| {
-            let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
-                &layout, glyph_row, position, max_x,
-            );
-            writer.push_item(item)
-        });
+        let progress = append_display_item_to_current_row_with_progress(
+            builder, &layout, item, position, max_x,
+        );
         let Some(progress) = progress else {
             break;
         };
@@ -4285,17 +4317,14 @@ impl LayoutEngine {
                                                     x_px: x,
                                                     col,
                                                 };
-                                            let progress = self.matrix_builder.with_current_row_mut(
-                                                |row| {
-                                                    let mut writer = crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
-                                                        &layout,
-                                                        row,
-                                                        &mut measurer,
-                                                        position,
-                                                        right_limit,
-                                                    );
-                                                    writer.push_item(item)
-                                                },
+                                            let progress =
+                                                append_display_item_to_current_row_with_measured_progress(
+                                                    &mut self.matrix_builder,
+                                                    &layout,
+                                                    item,
+                                                    &mut measurer,
+                                                    position,
+                                                    right_limit,
                                             );
                                             let Some(progress) = progress else {
                                                 break;
@@ -4331,17 +4360,14 @@ impl LayoutEngine {
                                                     x_px: x,
                                                     col,
                                                 };
-                                            let progress = self.matrix_builder.with_current_row_mut(
-                                                |row| {
-                                                    let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
-                                                        &layout,
-                                                        row,
-                                                        position,
-                                                        right_limit,
-                                                    );
-                                                    writer.push_item(item)
-                                                },
-                                            );
+                                            let progress =
+                                                append_display_item_to_current_row_with_progress(
+                                                    &mut self.matrix_builder,
+                                                    &layout,
+                                                    item,
+                                                    position,
+                                                    right_limit,
+                                                );
                                             let Some(progress) = progress else {
                                                 break;
                                             };
@@ -6191,17 +6217,14 @@ impl LayoutEngine {
                     advance_px: advance,
                 };
                 let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
-                let progress = self.matrix_builder.with_current_row_mut(|row| {
-                    let mut writer =
-                        crate::display_row_builder::DisplayRowProgressWriter::with_glyph_measurer(
-                            &layout,
-                            row,
-                            &mut measurer,
-                            position,
-                            content_x + avail_width,
-                        );
-                    writer.push_item(item)
-                });
+                let progress = append_display_item_to_current_row_with_measured_progress(
+                    &mut self.matrix_builder,
+                    &layout,
+                    item,
+                    &mut measurer,
+                    position,
+                    content_x + avail_width,
+                );
                 let Some(progress) = progress else {
                     break;
                 };
