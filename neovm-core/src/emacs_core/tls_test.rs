@@ -4,7 +4,10 @@ use super::tls::{
     gnutls_close_notify_result_value, gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::value::Value;
-use crate::emacs_core::builtins::builtin_gnutls_peer_status_warning_describe;
+use crate::emacs_core::builtins::{
+    builtin_gnutls_error_fatalp, builtin_gnutls_error_string,
+    builtin_gnutls_peer_status_warning_describe,
+};
 
 const TEST_CERTIFICATE_PEM: &str = concat!(
     "-----BEGIN CERTIFICATE-----\n",
@@ -206,4 +209,48 @@ fn gnutls_peer_status_warning_descriptions_match_gnu() {
             .expect("unknown warning"),
         Value::NIL
     );
+}
+
+#[test]
+fn gnutls_error_helpers_match_gnu_type_and_known_code_rules() {
+    assert_eq!(
+        builtin_gnutls_error_string(vec![Value::string("x")]).expect("string"),
+        Value::string("Not an error symbol or code")
+    );
+    assert_eq!(
+        builtin_gnutls_error_string(vec![Value::symbol("no-such")]).expect("string"),
+        Value::string("Symbol has no numeric gnutls-code property")
+    );
+    assert_eq!(
+        builtin_gnutls_error_string(vec![Value::symbol("gnutls-e-invalid-session")])
+            .expect("string"),
+        Value::string("The specified session has been invalidated for some reason.")
+    );
+
+    assert_eq!(
+        builtin_gnutls_error_fatalp(vec![Value::fixnum(1)]).expect("fatalp"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_gnutls_error_fatalp(vec![Value::fixnum(-1)]).expect("fatalp"),
+        Value::T
+    );
+    assert_eq!(
+        builtin_gnutls_error_fatalp(vec![Value::symbol("gnutls-e-again")]).expect("fatalp"),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_gnutls_error_fatalp(vec![Value::symbol("gnutls-e-invalid-session")])
+            .expect("fatalp"),
+        Value::T
+    );
+
+    let invalid_object = builtin_gnutls_error_fatalp(vec![Value::string("x")]).unwrap_err();
+    match invalid_object {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(sig.data, vec![Value::string("Not an error symbol or code")]);
+        }
+        other => panic!("expected error, got {other:?}"),
+    }
 }

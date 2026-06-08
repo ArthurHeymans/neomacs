@@ -156,9 +156,9 @@ pub(crate) fn reset_builtins_thread_locals() {
 }
 
 pub(crate) use gnutls::{
-    builtin_gnutls_error_string, builtin_gnutls_format_certificate, builtin_gnutls_hash_digest,
-    builtin_gnutls_hash_mac, builtin_gnutls_peer_status_warning_describe,
-    builtin_gnutls_symmetric_encrypt,
+    builtin_gnutls_error_fatalp, builtin_gnutls_error_string, builtin_gnutls_format_certificate,
+    builtin_gnutls_hash_digest, builtin_gnutls_hash_mac,
+    builtin_gnutls_peer_status_warning_describe, builtin_gnutls_symmetric_encrypt,
 };
 pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_monitor_info};
 

@@ -39,31 +39,66 @@ pub(crate) fn builtin_gnutls_errorp(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_error_string(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-string", &args, 1)?;
-    let message = if args[0] == Value::T {
-        "Not an error"
-    } else if args[0].is_symbol_named("gnutls-e-again") {
-        "Resource temporarily unavailable, try again."
-    } else if args[0].is_symbol_named("gnutls-e-interrupted") {
-        "Function was interrupted."
-    } else {
-        match args[0].kind() {
-            ValueKind::Fixnum(0) => "Success.",
-            ValueKind::Nil => "Symbol has no numeric gnutls-code property",
-            _ => "(unknown error code)",
-        }
+    let message = match gnutls_error_code(args[0]) {
+        GnutlsErrorCode::SuccessSentinel => "Not an error",
+        GnutlsErrorCode::Code(code) => gnutls_error_code_string(code),
+        GnutlsErrorCode::SymbolWithoutCode => "Symbol has no numeric gnutls-code property",
+        GnutlsErrorCode::InvalidObject => "Not an error symbol or code",
     };
     Ok(Value::string(message))
 }
 
 pub(crate) fn builtin_gnutls_error_fatalp(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-fatalp", &args, 1)?;
-    if args[0].is_nil() {
-        return Err(signal(
+    match gnutls_error_code(args[0]) {
+        GnutlsErrorCode::SuccessSentinel | GnutlsErrorCode::Code(0) => Ok(Value::NIL),
+        GnutlsErrorCode::Code(-28 | -52) => Ok(Value::NIL),
+        GnutlsErrorCode::Code(code) if code < 0 => Ok(Value::T),
+        GnutlsErrorCode::Code(_) => Ok(Value::NIL),
+        GnutlsErrorCode::SymbolWithoutCode => Err(signal(
             "error",
             vec![Value::string("Symbol has no numeric gnutls-code property")],
-        ));
+        )),
+        GnutlsErrorCode::InvalidObject => Err(signal(
+            "error",
+            vec![Value::string("Not an error symbol or code")],
+        )),
     }
-    Ok(Value::NIL)
+}
+
+enum GnutlsErrorCode {
+    SuccessSentinel,
+    Code(i64),
+    SymbolWithoutCode,
+    InvalidObject,
+}
+
+fn gnutls_error_code(value: Value) -> GnutlsErrorCode {
+    if value == Value::T {
+        return GnutlsErrorCode::SuccessSentinel;
+    }
+    match value.kind() {
+        ValueKind::Fixnum(code) => GnutlsErrorCode::Code(code),
+        ValueKind::Nil => GnutlsErrorCode::SymbolWithoutCode,
+        ValueKind::Symbol(_) => match value.as_symbol_name() {
+            Some("gnutls-e-again") => GnutlsErrorCode::Code(-28),
+            Some("gnutls-e-interrupted") => GnutlsErrorCode::Code(-52),
+            Some("gnutls-e-invalid-session") => GnutlsErrorCode::Code(-10),
+            Some("gnutls-e-not-ready-for-handshake") => GnutlsErrorCode::Code(-65500),
+            _ => GnutlsErrorCode::SymbolWithoutCode,
+        },
+        _ => GnutlsErrorCode::InvalidObject,
+    }
+}
+
+fn gnutls_error_code_string(code: i64) -> &'static str {
+    match code {
+        0 => "Success.",
+        -28 => "Resource temporarily unavailable, try again.",
+        -52 => "Function was interrupted.",
+        -10 => "The specified session has been invalidated for some reason.",
+        _ => "(unknown error code)",
+    }
 }
 
 pub(crate) fn builtin_gnutls_peer_status_warning_describe(args: Vec<Value>) -> EvalResult {
