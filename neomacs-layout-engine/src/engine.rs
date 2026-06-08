@@ -4179,8 +4179,6 @@ impl LayoutEngine {
                         && point_charpos < skip_to;
                     // Case 1: String replacement — render the string instead of buffer text
                     if let Some(replacement) = prop_val.as_utf8_str() {
-                        let replacement_start_x = x;
-                        let replacement_start_col = col;
                         if point_in_display_replacement {
                             let slot_width = replacement
                                 .chars()
@@ -4260,10 +4258,22 @@ impl LayoutEngine {
                                         break;
                                     };
                                     let crate::display_item::DisplayItem {
-                                        span,
                                         face: item_face,
                                         kind,
+                                        ..
                                     } = item;
+                                    let replacement_span = crate::display_item::SourceSpan::new(
+                                        crate::display_item::DisplaySourcePosition::buffer(
+                                            buf_id,
+                                            CharPos0::new(charpos as usize),
+                                            EmacsBytePos::new(text_start_byte + byte_idx),
+                                        ),
+                                        crate::display_item::DisplaySourcePosition::buffer(
+                                            buf_id,
+                                            CharPos0::new(charpos.saturating_add(1) as usize),
+                                            EmacsBytePos::new(text_start_byte + byte_idx),
+                                        ),
+                                    );
                                     match kind {
                                         crate::display_item::DisplayItemKind::TextRun(run) => {
                                             let face_id =
@@ -4295,26 +4305,13 @@ impl LayoutEngine {
                                                 measurer.insert(rch, face_id, advance);
                                             }
                                             let item = crate::display_item::DisplayItem::new(
-                                                crate::display_item::SourceSpan::new(
-                                                    crate::display_item::DisplaySourcePosition::buffer(
-                                                        buf_id,
-                                                        CharPos0::new(charpos as usize),
-                                                        EmacsBytePos::new(
-                                                            text_start_byte + byte_idx,
-                                                        ),
-                                                    ),
-                                                    crate::display_item::DisplaySourcePosition::buffer(
-                                                        buf_id,
-                                                        CharPos0::new(
-                                                            charpos.saturating_add(1) as usize,
-                                                        ),
-                                                        EmacsBytePos::new(
-                                                            text_start_byte + byte_idx,
-                                                        ),
+                                                replacement_span,
+                                                crate::display_item::RenderFaceRef::FaceId(face_id),
+                                                crate::display_item::DisplayItemKind::SourceMappedText(
+                                                    crate::display_item::DisplaySourceMappedText::new(
+                                                        run.text,
                                                     ),
                                                 ),
-                                                crate::display_item::RenderFaceRef::FaceId(face_id),
-                                                crate::display_item::DisplayItemKind::TextRun(run),
                                             );
                                             let layout = text_display_row_layout(
                                                 y,
@@ -4344,6 +4341,15 @@ impl LayoutEngine {
                                             };
                                             x = progress.end.x_px;
                                             col = progress.end.col;
+                                            emit_text_progress_slots(
+                                                &mut output_emitter,
+                                                evaluator,
+                                                &progress,
+                                                row,
+                                                y,
+                                                y + raise_y_offset,
+                                                face_h,
+                                            );
                                             if progress.status
                                                 == crate::display_row_builder::DisplayRowAppendStatus::Clipped
                                             {
@@ -4364,7 +4370,7 @@ impl LayoutEngine {
                                                 face_id,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
-                                                span,
+                                                replacement_span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
@@ -4386,27 +4392,19 @@ impl LayoutEngine {
                                             };
                                             x = progress.end.x_px;
                                             col = progress.end.col;
+                                            emit_text_progress_slots(
+                                                &mut output_emitter,
+                                                evaluator,
+                                                &progress,
+                                                row,
+                                                y,
+                                                y + raise_y_offset,
+                                                face_h,
+                                            );
                                         }
                                     }
                                 }
                             }
-                        }
-
-                        if x > replacement_start_x || col > replacement_start_col {
-                            output_emitter.emit_text_output_span(
-                                evaluator,
-                                text_output_span_from_coords(
-                                    layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                    row,
-                                    y,
-                                    y + raise_y_offset,
-                                    face_h,
-                                    replacement_start_x,
-                                    replacement_start_col,
-                                    x,
-                                    col,
-                                ),
-                            );
                         }
 
                         // Skip the buffer text that this display property covers
