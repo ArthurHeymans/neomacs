@@ -15,9 +15,7 @@ use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_b
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
-use super::window_output::{
-    ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, WindowOutputEmitter,
-};
+use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row::{DisplayRowGeometry, DisplayRowSpec};
 use crate::display_row_append::{
@@ -7112,43 +7110,32 @@ impl LayoutEngine {
             )
             .unwrap_or_else(|| Value::string(""));
 
-            let mut builder = std::mem::replace(
-                &mut self.matrix_builder,
-                crate::matrix_builder::GlyphMatrixBuilder::new(),
-            );
             let tab_row_output = ChromeRowOutput {
                 row: tl_row,
                 y: tl_y,
             };
-            output_emitter.begin_chrome_progress(evaluator, tab_row_output);
-            let tab_spec = DisplayRowSpec::from_base_face(
-                DisplayRowGeometry {
-                    y: tl_y,
-                    width: params.bounds.width,
-                    height: tab_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut current_face_id,
-                tl_face,
-                GlyphRowRole::TabLine,
-                status_line_symbol_values.clone(),
-            );
-            let tab_output = self.render_display_source_row(
-                tab_spec,
-                tab_text,
+            self.render_window_chrome_display_source_row(
+                evaluator,
+                &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
+                WindowChromeDisplayRowRequest {
+                    matrix_row: 0,
+                    output: tab_row_output,
+                    geometry: DisplayRowGeometry {
+                        y: tl_y,
+                        width: params.bounds.width,
+                        height: tab_line_height,
+                        char_width: char_w,
+                        ascent: font_ascent,
+                        tab_policy: text_display_tab_policy(0.0, params),
+                    },
+                    base_face: tl_face,
+                    role: GlyphRowRole::TabLine,
+                    symbol_values: status_line_symbol_values.clone(),
+                },
+                tab_text,
             );
-            if let Some(ref rendered) = tab_output {
-                crate::display_row::install_rendered_display_source_row(&mut builder, rendered, 0);
-                output_emitter.emit_chrome_progress(evaluator, tab_row_output, rendered.progress);
-            }
-            self.matrix_builder = builder;
-            if let Some(rendered) = tab_output {
-                output_emitter.finish_chrome_progress(rendered.progress);
-            }
         }
 
         // Header-line: evaluate format-mode-line with header-line-format.
@@ -7174,51 +7161,32 @@ impl LayoutEngine {
             )
             .unwrap_or_else(|| Value::string(""));
 
-            let mut builder = std::mem::replace(
-                &mut self.matrix_builder,
-                crate::matrix_builder::GlyphMatrixBuilder::new(),
-            );
             let header_row_output = ChromeRowOutput {
                 row: hl_row,
                 y: hl_y,
             };
-            output_emitter.begin_chrome_progress(evaluator, header_row_output);
-            let header_spec = DisplayRowSpec::from_base_face(
-                DisplayRowGeometry {
-                    y: hl_y,
-                    width: params.bounds.width,
-                    height: header_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut current_face_id,
-                hl_face,
-                GlyphRowRole::HeaderLine,
-                status_line_symbol_values.clone(),
-            );
-            let header_output = self.render_display_source_row(
-                header_spec,
-                header_text,
+            self.render_window_chrome_display_source_row(
+                evaluator,
+                &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
+                WindowChromeDisplayRowRequest {
+                    matrix_row: usize::from(tab_line_height > 0.0),
+                    output: header_row_output,
+                    geometry: DisplayRowGeometry {
+                        y: hl_y,
+                        width: params.bounds.width,
+                        height: header_line_height,
+                        char_width: char_w,
+                        ascent: font_ascent,
+                        tab_policy: text_display_tab_policy(0.0, params),
+                    },
+                    base_face: hl_face,
+                    role: GlyphRowRole::HeaderLine,
+                    symbol_values: status_line_symbol_values.clone(),
+                },
+                header_text,
             );
-            if let Some(ref rendered) = header_output {
-                crate::display_row::install_rendered_display_source_row(
-                    &mut builder,
-                    rendered,
-                    usize::from(tab_line_height > 0.0),
-                );
-                output_emitter.emit_chrome_progress(
-                    evaluator,
-                    header_row_output,
-                    rendered.progress,
-                );
-            }
-            self.matrix_builder = builder;
-            if let Some(rendered) = header_output {
-                output_emitter.finish_chrome_progress(rendered.progress);
-            }
         }
 
         // Mode-line: evaluate format-mode-line or fall back to buffer name.
@@ -7259,47 +7227,32 @@ impl LayoutEngine {
                 result
             };
 
-            let mut builder = std::mem::replace(
-                &mut self.matrix_builder,
-                crate::matrix_builder::GlyphMatrixBuilder::new(),
-            );
             let mode_row_output = ChromeRowOutput {
                 row: ml_row,
                 y: ml_y,
             };
-            output_emitter.begin_chrome_progress(evaluator, mode_row_output);
-            let mode_spec = DisplayRowSpec::from_base_face(
-                DisplayRowGeometry {
-                    y: ml_y,
-                    width: params.bounds.width,
-                    height: mode_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut current_face_id,
-                ml_face,
-                GlyphRowRole::ModeLine,
-                status_line_symbol_values.clone(),
-            );
-            let mode_output = self.render_display_source_row(
-                mode_spec,
-                mode_text,
+            self.render_window_chrome_display_source_row(
+                evaluator,
+                &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
+                WindowChromeDisplayRowRequest {
+                    matrix_row: mode_line_matrix_row,
+                    output: mode_row_output,
+                    geometry: DisplayRowGeometry {
+                        y: ml_y,
+                        width: params.bounds.width,
+                        height: mode_line_height,
+                        char_width: char_w,
+                        ascent: font_ascent,
+                        tab_policy: text_display_tab_policy(0.0, params),
+                    },
+                    base_face: ml_face,
+                    role: GlyphRowRole::ModeLine,
+                    symbol_values: status_line_symbol_values.clone(),
+                },
+                mode_text,
             );
-            if let Some(ref rendered) = mode_output {
-                crate::display_row::install_rendered_display_source_row(
-                    &mut builder,
-                    rendered,
-                    mode_line_matrix_row,
-                );
-                output_emitter.emit_chrome_progress(evaluator, mode_row_output, rendered.progress);
-            }
-            self.matrix_builder = builder;
-            if let Some(rendered) = mode_output {
-                output_emitter.finish_chrome_progress(rendered.progress);
-            }
         }
 
         self.matrix_builder.end_window();

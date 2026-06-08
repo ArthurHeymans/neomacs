@@ -1,4 +1,51 @@
 use super::*;
+use crate::display_row::DisplayRowGeometry;
+use crate::display_row_builder::DisplayTabPolicy;
+use crate::neovm_bridge::FaceResolver;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::emacs_core::Value;
+use neovm_core::face::FaceTable;
+
+#[test]
+fn window_chrome_display_row_request_builds_display_row_spec() {
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 42;
+    let request = WindowChromeDisplayRowRequest {
+        matrix_row: 3,
+        output: crate::window_output::ChromeRowOutput { row: 7, y: 20.0 },
+        geometry: DisplayRowGeometry {
+            y: 20.0,
+            width: 160.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: DisplayTabPolicy::every(4),
+        },
+        base_face: resolver.default_face(),
+        role: GlyphRowRole::HeaderLine,
+        symbol_values: std::collections::HashMap::from([(
+            "header-line-indent-width".to_string(),
+            Value::fixnum(2),
+        )]),
+    };
+
+    let spec = request.display_row_spec(&mut next_face_id);
+
+    assert_eq!(request.matrix_row, 3);
+    assert_eq!(request.output.row, 7);
+    assert_eq!(spec.role, GlyphRowRole::HeaderLine);
+    assert_eq!(spec.geometry.y, 20.0);
+    assert_eq!(spec.geometry.width, 160.0);
+    assert_eq!(spec.base_face_id, 42);
+    assert_eq!(next_face_id, 43);
+    assert_eq!(
+        spec.symbol_values
+            .get("header-line-indent-width")
+            .and_then(|value| (*value).as_fixnum()),
+        Some(2)
+    );
+}
 
 // ---------------------------------------------------------------
 // Helper: build a 14-byte face run record (native-endian)
