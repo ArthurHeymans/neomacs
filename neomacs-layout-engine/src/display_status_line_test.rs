@@ -555,7 +555,7 @@ fn status_line_face_preserves_gnu_box_type_codes() {
 }
 
 #[test]
-fn build_rust_status_line_spec_preserves_display_space_align_entries() {
+fn build_display_row_spec_preserves_display_space_align_entries() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -579,7 +579,7 @@ fn build_rust_status_line_spec_preserves_display_space_align_entries() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -604,7 +604,7 @@ fn build_rust_status_line_spec_preserves_display_space_align_entries() {
 }
 
 #[test]
-fn build_rust_status_line_spec_supports_display_space_relative_width() {
+fn build_propertized_display_row_spec_supports_display_space_relative_width() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -628,7 +628,7 @@ fn build_rust_status_line_spec_supports_display_space_relative_width() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -656,7 +656,7 @@ fn build_rust_status_line_spec_supports_display_space_relative_width() {
 }
 
 #[test]
-fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
+fn render_display_row_spec_skips_zero_gap_align_to_placeholder_space() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -680,7 +680,7 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -699,7 +699,7 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    let _ = engine.render_display_row_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
     builder.end_row();
     builder.end_window();
 
@@ -719,7 +719,7 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
 }
 
 #[test]
-fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
+fn render_display_row_spec_stores_pixel_widths_on_emitted_chars() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -728,7 +728,7 @@ fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -747,7 +747,7 @@ fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    let _ = engine.render_display_row_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
     builder.end_row();
     builder.end_window();
 
@@ -770,7 +770,7 @@ fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
 }
 
 #[test]
-fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
+fn build_propertized_display_row_spec_resolves_header_line_indent_width_symbol() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -801,7 +801,7 @@ fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -825,7 +825,7 @@ fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
 }
 
 #[test]
-fn render_status_line_spec_skips_multi_byte_align_to_interval() {
+fn render_display_row_spec_skips_multi_byte_align_to_interval() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
     let table = neovm_core::face::FaceTable::new();
@@ -849,7 +849,7 @@ fn render_status_line_spec_skips_multi_byte_align_to_interval() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -871,7 +871,7 @@ fn render_status_line_spec_skips_multi_byte_align_to_interval() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    let _ = engine.render_display_row_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
     builder.end_row();
     builder.end_window();
 
@@ -915,7 +915,7 @@ fn render_status_line_align_to_after_multibyte_prefix_uses_character_offsets() {
 
     let mut next_face_id = 1;
     let spec = engine
-        .build_rust_status_line_spec(
+        .build_propertized_display_row_spec(
             0.0,
             0.0,
             80.0,
@@ -938,7 +938,7 @@ fn render_status_line_align_to_after_multibyte_prefix_uses_character_offsets() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    let _ = engine.render_status_line_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    let _ = engine.render_display_row_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
     builder.end_row();
     builder.end_window();
 

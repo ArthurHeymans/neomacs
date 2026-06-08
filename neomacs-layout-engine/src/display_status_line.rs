@@ -8,8 +8,8 @@
 //! GNU Emacs's display_mode_line -> display_mode_element ->
 //! display_line -> PRODUCE_GLYPHS architecture.
 //!
-//! Housed types include StatusLineFace, StatusLineSpec,
-//! OverlayFaceRun, and the build_rust_status_line_spec property
+//! Housed types include StatusLineFace, DisplayRowSpec,
+//! OverlayFaceRun, and the build_propertized_display_row_spec property
 //! harvester that walks text-property intervals (face, font-lock-face,
 //! display).
 //!
@@ -292,7 +292,7 @@ struct DisplayPropRecord {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct StatusLineSpec {
+pub(crate) struct DisplayRowSpec {
     role: GlyphRowRole,
     y: f32,
     width: f32,
@@ -315,7 +315,7 @@ pub(crate) struct StatusLineOutputProgress {
     pub height: f32,
 }
 
-impl StatusLineSpec {
+impl DisplayRowSpec {
     fn plain(
         role: GlyphRowRole,
         y: f32,
@@ -456,10 +456,10 @@ impl LayoutEngine {
         }
     }
 
-    /// Step 3.5: backend-routed twin of `render_status_line_spec`.
+    /// Step 3.5: backend-routed twin of `render_display_row_spec`.
     ///
-    /// Walks a pre-built `StatusLineSpec` the same way
-    /// `render_status_line_spec` does, but emits every character and
+    /// Walks a pre-built `DisplayRowSpec` the same way
+    /// `render_display_row_spec` does, but emits every character and
     /// stretch glyph through a `TtyDisplayBackend` before bridging
     /// the produced `GlyphRow` back into the caller's
     /// `GlyphMatrixBuilder` via `push_status_line_char` /
@@ -479,9 +479,9 @@ impl LayoutEngine {
     /// `width_cols`), display-property stretch entries advance
     /// `sl_x_offset` without producing a visible glyph, face runs
     /// update `active_run_face` exactly as before.
-    pub(crate) fn render_status_line_spec_via_backend(
+    pub(crate) fn render_display_row_spec_via_backend(
         &mut self,
-        spec: &StatusLineSpec,
+        spec: &DisplayRowSpec,
         matrix_row: Option<usize>,
         mut builder: Option<&mut crate::matrix_builder::GlyphMatrixBuilder>,
         mut on_progress: Option<&mut dyn FnMut(StatusLineOutputProgress)>,
@@ -740,7 +740,7 @@ impl LayoutEngine {
 
     /// Step 3.5 entry point: equivalent to `render_rust_status_line_value`
     /// but routes glyph emission through `TtyDisplayBackend` via
-    /// `render_status_line_spec_via_backend`.
+    /// `render_display_row_spec_via_backend`.
     pub(crate) fn render_rust_status_line_value_via_backend(
         &mut self,
         x: f32,
@@ -760,7 +760,7 @@ impl LayoutEngine {
         builder: Option<&mut crate::matrix_builder::GlyphMatrixBuilder>,
         on_progress: Option<&mut dyn FnMut(StatusLineOutputProgress)>,
     ) -> Option<StatusLineOutputProgress> {
-        if let Some(spec) = self.build_rust_status_line_spec(
+        if let Some(spec) = self.build_propertized_display_row_spec(
             x,
             y,
             width,
@@ -775,7 +775,7 @@ impl LayoutEngine {
             symbol_values,
             role,
         ) {
-            return self.render_status_line_spec_via_backend(
+            return self.render_display_row_spec_via_backend(
                 &spec,
                 Some(matrix_row),
                 builder,
@@ -804,7 +804,7 @@ impl LayoutEngine {
         face
     }
 
-    pub(crate) fn build_rust_status_line_spec(
+    pub(crate) fn build_propertized_display_row_spec(
         &mut self,
         _x: f32,
         y: f32,
@@ -819,7 +819,7 @@ impl LayoutEngine {
         face_resolver: &FaceResolver,
         symbol_values: std::collections::HashMap<String, Value>,
         role: GlyphRowRole,
-    ) -> Option<StatusLineSpec> {
+    ) -> Option<DisplayRowSpec> {
         let text = rendered.as_runtime_string_owned()?;
         // Use the resolved face's cache ID when already assigned
         // (basic faces get fixed IDs from BasicFaceId); otherwise
@@ -834,7 +834,7 @@ impl LayoutEngine {
         let face = self.realize_status_line_face(base_face_id, base_face, char_w, ascent, height);
         let char_width = self.status_line_char_width(&face, char_w);
         let mut spec =
-            StatusLineSpec::plain(role, y, width, height, char_width, ascent, face, text);
+            DisplayRowSpec::plain(role, y, width, height, char_width, ascent, face, text);
 
         if !rendered.is_string() {
             return Some(spec);
@@ -914,7 +914,7 @@ impl LayoutEngine {
         // is what actually wires it into the mode-line path.
         //
         // Coordinate system: the align_entries/display_props fields
-        // on StatusLineSpec use status-line-local pixel offsets
+        // on DisplayRowSpec use status-line-local pixel offsets
         // (0 = left edge of the status line). We build a
         // PixelCalcContext where `text_area_*` reflect the status
         // line's own width, so a form like `(- right 200)` resolves
