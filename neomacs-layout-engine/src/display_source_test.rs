@@ -338,6 +338,104 @@ fn buffer_text_source_cursor_resolves_face_property_runs() {
 }
 
 #[test]
+fn buffer_text_source_cursor_pushes_display_string_replacement_source() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("axb");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("display"),
+            Value::string("YZ"),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["a", "YZ", "b"]);
+    let DisplaySourcePosition::LispString { .. } = items[1].span.start else {
+        panic!("replacement text should be emitted from a nested Lisp string source");
+    };
+}
+
+#[test]
+fn buffer_text_source_cursor_reports_nested_replacement_source_position() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("x");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(0));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let replacement = Value::string_with_text_properties(
+            "YZ",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+            }],
+        );
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("display"),
+            replacement,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let item = source
+        .next_item(&mut context)
+        .expect("first replacement item");
+
+    assert_eq!(
+        item.kind,
+        DisplayItemKind::TextRun(DisplayTextRun::new("Y"))
+    );
+    assert!(matches!(
+        source.source_position(),
+        DisplaySourcePosition::LispString { char_index: 1, .. }
+    ));
+}
+
+#[test]
 fn buffer_text_source_cursor_emits_explicit_newline_row_breaks() {
     let (buffer_id, snapshot, end) = snapshot_with_text("a\nb");
     let mut source = BufferTextSourceCursor::new(

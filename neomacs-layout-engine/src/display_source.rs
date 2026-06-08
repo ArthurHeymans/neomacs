@@ -56,54 +56,24 @@ pub(crate) trait DisplayItemFaceResolver {
 }
 
 pub(crate) struct LispStringSourceCursor {
-    frames: Vec<LispStringSourceFrame>,
-    next_source_id: u64,
+    stack: LispStringSourceStack,
 }
 
 impl LispStringSourceCursor {
     pub(crate) fn new(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
-        let frame = LispStringSourceFrame::new(source_id, value, base_face)?;
         Some(Self {
-            frames: vec![frame],
-            next_source_id: source_id.saturating_add(1),
+            stack: LispStringSourceStack::with_root(source_id, value, base_face)?,
         })
-    }
-
-    fn allocate_source_id(&mut self) -> u64 {
-        let id = self.next_source_id;
-        self.next_source_id = self.next_source_id.saturating_add(1);
-        id
     }
 }
 
 impl DisplayItemSource for LispStringSourceCursor {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        loop {
-            let action = {
-                let frame = self.frames.last_mut()?;
-                frame.next_action(context)
-            };
-
-            match action {
-                LispStringAction::PopFrame => {
-                    self.frames.pop();
-                }
-                LispStringAction::PushReplacement { value, base_face } => {
-                    let source_id = self.allocate_source_id();
-                    if let Some(frame) = LispStringSourceFrame::new(source_id, value, base_face) {
-                        self.frames.push(frame);
-                    }
-                }
-                LispStringAction::Emit(item) => return Some(item),
-            }
-        }
+        self.stack.next_item(context)
     }
 
     fn source_position(&self) -> DisplaySourcePosition {
-        self.frames
-            .last()
-            .map(LispStringSourceFrame::source_position)
-            .unwrap_or_else(|| DisplaySourcePosition::synthetic(0, 0))
+        self.stack.source_position()
     }
 }
 
@@ -113,6 +83,7 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     char_pos: CharPos0,
     end: CharPos0,
     base_face: RenderFaceRef,
+    replacement_strings: LispStringSourceStack,
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
@@ -132,6 +103,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             char_pos: start,
             end,
             base_face,
+            replacement_strings: LispStringSourceStack::empty(1),
         }
     }
 
@@ -222,65 +194,78 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
 impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        if self.char_pos >= self.end {
-            return None;
-        }
+        loop {
+            if let Some(item) = self.replacement_strings.next_item(context) {
+                return Some(item);
+            }
 
-        let start = self.char_pos;
-        let property_end = self
-            .next_property_change(start)
-            .max(start.add_len(CharLen::new(1)))
-            .min(self.end);
-        let face = self.face_at(start, context);
-        let span = self.span(start, property_end);
+            if self.char_pos >= self.end {
+                return None;
+            }
 
-        if let Some(display_prop) = self.display_prop_at(start)
-            && let Some(kind) = parse_display_property(display_prop)
-        {
-            self.char_pos = property_end;
-            return Some(DisplayItem::new(span, face, kind));
-        }
+            let start = self.char_pos;
+            let property_end = self
+                .next_property_change(start)
+                .max(start.add_len(CharLen::new(1)))
+                .min(self.end);
+            let face = self.face_at(start, context);
+            let span = self.span(start, property_end);
 
-        let ch = self.char_at(start)?;
-        if ch == '\n' {
-            self.char_pos = start.add_len(CharLen::new(1));
+            if let Some(display_prop) = self.display_prop_at(start) {
+                self.char_pos = property_end;
+                if display_prop.is_string() {
+                    self.replacement_strings.push(display_prop, face);
+                    continue;
+                }
+                if let Some(kind) = parse_display_property(display_prop) {
+                    return Some(DisplayItem::new(span, face, kind));
+                }
+            }
+
+            let ch = self.char_at(start)?;
+            if ch == '\n' {
+                self.char_pos = start.add_len(CharLen::new(1));
+                return Some(DisplayItem::new(
+                    self.span(start, self.char_pos),
+                    face,
+                    DisplayItemKind::RowBreak(DisplayRowBreak {
+                        reason: DisplayRowBreakReason::ExplicitNewline,
+                    }),
+                ));
+            }
+
+            if is_control_char(ch) {
+                self.char_pos = start.add_len(CharLen::new(1));
+                return Some(DisplayItem::new(
+                    self.span(start, self.char_pos),
+                    face,
+                    DisplayItemKind::ControlChar { ch },
+                ));
+            }
+
+            if let Some(method) = glyphless_method_for_char(ch) {
+                self.char_pos = start.add_len(CharLen::new(1));
+                return Some(DisplayItem::new(
+                    self.span(start, self.char_pos),
+                    face,
+                    DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+                ));
+            }
+
+            let end = self.next_text_run_end(start, property_end);
+            self.char_pos = end;
             return Some(DisplayItem::new(
-                self.span(start, self.char_pos),
+                self.span(start, end),
                 face,
-                DisplayItemKind::RowBreak(DisplayRowBreak {
-                    reason: DisplayRowBreakReason::ExplicitNewline,
-                }),
+                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
             ));
         }
-
-        if is_control_char(ch) {
-            self.char_pos = start.add_len(CharLen::new(1));
-            return Some(DisplayItem::new(
-                self.span(start, self.char_pos),
-                face,
-                DisplayItemKind::ControlChar { ch },
-            ));
-        }
-
-        if let Some(method) = glyphless_method_for_char(ch) {
-            self.char_pos = start.add_len(CharLen::new(1));
-            return Some(DisplayItem::new(
-                self.span(start, self.char_pos),
-                face,
-                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
-            ));
-        }
-
-        let end = self.next_text_run_end(start, property_end);
-        self.char_pos = end;
-        Some(DisplayItem::new(
-            self.span(start, end),
-            face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-        ))
     }
 
     fn source_position(&self) -> DisplaySourcePosition {
+        if !self.replacement_strings.is_empty() {
+            return self.replacement_strings.source_position();
+        }
         DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
     }
 }
@@ -316,6 +301,71 @@ enum LispStringAction {
         base_face: RenderFaceRef,
     },
     Emit(DisplayItem),
+}
+
+struct LispStringSourceStack {
+    frames: Vec<LispStringSourceFrame>,
+    next_source_id: u64,
+}
+
+impl LispStringSourceStack {
+    const fn empty(next_source_id: u64) -> Self {
+        Self {
+            frames: Vec::new(),
+            next_source_id,
+        }
+    }
+
+    fn with_root(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
+        let frame = LispStringSourceFrame::new(source_id, value, base_face)?;
+        Some(Self {
+            frames: vec![frame],
+            next_source_id: source_id.saturating_add(1),
+        })
+    }
+
+    fn push(&mut self, value: Value, base_face: RenderFaceRef) {
+        let source_id = self.allocate_source_id();
+        if let Some(frame) = LispStringSourceFrame::new(source_id, value, base_face) {
+            self.frames.push(frame);
+        }
+    }
+
+    fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        loop {
+            let action = {
+                let frame = self.frames.last_mut()?;
+                frame.next_action(context)
+            };
+
+            match action {
+                LispStringAction::PopFrame => {
+                    self.frames.pop();
+                }
+                LispStringAction::PushReplacement { value, base_face } => {
+                    self.push(value, base_face);
+                }
+                LispStringAction::Emit(item) => return Some(item),
+            }
+        }
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.frames
+            .last()
+            .map(LispStringSourceFrame::source_position)
+            .unwrap_or_else(|| DisplaySourcePosition::synthetic(0, 0))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
+    fn allocate_source_id(&mut self) -> u64 {
+        let id = self.next_source_id;
+        self.next_source_id = self.next_source_id.saturating_add(1);
+        id
+    }
 }
 
 struct LispStringSourceFrame {
