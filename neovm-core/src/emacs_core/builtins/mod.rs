@@ -833,7 +833,7 @@ fn defsubr_detect_coding_string(eval: &mut super::eval::Context, args: Vec<Value
     super::coding::builtin_detect_coding_string(&eval.coding_systems, args)
 }
 fn defsubr_detect_coding_region(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    super::coding::builtin_detect_coding_region(&eval.coding_systems, args)
+    super::coding::builtin_detect_coding_region(&eval.coding_systems, &eval.buffers, args)
 }
 fn defsubr_keyboard_coding_system(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     super::coding::builtin_keyboard_coding_system(&eval.coding_systems, args)

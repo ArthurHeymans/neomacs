@@ -1069,19 +1069,28 @@ fn detect_coding_string_rejects_too_many_args() {
 #[test]
 fn detect_coding_region_highest() {
     crate::test_utils::init_test_tracing();
-    let m = mgr();
-    let result =
-        builtin_detect_coding_region(&m, vec![Value::fixnum(1), Value::fixnum(100), Value::T])
-            .unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.buffers.current_buffer_mut().unwrap().insert("abc");
+    let result = builtin_detect_coding_region(
+        &eval.coding_systems,
+        &eval.buffers,
+        vec![Value::fixnum(1), Value::fixnum(4), Value::T],
+    )
+    .unwrap();
     assert!(result.is_symbol_named("undecided"));
 }
 
 #[test]
 fn detect_coding_region_list() {
     crate::test_utils::init_test_tracing();
-    let m = mgr();
-    let result =
-        builtin_detect_coding_region(&m, vec![Value::fixnum(1), Value::fixnum(100)]).unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.buffers.current_buffer_mut().unwrap().insert("abc");
+    let result = builtin_detect_coding_region(
+        &eval.coding_systems,
+        &eval.buffers,
+        vec![Value::fixnum(1), Value::fixnum(4)],
+    )
+    .unwrap();
     let items = list_to_vec(&result).unwrap();
     assert_eq!(items.len(), 1);
     assert!(items[0].is_symbol_named("undecided"));
@@ -1090,9 +1099,10 @@ fn detect_coding_region_list() {
 #[test]
 fn detect_coding_region_rejects_too_many_args() {
     crate::test_utils::init_test_tracing();
-    let m = mgr();
+    let eval = crate::emacs_core::eval::Context::new();
     let result = builtin_detect_coding_region(
-        &m,
+        &eval.coding_systems,
+        &eval.buffers,
         vec![Value::fixnum(1), Value::fixnum(100), Value::NIL, Value::NIL],
     );
     assert!(result.is_err());
@@ -1101,11 +1111,64 @@ fn detect_coding_region_rejects_too_many_args() {
 #[test]
 fn detect_coding_region_rejects_non_integer_or_marker_bounds() {
     crate::test_utils::init_test_tracing();
-    let m = mgr();
-    assert!(builtin_detect_coding_region(&m, vec![Value::string("a"), Value::fixnum(1)]).is_err());
-    assert!(builtin_detect_coding_region(&m, vec![Value::fixnum(1), Value::string("b")]).is_err());
-    assert!(builtin_detect_coding_region(&m, vec![Value::NIL, Value::fixnum(1)]).is_err());
-    assert!(builtin_detect_coding_region(&m, vec![Value::fixnum(1), Value::NIL]).is_err());
+    let eval = crate::emacs_core::eval::Context::new();
+    assert!(
+        builtin_detect_coding_region(
+            &eval.coding_systems,
+            &eval.buffers,
+            vec![Value::string("a"), Value::fixnum(1)]
+        )
+        .is_err()
+    );
+    assert!(
+        builtin_detect_coding_region(
+            &eval.coding_systems,
+            &eval.buffers,
+            vec![Value::fixnum(1), Value::string("b")]
+        )
+        .is_err()
+    );
+    assert!(
+        builtin_detect_coding_region(
+            &eval.coding_systems,
+            &eval.buffers,
+            vec![Value::NIL, Value::fixnum(1)]
+        )
+        .is_err()
+    );
+    assert!(
+        builtin_detect_coding_region(
+            &eval.coding_systems,
+            &eval.buffers,
+            vec![Value::fixnum(1), Value::NIL]
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn detect_coding_region_validates_accessible_region_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.buffers.current_buffer_mut().unwrap().insert("abc");
+
+    let err = builtin_detect_coding_region(
+        &eval.coding_systems,
+        &eval.buffers,
+        vec![Value::fixnum(0), Value::fixnum(2)],
+    )
+    .expect_err("GNU validate_region rejects positions before point-min");
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            let items = sig.data;
+            assert_eq!(items.len(), 3);
+            assert!(items[0].is_buffer());
+            assert_eq!(items[1].as_fixnum(), Some(0));
+            assert_eq!(items[2].as_fixnum(), Some(2));
+        }
+        other => panic!("expected args-out-of-range signal, got {other:?}"),
+    }
 }
 
 // ----- keyboard/terminal coding system -----

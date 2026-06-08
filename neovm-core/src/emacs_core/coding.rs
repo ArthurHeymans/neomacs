@@ -21,7 +21,7 @@ use super::eval::Context;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{EmacsByteRange, LispCharPos1};
+use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
@@ -1967,14 +1967,36 @@ pub(crate) fn builtin_detect_coding_string(
 
 /// `(detect-coding-region START END &optional HIGHEST)` -- detect the encoding
 /// of a buffer region. Stub: always returns utf-8.
+fn validate_detect_coding_region(buffers: &BufferManager, args: &[Value]) -> Result<(), Flow> {
+    let start = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
+    let end = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[1])?;
+    let (beg, end) = if end < start {
+        (end, start)
+    } else {
+        (start, end)
+    };
+    let buf = buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if !(point_min <= beg && end <= point_max) {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn builtin_detect_coding_region(
     _mgr: &CodingSystemManager,
+    buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("detect-coding-region", &args, 2)?;
     expect_max_args("detect-coding-region", &args, 3)?;
-    expect_integer_or_marker(&args[0])?;
-    expect_integer_or_marker(&args[1])?;
+    validate_detect_coding_region(buffers, &args)?;
     let highest = args.get(2).is_some_and(|v| v.is_truthy());
     if highest {
         Ok(Value::symbol("undecided"))
