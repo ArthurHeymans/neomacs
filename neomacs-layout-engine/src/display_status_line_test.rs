@@ -1,6 +1,8 @@
 use super::*;
+use crate::neovm_bridge::FaceResolver;
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::emacs_core::Value;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------

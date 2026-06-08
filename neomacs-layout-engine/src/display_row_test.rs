@@ -1,5 +1,6 @@
 use super::*;
 use crate::neovm_bridge::FaceResolver;
+use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
@@ -73,4 +74,46 @@ fn display_source_keeps_plain_and_propertized_inputs_distinct() {
         }
         DisplaySource::PlainString(_) => panic!("expected propertized source"),
     }
+}
+
+#[test]
+fn render_propertized_display_row_preserves_pixel_widths() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let rendered = Value::string("AB");
+    let mut next_face_id = 1;
+    let spec: DisplayRowSpec = engine
+        .build_propertized_display_row_spec(
+            0.0,
+            0.0,
+            80.0,
+            16.0,
+            1,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            rendered,
+            &resolver,
+            std::collections::HashMap::new(),
+            GlyphRowRole::TabLine,
+        )
+        .expect("display row spec");
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    let _ = engine.render_display_row_spec_via_backend(&spec, Some(0), Some(&mut builder), None);
+    builder.end_row();
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let glyphs = &state.window_matrices[0].matrix.rows[0].glyphs[1];
+
+    assert_eq!(glyphs.len(), 2);
+    assert!(
+        glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        "display row glyphs should carry measured/fallback pixel widths: {glyphs:?}"
+    );
 }
