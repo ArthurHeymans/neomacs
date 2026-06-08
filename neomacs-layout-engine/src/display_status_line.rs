@@ -8,10 +8,10 @@
 //! GNU Emacs's display_mode_line -> display_mode_element ->
 //! display_line -> PRODUCE_GLYPHS architecture.
 //!
-//! Housed types include StatusLineKind, StatusLineFace,
-//! StatusLineSpec, OverlayFaceRun, and the
-//! build_rust_status_line_spec property harvester that walks
-//! text-property intervals (face, font-lock-face, display).
+//! Housed types include StatusLineFace, StatusLineSpec,
+//! OverlayFaceRun, and the build_rust_status_line_spec property
+//! harvester that walks text-property intervals (face, font-lock-face,
+//! display).
 //!
 //! History: this module started as status_line.rs, a divergent
 //! parallel implementation of display-line rendering that did not
@@ -31,24 +31,6 @@ use neovm_core::buffer::{CharPos0, text_props::TextPropertyTable};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use std::collections::HashMap;
-
-/// Which kind of status line to render.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StatusLineKind {
-    ModeLine,
-    HeaderLine,
-    TabLine,
-}
-
-impl StatusLineKind {
-    fn row_role(self) -> GlyphRowRole {
-        match self {
-            Self::ModeLine => GlyphRowRole::ModeLine,
-            Self::HeaderLine => GlyphRowRole::HeaderLine,
-            Self::TabLine => GlyphRowRole::TabLine,
-        }
-    }
-}
 
 fn char_index_to_byte(text: &[u8], char_index: usize) -> usize {
     std::str::from_utf8(text)
@@ -311,7 +293,7 @@ struct DisplayPropRecord {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StatusLineSpec {
-    kind: StatusLineKind,
+    role: GlyphRowRole,
     y: f32,
     width: f32,
     height: f32,
@@ -335,7 +317,7 @@ pub(crate) struct StatusLineOutputProgress {
 
 impl StatusLineSpec {
     fn plain(
-        kind: StatusLineKind,
+        role: GlyphRowRole,
         y: f32,
         width: f32,
         height: f32,
@@ -345,7 +327,7 @@ impl StatusLineSpec {
         text: String,
     ) -> Self {
         Self {
-            kind,
+            role,
             y,
             width,
             height,
@@ -512,7 +494,7 @@ impl LayoutEngine {
         // the right entries when rasterization resolves face ids.
         if let Some(ref mut b) = builder {
             if let Some(row) = matrix_row {
-                b.begin_row(row, spec.kind.row_role());
+                b.begin_row(row, spec.role);
                 let row_ascent = if spec.face.font_ascent > 0.0 {
                     spec.face.font_ascent
                 } else {
@@ -521,7 +503,7 @@ impl LayoutEngine {
                 .max(0.0)
                 .min(spec.height.max(1.0));
                 b.set_current_row_metrics(spec.y, spec.height, row_ascent);
-            } else if b.begin_status_line_row(spec.kind.row_role()) {
+            } else if b.begin_status_line_row(spec.role) {
                 let row_ascent = if spec.face.font_ascent > 0.0 {
                     spec.face.font_ascent
                 } else {
@@ -733,7 +715,7 @@ impl LayoutEngine {
         // Flush the row through the backend and install the
         // produced text-area glyphs into the caller's matrix
         // builder wholesale. The backend is the sole producer.
-        let mut flush_row = GlyphRow::new(spec.kind.row_role());
+        let mut flush_row = GlyphRow::new(spec.role);
         flush_row.enabled = true;
         flush_row.mode_line = true;
         backend.finish_row(flush_row);
@@ -774,7 +756,7 @@ impl LayoutEngine {
         rendered: Value,
         face_resolver: &FaceResolver,
         symbol_values: std::collections::HashMap<String, Value>,
-        kind: StatusLineKind,
+        role: GlyphRowRole,
         builder: Option<&mut crate::matrix_builder::GlyphMatrixBuilder>,
         on_progress: Option<&mut dyn FnMut(StatusLineOutputProgress)>,
     ) -> Option<StatusLineOutputProgress> {
@@ -791,7 +773,7 @@ impl LayoutEngine {
             rendered,
             face_resolver,
             symbol_values,
-            kind,
+            role,
         ) {
             return self.render_status_line_spec_via_backend(
                 &spec,
@@ -836,7 +818,7 @@ impl LayoutEngine {
         rendered: Value,
         face_resolver: &FaceResolver,
         symbol_values: std::collections::HashMap<String, Value>,
-        kind: StatusLineKind,
+        role: GlyphRowRole,
     ) -> Option<StatusLineSpec> {
         let text = rendered.as_runtime_string_owned()?;
         // Use the resolved face's cache ID when already assigned
@@ -852,7 +834,7 @@ impl LayoutEngine {
         let face = self.realize_status_line_face(base_face_id, base_face, char_w, ascent, height);
         let char_width = self.status_line_char_width(&face, char_w);
         let mut spec =
-            StatusLineSpec::plain(kind, y, width, height, char_width, ascent, face, text);
+            StatusLineSpec::plain(role, y, width, height, char_width, ascent, face, text);
 
         if !rendered.is_string() {
             return Some(spec);

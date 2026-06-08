@@ -1,5 +1,6 @@
 use super::*;
 use neomacs_display_protocol::Rect;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------
@@ -12,34 +13,6 @@ fn make_run_bytes(byte_offset: u16, fg: u32, bg: u32) -> [u8; 14] {
     rec[6..10].copy_from_slice(&bg.to_ne_bytes());
     // face_id defaults to 0
     rec
-}
-
-// ---------------------------------------------------------------
-// StatusLineKind enum
-// ---------------------------------------------------------------
-
-#[test]
-fn status_line_kind_variants_exist() {
-    // Ensure all variants can be constructed (compile-time check
-    // made explicit).
-    let _ml = StatusLineKind::ModeLine;
-    let _hl = StatusLineKind::HeaderLine;
-    let _tl = StatusLineKind::TabLine;
-}
-
-#[test]
-fn status_line_kind_is_distinct() {
-    // Discriminants should differ (match each variant).
-    let check = |k: &StatusLineKind| -> u8 {
-        match k {
-            StatusLineKind::ModeLine => 0,
-            StatusLineKind::HeaderLine => 1,
-            StatusLineKind::TabLine => 2,
-        }
-    };
-    assert_eq!(check(&StatusLineKind::ModeLine), 0);
-    assert_eq!(check(&StatusLineKind::HeaderLine), 1);
-    assert_eq!(check(&StatusLineKind::TabLine), 2);
 }
 
 // ---------------------------------------------------------------
@@ -619,10 +592,11 @@ fn build_rust_status_line_spec_preserves_display_space_align_entries() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 
+    assert_eq!(spec.role, GlyphRowRole::HeaderLine);
     assert_eq!(spec.align_entries.len(), 1);
     assert_eq!(spec.align_entries[0].byte_offset, 1);
     assert_eq!(spec.align_entries[0].covers_bytes, 1);
@@ -667,7 +641,7 @@ fn build_rust_status_line_spec_supports_display_space_relative_width() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 
@@ -719,7 +693,7 @@ fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 
@@ -767,7 +741,7 @@ fn render_status_line_spec_stores_pixel_widths_on_emitted_chars() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::TabLine,
+            GlyphRowRole::TabLine,
         )
         .expect("status line spec");
 
@@ -840,7 +814,7 @@ fn build_rust_status_line_spec_resolves_header_line_indent_width_symbol() {
             rendered,
             &resolver,
             symbol_values,
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 
@@ -888,7 +862,7 @@ fn render_status_line_spec_skips_multi_byte_align_to_interval() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 
@@ -954,7 +928,7 @@ fn render_status_line_align_to_after_multibyte_prefix_uses_character_offsets() {
             rendered,
             &resolver,
             HashMap::new(),
-            StatusLineKind::HeaderLine,
+            GlyphRowRole::HeaderLine,
         )
         .expect("status line spec");
 

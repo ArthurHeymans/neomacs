@@ -6768,7 +6768,7 @@ impl LayoutEngine {
                 tab_text,
                 face_resolver,
                 status_line_symbol_values.clone(),
-                StatusLineKind::TabLine,
+                GlyphRowRole::TabLine,
                 Some(&mut builder),
                 Some(&mut advance_output),
             );
@@ -6824,7 +6824,7 @@ impl LayoutEngine {
                 header_text,
                 face_resolver,
                 status_line_symbol_values.clone(),
-                StatusLineKind::HeaderLine,
+                GlyphRowRole::HeaderLine,
                 Some(&mut builder),
                 Some(&mut advance_output),
             );
@@ -6895,7 +6895,7 @@ impl LayoutEngine {
                 mode_text,
                 face_resolver,
                 status_line_symbol_values.clone(),
-                StatusLineKind::ModeLine,
+                GlyphRowRole::ModeLine,
                 Some(&mut builder),
                 Some(&mut advance_output),
             );
