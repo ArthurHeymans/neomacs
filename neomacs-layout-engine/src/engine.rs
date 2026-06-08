@@ -1415,6 +1415,38 @@ impl crate::display_row_builder::DisplayGlyphMeasurer for SingleGlyphAdvance {
     }
 }
 
+struct LayoutStringFaceResolver<'a> {
+    face_resolver: &'a super::neovm_bridge::FaceResolver,
+    base_face: &'a super::neovm_bridge::ResolvedFace,
+    string_face_cache: &'a mut std::collections::HashMap<Value, u32>,
+    current_face_id: &'a mut u32,
+    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+}
+
+impl crate::display_source::DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
+    fn resolve_face_ref(
+        &mut self,
+        base: crate::display_item::RenderFaceRef,
+        face_value: Value,
+    ) -> crate::display_item::RenderFaceRef {
+        if let Some(face_id) = self.string_face_cache.get(&face_value) {
+            return crate::display_item::RenderFaceRef::FaceId(*face_id);
+        }
+        let Some(resolved) = self
+            .face_resolver
+            .resolve_face_value_over(self.base_face, &face_value)
+        else {
+            return base;
+        };
+
+        let face_id = *self.current_face_id;
+        apply_resolved_face(self.builder, face_id, &resolved, None);
+        *self.current_face_id += 1;
+        self.string_face_cache.insert(face_value, face_id);
+        crate::display_item::RenderFaceRef::FaceId(face_id)
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -1504,38 +1536,6 @@ fn render_overlay_string(
         }};
     }
 
-    struct OverlayStringFaceResolver<'a> {
-        face_resolver: &'a super::neovm_bridge::FaceResolver,
-        base_face: &'a super::neovm_bridge::ResolvedFace,
-        string_face_cache: &'a mut std::collections::HashMap<Value, u32>,
-        current_face_id: &'a mut u32,
-        builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
-    }
-
-    impl crate::display_source::DisplayItemFaceResolver for OverlayStringFaceResolver<'_> {
-        fn resolve_face_ref(
-            &mut self,
-            base: crate::display_item::RenderFaceRef,
-            face_value: Value,
-        ) -> crate::display_item::RenderFaceRef {
-            if let Some(face_id) = self.string_face_cache.get(&face_value) {
-                return crate::display_item::RenderFaceRef::FaceId(*face_id);
-            }
-            let Some(resolved) = self
-                .face_resolver
-                .resolve_face_value_over(self.base_face, &face_value)
-            else {
-                return base;
-            };
-
-            let face_id = *self.current_face_id;
-            apply_resolved_face(self.builder, face_id, &resolved, None);
-            *self.current_face_id += 1;
-            self.string_face_cache.insert(face_value, face_id);
-            crate::display_item::RenderFaceRef::FaceId(face_id)
-        }
-    }
-
     let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
         1,
         text_value,
@@ -1546,7 +1546,7 @@ fn render_overlay_string(
 
     while *row < max_rows {
         let item = {
-            let mut resolver = OverlayStringFaceResolver {
+            let mut resolver = LayoutStringFaceResolver {
                 face_resolver,
                 base_face: overlay_base_face,
                 string_face_cache: &mut string_face_cache,
@@ -4253,12 +4253,30 @@ impl LayoutEngine {
                                     ),
                                 )
                             {
-                                let mut context =
-                                    crate::display_source::DisplaySourceContext::empty();
-                                while let Some(item) = source.next_item(&mut context) {
+                                let mut string_face_cache = std::collections::HashMap::new();
+                                loop {
+                                    let item = {
+                                        let mut resolver = LayoutStringFaceResolver {
+                                            face_resolver,
+                                            base_face: &current_resolved_face,
+                                            string_face_cache: &mut string_face_cache,
+                                            current_face_id: &mut current_face_id,
+                                            builder: &mut self.matrix_builder,
+                                        };
+                                        let mut context =
+                                            crate::display_source::DisplaySourceContext::with_face_resolver(
+                                                &mut resolver,
+                                            );
+                                        source.next_item(&mut context)
+                                    };
+                                    let Some(item) = item else {
+                                        break;
+                                    };
                                     let item_face = item.face;
                                     match item.kind {
                                         crate::display_item::DisplayItemKind::TextRun(run) => {
+                                            let face_id =
+                                                render_face_ref_id(item_face, current_text_face_id);
                                             for rch in run.text.chars() {
                                                 let tail =
                                                     self.matrix_builder.last_text_cluster_tail();
@@ -4318,15 +4336,17 @@ impl LayoutEngine {
                                                                     charpos.saturating_add(1)
                                                                         as usize,
                                                                 ),
-                                                                EmacsBytePos::new(
-                                                                    text_start_byte + byte_idx,
-                                                                ),
+                                                            EmacsBytePos::new(
+                                                                text_start_byte + byte_idx,
                                                             ),
                                                         ),
-                                                        item_face,
-                                                        crate::display_item::DisplayItemKind::TextRun(
-                                                            crate::display_item::DisplayTextRun::new(
-                                                                rch.to_string(),
+                                                    ),
+                                                    crate::display_item::RenderFaceRef::FaceId(
+                                                        face_id,
+                                                    ),
+                                                    crate::display_item::DisplayItemKind::TextRun(
+                                                        crate::display_item::DisplayTextRun::new(
+                                                            rch.to_string(),
                                                             ),
                                                         ),
                                                     );
@@ -4337,11 +4357,11 @@ impl LayoutEngine {
                                                     face_ascent_val,
                                                     face_space_w,
                                                     params.tab_width,
-                                                    current_text_face_id,
+                                                    face_id,
                                                 );
                                                 let mut measurer = SingleGlyphAdvance {
                                                     ch: rch,
-                                                    face_id: current_text_face_id,
+                                                    face_id,
                                                     advance_px: rch_advance,
                                                 };
                                                 if append_display_item_to_current_row_with_shared_builder(
@@ -4360,6 +4380,8 @@ impl LayoutEngine {
                                         }
                                         crate::display_item::DisplayItemKind::RowBreak(_) => break,
                                         kind => {
+                                            let face_id =
+                                                render_face_ref_id(item_face, current_text_face_id);
                                             let layout = text_display_row_layout(
                                                 y,
                                                 right_limit - content_x,
@@ -4367,10 +4389,12 @@ impl LayoutEngine {
                                                 face_ascent_val,
                                                 face_space_w,
                                                 params.tab_width,
-                                                current_text_face_id,
+                                                face_id,
                                             );
                                             let item = crate::display_item::DisplayItem::new(
-                                                item.span, item_face, kind,
+                                                item.span,
+                                                crate::display_item::RenderFaceRef::FaceId(face_id),
+                                                kind,
                                             );
                                             let Some(metrics) =
                                                 append_display_item_to_current_row_with_shared_builder(
