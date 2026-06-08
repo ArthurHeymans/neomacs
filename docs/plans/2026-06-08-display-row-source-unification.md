@@ -387,7 +387,7 @@ git commit -m "refactor(layout): render tab bar through display row source"
 
 ---
 
-### Task 7: Convert Minibuffer Echo To A Display Source
+### Task 7: Convert Minibuffer Echo To A Lisp String Source
 
 **Files:**
 - Modify: `neomacs-layout-engine/src/engine.rs`
@@ -409,7 +409,8 @@ Before refactor they should pass. If needed, add a glyph `pixel_width` assertion
 **Step 2: Implement**
 
 - Add wrapping/truncation policy to `DisplayRowRequest` if not already present.
-- Render each echo visual row with `DisplaySource::PlainString`.
+- Render each echo visual row from the Lisp string returned by `current_message_value`.
+- Preserve string text properties when slicing wrapped echo rows.
 - Preserve the right-special-column `$` / `\` behavior.
 
 **Step 3: Verify**
@@ -424,23 +425,187 @@ cargo nextest run -p neomacs-layout-engine layout_frame_rust_keeps_echo_message_
 
 ```bash
 git add neomacs-layout-engine/src/engine.rs neomacs-layout-engine/src/display_row.rs
-git commit -m "refactor(layout): render echo rows through display row source"
+git commit -m "refactor(layout): render echo rows from lisp string source"
 ```
 
 ---
 
-### Task 8: Document Buffer-Text Full Unification As A Separate Phase
+### Task 8: Introduce Explicit Display Row Source Adapters
+
+**Files:**
+- Modify: `neomacs-layout-engine/src/display_row.rs`
+- Test: `neomacs-layout-engine/src/display_row_test.rs`
+
+**Goal:** Make the intended long-term boundary explicit:
+
+```text
+BufferTextSource      LispStringSource
+       \                  /
+        \                /
+         -> DisplayRowSpec -> GlyphRow -> renderer
+```
+
+`DisplayRowSpec` is the shared pure Rust row model. Source adapters are the only layer allowed to know how source text is obtained. Lisp string sources can carry `Value`; buffer text sources can carry buffer snapshots and typed positions later.
+
+**Step 1: Write failing tests**
+
+Add tests for:
+
+- `LispStringSource` builds the same spec currently produced by `DisplayRowRequest`.
+- `DisplayRowSourceKind::LispString` has no plain string variant; unpropertized text is still a Lisp string.
+- `BufferTextSource` can be constructed with typed buffer/window metadata but does not yet render buffer rows.
+
+Run:
+
+```bash
+cargo nextest run -p neomacs-layout-engine display_row_source
+```
+
+Expected: compile failure until source adapter types exist.
+
+**Step 2: Implement minimal source adapters**
+
+Add:
+
+```rust
+pub(crate) struct LispStringSource {
+    pub string: Value,
+}
+
+pub(crate) struct BufferTextSource {
+    pub buffer_id: BufferId,
+    pub window_id: i64,
+    pub start: CharPos0,
+    pub end: CharPos0,
+}
+
+pub(crate) enum DisplayRowSourceKind {
+    LispString(LispStringSource),
+    BufferText(BufferTextSource),
+}
+```
+
+Do not move main-buffer rendering yet. This task establishes the correct type boundary and removes the misleading idea that the main buffer should use `DisplayRowRequest`.
+
+**Step 3: Verify**
+
+Run:
+
+```bash
+cargo nextest run -p neomacs-layout-engine display_row
+```
+
+**Step 4: Commit**
+
+```bash
+git add neomacs-layout-engine/src/display_row.rs neomacs-layout-engine/src/display_row_test.rs
+git commit -m "refactor(layout): introduce display row source adapters"
+```
+
+---
+
+### Task 9: Route Lisp Chrome Through `LispStringSource`
+
+**Files:**
+- Modify: `neomacs-layout-engine/src/display_row.rs`
+- Modify: `neomacs-layout-engine/src/engine.rs`
+- Test: `neomacs-layout-engine/src/display_row_test.rs`
+- Test: `neomacs-layout-engine/src/engine_test.rs`
+
+**Goal:** Replace direct `DisplayRowRequest { string: Value }` construction in mode-line/header-line/tab-line/tab-bar/echo call sites with `LispStringSource`. This makes the source side explicit while keeping the shared spec/row renderer unchanged.
+
+**Step 1: Write failing tests**
+
+Add a test that builds a `DisplayRowRequest` from `LispStringSource` and asserts propertized face runs survive.
+
+Run:
+
+```bash
+cargo nextest run -p neomacs-layout-engine display_row_source_lisp_string_preserves_text_properties
+```
+
+**Step 2: Implement**
+
+- Change `DisplayRowRequest` to carry `source: LispStringSource` or provide a constructor `DisplayRowRequest::from_lisp_string`.
+- Update tab-bar and echo call sites.
+- Keep mode-line/header-line/tab-line wrappers working through the same constructor.
+- Do not add a generic enum unless both variants are actually used by production code in this task.
+
+**Step 3: Verify**
+
+Run:
+
+```bash
+cargo nextest run -p neomacs-layout-engine display_row display_status_line layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap layout_frame_rust_preserves_propertized_echo_message_faces
+```
+
+**Step 4: Commit**
+
+```bash
+git add neomacs-layout-engine/src/display_row.rs neomacs-layout-engine/src/engine.rs neomacs-layout-engine/src/display_row_test.rs neomacs-layout-engine/src/engine_test.rs
+git commit -m "refactor(layout): route chrome rows through lisp string source"
+```
+
+---
+
+### Task 10: Extract A Buffer Text Row Spec Builder
+
+**Files:**
+- Modify: `neomacs-layout-engine/src/engine.rs`
+- Modify: `neomacs-layout-engine/src/display_row.rs`
+- Test: existing buffer rendering tests in `engine_test.rs`
+
+**Goal:** Start the real main-buffer convergence without rewriting redisplay: extract the point where the existing main-buffer walker has already resolved a visual row into a pure row-spec-like builder. The source remains `BufferTextSource`; the output moves toward `DisplayRowSpec`/`GlyphRow`.
+
+**Step 1: Identify the current row emission boundary**
+
+Find the code in `layout_window_rust` that:
+
+- accumulates row glyphs,
+- sets row metrics,
+- installs the row into `GlyphMatrixBuilder`,
+- updates display snapshots.
+
+Do not change behavior yet.
+
+**Step 2: Write a locking test**
+
+Choose one existing small buffer row test and add assertions that emitted main-buffer glyphs keep nonzero pixel widths and expected `GlyphRowRole` after extraction.
+
+Run the single test before implementation and confirm it passes as a lock test.
+
+**Step 3: Extract without semantic changes**
+
+Introduce a small internal helper that accepts already-resolved row glyph data and row metrics, then installs a `GlyphRow`. This helper should be structurally compatible with `DisplayRowSpec -> GlyphRow`, but it must not force buffer text into `LispStringSource`.
+
+**Step 4: Verify**
+
+Run:
+
+```bash
+cargo nextest run -p neomacs-layout-engine layout_frame_rust_emits_display_string_replacement_glyphs layout_frame_rust_emits_buffer_tab_as_stretch_glyph layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph
+```
+
+**Step 5: Commit**
+
+```bash
+git add neomacs-layout-engine/src/engine.rs neomacs-layout-engine/src/display_row.rs neomacs-layout-engine/src/engine_test.rs
+git commit -m "refactor(layout): extract buffer row glyph installation"
+```
+
+---
+
+### Task 11: Document Remaining Buffer Text Parity Work
 
 **Files:**
 - Modify: `docs/plans/2026-06-08-display-row-source-unification.md`
 
-**Goal:** Stop the chrome-row refactor from silently becoming a rewrite of the main buffer walker.
+**Goal:** Record the work still required before main-buffer text can be fully generated from `BufferTextSource -> DisplayRowSpec`.
 
-**Step 1: Add a future phase section**
+**Step 1: Add a remaining work section**
 
-Document that full buffer text unification requires:
+Document that full buffer text source parity still requires:
 
-- a `BufferTextSource` adapter,
 - typed source positions,
 - display-property stack parity,
 - bidi/cluster preservation,
