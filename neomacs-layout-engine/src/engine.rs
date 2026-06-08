@@ -6187,28 +6187,7 @@ impl LayoutEngine {
                 end,
                 crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
             );
-            let item = source
-                .next_item(&mut crate::display_source::DisplaySourceContext::empty())
-                .unwrap_or_else(|| {
-                    crate::display_item::DisplayItem::new(
-                        crate::display_item::SourceSpan::new(
-                            crate::display_item::DisplaySourcePosition::buffer(
-                                buf_id,
-                                start,
-                                EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                            ),
-                            crate::display_item::DisplaySourcePosition::buffer(
-                                buf_id,
-                                end,
-                                EmacsBytePos::new(text_start_byte + byte_idx),
-                            ),
-                        ),
-                        crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                        crate::display_item::DisplayItemKind::TextRun(
-                            crate::display_item::DisplayTextRun::new(ch.to_string()),
-                        ),
-                    )
-                });
+            let mut context = crate::display_source::DisplaySourceContext::empty();
             let layout = text_display_row_layout(
                 y,
                 avail_width,
@@ -6231,10 +6210,11 @@ impl LayoutEngine {
                     content_x + avail_width
                 },
             );
-            let progress = append_cursor.append_measured_item_to_current_matrix_row(
+            let progress = append_cursor.append_next_measured_source_item_to_current_matrix_row(
                 &mut self.matrix_builder,
                 &layout,
-                item,
+                &mut source,
+                &mut context,
                 &mut measurer,
             );
             let Some(progress) = progress else {
