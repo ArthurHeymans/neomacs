@@ -334,6 +334,26 @@ fn append_measured_display_item_to_current_matrix_row_uses_glyph_measurer() {
 }
 
 #[test]
+fn fixed_glyph_advance_matches_only_configured_glyph() {
+    let mut measurer = FixedGlyphAdvance::new('m', 7, 13.0);
+
+    assert_eq!(measurer.glyph_advance_px('m', 7, 1, 8.0), Some(13.0));
+    assert_eq!(measurer.glyph_advance_px('m', 8, 1, 8.0), None);
+    assert_eq!(measurer.glyph_advance_px('i', 7, 1, 8.0), None);
+}
+
+#[test]
+fn fixed_glyph_advances_return_inserted_widths() {
+    let mut measurer = FixedGlyphAdvances::new();
+    measurer.insert('m', 7, 13.0);
+    measurer.insert('i', 7, 4.0);
+
+    assert_eq!(measurer.glyph_advance_px('m', 7, 1, 8.0), Some(13.0));
+    assert_eq!(measurer.glyph_advance_px('i', 7, 1, 8.0), Some(4.0));
+    assert_eq!(measurer.glyph_advance_px('m', 8, 1, 8.0), None);
+}
+
+#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));

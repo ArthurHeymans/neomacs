@@ -117,6 +117,61 @@ pub(crate) trait DisplayGlyphMeasurer {
     ) -> Option<f32>;
 }
 
+pub(crate) struct FixedGlyphAdvance {
+    ch: char,
+    face_id: u32,
+    advance_px: f32,
+}
+
+impl FixedGlyphAdvance {
+    pub(crate) fn new(ch: char, face_id: u32, advance_px: f32) -> Self {
+        Self {
+            ch,
+            face_id,
+            advance_px,
+        }
+    }
+}
+
+impl DisplayGlyphMeasurer for FixedGlyphAdvance {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        (self.ch == ch && self.face_id == face_id).then_some(self.advance_px)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FixedGlyphAdvances {
+    advances: std::collections::HashMap<(char, u32), f32>,
+}
+
+impl FixedGlyphAdvances {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn insert(&mut self, ch: char, face_id: u32, advance_px: f32) {
+        self.advances.insert((ch, face_id), advance_px);
+    }
+}
+
+impl DisplayGlyphMeasurer for FixedGlyphAdvances {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        self.advances.get(&(ch, face_id)).copied()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DisplayRowWriteMetrics {
     pub(crate) width_px: f32,

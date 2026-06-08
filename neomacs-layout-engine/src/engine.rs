@@ -20,7 +20,8 @@ use super::window_output::{
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row_builder::{
-    append_display_item_to_current_matrix_row, append_measured_display_item_to_current_matrix_row,
+    FixedGlyphAdvance, FixedGlyphAdvances, append_display_item_to_current_matrix_row,
+    append_measured_display_item_to_current_matrix_row,
 };
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -1459,52 +1460,6 @@ fn emit_text_progress_slots(
         },
         progress,
     );
-}
-
-struct SingleGlyphAdvance {
-    ch: char,
-    face_id: u32,
-    advance_px: f32,
-}
-
-impl crate::display_row_builder::DisplayGlyphMeasurer for SingleGlyphAdvance {
-    fn glyph_advance_px(
-        &mut self,
-        ch: char,
-        face_id: u32,
-        _columns: u8,
-        _fallback_advance_px: f32,
-    ) -> Option<f32> {
-        (self.ch == ch && self.face_id == face_id).then_some(self.advance_px)
-    }
-}
-
-struct DisplayRunGlyphAdvances {
-    advances: std::collections::HashMap<(char, u32), f32>,
-}
-
-impl DisplayRunGlyphAdvances {
-    fn new() -> Self {
-        Self {
-            advances: std::collections::HashMap::new(),
-        }
-    }
-
-    fn insert(&mut self, ch: char, face_id: u32, advance_px: f32) {
-        self.advances.insert((ch, face_id), advance_px);
-    }
-}
-
-impl crate::display_row_builder::DisplayGlyphMeasurer for DisplayRunGlyphAdvances {
-    fn glyph_advance_px(
-        &mut self,
-        ch: char,
-        face_id: u32,
-        _columns: u8,
-        _fallback_advance_px: f32,
-    ) -> Option<f32> {
-        self.advances.get(&(ch, face_id)).copied()
-    }
 }
 
 struct LayoutStringFaceResolver<'a> {
@@ -4314,7 +4269,7 @@ impl LayoutEngine {
                                         crate::display_item::DisplayItemKind::TextRun(run) => {
                                             let face_id =
                                                 render_face_ref_id(item_face, current_text_face_id);
-                                            let mut measurer = DisplayRunGlyphAdvances::new();
+                                            let mut measurer = FixedGlyphAdvances::new();
                                             for rch in run.text.chars() {
                                                 if rch == '\t' {
                                                     continue;
@@ -6258,11 +6213,7 @@ impl LayoutEngine {
                 text_display_tab_policy(content_x, params),
                 current_text_face_id,
             );
-            let mut measurer = SingleGlyphAdvance {
-                ch,
-                face_id: current_text_face_id,
-                advance_px: advance,
-            };
+            let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
             let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
             let progress = append_measured_display_item_to_current_matrix_row(
                 &mut self.matrix_builder,
