@@ -3281,6 +3281,11 @@ fn layout_frame_rust_emits_buffer_tab_as_stretch_glyph() {
         glyphs.get(2).map(|glyph| &glyph.glyph_type),
         Some(GlyphType::Char { ch: 'b' })
     ));
+    assert_eq!(text_row.role, GlyphRowRole::Text);
+    assert!(
+        glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        "main buffer text glyphs should keep pixel widths: {glyphs:?}"
+    );
 }
 
 #[test]

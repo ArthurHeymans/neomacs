@@ -677,7 +677,9 @@ impl GlyphMatrixBuilder {
                     pixel_height,
                     pixel_ascent,
                 );
-                matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()].push(glyph);
+                let row = &mut matrix.rows[self.current_row];
+                row.glyphs[GlyphArea::Text.index()].push(glyph);
+                row.displays_text = true;
             }
         }
     }

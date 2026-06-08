@@ -5234,9 +5234,10 @@ impl LayoutEngine {
                     col,
                     next_tab_col,
                 );
-                self.matrix_builder.push_stretch(
+                self.matrix_builder.push_stretch_with_pixel_width(
                     (next_tab_col.saturating_sub(col)).max(1) as u16,
                     current_text_face_id,
+                    advance,
                 );
                 x += advance;
                 col = next_tab_col;
