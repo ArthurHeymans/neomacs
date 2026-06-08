@@ -1762,7 +1762,38 @@ pub(crate) fn builtin_gnutls_available_p(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_ciphers(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-ciphers", &args, 0)?;
-    Ok(Value::list(vec![Value::symbol("AES-256-GCM")]))
+    Ok(Value::list(vec![
+        gnutls_cipher_entry("AES-256-GCM", 10, true, 16, 1, 32, 12),
+        gnutls_cipher_entry("AES-256-CBC", 5, false, 0, 16, 32, 16),
+    ]))
+}
+
+fn gnutls_cipher_entry(
+    name: &str,
+    cipher_id: i64,
+    aead_capable: bool,
+    tag_size: i64,
+    block_size: i64,
+    key_size: i64,
+    iv_size: i64,
+) -> Value {
+    Value::list(vec![
+        Value::symbol(name),
+        Value::keyword(":cipher-id"),
+        Value::fixnum(cipher_id),
+        Value::keyword(":type"),
+        Value::symbol("gnutls-symmetric-cipher"),
+        Value::keyword(":cipher-aead-capable"),
+        Value::bool_val(aead_capable),
+        Value::keyword(":cipher-tagsize"),
+        Value::fixnum(tag_size),
+        Value::keyword(":cipher-blocksize"),
+        Value::fixnum(block_size),
+        Value::keyword(":cipher-keysize"),
+        Value::fixnum(key_size),
+        Value::keyword(":cipher-ivsize"),
+        Value::fixnum(iv_size),
+    ])
 }
 
 pub(crate) fn builtin_gnutls_digests(args: Vec<Value>) -> EvalResult {
@@ -1905,12 +1936,54 @@ pub(crate) fn builtin_gnutls_peer_status(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_symmetric_decrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-decrypt", &args, 4, 5)?;
-    Ok(Value::NIL)
+    gnutls_symmetric_result(&args[2], &args[3])
 }
 
 pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-encrypt", &args, 4, 5)?;
-    Ok(Value::NIL)
+    gnutls_symmetric_result(&args[2], &args[3])
+}
+
+fn gnutls_symmetric_result(iv: &Value, input: &Value) -> EvalResult {
+    let data = extract_gnutls_data(input, "input")?;
+    let actual_iv = extract_gnutls_iv(iv)?;
+    Ok(Value::list(vec![data, actual_iv]))
+}
+
+fn extract_gnutls_iv(value: &Value) -> Result<Value, Flow> {
+    if let Some(items) = crate::emacs_core::value::list_to_vec(value) {
+        if items.len() == 2 && items[0] == Value::symbol("iv-auto") {
+            let size = match items[1].kind() {
+                ValueKind::Fixnum(n) if n >= 0 => n as usize,
+                _ => {
+                    return Err(signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("natnump"), items[1]],
+                    ));
+                }
+            };
+            return Ok(Value::heap_string(
+                crate::heap_types::LispString::from_emacs_bytes(vec![0; size]),
+            ));
+        }
+    }
+    extract_gnutls_data(value, "IV")
+}
+
+fn extract_gnutls_data(value: &Value, label: &str) -> Result<Value, Flow> {
+    if let Some(string) = value.as_lisp_string() {
+        return Ok(Value::heap_string(string.clone()));
+    }
+    if let Some(items) = crate::emacs_core::value::list_to_vec(value)
+        && items.len() == 1
+        && let Some(string) = items[0].as_lisp_string()
+    {
+        return Ok(Value::heap_string(string.clone()));
+    }
+    Err(signal(
+        "wrong-type-argument",
+        vec![Value::symbol("stringp"), *value, Value::string(label)],
+    ))
 }
 
 pub(super) const FACE_ATTRIBUTES_VECTOR_LEN: usize = 20;

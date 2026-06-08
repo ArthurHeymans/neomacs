@@ -655,7 +655,9 @@ fn gnutls_symmetric_encrypt_accepts_optional_aad_slot() {
         Value::string("aad"),
     ])
     .unwrap();
-    assert_eq!(out, Value::NIL);
+    let items = crate::emacs_core::value::list_to_vec(&out)
+        .expect("gnutls-symmetric-encrypt should return (DATA IV)");
+    assert_eq!(items, vec![Value::string("data"), Value::string("iv")]);
 }
 
 #[test]

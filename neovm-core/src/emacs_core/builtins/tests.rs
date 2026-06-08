@@ -10709,7 +10709,17 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
     let ciphers = dispatch_builtin_pure("gnutls-ciphers", vec![])
         .expect("gnutls-ciphers should resolve")
         .expect("gnutls-ciphers should evaluate");
-    assert_eq!(ciphers, Value::list(vec![Value::symbol("AES-256-GCM")]));
+    let cipher_entries = list_to_vec(&ciphers).expect("gnutls-ciphers should be a proper list");
+    let last_cipher = list_to_vec(
+        cipher_entries
+            .last()
+            .expect("gnutls-ciphers should include at least one entry"),
+    )
+    .expect("cipher entry should be a proper plist-like list");
+    assert_eq!(last_cipher[0], Value::symbol("AES-256-CBC"));
+    assert!(last_cipher.contains(&Value::keyword(":cipher-keysize")));
+    assert!(last_cipher.contains(&Value::keyword(":cipher-ivsize")));
+    assert!(last_cipher.contains(&Value::keyword(":cipher-blocksize")));
 
     let digests = dispatch_builtin_pure("gnutls-digests", vec![])
         .expect("gnutls-digests should resolve")
@@ -10812,14 +10822,38 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         vec![
             Value::symbol("AES-128-GCM"),
             Value::string("k"),
-            Value::string("iv"),
+            Value::list(vec![Value::symbol("iv-auto"), Value::fixnum(3)]),
             Value::string("data"),
             Value::string("aad"),
         ],
     )
     .expect("gnutls-symmetric-encrypt should resolve")
     .expect("gnutls-symmetric-encrypt should evaluate");
-    assert_eq!(enc, Value::NIL);
+    let enc_items = list_to_vec(&enc).expect("gnutls-symmetric-encrypt returns (DATA IV)");
+    assert_eq!(enc_items.len(), 2);
+    assert_eq!(enc_items[0], Value::string("data"));
+    assert_eq!(
+        enc_items[1]
+            .as_lisp_string()
+            .expect("generated IV should be a string")
+            .as_bytes(),
+        &[0, 0, 0]
+    );
+
+    let dec = dispatch_builtin_pure(
+        "gnutls-symmetric-decrypt",
+        vec![
+            Value::symbol("AES-128-GCM"),
+            Value::string("k"),
+            enc_items[1],
+            enc_items[0],
+            Value::string("aad"),
+        ],
+    )
+    .expect("gnutls-symmetric-decrypt should resolve")
+    .expect("gnutls-symmetric-decrypt should evaluate");
+    let dec_items = list_to_vec(&dec).expect("gnutls-symmetric-decrypt returns (DATA IV)");
+    assert_eq!(dec_items[0], Value::string("data"));
 }
 
 #[test]
