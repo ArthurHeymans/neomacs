@@ -707,6 +707,47 @@ fn image_flush_rejects_non_window_frame() {
 }
 
 #[test]
+fn image_flush_accepts_selected_neo_window_system_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let buffer = eval.buffers.create_buffer("*scratch*");
+    let frame = eval.frames.create_frame("F1", 960, 640, buffer);
+    eval.frames
+        .get_mut(frame)
+        .expect("test frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+
+    let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
+    let result = builtin_image_flush_in_context(&mut eval, vec![spec]);
+
+    assert!(
+        result
+            .expect("image-flush should accept GUI frame")
+            .is_nil()
+    );
+}
+
+#[test]
+fn image_flush_lisp_call_accepts_selected_neo_window_system_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let buffer = eval.buffers.create_buffer("*scratch*");
+    let frame = eval.frames.create_frame("F1", 960, 640, buffer);
+    eval.frames
+        .get_mut(frame)
+        .expect("test frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+
+    let result = eval
+        .eval_str(r#"(image-flush '(image :type png :file "test.png"))"#)
+        .expect("Lisp image-flush should accept GUI frame");
+
+    assert!(result.is_nil());
+}
+
+#[test]
 fn image_flush_all_frames() {
     crate::test_utils::init_test_tracing();
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();

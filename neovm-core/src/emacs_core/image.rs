@@ -648,6 +648,52 @@ pub(crate) fn builtin_image_mask_p(args: Vec<Value>) -> EvalResult {
     ))
 }
 
+fn image_frame_window_system(
+    eval: &mut Context,
+    builtin: &str,
+    frame_arg: Option<&Value>,
+) -> Result<Option<Value>, Flow> {
+    if let Some(frame) = frame_arg {
+        expect_frame_designator(builtin, frame)?;
+    }
+
+    if let Some(frame_arg) = frame_arg.filter(|value| !value.is_nil()) {
+        let frame_id = match frame_arg.kind() {
+            ValueKind::Fixnum(id) => crate::window::FrameId(id as u64),
+            ValueKind::Veclike(VecLikeType::Frame) => {
+                crate::window::FrameId(frame_arg.as_frame_id().expect("checked frame"))
+            }
+            _ => unreachable!("expect_frame_designator checked frame argument"),
+        };
+        Ok(eval
+            .frames
+            .get(frame_id)
+            .and_then(|frame| frame.effective_window_system()))
+    } else {
+        Ok(eval
+            .frames
+            .selected_frame()
+            .and_then(|frame| frame.effective_window_system()))
+    }
+}
+
+fn require_image_window_system_frame(
+    eval: &mut Context,
+    builtin: &str,
+    frame_arg: Option<&Value>,
+) -> Result<(), Flow> {
+    let frame_window_system = image_frame_window_system(eval, builtin, frame_arg)?;
+    if frame_window_system
+        .is_none_or(|window_system| !super::display::gui_window_system_active_value(window_system))
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("image-mask-p", &args, 1)?;
     expect_max_args("image-mask-p", &args, 2)?;
@@ -659,35 +705,7 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
         ));
     }
 
-    if let Some(frame) = args.get(1) {
-        expect_frame_designator("image-mask-p", frame)?;
-    }
-
-    let frame_window_system = if let Some(frame_arg) = args.get(1).filter(|value| !value.is_nil()) {
-        let frame_id = match frame_arg.kind() {
-            ValueKind::Fixnum(id) => crate::window::FrameId(id as u64),
-            ValueKind::Veclike(VecLikeType::Frame) => {
-                crate::window::FrameId(frame_arg.as_frame_id().expect("checked frame"))
-            }
-            _ => unreachable!("expect_frame_designator checked frame argument"),
-        };
-        eval.frames
-            .get(frame_id)
-            .and_then(|frame| frame.effective_window_system())
-    } else {
-        eval.frames
-            .selected_frame()
-            .and_then(|frame| frame.effective_window_system())
-    };
-
-    if frame_window_system
-        .is_none_or(|window_system| !super::display::gui_window_system_active_value(window_system))
-    {
-        return Err(signal(
-            "error",
-            vec![Value::string("Window system frame should be used")],
-        ));
-    }
+    require_image_window_system_frame(eval, "image-mask-p", args.get(1))?;
 
     let Some(display_host) = eval.display_host.as_ref() else {
         return Err(signal(
@@ -822,6 +840,33 @@ pub(crate) fn builtin_image_flush(args: Vec<Value>) -> EvalResult {
         "error",
         vec![Value::string("Window system frame should be used")],
     ))
+}
+
+pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_min_args("image-flush", &args, 1)?;
+    expect_max_args("image-flush", &args, 2)?;
+
+    if !is_image_spec(&args[0]) {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    }
+
+    if args.get(1).is_some_and(|value| value.is_t()) {
+        return Ok(Value::NIL);
+    }
+
+    require_image_window_system_frame(eval, "image-flush", args.get(1))?;
+
+    if eval.display_host.is_none() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    }
+
+    Ok(Value::NIL)
 }
 
 /// (clear-image-cache &optional FILTER) -> nil
