@@ -44,6 +44,37 @@ fn row_text_expanding_stretches(row: &GlyphRow) -> String {
         .collect()
 }
 
+#[test]
+fn display_row_geometry_builds_row_layout() {
+    let tab_policy =
+        crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6]);
+    let geometry = DisplayRowGeometry {
+        y: 20.0,
+        width: 120.0,
+        height: 16.0,
+        char_width: 8.0,
+        ascent: 11.0,
+        tab_policy: tab_policy.clone(),
+    };
+
+    let layout = geometry.to_layout(
+        GlyphRowRole::Text,
+        9.0,
+        12.0,
+        RenderFaceRef::FaceId(42),
+        std::collections::HashMap::new(),
+    );
+
+    assert_eq!(layout.role, GlyphRowRole::Text);
+    assert_eq!(layout.y_px, 20.0);
+    assert_eq!(layout.width_px, 120.0);
+    assert_eq!(layout.height_px, 16.0);
+    assert_eq!(layout.ascent_px, 12.0);
+    assert_eq!(layout.char_width_px, 9.0);
+    assert_eq!(layout.tab_policy, tab_policy);
+    assert_eq!(layout.base_face, RenderFaceRef::FaceId(42));
+}
+
 fn render_lisp_display_row(rendered: Value, role: GlyphRowRole) -> GlyphRow {
     render_lisp_display_row_with_symbols(rendered, role, std::collections::HashMap::new())
 }
@@ -106,12 +137,14 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     let rendered = engine
         .render_display_item_source_row(
             DisplayRowSpec {
-                y: 0.0,
-                width: 240.0,
-                height: 16.0,
-                char_width: 8.0,
-                ascent: 12.0,
-                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+                geometry: DisplayRowGeometry {
+                    y: 0.0,
+                    width: 240.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+                },
                 base_face_id: 1,
                 base_face: resolver.default_face(),
                 role: GlyphRowRole::TabLine,
@@ -169,20 +202,23 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     let rendered = engine
         .render_display_item_source_row(
             DisplayRowSpec {
-                y: 0.0,
-                width: 240.0,
-                height: 16.0,
-                char_width: 8.0,
-                ascent: 12.0,
+                geometry: DisplayRowGeometry {
+                    y: 0.0,
+                    width: 240.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy:
+                        crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
+                            0.0,
+                            4,
+                            &[2],
+                        ),
+                },
                 base_face_id: 1,
                 base_face: resolver.default_face(),
                 role: GlyphRowRole::TabLine,
                 symbol_values: std::collections::HashMap::new(),
-                tab_policy: crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
-                    0.0,
-                    4,
-                    &[2],
-                ),
             },
             &mut source,
             &resolver,

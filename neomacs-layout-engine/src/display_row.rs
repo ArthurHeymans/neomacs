@@ -1,4 +1,4 @@
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayLengthExpr, RenderFaceRef};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowBuilder, DisplayRowLayout, DisplayTabPolicy,
 };
@@ -456,6 +456,7 @@ pub(crate) struct RenderedDisplaySourceRow {
     pub(crate) faces: Vec<Face>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowGeometry {
     pub(crate) y: f32,
     pub(crate) width: f32,
@@ -465,13 +466,31 @@ pub(crate) struct DisplayRowGeometry {
     pub(crate) tab_policy: DisplayTabPolicy,
 }
 
+impl DisplayRowGeometry {
+    pub(crate) fn to_layout(
+        &self,
+        role: GlyphRowRole,
+        char_width_px: f32,
+        ascent_px: f32,
+        base_face: RenderFaceRef,
+        symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
+    ) -> DisplayRowLayout {
+        DisplayRowLayout {
+            role,
+            y_px: self.y,
+            width_px: self.width.max(1.0),
+            height_px: self.height,
+            ascent_px,
+            char_width_px,
+            tab_policy: self.tab_policy.clone(),
+            base_face,
+            symbol_values,
+        }
+    }
+}
+
 pub(crate) struct DisplayRowSpec<'a> {
-    pub(crate) y: f32,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
-    pub(crate) tab_policy: DisplayTabPolicy,
+    pub(crate) geometry: DisplayRowGeometry,
     pub(crate) base_face_id: u32,
     pub(crate) base_face: &'a ResolvedFace,
     pub(crate) role: GlyphRowRole,
@@ -494,12 +513,7 @@ impl<'a> DisplayRowSpec<'a> {
             id
         };
         Self {
-            y: geometry.y,
-            width: geometry.width,
-            height: geometry.height,
-            char_width: geometry.char_width,
-            ascent: geometry.ascent,
-            tab_policy: geometry.tab_policy,
+            geometry,
             base_face_id,
             base_face,
             role,
@@ -595,12 +609,7 @@ impl LayoutEngine {
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplaySourceRow> {
         let DisplayRowSpec {
-            y,
-            width,
-            height,
-            char_width: char_w,
-            ascent,
-            tab_policy,
+            geometry,
             base_face_id,
             base_face,
             role,
@@ -608,8 +617,16 @@ impl LayoutEngine {
         } = spec;
         *next_face_id = (*next_face_id).max(base_face_id.saturating_add(1));
         let mut face_realizer = DisplayRowFaceRealizer::new(&mut self.font_metrics);
-        let row_face = face_realizer.realize_face(base_face_id, base_face, char_w, ascent, height);
-        let char_width = face_realizer.char_width(&row_face, char_w).max(1.0);
+        let row_face = face_realizer.realize_face(
+            base_face_id,
+            base_face,
+            geometry.char_width,
+            geometry.ascent,
+            geometry.height,
+        );
+        let char_width = face_realizer
+            .char_width(&row_face, geometry.char_width)
+            .max(1.0);
         let mut row_faces = vec![row_face.clone()];
 
         struct RowFaceResolver<'a, 'metrics> {
@@ -658,17 +675,17 @@ impl LayoutEngine {
             .into_iter()
             .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
             .collect();
-        let row_layout = DisplayRowLayout {
+        let row_ascent = row_face
+            .font_ascent
+            .max(geometry.ascent)
+            .min(geometry.height.max(1.0));
+        let row_layout = geometry.to_layout(
             role,
-            y_px: y,
-            width_px: width,
-            height_px: height,
-            ascent_px: row_face.font_ascent.max(ascent).min(height.max(1.0)),
-            char_width_px: char_width,
-            tab_policy,
-            base_face: RenderFaceRef::FaceId(row_face.face_id),
-            symbol_values: parsed_symbol_values,
-        };
+            char_width,
+            row_ascent,
+            RenderFaceRef::FaceId(row_face.face_id),
+            parsed_symbol_values,
+        );
         let mut row_builder = DisplayRowBuilder::new(row_layout);
         loop {
             let item = {
@@ -678,9 +695,9 @@ impl LayoutEngine {
                     base_face,
                     base_face_id: row_face.face_id,
                     next_face_id,
-                    char_w,
-                    ascent,
-                    height,
+                    char_w: geometry.char_width,
+                    ascent: geometry.ascent,
+                    height: geometry.height,
                     row_faces: &mut row_faces,
                 };
                 let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
@@ -697,7 +714,13 @@ impl LayoutEngine {
             row_builder.push_measured_item(item, &mut glyph_measurer);
         }
         let row = row_builder.finish();
-        let progress = display_source_row_progress(&row, width, char_width, y, height);
+        let progress = display_source_row_progress(
+            &row,
+            geometry.width,
+            char_width,
+            geometry.y,
+            geometry.height,
+        );
         let faces = row_faces
             .into_iter()
             .map(|face| face.render_face())

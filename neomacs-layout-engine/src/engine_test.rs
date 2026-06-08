@@ -3485,14 +3485,20 @@ fn next_layout_string_source_item_installs_pending_faces() {
     let mut source =
         crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
             .expect("string source");
-    let row_layout = text_display_row_layout(
-        0.0,
-        80.0,
-        16.0,
-        12.0,
+    let row_layout = DisplayRowGeometry {
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        char_width: 8.0,
+        ascent: 12.0,
+        tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+    }
+    .to_layout(
+        GlyphRowRole::Text,
         8.0,
-        crate::display_row_builder::DisplayTabPolicy::every(8),
-        0,
+        12.0,
+        RenderFaceRef::FaceId(0),
+        std::collections::HashMap::new(),
     );
     let mut append_cursor = crate::display_row_builder::DisplayRowAppendCursor::new(
         crate::display_row_builder::DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -3534,20 +3540,22 @@ fn text_row_append_context_derives_layout_output_and_bounds() {
         crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
     let context = TextRowAppendContext {
         row: 3,
-        row_y: 20.0,
         glyph_y: 22.0,
         x: 8.0,
         col: 0,
-        face_height: 16.0,
-        face_ascent: 11.0,
+        geometry: DisplayRowGeometry {
+            y: 20.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 9.0,
+            ascent: 11.0,
+            tab_policy: tab_policy.clone(),
+        },
         default_row_height: 14.0,
         content_x: 8.0,
-        avail_width: 120.0,
         text_width: 150.0,
         line_number_width: 10.0,
-        face_char_width: 9.0,
         face_space_width: 7.0,
-        tab_policy: tab_policy.clone(),
         face_id: 42,
     };
 
@@ -3594,18 +3602,20 @@ fn text_row_append_frame_builds_positioned_context() {
     let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
     let frame = TextRowAppendFrame {
         row: 3,
-        row_y: 20.0,
         glyph_y: 22.0,
-        face_height: 16.0,
-        face_ascent: 11.0,
+        geometry: DisplayRowGeometry {
+            y: 20.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 9.0,
+            ascent: 11.0,
+            tab_policy,
+        },
         default_row_height: 14.0,
         content_x: 8.0,
-        avail_width: 120.0,
         text_width: 150.0,
         line_number_width: 10.0,
-        face_char_width: 9.0,
         face_space_width: 7.0,
-        tab_policy,
     };
 
     let spec = frame
@@ -3622,20 +3632,22 @@ fn text_row_append_frame_builds_positioned_context() {
 fn text_row_append_spec_appends_item_to_matrix_row() {
     let context = TextRowAppendContext {
         row: 0,
-        row_y: 0.0,
         glyph_y: 0.0,
         x: 0.0,
         col: 0,
-        face_height: 16.0,
-        face_ascent: 12.0,
+        geometry: DisplayRowGeometry {
+            y: 0.0,
+            width: 80.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
         default_row_height: 16.0,
         content_x: 0.0,
-        avail_width: 80.0,
         text_width: 80.0,
         line_number_width: 0.0,
-        face_char_width: 8.0,
         face_space_width: 8.0,
-        tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         face_id: 7,
     };
     let spec = context.append_spec(TextRowAppendKind::SourceText);
