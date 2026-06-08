@@ -219,20 +219,6 @@ fn include_glyph_vertical_metrics(
     *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
 }
 
-fn control_char_display_pair(ch: char, ctl_arrow: bool) -> Option<(char, char)> {
-    if !ctl_arrow {
-        return None;
-    }
-
-    let code = ch as u32;
-    if (code <= 0x1f && ch != '\t') || code == 0x7f {
-        let suffix = char::from_u32(code ^ 0x40).unwrap_or('?');
-        Some(('^', suffix))
-    } else {
-        None
-    }
-}
-
 fn finish_text_row(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -5762,10 +5748,6 @@ impl LayoutEngine {
 
             // Check for line wrap / truncation using per-face char width
 
-            let control_display = control_char_display_pair(
-                ch,
-                super::neovm_bridge::buffer_local_bool(buffer, "ctl-arrow"),
-            );
             let tab_advance = (ch == '\t').then(|| {
                 text_display_tab_policy(content_x, params).advance_from(
                     crate::display_row_builder::DisplayRowPosition { x_px: x, col },
@@ -5781,8 +5763,6 @@ impl LayoutEngine {
             // computed above (before glyphless handling) and are reused here.
             let char_cols = if let Some(tab_advance) = tab_advance {
                 tab_advance.width_cols
-            } else if control_display.is_some() {
-                2
             } else if is_cluster_continuation {
                 0
             } else {
@@ -5790,8 +5770,6 @@ impl LayoutEngine {
             };
             let advance = if let Some(tab_advance) = tab_advance {
                 tab_advance.pixel_width
-            } else if control_display.is_some() {
-                2.0 * face_char_w
             } else if is_cluster_continuation {
                 0.0
             } else if crate::composition::needs_complex_shaping(ch) {
@@ -6184,95 +6162,73 @@ impl LayoutEngine {
                     height_scale,
                 );
             }
-            let glyph_x = x;
-            let glyph_col = col;
-            let buffer_pos = layout_i64_char_pos_to_lisp_char_pos(charpos);
-            let progress = if let Some((prefix, suffix)) = control_display {
-                self.run_buf.push(prefix, face_char_w);
-                self.run_buf.push(suffix, face_char_w);
-                self.matrix_builder.push_char_with_pixel_width(
-                    prefix,
-                    current_text_face_id,
-                    charpos as usize,
-                    face_char_w,
-                );
-                self.matrix_builder.push_char_with_pixel_width(
-                    suffix,
-                    current_text_face_id,
-                    charpos as usize,
-                    face_char_w,
-                );
-                None
-            } else {
-                if ch != '\t' {
-                    self.run_buf.push(ch, advance);
-                }
-                let start = CharPos0::new(charpos as usize);
-                let end = CharPos0::new(charpos.saturating_add(1) as usize);
-                let mut source = crate::display_source::BufferTextSourceCursor::new(
-                    buf_id,
-                    buffer,
-                    start,
-                    end,
-                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                );
-                let item = source
-                    .next_item(&mut crate::display_source::DisplaySourceContext::empty())
-                    .unwrap_or_else(|| {
-                        crate::display_item::DisplayItem::new(
-                            crate::display_item::SourceSpan::new(
-                                crate::display_item::DisplaySourcePosition::buffer(
-                                    buf_id,
-                                    start,
-                                    EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                                ),
-                                crate::display_item::DisplaySourcePosition::buffer(
-                                    buf_id,
-                                    end,
-                                    EmacsBytePos::new(text_start_byte + byte_idx),
-                                ),
+            if ch != '\t' {
+                self.run_buf.push(ch, advance);
+            }
+            let start = CharPos0::new(charpos as usize);
+            let end = CharPos0::new(charpos.saturating_add(1) as usize);
+            let mut source = crate::display_source::BufferTextSourceCursor::new(
+                buf_id,
+                buffer,
+                start,
+                end,
+                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+            );
+            let item = source
+                .next_item(&mut crate::display_source::DisplaySourceContext::empty())
+                .unwrap_or_else(|| {
+                    crate::display_item::DisplayItem::new(
+                        crate::display_item::SourceSpan::new(
+                            crate::display_item::DisplaySourcePosition::buffer(
+                                buf_id,
+                                start,
+                                EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
                             ),
-                            crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                            crate::display_item::DisplayItemKind::TextRun(
-                                crate::display_item::DisplayTextRun::new(ch.to_string()),
+                            crate::display_item::DisplaySourcePosition::buffer(
+                                buf_id,
+                                end,
+                                EmacsBytePos::new(text_start_byte + byte_idx),
                             ),
-                        )
-                    });
-                let layout = text_display_row_layout(
-                    y,
-                    avail_width,
-                    face_h,
-                    face_ascent_val,
-                    if ch == '\t' {
-                        face_space_w
-                    } else {
-                        face_char_w
-                    },
-                    text_display_tab_policy(content_x, params),
-                    current_text_face_id,
-                );
-                let mut measurer = SingleGlyphAdvance {
-                    ch,
-                    face_id: current_text_face_id,
-                    advance_px: advance,
-                };
-                let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
-                let progress = append_display_item_to_current_row_with_measured_progress(
-                    &mut self.matrix_builder,
-                    &layout,
-                    item,
-                    &mut measurer,
-                    position,
-                    if ch == '\t' {
-                        f32::INFINITY
-                    } else {
-                        content_x + avail_width
-                    },
-                );
-                let Some(progress) = progress else {
-                    break;
-                };
-                Some(progress)
+                        ),
+                        crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                        crate::display_item::DisplayItemKind::TextRun(
+                            crate::display_item::DisplayTextRun::new(ch.to_string()),
+                        ),
+                    )
+                });
+            let layout = text_display_row_layout(
+                y,
+                avail_width,
+                face_h,
+                face_ascent_val,
+                if ch == '\t' {
+                    face_space_w
+                } else {
+                    face_char_w
+                },
+                text_display_tab_policy(content_x, params),
+                current_text_face_id,
+            );
+            let mut measurer = SingleGlyphAdvance {
+                ch,
+                face_id: current_text_face_id,
+                advance_px: advance,
+            };
+            let position = crate::display_row_builder::DisplayRowPosition { x_px: x, col };
+            let progress = append_display_item_to_current_row_with_measured_progress(
+                &mut self.matrix_builder,
+                &layout,
+                item,
+                &mut measurer,
+                position,
+                if ch == '\t' {
+                    f32::INFINITY
+                } else {
+                    content_x + avail_width
+                },
+            );
+            let Some(progress) = progress else {
+                break;
             };
 
             // Flush if run is too long
@@ -6282,36 +6238,17 @@ impl LayoutEngine {
             }
 
             let output_span_height = if ch == '\t' { char_h } else { face_h };
-            if let Some(progress) = progress {
-                x = progress.end.x_px;
-                col = progress.end.col;
-                emit_text_progress_slots(
-                    &mut output_emitter,
-                    evaluator,
-                    &progress,
-                    row,
-                    y,
-                    y + raise_y_offset,
-                    output_span_height,
-                );
-            } else {
-                x += advance;
-                col += char_cols as usize;
-                output_emitter.emit_text_output_span(
-                    evaluator,
-                    text_output_span_from_coords(
-                        buffer_pos,
-                        row,
-                        y,
-                        y + raise_y_offset,
-                        output_span_height,
-                        glyph_x,
-                        glyph_col,
-                        glyph_x + advance,
-                        col,
-                    ),
-                );
-            }
+            x = progress.end.x_px;
+            col = progress.end.col;
+            emit_text_progress_slots(
+                &mut output_emitter,
+                evaluator,
+                &progress,
+                row,
+                y,
+                y + raise_y_offset,
+                output_span_height,
+            );
             charpos += 1;
             word_wrap_may_wrap = char_can_wrap_after_basic(ch);
 
