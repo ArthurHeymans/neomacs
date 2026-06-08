@@ -1603,6 +1603,71 @@ fn implemented_text_backends_match_layout_frame_invisible_text_output() {
 }
 
 #[test]
+fn layout_frame_rust_renders_invisible_ellipsis_through_row_builder() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("abc hidden xyz");
+        buf.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![Value::cons(Value::symbol("folded"), Value::T)]),
+        );
+        let start = "abc ".len();
+        let end = start + "hidden".len();
+        assert!(buf.put_text_property(
+            start,
+            end,
+            Value::symbol("invisible"),
+            Value::symbol("folded"),
+        ));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-invisible-ellipsis", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+    let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
+
+    assert_eq!(logical_text, "abc ... xyz");
+    assert!(
+        text_row.glyphs[1]
+            .iter()
+            .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '.' }))
+            .all(|glyph| (glyph.pixel_width - 8.0).abs() <= 0.01),
+        "ellipsis dots should carry measured pixel widths, row={:?}",
+        text_row.glyphs[1]
+    );
+}
+
+#[test]
 fn implemented_text_backends_match_layout_frame_multiline_overlay_output() {
     let baseline = multiline_overlay_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let rows = trace_text_rows(&baseline);

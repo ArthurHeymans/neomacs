@@ -4323,43 +4323,60 @@ impl LayoutEngine {
                     if invisible.ellipsis {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
-                        let right_limit = content_x + avail_width;
-                        for _ in 0..3 {
-                            if x + face_char_w > right_limit {
-                                break;
-                            }
-                            let dot_start_x = x;
-                            let dot_start_col = col;
-                            let dot_advance = char_pixel_advance(
-                                &mut self.ascii_width_cache,
-                                frame_params.window_system,
-                                &mut self.font_metrics,
-                                '.',
-                                1,
-                                char_w,
-                                current_font_size_px,
-                                face_char_w,
-                                &self.current_resolved_family,
-                                current_font_weight,
-                                current_font_italic,
-                            );
-                            self.matrix_builder.push_char_with_pixel_width(
-                                '.',
-                                current_text_face_id,
-                                charpos.max(0) as usize,
-                                dot_advance,
-                            );
-                            x += dot_advance;
-                            col += 1;
-                            output_emitter.emit_synthetic_text_span(
-                                evaluator,
-                                row,
+
+                        let dot_advance = char_pixel_advance(
+                            &mut self.ascii_width_cache,
+                            frame_params.window_system,
+                            &mut self.font_metrics,
+                            '.',
+                            1,
+                            char_w,
+                            current_font_size_px,
+                            face_char_w,
+                            &self.current_resolved_family,
+                            current_font_weight,
+                            current_font_italic,
+                        );
+                        let item = crate::display_item::DisplayItem::new(
+                            crate::display_item::SourceSpan::synthetic(3, 0, 3),
+                            crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                            crate::display_item::DisplayItemKind::TextRun(
+                                crate::display_item::DisplayTextRun::new("..."),
+                            ),
+                        );
+                        let append_spec = TextRowAppendFrame {
+                            row,
+                            glyph_y: y + raise_y_offset,
+                            geometry: DisplayRowGeometry {
                                 y,
-                                dot_start_x,
-                                x - dot_start_x,
-                                dot_start_col,
-                                col,
-                            );
+                                width: avail_width,
+                                height: face_h,
+                                char_width: face_char_w,
+                                ascent: face_ascent_val,
+                                tab_policy: text_display_tab_policy(content_x, params),
+                            },
+                            default_row_height: char_h,
+                            content_x,
+                            text_width,
+                            line_number_width: lnum_pixel_width,
+                            face_space_width: face_space_w,
+                        }
+                        .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                        .append_spec(TextRowAppendKind::SourceText);
+                        let mut measurer =
+                            FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
+                        if let Some((_progress, position)) =
+                            append_measured_text_row_spec_item_and_emit(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                append_spec,
+                                item,
+                                &mut measurer,
+                            )
+                        {
+                            x = position.x_px;
+                            col = position.col;
                         }
                     }
 
