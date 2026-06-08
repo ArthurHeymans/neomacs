@@ -1597,106 +1597,10 @@ fn render_overlay_string(
             continue;
         }
 
-        if let crate::display_item::DisplayItemKind::TextRun(run) = item.kind {
-            let face_id = render_face_ref_id(item.face, overlay_base_face_id);
-            let (source_id, mut char_idx, mut byte_idx) =
-                lisp_span_start_parts(&item.span).unwrap_or((1, 0, 0));
-            for ch in run.text.chars() {
-                let ch_len = ch.len_utf8();
-                // Grapheme-cluster composition for overlay-string text, using
-                // the same shared rule as buffer text (see `composition`):
-                // combining marks, ZWJ emoji sequences, and flag pairs cluster
-                // here too.
-                let cluster_tail = builder.last_text_cluster_tail();
-                let is_continuation = crate::composition::continues_cluster(ch, cluster_tail);
-                let cols = if is_continuation {
-                    0
-                } else if ch == '\t' {
-                    let tab_width = params.tab_width.max(1) as usize;
-                    let remainder = *col % tab_width;
-                    if remainder == 0 {
-                        tab_width
-                    } else {
-                        tab_width - remainder
-                    }
-                } else {
-                    crate::composition::base_width_cols(ch) as usize
-                };
-                let ch_advance = cols as f32 * face_char_w;
-                if *x + ch_advance > max_x {
-                    break;
-                }
-
-                let item = crate::display_item::DisplayItem::new(
-                    crate::display_item::SourceSpan::lisp_string(
-                        source_id,
-                        char_idx,
-                        char_idx + 1,
-                        byte_idx,
-                        byte_idx + ch_len,
-                    ),
-                    crate::display_item::RenderFaceRef::FaceId(face_id),
-                    crate::display_item::DisplayItemKind::TextRun(
-                        crate::display_item::DisplayTextRun::new(ch.to_string()),
-                    ),
-                );
-                let layout = text_display_row_layout(
-                    *y,
-                    max_x - content_x,
-                    char_h,
-                    default_row_ascent,
-                    face_char_w,
-                    params.tab_width,
-                    face_id,
-                );
-                if append_display_item_to_current_row_with_shared_builder(
-                    builder, layout, item, None,
-                )
-                .is_none()
-                {
-                    break;
-                }
-
-                let glyph_start_x = *x;
-                let glyph_start_col = *col;
-                if source_id == 1 {
-                    capture_overlay_string_cursor(
-                        text_props.as_ref(),
-                        char_idx,
-                        cursor_info,
-                        glyph_start_x,
-                        *y,
-                        face_char_w,
-                        char_h,
-                        default_row_ascent,
-                        Color::from_pixel(overlay_base_face.bg),
-                        glyph_start_col,
-                        *row,
-                        Some(ch_advance.max(1.0)),
-                    );
-                }
-                *x += ch_advance;
-                *col += cols;
-                output_emitter.emit_synthetic_text_span(
-                    evaluator,
-                    *row,
-                    *y,
-                    glyph_start_x,
-                    *x - glyph_start_x,
-                    glyph_start_col,
-                    *col,
-                );
-                char_idx += 1;
-                byte_idx += ch_len;
-            }
-            continue;
-        }
-
         if *x >= max_x {
             break;
         }
         let face_id = render_face_ref_id(item.face, overlay_base_face_id);
-        let cursor_char_idx = root_lisp_span_start_char(&item.span);
         let layout = text_display_row_layout(
             *y,
             max_x - content_x,
@@ -1706,40 +1610,51 @@ fn render_overlay_string(
             params.tab_width,
             face_id,
         );
-        let Some(metrics) =
-            append_display_item_to_current_row_with_shared_builder(builder, layout, item, None)
-        else {
+        let item = crate::display_item::DisplayItem::new(
+            item.span,
+            crate::display_item::RenderFaceRef::FaceId(face_id),
+            item.kind,
+        );
+        let position = crate::display_row_builder::DisplayRowPosition {
+            x_px: *x,
+            col: *col,
+        };
+        let progress = builder.with_current_row_mut(|glyph_row| {
+            let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
+                &layout, glyph_row, position, max_x,
+            );
+            writer.push_item(item)
+        });
+        let Some(progress) = progress else {
             break;
         };
-        let glyph_start_x = *x;
-        let glyph_start_col = *col;
-        if let Some(char_idx) = cursor_char_idx {
-            capture_overlay_string_cursor(
+        for slot in &progress.slots {
+            capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
-                char_idx,
+                slot,
                 cursor_info,
-                glyph_start_x,
                 *y,
                 face_char_w,
                 char_h,
                 default_row_ascent,
-                Color::from_pixel(overlay_base_face.bg),
-                glyph_start_col,
                 *row,
-                Some(metrics.width_px.max(1.0)),
+                Color::from_pixel(overlay_base_face.bg),
             );
         }
-        *x += metrics.width_px;
-        *col += metrics.width_cols;
+        *x = progress.end.x_px;
+        *col = progress.end.col;
         output_emitter.emit_synthetic_text_span(
             evaluator,
             *row,
             *y,
-            glyph_start_x,
-            *x - glyph_start_x,
-            glyph_start_col,
-            *col,
+            progress.start.x_px,
+            progress.end.x_px - progress.start.x_px,
+            progress.start.col,
+            progress.end.col,
         );
+        if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
+            break;
+        }
     }
 }
 
@@ -1750,26 +1665,46 @@ fn render_face_ref_id(face: crate::display_item::RenderFaceRef, fallback: u32) -
     }
 }
 
-fn lisp_span_start_parts(span: &crate::display_item::SourceSpan) -> Option<(u64, usize, usize)> {
-    match span.start {
-        crate::display_item::DisplaySourcePosition::LispString {
-            source_id,
-            char_index,
-            byte_index,
-        } => Some((source_id.get(), char_index, byte_index)),
-        _ => None,
-    }
-}
-
-fn root_lisp_span_start_char(span: &crate::display_item::SourceSpan) -> Option<usize> {
-    match span.start {
+fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) -> Option<usize> {
+    match source {
         crate::display_item::DisplaySourcePosition::LispString {
             source_id,
             char_index,
             ..
-        } if source_id.get() == 1 => Some(char_index),
+        } if source_id.get() == 1 => Some(*char_index),
         _ => None,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn capture_overlay_string_cursor_at_slot(
+    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
+    slot: &crate::display_row_builder::DisplayRowGlyphSlot,
+    cursor_info: &mut Option<CapturedCursorInfo>,
+    y: f32,
+    face_w: f32,
+    face_h: f32,
+    face_ascent: f32,
+    matrix_row: usize,
+    bg: Color,
+) {
+    let Some(char_idx) = root_lisp_position_char(&slot.source) else {
+        return;
+    };
+    capture_overlay_string_cursor(
+        text_props,
+        char_idx,
+        cursor_info,
+        slot.x_px,
+        y,
+        face_w,
+        face_h,
+        face_ascent,
+        bg,
+        slot.col,
+        matrix_row,
+        Some(slot.width_px.max(1.0)),
+    );
 }
 
 fn capture_overlay_string_cursor(

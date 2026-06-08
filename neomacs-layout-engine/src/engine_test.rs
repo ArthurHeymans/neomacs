@@ -6941,6 +6941,72 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
 }
 
 #[test]
+fn layout_frame_rust_places_cursor_inside_overlay_string_text_run() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let overlay_text = Value::string_with_text_properties(
+            "AB",
+            vec![StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::T]),
+            }],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("after-string"), overlay_text);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-cursor-run", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+    let x_point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
+        .expect("x point");
+    let expected_overlay_slot_width = frame.char_width.round() as i64;
+
+    assert_eq!(cursor.row, x_point.row);
+    assert_eq!(
+        cursor.x,
+        x_point.x + x_point.width + expected_overlay_slot_width
+    );
+    assert_eq!(cursor.col, x_point.col + 2);
+    assert_eq!(cursor.width, expected_overlay_slot_width);
+}
+
+#[test]
 fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     let mut eval = Context::new();
     let buf_id = eval
