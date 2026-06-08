@@ -7211,6 +7211,25 @@ fn condition_case_suppresses_debugger_without_debug_marker() {
 }
 
 #[test]
+fn active_condition_handler_detection_matches_condition_case_error_clause() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.push_condition_frame(ConditionFrame::ConditionCase {
+        conditions: Value::symbol("error"),
+        resume: ResumeTarget::InterpreterConditionCase {
+            handler_index: 0,
+            condition_stack_base: 0,
+        },
+    });
+
+    let Flow::Signal(sig) = signal("error", vec![Value::string("handled later")]) else {
+        panic!("signal should create Flow::Signal");
+    };
+
+    assert!(ev.has_active_condition_handler_for_signal(&sig));
+}
+
+#[test]
 fn condition_case_debug_marker_calls_debugger_before_handler() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

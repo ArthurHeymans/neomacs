@@ -2633,6 +2633,20 @@ impl Context {
         self.matching_catch_resume(tag).is_some()
     }
 
+    pub(crate) fn has_active_condition_handler_for_signal(&self, sig: &SignalData) -> bool {
+        self.condition_stack.iter().rev().any(|frame| match frame {
+            ConditionFrame::ConditionCase { conditions, .. }
+            | ConditionFrame::HandlerBind { conditions, .. } => {
+                crate::emacs_core::errors::signal_matches_condition_value(
+                    &self.obarray,
+                    sig.symbol_name(),
+                    conditions,
+                )
+            }
+            _ => false,
+        })
+    }
+
     pub(crate) fn dispatch_signal_if_needed(
         &mut self,
         sig: Box<SignalData>,
@@ -2921,6 +2935,12 @@ impl Context {
             .symbol_value("debugger")
             .copied()
             .unwrap_or(Value::NIL);
+        let rendered = super::error::format_signal_data_with_eval(self, sig);
+        tracing::error!(
+            "entering Lisp debugger for signal: symbol={} data={}",
+            sig.symbol_name(),
+            rendered
+        );
         let specpdl_count = self.specpdl.len();
         self.specbind(intern("debugger-may-continue"), Value::T);
         self.specbind(intern("inhibit-debugger"), Value::T);
@@ -10003,7 +10023,7 @@ impl Context {
                         })();
                         let _ = self.require_stack.pop();
                         if let Err(ref e) = result
-                            && !matches!(e, Flow::Throw { tag, .. } if self.has_active_catch(tag))
+                            && !self.flow_has_active_handler(e)
                         {
                             let noerror_val =
                                 noerror.as_ref().map(|v| !v.is_nil()).unwrap_or(false);
@@ -10020,6 +10040,13 @@ impl Context {
                     }
                 }
             }
+        }
+    }
+
+    fn flow_has_active_handler(&self, flow: &Flow) -> bool {
+        match flow {
+            Flow::Signal(sig) => self.has_active_condition_handler_for_signal(sig),
+            Flow::Throw { tag, .. } => self.has_active_catch(tag),
         }
     }
 
