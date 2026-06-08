@@ -1682,17 +1682,72 @@ pub(crate) fn builtin_check_coding_system(
     }
 }
 
-/// `(check-coding-systems-region START END CODING-SYSTEMS)` -- compatibility
-/// helper that currently performs argument shape checks and returns nil.
+fn validate_coding_system_list_cars_for_non_ascii(
+    mgr: &CodingSystemManager,
+    coding_systems: Value,
+) -> Result<(), Flow> {
+    let mut tail = coding_systems;
+    while tail.is_cons() {
+        let coding_system = tail.cons_car();
+        let Some(name) = coding_system.as_symbol_name() else {
+            return Err(signal("coding-system-error", vec![coding_system]));
+        };
+        if !is_known_or_derived_coding_system(mgr, name) {
+            return Err(signal("coding-system-error", vec![coding_system]));
+        }
+        tail = tail.cons_cdr();
+    }
+    Ok(())
+}
+
+/// `(check-coding-systems-region START END CODING-SYSTEMS)` -- check whether
+/// CODING-SYSTEMS can encode the region.  The ASCII/unibyte fast paths mirror
+/// GNU `Fcheck_coding_systems_region`: they return nil before validating the
+/// coding-system list.
 pub(crate) fn builtin_check_coding_systems_region(
-    _mgr: &CodingSystemManager,
+    eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("check-coding-systems-region", &args, 3)?;
-    if !args[0].is_string() {
-        expect_integer_or_marker(&args[0])?;
-        expect_integer_or_marker(&args[1])?;
+
+    if args[0].is_string() {
+        let text = coding_runtime_string(&args[0])?;
+        if !args[0].string_is_multibyte() || text.is_ascii() {
+            return Ok(Value::NIL);
+        }
+        validate_coding_system_list_cars_for_non_ascii(&eval.coding_systems, args[2])?;
+        return Ok(Value::NIL);
     }
+
+    let start = marker_or_integer_position(&args[0])?;
+    let end = marker_or_integer_position(&args[1])?;
+
+    let buffer = eval
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let buffer_start = 1;
+    let buffer_end = buffer.total_char_len().get() as i64 + 1;
+    if !(buffer_start <= start && start <= end && end <= buffer_end) {
+        return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+    }
+
+    if !buffer.get_multibyte() {
+        return Ok(Value::NIL);
+    }
+    let byte_range = EmacsByteRange::new(
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
+    );
+    let text = {
+        let string = buffer.buffer_substring_lisp_string_range(byte_range);
+        super::builtins::runtime_string_from_lisp_string(&string)
+    };
+    if text.is_ascii() {
+        return Ok(Value::NIL);
+    }
+
+    validate_coding_system_list_cars_for_non_ascii(&eval.coding_systems, args[2])?;
     Ok(Value::NIL)
 }
 

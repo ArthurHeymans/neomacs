@@ -1618,10 +1618,10 @@ fn check_coding_system_rejects_unsupported_derived_variants() {
 #[test]
 fn check_coding_systems_region_semantics() {
     crate::test_utils::init_test_tracing();
-    let m = mgr();
+    let mut eval = crate::emacs_core::eval::Context::new();
     assert!(
         builtin_check_coding_systems_region(
-            &m,
+            &mut eval,
             vec![
                 Value::fixnum(1),
                 Value::fixnum(1),
@@ -1633,7 +1633,7 @@ fn check_coding_systems_region_semantics() {
     );
     assert!(
         builtin_check_coding_systems_region(
-            &m,
+            &mut eval,
             vec![Value::string("x"), Value::fixnum(1), Value::symbol("utf-8")]
         )
         .unwrap()
@@ -1641,7 +1641,7 @@ fn check_coding_systems_region_semantics() {
     );
 
     let start_type_err = builtin_check_coding_systems_region(
-        &m,
+        &mut eval,
         vec![Value::symbol("x"), Value::fixnum(1), Value::symbol("utf-8")],
     )
     .unwrap_err();
@@ -1657,7 +1657,7 @@ fn check_coding_systems_region_semantics() {
     }
 
     let type_err = builtin_check_coding_systems_region(
-        &m,
+        &mut eval,
         vec![Value::fixnum(1), Value::string("x"), Value::symbol("utf-8")],
     )
     .unwrap_err();
@@ -1672,9 +1672,94 @@ fn check_coding_systems_region_semantics() {
         other => panic!("expected wrong-type-argument, got {other:?}"),
     }
 
-    assert!(builtin_check_coding_systems_region(&m, vec![]).is_err());
+    assert!(builtin_check_coding_systems_region(&mut eval, vec![]).is_err());
     assert!(
-        builtin_check_coding_systems_region(&m, vec![Value::fixnum(1), Value::fixnum(1)]).is_err()
+        builtin_check_coding_systems_region(&mut eval, vec![Value::fixnum(1), Value::fixnum(1)])
+            .is_err()
+    );
+}
+
+#[test]
+fn check_coding_systems_region_matches_gnu_validation_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.eval_str("(insert \"abc\")").expect("insert ascii");
+
+    let range_err = builtin_check_coding_systems_region(
+        &mut eval,
+        vec![
+            Value::fixnum(9),
+            Value::fixnum(10),
+            Value::list(vec![Value::symbol("no-such-coding")]),
+        ],
+    )
+    .expect_err("GNU validates bad buffer ranges before coding systems");
+    match range_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(9), Value::fixnum(10)]);
+        }
+        other => panic!("expected args-out-of-range, got {other:?}"),
+    }
+
+    let reversed_err = builtin_check_coding_systems_region(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(2),
+            Value::list(vec![Value::symbol("no-such-coding")]),
+        ],
+    )
+    .expect_err("GNU does not swap check-coding-systems-region endpoints");
+    match reversed_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(3), Value::fixnum(2)]);
+        }
+        other => panic!("expected args-out-of-range, got {other:?}"),
+    }
+
+    assert!(
+        builtin_check_coding_systems_region(
+            &mut eval,
+            vec![
+                Value::fixnum(1),
+                Value::fixnum(2),
+                Value::list(vec![Value::symbol("no-such-coding")]),
+            ],
+        )
+        .expect("GNU ignores coding list for ASCII buffer text")
+        .is_nil()
+    );
+
+    let coding_err = builtin_check_coding_systems_region(
+        &mut eval,
+        vec![
+            Value::string("é"),
+            Value::NIL,
+            Value::list(vec![Value::symbol("no-such-coding")]),
+        ],
+    )
+    .expect_err("GNU validates coding list for non-ASCII string text");
+    match coding_err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "coding-system-error");
+            assert_eq!(sig.data, vec![Value::symbol("no-such-coding")]);
+        }
+        other => panic!("expected coding-system-error, got {other:?}"),
+    }
+
+    assert!(
+        builtin_check_coding_systems_region(
+            &mut eval,
+            vec![
+                Value::string("é"),
+                Value::NIL,
+                Value::cons(Value::symbol("utf-8"), Value::symbol("ignored-tail")),
+            ],
+        )
+        .expect("GNU ignores dotted tail after valid coding cons cars")
+        .is_nil()
     );
 }
 

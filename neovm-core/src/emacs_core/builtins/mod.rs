@@ -858,7 +858,7 @@ fn defsubr_check_coding_systems_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::coding::builtin_check_coding_systems_region(&eval.coding_systems, args)
+    super::coding::builtin_check_coding_systems_region(eval, args)
 }
 fn defsubr_define_coding_system_internal(
     eval: &mut super::eval::Context,
