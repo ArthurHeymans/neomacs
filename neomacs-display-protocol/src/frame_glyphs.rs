@@ -1432,6 +1432,91 @@ impl FrameGlyphBuffer {
             .unwrap_or(fallback)
     }
 
+    /// The full pixel rect `(x, y, width, height)` at which a cursor on
+    /// `slot_id` with the given `style` is drawn. Resolves the glyph occupying
+    /// the slot (its cell `x`, and full rect for media glyphs), keeping the
+    /// layout's row `y`/`height`, applying the box/bar/stretch width policy, and
+    /// shifting bar/hollow cursors to the right edge on RTL glyphs. `fallback`
+    /// (the layout's grid-derived geometry) is used when no glyph occupies the
+    /// slot, e.g. an empty line.
+    ///
+    /// This is THE single cursor-placement computation: the static draw, the
+    /// per-window cursors, and the slide-animation target all call it, so they
+    /// cannot drift apart (each independent reconstruction previously produced a
+    /// distinct cursor bug under line numbers, hidden text, or scaled fonts).
+    pub fn cursor_draw_rect(
+        &self,
+        slot_id: DisplaySlotId,
+        style: CursorStyle,
+        fallback: (f32, f32, f32, f32),
+    ) -> (f32, f32, f32, f32) {
+        let mut x = fallback.0;
+        let y = fallback.1;
+        let mut width = fallback.2.max(1.0);
+        let height = fallback.3.max(1.0);
+
+        if let Some(slot) = self.slot_glyph(slot_id) {
+            match slot {
+                FrameGlyph::Char {
+                    x: slot_x,
+                    width: slot_width,
+                    ..
+                } => {
+                    x = *slot_x;
+                    if !matches!(style, CursorStyle::Bar(_)) {
+                        width = slot_width.max(1.0);
+                    }
+                }
+                FrameGlyph::Stretch { x: slot_x, .. } => {
+                    // The stretch-cursor width policy is already resolved into
+                    // the fallback width by the layout.
+                    x = *slot_x;
+                }
+                FrameGlyph::Image {
+                    x: slot_x,
+                    y: slot_y,
+                    width: slot_width,
+                    height: slot_height,
+                    ..
+                }
+                | FrameGlyph::Video {
+                    x: slot_x,
+                    y: slot_y,
+                    width: slot_width,
+                    height: slot_height,
+                    ..
+                }
+                | FrameGlyph::Xwidget {
+                    x: slot_x,
+                    y: slot_y,
+                    width: slot_width,
+                    height: slot_height,
+                    ..
+                } => {
+                    return (*slot_x, *slot_y, slot_width.max(1.0), slot_height.max(1.0));
+                }
+                _ => {}
+            }
+        }
+
+        if matches!(
+            style,
+            CursorStyle::Bar(_) | CursorStyle::Hbar(_) | CursorStyle::Hollow
+        ) && let Some(slot) = self.slot_glyph(slot_id)
+            && slot.bidi_level().is_some_and(|level| level & 1 != 0)
+        {
+            let slot_width = match slot {
+                FrameGlyph::Char { width, .. } | FrameGlyph::Stretch { width, .. } => *width,
+                _ => width,
+            };
+            if slot_width > width {
+                x += slot_width - width;
+            }
+        }
+
+        (x, y, width, height)
+    }
+
     /// Add border
     pub fn add_border(&mut self, x: f32, y: f32, width: f32, height: f32, color: Color) {
         self.glyphs.push(FrameGlyph::Border {

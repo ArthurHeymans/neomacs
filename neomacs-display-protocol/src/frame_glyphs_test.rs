@@ -328,6 +328,70 @@ fn cursor_cell_rect_resolves_slot_glyph_else_fallback() {
 }
 
 #[test]
+fn cursor_draw_rect_box_adopts_cell_while_bar_keeps_width() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
+    let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
+
+    // A box cursor adopts the glyph's actual cell x and full width, keeping the
+    // layout row's y/height fallback -- this is why a box cursor lands exactly
+    // on a scaled-font glyph instead of the grid-approximate column.
+    assert_eq!(
+        buf.cursor_draw_rect(slot, CursorStyle::FilledBox, (5.0, 41.0, 2.0, 33.0)),
+        (30.0, 41.0, 18.0, 33.0)
+    );
+
+    // A bar cursor adopts the same cell x but keeps its own thin fallback width.
+    assert_eq!(
+        buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), (5.0, 41.0, 2.0, 33.0)),
+        (30.0, 41.0, 2.0, 33.0)
+    );
+}
+
+#[test]
+fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.add_image(9, 24.0, 48.0, 128.0, 96.0);
+    let slot = buf.glyphs[0].slot_id().expect("image glyph has a slot");
+
+    // A cursor over an image covers the whole image rect, ignoring the
+    // grid-derived fallback geometry entirely.
+    assert_eq!(
+        buf.cursor_draw_rect(slot, CursorStyle::Hollow, (1.0, 2.0, 3.0, 4.0)),
+        (24.0, 48.0, 128.0, 96.0)
+    );
+
+    // An unoccupied slot falls back to the layout's grid geometry unchanged.
+    let empty = DisplaySlotId {
+        window_id: 7,
+        row: 9,
+        col: 9,
+    };
+    assert_eq!(
+        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, (5.0, 6.0, 7.0, 8.0)),
+        (5.0, 6.0, 7.0, 8.0)
+    );
+}
+
+#[test]
+fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.add_char('\u{0627}', 30.0, 40.0, 18.0, 33.0, 26.0, false);
+    // Mark the glyph right-to-left (odd bidi level); add_char defaults to 0.
+    if let FrameGlyph::Char { bidi_level, .. } = &mut buf.glyphs[0] {
+        *bidi_level = 1;
+    }
+    let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
+
+    // A 2px bar on an 18px RTL cell sits at the cell's right edge:
+    // 30 + (18 - 2) = 46, so the caret leads the character as it should in RTL.
+    let (x, _y, w, _h) = buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), (30.0, 40.0, 2.0, 33.0));
+    assert_eq!((x, w), (46.0, 2.0));
+}
+
+#[test]
 fn add_char_uses_current_face_attributes() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(1.0, 0.0, 0.0);

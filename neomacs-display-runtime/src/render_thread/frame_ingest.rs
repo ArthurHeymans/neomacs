@@ -123,20 +123,20 @@ impl RenderApp {
         if active_cursor.is_none() {
             for (_, entry) in &render.compositor.child_frames.frames {
                 if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
-                    // Slide to the slot glyph's cell (where the static cursor
-                    // draws), not the grid-approximate PhysCursor::x; see
-                    // cursor_target_for_frame.
-                    let x = entry
-                        .frame
-                        .slot_glyph(cursor.slot_id)
-                        .and_then(|glyph| glyph.cell_x())
-                        .unwrap_or(cursor.x);
+                    // Resolve through the shared cursor_draw_rect (where the
+                    // static cursor draws), not the grid-approximate PhysCursor
+                    // geometry; see cursor_target_for_frame.
+                    let (x, y, width, height) = entry.frame.cursor_draw_rect(
+                        cursor.slot_id,
+                        cursor.style,
+                        (cursor.x, cursor.y, cursor.width, cursor.height),
+                    );
                     active_cursor = Some(CursorTarget {
                         window_id: cursor.window_id,
                         x,
-                        y: cursor.y,
-                        width: cursor.width,
-                        height: cursor.height,
+                        y,
+                        width,
+                        height,
                         style: cursor.style,
                         color: cursor.color,
                         frame_id: entry.frame_id,

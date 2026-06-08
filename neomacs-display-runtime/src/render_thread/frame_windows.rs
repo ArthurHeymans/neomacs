@@ -1355,20 +1355,21 @@ impl GuiFrameWindowManager {
         frame: &FrameGlyphBuffer,
     ) -> Option<CursorTarget> {
         frame.phys_cursor.as_ref().map(|cursor| {
-            // Slide to where the static cursor is actually drawn -- the slot
-            // glyph's cell -- not the grid-approximate PhysCursor::x. Under
-            // scaled fonts (e.g. org headings) the two differ by whole columns,
-            // which left the animated cursor stranded as a second box.
-            let x = frame
-                .slot_glyph(cursor.slot_id)
-                .and_then(|glyph| glyph.cell_x())
-                .unwrap_or(cursor.x);
+            // Slide toward the exact rect the static cursor is drawn at -- the
+            // shared cursor_draw_rect -- not the grid-approximate PhysCursor
+            // geometry. Under scaled fonts the two diverge and the animated box
+            // would strand itself as a second cursor.
+            let (x, y, width, height) = frame.cursor_draw_rect(
+                cursor.slot_id,
+                cursor.style,
+                (cursor.x, cursor.y, cursor.width, cursor.height),
+            );
             CursorTarget {
                 window_id: cursor.window_id,
                 x,
-                y: cursor.y,
-                width: cursor.width,
-                height: cursor.height,
+                y,
+                width,
+                height,
                 style: cursor.style,
                 color: cursor.color,
                 frame_id: emacs_frame_id,

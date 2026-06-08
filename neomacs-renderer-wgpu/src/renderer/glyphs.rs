@@ -340,71 +340,14 @@ fn cursor_glyph_slot_rect(
     frame_glyphs: &FrameGlyphBuffer,
     cursor: &PhysCursor,
 ) -> (f32, f32, f32, f32) {
-    let mut x = cursor.x;
-    let y = cursor.y;
-    let mut width = cursor.width.max(1.0);
-    let height = cursor.height.max(1.0);
-
-    if let Some(slot) = frame_glyphs.slot_glyph(cursor.slot_id) {
-        match slot {
-            FrameGlyph::Char {
-                x: slot_x,
-                width: slot_width,
-                ..
-            } => {
-                x = *slot_x;
-                if !matches!(cursor.style, CursorStyle::Bar(_)) {
-                    width = slot_width.max(1.0);
-                }
-            }
-            FrameGlyph::Stretch { x: slot_x, .. } => {
-                x = *slot_x;
-                // GNU clamps stretch cursor width when x-stretch-cursor is nil.
-                // Layout has already resolved that policy into PhysCursor::width.
-            }
-            FrameGlyph::Image {
-                x: slot_x,
-                y: slot_y,
-                width: slot_width,
-                height: slot_height,
-                ..
-            }
-            | FrameGlyph::Video {
-                x: slot_x,
-                y: slot_y,
-                width: slot_width,
-                height: slot_height,
-                ..
-            }
-            | FrameGlyph::Xwidget {
-                x: slot_x,
-                y: slot_y,
-                width: slot_width,
-                height: slot_height,
-                ..
-            } => {
-                return (*slot_x, *slot_y, slot_width.max(1.0), slot_height.max(1.0));
-            }
-            _ => {}
-        }
-    }
-
-    if matches!(
+    // Single source of truth for cursor placement (display-protocol). The
+    // animation target and per-window cursors resolve through the same call,
+    // so they cannot drift from where the cursor is statically drawn.
+    frame_glyphs.cursor_draw_rect(
+        cursor.slot_id,
         cursor.style,
-        CursorStyle::Bar(_) | CursorStyle::Hbar(_) | CursorStyle::Hollow
-    ) && let Some(slot) = frame_glyphs.slot_glyph(cursor.slot_id)
-        && slot.bidi_level().is_some_and(|level| level & 1 != 0)
-    {
-        let slot_width = match slot {
-            FrameGlyph::Char { width, .. } | FrameGlyph::Stretch { width, .. } => *width,
-            _ => width,
-        };
-        if slot_width > width {
-            x += slot_width - width;
-        }
-    }
-
-    (x, y, width, height)
+        (cursor.x, cursor.y, cursor.width, cursor.height),
+    )
 }
 
 fn log_cursor_glyph_alignment(
