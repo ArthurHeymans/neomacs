@@ -1,3 +1,4 @@
+use super::ChromeRowOutput;
 use super::DisplayProgressSink;
 use super::TextRowOutput;
 use super::WindowOutputEmitter;
@@ -6,6 +7,7 @@ use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
     DisplayRowWriteMetrics,
 };
+use crate::display_status_line::StatusLineOutputProgress;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
@@ -240,4 +242,55 @@ fn display_progress_sink_advances_without_points_for_non_buffer_slots() {
             col: 3,
         })
     );
+}
+
+#[test]
+fn display_progress_sink_records_chrome_row_progress() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-chrome-progress", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    let output = ChromeRowOutput { row: 2, y: 18.0 };
+    let progress = StatusLineOutputProgress {
+        end_x: 40.0,
+        end_col: 5,
+        y: 18.0,
+        height: 14.0,
+    };
+
+    emitter.begin_chrome_progress(&mut eval, output);
+    emitter.emit_chrome_progress(&mut eval, output, progress);
+    emitter.finish_chrome_progress(progress);
+
+    let display = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.display())
+        .expect("window display state");
+
+    assert_eq!(
+        display.output_cursor,
+        Some(neovm_core::window::WindowCursorPos {
+            x: 40,
+            y: 18,
+            row: 2,
+            col: 5,
+        })
+    );
+    assert_eq!(emitter.rows().len(), 1);
+    assert_eq!(emitter.rows()[0].row, 2);
+    assert_eq!(emitter.rows()[0].height, 14);
 }

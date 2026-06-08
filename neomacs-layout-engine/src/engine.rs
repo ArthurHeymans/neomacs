@@ -16,7 +16,7 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
+    ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_source::DisplayItemSource;
@@ -7008,11 +7008,11 @@ impl LayoutEngine {
                 &mut self.matrix_builder,
                 crate::matrix_builder::GlyphMatrixBuilder::new(),
             );
-            output_emitter.begin_chrome_row(evaluator, tl_row, tl_y);
-            let mut advance_output =
-                |progress: crate::display_status_line::StatusLineOutputProgress| {
-                    output_emitter.move_chrome_output_to(evaluator, tl_row, progress);
-                };
+            let tab_row_output = ChromeRowOutput {
+                row: tl_row,
+                y: tl_y,
+            };
+            output_emitter.begin_chrome_progress(evaluator, tab_row_output);
             let tab_output = self.render_display_source_row(
                 tl_y,
                 params.bounds.width,
@@ -7028,11 +7028,11 @@ impl LayoutEngine {
             );
             if let Some(ref rendered) = tab_output {
                 crate::display_row::install_rendered_display_source_row(&mut builder, rendered, 0);
-                advance_output(rendered.progress);
+                output_emitter.emit_chrome_progress(evaluator, tab_row_output, rendered.progress);
             }
             self.matrix_builder = builder;
             if let Some(rendered) = tab_output {
-                output_emitter.push_chrome_row_progress(rendered.progress);
+                output_emitter.finish_chrome_progress(rendered.progress);
             }
         }
 
@@ -7063,11 +7063,11 @@ impl LayoutEngine {
                 &mut self.matrix_builder,
                 crate::matrix_builder::GlyphMatrixBuilder::new(),
             );
-            output_emitter.begin_chrome_row(evaluator, hl_row, hl_y);
-            let mut advance_output =
-                |progress: crate::display_status_line::StatusLineOutputProgress| {
-                    output_emitter.move_chrome_output_to(evaluator, hl_row, progress);
-                };
+            let header_row_output = ChromeRowOutput {
+                row: hl_row,
+                y: hl_y,
+            };
+            output_emitter.begin_chrome_progress(evaluator, header_row_output);
             let header_output = self.render_display_source_row(
                 hl_y,
                 params.bounds.width,
@@ -7087,11 +7087,15 @@ impl LayoutEngine {
                     rendered,
                     usize::from(tab_line_height > 0.0),
                 );
-                advance_output(rendered.progress);
+                output_emitter.emit_chrome_progress(
+                    evaluator,
+                    header_row_output,
+                    rendered.progress,
+                );
             }
             self.matrix_builder = builder;
             if let Some(rendered) = header_output {
-                output_emitter.push_chrome_row_progress(rendered.progress);
+                output_emitter.finish_chrome_progress(rendered.progress);
             }
         }
 
@@ -7137,11 +7141,11 @@ impl LayoutEngine {
                 &mut self.matrix_builder,
                 crate::matrix_builder::GlyphMatrixBuilder::new(),
             );
-            output_emitter.begin_chrome_row(evaluator, ml_row, ml_y);
-            let mut advance_output =
-                |progress: crate::display_status_line::StatusLineOutputProgress| {
-                    output_emitter.move_chrome_output_to(evaluator, ml_row, progress);
-                };
+            let mode_row_output = ChromeRowOutput {
+                row: ml_row,
+                y: ml_y,
+            };
+            output_emitter.begin_chrome_progress(evaluator, mode_row_output);
             let mode_output = self.render_display_source_row(
                 ml_y,
                 params.bounds.width,
@@ -7161,11 +7165,11 @@ impl LayoutEngine {
                     rendered,
                     mode_line_matrix_row,
                 );
-                advance_output(rendered.progress);
+                output_emitter.emit_chrome_progress(evaluator, mode_row_output, rendered.progress);
             }
             self.matrix_builder = builder;
             if let Some(rendered) = mode_output {
-                output_emitter.push_chrome_row_progress(rendered.progress);
+                output_emitter.finish_chrome_progress(rendered.progress);
             }
         }
 

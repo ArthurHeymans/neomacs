@@ -78,6 +78,12 @@ impl TextRowOutput {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ChromeRowOutput {
+    pub(crate) row: i64,
+    pub(crate) y: f32,
+}
+
 pub(crate) trait DisplayProgressSink {
     fn emit_text_progress(
         &mut self,
@@ -85,6 +91,17 @@ pub(crate) trait DisplayProgressSink {
         output: TextRowOutput,
         progress: &DisplayRowAppendProgress,
     );
+
+    fn begin_chrome_progress(&mut self, evaluator: &mut Context, output: ChromeRowOutput);
+
+    fn emit_chrome_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: ChromeRowOutput,
+        progress: StatusLineOutputProgress,
+    );
+
+    fn finish_chrome_progress(&mut self, progress: StatusLineOutputProgress);
 }
 
 pub(crate) struct WindowOutputEmitter {
@@ -127,6 +144,23 @@ impl DisplayProgressSink for WindowOutputEmitter {
                 progress.end.x_px,
             );
         }
+    }
+
+    fn begin_chrome_progress(&mut self, evaluator: &mut Context, output: ChromeRowOutput) {
+        self.begin_chrome_row(evaluator, output.row, output.y);
+    }
+
+    fn emit_chrome_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: ChromeRowOutput,
+        progress: StatusLineOutputProgress,
+    ) {
+        self.move_chrome_output_to(evaluator, output.row, progress);
+    }
+
+    fn finish_chrome_progress(&mut self, progress: StatusLineOutputProgress) {
+        self.push_chrome_row_progress(progress);
     }
 }
 
@@ -374,7 +408,7 @@ impl WindowOutputEmitter {
         );
     }
 
-    pub(crate) fn begin_chrome_row(&mut self, evaluator: &mut Context, row: i64, y: f32) {
+    fn begin_chrome_row(&mut self, evaluator: &mut Context, row: i64, y: f32) {
         self.begin_row_output(evaluator, row, 0, (y - self.window_top).round() as i64, 0);
     }
 
@@ -413,7 +447,7 @@ impl WindowOutputEmitter {
         );
     }
 
-    pub(crate) fn move_chrome_output_to(
+    fn move_chrome_output_to(
         &mut self,
         evaluator: &mut Context,
         row: i64,
@@ -452,11 +486,11 @@ impl WindowOutputEmitter {
         });
     }
 
-    pub(crate) fn push_chrome_row(&mut self, row: DisplayRowSnapshot) {
+    fn push_chrome_row(&mut self, row: DisplayRowSnapshot) {
         self.rows.push(row);
     }
 
-    pub(crate) fn push_chrome_row_progress(&mut self, progress: StatusLineOutputProgress) {
+    fn push_chrome_row_progress(&mut self, progress: StatusLineOutputProgress) {
         let row_progress = self
             .current_row_progress
             .take()
