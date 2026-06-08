@@ -65,6 +65,27 @@ impl DisplayRowWriteMetrics {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DisplayRowPosition {
+    pub(crate) x_px: f32,
+    pub(crate) col: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowAppendStatus {
+    Complete,
+    Clipped,
+    RowBreak,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendProgress {
+    pub(crate) start: DisplayRowPosition,
+    pub(crate) end: DisplayRowPosition,
+    pub(crate) metrics: DisplayRowWriteMetrics,
+    pub(crate) status: DisplayRowAppendStatus,
+}
+
 pub(crate) struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
     row: GlyphRow,
@@ -75,6 +96,12 @@ pub(crate) struct DisplayRowWriter<'layout, 'row, 'measurer> {
     layout: &'layout DisplayRowLayout,
     row: &'row mut GlyphRow,
     glyph_measurer: Option<&'measurer mut dyn DisplayGlyphMeasurer>,
+}
+
+pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
+    writer: DisplayRowWriter<'layout, 'row, 'measurer>,
+    position: DisplayRowPosition,
+    max_x_px: f32,
 }
 
 impl DisplayRowBuilder<'_> {
@@ -147,6 +174,99 @@ impl<'layout, 'row> DisplayRowWriter<'layout, 'row, '_> {
             row,
             glyph_measurer: None,
         }
+    }
+}
+
+impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
+    pub(crate) fn new(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+    ) -> Self {
+        Self {
+            writer: DisplayRowWriter::new(layout, row),
+            position,
+            max_x_px,
+        }
+    }
+}
+
+impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer> {
+    pub(crate) fn with_glyph_measurer(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+    ) -> Self {
+        Self {
+            writer: DisplayRowWriter::with_glyph_measurer(layout, row, glyph_measurer),
+            position,
+            max_x_px,
+        }
+    }
+
+    pub(crate) fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowAppendProgress {
+        let start = self.position;
+        let mut metrics = DisplayRowWriteMetrics::default();
+        let DisplayItem { span, face, kind } = item;
+        let status = match kind {
+            DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
+            DisplayItemKind::TextRun(run) => {
+                let face_id = self.writer.face_id(face);
+                let mut charpos = source_span_start_char(&span);
+                let mut status = DisplayRowAppendStatus::Complete;
+                for ch in run.text.chars() {
+                    let advance = self.writer.text_char_advance_px(ch, face_id);
+                    if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
+                        status = DisplayRowAppendStatus::Clipped;
+                        break;
+                    }
+
+                    let before_len = self.text_area_len();
+                    self.writer.push_text_char(ch, face_id, charpos);
+                    let written = self.metrics_since(before_len);
+                    self.advance(written);
+                    metrics.add(written);
+                    charpos += 1;
+                }
+                status
+            }
+            kind => {
+                let written = self.writer.push_item(DisplayItem::new(span, face, kind));
+                self.advance(written);
+                metrics.add(written);
+                DisplayRowAppendStatus::Complete
+            }
+        };
+
+        DisplayRowAppendProgress {
+            start,
+            end: self.position,
+            metrics,
+            status,
+        }
+    }
+
+    fn text_area_len(&self) -> usize {
+        self.writer.row.glyphs[GlyphArea::Text.index()].len()
+    }
+
+    fn metrics_since(&self, before_len: usize) -> DisplayRowWriteMetrics {
+        DisplayRowWriteMetrics::from_glyphs(
+            &self.writer.row.glyphs[GlyphArea::Text.index()][before_len..],
+            self.writer.layout.char_width_px,
+        )
+    }
+
+    fn advance(&mut self, metrics: DisplayRowWriteMetrics) {
+        self.position.x_px += metrics.width_px;
+        self.position.col += metrics.width_cols;
     }
 }
 
@@ -274,6 +394,24 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         } else {
             GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         }
+    }
+
+    fn text_char_advance_px(&mut self, ch: char, face_id: u32) -> f32 {
+        if ch == '\t' {
+            let tab_width = self.layout.tab_width_cols.max(1);
+            let current_col = self.current_text_cols();
+            let width_cols = tab_width - (current_col % tab_width);
+            return f32::from(width_cols) * self.layout.char_width_px.max(1.0);
+        }
+
+        let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
+        if continues_cluster(ch, tail) {
+            return 0.0;
+        }
+        if continues_complex_run(ch, tail) {
+            return self.glyph_advance_px(ch, face_id, 1);
+        }
+        self.glyph_advance_px(ch, face_id, base_width_cols(ch))
     }
 
     fn push_tab(&mut self, face_id: u32) {

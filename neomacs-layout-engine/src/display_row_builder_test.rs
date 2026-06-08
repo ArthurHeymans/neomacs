@@ -140,6 +140,26 @@ fn display_row_writer_reports_appended_metrics() {
 }
 
 #[test]
+fn display_row_progress_writer_stops_text_before_right_limit() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowProgressWriter::new(
+        &row_layout,
+        &mut row,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        20.0,
+    );
+
+    let progress = writer.push_item(text_item("abcd"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(writer.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(row_text(&row), "ab");
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 
