@@ -122,9 +122,9 @@ impl RenderApp {
 
         if active_cursor.is_none() {
             for (_, entry) in &render.compositor.child_frames.frames {
-                if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
+                if let Some(cursor) = entry.frame.active_cursor() {
                     // Resolve through the shared cursor_draw_rect (where the
-                    // static cursor draws), not the grid-approximate PhysCursor
+                    // static cursor draws), not the grid-approximate cursor
                     // geometry; see cursor_target_for_frame.
                     let (x, y, width, height) = entry.frame.cursor_draw_rect(
                         cursor.slot_id,
@@ -298,10 +298,11 @@ impl RenderApp {
                     }
                 }
                 let cursor_count = frame.window_cursors.len();
+                let active_cursor_count = frame.window_cursors.iter().filter(|c| c.active).count();
                 tracing::info!(
                     "poll_frame: frame_id={} parent_id={} size={:.0}x{:.0} char={:.1}x{:.1} \
                      glyphs={} (char={} bg={} border={} stretch={} scrollbar={} image={} video={} webkit={} other={}) \
-                     windows={} window_cursors={} phys_cursor={} faces={}",
+                     windows={} window_cursors={} active_cursors={} faces={}",
                     frame_id,
                     parent_id,
                     frame.width,
@@ -320,21 +321,14 @@ impl RenderApp {
                     other_count,
                     frame.window_infos.len(),
                     cursor_count,
-                    if frame.phys_cursor.is_some() {
-                        "yes"
-                    } else {
-                        "no"
-                    },
+                    active_cursor_count,
                     frame.faces.len(),
                 );
-                if let Some(cursor) = frame.phys_cursor.as_ref() {
+                if let Some(cursor) = frame.active_cursor() {
                     tracing::info!(
-                        "phys_cursor: window_id={} charpos={} row={} col={} slot=(window_id={},row={},col={}) \
+                        "active_cursor: window_id={} slot=(window_id={},row={},col={}) \
                          rect=({:.2},{:.2}) {:.2}x{:.2} ascent={:.2} style={:?} color={:?} cursor_fg={:?}",
                         cursor.window_id,
-                        cursor.charpos,
-                        cursor.row,
-                        cursor.col,
                         cursor.slot_id.window_id,
                         cursor.slot_id.row,
                         cursor.slot_id.col,
@@ -349,20 +343,20 @@ impl RenderApp {
                     );
                     match frame.slot_glyph(cursor.slot_id) {
                         Some(slot_glyph) => {
-                            tracing::info!("phys_cursor_slot_glyph: {:?}", slot_glyph)
+                            tracing::info!("active_cursor_slot_glyph: {:?}", slot_glyph)
                         }
                         None => tracing::warn!(
-                            "phys_cursor_slot_glyph: missing slot=(window_id={},row={},col={})",
+                            "active_cursor_slot_glyph: missing slot=(window_id={},row={},col={})",
                             cursor.slot_id.window_id,
                             cursor.slot_id.row,
                             cursor.slot_id.col,
                         ),
                     }
                     if let Some(effects) = frame.phys_cursor_effects() {
-                        tracing::info!("phys_cursor_effects: {:?}", effects);
+                        tracing::info!("active_cursor_effects: {:?}", effects);
                     }
                 } else {
-                    tracing::info!("phys_cursor: none");
+                    tracing::info!("active_cursor: none");
                 }
                 if !frame.window_cursors.is_empty() {
                     let all_window_cursors: String = frame

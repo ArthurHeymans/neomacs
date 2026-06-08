@@ -45,7 +45,7 @@ fn new_creates_empty_buffer() {
     assert!(buf.window_infos.is_empty());
     assert!(buf.faces.is_empty());
     assert!(buf.stipple_patterns.is_empty());
-    assert!(buf.phys_cursor.is_none());
+    assert!(buf.active_cursor().is_none());
 }
 
 #[test]
@@ -155,7 +155,8 @@ fn clear_all_resets_glyphs_and_metadata() {
     assert!(buf.window_infos.is_empty());
     assert!(buf.transition_hints.is_empty());
     assert!(buf.effect_hints.is_empty());
-    assert!(buf.phys_cursor.is_none());
+    assert!(buf.active_cursor().is_none());
+    assert!(buf.window_cursors.is_empty());
     assert!(buf.stipple_patterns.is_empty());
     assert!(buf.faces.is_empty());
 }
@@ -1156,16 +1157,16 @@ fn set_phys_cursor_stores_info() {
     };
     buf.set_phys_cursor(cursor.clone());
 
-    let stored = buf.phys_cursor.as_ref().unwrap();
+    let stored = buf.active_cursor().unwrap();
     assert_eq!(stored.window_id, cursor.window_id);
-    assert_eq!(stored.charpos, cursor.charpos);
-    assert_eq!(stored.row, cursor.row);
-    assert_eq!(stored.col, cursor.col);
     assert_eq!(stored.slot_id, cursor.slot_id);
     assert_eq!(stored.x, cursor.x);
     assert_eq!(stored.y, cursor.y);
     assert_eq!(stored.width, cursor.width);
     assert_eq!(stored.height, cursor.height);
+    assert_eq!(stored.ascent, cursor.ascent);
+    assert_eq!(stored.style, cursor.style);
+    assert!(stored.active);
     assert_color_eq(&stored.color, &cursor.color);
     assert_color_eq(&stored.cursor_fg, &cursor.cursor_fg);
 }
@@ -1342,7 +1343,7 @@ fn set_phys_cursor_normalizes_media_slots_to_hollow() {
         cursor_fg: Color::BLACK,
     });
 
-    let stored = buf.phys_cursor.as_ref().expect("phys cursor");
+    let stored = buf.active_cursor().expect("active cursor");
     assert_eq!(stored.style, CursorStyle::Hollow);
     assert_eq!(stored.x, 24.0);
     assert_eq!(stored.y, 48.0);
@@ -1535,9 +1536,11 @@ fn full_frame_simulation() {
     // Verify totals
     // 15 chars + 2 backgrounds + 1 border + 1 mode-line stretch = 19 glyphs
     assert_eq!(buf.len(), 19);
-    assert_eq!(buf.window_cursors.len(), 1);
+    // One decorative cursor from add_cursor plus the active cursor from
+    // set_phys_cursor (both window 1) now live in the same unified list.
+    assert_eq!(buf.window_cursors.len(), 2);
     assert_eq!(buf.window_infos.len(), 2);
-    assert!(buf.phys_cursor.is_some());
+    assert!(buf.active_cursor().is_some());
     assert_eq!(buf.frame_id, 0x1);
     assert_eq!(buf.width, 1920.0);
     assert_eq!(buf.height, 1080.0);

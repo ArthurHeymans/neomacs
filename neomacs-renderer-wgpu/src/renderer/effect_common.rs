@@ -83,8 +83,7 @@ pub(super) fn find_cursor_pos(
         return Some((anim.x, anim.y, anim.width, anim.height));
     }
     frame_glyphs
-        .phys_cursor
-        .as_ref()
+        .active_cursor()
         .map(|cursor| (cursor.x, cursor.y, cursor.width, cursor.height))
 }
 

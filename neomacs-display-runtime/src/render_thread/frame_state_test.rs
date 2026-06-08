@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::face::Face;
-use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole};
+use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole, PhysCursor};
 use crate::thread_comm::ThreadComms;
 use neomacs_display_protocol::types::Color;
 use std::collections::HashMap;
@@ -74,13 +74,7 @@ fn apply_extra_spacing_remaps_cursor_by_slot_id() {
         cursor_fg: Color::BLACK,
     });
 
-    RenderApp::apply_extra_spacing(
-        &mut frame.glyphs,
-        &mut frame.window_cursors,
-        &mut frame.phys_cursor,
-        0.0,
-        1.0,
-    );
+    RenderApp::apply_extra_spacing(&mut frame.glyphs, &mut frame.window_cursors, 0.0, 1.0);
 
     match &frame.glyphs[1] {
         FrameGlyph::Char { x, .. } => assert_eq!(*x, 9.0),
@@ -88,7 +82,7 @@ fn apply_extra_spacing_remaps_cursor_by_slot_id() {
     }
     assert_eq!(frame.window_cursors[0].x, 9.0);
     assert_eq!(frame.window_cursors[0].y, 0.0);
-    let cursor = frame.phys_cursor.as_ref().expect("phys cursor");
+    let cursor = frame.active_cursor().expect("active cursor");
     assert_eq!(cursor.x, 9.0);
     assert_eq!(cursor.y, 0.0);
 }

@@ -13,9 +13,7 @@ use std::io::{self, Write};
 
 use crate::backend::DisplayBackend;
 use crate::core::error::{DisplayError, DisplayResult};
-use crate::core::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, WindowCursorVisual,
-};
+use crate::core::frame_glyphs::{CursorStyle, FrameGlyph, FrameGlyphBuffer, WindowCursor};
 use crate::core::scene::Scene;
 use crate::core::types::Color;
 
@@ -601,19 +599,9 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
         }
     }
 
+    // One entry per window (selected window's entry is `active`); apply each.
     for cursor in &frame.window_cursors {
-        if frame
-            .phys_cursor
-            .as_ref()
-            .is_some_and(|phys| window_cursor_visual_matches_phys(cursor, phys))
-        {
-            continue;
-        }
-        apply_tty_window_cursor_visual(grid, frame, cursor);
-    }
-
-    if let Some(cursor) = frame.phys_cursor.as_ref() {
-        apply_tty_cursor_visual(grid, frame, cursor);
+        apply_tty_window_cursor(grid, frame, cursor);
     }
 }
 
@@ -633,11 +621,7 @@ fn glyph_pixel_width(glyph: &FrameGlyph) -> f32 {
     }
 }
 
-fn apply_tty_cursor_visual(
-    grid: &mut TtyGrid,
-    frame: &FrameGlyphBuffer,
-    cursor: &crate::core::frame_glyphs::PhysCursor,
-) {
+fn apply_tty_window_cursor(grid: &mut TtyGrid, frame: &FrameGlyphBuffer, cursor: &WindowCursor) {
     let cw = frame.char_width.max(1.0);
     let ch = frame.char_height.max(1.0);
     let col = (cursor.x / cw) as usize;
@@ -675,61 +659,13 @@ fn apply_tty_cursor_visual(
     }
 }
 
-fn apply_tty_window_cursor_visual(
-    grid: &mut TtyGrid,
-    frame: &FrameGlyphBuffer,
-    cursor: &WindowCursorVisual,
-) {
-    let cw = frame.char_width.max(1.0);
-    let ch = frame.char_height.max(1.0);
-    let col = (cursor.x / cw) as usize;
-    let row = (cursor.y / ch) as usize;
-
-    if col >= grid.width || row >= grid.height {
-        return;
-    }
-
-    let cursor_rgb = color_to_rgb8(&cursor.color);
-
-    match cursor.style {
-        CursorStyle::FilledBox => {
-            if let Some(cell) = grid.get_mut(col, row) {
-                cell.attrs.fg = cell.attrs.bg;
-                cell.attrs.bg = Some(cursor_rgb);
-            }
-        }
-        CursorStyle::Bar(_) => {
-            if let Some(cell) = grid.get_mut(col, row) {
-                cell.attrs.inverse = true;
-            }
-        }
-        CursorStyle::Hbar(_) => {
-            if let Some(cell) = grid.get_mut(col, row) {
-                cell.attrs.underline = 1;
-            }
-        }
-        CursorStyle::Hollow => {
-            if let Some(cell) = grid.get_mut(col, row) {
-                cell.attrs.inverse = true;
-            }
-        }
-    }
-}
-
-fn window_cursor_visual_matches_phys(
-    cursor: &WindowCursorVisual,
-    phys_cursor: &crate::core::frame_glyphs::PhysCursor,
-) -> bool {
-    cursor.window_id == phys_cursor.window_id && cursor.slot_id == phys_cursor.slot_id
-}
-
 fn terminal_cursor_state(
     frame: &FrameGlyphBuffer,
 ) -> Option<((u16, u16), bool, Option<ansi::TerminalCursorShape>)> {
     let cw = frame.char_width.max(1.0);
     let ch = frame.char_height.max(1.0);
 
-    frame.phys_cursor.as_ref().map(|cursor| {
+    frame.active_cursor().map(|cursor| {
         let col = (cursor.x / cw) as u16;
         let row = (cursor.y / ch) as u16;
         let (visible, shape) = match cursor.style {

@@ -399,7 +399,6 @@ impl RenderApp {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,
                 &mut frame.window_cursors,
-                &mut frame.phys_cursor,
                 extra_line_spacing,
                 extra_letter_spacing,
             );
@@ -407,7 +406,7 @@ impl RenderApp {
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor =
             animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
-        if let Some(cursor) = frame.phys_cursor.as_mut()
+        if let Some(cursor) = frame.active_cursor_mut()
             && root_animated_cursor.is_some_and(|target| target.window_id == cursor.window_id)
         {
             cursor.x = render.cursor.current_x;
@@ -458,7 +457,6 @@ impl RenderApp {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,
                 &mut frame.window_cursors,
-                &mut frame.phys_cursor,
                 extra_line_spacing,
                 extra_letter_spacing,
             );

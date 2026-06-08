@@ -12,8 +12,7 @@ use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, GlyphRowRole,
-    PhysCursor, StipplePattern, WindowCursorVisual, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    PhysCursor, StipplePattern, WindowCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use super::types::{Color, Rect};
 use super::ui_types::{MenuBarItem, ToolBarItem};
@@ -813,24 +812,45 @@ impl FrameDisplayState {
         state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
         state.window_infos = buf.window_infos.clone();
-        state.phys_cursor = buf.phys_cursor.clone();
+        // Reconstruct the layout-internal phys_cursor from the unified list's
+        // active entry; charpos isn't carried on WindowCursor so default to 0.
+        state.phys_cursor = buf.active_cursor().map(|c| PhysCursor {
+            window_id: c.window_id,
+            charpos: 0,
+            row: c.slot_id.row as usize,
+            col: c.slot_id.col,
+            slot_id: c.slot_id,
+            x: c.x,
+            y: c.y,
+            width: c.width,
+            height: c.height,
+            ascent: c.ascent,
+            style: c.style,
+            color: c.color,
+            cursor_fg: c.cursor_fg,
+        });
         state.cursor_effects_by_window = buf.cursor_effects_by_window.clone();
         state.stipple_patterns = buf.stipple_patterns.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
         state.tab_bar = buf.tab_bar.clone();
-        state
-            .cursors
-            .extend(buf.window_cursors.iter().map(|cursor| CursorItem {
-                window_id: cursor.window_id,
-                slot_id: cursor.slot_id,
-                x: cursor.x,
-                y: cursor.y,
-                width: cursor.width,
-                height: cursor.height,
-                style: cursor.style,
-                color: cursor.color,
-            }));
+        // Only non-active (decorative) cursors round-trip into `cursors`; the
+        // active entry is reconstructed into `phys_cursor` above.
+        state.cursors.extend(
+            buf.window_cursors
+                .iter()
+                .filter(|cursor| !cursor.active)
+                .map(|cursor| CursorItem {
+                    window_id: cursor.window_id,
+                    slot_id: cursor.slot_id,
+                    x: cursor.x,
+                    y: cursor.y,
+                    width: cursor.width,
+                    height: cursor.height,
+                    style: cursor.style,
+                    color: cursor.color,
+                }),
+        );
 
         // Decompose glyphs into structured non-grid item vectors
         for glyph in &buf.glyphs {
@@ -1074,8 +1094,11 @@ impl FrameDisplayState {
         }
 
         // --- Materialize cursors ---
+        // These are non-selected (decorative) cursors; CursorItem has no
+        // cursor_fg/ascent. The selected window's active cursor is pushed by
+        // set_phys_cursor below.
         for cursor in &self.cursors {
-            buf.window_cursors.push(WindowCursorVisual {
+            buf.window_cursors.push(WindowCursor {
                 window_id: cursor.window_id,
                 slot_id: cursor.slot_id,
                 x: cursor.x,
@@ -1084,6 +1107,9 @@ impl FrameDisplayState {
                 height: cursor.height,
                 style: cursor.style,
                 color: cursor.color,
+                cursor_fg: Color::BLACK,
+                ascent: 0.0,
+                active: false,
             });
         }
         buf.cursor_effects_by_window = self.cursor_effects_by_window.clone();

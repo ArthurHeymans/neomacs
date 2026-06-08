@@ -104,7 +104,7 @@ fn test_find_cursor_pos_from_phys_cursor() {
     let animated = None;
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
-    frame_glyphs.phys_cursor = Some(PhysCursor {
+    frame_glyphs.set_phys_cursor(PhysCursor {
         window_id: 1,
         charpos: 12,
         row: 3,
@@ -130,7 +130,7 @@ fn test_find_cursor_pos_prefers_phys_cursor() {
     let animated = None;
     let mut frame_glyphs = FrameGlyphBuffer::new();
 
-    frame_glyphs.phys_cursor = Some(PhysCursor {
+    frame_glyphs.set_phys_cursor(PhysCursor {
         window_id: 2,
         charpos: 20,
         row: 4,

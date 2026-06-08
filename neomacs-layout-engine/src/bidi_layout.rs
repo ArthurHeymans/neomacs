@@ -162,15 +162,9 @@ pub fn reorder_row_bidi(
             }
         }
 
-        // Step C: Adjust cursor positions if any cursor visual covers a slot
-        // on this row. Decorative window cursors and the active phys cursor
-        // must stay attached to the same display slot baseline.
-        if let Some(cursor) = frame_glyphs.phys_cursor.as_mut()
-            && let Some(offset) = slot_offset_for(cursor.slot_id, &slot_y_offsets)
-            && offset.abs() > 0.01
-        {
-            cursor.y += offset;
-        }
+        // Step C: Adjust cursor positions if any cursor covers a slot on this
+        // row. Every per-window cursor (the selected window's active entry
+        // included) must stay attached to the same display slot baseline.
         for cursor in &mut frame_glyphs.window_cursors {
             if let Some(offset) = slot_offset_for(cursor.slot_id, &slot_y_offsets)
                 && offset.abs() > 0.01
@@ -253,8 +247,8 @@ pub fn reorder_row_bidi(
     }
 
     // Step 7: Adjust cursor positions on this row.
-    // Cursors were placed at LTR X positions; move both the active phys cursor
-    // and decorative window cursor visuals to the exact reordered slot.
+    // Cursors were placed at LTR X positions; move every per-window cursor (the
+    // selected window's active entry included) to the exact reordered slot.
     let slot_x_positions: Vec<(DisplaySlotId, f32)> = row_chars
         .iter()
         .enumerate()
@@ -267,11 +261,6 @@ pub fn reorder_row_bidi(
             },
         )
         .collect();
-    if let Some(ref mut cursor) = frame_glyphs.phys_cursor {
-        if let Some(new_cursor_x) = slot_x_for(cursor.slot_id, &slot_x_positions) {
-            cursor.x = new_cursor_x;
-        }
-    }
     for cursor in &mut frame_glyphs.window_cursors {
         if let Some(new_cursor_x) = slot_x_for(cursor.slot_id, &slot_x_positions) {
             cursor.x = new_cursor_x;

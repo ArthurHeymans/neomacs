@@ -1,10 +1,8 @@
 use super::{
-    RenderedCharBounds, char_overlap, cursor_render_rect, frame_default_glyph_metrics,
-    window_cursor_visual_matches_phys,
+    RenderedCharBounds, char_overlap, cursor_glyph_slot_rect, frame_default_glyph_metrics,
 };
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
-    WindowCursorVisual,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::types::Color;
 
@@ -14,21 +12,19 @@ fn make_cursor(
     y: f32,
     width: f32,
     style: CursorStyle,
-) -> PhysCursor {
-    PhysCursor {
+) -> WindowCursor {
+    WindowCursor {
         window_id: slot_id.window_id,
-        charpos: 0,
-        row: slot_id.row as usize,
-        col: slot_id.col,
         slot_id,
         x,
         y,
         width,
         height: 16.0,
-        ascent: 12.0,
         style,
         color: Color::WHITE,
         cursor_fg: Color::BLACK,
+        ascent: 12.0,
+        active: true,
     }
 }
 
@@ -43,7 +39,10 @@ fn rtl_bar_cursor_uses_right_edge_of_char_slot() {
     }
 
     let cursor = make_cursor(slot_id, 10.0, 20.0, 2.0, CursorStyle::Bar(2.0));
-    assert_eq!(cursor_render_rect(&frame, &cursor), (20.0, 20.0, 2.0, 16.0));
+    assert_eq!(
+        cursor_glyph_slot_rect(&frame, &cursor),
+        (20.0, 20.0, 2.0, 16.0)
+    );
 }
 
 #[test]
@@ -57,7 +56,10 @@ fn rtl_hbar_cursor_uses_right_edge_of_stretch_slot() {
     }
 
     let cursor = make_cursor(slot_id, 30.0, 40.0, 8.0, CursorStyle::Hbar(2.0));
-    assert_eq!(cursor_render_rect(&frame, &cursor), (46.0, 40.0, 8.0, 16.0));
+    assert_eq!(
+        cursor_glyph_slot_rect(&frame, &cursor),
+        (46.0, 40.0, 8.0, 16.0)
+    );
 }
 
 #[test]
@@ -72,38 +74,9 @@ fn filled_box_cursor_keeps_slot_origin_in_rtl_runs() {
 
     let cursor = make_cursor(slot_id, 50.0, 60.0, 8.0, CursorStyle::FilledBox);
     assert_eq!(
-        cursor_render_rect(&frame, &cursor),
+        cursor_glyph_slot_rect(&frame, &cursor),
         (50.0, 60.0, 12.0, 16.0)
     );
-}
-
-#[test]
-fn window_cursor_visual_match_uses_slot_identity() {
-    let slot_id = DisplaySlotId::from_pixels(7, 32.0, 16.0, 8.0, 16.0);
-    let phys = make_cursor(slot_id, 32.0, 16.0, 8.0, CursorStyle::FilledBox);
-    let matching = WindowCursorVisual {
-        window_id: 7,
-        slot_id,
-        x: 4.0,
-        y: 0.0,
-        width: 20.0,
-        height: 30.0,
-        style: CursorStyle::Hollow,
-        color: Color::WHITE,
-    };
-    let mismatched = WindowCursorVisual {
-        window_id: 7,
-        slot_id: DisplaySlotId::from_pixels(7, 40.0, 16.0, 8.0, 16.0),
-        x: 32.0,
-        y: 16.0,
-        width: 8.0,
-        height: 16.0,
-        style: CursorStyle::Hollow,
-        color: Color::WHITE,
-    };
-
-    assert!(window_cursor_visual_matches_phys(&matching, &phys));
-    assert!(!window_cursor_visual_matches_phys(&mismatched, &phys));
 }
 
 #[test]

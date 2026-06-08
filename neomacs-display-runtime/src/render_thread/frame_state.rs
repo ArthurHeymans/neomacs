@@ -1,5 +1,5 @@
 use super::{FpsCounter, RenderApp};
-use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, PhysCursor, WindowCursorVisual};
+use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, WindowCursor};
 use std::collections::HashMap;
 
 impl RenderApp {
@@ -107,8 +107,7 @@ impl RenderApp {
 impl RenderApp {
     pub(super) fn apply_extra_spacing(
         glyphs: &mut [FrameGlyph],
-        window_cursors: &mut [WindowCursorVisual],
-        phys_cursor: &mut Option<PhysCursor>,
+        cursors: &mut [WindowCursor],
         line_spacing: f32,
         letter_spacing: f32,
     ) {
@@ -222,18 +221,13 @@ impl RenderApp {
             }
         }
 
-        for cursor in window_cursors.iter_mut() {
+        // The active (selected window's) cursor is now in this list, so the
+        // single loop adjusts it alongside the decorative cursors.
+        for cursor in cursors.iter_mut() {
             if let Some((x, y)) = slot_positions.get(&cursor.slot_id).copied() {
                 cursor.x = x;
                 cursor.y = y;
             }
-        }
-
-        if let Some(cursor) = phys_cursor.as_mut()
-            && let Some((x, y)) = slot_positions.get(&cursor.slot_id).copied()
-        {
-            cursor.x = x;
-            cursor.y = y;
         }
     }
 }

@@ -13,8 +13,7 @@ use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
-    WindowCursorVisual,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
@@ -338,7 +337,7 @@ fn log_rendered_char_overlaps(
 
 fn cursor_glyph_slot_rect(
     frame_glyphs: &FrameGlyphBuffer,
-    cursor: &PhysCursor,
+    cursor: &WindowCursor,
 ) -> (f32, f32, f32, f32) {
     // Single source of truth for cursor placement (display-protocol). The
     // animation target and per-window cursors resolve through the same call,
@@ -356,7 +355,7 @@ fn log_cursor_glyph_alignment(
     frame_glyphs: &FrameGlyphBuffer,
     chars: &[RenderedCharBounds],
 ) {
-    let Some(cursor) = frame_glyphs.phys_cursor.as_ref() else {
+    let Some(cursor) = frame_glyphs.active_cursor() else {
         return;
     };
     let Some(glyph) = chars.iter().find(|bounds| bounds.slot_id == cursor.slot_id) else {
@@ -534,20 +533,6 @@ fn frame_default_glyph_metrics(frame_glyphs: &FrameGlyphBuffer) -> (f32, f32) {
     };
 
     (font_size, line_height.max(font_size))
-}
-
-fn cursor_render_rect(
-    frame_glyphs: &FrameGlyphBuffer,
-    cursor: &PhysCursor,
-) -> (f32, f32, f32, f32) {
-    cursor_glyph_slot_rect(frame_glyphs, cursor)
-}
-
-fn window_cursor_visual_matches_phys(
-    cursor: &WindowCursorVisual,
-    phys_cursor: &PhysCursor,
-) -> bool {
-    cursor.window_id == phys_cursor.window_id && cursor.slot_id == phys_cursor.slot_id
 }
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
@@ -1531,7 +1516,7 @@ impl WgpuRenderer {
             let (lr, lg, lb, la) = self.effects.line_highlight.color;
             let hl_color = Color::new(lr, lg, lb, la);
 
-            if let Some(cursor) = frame_glyphs.phys_cursor.as_ref() {
+            if let Some(cursor) = frame_glyphs.active_cursor() {
                 for info in &frame_glyphs.window_infos {
                     if info.selected {
                         self.add_rect(
@@ -1926,48 +1911,22 @@ impl WgpuRenderer {
             }
         }
 
+        // One entry per window (selected window's entry is `active`); every
+        // cursor draws through the shared cursor_draw_rect, so a non-selected
+        // window's box lands on its glyph cell just like the selected one,
+        // under line numbers or scaled fonts.
         for cursor in &frame_glyphs.window_cursors {
-            if frame_glyphs
-                .phys_cursor
-                .as_ref()
-                .is_some_and(|phys| window_cursor_visual_matches_phys(cursor, phys))
-            {
-                continue;
-            }
             let cursor_effects = frame_glyphs
                 .window_cursor_effects(cursor.window_id)
                 .unwrap_or(&self.effects)
                 .clone();
             self.emit_cursor_visual(
                 cursor.window_id,
-                // Same slot-snapping as the selected window's cursor: a
-                // non-selected window's box must also land on its glyph cell,
-                // not the grid-approximate column, under line numbers or
-                // scaled fonts.
                 frame_glyphs.cursor_draw_rect(
                     cursor.slot_id,
                     cursor.style,
                     (cursor.x, cursor.y, cursor.width, cursor.height),
                 ),
-                cursor.style,
-                &cursor.color,
-                &cursor_effects,
-                cursor_visible,
-                &animated_cursor,
-                &mut cursor_bg_vertices,
-                &mut behind_text_cursor_vertices,
-                &mut cursor_vertices,
-            );
-        }
-
-        if let Some(cursor) = frame_glyphs.phys_cursor.as_ref() {
-            let cursor_effects = frame_glyphs
-                .window_cursor_effects(cursor.window_id)
-                .unwrap_or(&self.effects)
-                .clone();
-            self.emit_cursor_visual(
-                cursor.window_id,
-                cursor_render_rect(frame_glyphs, cursor),
                 cursor.style,
                 &cursor.color,
                 &cursor_effects,
@@ -2337,7 +2296,7 @@ impl WgpuRenderer {
                             )
                             .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                             if cursor_visible
-                                && let Some(cursor) = frame_glyphs.phys_cursor.as_ref()
+                                && let Some(cursor) = frame_glyphs.active_cursor()
                                 && matches!(cursor.style, CursorStyle::FilledBox)
                                 && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
                             {

@@ -1354,9 +1354,9 @@ impl GuiFrameWindowManager {
         emacs_frame_id: u64,
         frame: &FrameGlyphBuffer,
     ) -> Option<CursorTarget> {
-        frame.phys_cursor.as_ref().map(|cursor| {
+        frame.active_cursor().map(|cursor| {
             // Slide toward the exact rect the static cursor is drawn at -- the
-            // shared cursor_draw_rect -- not the grid-approximate PhysCursor
+            // shared cursor_draw_rect -- not the grid-approximate cursor
             // geometry. Under scaled fonts the two diverge and the animated box
             // would strand itself as a second cursor.
             let (x, y, width, height) = frame.cursor_draw_rect(

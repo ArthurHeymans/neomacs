@@ -66,8 +66,7 @@ pub(super) fn emit_cursor_crosshair(ctx: &EffectCtx) -> Vec<RectVertex> {
         Some((anim.x, anim.y, anim.width, anim.height))
     } else {
         ctx.frame_glyphs
-            .phys_cursor
-            .as_ref()
+            .active_cursor()
             .map(|cursor| (cursor.x, cursor.y, cursor.width, cursor.height))
     };
     let mut verts = Vec::new();

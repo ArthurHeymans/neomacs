@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursorVisual, WindowEffectHint,
+    CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursor, WindowEffectHint,
     WindowTransitionHint, WindowTransitionKind,
 };
 use crate::render_thread::cursor::CursorTarget;
@@ -144,7 +144,7 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut frame = make_frame(0x42, 0);
-    frame.window_cursors.push(WindowCursorVisual {
+    frame.window_cursors.push(WindowCursor {
         window_id: -7,
         slot_id: DisplaySlotId::ZERO,
         x: 1.0,
@@ -153,6 +153,9 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
         height: 4.0,
         style: CursorStyle::Hollow,
         color: Color::WHITE,
+        cursor_fg: Color::BLACK,
+        ascent: 0.0,
+        active: false,
     });
     render.compositor.current_frame = Some(frame);
     let mut visual = crate::render_thread::cursor::CursorState::default();

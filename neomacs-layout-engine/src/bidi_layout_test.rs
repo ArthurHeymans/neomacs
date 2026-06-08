@@ -1,6 +1,6 @@
 use super::*;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, WindowCursorVisual,
+    CursorStyle, DisplaySlotId, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::types::Color;
 
@@ -229,9 +229,9 @@ fn test_non_char_glyphs_preserved() {
 // Additional comprehensive tests
 // ===================================================================
 
-/// Helper to create a decorative cursor visual for testing.
-fn make_cursor_visual(x: f32, width: f32) -> WindowCursorVisual {
-    WindowCursorVisual {
+/// Helper to create a decorative cursor for testing.
+fn make_cursor_visual(x: f32, width: f32) -> WindowCursor {
+    WindowCursor {
         window_id: 0,
         slot_id: DisplaySlotId::from_pixels(0, x, 0.0, 8.0, 16.0),
         x,
@@ -240,6 +240,9 @@ fn make_cursor_visual(x: f32, width: f32) -> WindowCursorVisual {
         height: 16.0,
         style: CursorStyle::FilledBox,
         color: Color::new(1.0, 1.0, 1.0, 1.0),
+        cursor_fg: Color::new(0.0, 0.0, 0.0, 1.0),
+        ascent: 0.0,
+        active: false,
     }
 }
 
@@ -261,7 +264,7 @@ fn make_phys_cursor(slot_x: f32, width: f32) -> neomacs_display_protocol::frame_
     }
 }
 
-fn get_cursor_x(cursor: &WindowCursorVisual) -> f32 {
+fn get_cursor_x(cursor: &WindowCursor) -> f32 {
     cursor.x
 }
 
@@ -659,7 +662,7 @@ fn test_cursor_moves_with_rtl_reorder() {
     buf.glyphs.push(make_char_glyph('\u{05D1}', 8.0, 8.0)); // Bet
     buf.glyphs.push(make_char_glyph('\u{05D2}', 16.0, 8.0)); // Gimel
     buf.window_cursors.push(make_cursor_visual(0.0, 8.0)); // Cursor at Alef's original x
-    buf.phys_cursor = Some(make_phys_cursor(0.0, 8.0));
+    buf.set_phys_cursor(make_phys_cursor(0.0, 8.0));
 
     reorder_row_bidi(&mut buf, 0, 3, 0.0);
 
@@ -677,7 +680,7 @@ fn test_cursor_at_rtl_char_middle_of_row() {
     buf.glyphs.push(make_char_glyph('\u{05D1}', 8.0, 8.0)); // Bet
     buf.glyphs.push(make_char_glyph('\u{05D2}', 16.0, 8.0)); // Gimel
     buf.window_cursors.push(make_cursor_visual(8.0, 8.0)); // Cursor at Bet's original x
-    buf.phys_cursor = Some(make_phys_cursor(8.0, 8.0));
+    buf.set_phys_cursor(make_phys_cursor(8.0, 8.0));
 
     reorder_row_bidi(&mut buf, 0, 3, 0.0);
 
@@ -698,7 +701,7 @@ fn test_cursor_in_ltr_section_unchanged() {
     buf.glyphs.push(make_char_glyph('\u{05D2}', 16.0, 8.0));
     buf.glyphs.push(make_char_glyph('\u{05D3}', 24.0, 8.0));
     buf.window_cursors.push(make_cursor_visual(0.0, 8.0)); // Cursor at A
-    buf.phys_cursor = Some(make_phys_cursor(0.0, 8.0));
+    buf.set_phys_cursor(make_phys_cursor(0.0, 8.0));
 
     reorder_row_bidi(&mut buf, 0, 4, 0.0);
 
@@ -714,7 +717,7 @@ fn test_active_phys_cursor_moves_in_mixed_text() {
     buf.glyphs.push(make_char_glyph('\u{05D0}', 8.0, 8.0)); // Alef
     buf.glyphs.push(make_char_glyph('\u{05D1}', 16.0, 8.0)); // Bet
     buf.window_cursors.push(make_cursor_visual(8.0, 8.0)); // Cursor at Alef
-    buf.phys_cursor = Some(make_phys_cursor(8.0, 8.0));
+    buf.set_phys_cursor(make_phys_cursor(8.0, 8.0));
 
     reorder_row_bidi(&mut buf, 0, 3, 0.0);
 
@@ -834,13 +837,13 @@ fn test_cursor_moves_with_rtl_stretch_slot() {
     });
     buf.glyphs.push(make_char_glyph('\u{05D1}', 20.0, 8.0)); // Bet
     buf.window_cursors.push(make_cursor_visual(16.0, 4.0));
-    buf.phys_cursor = Some(make_phys_cursor(16.0, 8.0));
+    buf.set_phys_cursor(make_phys_cursor(16.0, 8.0));
 
     reorder_row_bidi(&mut buf, 0, 3, 0.0);
 
     assert_eq!(get_stretch_x(&buf.glyphs[1]), 8.0);
     assert_eq!(get_cursor_x(&buf.window_cursors[0]), 8.0);
-    assert_eq!(buf.phys_cursor.as_ref().expect("phys cursor").x, 8.0);
+    assert_eq!(buf.active_cursor().expect("active cursor").x, 8.0);
 }
 
 #[test]

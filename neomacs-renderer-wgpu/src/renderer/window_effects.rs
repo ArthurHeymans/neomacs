@@ -1116,7 +1116,7 @@ pub(super) fn emit_focus_mode(ctx: &EffectCtx) -> Vec<RectVertex> {
     if let Some(anim) = ctx.animated_cursor {
         cursor_y = Some(anim.y);
         cursor_h = anim.height;
-    } else if let Some(cursor) = ctx.frame_glyphs.phys_cursor.as_ref() {
+    } else if let Some(cursor) = ctx.frame_glyphs.active_cursor() {
         cursor_y = Some(cursor.y);
         cursor_h = cursor.height;
     }

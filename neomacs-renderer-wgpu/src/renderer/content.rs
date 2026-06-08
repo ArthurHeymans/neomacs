@@ -16,19 +16,10 @@ use super::GlyphRenderStats;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, Face};
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, FrameGlyph, FrameGlyphBuffer, PhysCursor, WindowCursorVisual,
-};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, FrameGlyphBuffer};
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::{HashMap, HashSet};
 use wgpu::util::DeviceExt;
-
-fn window_cursor_visual_matches_phys(
-    cursor: &WindowCursorVisual,
-    phys_cursor: &PhysCursor,
-) -> bool {
-    cursor.window_id == phys_cursor.window_id && cursor.slot_id == phys_cursor.slot_id
-}
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
     let t = blend.clamp(0.0, 1.0);
@@ -293,15 +284,8 @@ impl WgpuRenderer {
             }
         }
 
+        // One entry per window (selected window's entry is `active`); draw each.
         for cursor in &frame.window_cursors {
-            if frame
-                .phys_cursor
-                .as_ref()
-                .is_some_and(|phys| window_cursor_visual_matches_phys(cursor, phys))
-            {
-                continue;
-            }
-
             if !cursor_visible && !cursor.style.is_hollow() {
                 continue;
             }
@@ -371,78 +355,6 @@ impl WgpuRenderer {
                         gh,
                         &cursor.color,
                     );
-                }
-            }
-        }
-
-        if let Some(cursor) = frame.phys_cursor.as_ref() {
-            if cursor_visible || cursor.style.is_hollow() {
-                let (gx, gy, gw, gh) = if !cursor.style.is_hollow() {
-                    if let Some(ref ac) = animated_cursor {
-                        if ac.window_id == cursor.window_id {
-                            (ac.x + offset_x, ac.y + offset_y, ac.width, ac.height)
-                        } else {
-                            (
-                                cursor.x + offset_x,
-                                cursor.y + offset_y,
-                                cursor.width,
-                                cursor.height,
-                            )
-                        }
-                    } else {
-                        (
-                            cursor.x + offset_x,
-                            cursor.y + offset_y,
-                            cursor.width,
-                            cursor.height,
-                        )
-                    }
-                } else {
-                    (
-                        cursor.x + offset_x,
-                        cursor.y + offset_y,
-                        cursor.width,
-                        cursor.height,
-                    )
-                };
-
-                match cursor.style {
-                    CursorStyle::FilledBox => {
-                        self.add_rect(&mut cursor_bg_vertices, gx, gy, gw, gh, &cursor.color);
-                    }
-                    CursorStyle::Bar(bar_w) => {
-                        self.add_rect(&mut cursor_vertices, gx, gy, bar_w, gh, &cursor.color);
-                    }
-                    CursorStyle::Hbar(hbar_h) => {
-                        self.add_rect(
-                            &mut cursor_vertices,
-                            gx,
-                            gy + gh - hbar_h,
-                            gw,
-                            hbar_h,
-                            &cursor.color,
-                        );
-                    }
-                    CursorStyle::Hollow => {
-                        self.add_rect(&mut cursor_vertices, gx, gy, gw, 1.0, &cursor.color);
-                        self.add_rect(
-                            &mut cursor_vertices,
-                            gx,
-                            gy + gh - 1.0,
-                            gw,
-                            1.0,
-                            &cursor.color,
-                        );
-                        self.add_rect(&mut cursor_vertices, gx, gy, 1.0, gh, &cursor.color);
-                        self.add_rect(
-                            &mut cursor_vertices,
-                            gx + gw - 1.0,
-                            gy,
-                            1.0,
-                            gh,
-                            &cursor.color,
-                        );
-                    }
                 }
             }
         }
@@ -549,7 +461,7 @@ impl WgpuRenderer {
                         .or_else(|| face.map(|resolved| resolved.background))
                         .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                     if cursor_visible
-                        && let Some(cursor) = frame.phys_cursor.as_ref()
+                        && let Some(cursor) = frame.active_cursor()
                         && matches!(cursor.style, CursorStyle::FilledBox)
                         && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
                     {

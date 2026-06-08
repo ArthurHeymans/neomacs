@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::frame_glyphs::DisplaySlotId;
 use crate::core::types::Rect;
 
 // -------------------------------------------------------------------
@@ -1354,56 +1355,11 @@ fn test_render_does_not_derive_terminal_cursor_from_cursor_glyphs() {
     assert!(!backend.cursor_visible);
 }
 
-#[test]
-fn test_window_cursor_visual_match_uses_slot_identity() {
-    let slot_id = DisplaySlotId {
-        window_id: 0,
-        row: 1,
-        col: 2,
-    };
-    let phys = crate::core::frame_glyphs::PhysCursor {
-        window_id: 0,
-        charpos: 0,
-        row: 1,
-        col: 2,
-        slot_id,
-        x: 16.0,
-        y: 16.0,
-        width: 8.0,
-        height: 16.0,
-        ascent: 12.0,
-        style: CursorStyle::FilledBox,
-        color: Color::WHITE,
-        cursor_fg: Color::BLACK,
-    };
-    let matching = WindowCursorVisual {
-        window_id: 0,
-        slot_id,
-        x: 0.0,
-        y: 0.0,
-        width: 40.0,
-        height: 24.0,
-        style: CursorStyle::Hollow,
-        color: Color::GREEN,
-    };
-    let mismatched = WindowCursorVisual {
-        window_id: 0,
-        slot_id: DisplaySlotId {
-            window_id: 0,
-            row: 1,
-            col: 3,
-        },
-        x: 16.0,
-        y: 16.0,
-        width: 8.0,
-        height: 16.0,
-        style: CursorStyle::Hollow,
-        color: Color::GREEN,
-    };
-
-    assert!(window_cursor_visual_matches_phys(&matching, &phys));
-    assert!(!window_cursor_visual_matches_phys(&mismatched, &phys));
-}
+// The former `test_window_cursor_visual_match_uses_slot_identity` test covered
+// the phys/visual dedup helper, which no longer exists: cursors are unified
+// into a single per-window list (the selected window's entry is `active`), so
+// the TTY backend applies every entry without deduplicating against a separate
+// phys_cursor.
 
 // -------------------------------------------------------------------
 // Multi-row rasterization

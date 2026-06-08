@@ -376,7 +376,7 @@ fn materialize_includes_cursors() {
     let buf = state.materialize();
     assert!(buf.glyphs.is_empty());
     assert_eq!(buf.window_cursors.len(), 1);
-    assert!(buf.phys_cursor.is_none());
+    assert!(buf.active_cursor().is_none());
     let cursor = &buf.window_cursors[0];
     assert_eq!(cursor.window_id, 7);
     assert_eq!(cursor.x, 40.0);
@@ -408,11 +408,11 @@ fn materialize_preserves_phys_cursor() {
     });
 
     let buf = state.materialize();
-    let phys = buf.phys_cursor.as_ref().expect("preserved phys cursor");
+    let phys = buf.active_cursor().expect("preserved active cursor");
     assert_eq!(phys.window_id, 11);
-    assert_eq!(phys.charpos, 42);
-    assert_eq!(phys.row, 3);
-    assert_eq!(phys.col, 5);
+    assert_eq!(phys.slot_id.row, 3);
+    assert_eq!(phys.slot_id.col, 5);
+    assert!(phys.active);
     assert_eq!(phys.style, CursorStyle::Hollow);
 }
 

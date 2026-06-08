@@ -412,28 +412,31 @@ pub struct PhysCursor {
     pub cursor_fg: Color,
 }
 
-/// Decorative per-window cursor visual emitted by layout.
+/// Unified per-window cursor emitted by layout.
 ///
-/// This covers non-selected-window hollow cursors and any other
-/// non-physical cursor hints that should be drawn without owning the
-/// selected frame cursor. The authoritative selected cursor lives in
-/// `FrameGlyphBuffer::phys_cursor`.
+/// Exactly one entry per window exists in `FrameGlyphBuffer::window_cursors`.
+/// The selected window's entry has `active: true` (the former
+/// `FrameGlyphBuffer::phys_cursor`); non-selected windows are decorative.
+/// Geometry (x/y/width/height) lives here so animation/spacing/bidi code can
+/// adjust every cursor uniformly.
 #[derive(Debug, Clone, PartialEq)]
-pub struct WindowCursorVisual {
-    /// Window that owns the cursor visual.
+pub struct WindowCursor {
     pub window_id: i64,
-    /// Display slot the visual should stay attached to.
     pub slot_id: DisplaySlotId,
-    /// Frame-absolute origin.
     pub x: f32,
     pub y: f32,
-    /// Cursor rectangle dimensions in pixels.
     pub width: f32,
     pub height: f32,
-    /// Visual cursor style.
     pub style: CursorStyle,
-    /// Cursor color.
     pub color: Color,
+    /// Foreground for the glyph under a box cursor. Default Color::BLACK for
+    /// non-selected/decorative cursors that never invert text.
+    pub cursor_fg: Color,
+    /// Pixels above the baseline. 0.0 for decorative cursors.
+    pub ascent: f32,
+    /// True for the selected window's cursor (the former phys_cursor). Effects
+    /// and the slide animation target this entry.
+    pub active: bool,
 }
 
 /// Frame-level tab bar metadata published alongside rendered glyphs.
@@ -609,11 +612,9 @@ pub struct FrameGlyphBuffer {
     /// Explicit effect requests emitted by layout producers.
     pub effect_hints: Vec<WindowEffectHint>,
 
-    /// Authoritative active cursor for the frame.
-    pub phys_cursor: Option<PhysCursor>,
-
-    /// Decorative per-window cursor visuals emitted by layout.
-    pub window_cursors: Vec<WindowCursorVisual>,
+    /// Unified per-window cursors emitted by layout. Exactly one entry per
+    /// window; the selected window's entry has `active: true`.
+    pub window_cursors: Vec<WindowCursor>,
 
     /// Per-window cursor effect profiles emitted by layout.
     ///
@@ -742,7 +743,6 @@ impl FrameGlyphBuffer {
             window_infos: Vec::with_capacity(16),
             transition_hints: Vec::with_capacity(16),
             effect_hints: Vec::with_capacity(16),
-            phys_cursor: None,
             window_cursors: Vec::with_capacity(8),
             cursor_effects_by_window: HashMap::new(),
             tab_bar: None,
@@ -784,7 +784,6 @@ impl FrameGlyphBuffer {
         self.window_infos.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();
-        self.phys_cursor = None;
         self.window_cursors.clear();
         self.tab_bar = None;
         self.stipple_patterns.clear();
@@ -1215,7 +1214,7 @@ impl FrameGlyphBuffer {
         style: CursorStyle,
         color: Color,
     ) {
-        self.window_cursors.push(WindowCursorVisual {
+        self.window_cursors.push(WindowCursor {
             window_id,
             slot_id: DisplaySlotId::from_pixels(window_id, x, y, self.char_width, self.char_height),
             x,
@@ -1224,7 +1223,20 @@ impl FrameGlyphBuffer {
             height,
             style,
             color,
+            cursor_fg: Color::BLACK,
+            ascent: 0.0,
+            active: false,
         });
+    }
+
+    /// Return the active (selected window's) cursor, if any.
+    pub fn active_cursor(&self) -> Option<&WindowCursor> {
+        self.window_cursors.iter().find(|c| c.active)
+    }
+
+    /// Return a mutable reference to the active (selected window's) cursor.
+    pub fn active_cursor_mut(&mut self) -> Option<&mut WindowCursor> {
+        self.window_cursors.iter_mut().find(|c| c.active)
     }
 
     /// Set the cursor effect profile for one window.
@@ -1239,8 +1251,7 @@ impl FrameGlyphBuffer {
 
     /// Return the active physical cursor's effect profile, if any.
     pub fn phys_cursor_effects(&self) -> Option<&EffectsConfig> {
-        self.phys_cursor
-            .as_ref()
+        self.active_cursor()
             .and_then(|cursor| self.window_cursor_effects(cursor.window_id))
     }
 
@@ -1403,7 +1414,30 @@ impl FrameGlyphBuffer {
                 _ => {}
             }
         }
-        self.phys_cursor = Some(cursor);
+        let entry = WindowCursor {
+            window_id: cursor.window_id,
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            style: cursor.style,
+            color: cursor.color,
+            cursor_fg: cursor.cursor_fg,
+            ascent: cursor.ascent,
+            active: true,
+        };
+        // Exactly one active entry per window: replace an existing active entry
+        // for this window rather than duplicating it.
+        if let Some(existing) = self
+            .window_cursors
+            .iter_mut()
+            .find(|c| c.active && c.window_id == entry.window_id)
+        {
+            *existing = entry;
+        } else {
+            self.window_cursors.push(entry);
+        }
     }
 
     /// Look up the text or stretch glyph occupying a given display slot.
