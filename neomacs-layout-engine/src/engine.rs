@@ -7415,44 +7415,8 @@ impl LayoutEngine {
         face: &DisplayRowFace,
         fallback_char_width: f32,
     ) -> f32 {
-        if face.font_char_width > 0.0 {
-            return face.font_char_width;
-        }
-        if let Some(ref mut svc) = self.font_metrics {
-            let metrics = svc.font_metrics(
-                &face.font_family,
-                face.font_weight,
-                face.italic,
-                face.font_size,
-            );
-            return metrics.char_width;
-        }
-        fallback_char_width
-    }
-
-    pub(crate) fn display_row_font_metrics(
-        &mut self,
-        face: &DisplayRowFace,
-    ) -> crate::font_metrics::FontMetrics {
-        // If the engine was started in TTY mode (no
-        // `enable_cosmic_metrics()` call), `self.font_metrics` is
-        // None and we return the face's cell-based fallback
-        // metrics. GUI mode populated the service at startup.
-        if let Some(ref mut svc) = self.font_metrics {
-            return svc.font_metrics(
-                &face.font_family,
-                face.font_weight,
-                face.italic,
-                face.font_size,
-            );
-        }
-
-        crate::font_metrics::FontMetrics {
-            ascent: face.font_ascent.max(1.0),
-            descent: face.font_descent.max(0) as f32,
-            line_height: (face.font_ascent + face.font_descent as f32).max(1.0),
-            char_width: face.font_char_width.max(1.0),
-        }
+        crate::display_row::DisplayRowFaceRealizer::new(&mut self.font_metrics)
+            .char_width(face, fallback_char_width)
     }
 
     /// Render the frame-level tab-bar from GNU Lisp keymap output on the Rust path.

@@ -15,11 +15,14 @@
 
 use super::engine::LayoutEngine;
 use super::neovm_bridge::ResolvedFace;
-pub(crate) use crate::display_row::{DisplayRowFace, DisplayRowOutputProgress};
+pub(crate) use crate::display_row::{
+    DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
+};
 #[cfg(test)]
 pub(crate) use crate::display_row::{
     OverlayFaceRun, apply_overlay_face_run, parse_overlay_face_runs,
 };
+#[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 
 impl LayoutEngine {
@@ -31,9 +34,8 @@ impl LayoutEngine {
         ascent: f32,
         row_height: f32,
     ) -> DisplayRowFace {
-        let mut face = DisplayRowFace::from_resolved(face_id, face);
-        self.ensure_display_row_face_metrics(&mut face, char_w, ascent, row_height);
-        face
+        DisplayRowFaceRealizer::new(&mut self.font_metrics)
+            .realize_face(face_id, face, char_w, ascent, row_height)
     }
 
     pub(crate) fn display_row_height_for_face(
@@ -43,72 +45,12 @@ impl LayoutEngine {
         fallback_ascent: f32,
         fallback_row_height: f32,
     ) -> f32 {
-        // GNU Emacs frame.c:1184-1185 — non-window (TTY) frames have
-        //   f->column_width = 1;
-        //   f->line_height  = 1;
-        // and every row (including mode-line, header-line, tab-line) is
-        // exactly one character cell tall. Face font metrics are GUI
-        // pixel measurements and must not contribute to row sizing on
-        // a TTY frame: the layout engine's `char_w` and
-        // `fallback_row_height` are both 1.0 in that case
-        // (set by `bootstrap_buffers` at neomacs-bin/src/main.rs:1691-1694),
-        // so detect the TTY context by the 1.0-cell markers and return
-        // the cell height directly. Without this early return, the
-        // face-derived `line_height` above was producing a 3-row-tall
-        // mode-line region in the TTY pty capture: the mode-line text
-        // painted on the first row and the remaining two rows showed up
-        // as blank padding that looked like extra echo-area rows.
-        if char_w <= 1.0 && fallback_row_height <= 1.0 {
-            return fallback_row_height.max(1.0);
-        }
-        let face =
-            self.realize_display_row_face(0, face, char_w, fallback_ascent, fallback_row_height);
-        let line_height = (face.font_ascent + face.font_descent as f32)
-            .max(1.0)
-            .ceil();
-        let box_pixels = if face.box_type != BoxType::None && face.box_h_line_width != 0 {
-            2.0 * face.box_h_line_width.unsigned_abs() as f32
-        } else {
-            0.0
-        };
-        let minimum_row_height = fallback_row_height.ceil().max(1.0);
-        (line_height + box_pixels).max(minimum_row_height)
-    }
-
-    fn ensure_display_row_face_metrics(
-        &mut self,
-        face: &mut DisplayRowFace,
-        fallback_char_width: f32,
-        fallback_ascent: f32,
-        row_height: f32,
-    ) {
-        let needs_metrics = face.font_char_width <= 0.0
-            || face.font_ascent <= 0.0
-            || (face.font_ascent + face.font_descent as f32) <= 0.0;
-
-        if needs_metrics {
-            let metrics = self.display_row_font_metrics(face);
-
-            if face.font_char_width <= 0.0 && metrics.char_width > 0.0 {
-                face.font_char_width = metrics.char_width;
-            }
-            if face.font_ascent <= 0.0 && metrics.ascent > 0.0 {
-                face.font_ascent = metrics.ascent;
-            }
-            if (face.font_ascent + face.font_descent as f32) <= 0.0 && metrics.line_height > 0.0 {
-                face.font_descent = (metrics.line_height - metrics.ascent).max(0.0).ceil() as i32;
-            }
-        }
-
-        if face.font_char_width <= 0.0 {
-            face.font_char_width = fallback_char_width.max(1.0);
-        }
-        if face.font_ascent <= 0.0 {
-            face.font_ascent = fallback_ascent.max(1.0);
-        }
-        if (face.font_ascent + face.font_descent as f32) <= 0.0 {
-            face.font_descent = (row_height - face.font_ascent).max(0.0).ceil() as i32;
-        }
+        DisplayRowFaceRealizer::new(&mut self.font_metrics).row_height_for_face(
+            face,
+            char_w,
+            fallback_ascent,
+            fallback_row_height,
+        )
     }
 }
 

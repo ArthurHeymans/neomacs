@@ -12,6 +12,23 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
     resolver.default_face().clone()
 }
 
+#[test]
+fn display_row_face_realizer_realizes_face_without_layout_engine() {
+    let mut font_metrics = None;
+    let mut realizer = DisplayRowFaceRealizer::new(&mut font_metrics);
+    let mut face = base_face();
+    face.font_char_width = 0.0;
+    face.font_ascent = 0.0;
+    face.font_line_height = 0.0;
+
+    let rendered = realizer.realize_face(7, &face, 8.0, 12.0, 16.0);
+
+    assert_eq!(rendered.face_id, 7);
+    assert_eq!(rendered.font_char_width, 1.0);
+    assert_eq!(rendered.font_ascent, 1.0);
+    assert_eq!(rendered.font_descent, 0);
+}
+
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()
