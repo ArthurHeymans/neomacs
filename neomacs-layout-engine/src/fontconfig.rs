@@ -21,7 +21,7 @@ use neovm_core::emacs_core::fontset::{
     repertory_target_ranges,
 };
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
-use neovm_core::face::{FontSlant, FontWeight, FontWidth};
+use neovm_core::face::{Face, FaceHeight, FontSlant, FontWeight, FontWidth};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
@@ -489,6 +489,48 @@ pub fn points_to_pixels(points: f32) -> f32 {
 /// Convert a face height in 1/10 pt to pixels using GNU Emacs' X11 rule.
 pub fn face_height_to_pixels(tenths: i32) -> f32 {
     points_to_pixels(tenths as f32 / 10.0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontSizing {
+    layout_dpi: f32,
+}
+
+impl FontSizing {
+    const LOGICAL_DPI: f32 = 96.0;
+
+    pub fn xft() -> Self {
+        Self {
+            layout_dpi: xft_dpi(),
+        }
+    }
+
+    pub fn logical() -> Self {
+        Self {
+            layout_dpi: Self::LOGICAL_DPI,
+        }
+    }
+
+    pub fn for_layout_dpi(layout_dpi: f32) -> Self {
+        Self { layout_dpi }
+    }
+
+    pub fn layout_dpi(self) -> f32 {
+        self.layout_dpi
+    }
+
+    pub fn face_height_to_layout_pixels(self, tenths: i32) -> f32 {
+        points_to_pixels_for_dpi(tenths as f32 / 10.0, self.layout_dpi)
+    }
+
+    pub fn font_size_px_for_face(self, face: &Face) -> f32 {
+        let default_font_size = self.face_height_to_layout_pixels(100);
+        match &face.height {
+            Some(FaceHeight::Absolute(tenths)) => self.face_height_to_layout_pixels(*tenths),
+            Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
+            None => default_font_size,
+        }
+    }
 }
 
 fn match_font_for_char_uncached(

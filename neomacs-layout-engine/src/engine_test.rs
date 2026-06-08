@@ -3242,6 +3242,7 @@ fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
             neovm_core::window::SplitDirection::Horizontal,
             right_buf_id,
             None,
+            neovm_core::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -3339,6 +3340,7 @@ fn layout_frame_rust_display_space_align_keeps_suffix_text_in_split_windows() {
             neovm_core::window::SplitDirection::Horizontal,
             right_buf_id,
             None,
+            neovm_core::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
 
@@ -3484,6 +3486,7 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
             neovm_core::window::SplitDirection::Horizontal,
             right_buf_id,
             None,
+            neovm_core::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let left_bounds = {
@@ -3567,6 +3570,7 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
             neovm_core::window::SplitDirection::Horizontal,
             right_buf_id,
             None,
+            neovm_core::window::SplitPlacement::AfterTarget,
         )
         .expect("split window");
     let left_bounds = {

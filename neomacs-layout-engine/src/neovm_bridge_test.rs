@@ -708,7 +708,7 @@ fn window_params_fill_column_indicator_follows_gnu_conditions() {
 
 #[test]
 fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
-    use neovm_core::window::SplitDirection;
+    use neovm_core::window::{SplitDirection, SplitPlacement};
 
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let left_buf = evaluator.buffer_manager_mut().create_buffer("*left*");
@@ -730,6 +730,7 @@ fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
                 SplitDirection::Horizontal,
                 right_buf,
                 None,
+                SplitPlacement::AfterTarget,
             )
             .is_some(),
         "expected side-by-side split"
@@ -747,7 +748,7 @@ fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
 
 #[test]
 fn test_window_params_partial_width_windows_respect_disabled_truncate_partial_width_windows() {
-    use neovm_core::window::SplitDirection;
+    use neovm_core::window::{SplitDirection, SplitPlacement};
 
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let left_buf = evaluator.buffer_manager_mut().create_buffer("*left*");
@@ -769,6 +770,7 @@ fn test_window_params_partial_width_windows_respect_disabled_truncate_partial_wi
                 SplitDirection::Horizontal,
                 right_buf,
                 None,
+                SplitPlacement::AfterTarget,
             )
             .is_some(),
         "expected side-by-side split"
@@ -2034,6 +2036,26 @@ fn test_realize_face_height_absolute() {
     let realized = resolver.realize_face(&face);
     let expected = crate::fontconfig::face_height_to_pixels(240);
     assert!((realized.font_size - expected).abs() < 0.1);
+}
+
+#[test]
+fn face_resolver_absolute_height_uses_configured_font_sizing() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new_with_font_sizing(
+        &table,
+        0x00FFFFFF,
+        0x00000000,
+        13.0,
+        Some("neo".to_string()),
+        crate::fontconfig::FontSizing::logical(),
+    );
+
+    let mut face = NeoFace::new("tall");
+    face.height = Some(FaceHeight::Absolute(100));
+    let realized = resolver.realize_face(&face);
+
+    assert_eq!(realized.font_size, 13.0);
 }
 
 #[test]

@@ -26,7 +26,7 @@ use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
 };
-use crate::fontconfig::face_height_to_pixels;
+use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -976,6 +976,34 @@ pub fn window_params_from_neovm(
     window_cursor_type: Value,
     window_cursor_effect: Value,
 ) -> Option<WindowParams> {
+    window_params_from_neovm_with_font_sizing(
+        window,
+        buffer,
+        frame,
+        obarray,
+        face_table,
+        default_font_ascent,
+        is_selected,
+        is_minibuffer,
+        window_cursor_type,
+        window_cursor_effect,
+        FontSizing::xft(),
+    )
+}
+
+pub fn window_params_from_neovm_with_font_sizing(
+    window: &Window,
+    buffer: &Buffer,
+    frame: &Frame,
+    obarray: &Obarray,
+    face_table: &FaceTable,
+    default_font_ascent: Option<f32>,
+    is_selected: bool,
+    is_minibuffer: bool,
+    window_cursor_type: Value,
+    window_cursor_effect: Value,
+    font_sizing: FontSizing,
+) -> Option<WindowParams> {
     // Only leaf windows can be laid out.
     let effective_window_system = frame.effective_window_system();
     let is_window_system = effective_window_system.is_some();
@@ -1055,12 +1083,13 @@ pub fn window_params_from_neovm(
         .background
         .map(|color| color_to_pixel(&color))
         .unwrap_or(0x00FFFFFF);
-    let face_resolver = FaceResolver::new(
+    let face_resolver = FaceResolver::new_with_font_sizing(
         face_table,
         default_fg,
         default_bg,
         frame.font_pixel_size,
         window_system,
+        font_sizing,
     );
 
     // Convert neovm-core Rect to display Rect (same fields, different types).
@@ -1310,6 +1339,20 @@ pub fn collect_layout_params(
     frame_id: FrameId,
     default_font_ascent: Option<f32>,
 ) -> Option<(FrameParams, Vec<WindowParams>)> {
+    collect_layout_params_with_font_sizing(
+        evaluator,
+        frame_id,
+        default_font_ascent,
+        FontSizing::xft(),
+    )
+}
+
+pub fn collect_layout_params_with_font_sizing(
+    evaluator: &Context,
+    frame_id: FrameId,
+    default_font_ascent: Option<f32>,
+    font_sizing: FontSizing,
+) -> Option<(FrameParams, Vec<WindowParams>)> {
     let frame = evaluator.frame_manager().get(frame_id)?;
     let frame_is_selected = evaluator
         .frame_manager()
@@ -1337,7 +1380,7 @@ pub fn collect_layout_params(
             .frame_manager()
             .window_parameter(*win_id, &Value::symbol("neomacs-cursor-effect"))
             .unwrap_or(Value::NIL);
-        if let Some(wp) = window_params_from_neovm(
+        if let Some(wp) = window_params_from_neovm_with_font_sizing(
             window,
             buffer,
             frame,
@@ -1348,6 +1391,7 @@ pub fn collect_layout_params(
             false,
             window_cursor_type,
             window_cursor_effect,
+            font_sizing,
         ) {
             tracing::debug!(
                 "layout window cursor: win={} selected={} minibuffer=false kind={:?} width={} color=#{:06x} window-cursor-type={:?}",
@@ -1384,7 +1428,7 @@ pub fn collect_layout_params(
                 .frame_manager()
                 .window_parameter(mini_leaf.id(), &Value::symbol("neomacs-cursor-effect"))
                 .unwrap_or(Value::NIL);
-            if let Some(wp) = window_params_from_neovm(
+            if let Some(wp) = window_params_from_neovm_with_font_sizing(
                 mini_leaf,
                 buffer,
                 frame,
@@ -1395,6 +1439,7 @@ pub fn collect_layout_params(
                 true,
                 window_cursor_type,
                 window_cursor_effect,
+                font_sizing,
             ) {
                 tracing::debug!(
                     "layout window cursor: win={} selected={} minibuffer=true kind={:?} width={} color=#{:06x} window-cursor-type={:?}",
@@ -2071,6 +2116,7 @@ pub struct FaceResolver {
     /// `Some("wayland")` for Wayland, etc.  Used to evaluate
     /// `:filtered` face spec predicates.
     window_system: Option<String>,
+    font_sizing: FontSizing,
 }
 
 impl FaceResolver {
@@ -2097,6 +2143,24 @@ impl FaceResolver {
         default_font_size: f32,
         window_system: Option<String>,
     ) -> Self {
+        Self::new_with_font_sizing(
+            face_table,
+            default_fg,
+            default_bg,
+            default_font_size,
+            window_system,
+            FontSizing::xft(),
+        )
+    }
+
+    pub fn new_with_font_sizing(
+        face_table: &FaceTable,
+        default_fg: u32,
+        default_bg: u32,
+        default_font_size: f32,
+        window_system: Option<String>,
+        font_sizing: FontSizing,
+    ) -> Self {
         let neo_default = face_table.resolve("default");
         let mut df = ResolvedFace::default();
         if let Some(color) = neo_default.foreground.as_ref() {
@@ -2120,7 +2184,7 @@ impl FaceResolver {
             .unwrap_or(FontWeight::NORMAL.css_weight());
         df.italic = neo_default.slant.map(|s| s.is_italic()).unwrap_or(false);
         df.font_size = match &neo_default.height {
-            Some(FaceHeight::Absolute(tenths)) => face_height_to_pixels(*tenths),
+            Some(FaceHeight::Absolute(tenths)) => font_sizing.face_height_to_layout_pixels(*tenths),
             _ => default_font_size,
         };
         df.extend = neo_default.extend.unwrap_or(false);
@@ -2153,6 +2217,7 @@ impl FaceResolver {
                 neomacs_display_protocol::face::BasicFaceId::SENTINEL,
             ),
             window_system,
+            font_sizing,
         }
     }
 
@@ -2253,7 +2318,7 @@ impl FaceResolver {
         if let Some(height) = &face.height {
             match height {
                 FaceHeight::Absolute(tenths) => {
-                    rf.font_size = face_height_to_pixels(*tenths);
+                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
                 }
                 FaceHeight::Relative(factor) => {
                     rf.font_size = (rf.font_size * *factor as f32).max(1.0);
@@ -2780,7 +2845,7 @@ impl FaceResolver {
         if let Some(h) = &face.height {
             match h {
                 FaceHeight::Absolute(tenths) => {
-                    rf.font_size = face_height_to_pixels(*tenths);
+                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
                 }
                 FaceHeight::Relative(factor) => {
                     rf.font_size = self.default_face.font_size * (*factor as f32);

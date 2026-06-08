@@ -17,6 +17,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
@@ -1712,6 +1713,8 @@ pub struct LayoutEngine {
     /// now made once at startup by the binary that constructs the
     /// layout engine.
     pub font_metrics: Option<FontMetricsService>,
+    /// Converts Emacs face height units into layout pixels for this display.
+    font_sizing: FontSizing,
     /// Previous frame's per-window metadata for transition hint derivation.
     prev_window_infos: std::collections::HashMap<i64, WindowInfo>,
     /// Previous selected window id for switch-fade detection.
@@ -1772,6 +1775,7 @@ impl LayoutEngine {
             current_resolved_family: String::new(),
             resolved_family_face_id: u32::MAX,
             font_metrics: Some(FontMetricsService::new()),
+            font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
             prev_selected_window_id: 0,
             prev_background: None,
@@ -1800,6 +1804,7 @@ impl LayoutEngine {
             current_resolved_family: String::new(),
             resolved_family_face_id: u32::MAX,
             font_metrics: None,
+            font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
             prev_selected_window_id: 0,
             prev_background: None,
@@ -1838,6 +1843,10 @@ impl LayoutEngine {
         if self.font_metrics.is_none() {
             self.font_metrics = Some(FontMetricsService::new());
         }
+    }
+
+    pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
+        self.font_sizing = font_sizing;
     }
 
     fn record_transition_hint_from_latest_window_info(
@@ -2302,12 +2311,13 @@ impl LayoutEngine {
 
         // Realize the default face before collecting window params so frame and
         // window geometry use the same default metrics GNU Emacs redisplay does.
-        let face_resolver = super::neovm_bridge::FaceResolver::new(
+        let face_resolver = super::neovm_bridge::FaceResolver::new_with_font_sizing(
             evaluator.face_table(),
             0x00FFFFFF,
             bootstrap_bg,
             bootstrap_font_size,
             window_system.clone(),
+            self.font_sizing,
         );
         let default_resolved = face_resolver.default_face();
         let default_metrics = if window_system.is_some() {
@@ -2356,10 +2366,11 @@ impl LayoutEngine {
         let (frame_params, curr_window_infos) = loop {
             // Collect window and frame params from neovm-core
             let (frame_params, window_params_list) =
-                match super::neovm_bridge::collect_layout_params(
+                match super::neovm_bridge::collect_layout_params_with_font_sizing(
                     evaluator,
                     frame_id,
                     default_metrics.map(|metrics| metrics.ascent),
+                    self.font_sizing,
                 ) {
                     Some(data) => data,
                     None => {
@@ -2778,12 +2789,13 @@ impl LayoutEngine {
             // honoured. The default `menu` face inherits :inverse-video
             // on TTYs, which gives the highlighted bar visible in GNU
             // Emacs `-nw`.
-            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new(
+            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new_with_font_sizing(
                 evaluator.face_table(),
                 0x00FFFFFF,
                 0x00000000,
                 frame_params.font_pixel_size,
                 window_system.clone(),
+                self.font_sizing,
             );
             let menu_face = menu_face_resolver.resolve_named_face("menu");
             frame_display_state.menu_bar =
@@ -2799,12 +2811,13 @@ impl LayoutEngine {
                 });
         }
         if frame_display_state.parent_id == 0 {
-            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new(
+            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new_with_font_sizing(
                 evaluator.face_table(),
                 0x00FFFFFF,
                 0x00000000,
                 frame_params.font_pixel_size,
                 window_system.clone(),
+                self.font_sizing,
             );
             let pixel_to_tuple = |pixel: u32| -> (f32, f32, f32) {
                 (

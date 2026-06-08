@@ -38,7 +38,7 @@ use neomacs_display_runtime::thread_comm::{
     LifecycleCommand, MediaSource, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
-use neomacs_layout_engine::fontconfig::{points_to_pixels_for_dpi, xft_dpi};
+use neomacs_layout_engine::fontconfig::FontSizing;
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
@@ -81,40 +81,6 @@ enum EarlyCliAction {
 pub(crate) enum FrontendKind {
     Gui,
     Tty,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct FontSizing {
-    layout_dpi: f32,
-}
-
-impl FontSizing {
-    const LOGICAL_DPI: f32 = 96.0;
-
-    fn xft() -> Self {
-        Self {
-            layout_dpi: xft_dpi(),
-        }
-    }
-
-    fn logical() -> Self {
-        Self {
-            layout_dpi: Self::LOGICAL_DPI,
-        }
-    }
-
-    fn face_height_to_layout_pixels(self, tenths: i32) -> f32 {
-        points_to_pixels_for_dpi(tenths as f32 / 10.0, self.layout_dpi)
-    }
-
-    fn font_size_px_for_face(self, face: &neovm_core::face::Face) -> f32 {
-        let default_font_size = self.face_height_to_layout_pixels(100);
-        match &face.height {
-            Some(FaceHeight::Absolute(tenths)) => self.face_height_to_layout_pixels(*tenths),
-            Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
-            None => default_font_size,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2255,7 +2221,9 @@ fn run_gui_evaluator_worker(
     evaluator.init_input_system(input_rx, emacs_comms.wakeup_read_fd);
 
     tty_layout::LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().enable_cosmic_metrics();
+        let mut engine = engine.borrow_mut();
+        engine.enable_cosmic_metrics();
+        engine.set_font_sizing(bootstrap_display.font_sizing);
     });
     let frame_tx = emacs_comms.frame_tx;
     let initial_frame_tx = frame_tx.clone();
@@ -2730,19 +2698,17 @@ fn bootstrap_default_font_name(font_pixel_size: f32) -> Value {
 }
 
 fn bootstrap_frame_metrics() -> BootstrapFrameMetrics {
-    FontSizing::xft().bootstrap_frame_metrics()
+    bootstrap_frame_metrics_for_font_sizing(FontSizing::xft())
 }
 
-impl FontSizing {
-    fn bootstrap_frame_metrics(self) -> BootstrapFrameMetrics {
-        let font_pixel_size = self.face_height_to_layout_pixels(100);
-        let mut metrics_svc = FontMetricsService::new();
-        let metrics = metrics_svc.font_metrics("Monospace", 400, false, font_pixel_size);
-        BootstrapFrameMetrics {
-            char_width: metrics.char_width.max(1.0),
-            char_height: metrics.line_height.max(1.0),
-            font_pixel_size,
-        }
+fn bootstrap_frame_metrics_for_font_sizing(font_sizing: FontSizing) -> BootstrapFrameMetrics {
+    let font_pixel_size = font_sizing.face_height_to_layout_pixels(100);
+    let mut metrics_svc = FontMetricsService::new();
+    let metrics = metrics_svc.font_metrics("Monospace", 400, false, font_pixel_size);
+    BootstrapFrameMetrics {
+        char_width: metrics.char_width.max(1.0),
+        char_height: metrics.line_height.max(1.0),
+        font_pixel_size,
     }
 }
 
@@ -2762,7 +2728,7 @@ fn bootstrap_frame_metrics_for_display(display: BootstrapDisplayConfig) -> Boots
     if display.frontend == FrontendKind::Tty {
         bootstrap_frame_metrics_for_frontend(FrontendKind::Tty)
     } else {
-        display.font_sizing.bootstrap_frame_metrics()
+        bootstrap_frame_metrics_for_font_sizing(display.font_sizing)
     }
 }
 

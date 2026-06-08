@@ -8,9 +8,9 @@ use super::{
     BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FontSizing,
     FrontendKind, PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
     adopt_existing_primary_gui_frame, bootstrap_buffers, bootstrap_default_font_name,
-    bootstrap_display_config, bootstrap_frame_metrics, bootstrap_frame_metrics_for_frontend,
-    classify_early_cli_action, configure_gnu_startup_state, parse_startup_options,
-    publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
+    bootstrap_display_config, bootstrap_frame_metrics, bootstrap_frame_metrics_for_font_sizing,
+    bootstrap_frame_metrics_for_frontend, classify_early_cli_action, configure_gnu_startup_state,
+    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
@@ -1961,7 +1961,7 @@ fn wayland_font_policy_uses_logical_dpi_not_xft_dpi() {
 
 #[test]
 fn wayland_bootstrap_frame_metrics_use_logical_default_font_size() {
-    let metrics = FontSizing::logical().bootstrap_frame_metrics();
+    let metrics = bootstrap_frame_metrics_for_font_sizing(FontSizing::logical());
     assert_eq!(metrics.font_pixel_size, 13.0);
 }
 
