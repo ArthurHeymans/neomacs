@@ -4347,18 +4347,27 @@ impl LayoutEngine {
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
                                                 kind,
                                             );
-                                            let Some(metrics) =
-                                                append_display_item_to_current_row_with_shared_builder(
-                                                    &mut self.matrix_builder,
-                                                    layout,
-                                                    item,
-                                                    None,
-                                                )
-                                            else {
+                                            let position =
+                                                crate::display_row_builder::DisplayRowPosition {
+                                                    x_px: x,
+                                                    col,
+                                                };
+                                            let progress = self.matrix_builder.with_current_row_mut(
+                                                |row| {
+                                                    let mut writer = crate::display_row_builder::DisplayRowProgressWriter::new(
+                                                        &layout,
+                                                        row,
+                                                        position,
+                                                        right_limit,
+                                                    );
+                                                    writer.push_item(item)
+                                                },
+                                            );
+                                            let Some(progress) = progress else {
                                                 break;
                                             };
-                                            x += metrics.width_px;
-                                            col += metrics.width_cols;
+                                            x = progress.end.x_px;
+                                            col = progress.end.col;
                                         }
                                     }
                                 }
