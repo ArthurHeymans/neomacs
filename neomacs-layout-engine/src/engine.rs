@@ -2116,13 +2116,22 @@ impl LayoutEngine {
         builder: &crate::matrix_builder::GlyphMatrixBuilder,
         info: &WindowInfo,
     ) -> Option<f32> {
+        let in_window = |x: f32, y: f32, hollow: bool| -> bool {
+            !hollow
+                && x >= info.bounds.x
+                && x < info.bounds.x + info.bounds.width
+                && y >= info.bounds.y
+                && y < info.bounds.y + info.bounds.height
+        };
+        // The selected window's cursor lives in the phys cursor, not the
+        // per-window CursorItem list (which now holds only non-selected windows).
+        if let Some(phys) = builder.phys_cursor()
+            && in_window(phys.x, phys.y, phys.style.is_hollow())
+        {
+            return Some(phys.y);
+        }
         for cursor in builder.cursors() {
-            if cursor.x >= info.bounds.x
-                && cursor.x < info.bounds.x + info.bounds.width
-                && cursor.y >= info.bounds.y
-                && cursor.y < info.bounds.y + info.bounds.height
-                && !cursor.style.is_hollow()
-            {
+            if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
                 return Some(cursor.y);
             }
         }
@@ -6368,16 +6377,24 @@ impl LayoutEngine {
                     if resolved_cursor.y >= text_y
                         && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
                     {
-                        self.matrix_builder.push_cursor(
-                            resolved_cursor.window_id(),
-                            resolved_cursor.slot_id,
-                            resolved_cursor.x,
-                            resolved_cursor.y,
-                            resolved_cursor.width,
-                            resolved_cursor.height,
-                            resolved_cursor.style,
-                            resolved_cursor.color,
-                        );
+                        // The selected window's cursor is published as the phys
+                        // cursor below; every backend draws it from there and
+                        // dedups the matching per-window CursorItem. Pushing one
+                        // for the selected window is pure redundancy (and was the
+                        // source of the "two cursors" drift), so only non-selected
+                        // windows get a per-window cursor here.
+                        if !params.selected {
+                            self.matrix_builder.push_cursor(
+                                resolved_cursor.window_id(),
+                                resolved_cursor.slot_id,
+                                resolved_cursor.x,
+                                resolved_cursor.y,
+                                resolved_cursor.width,
+                                resolved_cursor.height,
+                                resolved_cursor.style,
+                                resolved_cursor.color,
+                            );
+                        }
                         self.matrix_builder.set_cursor_at_row(
                             resolved_cursor.row(),
                             resolved_cursor.col(),

@@ -636,15 +636,12 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
 }
 
 #[test]
-fn set_phys_cursor_syncs_the_redundant_window_cursor_slot() {
-    // Regression for the "two cursors on a line-numbered / heading line" bug.
-    // For the selected window the engine pushes BOTH a redundant per-window
-    // cursor (push_cursor, seeded with the captured Text-area slot) AND the
-    // phys cursor. The renderer suppresses the duplicate only when their
-    // slot_ids are identical. set_phys_cursor resolves the phys cursor to the
-    // materialize column (past the line-number gutter); it must propagate that
-    // slot to the redundant window cursor too, or the duplicate is drawn as a
-    // stray second cursor.
+fn set_phys_cursor_leaves_window_cursors_untouched() {
+    // The "two cursors on a line-numbered / heading line" bug is now prevented
+    // at the source: the engine no longer pushes a redundant per-window cursor
+    // for the selected window (push_cursor is guarded on !params.selected), so
+    // set_phys_cursor has nothing to sync and must not reach into the
+    // window-cursor list at all -- it only resolves and stores the phys cursor.
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -698,11 +695,11 @@ fn set_phys_cursor_syncs_the_redundant_window_cursor_slot() {
         .cursors
         .iter()
         .find(|c| c.window_id == 1)
-        .expect("redundant window cursor");
+        .expect("the manually pushed window cursor");
     assert_eq!(
-        wc.slot_id, phys.slot_id,
-        "the redundant window cursor must be synced to the phys cursor slot so \
-         the renderer recognizes and skips the duplicate"
+        wc.slot_id, captured_slot,
+        "set_phys_cursor must leave a separately-pushed window cursor exactly as \
+         pushed -- it no longer syncs a redundant duplicate (there is none)"
     );
 }
 

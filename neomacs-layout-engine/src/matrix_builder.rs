@@ -883,8 +883,7 @@ impl GlyphMatrixBuilder {
     /// Resolve the materialize-grid column the cursor at `cursor.charpos` on
     /// `cursor.row` actually occupies, or `None` when the cursor is not on the
     /// current window's matrix. This is the single authority for "which display
-    /// column is point on"; `set_phys_cursor` applies it to the cursor and the
-    /// redundant per-window cursor visual so neither re-derives it independently.
+    /// column is point on"; `set_phys_cursor` applies it to the phys cursor.
     ///
     /// The column must equal the one `FrameDisplayState::materialize_grid_row`
     /// assigns to point's glyph: a single running counter over the LeftMargin
@@ -947,7 +946,6 @@ impl GlyphMatrixBuilder {
 
     pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
-        let original_slot_id = cursor.slot_id;
         let visual_col =
             self.resolve_cursor_visual_col(cursor.window_id, cursor.row, cursor.charpos);
 
@@ -972,21 +970,10 @@ impl GlyphMatrixBuilder {
             matrix.rows[cursor.row].cursor_type = Some(cursor.style);
         }
 
-        // The selected window also pushed a redundant per-window cursor
-        // (push_cursor) seeded with the pre-resolution slot. The renderer only
-        // suppresses that duplicate when its slot_id is identical to the phys
-        // cursor's, so propagate the resolved slot to it here. This keeps a
-        // single source of truth for where the cursor sits and prevents the
-        // duplicate from being drawn as a second cursor when the resolution
-        // above moved the phys cursor (line-number gutter, hidden-text prefix).
-        if cursor.slot_id != original_slot_id {
-            for item in &mut self.cursors {
-                if item.window_id == cursor.window_id && item.slot_id == original_slot_id {
-                    item.slot_id = cursor.slot_id;
-                }
-            }
-        }
-
+        // The selected window is represented solely by the phys cursor: the
+        // engine no longer pushes a redundant per-window CursorItem for it (see
+        // the `!params.selected` guard around push_cursor in engine.rs), so
+        // there is nothing to keep in sync here.
         self.phys_cursor = Some(cursor);
     }
 
@@ -1064,6 +1051,10 @@ impl GlyphMatrixBuilder {
 
     pub fn cursors(&self) -> &[CursorItem] {
         &self.cursors
+    }
+
+    pub fn phys_cursor(&self) -> Option<&PhysCursor> {
+        self.phys_cursor.as_ref()
     }
 
     pub fn set_frame_identity(
