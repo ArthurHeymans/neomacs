@@ -16,6 +16,7 @@ fn layout() -> DisplayRowLayout {
         height_px: 16.0,
         ascent_px: 12.0,
         char_width_px: 8.0,
+        tab_width_cols: 4,
         base_face: RenderFaceRef::FaceId(1),
         symbol_values: std::collections::HashMap::new(),
     }
@@ -79,6 +80,18 @@ fn display_row_builder_consumes_display_item_source() {
 
     let row = builder.finish();
     assert_eq!(row_text(&row), "abc");
+}
+
+#[test]
+fn display_row_builder_emits_tab_as_stretch_to_next_tab_stop() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(text_item("a\tb"));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+
+    assert_eq!(row_text(&row), "a   b");
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Stretch { width_cols: 3 });
 }
 
 #[test]

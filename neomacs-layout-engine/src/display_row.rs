@@ -639,6 +639,7 @@ impl LayoutEngine {
             height_px: height,
             ascent_px: status_face.font_ascent.max(ascent).min(height.max(1.0)),
             char_width_px: char_width,
+            tab_width_cols: 8,
             base_face: RenderFaceRef::FaceId(status_face.face_id),
             symbol_values: parsed_symbol_values,
         };

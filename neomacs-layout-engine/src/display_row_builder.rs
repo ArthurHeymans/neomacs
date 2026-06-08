@@ -18,6 +18,7 @@ pub(crate) struct DisplayRowLayout {
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
     pub(crate) char_width_px: f32,
+    pub(crate) tab_width_cols: u16,
     pub(crate) base_face: RenderFaceRef,
     pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
 }
@@ -132,6 +133,11 @@ impl<'a> DisplayRowBuilder<'a> {
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+        if ch == '\t' {
+            self.push_tab(face_id);
+            return;
+        }
+
         let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
         if continues_cluster(ch, tail) {
             GlyphMatrixBuilder::push_cluster_continuation_to_row(
@@ -160,6 +166,32 @@ impl<'a> DisplayRowBuilder<'a> {
         } else {
             GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         }
+    }
+
+    fn push_tab(&mut self, face_id: u32) {
+        let tab_width = self.layout.tab_width_cols.max(1);
+        let current_col = self.current_text_cols();
+        let width_cols = tab_width - (current_col % tab_width);
+        GlyphMatrixBuilder::push_stretch_to_row(
+            &mut self.row,
+            width_cols,
+            face_id,
+            f32::from(width_cols) * self.layout.char_width_px.max(1.0),
+            0.0,
+            0.0,
+        );
+    }
+
+    fn current_text_cols(&self) -> u16 {
+        self.row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| match glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => width_cols.max(1),
+                _ if glyph.wide => 2,
+                _ => 1,
+            })
+            .sum()
     }
 
     fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: u8) -> f32 {
