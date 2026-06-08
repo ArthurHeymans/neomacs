@@ -5,11 +5,17 @@ use super::{
 
 pub(crate) fn builtin_gnutls_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-available-p", &args, 0)?;
-    Ok(Value::list(vec![Value::symbol("gnutls")]))
+    Ok(Value::list(
+        crate::emacs_core::tls::gnutls_available_capabilities()
+            .iter()
+            .map(|capability| Value::symbol(*capability))
+            .collect(),
+    ))
 }
 
 pub(crate) fn builtin_gnutls_ciphers(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-ciphers", &args, 0)?;
+    ensure_gnutls_available()?;
     Ok(Value::list(vec![
         gnutls_cipher_entry("AES-256-GCM", 10, true, 16, 1, 32, 12),
         gnutls_cipher_entry("AES-256-CBC", 5, false, 0, 16, 32, 16),
@@ -46,11 +52,13 @@ fn gnutls_cipher_entry(
 
 pub(crate) fn builtin_gnutls_digests(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-digests", &args, 0)?;
+    ensure_gnutls_available()?;
     Ok(Value::list(vec![Value::symbol("SHA256")]))
 }
 
 pub(crate) fn builtin_gnutls_macs(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-macs", &args, 0)?;
+    ensure_gnutls_available()?;
     Ok(Value::list(vec![Value::symbol("AEAD")]))
 }
 
@@ -148,6 +156,7 @@ pub(crate) fn builtin_gnutls_get_initstage(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_hash_digest(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-hash-digest", &args, 2)?;
+    ensure_gnutls_available()?;
     if args[0].is_nil() {
         return Err(signal(
             "error",
@@ -169,6 +178,7 @@ pub(crate) fn builtin_gnutls_hash_digest(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_hash_mac(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-hash-mac", &args, 3)?;
+    ensure_gnutls_available()?;
     if args[0].is_nil() {
         return Err(signal(
             "error",
@@ -197,12 +207,21 @@ pub(crate) fn builtin_gnutls_peer_status(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_symmetric_decrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-decrypt", &args, 4, 5)?;
+    ensure_gnutls_available()?;
     gnutls_symmetric_result(&args[2], &args[3])
 }
 
 pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-encrypt", &args, 4, 5)?;
+    ensure_gnutls_available()?;
     gnutls_symmetric_result(&args[2], &args[3])
+}
+
+fn ensure_gnutls_available() -> Result<(), Flow> {
+    Err(signal(
+        "error",
+        vec![Value::string("GnuTLS support is not available")],
+    ))
 }
 
 fn gnutls_symmetric_result(iv: &Value, input: &Value) -> EvalResult {

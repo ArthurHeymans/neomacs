@@ -851,6 +851,9 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("gnutls-hash-mac", 3, Some(3));
     assert_subr_arity("gnutls-macs", 0, Some(0));
     assert_subr_arity("gnutls-peer-status", 1, Some(1));
+    assert_subr_arity("neomacs-open-tls-stream", 4, Some(4));
+    assert_subr_arity("neomacs-tls-available-p", 0, Some(0));
+    assert_subr_arity("open-tls-stream", 4, Some(4));
     assert_subr_arity("gpm-mouse-start", 0, Some(0));
     assert_subr_arity("gpm-mouse-stop", 0, Some(0));
     assert_subr_arity("sqlite-close", 1, Some(1));

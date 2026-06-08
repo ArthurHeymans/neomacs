@@ -115,6 +115,7 @@ pub mod textprop;
 pub mod threads;
 pub mod timefns;
 pub mod timer;
+pub(crate) mod tls;
 pub mod treesit;
 pub mod undo;
 pub mod value;

@@ -1967,6 +1967,24 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
+        "neomacs-open-tls-stream",
+        super::process::builtin_neomacs_open_tls_stream,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "open-tls-stream",
+        super::process::builtin_neomacs_open_tls_stream,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "neomacs-tls-available-p",
+        |_ctx, args| super::tls::builtin_neomacs_tls_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
         "make-pipe-process",
         super::process::builtin_make_pipe_process,
         0,

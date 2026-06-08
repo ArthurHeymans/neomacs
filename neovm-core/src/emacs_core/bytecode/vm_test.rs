@@ -6534,10 +6534,13 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (null (neomacs-primary-selection-set "x"))
                  (equal (neomacs-primary-selection-get) "x")
                  (equal (neomacs-core-backend) "rust")
-                 (equal (gnutls-available-p) '(gnutls))
-                 (equal (gnutls-ciphers) '(AES-256-GCM))
-                 (equal (gnutls-digests) '(SHA256))
-                 (equal (gnutls-macs) '(AEAD))
+                 (null (gnutls-available-p))
+                 (neomacs-tls-available-p)
+                 (featurep 'tls)
+                 (fboundp 'open-tls-stream)
+                 (condition-case nil (gnutls-ciphers) (error t))
+                 (condition-case nil (gnutls-digests) (error t))
+                 (condition-case nil (gnutls-macs) (error t))
                  (gnutls-errorp nil)
                  (equal (gnutls-error-string 0) "Success.")
                  (null (gnutls-error-fatalp 1))
@@ -6555,12 +6558,16 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                         (null (gnutls-peer-status p)))
                      (condition-case nil (delete-process p) (error nil))))
                  (equal (gnutls-format-certificate "x") "Certificate")
-                 (equal (gnutls-hash-digest 'sha256 "x") "digest")
-                 (equal (gnutls-hash-mac 'sha256 "k" "x") "mac")
-                 (null (gnutls-symmetric-decrypt nil nil nil nil))
-                 (null (gnutls-symmetric-encrypt nil nil nil nil)))"##
+                 (condition-case nil (gnutls-hash-digest 'sha256 "x")
+                   (error t))
+                 (condition-case nil (gnutls-hash-mac 'sha256 "k" "x")
+                   (error t))
+                 (condition-case nil (gnutls-symmetric-decrypt nil nil nil nil)
+                   (error t))
+                 (condition-case nil (gnutls-symmetric-encrypt nil nil nil nil)
+                   (error t)))"##
         ),
-        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
+        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
     );
 }
 

@@ -10704,32 +10704,31 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
     let available = dispatch_builtin_pure("gnutls-available-p", vec![])
         .expect("gnutls-available-p should resolve")
         .expect("gnutls-available-p should evaluate");
-    assert_eq!(available, Value::list(vec![Value::symbol("gnutls")]));
+    assert_eq!(available, Value::NIL);
 
-    let ciphers = dispatch_builtin_pure("gnutls-ciphers", vec![])
+    let ciphers_err = dispatch_builtin_pure("gnutls-ciphers", vec![])
         .expect("gnutls-ciphers should resolve")
-        .expect("gnutls-ciphers should evaluate");
-    let cipher_entries = list_to_vec(&ciphers).expect("gnutls-ciphers should be a proper list");
-    let last_cipher = list_to_vec(
-        cipher_entries
-            .last()
-            .expect("gnutls-ciphers should include at least one entry"),
-    )
-    .expect("cipher entry should be a proper plist-like list");
-    assert_eq!(last_cipher[0], Value::symbol("AES-256-CBC"));
-    assert!(last_cipher.contains(&Value::keyword(":cipher-keysize")));
-    assert!(last_cipher.contains(&Value::keyword(":cipher-ivsize")));
-    assert!(last_cipher.contains(&Value::keyword(":cipher-blocksize")));
+        .unwrap_err();
+    match ciphers_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
-    let digests = dispatch_builtin_pure("gnutls-digests", vec![])
+    let digests_err = dispatch_builtin_pure("gnutls-digests", vec![])
         .expect("gnutls-digests should resolve")
-        .expect("gnutls-digests should evaluate");
-    assert_eq!(digests, Value::list(vec![Value::symbol("SHA256")]));
+        .unwrap_err();
+    match digests_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
-    let macs = dispatch_builtin_pure("gnutls-macs", vec![])
+    let macs_err = dispatch_builtin_pure("gnutls-macs", vec![])
         .expect("gnutls-macs should resolve")
-        .expect("gnutls-macs should evaluate");
-    assert_eq!(macs, Value::list(vec![Value::symbol("AEAD")]));
+        .unwrap_err();
+    match macs_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
     let errorp = dispatch_builtin_pure("gnutls-errorp", vec![Value::fixnum(0)])
         .expect("gnutls-errorp should resolve")
@@ -10840,7 +10839,7 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         other => panic!("expected signal, got {other:?}"),
     }
 
-    let mac = dispatch_builtin_pure(
+    let mac_err = dispatch_builtin_pure(
         "gnutls-hash-mac",
         vec![
             Value::symbol("SHA256"),
@@ -10849,10 +10848,13 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         ],
     )
     .expect("gnutls-hash-mac should resolve")
-    .expect("gnutls-hash-mac should evaluate");
-    assert_eq!(mac, Value::string("mac"));
+    .unwrap_err();
+    match mac_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
-    let enc = dispatch_builtin_pure(
+    let enc_err = dispatch_builtin_pure(
         "gnutls-symmetric-encrypt",
         vec![
             Value::symbol("AES-128-GCM"),
@@ -10863,32 +10865,28 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         ],
     )
     .expect("gnutls-symmetric-encrypt should resolve")
-    .expect("gnutls-symmetric-encrypt should evaluate");
-    let enc_items = list_to_vec(&enc).expect("gnutls-symmetric-encrypt returns (DATA IV)");
-    assert_eq!(enc_items.len(), 2);
-    assert_eq!(enc_items[0], Value::string("data"));
-    assert_eq!(
-        enc_items[1]
-            .as_lisp_string()
-            .expect("generated IV should be a string")
-            .as_bytes(),
-        &[0, 0, 0]
-    );
+    .unwrap_err();
+    match enc_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 
-    let dec = dispatch_builtin_pure(
+    let dec_err = dispatch_builtin_pure(
         "gnutls-symmetric-decrypt",
         vec![
             Value::symbol("AES-128-GCM"),
             Value::string("k"),
-            enc_items[1],
-            enc_items[0],
+            Value::string("iv"),
+            Value::string("data"),
             Value::string("aad"),
         ],
     )
     .expect("gnutls-symmetric-decrypt should resolve")
-    .expect("gnutls-symmetric-decrypt should evaluate");
-    let dec_items = list_to_vec(&dec).expect("gnutls-symmetric-decrypt returns (DATA IV)");
-    assert_eq!(dec_items[0], Value::string("data"));
+    .unwrap_err();
+    match dec_err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 #[test]

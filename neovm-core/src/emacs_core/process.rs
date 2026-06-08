@@ -12,10 +12,11 @@
 //! stdout, so `accept-process-output` and `poll_process_output` wake on
 //! incoming data.
 //!
-//! **TLS**: `gnutls-boot` upgrades a network process to TLS using `rustls`.
-//! The `TcpStream` is moved into a `rustls::StreamOwned` stored in
-//! `Process.tls_stream`. Read/write/send automatically use the TLS layer
-//! when present. Mozilla root certificates are used for verification.
+//! **TLS**: `gnutls-boot` upgrades a network process through the Neomacs TLS
+//! facade. The `TcpStream` is moved into the backend-neutral
+//! `Process.tls_stream`. Read/write/send automatically use the TLS layer when
+//! present. Mozilla root certificates are used by the default rustls backend
+//! for verification.
 
 use std::collections::HashMap;
 #[cfg(not(target_os = "windows"))]
@@ -30,14 +31,10 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
-/// A TLS-wrapped TCP stream using rustls.
-/// The underlying `TcpStream` is owned by `StreamOwned`, so when TLS is active
-/// the `Process.network_socket` field is `None`.
-pub type TlsStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+use super::tls::{RustlsBackend, TlsBackendError, TlsStream};
 
 /// OS socket owned by a network process.
 ///
@@ -2863,7 +2860,7 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // it (`(defvar gnutls-log-level)  ; gnutls.c`), so without the C-side
     // definition it is void and `gnutls-negotiate` errors on
     // `:loglevel ,gnutls-log-level` before it ever reaches the (working,
-    // rustls-backed) `gnutls-boot` -- breaking every TLS package download and
+    // TLS-capable) `gnutls-boot` -- breaking every package download and
     // thus `use-package`.  See https://github.com/eval-exec/neomacs/issues/121.
     obarray.set_symbol_value("gnutls-log-level", Value::fixnum(0));
     obarray.make_special("gnutls-log-level");
@@ -4356,7 +4353,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
 
 /// (gnutls-boot PROCESS TYPE PROPLIST) -> t or error
 ///
-/// Upgrade a network process to TLS using rustls (matching GNU's GnuTLS binding).
+/// Upgrade a network process to TLS through the GNU-compatible `gnutls-boot` API.
 /// PROCESS must be a network process with an open TCP socket.
 /// TYPE is ignored (GNU uses it for credential type).
 /// PROPLIST is a keyword plist; we extract `:hostname` for SNI.
@@ -4381,6 +4378,54 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
         }
     }
 
+    let host = hostname.unwrap_or_else(|| "localhost".to_string());
+    upgrade_process_to_tls(eval, id, &host, "gnutls-boot", signal_gnutls_boot_error)?;
+
+    Ok(Value::T)
+}
+
+/// (neomacs-open-tls-stream NAME BUFFER HOST PORT) -> process
+///
+/// Open a TCP network process and immediately upgrade it through Neomacs'
+/// native TLS backend. This is intentionally separate from GNU's `gnutls-*`
+/// API: rustls provides TLS transport, not libgnutls semantics.
+pub(crate) fn builtin_neomacs_open_tls_stream(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("neomacs-open-tls-stream", &args, 4)?;
+    let host = expect_string_strict(&args[2])?;
+    let process = builtin_make_network_process(
+        eval,
+        vec![
+            Value::keyword(":name"),
+            args[0],
+            Value::keyword(":buffer"),
+            args[1],
+            Value::keyword(":host"),
+            args[2],
+            Value::keyword(":service"),
+            args[3],
+        ],
+    )?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &process)?;
+    upgrade_process_to_tls(
+        eval,
+        id,
+        &host,
+        "neomacs-open-tls-stream",
+        signal_neomacs_tls_error,
+    )?;
+    Ok(process)
+}
+
+fn upgrade_process_to_tls(
+    eval: &mut super::eval::Context,
+    id: ProcessId,
+    host: &str,
+    operation: &str,
+    map_error: fn(TlsBackendError) -> Flow,
+) -> Result<(), Flow> {
     let proc = eval
         .processes
         .get_mut(id)
@@ -4389,7 +4434,7 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     if proc.kind != ProcessKind::Network {
         return Err(signal(
             "error",
-            vec![Value::string("gnutls-boot: not a network process")],
+            vec![Value::string(format!("{operation}: not a network process"))],
         ));
     }
 
@@ -4400,83 +4445,54 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
             proc.network_socket = Some(other);
             return Err(signal(
                 "error",
-                vec![Value::string("gnutls-boot: process is not a TCP stream")],
+                vec![Value::string(format!(
+                    "{operation}: process is not a TCP stream"
+                ))],
             ));
         }
         None => {
             return Err(signal(
                 "error",
-                vec![Value::string(
-                    "gnutls-boot: no socket (already TLS or closed)",
-                )],
+                vec![Value::string(format!(
+                    "{operation}: no socket (already TLS or closed)"
+                ))],
             ));
         }
     };
 
-    let host = hostname.unwrap_or_else(|| "localhost".to_string());
-
-    // Build rustls config with Mozilla root certificates.
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = rustls::ClientConfig::builder()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let server_name: rustls_pki_types::ServerName<'_> = host.clone().try_into().map_err(|_| {
-        signal(
-            "error",
-            vec![Value::string(format!("Invalid hostname for TLS: {}", host))],
-        )
-    })?;
-
-    let tls_conn = rustls::ClientConnection::new(Arc::new(config), server_name).map_err(|e| {
-        signal(
-            "error",
-            vec![Value::string(format!("TLS handshake failed: {}", e))],
-        )
-    })?;
-
-    // Temporarily set the stream to blocking for the handshake.
-    tcp_stream.set_nonblocking(false).ok();
-    let mut tls_stream = rustls::StreamOwned::new(tls_conn, tcp_stream);
-
-    // Drive the handshake to completion by doing a zero-length read.
-    // This forces rustls to exchange TLS records over the socket.
-    {
-        use std::io::Read;
-        let mut dummy = [0u8; 0];
-        match tls_stream.read(&mut dummy) {
-            Ok(_) => {}
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(signal(
-                    "gnutls-error",
-                    vec![
-                        Value::fixnum(-1),
-                        Value::string("TLS handshake: unexpected EOF"),
-                    ],
-                ));
-            }
-            Err(e) => {
-                return Err(signal(
-                    "gnutls-error",
-                    vec![
-                        Value::fixnum(-1),
-                        Value::string(format!("TLS handshake: {}", e)),
-                    ],
-                ));
-            }
-        }
-    }
-
-    // Switch back to non-blocking for async I/O.
-    tls_stream.sock.set_nonblocking(true).ok();
+    let tls_stream = RustlsBackend::connect_client(tcp_stream, host).map_err(map_error)?;
 
     // Store the TLS stream. The poller still watches the underlying fd
     // (which is the same fd that was registered for the plain socket).
     proc.tls_stream = Some(tls_stream);
 
-    Ok(Value::T)
+    Ok(())
+}
+
+fn signal_gnutls_boot_error(err: TlsBackendError) -> Flow {
+    match err {
+        TlsBackendError::InvalidHostname(_) | TlsBackendError::Connect(_) => {
+            signal("error", vec![Value::string(err.to_string())])
+        }
+        TlsBackendError::UnexpectedEof => signal(
+            "gnutls-error",
+            vec![
+                Value::fixnum(-1),
+                Value::string("TLS handshake: unexpected EOF"),
+            ],
+        ),
+        TlsBackendError::Io(err) => signal(
+            "gnutls-error",
+            vec![
+                Value::fixnum(-1),
+                Value::string(format!("TLS handshake: {}", err)),
+            ],
+        ),
+    }
+}
+
+fn signal_neomacs_tls_error(err: TlsBackendError) -> Flow {
+    signal("error", vec![Value::string(err.to_string())])
 }
 
 /// (isearch-process-search-char CHAR &optional COUNT) -> nil

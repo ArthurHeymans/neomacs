@@ -4745,6 +4745,8 @@ impl Context {
             Some(super::process::make_network_process_subfeatures()),
         )
         .expect("startup make-network-process provide should succeed");
+        ev.provide_value(Value::symbol("tls"), None)
+            .expect("startup tls provide should succeed");
         ev.finish_runtime_activation(false);
         ev
     }
@@ -4940,6 +4942,10 @@ impl Context {
                 Some(super::process::make_network_process_subfeatures()),
             )
             .expect("startup make-network-process provide should succeed");
+        }
+        if !ev.feature_present("tls") {
+            ev.provide_value(Value::symbol("tls"), None)
+                .expect("startup tls provide should succeed");
         }
 
         ev.finish_runtime_activation(true);

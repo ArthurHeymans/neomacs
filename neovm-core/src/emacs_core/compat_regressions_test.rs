@@ -633,31 +633,35 @@ fn gnutls_hash_digest_nil_method_signals_error() {
 }
 
 #[test]
-fn gnutls_hash_mac_symbol_method_returns_string() {
+fn gnutls_hash_mac_requires_gnutls_support() {
     crate::test_utils::init_test_tracing();
-    let out = crate::emacs_core::builtins::builtin_gnutls_hash_mac(vec![
+    let err = crate::emacs_core::builtins::builtin_gnutls_hash_mac(vec![
         Value::symbol("SHA256"),
         Value::string("k"),
         Value::string("a"),
     ])
-    .unwrap();
-    assert!(out.is_string());
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 #[test]
-fn gnutls_symmetric_encrypt_accepts_optional_aad_slot() {
+fn gnutls_symmetric_encrypt_requires_gnutls_support() {
     crate::test_utils::init_test_tracing();
-    let out = crate::emacs_core::builtins::builtin_gnutls_symmetric_encrypt(vec![
+    let err = crate::emacs_core::builtins::builtin_gnutls_symmetric_encrypt(vec![
         Value::symbol("AES-128-GCM"),
         Value::string("k"),
         Value::string("iv"),
         Value::string("data"),
         Value::string("aad"),
     ])
-    .unwrap();
-    let items = crate::emacs_core::value::list_to_vec(&out)
-        .expect("gnutls-symmetric-encrypt should return (DATA IV)");
-    assert_eq!(items, vec![Value::string("data"), Value::string("iv")]);
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 #[test]
