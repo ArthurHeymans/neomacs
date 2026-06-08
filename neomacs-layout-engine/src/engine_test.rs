@@ -249,6 +249,20 @@ fn enabled_window_row_texts(
         .collect()
 }
 
+fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
+    glyphs
+        .iter()
+        .filter(|glyph| !glyph.padding)
+        .map(|glyph| match &glyph.glyph_type {
+            GlyphType::Char { ch } | GlyphType::Glyphless { ch } => ch.to_string(),
+            GlyphType::Composite { text } => text.to_string(),
+            GlyphType::Stretch { width_cols } => " ".repeat(usize::from(*width_cols)),
+            _ => String::new(),
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
 fn enabled_window_row_texts_expanding_stretches(
     entry: &neomacs_display_protocol::glyph_matrix::WindowMatrixEntry,
 ) -> Vec<String> {
@@ -1189,7 +1203,7 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
         eval.frame_manager_mut()
             .create_frame("layout-propertized-echo", 320, 120, buf_id);
     let echo = Value::string_with_text_properties(
-        "AB",
+        "A中👨‍👩",
         vec![StringTextPropertyRun {
             start: 1,
             end: 2,
@@ -1228,22 +1242,30 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
         .glyphs[1]
         .clone();
 
-    assert_eq!(
-        echo_glyphs
-            .iter()
-            .filter_map(|glyph| match &glyph.glyph_type {
-                GlyphType::Char { ch } => Some(*ch),
-                _ => None,
-            })
-            .collect::<String>(),
-        "AB"
-    );
+    assert_eq!(glyphs_logical_text(&echo_glyphs), "A中👨‍👩");
     assert_ne!(
         echo_glyphs[0].face_id, echo_glyphs[1].face_id,
         "propertized echo character should receive its property face"
     );
     assert!(
-        echo_glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        echo_glyphs[1].wide,
+        "echo CJK glyph should use the shared wide-glyph builder: {echo_glyphs:?}"
+    );
+    assert!(
+        echo_glyphs.iter().any(|glyph| glyph.padding),
+        "echo CJK glyph should retain its padding cell: {echo_glyphs:?}"
+    );
+    assert!(
+        echo_glyphs.iter().any(
+            |glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.as_ref() == "👨‍👩")
+        ),
+        "echo ZWJ emoji should be clustered by the shared builder: {echo_glyphs:?}"
+    );
+    assert!(
+        echo_glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .all(|glyph| glyph.pixel_width > 0.0),
         "echo glyphs should carry real pixel widths: {echo_glyphs:?}"
     );
 }
@@ -6246,7 +6268,7 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
 }
 
 #[test]
-fn layout_frame_rust_baseline_tab_line_unicode_uses_chrome_display_row_path() {
+fn layout_frame_rust_tab_line_unicode_uses_shared_display_row_builder() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -6291,16 +6313,20 @@ fn layout_frame_rust_baseline_tab_line_unicode_uses_chrome_display_row_path() {
         .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
         .expect("tab-line CJK glyph");
 
-    assert_eq!(enabled_window_row_texts(entry)[0], "A中👨‍👩");
+    assert_eq!(glyphs_logical_text(glyphs), "A中👨‍👩");
     assert!(
-        !cjk.wide && !cjk.padding,
-        "current tab-line chrome row records CJK as a plain char, unlike the main buffer path: {glyphs:?}"
+        cjk.wide,
+        "tab-line chrome row should record CJK as a wide glyph through the shared builder: {glyphs:?}"
+    );
+    assert!(
+        glyphs.iter().any(|glyph| glyph.padding),
+        "tab-line chrome row should retain padding cells through the shared builder: {glyphs:?}"
     );
     assert!(
         glyphs
             .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{200d}' })),
-        "current tab-line chrome row emits ZWJ as an individual char: {glyphs:?}"
+            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))),
+        "tab-line chrome row should compose ZWJ emoji through the shared builder: {glyphs:?}"
     );
 }
 
@@ -6818,6 +6844,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
           (select-frame layout-target-frame)
           (tab-bar-new-tab)
           (switch-to-buffer (get-buffer-create "*tb-2*"))
+          (tab-bar-rename-tab "T中👨‍👩")
           (tab-bar-select-tab 1)
         "#,
     )
@@ -6873,17 +6900,14 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
                 .frame_chrome_rows
                 .iter()
                 .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
-                .flat_map(|row| row.row.glyphs[1].iter())
-                .filter_map(|g| match &g.glyph_type {
-                    neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(*ch),
-                    _ => None,
-                })
-                .collect::<String>()
+                .map(|row| glyphs_logical_text(&row.row.glyphs[1]))
+                .collect::<Vec<_>>()
+                .join("")
         })
         .unwrap_or_default();
 
     assert!(
-        tab_bar_text.contains("*tb-2*"),
+        tab_bar_text.contains("T中👨‍👩"),
         "expected tab-bar row to render tab captions from tab-bar keymap, got {tab_bar_text:?}; tabs={tabs_debug}; format={format_debug}; keymap={keymap_debug}"
     );
     let tab_bar_glyphs = engine
@@ -6895,12 +6919,34 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
                 .iter()
                 .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
                 .flat_map(|row| row.row.glyphs[1].iter())
+                .cloned()
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
     assert!(
-        tab_bar_glyphs.iter().all(|glyph| glyph.pixel_width > 0.0),
+        tab_bar_glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .all(|glyph| glyph.pixel_width > 0.0),
         "expected tab-bar glyphs to carry display-row pixel widths: {tab_bar_glyphs:?}"
+    );
+    let cjk = tab_bar_glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
+        .expect("tab-bar CJK glyph");
+    assert!(
+        cjk.wide,
+        "tab-bar CJK glyph should use the shared wide-glyph builder: {tab_bar_glyphs:?}"
+    );
+    assert!(
+        tab_bar_glyphs.iter().any(|glyph| glyph.padding),
+        "tab-bar CJK glyph should retain its padding cell: {tab_bar_glyphs:?}"
+    );
+    assert!(
+        tab_bar_glyphs.iter().any(
+            |glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.as_ref() == "👨‍👩")
+        ),
+        "tab-bar ZWJ emoji should be clustered by the shared builder: {tab_bar_glyphs:?}"
     );
     let window_tab_bar_rows = engine
         .last_frame_display_state

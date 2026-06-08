@@ -310,7 +310,7 @@ fn parse_display_length(value: Value) -> Option<DisplayLength> {
     parse_display_length_expr(value).map(DisplayLength::Expr)
 }
 
-fn parse_display_length_expr(value: Value) -> Option<DisplayLengthExpr> {
+pub(crate) fn parse_display_length_expr(value: Value) -> Option<DisplayLengthExpr> {
     if let Some(number) = lisp_number(value) {
         return Some(DisplayLengthExpr::Em(number));
     }

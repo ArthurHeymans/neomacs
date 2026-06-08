@@ -424,6 +424,17 @@ impl GlyphMatrixBuilder {
         self.in_row = false;
     }
 
+    /// Close a row whose glyph ordering was already finalized before
+    /// installation.
+    ///
+    /// `end_row` owns bidi normalization for rows built incrementally through
+    /// the matrix builder. Rows produced by `DisplayRowBuilder` have already
+    /// gone through the same normalization, so closing them must only update
+    /// builder state.
+    pub fn end_prebuilt_row(&mut self) {
+        self.in_row = false;
+    }
+
     /// Record authoritative geometry for the currently open row.
     ///
     /// `pixel_y` is frame-absolute; the builder stores rows
@@ -464,6 +475,35 @@ impl GlyphMatrixBuilder {
                 let row = &mut matrix.rows[self.current_row];
                 row.displays_text = !glyphs.is_empty();
                 row.glyphs[GlyphArea::Text.index()] = glyphs;
+            }
+        }
+    }
+
+    /// Install a complete row whose glyph order and row-level metadata were
+    /// produced outside the matrix builder.
+    ///
+    /// The source row's `pixel_y` is frame-absolute; rows stored in a window
+    /// matrix use window-relative Y, matching GNU `struct glyph_row::y`.
+    pub fn install_prebuilt_current_row(&mut self, source: &GlyphRow) {
+        if let Some(ref mut matrix) = self.current_matrix {
+            if self.current_row < matrix.rows.len() {
+                let row = &mut matrix.rows[self.current_row];
+                row.glyphs = source.glyphs.clone();
+                row.hash = source.hash;
+                row.enabled = source.enabled;
+                row.role = source.role;
+                row.cursor_col = source.cursor_col;
+                row.cursor_type = source.cursor_type;
+                row.truncated_left = source.truncated_left;
+                row.continued = source.continued;
+                row.reversed_p = source.reversed_p;
+                row.displays_text = source.displays_text;
+                row.ends_at_zv = source.ends_at_zv;
+                row.mode_line = source.mode_line;
+                row.start_charpos = source.start_charpos;
+                row.end_charpos = source.end_charpos;
+                let pixel_y_rel = source.pixel_y - self.current_pixel_bounds.y;
+                Self::write_row_metrics(row, pixel_y_rel, source.height_px, source.ascent_px);
             }
         }
     }

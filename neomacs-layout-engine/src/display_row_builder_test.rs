@@ -9,11 +9,13 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
 fn layout() -> DisplayRowLayout {
     DisplayRowLayout {
         role: GlyphRowRole::Text,
+        y_px: 0.0,
         width_px: 240.0,
         height_px: 16.0,
         ascent_px: 12.0,
         char_width_px: 8.0,
         base_face: RenderFaceRef::FaceId(1),
+        symbol_values: std::collections::HashMap::new(),
     }
 }
 

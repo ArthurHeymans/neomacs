@@ -16,6 +16,7 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()
+        .filter(|glyph| !glyph.padding)
         .flat_map(|glyph| match &glyph.glyph_type {
             GlyphType::Char { ch } => std::iter::repeat_n(*ch, 1).collect::<Vec<_>>(),
             GlyphType::Composite { text } => text.chars().collect::<Vec<_>>(),
@@ -33,13 +34,11 @@ fn render_lisp_display_row(rendered: Value, role: GlyphRowRole) -> GlyphRow {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 1;
-    let spec = engine
-        .build_propertized_display_row_spec(
-            0.0,
+    engine
+        .render_display_source_row(
             0.0,
             240.0,
             16.0,
-            1,
             8.0,
             12.0,
             &mut next_face_id,
@@ -49,12 +48,8 @@ fn render_lisp_display_row(rendered: Value, role: GlyphRowRole) -> GlyphRow {
             std::collections::HashMap::new(),
             role,
         )
-        .expect("display row spec");
-
-    engine
-        .render_display_row_spec_to_glyph_row(&spec, None)
-        .expect("glyph row")
-        .0
+        .expect("display source row")
+        .row
 }
 
 #[test]
@@ -431,7 +426,7 @@ fn display_row_baseline_mode_line_display_space_align_expands_to_spaces() {
 }
 
 #[test]
-fn display_row_baseline_tab_line_wide_char_is_not_main_buffer_wide_glyph_yet() {
+fn display_row_tab_line_wide_char_uses_shared_wide_glyph() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("A中B"), GlyphRowRole::TabLine);
     let glyphs = &row.glyphs[1];
@@ -443,13 +438,17 @@ fn display_row_baseline_tab_line_wide_char_is_not_main_buffer_wide_glyph_yet() {
     assert_eq!(row.role, GlyphRowRole::TabLine);
     assert_eq!(row_text_expanding_stretches(&row), "A中B");
     assert!(
-        !cjk.wide && !cjk.padding,
-        "current chrome row path records CJK as a plain char, not the main-buffer wide glyph pair: {glyphs:?}"
+        cjk.wide,
+        "tab-line CJK should use the shared wide glyph path: {glyphs:?}"
+    );
+    assert!(
+        glyphs.iter().any(|glyph| glyph.padding),
+        "tab-line CJK should retain a padding cell like main buffer text: {glyphs:?}"
     );
 }
 
 #[test]
-fn display_row_baseline_tab_line_zwj_emoji_sequence_is_not_clustered_yet() {
+fn display_row_tab_line_zwj_emoji_sequence_uses_shared_cluster() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("👨‍👩"), GlyphRowRole::TabLine);
     let glyphs = &row.glyphs[1];
@@ -459,14 +458,8 @@ fn display_row_baseline_tab_line_zwj_emoji_sequence_is_not_clustered_yet() {
     assert!(
         glyphs
             .iter()
-            .all(|glyph| !matches!(glyph.glyph_type, GlyphType::Composite { .. })),
-        "current chrome row path does not compose ZWJ emoji clusters yet: {glyphs:?}"
-    );
-    assert!(
-        glyphs
-            .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{200d}' })),
-        "current chrome row path still emits the ZWJ as an individual char: {glyphs:?}"
+            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))),
+        "tab-line ZWJ emoji should use the shared cluster path: {glyphs:?}"
     );
 }
 
@@ -481,4 +474,41 @@ fn display_row_baseline_tab_line_rtl_text_is_reordered_after_row_build() {
         "pure RTL chrome row should be marked reversed"
     );
     assert_eq!(row_text_expanding_stretches(&row), "בא");
+}
+
+#[test]
+fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let rendered = engine
+        .render_display_source_row(
+            0.0,
+            80.0,
+            16.0,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            Value::string("אב"),
+            &resolver,
+            std::collections::HashMap::new(),
+            GlyphRowRole::TabLine,
+        )
+        .expect("display source row");
+
+    assert!(rendered.row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "בא");
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    install_rendered_display_source_row(&mut builder, &rendered, 0);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert!(row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(row), "בא");
 }

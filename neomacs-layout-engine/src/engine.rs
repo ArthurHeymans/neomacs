@@ -3418,7 +3418,7 @@ impl LayoutEngine {
                 params.text_bounds,
                 params.selected,
             );
-            let (faces, rows) = self.render_minibuffer_echo_via_backend(
+            let (faces, rows) = self.render_minibuffer_echo_rows(
                 params.bounds.y,
                 text_width,
                 char_w,
@@ -6814,13 +6814,10 @@ impl LayoutEngine {
                 |progress: crate::display_status_line::StatusLineOutputProgress| {
                     output_emitter.move_chrome_output_to(evaluator, tl_row, progress);
                 };
-            let tab_output = self.render_rust_status_line_value_via_backend(
-                params.bounds.x,
+            let tab_output = self.render_display_source_row(
                 tl_y,
                 params.bounds.width,
                 tab_line_height,
-                0,
-                params.window_id,
                 char_w,
                 font_ascent,
                 &mut current_face_id,
@@ -6829,12 +6826,14 @@ impl LayoutEngine {
                 face_resolver,
                 status_line_symbol_values.clone(),
                 GlyphRowRole::TabLine,
-                Some(&mut builder),
-                Some(&mut advance_output),
             );
+            if let Some(ref rendered) = tab_output {
+                crate::display_row::install_rendered_display_source_row(&mut builder, rendered, 0);
+                advance_output(rendered.progress);
+            }
             self.matrix_builder = builder;
-            if let Some(progress) = tab_output {
-                output_emitter.push_chrome_row_progress(progress);
+            if let Some(rendered) = tab_output {
+                output_emitter.push_chrome_row_progress(rendered.progress);
             }
         }
 
@@ -6870,13 +6869,10 @@ impl LayoutEngine {
                 |progress: crate::display_status_line::StatusLineOutputProgress| {
                     output_emitter.move_chrome_output_to(evaluator, hl_row, progress);
                 };
-            let header_output = self.render_rust_status_line_value_via_backend(
-                params.bounds.x,
+            let header_output = self.render_display_source_row(
                 hl_y,
                 params.bounds.width,
                 header_line_height,
-                usize::from(tab_line_height > 0.0),
-                params.window_id,
                 char_w,
                 font_ascent,
                 &mut current_face_id,
@@ -6885,12 +6881,18 @@ impl LayoutEngine {
                 face_resolver,
                 status_line_symbol_values.clone(),
                 GlyphRowRole::HeaderLine,
-                Some(&mut builder),
-                Some(&mut advance_output),
             );
+            if let Some(ref rendered) = header_output {
+                crate::display_row::install_rendered_display_source_row(
+                    &mut builder,
+                    rendered,
+                    usize::from(tab_line_height > 0.0),
+                );
+                advance_output(rendered.progress);
+            }
             self.matrix_builder = builder;
-            if let Some(progress) = header_output {
-                output_emitter.push_chrome_row_progress(progress);
+            if let Some(rendered) = header_output {
+                output_emitter.push_chrome_row_progress(rendered.progress);
             }
         }
 
@@ -6941,13 +6943,10 @@ impl LayoutEngine {
                 |progress: crate::display_status_line::StatusLineOutputProgress| {
                     output_emitter.move_chrome_output_to(evaluator, ml_row, progress);
                 };
-            let mode_output = self.render_rust_status_line_value_via_backend(
-                params.bounds.x,
+            let mode_output = self.render_display_source_row(
                 ml_y,
                 params.bounds.width,
                 mode_line_height,
-                mode_line_matrix_row,
-                params.window_id,
                 char_w,
                 font_ascent,
                 &mut current_face_id,
@@ -6956,12 +6955,18 @@ impl LayoutEngine {
                 face_resolver,
                 status_line_symbol_values.clone(),
                 GlyphRowRole::ModeLine,
-                Some(&mut builder),
-                Some(&mut advance_output),
             );
+            if let Some(ref rendered) = mode_output {
+                crate::display_row::install_rendered_display_source_row(
+                    &mut builder,
+                    rendered,
+                    mode_line_matrix_row,
+                );
+                advance_output(rendered.progress);
+            }
             self.matrix_builder = builder;
-            if let Some(progress) = mode_output {
-                output_emitter.push_chrome_row_progress(progress);
+            if let Some(rendered) = mode_output {
+                output_emitter.push_chrome_row_progress(rendered.progress);
             }
         }
 
@@ -7076,11 +7081,11 @@ fn minibuffer_resize_line_count(buffer: &neovm_core::buffer::Buffer, window_id: 
 }
 
 impl LayoutEngine {
-    /// Build the minibuffer echo row through the shared DisplayBackend path.
+    /// Build minibuffer echo rows through the shared display-source path.
     ///
     /// This returns the realized face plus the row's text glyphs so the
     /// caller can install them into the currently open minibuffer window.
-    pub(crate) fn render_minibuffer_echo_via_backend(
+    pub(crate) fn render_minibuffer_echo_rows(
         &mut self,
         y: f32,
         text_width: f32,
@@ -7098,7 +7103,6 @@ impl LayoutEngine {
         Vec<neomacs_display_protocol::face::Face>,
         Vec<neomacs_display_protocol::glyph_matrix::GlyphRow>,
     ) {
-        use crate::display_row::{DisplayRowRequest, LispStringSource};
         use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
 
         // Reuse the shared face realization so GUI and TTY echo text use the
@@ -7128,7 +7132,7 @@ impl LayoutEngine {
         let echo_text = echo_message.as_runtime_string_owned().unwrap_or_default();
         let chars = echo_text.chars().collect::<Vec<_>>();
 
-        let mut faces = vec![base_render_face.clone()];
+        let mut faces = Vec::new();
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
         let mut line_start = 0usize;
@@ -7171,47 +7175,40 @@ impl LayoutEngine {
                     row_start,
                     offset,
                 );
-                let request = DisplayRowRequest {
-                    role: GlyphRowRole::Minibuffer,
-                    x: 0.0,
-                    y: y + rows.len() as f32 * row_height,
-                    width: wrap_width,
-                    height: row_height,
-                    window_id: 0,
-                    matrix_row: Some(rows.len()),
-                    base_face: base_face.clone(),
-                    source: LispStringSource { string: segment },
-                };
-                let Some(spec) = self.build_display_row_spec_from_request(
-                    request,
+                let Some(rendered) = self.render_display_source_row(
+                    y + rows.len() as f32 * row_height,
+                    wrap_width,
+                    row_height,
+                    char_w,
+                    ascent,
                     next_face_id,
+                    &base_face,
+                    segment,
                     face_resolver,
                     std::collections::HashMap::new(),
+                    GlyphRowRole::Minibuffer,
                 ) else {
                     break;
                 };
-                faces.push(spec.face.render_face());
-                for run_face in spec.run_faces.values() {
-                    faces.push(run_face.render_face());
-                }
-                let Some((mut row, _progress)) =
-                    self.render_display_row_spec_to_glyph_row(&spec, None)
-                else {
-                    break;
-                };
+                let special_face_id = rendered
+                    .faces
+                    .first()
+                    .map(|face| face.id)
+                    .unwrap_or(base_render_face.id);
+                faces.extend(rendered.faces);
+                let mut row = rendered.row;
                 row.role = GlyphRowRole::Minibuffer;
                 row.mode_line = false;
                 if needs_special_glyph {
                     let ch = if truncate_lines { '$' } else { '\\' };
                     while row.glyphs[1].len() < special_col {
                         row.glyphs[1].push(
-                            Glyph::char(' ', base_render_face.id, 0)
+                            Glyph::char(' ', special_face_id, 0)
                                 .with_pixel_width(char_width.max(1.0)),
                         );
                     }
                     row.glyphs[1].push(
-                        Glyph::char(ch, base_render_face.id, 0)
-                            .with_pixel_width(char_width.max(1.0)),
+                        Glyph::char(ch, special_face_id, 0).with_pixel_width(char_width.max(1.0)),
                     );
                     if truncate_lines {
                         offset = line_end;
@@ -7301,8 +7298,6 @@ impl LayoutEngine {
         frame_params: &FrameParams,
         tab_bar_height: f32,
     ) {
-        use crate::display_row::{DisplayRowRequest, LispStringSource};
-
         let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64) else {
             return;
         };
@@ -7316,39 +7311,26 @@ impl LayoutEngine {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let request = DisplayRowRequest {
-            role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
-            x: 0.0,
-            y: 0.0,
+        let Some(rendered) = self.render_display_source_row(
+            0.0,
             width,
-            height: tab_bar_height,
-            window_id: frame_window_id,
-            matrix_row: None,
-            base_face: tab_bar_face,
-            source: LispStringSource {
-                string: tab_bar.text,
-            },
-        };
-        let Some(spec) = self.build_display_row_spec_from_request(
-            request,
+            tab_bar_height,
+            frame_params.char_width,
+            tab_bar_face.font_ascent,
             &mut current_face_id,
+            &tab_bar_face,
+            tab_bar.text,
             face_resolver,
             std::collections::HashMap::new(),
+            neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
         ) else {
             return;
         };
         self.frame_face_id_counter = current_face_id;
-        self.matrix_builder
-            .insert_face(spec.face.face_id, spec.face.render_face());
-        for run_face in spec.run_faces.values() {
-            self.matrix_builder
-                .insert_face(run_face.face_id, run_face.render_face());
+        for face in &rendered.faces {
+            self.matrix_builder.insert_face(face.id, face.clone());
         }
-
-        let Some((mut row, _progress)) = self.render_display_row_spec_to_glyph_row(&spec, None)
-        else {
-            return;
-        };
+        let mut row = rendered.row;
         if row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].is_empty() {
             return;
         }

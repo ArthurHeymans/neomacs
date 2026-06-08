@@ -12,11 +12,13 @@ use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphTy
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowLayout {
     pub(crate) role: GlyphRowRole,
+    pub(crate) y_px: f32,
     pub(crate) width_px: f32,
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
     pub(crate) char_width_px: f32,
     pub(crate) base_face: RenderFaceRef,
+    pub(crate) symbol_values: std::collections::HashMap<String, DisplayLengthExpr>,
 }
 
 pub(crate) struct DisplayRowBuilder {
@@ -28,6 +30,7 @@ impl DisplayRowBuilder {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);
         row.enabled = true;
+        row.pixel_y = layout.y_px;
         row.height_px = layout.height_px.max(1.0);
         row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
         Self { layout, row }
@@ -219,7 +222,11 @@ impl DisplayRowBuilder {
                 | crate::display_item::DisplayLengthSymbol::RightMargin
                 | crate::display_item::DisplayLengthSymbol::ScrollBar => Some(0.0),
             },
-            DisplayLengthExpr::Variable(_) => None,
+            DisplayLengthExpr::Variable(name) => self
+                .layout
+                .symbol_values
+                .get(name.as_ref())
+                .and_then(|expr| self.length_expr_pixels(expr)),
             DisplayLengthExpr::Add(parts) => parts.iter().try_fold(0.0, |sum, part| {
                 self.length_expr_pixels(part).map(|value| sum + value)
             }),

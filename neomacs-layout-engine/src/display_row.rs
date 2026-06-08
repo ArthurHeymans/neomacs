@@ -1,10 +1,18 @@
+use crate::display_item::RenderFaceRef;
+use crate::display_row_builder::{DisplayRowBuilder, DisplayRowLayout};
+use crate::display_source::{
+    DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
+    parse_display_length_expr,
+};
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
 use crate::engine::LayoutEngine;
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, text_props::TextPropertyTable};
 use neovm_core::emacs_core::Value;
@@ -174,6 +182,7 @@ impl StatusLineFace {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_color_override(
         &self,
         face_id: u32,
@@ -253,6 +262,7 @@ impl StatusLineFace {
 
 /// A face run within an overlay/display string: byte offset + fg/bg colors + face_id.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct OverlayFaceRun {
     pub byte_offset: u16,
     pub fg: u32,
@@ -301,6 +311,7 @@ pub(crate) fn parse_overlay_face_runs(
 
 /// An align-to entry within an overlay string.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct OverlayAlignEntry {
     pub byte_offset: u16,
     pub covers_bytes: u16,
@@ -332,6 +343,7 @@ pub(crate) fn apply_overlay_face_run(
 /// A display property record extracted from a mode-line string.
 /// Only width participates in the current backend walker.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct DisplayPropRecord {
     pub(crate) byte_offset: u16,
     pub(crate) covers_bytes: u16,
@@ -339,6 +351,7 @@ pub(crate) struct DisplayPropRecord {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct DisplayRowSpec {
     pub(crate) role: GlyphRowRole,
     pub(crate) y: f32,
@@ -360,6 +373,25 @@ pub(crate) struct StatusLineOutputProgress {
     pub end_col: i64,
     pub y: f32,
     pub height: f32,
+}
+
+pub(crate) struct RenderedDisplaySourceRow {
+    pub(crate) row: GlyphRow,
+    pub(crate) progress: StatusLineOutputProgress,
+    pub(crate) faces: Vec<Face>,
+}
+
+pub(crate) fn install_rendered_display_source_row(
+    builder: &mut GlyphMatrixBuilder,
+    rendered: &RenderedDisplaySourceRow,
+    matrix_row: usize,
+) {
+    for face in &rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    builder.begin_row(matrix_row, rendered.row.role);
+    builder.install_prebuilt_current_row(&rendered.row);
+    builder.end_prebuilt_row();
 }
 
 impl DisplayRowSpec {
@@ -410,7 +442,158 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
 }
 
+fn display_source_row_progress(
+    row: &GlyphRow,
+    width: f32,
+    char_width: f32,
+    y: f32,
+    height: f32,
+) -> StatusLineOutputProgress {
+    let fallback = char_width.max(1.0);
+    let end_x: f32 = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .map(|glyph| match glyph.glyph_type {
+            GlyphType::Stretch { width_cols } => {
+                if glyph.pixel_width > 0.0 {
+                    glyph.pixel_width
+                } else {
+                    f32::from(width_cols) * fallback
+                }
+            }
+            _ if glyph.padding => 0.0,
+            _ if glyph.pixel_width > 0.0 => glyph.pixel_width,
+            _ if glyph.wide => fallback * 2.0,
+            _ => fallback,
+        })
+        .sum();
+    StatusLineOutputProgress {
+        end_x: end_x.min(width).max(0.0),
+        end_col: (end_x / fallback).round().max(0.0) as i64,
+        y,
+        height,
+    }
+}
+
 impl LayoutEngine {
+    pub(crate) fn render_display_source_row(
+        &mut self,
+        y: f32,
+        width: f32,
+        height: f32,
+        char_w: f32,
+        ascent: f32,
+        next_face_id: &mut u32,
+        base_face: &ResolvedFace,
+        rendered: Value,
+        face_resolver: &FaceResolver,
+        symbol_values: std::collections::HashMap<String, Value>,
+        role: GlyphRowRole,
+    ) -> Option<RenderedDisplaySourceRow> {
+        let base_face_id = if base_face.face_id != 0 {
+            base_face.face_id
+        } else {
+            let id = *next_face_id;
+            *next_face_id += 1;
+            id
+        };
+        let status_face =
+            self.realize_status_line_face(base_face_id, base_face, char_w, ascent, height);
+        let char_width = self.status_line_char_width(&status_face, char_w).max(1.0);
+        let mut status_faces = vec![status_face.clone()];
+        let mut source =
+            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(status_face.face_id))?;
+        let mut items = Vec::new();
+
+        struct RowFaceResolver<'a> {
+            engine: &'a mut LayoutEngine,
+            face_resolver: &'a FaceResolver,
+            base_face: &'a ResolvedFace,
+            base_face_id: u32,
+            next_face_id: &'a mut u32,
+            char_w: f32,
+            ascent: f32,
+            height: f32,
+            status_faces: &'a mut Vec<StatusLineFace>,
+        }
+
+        impl DisplayItemFaceResolver for RowFaceResolver<'_> {
+            fn resolve_face_ref(
+                &mut self,
+                base: crate::display_item::RenderFaceRef,
+                face_value: Value,
+            ) -> crate::display_item::RenderFaceRef {
+                let Some(resolved) = self
+                    .face_resolver
+                    .resolve_face_value_over(self.base_face, &face_value)
+                else {
+                    return base;
+                };
+                if same_resolved_face(&resolved, self.base_face) {
+                    return crate::display_item::RenderFaceRef::FaceId(self.base_face_id);
+                }
+
+                let face_id = *self.next_face_id;
+                *self.next_face_id += 1;
+                let status_face = self.engine.realize_status_line_face(
+                    face_id,
+                    &resolved,
+                    self.char_w,
+                    self.ascent,
+                    self.height,
+                );
+                self.status_faces.push(status_face);
+                crate::display_item::RenderFaceRef::FaceId(face_id)
+            }
+        }
+
+        {
+            let mut row_face_resolver = RowFaceResolver {
+                engine: self,
+                face_resolver,
+                base_face,
+                base_face_id: status_face.face_id,
+                next_face_id,
+                char_w,
+                ascent,
+                height,
+                status_faces: &mut status_faces,
+            };
+            let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
+            while let Some(item) = source.next_item(&mut context) {
+                items.push(item);
+            }
+        }
+
+        let parsed_symbol_values = symbol_values
+            .into_iter()
+            .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
+            .collect();
+        let mut row_builder = DisplayRowBuilder::new(DisplayRowLayout {
+            role,
+            y_px: y,
+            width_px: width,
+            height_px: height,
+            ascent_px: status_face.font_ascent.max(ascent).min(height.max(1.0)),
+            char_width_px: char_width,
+            base_face: RenderFaceRef::FaceId(status_face.face_id),
+            symbol_values: parsed_symbol_values,
+        });
+        for item in items {
+            row_builder.push_item(item);
+        }
+        let row = row_builder.finish();
+        let progress = display_source_row_progress(&row, width, char_width, y, height);
+        let faces = status_faces
+            .into_iter()
+            .map(|face| face.render_face())
+            .collect();
+        Some(RenderedDisplaySourceRow {
+            row,
+            progress,
+            faces,
+        })
+    }
+
     #[allow(dead_code)]
     pub(crate) fn build_display_row_spec_from_lisp_source(
         &mut self,
@@ -454,6 +637,7 @@ impl LayoutEngine {
         )
     }
 
+    #[allow(dead_code)]
     pub(crate) fn render_display_row_spec_to_glyph_row(
         &mut self,
         spec: &DisplayRowSpec,
@@ -679,6 +863,7 @@ impl LayoutEngine {
         Some((row, progress))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn render_display_row_spec_via_backend(
         &mut self,
         spec: &DisplayRowSpec,
@@ -730,6 +915,7 @@ impl LayoutEngine {
     /// Step 3.5 entry point: equivalent to `render_rust_status_line_value`
     /// but routes glyph emission through `TtyDisplayBackend` via
     /// `render_display_row_spec_via_backend`.
+    #[allow(dead_code)]
     pub(crate) fn render_rust_status_line_value_via_backend(
         &mut self,
         x: f32,
