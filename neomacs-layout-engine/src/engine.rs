@@ -7023,7 +7023,7 @@ impl LayoutEngine {
         Vec<neomacs_display_protocol::face::Face>,
         Vec<neomacs_display_protocol::glyph_matrix::GlyphRow>,
     ) {
-        use crate::display_row::DisplayRowRequest;
+        use crate::display_row::{DisplayRowRequest, LispStringSource};
         use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
 
         // Reuse the shared face realization so GUI and TTY echo text use the
@@ -7105,7 +7105,7 @@ impl LayoutEngine {
                     window_id: 0,
                     matrix_row: Some(rows.len()),
                     base_face: base_face.clone(),
-                    string: segment,
+                    source: LispStringSource { string: segment },
                 };
                 let Some(spec) = self.build_display_row_spec_from_request(
                     request,
@@ -7226,7 +7226,7 @@ impl LayoutEngine {
         frame_params: &FrameParams,
         tab_bar_height: f32,
     ) {
-        use crate::display_row::DisplayRowRequest;
+        use crate::display_row::{DisplayRowRequest, LispStringSource};
 
         let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64) else {
             return;
@@ -7250,7 +7250,9 @@ impl LayoutEngine {
             window_id: frame_window_id,
             matrix_row: None,
             base_face: tab_bar_face,
-            string: tab_bar.text,
+            source: LispStringSource {
+                string: tab_bar.text,
+            },
         };
         let Some(spec) = self.build_display_row_spec_from_request(
             request,

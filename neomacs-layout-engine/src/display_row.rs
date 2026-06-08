@@ -67,7 +67,7 @@ pub(crate) struct DisplayRowRequest {
     pub window_id: i64,
     pub matrix_row: Option<usize>,
     pub base_face: ResolvedFace,
-    pub string: Value,
+    pub source: LispStringSource,
 }
 
 fn char_index_to_byte(text: &[u8], char_index: usize) -> usize {
@@ -421,10 +421,7 @@ impl LayoutEngine {
         symbol_values: std::collections::HashMap<String, Value>,
     ) -> Option<DisplayRowSpec> {
         self.build_display_row_spec_from_request(
-            DisplayRowRequest {
-                string: source.string,
-                ..request
-            },
+            DisplayRowRequest { source, ..request },
             next_face_id,
             face_resolver,
             symbol_values,
@@ -450,7 +447,7 @@ impl LayoutEngine {
             ascent,
             next_face_id,
             &request.base_face,
-            request.string,
+            request.source.string,
             face_resolver,
             symbol_values,
             request.role,

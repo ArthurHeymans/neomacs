@@ -29,7 +29,9 @@ fn display_row_request_accepts_window_chrome_roles() {
             window_id: 7,
             matrix_row: Some(0),
             base_face: base_face(),
-            string: Value::string("row"),
+            source: LispStringSource {
+                string: Value::string("row"),
+            },
         };
 
         assert_eq!(request.role, role);
@@ -51,7 +53,9 @@ fn display_row_request_accepts_frame_and_minibuffer_roles() {
             window_id: 0,
             matrix_row: None,
             base_face: base_face(),
-            string: Value::string("plain"),
+            source: LispStringSource {
+                string: Value::string("plain"),
+            },
         };
 
         assert_eq!(request.role, role);
@@ -71,16 +75,20 @@ fn display_row_request_represents_plain_text_as_lisp_string_without_properties()
         window_id: 0,
         matrix_row: None,
         base_face: base_face(),
-        string: Value::string("plain"),
+        source: LispStringSource {
+            string: Value::string("plain"),
+        },
     };
 
     assert_eq!(
-        request.string.as_runtime_string_owned().as_deref(),
+        request.source.string.as_runtime_string_owned().as_deref(),
         Some("plain")
     );
     assert!(
-        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(request.string)
-            .is_none()
+        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(
+            request.source.string,
+        )
+        .is_none()
     );
 }
 
@@ -119,7 +127,7 @@ fn display_row_source_lisp_string_builds_existing_row_spec() {
         window_id: 7,
         matrix_row: Some(0),
         base_face,
-        string: source.string,
+        source,
     };
     let mut next_face_id = 1;
 
@@ -135,6 +143,53 @@ fn display_row_source_lisp_string_builds_existing_row_spec() {
 
     assert_eq!(spec.role, GlyphRowRole::TabLine);
     assert_eq!(spec.text, b"row");
+}
+
+#[test]
+fn display_row_request_uses_lisp_string_source_for_text_properties() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let request = DisplayRowRequest {
+        role: GlyphRowRole::TabBar,
+        x: 0.0,
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        window_id: 0,
+        matrix_row: None,
+        base_face,
+        source: LispStringSource {
+            string: Value::string_with_text_properties(
+                "AB",
+                vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                    start: 1,
+                    end: 2,
+                    plist: Value::list(vec![
+                        Value::symbol("face"),
+                        Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+                    ]),
+                }],
+            ),
+        },
+    };
+    let mut next_face_id = 1;
+
+    let spec = engine
+        .build_display_row_spec_from_request(
+            request,
+            &mut next_face_id,
+            &resolver,
+            std::collections::HashMap::new(),
+        )
+        .expect("display row request spec");
+
+    assert_eq!(spec.face_runs.len(), 1);
+    assert_eq!(spec.face_runs[0].byte_offset, 1);
 }
 
 #[test]
@@ -255,7 +310,9 @@ fn render_plain_display_row_request_returns_glyph_row() {
         window_id: 0,
         matrix_row: None,
         base_face,
-        string: Value::string("tab"),
+        source: LispStringSource {
+            string: Value::string("tab"),
+        },
     };
     let mut next_face_id = 1;
     let spec = engine
