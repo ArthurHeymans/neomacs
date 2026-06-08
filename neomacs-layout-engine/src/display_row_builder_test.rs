@@ -128,6 +128,18 @@ fn display_row_writer_consumes_display_item_source() {
 }
 
 #[test]
+fn display_row_writer_reports_appended_metrics() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowWriter::new(&row_layout, &mut row);
+
+    let metrics = writer.push_item(text_item("a\tb"));
+
+    assert_eq!(metrics.width_cols, 5);
+    assert_eq!(metrics.width_px, 40.0);
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 

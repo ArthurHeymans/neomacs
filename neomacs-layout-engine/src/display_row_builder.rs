@@ -33,6 +33,38 @@ pub(crate) trait DisplayGlyphMeasurer {
     ) -> Option<f32>;
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DisplayRowWriteMetrics {
+    pub(crate) width_px: f32,
+    pub(crate) width_cols: usize,
+}
+
+impl DisplayRowWriteMetrics {
+    fn from_glyphs(glyphs: &[Glyph], char_width_px: f32) -> Self {
+        glyphs.iter().fold(Self::default(), |mut metrics, glyph| {
+            let width_cols = match glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => usize::from(width_cols.max(1)),
+                _ if glyph.padding && glyph.pixel_width <= 0.0 => 0,
+                _ if glyph.wide => 2,
+                _ => 1,
+            };
+            let width_px = if glyph.pixel_width > 0.0 {
+                glyph.pixel_width
+            } else {
+                width_cols as f32 * char_width_px.max(1.0)
+            };
+            metrics.width_cols += width_cols;
+            metrics.width_px += width_px;
+            metrics
+        })
+    }
+
+    fn add(&mut self, other: Self) {
+        self.width_px += other.width_px;
+        self.width_cols += other.width_cols;
+    }
+}
+
 pub(crate) struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
     row: GlyphRow,
@@ -70,14 +102,14 @@ impl<'a> DisplayRowBuilder<'a> {
         builder
     }
 
-    pub(crate) fn push_item(&mut self, item: DisplayItem) {
+    pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         if let Some(glyph_measurer) = self.glyph_measurer.as_deref_mut() {
             let mut writer =
                 DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
-            writer.push_item(item);
+            writer.push_item(item)
         } else {
             let mut writer = DisplayRowWriter::new(&self.layout, &mut self.row);
-            writer.push_item(item);
+            writer.push_item(item)
         }
     }
 
@@ -85,14 +117,14 @@ impl<'a> DisplayRowBuilder<'a> {
         &mut self,
         source: &mut impl DisplayItemSource,
         context: &mut DisplaySourceContext<'_>,
-    ) {
+    ) -> DisplayRowWriteMetrics {
         if let Some(glyph_measurer) = self.glyph_measurer.as_deref_mut() {
             let mut writer =
                 DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
-            writer.push_source(source, context);
+            writer.push_source(source, context)
         } else {
             let mut writer = DisplayRowWriter::new(&self.layout, &mut self.row);
-            writer.push_source(source, context);
+            writer.push_source(source, context)
         }
     }
 
@@ -137,8 +169,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    pub(crate) fn push_item(&mut self, item: DisplayItem) {
+    pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         let face_id = self.face_id(item.face);
+        let text_area = GlyphArea::Text.index();
+        let before_len = self.row.glyphs[text_area].len();
         match item.kind {
             DisplayItemKind::TextRun(run) => {
                 let mut charpos = source_span_start_char(&item.span);
@@ -188,16 +222,22 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }
+        DisplayRowWriteMetrics::from_glyphs(
+            &self.row.glyphs[text_area][before_len..],
+            self.layout.char_width_px,
+        )
     }
 
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
         context: &mut DisplaySourceContext<'_>,
-    ) {
+    ) -> DisplayRowWriteMetrics {
+        let mut metrics = DisplayRowWriteMetrics::default();
         while let Some(item) = source.next_item(context) {
-            self.push_item(item);
+            metrics.add(self.push_item(item));
         }
+        metrics
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {

@@ -1359,22 +1359,19 @@ fn append_display_item_to_current_row_with_shared_builder(
     layout: crate::display_row_builder::DisplayRowLayout,
     item: crate::display_item::DisplayItem,
     glyph_measurer: Option<&mut dyn crate::display_row_builder::DisplayGlyphMeasurer>,
-) -> Option<DisplayAppendMetrics> {
+) -> Option<crate::display_row_builder::DisplayRowWriteMetrics> {
     builder.with_current_row_mut(|row| {
-        let text_area = neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index();
-        let before_len = row.glyphs[text_area].len();
         if let Some(glyph_measurer) = glyph_measurer {
             let mut writer = crate::display_row_builder::DisplayRowWriter::with_glyph_measurer(
                 &layout,
                 row,
                 glyph_measurer,
             );
-            writer.push_item(item);
+            writer.push_item(item)
         } else {
             let mut writer = crate::display_row_builder::DisplayRowWriter::new(&layout, row);
-            writer.push_item(item);
+            writer.push_item(item)
         }
-        display_append_metrics(&row.glyphs[text_area][before_len..], layout.char_width_px)
     })
 }
 
@@ -1398,38 +1395,6 @@ fn text_display_row_layout(
         base_face: crate::display_item::RenderFaceRef::FaceId(face_id),
         symbol_values: std::collections::HashMap::new(),
     }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct DisplayAppendMetrics {
-    width_px: f32,
-    width_cols: usize,
-}
-
-fn display_append_metrics(
-    glyphs: &[neomacs_display_protocol::glyph_matrix::Glyph],
-    char_width_px: f32,
-) -> DisplayAppendMetrics {
-    glyphs
-        .iter()
-        .fold(DisplayAppendMetrics::default(), |mut metrics, glyph| {
-            let width_cols = match glyph.glyph_type {
-                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols } => {
-                    usize::from(width_cols.max(1))
-                }
-                _ if glyph.padding && glyph.pixel_width <= 0.0 => 0,
-                _ if glyph.wide => 2,
-                _ => 1,
-            };
-            let width_px = if glyph.pixel_width > 0.0 {
-                glyph.pixel_width
-            } else {
-                width_cols as f32 * char_width_px.max(1.0)
-            };
-            metrics.width_cols += width_cols;
-            metrics.width_px += width_px;
-            metrics
-        })
 }
 
 struct SingleGlyphAdvance {
