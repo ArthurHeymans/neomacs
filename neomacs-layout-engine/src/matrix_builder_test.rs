@@ -636,6 +636,77 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
 }
 
 #[test]
+fn set_phys_cursor_syncs_the_redundant_window_cursor_slot() {
+    // Regression for the "two cursors on a line-numbered / heading line" bug.
+    // For the selected window the engine pushes BOTH a redundant per-window
+    // cursor (push_cursor, seeded with the captured Text-area slot) AND the
+    // phys cursor. The renderer suppresses the duplicate only when their
+    // slot_ids are identical. set_phys_cursor resolves the phys cursor to the
+    // materialize column (past the line-number gutter); it must propagate that
+    // slot to the redundant window cursor too, or the duplicate is drawn as a
+    // stray second cursor.
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_left_margin_char('1', 1);
+    builder.push_left_margin_char('2', 1);
+    builder.push_left_margin_stretch(1, 1); // three-column line-number gutter
+    builder.push_char('H', 0, 100);
+    builder.push_char('e', 0, 101);
+    builder.push_char('l', 0, 102);
+    builder.end_row();
+
+    // The captured (pre-resolution) slot is the Text-area index, column 2.
+    let captured_slot = DisplaySlotId {
+        window_id: 1,
+        row: 0,
+        col: 2,
+    };
+    builder.push_cursor(
+        1,
+        captured_slot,
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        neomacs_display_protocol::types::Color::WHITE,
+    );
+    builder.set_phys_cursor(PhysCursor {
+        window_id: 1,
+        charpos: 102,
+        row: 0,
+        col: 2,
+        slot_id: captured_slot,
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let phys = state.phys_cursor.as_ref().expect("phys cursor");
+    // 3 gutter columns + Text index 2 = materialize column 5.
+    assert_eq!(phys.slot_id.col, 5, "phys cursor resolves past the gutter");
+
+    let wc = state
+        .cursors
+        .iter()
+        .find(|c| c.window_id == 1)
+        .expect("redundant window cursor");
+    assert_eq!(
+        wc.slot_id, phys.slot_id,
+        "the redundant window cursor must be synced to the phys cursor slot so \
+         the renderer recognizes and skips the duplicate"
+    );
+}
+
+#[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);

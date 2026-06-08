@@ -882,6 +882,7 @@ impl GlyphMatrixBuilder {
 
     pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
+        let original_slot_id = cursor.slot_id;
         let mut visual_col = None;
 
         if cursor_window_matches_current(cursor.window_id, self.current_window_id)
@@ -952,6 +953,21 @@ impl GlyphMatrixBuilder {
         {
             matrix.rows[cursor.row].cursor_col = Some(col);
             matrix.rows[cursor.row].cursor_type = Some(cursor.style);
+        }
+
+        // The selected window also pushed a redundant per-window cursor
+        // (push_cursor) seeded with the pre-resolution slot. The renderer only
+        // suppresses that duplicate when its slot_id is identical to the phys
+        // cursor's, so propagate the resolved slot to it here. This keeps a
+        // single source of truth for where the cursor sits and prevents the
+        // duplicate from being drawn as a second cursor when the resolution
+        // above moved the phys cursor (line-number gutter, hidden-text prefix).
+        if cursor.slot_id != original_slot_id {
+            for item in &mut self.cursors {
+                if item.window_id == cursor.window_id && item.slot_id == original_slot_id {
+                    item.slot_id = cursor.slot_id;
+                }
+            }
         }
 
         self.phys_cursor = Some(cursor);
