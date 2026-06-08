@@ -3,8 +3,10 @@ use crate::display_item::{DisplayItemKind, DisplaySourcePosition, RenderFaceRef}
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
+use neovm_core::emacs_core::value::StringTextPropertyRun;
+use neovm_core::emacs_core::{Context, Value};
 
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
@@ -258,6 +260,113 @@ fn display_row_append_frame_from_parts_preserves_geometry_and_area() {
     assert_eq!(frame.text_width, 150.0);
     assert_eq!(frame.line_number_width, 10.0);
     assert_eq!(frame.face_space_width, 7.0);
+}
+
+#[test]
+fn layout_string_face_resolver_records_pending_faces_without_builder() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut string_face_cache = std::collections::HashMap::new();
+    let mut current_face_id = 20;
+    let mut pending_faces = Vec::new();
+    let mut resolver = LayoutStringFaceResolver {
+        face_resolver: &face_resolver,
+        base_face,
+        string_face_cache: &mut string_face_cache,
+        current_face_id: &mut current_face_id,
+        pending_faces: &mut pending_faces,
+    };
+    let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
+
+    let face = crate::display_source::DisplayItemFaceResolver::resolve_face_ref(
+        &mut resolver,
+        RenderFaceRef::FaceId(0),
+        face_value,
+    );
+
+    assert_eq!(face, RenderFaceRef::FaceId(20));
+    assert_eq!(current_face_id, 21);
+    assert_eq!(pending_faces.len(), 1);
+    assert_eq!(pending_faces[0].face_id, 20);
+    assert_eq!(pending_faces[0].resolved.fg, 0x00ff0000);
+}
+
+#[test]
+fn next_layout_string_source_item_installs_pending_faces() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut string_face_cache = std::collections::HashMap::new();
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let value = Value::string_with_text_properties(
+        "a",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+            ]),
+        }],
+    );
+    let mut source =
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+            .expect("string source");
+    let row_layout = DisplayRowGeometry {
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        char_width: 8.0,
+        ascent: 12.0,
+        tab_policy: DisplayTabPolicy::every(8),
+    }
+    .to_layout(
+        GlyphRowRole::Text,
+        8.0,
+        12.0,
+        RenderFaceRef::FaceId(0),
+        std::collections::HashMap::new(),
+    );
+    let mut append_cursor = crate::display_row_builder::DisplayRowAppendCursor::new(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let item = next_layout_string_source_item(
+        &mut builder,
+        &mut source,
+        &face_resolver,
+        base_face,
+        &mut string_face_cache,
+        &mut current_face_id,
+    )
+    .expect("source item");
+
+    assert_eq!(item.face, RenderFaceRef::FaceId(20));
+    assert_eq!(
+        builder.faces().get(&20).map(|face| face.foreground),
+        Some(Color::from_pixel(0x00ff0000))
+    );
+
+    let progress = append_cursor
+        .append_item_to_current_matrix_row(&mut builder, &row_layout, item)
+        .expect("append progress");
+
+    assert_eq!(progress.end.x_px, 8.0);
+    assert_eq!(append_cursor.position().col, 1);
+    builder
+        .with_current_row_mut(|row| {
+            assert_eq!(row.glyphs[1][0].face_id, 20);
+        })
+        .expect("current row");
 }
 
 #[test]

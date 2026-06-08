@@ -1,15 +1,17 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::DisplayRowGeometry;
+use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy,
 };
+use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
 pub(crate) fn emit_text_progress_slots(
@@ -45,6 +47,74 @@ pub(crate) fn synthetic_display_text_item(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
+}
+
+struct LayoutStringFaceResolver<'a> {
+    face_resolver: &'a FaceResolver,
+    base_face: &'a ResolvedFace,
+    string_face_cache: &'a mut HashMap<Value, u32>,
+    current_face_id: &'a mut u32,
+    pending_faces: &'a mut Vec<LayoutStringPendingFace>,
+}
+
+#[derive(Clone, Debug)]
+struct LayoutStringPendingFace {
+    face_id: u32,
+    resolved: ResolvedFace,
+}
+
+fn apply_pending_string_faces(
+    builder: &mut GlyphMatrixBuilder,
+    pending_faces: &mut Vec<LayoutStringPendingFace>,
+) {
+    for pending in pending_faces.drain(..) {
+        insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
+    }
+}
+
+pub(crate) fn next_layout_string_source_item(
+    builder: &mut GlyphMatrixBuilder,
+    source: &mut impl DisplayItemSource,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    string_face_cache: &mut HashMap<Value, u32>,
+    current_face_id: &mut u32,
+) -> Option<DisplayItem> {
+    let mut pending_faces = Vec::new();
+    let item = {
+        let mut resolver = LayoutStringFaceResolver {
+            face_resolver,
+            base_face,
+            string_face_cache,
+            current_face_id,
+            pending_faces: &mut pending_faces,
+        };
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        source.next_item(&mut context)
+    };
+    apply_pending_string_faces(builder, &mut pending_faces);
+    item
+}
+
+impl DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
+    fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
+        if let Some(face_id) = self.string_face_cache.get(&face_value) {
+            return RenderFaceRef::FaceId(*face_id);
+        }
+        let Some(resolved) = self
+            .face_resolver
+            .resolve_face_value_over(self.base_face, &face_value)
+        else {
+            return base;
+        };
+
+        let face_id = *self.current_face_id;
+        *self.current_face_id += 1;
+        self.string_face_cache.insert(face_value, face_id);
+        self.pending_faces
+            .push(LayoutStringPendingFace { face_id, resolved });
+        RenderFaceRef::FaceId(face_id)
+    }
 }
 
 pub(crate) struct DisplayRowAppendOutput {

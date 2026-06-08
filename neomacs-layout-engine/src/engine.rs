@@ -22,7 +22,8 @@ use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, append_display_row_spec_item,
     append_display_row_spec_item_and_emit, append_measured_display_row_spec_item_and_emit,
-    append_synthetic_text_to_display_row, emit_text_progress_slots, synthetic_display_text_item,
+    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
+    synthetic_display_text_item,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -1495,79 +1496,6 @@ fn append_lisp_string_to_text_row(
         }
     }
     position
-}
-
-struct LayoutStringFaceResolver<'a> {
-    face_resolver: &'a super::neovm_bridge::FaceResolver,
-    base_face: &'a super::neovm_bridge::ResolvedFace,
-    string_face_cache: &'a mut std::collections::HashMap<Value, u32>,
-    current_face_id: &'a mut u32,
-    pending_faces: &'a mut Vec<LayoutStringPendingFace>,
-}
-
-#[derive(Clone, Debug)]
-struct LayoutStringPendingFace {
-    face_id: u32,
-    resolved: super::neovm_bridge::ResolvedFace,
-}
-
-fn apply_pending_string_faces(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    pending_faces: &mut Vec<LayoutStringPendingFace>,
-) {
-    for pending in pending_faces.drain(..) {
-        insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
-    }
-}
-
-fn next_layout_string_source_item(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    source: &mut impl DisplayItemSource,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    base_face: &super::neovm_bridge::ResolvedFace,
-    string_face_cache: &mut std::collections::HashMap<Value, u32>,
-    current_face_id: &mut u32,
-) -> Option<crate::display_item::DisplayItem> {
-    let mut pending_faces = Vec::new();
-    let item = {
-        let mut resolver = LayoutStringFaceResolver {
-            face_resolver,
-            base_face,
-            string_face_cache,
-            current_face_id,
-            pending_faces: &mut pending_faces,
-        };
-        let mut context =
-            crate::display_source::DisplaySourceContext::with_face_resolver(&mut resolver);
-        source.next_item(&mut context)
-    };
-    apply_pending_string_faces(builder, &mut pending_faces);
-    item
-}
-
-impl crate::display_source::DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
-    fn resolve_face_ref(
-        &mut self,
-        base: crate::display_item::RenderFaceRef,
-        face_value: Value,
-    ) -> crate::display_item::RenderFaceRef {
-        if let Some(face_id) = self.string_face_cache.get(&face_value) {
-            return crate::display_item::RenderFaceRef::FaceId(*face_id);
-        }
-        let Some(resolved) = self
-            .face_resolver
-            .resolve_face_value_over(self.base_face, &face_value)
-        else {
-            return base;
-        };
-
-        let face_id = *self.current_face_id;
-        *self.current_face_id += 1;
-        self.string_face_cache.insert(face_value, face_id);
-        self.pending_faces
-            .push(LayoutStringPendingFace { face_id, resolved });
-        crate::display_item::RenderFaceRef::FaceId(face_id)
-    }
 }
 
 /// Render overlay string bytes into the layout.
