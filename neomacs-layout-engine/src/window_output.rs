@@ -6,6 +6,7 @@
 //! handoff.
 
 use super::display_status_line::StatusLineOutputProgress;
+use crate::display_row_builder::DisplayRowPosition;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
@@ -29,6 +30,17 @@ struct CurrentRowProgress {
     x: i64,
     start_col: i64,
     start_x: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextOutputSpan {
+    pub(crate) buffer_pos: LispCharPos1,
+    pub(crate) row: usize,
+    pub(crate) row_y: f32,
+    pub(crate) glyph_y: f32,
+    pub(crate) height: f32,
+    pub(crate) start: DisplayRowPosition,
+    pub(crate) end: DisplayRowPosition,
 }
 
 pub(crate) struct WindowOutputEmitter {
@@ -226,6 +238,21 @@ impl WindowOutputEmitter {
     ) {
         self.push_text_display_point(buffer_pos, glyph_x, glyph_y, width, height, row, start_col);
         self.move_text_output_to(evaluator, row, end_col, row_y, glyph_x + width.max(0.0));
+    }
+
+    pub(crate) fn emit_text_output_span(&mut self, evaluator: &mut Context, span: TextOutputSpan) {
+        self.emit_text_span(
+            evaluator,
+            span.buffer_pos,
+            span.row,
+            span.row_y,
+            span.start.x_px,
+            span.glyph_y,
+            span.end.x_px - span.start.x_px,
+            span.height,
+            span.start.col,
+            span.end.col,
+        );
     }
 
     #[allow(clippy::too_many_arguments)]

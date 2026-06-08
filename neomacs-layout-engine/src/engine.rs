@@ -15,7 +15,7 @@ use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_b
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
-use super::window_output::{RowMetricsSnapshot, WindowOutputEmitter};
+use super::window_output::{RowMetricsSnapshot, TextOutputSpan, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
@@ -4380,17 +4380,23 @@ impl LayoutEngine {
                         }
 
                         if x > replacement_start_x || col > replacement_start_col {
-                            output_emitter.emit_text_span(
+                            output_emitter.emit_text_output_span(
                                 evaluator,
-                                layout_i64_char_pos_to_lisp_char_pos(charpos),
-                                row,
-                                y,
-                                replacement_start_x,
-                                y + raise_y_offset,
-                                x - replacement_start_x,
-                                face_h,
-                                replacement_start_col,
-                                col,
+                                TextOutputSpan {
+                                    buffer_pos: layout_i64_char_pos_to_lisp_char_pos(charpos),
+                                    row,
+                                    row_y: y,
+                                    glyph_y: y + raise_y_offset,
+                                    height: face_h,
+                                    start: crate::display_row_builder::DisplayRowPosition {
+                                        x_px: replacement_start_x,
+                                        col: replacement_start_col,
+                                    },
+                                    end: crate::display_row_builder::DisplayRowPosition {
+                                        x_px: x,
+                                        col,
+                                    },
+                                },
                             );
                         }
 
@@ -6240,22 +6246,34 @@ impl LayoutEngine {
             if let Some(progress) = progress {
                 x = progress.end.x_px;
                 col = progress.end.col;
+                output_emitter.emit_text_output_span(
+                    evaluator,
+                    TextOutputSpan {
+                        buffer_pos,
+                        row,
+                        row_y: y,
+                        glyph_y: y + raise_y_offset,
+                        height: face_h,
+                        start: progress.start,
+                        end: progress.end,
+                    },
+                );
             } else {
                 x += advance;
                 col += char_cols as usize;
+                output_emitter.emit_text_span(
+                    evaluator,
+                    buffer_pos,
+                    row,
+                    y,
+                    glyph_x,
+                    y + raise_y_offset,
+                    advance,
+                    face_h,
+                    glyph_col,
+                    col,
+                );
             }
-            output_emitter.emit_text_span(
-                evaluator,
-                buffer_pos,
-                row,
-                y,
-                glyph_x,
-                y + raise_y_offset,
-                advance,
-                face_h,
-                glyph_col,
-                col,
-            );
             charpos += 1;
             word_wrap_may_wrap = char_can_wrap_after_basic(ch);
 

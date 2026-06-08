@@ -1,4 +1,6 @@
+use super::TextOutputSpan;
 use super::WindowOutputEmitter;
+use crate::display_row_builder::DisplayRowPosition;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 
@@ -90,6 +92,58 @@ fn emit_synthetic_text_span_advances_live_output_without_display_points() {
             y: 0,
             row: 0,
             col: 2,
+        })
+    );
+}
+
+#[test]
+fn emit_text_output_span_advances_from_row_positions() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-row-position-span", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    emitter.emit_text_output_span(
+        &mut eval,
+        TextOutputSpan {
+            buffer_pos: LispCharPos1::new(1),
+            row: 0,
+            row_y: 0.0,
+            glyph_y: 0.0,
+            height: 16.0,
+            start: DisplayRowPosition { x_px: 8.0, col: 1 },
+            end: DisplayRowPosition { x_px: 24.0, col: 3 },
+        },
+    );
+
+    let display = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.display())
+        .expect("window display state");
+
+    assert_eq!(emitter.display_point_len(), 1);
+    assert_eq!(
+        display.output_cursor,
+        Some(neovm_core::window::WindowCursorPos {
+            x: 24,
+            y: 0,
+            row: 0,
+            col: 3,
         })
     );
 }
