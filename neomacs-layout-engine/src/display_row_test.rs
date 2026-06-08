@@ -339,6 +339,42 @@ fn display_row_tab_line_zwj_emoji_sequence_uses_shared_cluster() {
 }
 
 #[test]
+fn display_row_lisp_chrome_roles_share_wide_and_cluster_builder() {
+    let _eval = Context::new();
+
+    for role in [
+        GlyphRowRole::ModeLine,
+        GlyphRowRole::HeaderLine,
+        GlyphRowRole::TabLine,
+        GlyphRowRole::TabBar,
+    ] {
+        let row = render_lisp_display_row(Value::string("A中👨‍👩"), role);
+        let glyphs = &row.glyphs[1];
+        let cjk = glyphs
+            .iter()
+            .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
+            .expect("CJK glyph");
+
+        assert_eq!(row.role, role);
+        assert_eq!(row_text_expanding_stretches(&row), "A中👨‍👩");
+        assert!(
+            cjk.wide,
+            "Lisp-string chrome role {role:?} should use the shared wide-glyph path: {glyphs:?}"
+        );
+        assert!(
+            glyphs.iter().any(|glyph| glyph.padding),
+            "Lisp-string chrome role {role:?} should retain CJK padding cells: {glyphs:?}"
+        );
+        assert!(
+            glyphs
+                .iter()
+                .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))),
+            "Lisp-string chrome role {role:?} should use the shared cluster path: {glyphs:?}"
+        );
+    }
+}
+
+#[test]
 fn display_row_baseline_tab_line_rtl_text_is_reordered_after_row_build() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
