@@ -19,7 +19,10 @@ use super::window_output::{
     ChromeRowOutput, DisplayProgressSink, RowMetricsSnapshot, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
-use crate::display_row_builder::{DisplayRowAppendCursor, FixedGlyphAdvance, FixedGlyphAdvances};
+use crate::display_row_builder::{
+    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
+    DisplayRowPosition, FixedGlyphAdvance, FixedGlyphAdvances,
+};
 use crate::display_source::DisplayItemSource;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1477,6 +1480,69 @@ fn emit_text_progress_slots(
         },
         progress,
     );
+}
+
+struct TextRowAppendOutput {
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+}
+
+fn append_text_row_item_and_emit(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: crate::display_item::DisplayItem,
+    output: TextRowAppendOutput,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_item_to_current_matrix_row(builder, layout, item)?;
+    let position = append_cursor.position();
+    emit_text_progress_slots(
+        output_emitter,
+        evaluator,
+        &progress,
+        output.row,
+        output.row_y,
+        output.glyph_y,
+        output.height,
+    );
+    Some((progress, position))
+}
+
+fn append_measured_text_row_item_and_emit(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: crate::display_item::DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+    output: TextRowAppendOutput,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_measured_item_to_current_matrix_row(
+        builder,
+        layout,
+        item,
+        glyph_measurer,
+    )?;
+    let position = append_cursor.position();
+    emit_text_progress_slots(
+        output_emitter,
+        evaluator,
+        &progress,
+        output.row,
+        output.row_y,
+        output.glyph_y,
+        output.height,
+    );
+    Some((progress, position))
 }
 
 struct LayoutStringFaceResolver<'a> {
@@ -5645,27 +5711,23 @@ impl LayoutEngine {
                     text_display_tab_policy(content_x, params),
                     current_text_face_id,
                 );
-                let mut append_cursor = DisplayRowAppendCursor::new(
-                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    content_x + (text_width - lnum_pixel_width),
-                );
-                if let Some(progress) = append_cursor.append_item_to_current_matrix_row(
+                if let Some((_progress, position)) = append_text_row_item_and_emit(
                     &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
                     &layout,
+                    DisplayRowPosition { x_px: x, col },
+                    content_x + (text_width - lnum_pixel_width),
                     item,
+                    TextRowAppendOutput {
+                        row,
+                        row_y: y,
+                        glyph_y: y + raise_y_offset,
+                        height: char_h,
+                    },
                 ) {
-                    let position = append_cursor.position();
                     x = position.x_px;
                     col = position.col;
-                    emit_text_progress_slots(
-                        &mut output_emitter,
-                        evaluator,
-                        &progress,
-                        row,
-                        y,
-                        y + raise_y_offset,
-                        char_h,
-                    );
                 }
                 charpos += 1;
                 word_wrap_may_wrap = false;
@@ -6266,23 +6328,30 @@ impl LayoutEngine {
                 current_text_face_id,
             );
             let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
-            let mut append_cursor = DisplayRowAppendCursor::new(
-                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                if ch == '\t' {
-                    f32::INFINITY
-                } else {
-                    content_x + avail_width
-                },
-            );
+            let output_span_height = if ch == '\t' { char_h } else { face_h };
             let progress = source.next_item(&mut context).and_then(|item| {
-                append_cursor.append_measured_item_to_current_matrix_row(
+                append_measured_text_row_item_and_emit(
                     &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
                     &layout,
+                    DisplayRowPosition { x_px: x, col },
+                    if ch == '\t' {
+                        f32::INFINITY
+                    } else {
+                        content_x + avail_width
+                    },
                     item,
                     &mut measurer,
+                    TextRowAppendOutput {
+                        row,
+                        row_y: y,
+                        glyph_y: y + raise_y_offset,
+                        height: output_span_height,
+                    },
                 )
             });
-            let Some(progress) = progress else {
+            let Some((_progress, position)) = progress else {
                 break;
             };
 
@@ -6292,19 +6361,8 @@ impl LayoutEngine {
                 self.run_buf.clear();
             }
 
-            let output_span_height = if ch == '\t' { char_h } else { face_h };
-            let position = append_cursor.position();
             x = position.x_px;
             col = position.col;
-            emit_text_progress_slots(
-                &mut output_emitter,
-                evaluator,
-                &progress,
-                row,
-                y,
-                y + raise_y_offset,
-                output_span_height,
-            );
             charpos += 1;
             word_wrap_may_wrap = char_can_wrap_after_basic(ch);
 
