@@ -869,6 +869,37 @@ fn set_network_process_coding(proc: &mut Process, coding: Value) {
     proc.coding_encode = encode;
 }
 
+#[derive(Debug)]
+enum ProcessOutputRead {
+    Data(LispString),
+    WouldBlock,
+    Eof,
+    NoSource,
+}
+
+impl ProcessOutputRead {
+    fn from_io_result(
+        result: std::io::Result<usize>,
+        bytes: &[u8],
+        coding: Value,
+    ) -> ProcessOutputRead {
+        match result {
+            Ok(0) => Self::Eof,
+            Ok(n) => Self::Data(decode_process_output_bytes(&bytes[..n], coding)),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Self::WouldBlock,
+            Err(_) => Self::Eof,
+        }
+    }
+
+    fn into_legacy_option(self) -> Option<LispString> {
+        match self {
+            Self::Data(data) => Some(data),
+            Self::WouldBlock => Some(LispString::from_utf8("")),
+            Self::Eof | Self::NoSource => None,
+        }
+    }
+}
+
 fn process_status_is_run(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Run)
 }
@@ -1438,9 +1469,13 @@ impl ProcessManager {
 
     /// Read available output from a child process's stdout.
     /// Returns the data read (may be empty if nothing available).
-    pub fn read_child_stdout(&mut self, id: ProcessId) -> Option<LispString> {
-        let proc = self.processes.get_mut(&id)?;
-        let stdout = proc.child_stdout.as_mut()?;
+    fn read_child_stdout_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return ProcessOutputRead::NoSource;
+        };
+        let Some(stdout) = proc.child_stdout.as_mut() else {
+            return ProcessOutputRead::NoSource;
+        };
 
         // Use non-blocking read via set_nonblocking on Unix
         #[cfg(unix)]
@@ -1455,40 +1490,32 @@ impl ProcessManager {
         }
 
         let mut buf = vec![0u8; 4096];
-        match stdout.read(&mut buf) {
-            Ok(0) => None, // EOF
-            Ok(n) => {
-                let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                proc.stdout.push_str(&process_output_runtime_string(&s));
-                Some(s)
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                Some(LispString::from_utf8(""))
-            }
-            Err(_) => None,
+        let read =
+            ProcessOutputRead::from_io_result(stdout.read(&mut buf), &buf, proc.coding_decode);
+        if let ProcessOutputRead::Data(ref data) = read {
+            proc.stdout.push_str(&process_output_runtime_string(data));
         }
+        read
     }
 
     /// Read available output from a PTY master reader.
     /// Returns the data read (may be empty if nothing available).
     /// PTY combines stdout and stderr into a single stream.
-    fn read_pty_output(&mut self, id: ProcessId) -> Option<LispString> {
-        let proc = self.processes.get_mut(&id)?;
-        let reader = proc.pty_reader.as_mut()?;
+    fn read_pty_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return ProcessOutputRead::NoSource;
+        };
+        let Some(reader) = proc.pty_reader.as_mut() else {
+            return ProcessOutputRead::NoSource;
+        };
 
         let mut buf = vec![0u8; 4096];
-        match reader.read(&mut buf) {
-            Ok(0) => None, // EOF — slave closed
-            Ok(n) => {
-                let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                proc.stdout.push_str(&process_output_runtime_string(&s));
-                Some(s)
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                Some(LispString::from_utf8(""))
-            }
-            Err(_) => None,
+        let read =
+            ProcessOutputRead::from_io_result(reader.read(&mut buf), &buf, proc.coding_decode);
+        if let ProcessOutputRead::Data(ref data) = read {
+            proc.stdout.push_str(&process_output_runtime_string(data));
         }
+        read
     }
 
     /// Wait for any child process to have output ready, with timeout.
@@ -1973,7 +2000,7 @@ impl ProcessManager {
     /// Read available output from a process — child stdout or network socket.
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
-    pub fn read_process_output(&mut self, id: ProcessId) -> Option<LispString> {
+    fn read_process_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
         // Check what kind of I/O source this process has, without holding
         // a long-lived mutable borrow.
         let has_pty_reader = self
@@ -1983,7 +2010,7 @@ impl ProcessManager {
             .unwrap_or(false);
 
         if has_pty_reader {
-            return self.read_pty_output(id);
+            return self.read_pty_output_result(id);
         }
 
         let has_child_stdout = self
@@ -1993,49 +2020,52 @@ impl ProcessManager {
             .unwrap_or(false);
 
         if has_child_stdout {
-            return self.read_child_stdout(id);
+            return self.read_child_stdout_result(id);
         }
 
         // Try TLS stream first (encrypted network process), then plain socket.
         {
-            let proc = self.processes.get_mut(&id)?;
+            let Some(proc) = self.processes.get_mut(&id) else {
+                return ProcessOutputRead::NoSource;
+            };
 
             // TLS stream has priority over plain socket.
             if let Some(ref mut tls) = proc.tls_stream {
                 let mut buf = vec![0u8; 4096];
-                match tls.read_process_output(&mut buf) {
-                    Ok(0) => return None,
-                    Ok(n) => {
-                        let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&process_output_runtime_string(&s));
-                        return Some(s);
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Some(LispString::from_utf8(""));
-                    }
-                    Err(_) => return None,
+                let read = ProcessOutputRead::from_io_result(
+                    tls.read_process_output(&mut buf),
+                    &buf,
+                    proc.coding_decode,
+                );
+                if let ProcessOutputRead::Data(ref data) = read {
+                    proc.stdout.push_str(&process_output_runtime_string(data));
                 }
+                return read;
             }
 
             if let Some(socket) = proc.network_socket.as_mut() {
                 let mut buf = vec![0u8; 4096];
-                return match socket.read_stream_output(&mut buf) {
-                    Some(Ok(0)) => None,
-                    Some(Ok(n)) => {
-                        let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
-                        proc.stdout.push_str(&process_output_runtime_string(&s));
-                        Some(s)
+                let read = match socket.read_stream_output(&mut buf) {
+                    Some(result) => {
+                        ProcessOutputRead::from_io_result(result, &buf, proc.coding_decode)
                     }
-                    Some(Err(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        Some(LispString::from_utf8(""))
-                    }
-                    Some(Err(_)) => None,
-                    None => Some(LispString::from_utf8("")),
+                    None => ProcessOutputRead::WouldBlock,
                 };
+                if let ProcessOutputRead::Data(ref data) = read {
+                    proc.stdout.push_str(&process_output_runtime_string(data));
+                }
+                return read;
             }
         }
 
-        None
+        ProcessOutputRead::NoSource
+    }
+
+    /// Read available output from a process — child stdout or network socket.
+    /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
+    /// or `None` on EOF / connection closed.
+    pub fn read_process_output(&mut self, id: ProcessId) -> Option<LispString> {
+        self.read_process_output_result(id).into_legacy_option()
     }
 
     /// Get stdout output from a process.
@@ -2318,7 +2348,7 @@ impl super::eval::Context {
                 );
             }
 
-            let read_result = self.processes.read_process_output(pid);
+            let read_result = self.processes.read_process_output_result(pid);
             let is_network = self
                 .processes
                 .get(pid)
@@ -2326,7 +2356,7 @@ impl super::eval::Context {
                 .unwrap_or(false);
 
             match read_result {
-                Some(ref data) if !data.is_empty() => {
+                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
                     outcome.any_process_activity = true;
                     if is_target {
                         outcome.target_process_activity = true;
@@ -2339,7 +2369,7 @@ impl super::eval::Context {
                         .unwrap_or(Value::NIL);
                     self.run_process_filter_callback(pid, filter, data);
                 }
-                None if is_network => {
+                ProcessOutputRead::Eof if is_network => {
                     outcome.any_process_activity = true;
                     if is_target {
                         outcome.target_process_activity = true;
