@@ -15,6 +15,7 @@ pub(crate) mod display_item;
 pub mod display_iterator;
 pub mod display_pixel_calc;
 pub(crate) mod display_row;
+pub(crate) mod display_row_append;
 pub(crate) mod display_row_builder;
 pub(crate) mod display_row_sink;
 pub(crate) mod display_source;

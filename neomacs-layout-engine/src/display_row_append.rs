@@ -1,0 +1,378 @@
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
+use crate::display_row::DisplayRowGeometry;
+use crate::display_row_builder::{
+    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
+    DisplayRowPosition, DisplayTabPolicy,
+};
+use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neovm_core::emacs_core::Context;
+use std::collections::HashMap;
+
+pub(crate) fn emit_text_progress_slots(
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    progress: &DisplayRowAppendProgress,
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
+) {
+    output_emitter.emit_text_progress(
+        evaluator,
+        TextRowOutput {
+            row,
+            row_y,
+            glyph_y,
+            height,
+        },
+        progress,
+    );
+}
+
+pub(crate) struct DisplayRowAppendOutput {
+    pub(crate) row: usize,
+    pub(crate) row_y: f32,
+    pub(crate) glyph_y: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendPlacement {
+    pub(crate) row: usize,
+    pub(crate) y: f32,
+    pub(crate) glyph_y: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendArea {
+    pub(crate) content_x: f32,
+    pub(crate) width: f32,
+    pub(crate) text_width: f32,
+    pub(crate) line_number_width: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendSurface {
+    area: DisplayRowAppendArea,
+    tab_policy: DisplayTabPolicy,
+}
+
+impl DisplayRowAppendSurface {
+    pub(crate) fn new(area: DisplayRowAppendArea, tab_policy: DisplayTabPolicy) -> Self {
+        Self { area, tab_policy }
+    }
+
+    pub(crate) fn frame(
+        &self,
+        placement: DisplayRowAppendPlacement,
+        metrics: DisplayRowAppendMetrics,
+    ) -> DisplayRowAppendFrame {
+        DisplayRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowAppendMetrics {
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+    pub(crate) char_width: f32,
+    pub(crate) space_width: f32,
+    pub(crate) default_row_height: f32,
+}
+
+#[derive(Clone)]
+pub(crate) struct DisplayRowAppendFrame {
+    pub(crate) row: usize,
+    pub(crate) glyph_y: f32,
+    pub(crate) geometry: DisplayRowGeometry,
+    pub(crate) default_row_height: f32,
+    pub(crate) content_x: f32,
+    pub(crate) text_width: f32,
+    pub(crate) line_number_width: f32,
+    pub(crate) face_space_width: f32,
+}
+
+impl DisplayRowAppendFrame {
+    pub(crate) fn from_parts(
+        placement: DisplayRowAppendPlacement,
+        area: DisplayRowAppendArea,
+        metrics: DisplayRowAppendMetrics,
+        tab_policy: DisplayTabPolicy,
+    ) -> Self {
+        Self {
+            row: placement.row,
+            glyph_y: placement.glyph_y,
+            geometry: DisplayRowGeometry {
+                y: placement.y,
+                width: area.width,
+                height: metrics.height,
+                char_width: metrics.char_width,
+                ascent: metrics.ascent,
+                tab_policy,
+            },
+            default_row_height: metrics.default_row_height,
+            content_x: area.content_x,
+            text_width: area.text_width,
+            line_number_width: area.line_number_width,
+            face_space_width: metrics.space_width,
+        }
+    }
+
+    pub(crate) fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
+        DisplayRowAppendContext {
+            row: self.row,
+            glyph_y: self.glyph_y,
+            x: position.x_px,
+            col: position.col,
+            geometry: self.geometry,
+            default_row_height: self.default_row_height,
+            content_x: self.content_x,
+            text_width: self.text_width,
+            line_number_width: self.line_number_width,
+            face_space_width: self.face_space_width,
+            face_id,
+        }
+    }
+}
+
+pub(crate) struct DisplayRowAppendContext {
+    pub(crate) row: usize,
+    pub(crate) glyph_y: f32,
+    pub(crate) x: f32,
+    pub(crate) col: usize,
+    pub(crate) geometry: DisplayRowGeometry,
+    pub(crate) default_row_height: f32,
+    pub(crate) content_x: f32,
+    pub(crate) text_width: f32,
+    pub(crate) line_number_width: f32,
+    pub(crate) face_space_width: f32,
+    pub(crate) face_id: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowAppendKind {
+    SourceText,
+    Tab,
+    ControlChar,
+    SourceMappedText,
+    Glyphless,
+    DisplayReplacement,
+    DisplayReplacementString,
+}
+
+impl DisplayRowAppendKind {
+    pub(crate) fn from_display_item_kind(kind: &DisplayItemKind) -> Option<Self> {
+        match kind {
+            DisplayItemKind::TextRun(_) => Some(Self::SourceText),
+            DisplayItemKind::SourceMappedText(_) => Some(Self::SourceMappedText),
+            DisplayItemKind::ControlChar { .. } => Some(Self::ControlChar),
+            DisplayItemKind::Glyphless(_) => Some(Self::Glyphless),
+            DisplayItemKind::Stretch(_)
+            | DisplayItemKind::Image(_)
+            | DisplayItemKind::Video(_)
+            | DisplayItemKind::Xwidget(_) => Some(Self::DisplayReplacement),
+            DisplayItemKind::RowBreak(_)
+            | DisplayItemKind::CursorAnchor(_)
+            | DisplayItemKind::HitTestAnchor(_) => None,
+        }
+    }
+}
+
+pub(crate) struct DisplayRowAppendSpec {
+    pub(crate) layout: DisplayRowLayout,
+    pub(crate) position: DisplayRowPosition,
+    pub(crate) max_x: f32,
+    pub(crate) output: DisplayRowAppendOutput,
+}
+
+impl DisplayRowAppendContext {
+    pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
+        let char_width = match kind {
+            DisplayRowAppendKind::Tab | DisplayRowAppendKind::DisplayReplacementString => {
+                self.face_space_width
+            }
+            DisplayRowAppendKind::SourceText
+            | DisplayRowAppendKind::ControlChar
+            | DisplayRowAppendKind::SourceMappedText
+            | DisplayRowAppendKind::Glyphless
+            | DisplayRowAppendKind::DisplayReplacement => self.geometry.char_width,
+        };
+        let max_x = match kind {
+            DisplayRowAppendKind::Tab => f32::INFINITY,
+            DisplayRowAppendKind::ControlChar => {
+                self.content_x + (self.text_width - self.line_number_width)
+            }
+            DisplayRowAppendKind::SourceText
+            | DisplayRowAppendKind::SourceMappedText
+            | DisplayRowAppendKind::Glyphless
+            | DisplayRowAppendKind::DisplayReplacement
+            | DisplayRowAppendKind::DisplayReplacementString => {
+                self.content_x + self.geometry.width
+            }
+        };
+        let output_height = match kind {
+            DisplayRowAppendKind::SourceText
+            | DisplayRowAppendKind::Glyphless
+            | DisplayRowAppendKind::DisplayReplacement
+            | DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
+            DisplayRowAppendKind::Tab
+            | DisplayRowAppendKind::ControlChar
+            | DisplayRowAppendKind::SourceMappedText => self.default_row_height,
+        };
+
+        DisplayRowAppendSpec {
+            layout: self.geometry.to_layout(
+                GlyphRowRole::Text,
+                char_width,
+                self.geometry.ascent,
+                RenderFaceRef::FaceId(self.face_id),
+                HashMap::new(),
+            ),
+            position: DisplayRowPosition {
+                x_px: self.x,
+                col: self.col,
+            },
+            max_x,
+            output: DisplayRowAppendOutput {
+                row: self.row,
+                row_y: self.geometry.y,
+                glyph_y: self.glyph_y,
+                height: output_height,
+            },
+        }
+    }
+}
+
+pub(crate) fn append_display_row_item(
+    builder: &mut GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_item_to_current_matrix_row(builder, layout, item)?;
+    let position = append_cursor.position();
+    Some((progress, position))
+}
+
+pub(crate) fn append_display_row_spec_item(
+    builder: &mut GlyphMatrixBuilder,
+    spec: &DisplayRowAppendSpec,
+    item: DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
+}
+
+pub(crate) fn append_measured_display_row_item(
+    builder: &mut GlyphMatrixBuilder,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
+    let progress = append_cursor.append_measured_item_to_current_matrix_row(
+        builder,
+        layout,
+        item,
+        glyph_measurer,
+    )?;
+    let position = append_cursor.position();
+    Some((progress, position))
+}
+
+pub(crate) fn append_display_row_spec_item_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    spec: DisplayRowAppendSpec,
+    item: DisplayItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_display_row_item_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &spec.layout,
+        spec.position,
+        spec.max_x,
+        item,
+        spec.output,
+    )
+}
+
+pub(crate) fn append_measured_display_row_spec_item_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    spec: DisplayRowAppendSpec,
+    item: DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    append_measured_display_row_item_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &spec.layout,
+        spec.position,
+        spec.max_x,
+        item,
+        glyph_measurer,
+        spec.output,
+    )
+}
+
+pub(crate) fn append_display_row_item_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: DisplayItem,
+    output: DisplayRowAppendOutput,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let (progress, position) = append_display_row_item(builder, layout, position, max_x, item)?;
+    emit_text_progress_slots(
+        output_emitter,
+        evaluator,
+        &progress,
+        output.row,
+        output.row_y,
+        output.glyph_y,
+        output.height,
+    );
+    Some((progress, position))
+}
+
+pub(crate) fn append_measured_display_row_item_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    layout: &DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    item: DisplayItem,
+    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+    output: DisplayRowAppendOutput,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let (progress, position) =
+        append_measured_display_row_item(builder, layout, position, max_x, item, glyph_measurer)?;
+    emit_text_progress_slots(
+        output_emitter,
+        evaluator,
+        &progress,
+        output.row,
+        output.row_y,
+        output.glyph_y,
+        output.height,
+    );
+    Some((progress, position))
+}
+
+#[cfg(test)]
+#[path = "display_row_append_test.rs"]
+mod tests;
