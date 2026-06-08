@@ -6,6 +6,7 @@
 
 use super::builtins::{EvalResult, expect_args};
 use super::value::Value;
+use base64::Engine;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -21,19 +22,33 @@ pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
 
 type RustlsClientStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
 
+pub(crate) struct RustlsTlsStream {
+    inner: RustlsClientStream,
+    peer_certificates_pem: Vec<String>,
+}
+
 /// Backend-neutral TLS stream owned by a Neomacs process.
-pub enum TlsStream {
-    Rustls(RustlsClientStream),
+pub(crate) enum TlsStream {
+    Rustls(RustlsTlsStream),
 }
 
 impl TlsStream {
-    fn rustls(inner: RustlsClientStream) -> Self {
-        Self::Rustls(inner)
+    fn rustls(inner: RustlsClientStream, peer_certificates_pem: Vec<String>) -> Self {
+        Self::Rustls(RustlsTlsStream {
+            inner,
+            peer_certificates_pem,
+        })
     }
 
     pub(crate) fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
         match self {
-            Self::Rustls(inner) => inner.sock.set_nonblocking(nonblocking),
+            Self::Rustls(stream) => stream.inner.sock.set_nonblocking(nonblocking),
+        }
+    }
+
+    pub(crate) fn peer_certificates_pem(&self) -> &[String] {
+        match self {
+            Self::Rustls(stream) => &stream.peer_certificates_pem,
         }
     }
 }
@@ -41,7 +56,7 @@ impl TlsStream {
 impl Read for TlsStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
-            Self::Rustls(inner) => inner.read(buf),
+            Self::Rustls(stream) => stream.inner.read(buf),
         }
     }
 }
@@ -49,13 +64,13 @@ impl Read for TlsStream {
 impl Write for TlsStream {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
-            Self::Rustls(inner) => inner.write(buf),
+            Self::Rustls(stream) => stream.inner.write(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
-            Self::Rustls(inner) => inner.flush(),
+            Self::Rustls(stream) => stream.inner.flush(),
         }
     }
 }
@@ -122,15 +137,36 @@ impl TlsClientBackend for RustlsBackend {
             Err(err) => return Err(TlsBackendError::Io(err)),
         }
 
-        let stream = TlsStream::rustls(tls_stream);
+        let peer_certificates_pem = tls_stream
+            .conn
+            .peer_certificates()
+            .map(|certs| {
+                certs
+                    .iter()
+                    .map(|cert| der_certificate_to_pem(cert.as_ref()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let stream = TlsStream::rustls(tls_stream, peer_certificates_pem);
         stream.set_nonblocking(true).ok();
         Ok(stream)
     }
 }
 
+fn der_certificate_to_pem(der: &[u8]) -> String {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(der);
+    let mut pem = String::from("-----BEGIN CERTIFICATE-----\n");
+    for chunk in encoded.as_bytes().chunks(64) {
+        pem.push_str(std::str::from_utf8(chunk).expect("base64 output is ASCII"));
+        pem.push('\n');
+    }
+    pem.push_str("-----END CERTIFICATE-----\n");
+    pem
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{TlsBackendError, gnutls_available_capabilities};
+    use super::{TlsBackendError, der_certificate_to_pem, gnutls_available_capabilities};
 
     #[test]
     fn backend_errors_render_boundary_messages() {
@@ -151,5 +187,13 @@ mod tests {
     #[test]
     fn rustls_backend_advertises_conservative_gnutls_compatibility() {
         assert_eq!(gnutls_available_capabilities(), &["gnutls3", "gnutls"]);
+    }
+
+    #[test]
+    fn der_certificates_are_formatted_as_pem_blocks() {
+        assert_eq!(
+            der_certificate_to_pem(&[1, 2, 3]),
+            "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n"
+        );
     }
 }

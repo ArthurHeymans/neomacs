@@ -312,7 +312,7 @@ pub struct Process {
     pub network_socket: Option<NetworkSocket>,
     /// TLS-wrapped stream for encrypted network connections.
     /// When `Some`, reads/writes go through this instead of `socket`.
-    pub tls_stream: Option<TlsStream>,
+    pub(crate) tls_stream: Option<TlsStream>,
     /// GNU-compatible GnuTLS initialization stage for this process.
     pub(crate) gnutls_initstage: GnutlsInitStage,
     /// Deferred parameters set by `gnutls-asynchronous-parameters`.
@@ -4488,13 +4488,31 @@ pub(crate) fn builtin_gnutls_peer_status(
         .get(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
     if proc.gnutls_initstage == GnutlsInitStage::Ready {
+        let certificates = proc
+            .tls_stream
+            .as_ref()
+            .map(|tls| {
+                Value::list(
+                    tls.peer_certificates_pem()
+                        .iter()
+                        .map(|cert| Value::string(cert.clone()))
+                        .collect(),
+                )
+            })
+            .unwrap_or(Value::NIL);
+        let certificate = proc
+            .tls_stream
+            .as_ref()
+            .and_then(|tls| tls.peer_certificates_pem().first())
+            .map(|cert| Value::string(cert.clone()))
+            .unwrap_or(Value::NIL);
         Ok(Value::list(vec![
             Value::keyword(":warnings"),
             Value::NIL,
             Value::keyword(":certificates"),
-            Value::NIL,
+            certificates,
             Value::keyword(":certificate"),
-            Value::NIL,
+            certificate,
         ]))
     } else {
         Ok(Value::NIL)

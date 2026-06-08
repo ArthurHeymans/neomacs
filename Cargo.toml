@@ -61,6 +61,7 @@ sysinfo = "0.39"
 # Crypto
 sha1 = "0.11"
 sha2 = "0.11"
+base64 = "0.22"
 
 # Misc
 regex = "1"

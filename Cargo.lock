@@ -3028,6 +3028,7 @@ dependencies = [
 name = "neovm-core"
 version = "0.0.2"
 dependencies = [
+ "base64",
  "bytemuck",
  "criterion",
  "crossbeam-channel",
