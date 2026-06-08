@@ -110,6 +110,24 @@ fn display_row_writer_appends_items_to_existing_row_tab_context() {
 }
 
 #[test]
+fn display_row_writer_consumes_display_item_source() {
+    let _eval = Context::new();
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    crate::matrix_builder::GlyphMatrixBuilder::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
+    let mut source =
+        LispStringSourceCursor::new(1, Value::string("a\tb"), RenderFaceRef::FaceId(2))
+            .expect("source");
+    let mut context = DisplaySourceContext::empty();
+
+    let row_layout = layout();
+    let mut writer = DisplayRowWriter::new(&row_layout, &mut row);
+    writer.push_source(&mut source, &mut context);
+
+    assert_eq!(row_text(&row), "xa  b");
+}
+
+#[test]
 fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
     struct TestMeasurer;
 

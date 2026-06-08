@@ -86,8 +86,13 @@ impl<'a> DisplayRowBuilder<'a> {
         source: &mut impl DisplayItemSource,
         context: &mut DisplaySourceContext<'_>,
     ) {
-        while let Some(item) = source.next_item(context) {
-            self.push_item(item);
+        if let Some(glyph_measurer) = self.glyph_measurer.as_deref_mut() {
+            let mut writer =
+                DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
+            writer.push_source(source, context);
+        } else {
+            let mut writer = DisplayRowWriter::new(&self.layout, &mut self.row);
+            writer.push_source(source, context);
         }
     }
 
@@ -182,6 +187,16 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             | DisplayItemKind::RowBreak(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
+        }
+    }
+
+    pub(crate) fn push_source(
+        &mut self,
+        source: &mut impl DisplayItemSource,
+        context: &mut DisplaySourceContext<'_>,
+    ) {
+        while let Some(item) = source.next_item(context) {
+            self.push_item(item);
         }
     }
 
