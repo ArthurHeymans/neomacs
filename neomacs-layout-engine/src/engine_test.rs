@@ -1,10 +1,12 @@
 use super::*;
-use crate::neovm_bridge::RustBufferAccess;
+use crate::display_item::RenderFaceRef;
+use crate::display_source::DisplayItemSource;
+use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
 use neovm_core::buffer::{
-    BufferId, BufferTextBackendKind, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
@@ -6386,6 +6388,102 @@ fn layout_frame_rust_baseline_buffer_text_uses_main_buffer_wide_and_cluster_glyp
             matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))
         }),
         "main buffer path should compose the ZWJ emoji sequence: {text_glyphs:?}"
+    );
+}
+
+#[test]
+fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("A中👨‍👩B\n");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-source-shadow", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let main_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("main buffer text row");
+
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let line_end = CharPos0::new("A中👨‍👩B".chars().count());
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        RenderFaceRef::FaceId(0),
+    );
+    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::new(
+        crate::display_row_builder::DisplayRowLayout {
+            role: GlyphRowRole::Text,
+            y_px: 0.0,
+            width_px: 640.0,
+            height_px: 16.0,
+            ascent_px: 12.0,
+            char_width_px: 8.0,
+            base_face: RenderFaceRef::FaceId(0),
+            symbol_values: std::collections::HashMap::new(),
+        },
+    );
+    let mut context = crate::display_source::DisplaySourceContext::empty();
+    while let Some(item) = source.next_item(&mut context) {
+        row_builder.push_item(item);
+    }
+    let shadow_row = row_builder.finish();
+
+    assert_eq!(
+        glyphs_logical_text(&shadow_row.glyphs[1]),
+        glyphs_logical_text(&main_row.glyphs[1])
+    );
+    assert_eq!(
+        shadow_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }) && glyph.wide),
+        main_row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }) && glyph.wide)
+    );
+    assert_eq!(
+        shadow_row.glyphs[1].iter().any(|glyph| glyph.padding),
+        main_row.glyphs[1].iter().any(|glyph| glyph.padding)
+    );
+    assert_eq!(
+        shadow_row
+            .glyphs[1]
+            .iter()
+            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))),
+        main_row
+            .glyphs[1]
+            .iter()
+            .any(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}')))
     );
 }
 

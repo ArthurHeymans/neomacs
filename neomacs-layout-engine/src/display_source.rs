@@ -1,12 +1,17 @@
 #![allow(dead_code)]
 
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayRowBreak, DisplayRowBreakReason, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
+    DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
-use neovm_core::buffer::{CharPos0, text_props::TextPropertyTable};
+use crate::neovm_bridge::LayoutBufferView;
+use crate::unicode::decode_utf8;
+use neovm_core::buffer::{
+    BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, text_props::TextPropertyTable,
+};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 
@@ -99,6 +104,208 @@ impl DisplayItemSource for LispStringSourceCursor {
             .last()
             .map(LispStringSourceFrame::source_position)
             .unwrap_or_else(|| DisplaySourcePosition::synthetic(0, 0))
+    }
+}
+
+pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
+    buffer_id: BufferId,
+    buffer: &'a B,
+    char_pos: CharPos0,
+    end: CharPos0,
+    base_face: RenderFaceRef,
+}
+
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
+    pub(crate) fn new(
+        buffer_id: BufferId,
+        buffer: &'a B,
+        start: CharPos0,
+        end: CharPos0,
+        base_face: RenderFaceRef,
+    ) -> Self {
+        let accessible_end = buffer.layout_point_max_char_pos();
+        let start = start.min(accessible_end);
+        let end = end.min(accessible_end).max(start);
+        Self {
+            buffer_id,
+            buffer,
+            char_pos: start,
+            end,
+            base_face,
+        }
+    }
+
+    fn byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+        self.buffer.layout_char_pos_to_emacs_byte_pos(char_pos)
+    }
+
+    fn char_at(&self, char_pos: CharPos0) -> Option<char> {
+        if char_pos >= self.end {
+            return None;
+        }
+        let start = self.byte_pos(char_pos);
+        let end = self.byte_pos(char_pos.add_len(CharLen::new(1)).min(self.end));
+        let mut bytes = Vec::new();
+        self.buffer
+            .layout_copy_emacs_byte_range_to(EmacsByteRange::new(start, end), &mut bytes);
+        let (ch, len) = decode_utf8(&bytes);
+        (len > 0).then_some(ch)
+    }
+
+    fn text_slice(&self, start: CharPos0, end: CharPos0) -> String {
+        let mut bytes = Vec::new();
+        self.buffer.layout_copy_emacs_byte_range_to(
+            EmacsByteRange::new(self.byte_pos(start), self.byte_pos(end)),
+            &mut bytes,
+        );
+        let mut text = String::new();
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            let (ch, len) = decode_utf8(&bytes[offset..]);
+            if len == 0 {
+                break;
+            }
+            text.push(ch);
+            offset += len;
+        }
+        text
+    }
+
+    fn span(&self, start: CharPos0, end: CharPos0) -> SourceSpan {
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(self.buffer_id, start, self.byte_pos(start)),
+            DisplaySourcePosition::buffer(self.buffer_id, end, self.byte_pos(end)),
+        )
+    }
+
+    fn next_property_change(&self, char_pos: CharPos0) -> CharPos0 {
+        self.buffer
+            .layout_next_text_prop_change_after_emacs_byte_pos(self.byte_pos(char_pos))
+            .map(|byte_pos| self.buffer.layout_emacs_byte_pos_to_char_pos(byte_pos))
+            .unwrap_or(self.end)
+            .min(self.end)
+    }
+
+    fn display_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
+        self.buffer
+            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("display"))
+    }
+
+    fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
+        let face = self
+            .buffer
+            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("face"))
+            .or_else(|| {
+                self.buffer.layout_text_prop_at_emacs_byte_pos(
+                    self.byte_pos(char_pos),
+                    Value::symbol("font-lock-face"),
+                )
+            });
+        face.map(|value| context.resolve_face_ref(self.base_face, value))
+            .unwrap_or(self.base_face)
+    }
+
+    fn next_text_run_end(&self, start: CharPos0, limit: CharPos0) -> CharPos0 {
+        let mut end = start;
+        while end < limit {
+            let Some(ch) = self.char_at(end) else {
+                break;
+            };
+            if ch == '\n' || is_control_char(ch) || glyphless_method_for_char(ch).is_some() {
+                break;
+            }
+            end = end.add_len(CharLen::new(1));
+        }
+        end.max(start.add_len(CharLen::new(1))).min(limit)
+    }
+}
+
+impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
+    fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        if self.char_pos >= self.end {
+            return None;
+        }
+
+        let start = self.char_pos;
+        let property_end = self
+            .next_property_change(start)
+            .max(start.add_len(CharLen::new(1)))
+            .min(self.end);
+        let face = self.face_at(start, context);
+        let span = self.span(start, property_end);
+
+        if let Some(display_prop) = self.display_prop_at(start)
+            && let Some(kind) = parse_display_property(display_prop)
+        {
+            self.char_pos = property_end;
+            return Some(DisplayItem::new(span, face, kind));
+        }
+
+        let ch = self.char_at(start)?;
+        if ch == '\n' {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(DisplayItem::new(
+                self.span(start, self.char_pos),
+                face,
+                DisplayItemKind::RowBreak(DisplayRowBreak {
+                    reason: DisplayRowBreakReason::ExplicitNewline,
+                }),
+            ));
+        }
+
+        if is_control_char(ch) {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(DisplayItem::new(
+                self.span(start, self.char_pos),
+                face,
+                DisplayItemKind::ControlChar { ch },
+            ));
+        }
+
+        if let Some(method) = glyphless_method_for_char(ch) {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(DisplayItem::new(
+                self.span(start, self.char_pos),
+                face,
+                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+            ));
+        }
+
+        let end = self.next_text_run_end(start, property_end);
+        self.char_pos = end;
+        Some(DisplayItem::new(
+            self.span(start, end),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+        ))
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
+    }
+}
+
+fn is_control_char(ch: char) -> bool {
+    let code = ch as u32;
+    (code <= 0x1f && ch != '\n' && ch != '\t') || code == 0x7f
+}
+
+fn glyphless_method_for_char(ch: char) -> Option<GlyphlessMethod> {
+    if crate::composition::is_composition_joiner(ch) {
+        return None;
+    }
+
+    let cp = ch as u32;
+    match cp {
+        0x80..=0x9f | 0xfff0..=0xfff8 => Some(GlyphlessMethod::HexCode),
+        0xfffc => Some(GlyphlessMethod::EmptyBox),
+        0xfeff
+        | 0x200b..=0x200f
+        | 0x2028..=0x2029
+        | 0xe0001..=0xe007f
+        | 0xe0100..=0xe01ef
+        | 0xfe00..=0xfe0f => Some(GlyphlessMethod::ZeroWidth),
+        _ => None,
     }
 }
 

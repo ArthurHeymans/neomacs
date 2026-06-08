@@ -1,9 +1,11 @@
 use super::*;
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplaySourceId, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
-    RenderFaceRef,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
+    DisplayLengthSymbol, DisplaySourceId, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
 };
+use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
 
@@ -24,6 +26,26 @@ fn item_texts(items: &[DisplayItem]) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert(text);
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    (buffer_id, snapshot, end)
 }
 
 #[test]
@@ -233,5 +255,128 @@ fn lisp_string_source_cursor_pushes_display_string_replacement_source() {
         source_id,
         DisplaySourceId::new(7),
         "replacement string should be emitted from a nested source frame, not flattened into the parent span"
+    );
+}
+
+#[test]
+fn buffer_text_source_cursor_emits_text_runs_with_buffer_spans() {
+    let (buffer_id, snapshot, end) = snapshot_with_text("ab中");
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["ab中"]);
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
+    assert_eq!(
+        items[0].span.start,
+        DisplaySourcePosition::buffer(
+            buffer_id,
+            CharPos0::new(0),
+            neovm_core::buffer::EmacsBytePos::new(0)
+        )
+    );
+    assert_eq!(
+        items[0].span.end,
+        DisplaySourcePosition::buffer(
+            buffer_id,
+            CharPos0::new(3),
+            snapshot.layout_char_pos_to_emacs_byte_pos(CharPos0::new(3))
+        )
+    );
+}
+
+#[test]
+fn buffer_text_source_cursor_resolves_face_property_runs() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("abc");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let mut items = Vec::new();
+    while let Some(item) = source.next_item(&mut context) {
+        items.push(item);
+    }
+
+    assert_eq!(item_texts(&items), ["a", "b", "c"]);
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
+    assert_eq!(items[1].face, RenderFaceRef::FaceId(7));
+    assert_eq!(items[2].face, RenderFaceRef::FaceId(3));
+}
+
+#[test]
+fn buffer_text_source_cursor_emits_explicit_newline_row_breaks() {
+    let (buffer_id, snapshot, end) = snapshot_with_text("a\nb");
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["a", "b"]);
+    assert!(matches!(items[1].kind, DisplayItemKind::RowBreak(_)));
+}
+
+#[test]
+fn buffer_text_source_cursor_emits_control_and_glyphless_items() {
+    let (buffer_id, snapshot, end) = snapshot_with_text("a\u{0001}\u{200b}b");
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["a", "b"]);
+    assert_eq!(
+        items[1].kind,
+        DisplayItemKind::ControlChar { ch: '\u{0001}' }
+    );
+    assert_eq!(
+        items[2].kind,
+        DisplayItemKind::Glyphless(DisplayGlyphless {
+            ch: '\u{200b}',
+            method: GlyphlessMethod::ZeroWidth,
+        })
     );
 }
