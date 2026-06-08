@@ -52,6 +52,9 @@ use strum::{EnumString, IntoStaticStr};
 const MAX_LIGATURE_RUN_LEN: usize = 64;
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
+const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
+const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
+const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
 
 #[derive(Clone, Copy, Debug)]
 struct ScrollBarMetrics {
@@ -1783,6 +1786,56 @@ fn append_measured_text_row_item_and_emit(
     Some((progress, position))
 }
 
+fn synthetic_text_item(
+    source_id: u64,
+    text: impl Into<Box<str>>,
+    face_id: u32,
+) -> crate::display_item::DisplayItem {
+    let text = text.into();
+    let char_len = text.chars().count();
+    crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(source_id, 0, char_len),
+        crate::display_item::RenderFaceRef::FaceId(face_id),
+        crate::display_item::DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new(
+            text,
+        )),
+    )
+}
+
+fn append_synthetic_text_to_text_row(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    frame: TextRowAppendFrame,
+    position: DisplayRowPosition,
+    source_id: u64,
+    text: impl Into<Box<str>>,
+    face_id: u32,
+    glyph_measurer: Option<&mut dyn DisplayGlyphMeasurer>,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let append_spec = frame
+        .at(position, face_id)
+        .append_spec(TextRowAppendKind::SourceText);
+    let item = synthetic_text_item(source_id, text, face_id);
+    match glyph_measurer {
+        Some(measurer) => append_measured_text_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+            measurer,
+        ),
+        None => append_text_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ),
+    }
+}
+
 fn append_lisp_string_to_text_row(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -2082,15 +2135,7 @@ fn render_overlay_string(
         }
         *x = position.x_px;
         *col = position.col;
-        output_emitter.emit_synthetic_text_span(
-            evaluator,
-            *row,
-            *y,
-            progress.start.x_px,
-            progress.end.x_px - progress.start.x_px,
-            progress.start.col,
-            progress.end.col,
-        );
+        emit_text_progress_slots(output_emitter, evaluator, &progress, *row, *y, *y, char_h);
         if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
             break;
         }
@@ -4394,13 +4439,6 @@ impl LayoutEngine {
                             current_font_weight,
                             current_font_italic,
                         );
-                        let item = crate::display_item::DisplayItem::new(
-                            crate::display_item::SourceSpan::synthetic(3, 0, 3),
-                            crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                            crate::display_item::DisplayItemKind::TextRun(
-                                crate::display_item::DisplayTextRun::new("..."),
-                            ),
-                        );
                         let append_spec = TextRowAppendFrame::from_parts(
                             TextRowAppendPlacement {
                                 row,
@@ -4424,6 +4462,11 @@ impl LayoutEngine {
                         )
                         .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
                         .append_spec(TextRowAppendKind::SourceText);
+                        let item = synthetic_text_item(
+                            SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
+                            "...",
+                            current_text_face_id,
+                        );
                         let mut measurer =
                             FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
                         if let Some((_progress, position)) =
@@ -4588,18 +4631,45 @@ impl LayoutEngine {
 
                     // When hscroll is exhausted, show $ indicator at left edge
                     if hscroll_remaining <= 0 && show_left_trunc {
-                        let trunc_start_x = content_x;
-                        col = 1; // $ takes 1 column
-                        x = content_x + char_w;
-                        output_emitter.emit_synthetic_text_span(
-                            evaluator,
-                            row,
-                            y,
-                            trunc_start_x,
-                            x - trunc_start_x,
-                            0,
-                            col,
+                        let trunc_face_id: u32 = BasicFaceId::Default.into();
+                        let trunc_frame = TextRowAppendFrame::from_parts(
+                            TextRowAppendPlacement { row, y, glyph_y: y },
+                            TextRowAppendArea {
+                                content_x,
+                                width: avail_width,
+                                text_width,
+                                line_number_width: lnum_pixel_width,
+                            },
+                            TextRowAppendMetrics {
+                                height: char_h,
+                                ascent: default_face_ascent,
+                                char_width: char_w,
+                                space_width: char_w,
+                                default_row_height: char_h,
+                            },
+                            text_display_tab_policy(content_x, params),
                         );
+                        let mut measurer = FixedGlyphAdvance::new('$', trunc_face_id, char_w);
+                        if let Some((_progress, position)) = append_synthetic_text_to_text_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            trunc_frame,
+                            DisplayRowPosition {
+                                x_px: content_x,
+                                col: 0,
+                            },
+                            SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
+                            "$",
+                            trunc_face_id,
+                            Some(&mut measurer),
+                        ) {
+                            x = position.x_px;
+                            col = position.col;
+                        }
+                        self.matrix_builder.with_current_row_mut(|glyph_row| {
+                            glyph_row.truncated_left = true;
+                        });
                     }
                     if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
@@ -5710,38 +5780,55 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                // Show ... ellipsis indicator
-                let ellipsis = "...";
-                let ellipsis_start_x = x;
-                let ellipsis_start_col = col;
-                for ech in ellipsis.chars() {
-                    let adv = char_pixel_advance(
-                        &mut self.ascii_width_cache,
-                        frame_params.window_system,
-                        &mut self.font_metrics,
-                        ech,
-                        1,
-                        char_w,
-                        current_font_size_px,
-                        face_char_w,
-                        &self.current_resolved_family,
-                        current_font_weight,
-                        current_font_italic,
-                    );
-                    if x + adv <= content_x + avail_width {
-                        x += adv;
-                        col += 1;
-                    }
-                }
-                output_emitter.emit_synthetic_text_span(
-                    evaluator,
-                    row,
-                    y,
-                    ellipsis_start_x,
-                    x - ellipsis_start_x,
-                    ellipsis_start_col,
-                    col,
+                let dot_advance = char_pixel_advance(
+                    &mut self.ascii_width_cache,
+                    frame_params.window_system,
+                    &mut self.font_metrics,
+                    '.',
+                    1,
+                    char_w,
+                    current_font_size_px,
+                    face_char_w,
+                    &self.current_resolved_family,
+                    current_font_weight,
+                    current_font_italic,
                 );
+                let ellipsis_frame = TextRowAppendFrame::from_parts(
+                    TextRowAppendPlacement {
+                        row,
+                        y,
+                        glyph_y: y + raise_y_offset,
+                    },
+                    TextRowAppendArea {
+                        content_x,
+                        width: avail_width,
+                        text_width,
+                        line_number_width: lnum_pixel_width,
+                    },
+                    TextRowAppendMetrics {
+                        height: face_h,
+                        ascent: face_ascent_val,
+                        char_width: face_char_w,
+                        space_width: face_space_w,
+                        default_row_height: char_h,
+                    },
+                    text_display_tab_policy(content_x, params),
+                );
+                let mut measurer = FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
+                if let Some((_progress, position)) = append_synthetic_text_to_text_row(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    ellipsis_frame,
+                    DisplayRowPosition { x_px: x, col },
+                    SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
+                    "...",
+                    current_text_face_id,
+                    Some(&mut measurer),
+                ) {
+                    x = position.x_px;
+                    col = position.col;
+                }
                 // Skip remaining chars until newline
                 charpos += 1;
                 while byte_idx < text.len() {

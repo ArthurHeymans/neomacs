@@ -1744,6 +1744,10 @@ fn implemented_text_backends_match_selective_display_output() {
         "baseline should render text before carriage-return selective display marker, rows={rows:?}"
     );
     assert!(
+        rows.iter().any(|row| row.contains("head...")),
+        "baseline should render the selective-display ellipsis, rows={rows:?}"
+    );
+    assert!(
         rows.iter().any(|row| row.contains("shown")),
         "baseline should render visible line after selective display marker, rows={rows:?}"
     );
@@ -2202,6 +2206,10 @@ fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
     assert_eq!(cursor.row, 0);
     assert_eq!(cursor.col, 0);
     let text_rows = trace_text_rows(&baseline);
+    assert!(
+        text_rows.iter().any(|row| row.starts_with('$')),
+        "baseline should render the left truncation marker, rows={text_rows:?}"
+    );
     assert!(
         text_rows.iter().any(|row| row.contains("def")),
         "baseline should render the hscrolled visible suffix, rows={text_rows:?}"

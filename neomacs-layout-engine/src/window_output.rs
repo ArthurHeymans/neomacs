@@ -360,23 +360,6 @@ impl WindowOutputEmitter {
         );
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_synthetic_text_span(
-        &mut self,
-        evaluator: &mut Context,
-        row: usize,
-        row_y: f32,
-        glyph_x: f32,
-        width: f32,
-        start_col: usize,
-        end_col: usize,
-    ) {
-        if width <= 0.0 && start_col == end_col {
-            return;
-        }
-        self.move_text_output_to(evaluator, row, end_col, row_y, glyph_x + width.max(0.0));
-    }
-
     pub(crate) fn begin_row_output(
         &mut self,
         evaluator: &mut Context,
