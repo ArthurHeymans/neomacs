@@ -49,6 +49,13 @@ pub(crate) fn synthetic_display_text_item(
     )
 }
 
+pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
+    match face {
+        RenderFaceRef::FaceId(face_id) => face_id,
+        RenderFaceRef::Inherit => fallback,
+    }
+}
+
 struct LayoutStringFaceResolver<'a> {
     face_resolver: &'a FaceResolver,
     base_face: &'a ResolvedFace,
@@ -115,6 +122,57 @@ impl DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
             .push(LayoutStringPendingFace { face_id, resolved });
         RenderFaceRef::FaceId(face_id)
     }
+}
+
+pub(crate) fn append_lisp_string_to_text_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    text_value: Value,
+    source_id: u64,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    base_face_id: u32,
+    current_face_id: &mut u32,
+    frame: DisplayRowAppendFrame,
+    mut position: DisplayRowPosition,
+) -> DisplayRowPosition {
+    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+        source_id,
+        text_value,
+        RenderFaceRef::FaceId(base_face_id),
+    ) else {
+        return position;
+    };
+    let mut string_face_cache = HashMap::new();
+    while let Some(item) = next_layout_string_source_item(
+        builder,
+        &mut source,
+        face_resolver,
+        base_face,
+        &mut string_face_cache,
+        current_face_id,
+    ) {
+        let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
+            continue;
+        };
+        let face_id = render_face_ref_id(item.face, base_face_id);
+        let append_spec = frame.clone().at(position, face_id).append_spec(kind);
+        let Some((progress, next_position)) = append_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ) else {
+            break;
+        };
+        position = next_position;
+        if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
+            break;
+        }
+    }
+    position
 }
 
 pub(crate) struct DisplayRowAppendOutput {

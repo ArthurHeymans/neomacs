@@ -19,11 +19,11 @@ use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmit
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
-    DisplayRowAppendPlacement, DisplayRowAppendSurface, append_display_row_spec_item,
-    append_display_row_spec_item_and_emit, append_measured_display_row_spec_item_and_emit,
+    DisplayRowAppendArea, DisplayRowAppendKind, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
+    DisplayRowAppendSurface, append_display_row_spec_item, append_display_row_spec_item_and_emit,
+    append_lisp_string_to_text_row, append_measured_display_row_spec_item_and_emit,
     append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
-    synthetic_display_text_item,
+    render_face_ref_id, synthetic_display_text_item,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -1447,57 +1447,6 @@ fn text_display_tab_policy(
     )
 }
 
-fn append_lisp_string_to_text_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    text_value: Value,
-    source_id: u64,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    base_face: &super::neovm_bridge::ResolvedFace,
-    base_face_id: u32,
-    current_face_id: &mut u32,
-    frame: DisplayRowAppendFrame,
-    mut position: DisplayRowPosition,
-) -> DisplayRowPosition {
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
-        source_id,
-        text_value,
-        crate::display_item::RenderFaceRef::FaceId(base_face_id),
-    ) else {
-        return position;
-    };
-    let mut string_face_cache = std::collections::HashMap::new();
-    while let Some(item) = next_layout_string_source_item(
-        builder,
-        &mut source,
-        face_resolver,
-        base_face,
-        &mut string_face_cache,
-        current_face_id,
-    ) {
-        let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
-            continue;
-        };
-        let face_id = render_face_ref_id(item.face, base_face_id);
-        let append_spec = frame.clone().at(position, face_id).append_spec(kind);
-        let Some((progress, next_position)) = append_display_row_spec_item_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            append_spec,
-            item,
-        ) else {
-            break;
-        };
-        position = next_position;
-        if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
-            break;
-        }
-    }
-    position
-}
-
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -1680,13 +1629,6 @@ fn render_overlay_string(
         if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
             break;
         }
-    }
-}
-
-fn render_face_ref_id(face: crate::display_item::RenderFaceRef, fallback: u32) -> u32 {
-    match face {
-        crate::display_item::RenderFaceRef::FaceId(face_id) => face_id,
-        crate::display_item::RenderFaceRef::Inherit => fallback,
     }
 }
 

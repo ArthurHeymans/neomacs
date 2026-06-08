@@ -22,6 +22,12 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
 }
 
 #[test]
+fn render_face_ref_id_uses_fallback_for_inherit() {
+    assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
+    assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);
+}
+
+#[test]
 fn display_row_append_surface_builds_positioned_specs() {
     let tab_policy = DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
     let surface = DisplayRowAppendSurface::new(
@@ -365,6 +371,97 @@ fn next_layout_string_source_item_installs_pending_faces() {
     builder
         .with_current_row_mut(|row| {
             assert_eq!(row.glyphs[1][0].face_id, 20);
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_lisp_string_to_text_row_appends_propertized_string_items() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("append-lisp-string", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let value = Value::string_with_text_properties(
+        "ab",
+        vec![StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+            ]),
+        }],
+    );
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let end = append_lisp_string_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        value,
+        1,
+        &face_resolver,
+        base_face,
+        0,
+        &mut current_face_id,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
+
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(current_face_id, 21);
+    assert_eq!(
+        builder.faces().get(&20).map(|face| face.foreground),
+        Some(Color::from_pixel(0x00ff0000))
+    );
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text[0].face_id, 0);
+            assert_eq!(text[1].face_id, 20);
         })
         .expect("current row");
 }
