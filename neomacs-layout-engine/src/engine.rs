@@ -21,11 +21,13 @@ use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_dis
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendKind, DisplayRowAppendMeasurement,
     DisplayRowAppendMetrics, DisplayRowAppendPlacement, DisplayRowAppendSurface,
-    append_buffer_text_char_to_text_row, append_display_replacement_string_item_to_text_row,
-    append_display_row_spec_item, append_display_row_spec_item_and_emit,
-    append_lisp_string_to_text_row, append_measured_display_row_spec_item_and_emit,
-    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
-    render_face_ref_id, synthetic_display_text_item,
+    append_buffer_text_char_to_text_row, append_display_replacement_item_to_text_row,
+    append_display_replacement_item_to_text_row_and_emit,
+    append_display_replacement_string_item_to_text_row, append_display_row_spec_item,
+    append_display_row_spec_item_and_emit, append_lisp_string_to_text_row,
+    append_measured_display_row_spec_item_and_emit, append_synthetic_text_to_display_row,
+    emit_text_progress_slots, next_layout_string_source_item, render_face_ref_id,
+    synthetic_display_text_item,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -4347,30 +4349,29 @@ impl LayoutEngine {
                                     },
                                 ),
                             );
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             if let Some((_progress, position)) =
-                                append_display_row_spec_item_and_emit(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
-                                    append_spec,
                                     item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
                                 )
                             {
                                 x = position.x_px;
@@ -4438,23 +4439,20 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4463,11 +4461,15 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_display_row_spec_item(
-                                &mut self.matrix_builder,
-                                &append_spec,
-                                item,
-                            ) {
+                            if let Some((progress, position)) =
+                                append_display_replacement_item_to_text_row(
+                                    &mut self.matrix_builder,
+                                    item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
+                                )
+                            {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                     && progress.metrics.width_px > 0.0
@@ -4524,32 +4526,31 @@ impl LayoutEngine {
                                 );
                             }
                             let placeholder = "[img]";
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, placeholder);
                             if let Some((_progress, position)) =
-                                append_display_row_spec_item_and_emit(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
-                                    append_spec,
                                     item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
                                 )
                             {
                                 x = position.x_px;
@@ -4612,23 +4613,20 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4637,11 +4635,15 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_display_row_spec_item(
-                                &mut self.matrix_builder,
-                                &append_spec,
-                                item,
-                            ) {
+                            if let Some((progress, position)) =
+                                append_display_replacement_item_to_text_row(
+                                    &mut self.matrix_builder,
+                                    item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
+                                )
+                            {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                     && progress.metrics.width_px > 0.0
@@ -4693,32 +4695,31 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
                             if let Some((_progress, position)) =
-                                append_display_row_spec_item_and_emit(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
-                                    append_spec,
                                     item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
                                 )
                             {
                                 x = position.x_px;
@@ -4766,23 +4767,20 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4791,11 +4789,15 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_display_row_spec_item(
-                                &mut self.matrix_builder,
-                                &append_spec,
-                                item,
-                            ) {
+                            if let Some((progress, position)) =
+                                append_display_replacement_item_to_text_row(
+                                    &mut self.matrix_builder,
+                                    item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
+                                )
+                            {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                     && progress.metrics.width_px > 0.0
@@ -4882,23 +4884,20 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -4907,11 +4906,15 @@ impl LayoutEngine {
                                     display_height,
                                 ),
                             );
-                            if let Some((progress, position)) = append_display_row_spec_item(
-                                &mut self.matrix_builder,
-                                &append_spec,
-                                item,
-                            ) {
+                            if let Some((progress, position)) =
+                                append_display_replacement_item_to_text_row(
+                                    &mut self.matrix_builder,
+                                    item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
+                                )
+                            {
                                 if progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                     && progress.metrics.width_px > 0.0
@@ -4961,32 +4964,31 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = text_append_surface
-                                .frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics {
-                                        height: face_h,
-                                        ascent: face_ascent_val,
-                                        char_width: face_char_w,
-                                        space_width: face_space_w,
-                                        default_row_height: char_h,
-                                    },
-                                )
-                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                                .append_spec(DisplayRowAppendKind::DisplayReplacement);
+                            let replacement_frame = text_append_surface.frame(
+                                DisplayRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                DisplayRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            );
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
                             if let Some((_progress, position)) =
-                                append_display_row_spec_item_and_emit(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
-                                    append_spec,
                                     item,
+                                    current_text_face_id,
+                                    replacement_frame,
+                                    DisplayRowPosition { x_px: x, col },
                                 )
                             {
                                 x = position.x_px;

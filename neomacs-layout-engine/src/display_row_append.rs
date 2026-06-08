@@ -220,6 +220,38 @@ pub(crate) enum DisplayRowAppendMeasurement<'a> {
     Measured(&'a mut dyn DisplayGlyphMeasurer),
 }
 
+pub(crate) fn append_display_replacement_item_to_text_row(
+    builder: &mut GlyphMatrixBuilder,
+    mut item: DisplayItem,
+    fallback_face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let face_id = render_face_ref_id(item.face, fallback_face_id);
+    item.face = RenderFaceRef::FaceId(face_id);
+    let append_spec = frame
+        .at(position, face_id)
+        .append_spec(DisplayRowAppendKind::DisplayReplacement);
+    append_display_row_spec_item(builder, &append_spec, item)
+}
+
+pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    mut item: DisplayItem,
+    fallback_face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let face_id = render_face_ref_id(item.face, fallback_face_id);
+    item.face = RenderFaceRef::FaceId(face_id);
+    let append_spec = frame
+        .at(position, face_id)
+        .append_spec(DisplayRowAppendKind::DisplayReplacement);
+    append_display_row_spec_item_and_emit(builder, output_emitter, evaluator, append_spec, item)
+}
+
 pub(crate) fn append_display_replacement_string_item_to_text_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,

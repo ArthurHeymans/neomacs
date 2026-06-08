@@ -1,5 +1,8 @@
 use super::*;
-use crate::display_item::{DisplayItemKind, DisplaySourcePosition, RenderFaceRef};
+use crate::display_item::{
+    DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
+    RenderFaceRef,
+};
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvances};
 use crate::neovm_bridge::LayoutBufferSnapshot;
@@ -626,6 +629,151 @@ fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_
             assert_eq!(text[0].pixel_width, 11.0);
         })
         .expect("current row");
+}
+
+#[test]
+fn append_display_replacement_item_to_text_row_uses_face_fallback_without_emitting() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
+            height: Some(DisplayLength::Pixels(16.0)),
+            ascent: Some(DisplayLength::Pixels(12.0)),
+        }),
+    );
+
+    let (progress, end) = append_display_replacement_item_to_text_row(
+        &mut builder,
+        item,
+        7,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
+    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].pixel_width, 13.0);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 2 }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-replacement-item", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::FaceId(3),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
+            height: Some(DisplayLength::Pixels(16.0)),
+            ascent: Some(DisplayLength::Pixels(12.0)),
+        }),
+    );
+
+    let (_progress, end) = append_display_replacement_item_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        item,
+        7,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("append progress");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
+    let display = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.display())
+        .expect("window display state");
+    assert_eq!(
+        display.output_cursor,
+        Some(neovm_core::window::WindowCursorPos {
+            x: 13,
+            y: 0,
+            row: 0,
+            col: 2,
+        })
+    );
 }
 
 #[test]
