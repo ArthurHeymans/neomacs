@@ -1,7 +1,8 @@
 use super::tls::{
     GnutlsCredentialType, TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus,
-    der_certificate_to_pem, format_x509_certificate_pem, gnutls_available_capabilities,
-    gnutls_close_notify_result_value, gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
+    certificate_details_value_pem, der_certificate_to_pem, format_x509_certificate_pem,
+    gnutls_available_capabilities, gnutls_close_notify_result_value, gnutls_peer_status_to_value,
+    parse_gnutls_boot_parameters,
 };
 use super::value::Value;
 use crate::emacs_core::builtins::{
@@ -140,6 +141,27 @@ fn der_certificates_are_formatted_as_pem_blocks() {
 }
 
 #[test]
+fn certificate_details_value_uses_gnu_peer_status_plist_shape() {
+    let details = certificate_details_value_pem(TEST_CERTIFICATE_PEM).expect("valid cert");
+    let items = crate::emacs_core::value::list_to_vec(&details).expect("plist");
+    assert_eq!(items[0], Value::keyword(":version"));
+    assert_eq!(items[1], Value::fixnum(3));
+    assert_eq!(items[2], Value::keyword(":serial-number"));
+    assert_eq!(items[4], Value::keyword(":issuer"));
+    assert_eq!(
+        items[5],
+        Value::string("C=US, O=Let's Encrypt, CN=Let's Encrypt Authority X3")
+    );
+    assert_eq!(items[6], Value::keyword(":valid-from"));
+    assert_eq!(items[7], Value::string("2019-07-12"));
+    assert_eq!(items[8], Value::keyword(":valid-to"));
+    assert_eq!(items[9], Value::string("2019-10-10"));
+    assert_eq!(items[10], Value::keyword(":subject"));
+    assert_eq!(items[11], Value::string("CN=lists.for-our.info"));
+    assert!(items.contains(&Value::keyword(":pem")));
+}
+
+#[test]
 fn gnutls_close_notify_results_use_gnu_error_symbols() {
     assert_eq!(
         gnutls_close_notify_result_value(TlsCloseNotifyResult::Success),
@@ -160,7 +182,7 @@ fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
     let status = TlsPeerStatus {
         warnings: vec![":unknown-ca"],
         certificates: vec![
-            format_x509_certificate_pem(TEST_CERTIFICATE_PEM.as_bytes()).expect("valid cert"),
+            certificate_details_value_pem(TEST_CERTIFICATE_PEM).expect("valid cert"),
         ],
         protocol: Some("TLS1.3".to_owned()),
         cipher: Some("AES-256-GCM".to_owned()),
@@ -182,14 +204,9 @@ fn gnutls_peer_status_plist_matches_gnu_certificate_shape() {
     assert_eq!(items[9], Value::string("AES-256-GCM"));
     assert_eq!(items[10], Value::keyword(":mac"));
     assert_eq!(items[11], Value::string("AEAD"));
-    assert!(
-        items[5]
-            .as_lisp_string()
-            .expect("certificate details")
-            .as_utf8_str()
-            .expect("utf-8 certificate details")
-            .contains("Subject: CN=lists.for-our.info")
-    );
+    let certificate = crate::emacs_core::value::list_to_vec(&items[5]).expect("certificate plist");
+    assert!(certificate.contains(&Value::keyword(":subject")));
+    assert!(certificate.contains(&Value::string("CN=lists.for-our.info")));
 }
 
 #[test]

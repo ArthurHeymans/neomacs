@@ -97,7 +97,7 @@ pub(crate) fn parse_gnutls_boot_parameters(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TlsPeerStatus {
     pub(crate) warnings: Vec<&'static str>,
-    pub(crate) certificates: Vec<String>,
+    pub(crate) certificates: Vec<Value>,
     pub(crate) protocol: Option<String>,
     pub(crate) cipher: Option<String>,
     pub(crate) mac: Option<String>,
@@ -144,17 +144,11 @@ pub(crate) fn gnutls_peer_status_to_value(status: &TlsPeerStatus) -> Value {
     }
 
     if !status.certificates.is_empty() {
-        let certificates = Value::list(
-            status
-                .certificates
-                .iter()
-                .map(|cert| Value::string(cert.clone()))
-                .collect(),
-        );
+        let certificates = Value::list(status.certificates.iter().copied().collect());
         entries.push(Value::keyword(":certificates"));
         entries.push(certificates);
         entries.push(Value::keyword(":certificate"));
-        entries.push(Value::string(status.certificates[0].clone()));
+        entries.push(status.certificates[0]);
     }
 
     if let Some(protocol) = &status.protocol {
@@ -197,6 +191,41 @@ impl std::fmt::Display for CertificateFormatError {
 pub(crate) fn format_x509_certificate_pem(
     pem_bytes: &[u8],
 ) -> Result<String, CertificateFormatError> {
+    with_x509_certificate_pem(pem_bytes, format_x509_certificate)
+}
+
+pub(crate) fn certificate_details_value_pem(pem: &str) -> Result<Value, CertificateFormatError> {
+    with_x509_certificate_pem(pem.as_bytes(), |cert| {
+        let validity = cert.validity();
+        let mut entries = vec![
+            Value::keyword(":version"),
+            Value::fixnum(i64::from(cert.version().0 + 1)),
+            Value::keyword(":serial-number"),
+            Value::string(cert.raw_serial_as_string()),
+            Value::keyword(":issuer"),
+            Value::string(cert.issuer().to_string()),
+            Value::keyword(":valid-from"),
+            Value::string(asn1_date_string(&validity.not_before)),
+            Value::keyword(":valid-to"),
+            Value::string(asn1_date_string(&validity.not_after)),
+            Value::keyword(":subject"),
+            Value::string(cert.subject().to_string()),
+            Value::keyword(":public-key-algorithm"),
+            Value::string(public_key_algorithm_name(cert)),
+            Value::keyword(":signature-algorithm"),
+            Value::string(signature_algorithm_name(cert)),
+            Value::keyword(":pem"),
+            Value::string(pem.to_owned()),
+        ];
+        entries.shrink_to_fit();
+        Value::list(entries)
+    })
+}
+
+fn with_x509_certificate_pem<R>(
+    pem_bytes: &[u8],
+    f: impl FnOnce(&X509Certificate<'_>) -> R,
+) -> Result<R, CertificateFormatError> {
     let (_, pem) = parse_x509_pem(pem_bytes)
         .map_err(|err| CertificateFormatError::new(format!("cannot import X.509 PEM: {err}")))?;
     if pem.label != "CERTIFICATE" {
@@ -214,7 +243,7 @@ pub(crate) fn format_x509_certificate_pem(
         ));
     }
 
-    Ok(format_x509_certificate(&cert))
+    Ok(f(&cert))
 }
 
 fn format_x509_certificate(cert: &X509Certificate<'_>) -> String {
@@ -250,6 +279,43 @@ fn format_x509_certificate(cert: &X509Certificate<'_>) -> String {
         }
     }
     out
+}
+
+fn asn1_date_string(time: &x509_parser::time::ASN1Time) -> String {
+    let datetime = time.to_datetime();
+    format!(
+        "{:04}-{:02}-{:02}",
+        datetime.year(),
+        u8::from(datetime.month()),
+        datetime.day()
+    )
+}
+
+fn public_key_algorithm_name(cert: &X509Certificate<'_>) -> String {
+    match cert
+        .public_key()
+        .algorithm
+        .algorithm
+        .to_id_string()
+        .as_str()
+    {
+        "1.2.840.113549.1.1.1" => "RSA".to_owned(),
+        "1.2.840.10045.2.1" => "EC/ECDSA".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+fn signature_algorithm_name(cert: &X509Certificate<'_>) -> String {
+    match cert.signature_algorithm.algorithm.to_id_string().as_str() {
+        "1.2.840.113549.1.1.5" => "RSA-SHA1".to_owned(),
+        "1.2.840.113549.1.1.11" => "RSA-SHA256".to_owned(),
+        "1.2.840.113549.1.1.12" => "RSA-SHA384".to_owned(),
+        "1.2.840.113549.1.1.13" => "RSA-SHA512".to_owned(),
+        "1.2.840.10045.4.3.2" => "ECDSA-SHA256".to_owned(),
+        "1.2.840.10045.4.3.3" => "ECDSA-SHA384".to_owned(),
+        "1.2.840.10045.4.3.4" => "ECDSA-SHA512".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 type RustlsClientStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
@@ -321,7 +387,7 @@ fn rustls_peer_status(stream: &RustlsTlsStream) -> TlsPeerStatus {
     status.certificates = stream
         .peer_certificates_pem
         .iter()
-        .map(|cert| format_x509_certificate_pem(cert.as_bytes()).unwrap_or_else(|_| cert.clone()))
+        .map(|cert| certificate_details_value_pem(cert).unwrap_or_else(|_| Value::string(cert)))
         .collect();
     status.protocol = stream
         .inner
