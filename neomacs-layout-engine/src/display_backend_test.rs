@@ -80,6 +80,16 @@ fn produce_char_glyph_uses_face_id() {
 }
 
 #[test]
+fn tty_produce_glyph_with_pixel_width_preserves_cell_advance() {
+    let mut be = TtyDisplayBackend::new();
+    let f = default_face();
+
+    be.produce_glyph_with_pixel_width(GlyphKind::Char('x'), &f, 0, 1.0);
+
+    assert_eq!(be.pending_glyphs()[0].pixel_width, 1.0);
+}
+
+#[test]
 fn produce_stretch_glyph_converts_pixels_to_cells() {
     let mut be = TtyDisplayBackend::new();
     let f = default_face();
@@ -223,6 +233,18 @@ fn gui_produce_glyph_accumulates_like_tty() {
     be.produce_glyph(GlyphKind::Char('A'), &f, 0);
     be.produce_glyph(GlyphKind::Char('B'), &f, 1);
     assert_eq!(be.pending_glyphs().len(), 2);
+}
+
+#[test]
+fn gui_produce_glyph_with_pixel_width_preserves_measured_advance() {
+    let mut svc = FontMetricsService::new();
+    let mut be = GuiDisplayBackend::new(&mut svc);
+    let f = gui_face();
+    let width = be.char_advance(&f, 'x');
+
+    be.produce_glyph_with_pixel_width(GlyphKind::Char('x'), &f, 0, width);
+
+    assert!((be.pending_glyphs()[0].pixel_width - width).abs() < 0.001);
 }
 
 #[test]

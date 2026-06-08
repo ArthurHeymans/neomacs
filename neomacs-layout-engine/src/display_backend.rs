@@ -24,10 +24,10 @@
 //! See `docs/plans/2026-04-11-display-engine-unification-execution.md`
 //! for the full plan.
 
+use crate::display_row_sink::GlyphRowSink;
+use crate::font_metrics::FontMetricsService;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
-
-use crate::font_metrics::FontMetricsService;
 
 /// Which kind of glyph the display walker is asking the backend to
 /// produce. Mirrors GNU's `enum it_method` values that feed through
@@ -149,68 +149,6 @@ pub trait DisplayBackend {
     /// currently being walked. Used by the frame tab-bar installer
     /// which peeks at the glyphs before calling `finish_row`.
     fn pending_glyphs(&self) -> &[Glyph];
-}
-
-// ---------------------------------------------------------------------------
-// GlyphRowSink
-// ---------------------------------------------------------------------------
-
-/// Neutral row accumulator shared by GUI and TTY metric backends.
-///
-/// It owns no measurement policy. Callers pass the already-measured
-/// pixel advance, and the sink stores it on the produced `Glyph` so
-/// later `FrameDisplayState` materialization does not need to
-/// reconstruct geometry from fallback cell widths.
-#[derive(Default)]
-struct GlyphRowSink {
-    /// Glyphs accumulated for the row currently being walked.
-    /// Flushed to `pending_rows` on `finish_row`.
-    pending_glyphs: Vec<Glyph>,
-    /// Completed rows from the current frame. Drained via `take_rows`.
-    pending_rows: Vec<GlyphRow>,
-}
-
-impl GlyphRowSink {
-    fn produce_glyph(
-        &mut self,
-        kind: GlyphKind,
-        face: &Face,
-        charpos: usize,
-        stretch_cell_width_px: f32,
-        pixel_width: f32,
-    ) {
-        let face_id = face.id;
-        let pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
-            pixel_width
-        } else {
-            0.0
-        };
-        let glyph = match kind {
-            GlyphKind::Char(ch) => Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width),
-            GlyphKind::Glyphless(ch) => {
-                Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width)
-            }
-            GlyphKind::Stretch { width_px, .. } => {
-                let cols = (width_px / stretch_cell_width_px.max(1.0)).round() as u16;
-                Glyph::stretch(cols.max(1), face_id).with_pixel_width(width_px)
-            }
-        };
-        self.pending_glyphs.push(glyph);
-    }
-
-    fn finish_row(&mut self, mut row: GlyphRow) {
-        let text_glyphs = std::mem::take(&mut self.pending_glyphs);
-        row.glyphs[1] = text_glyphs;
-        self.pending_rows.push(row);
-    }
-
-    fn take_rows(&mut self) -> Vec<GlyphRow> {
-        std::mem::take(&mut self.pending_rows)
-    }
-
-    fn pending_glyphs(&self) -> &[Glyph] {
-        &self.pending_glyphs
-    }
 }
 
 // ---------------------------------------------------------------------------
