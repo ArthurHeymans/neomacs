@@ -442,6 +442,38 @@ fn display_row_baseline_mode_line_display_space_align_expands_to_spaces() {
 }
 
 #[test]
+fn display_row_baseline_header_line_display_space_relative_width_expands_to_stretch() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "C R",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("relative-width"),
+                    Value::fixnum(2),
+                ]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::HeaderLine);
+
+    assert_eq!(row.role, GlyphRowRole::HeaderLine);
+    assert_eq!(row_text_expanding_stretches(&row), "C  R");
+    assert!(
+        row.glyphs[1]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 2 })),
+        "relative-width display space should become a stretch glyph: {:?}",
+        row.glyphs[1]
+    );
+}
+
+#[test]
 fn render_display_source_row_uses_face_specific_glyph_widths() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
