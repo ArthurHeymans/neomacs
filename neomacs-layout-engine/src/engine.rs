@@ -1486,6 +1486,26 @@ struct TextRowAppendArea {
     line_number_width: f32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct TextRowAppendSurface {
+    area: TextRowAppendArea,
+    tab_policy: DisplayTabPolicy,
+}
+
+impl TextRowAppendSurface {
+    fn new(area: TextRowAppendArea, tab_policy: DisplayTabPolicy) -> Self {
+        Self { area, tab_policy }
+    }
+
+    fn frame(
+        &self,
+        placement: TextRowAppendPlacement,
+        metrics: TextRowAppendMetrics,
+    ) -> TextRowAppendFrame {
+        TextRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct TextRowAppendMetrics {
     height: f32,
@@ -2082,35 +2102,38 @@ fn render_overlay_string(
             break;
         }
         let face_id = render_face_ref_id(item.face, overlay_base_face_id);
-        let append_spec = TextRowAppendFrame::from_parts(
-            TextRowAppendPlacement {
-                row: *row,
-                y: *y,
-                glyph_y: *y,
-            },
+        let overlay_surface = TextRowAppendSurface::new(
             TextRowAppendArea {
                 content_x,
                 width: max_x - content_x,
                 text_width: max_x - content_x,
                 line_number_width: 0.0,
             },
-            TextRowAppendMetrics {
-                height: char_h,
-                ascent: default_row_ascent,
-                char_width: face_char_w,
-                space_width: face_char_w,
-                default_row_height: char_h,
-            },
             text_display_tab_policy(content_x, params),
-        )
-        .at(
-            DisplayRowPosition {
-                x_px: *x,
-                col: *col,
-            },
-            face_id,
-        )
-        .append_spec(TextRowAppendKind::DisplayReplacement);
+        );
+        let append_spec = overlay_surface
+            .frame(
+                TextRowAppendPlacement {
+                    row: *row,
+                    y: *y,
+                    glyph_y: *y,
+                },
+                TextRowAppendMetrics {
+                    height: char_h,
+                    ascent: default_row_ascent,
+                    char_width: face_char_w,
+                    space_width: face_char_w,
+                    default_row_height: char_h,
+                },
+            )
+            .at(
+                DisplayRowPosition {
+                    x_px: *x,
+                    col: *col,
+                },
+                face_id,
+            )
+            .append_spec(TextRowAppendKind::DisplayReplacement);
         let item = crate::display_item::DisplayItem::new(
             item.span,
             crate::display_item::RenderFaceRef::FaceId(face_id),
@@ -4054,6 +4077,15 @@ impl LayoutEngine {
             - reserve_right_border_width
             - reserve_right_special_width)
             .max(char_w);
+        let text_append_surface = TextRowAppendSurface::new(
+            TextRowAppendArea {
+                content_x,
+                width: avail_width,
+                text_width,
+                line_number_width: lnum_pixel_width,
+            },
+            text_display_tab_policy(content_x, params),
+        );
 
         // Variable-height row tracking
         let mut row_max_height: f32 = char_h; // max glyph height on current row
@@ -4343,17 +4375,11 @@ impl LayoutEngine {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
 
-                    let append_frame = TextRowAppendFrame::from_parts(
+                    let append_frame = text_append_surface.frame(
                         TextRowAppendPlacement {
                             row,
                             y,
                             glyph_y: y + raise_y_offset,
-                        },
-                        TextRowAppendArea {
-                            content_x,
-                            width: avail_width,
-                            text_width,
-                            line_number_width: lnum_pixel_width,
                         },
                         TextRowAppendMetrics {
                             height: face_h,
@@ -4362,7 +4388,6 @@ impl LayoutEngine {
                             space_width: face_space_w,
                             default_row_height: char_h,
                         },
-                        text_display_tab_policy(content_x, params),
                     );
                     let position = append_lisp_string_to_text_row(
                         &mut self.matrix_builder,
@@ -4439,29 +4464,23 @@ impl LayoutEngine {
                             current_font_weight,
                             current_font_italic,
                         );
-                        let append_spec = TextRowAppendFrame::from_parts(
-                            TextRowAppendPlacement {
-                                row,
-                                y,
-                                glyph_y: y + raise_y_offset,
-                            },
-                            TextRowAppendArea {
-                                content_x,
-                                width: avail_width,
-                                text_width,
-                                line_number_width: lnum_pixel_width,
-                            },
-                            TextRowAppendMetrics {
-                                height: face_h,
-                                ascent: face_ascent_val,
-                                char_width: face_char_w,
-                                space_width: face_space_w,
-                                default_row_height: char_h,
-                            },
-                            text_display_tab_policy(content_x, params),
-                        )
-                        .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                        .append_spec(TextRowAppendKind::SourceText);
+                        let append_spec = text_append_surface
+                            .frame(
+                                TextRowAppendPlacement {
+                                    row,
+                                    y,
+                                    glyph_y: y + raise_y_offset,
+                                },
+                                TextRowAppendMetrics {
+                                    height: face_h,
+                                    ascent: face_ascent_val,
+                                    char_width: face_char_w,
+                                    space_width: face_space_w,
+                                    default_row_height: char_h,
+                                },
+                            )
+                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                            .append_spec(TextRowAppendKind::SourceText);
                         let item = synthetic_text_item(
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
@@ -4632,14 +4651,8 @@ impl LayoutEngine {
                     // When hscroll is exhausted, show $ indicator at left edge
                     if hscroll_remaining <= 0 && show_left_trunc {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
-                        let trunc_frame = TextRowAppendFrame::from_parts(
+                        let trunc_frame = text_append_surface.frame(
                             TextRowAppendPlacement { row, y, glyph_y: y },
-                            TextRowAppendArea {
-                                content_x,
-                                width: avail_width,
-                                text_width,
-                                line_number_width: lnum_pixel_width,
-                            },
                             TextRowAppendMetrics {
                                 height: char_h,
                                 ascent: default_face_ascent,
@@ -4647,7 +4660,6 @@ impl LayoutEngine {
                                 space_width: char_w,
                                 default_row_height: char_h,
                             },
-                            text_display_tab_policy(content_x, params),
                         );
                         let mut measurer = FixedGlyphAdvance::new('$', trunc_face_id, char_w);
                         if let Some((_progress, position)) = append_synthetic_text_to_text_row(
@@ -4763,6 +4775,15 @@ impl LayoutEngine {
                         }
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
+                            let replacement_string_surface = TextRowAppendSurface::new(
+                                TextRowAppendArea {
+                                    content_x,
+                                    width: right_limit - content_x,
+                                    text_width,
+                                    line_number_width: lnum_pixel_width,
+                                },
+                                text_display_tab_policy(content_x, params),
+                            );
                             let replacement_source = BufferDisplayReplacementSource::new(
                                 buf_id,
                                 charpos,
@@ -4834,31 +4855,25 @@ impl LayoutEngine {
                                                     text,
                                                 ),
                                             );
-                                            let append_spec = TextRowAppendFrame::from_parts(
-                                                TextRowAppendPlacement {
-                                                    row,
-                                                    y,
-                                                    glyph_y: y + raise_y_offset,
-                                                },
-                                                TextRowAppendArea {
-                                                    content_x,
-                                                    width: right_limit - content_x,
-                                                    text_width,
-                                                    line_number_width: lnum_pixel_width,
-                                                },
-                                                TextRowAppendMetrics {
-                                                    height: face_h,
-                                                    ascent: face_ascent_val,
-                                                    char_width: face_char_w,
-                                                    space_width: face_space_w,
-                                                    default_row_height: char_h,
-                                                },
-                                                text_display_tab_policy(content_x, params),
-                                            )
-                                            .at(DisplayRowPosition { x_px: x, col }, face_id)
-                                            .append_spec(
-                                                TextRowAppendKind::DisplayReplacementString,
-                                            );
+                                            let append_spec = replacement_string_surface
+                                                .frame(
+                                                    TextRowAppendPlacement {
+                                                        row,
+                                                        y,
+                                                        glyph_y: y + raise_y_offset,
+                                                    },
+                                                    TextRowAppendMetrics {
+                                                        height: face_h,
+                                                        ascent: face_ascent_val,
+                                                        char_width: face_char_w,
+                                                        space_width: face_space_w,
+                                                        default_row_height: char_h,
+                                                    },
+                                                )
+                                                .at(DisplayRowPosition { x_px: x, col }, face_id)
+                                                .append_spec(
+                                                    TextRowAppendKind::DisplayReplacementString,
+                                                );
                                             let progress =
                                                 append_measured_text_row_spec_item_and_emit(
                                                     &mut self.matrix_builder,
@@ -4883,31 +4898,25 @@ impl LayoutEngine {
                                         kind => {
                                             let face_id =
                                                 render_face_ref_id(item_face, current_text_face_id);
-                                            let append_spec = TextRowAppendFrame::from_parts(
-                                                TextRowAppendPlacement {
-                                                    row,
-                                                    y,
-                                                    glyph_y: y + raise_y_offset,
-                                                },
-                                                TextRowAppendArea {
-                                                    content_x,
-                                                    width: right_limit - content_x,
-                                                    text_width,
-                                                    line_number_width: lnum_pixel_width,
-                                                },
-                                                TextRowAppendMetrics {
-                                                    height: face_h,
-                                                    ascent: face_ascent_val,
-                                                    char_width: face_char_w,
-                                                    space_width: face_space_w,
-                                                    default_row_height: char_h,
-                                                },
-                                                text_display_tab_policy(content_x, params),
-                                            )
-                                            .at(DisplayRowPosition { x_px: x, col }, face_id)
-                                            .append_spec(
-                                                TextRowAppendKind::DisplayReplacementString,
-                                            );
+                                            let append_spec = replacement_string_surface
+                                                .frame(
+                                                    TextRowAppendPlacement {
+                                                        row,
+                                                        y,
+                                                        glyph_y: y + raise_y_offset,
+                                                    },
+                                                    TextRowAppendMetrics {
+                                                        height: face_h,
+                                                        ascent: face_ascent_val,
+                                                        char_width: face_char_w,
+                                                        space_width: face_space_w,
+                                                        default_row_height: char_h,
+                                                    },
+                                                )
+                                                .at(DisplayRowPosition { x_px: x, col }, face_id)
+                                                .append_spec(
+                                                    TextRowAppendKind::DisplayReplacementString,
+                                                );
                                             let item = crate::display_item::DisplayItem::new(
                                                 span,
                                                 crate::display_item::RenderFaceRef::FaceId(face_id),
@@ -5032,29 +5041,23 @@ impl LayoutEngine {
                                     },
                                 ),
                             );
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
@@ -5127,29 +5130,23 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5219,29 +5216,23 @@ impl LayoutEngine {
                                 );
                             }
                             let placeholder = "[img]";
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, placeholder);
                             if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
@@ -5311,29 +5302,23 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5398,29 +5383,23 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
                             if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
@@ -5475,29 +5454,23 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5597,29 +5570,23 @@ impl LayoutEngine {
                                 );
                             }
 
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source.stretch_item(
                                 current_text_face_id,
                                 DisplayReplacementBox::new(
@@ -5682,29 +5649,23 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let append_spec = TextRowAppendFrame::from_parts(
-                                TextRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                TextRowAppendArea {
-                                    content_x,
-                                    width: avail_width,
-                                    text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
-                                TextRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
-                                },
-                                text_display_tab_policy(content_x, params),
-                            )
-                            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                            .append_spec(TextRowAppendKind::DisplayReplacement);
+                            let append_spec = text_append_surface
+                                .frame(
+                                    TextRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    TextRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                )
+                                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                                .append_spec(TextRowAppendKind::DisplayReplacement);
                             let item = replacement_source
                                 .source_mapped_text_item(current_text_face_id, "     ");
                             if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
@@ -5793,17 +5754,11 @@ impl LayoutEngine {
                     current_font_weight,
                     current_font_italic,
                 );
-                let ellipsis_frame = TextRowAppendFrame::from_parts(
+                let ellipsis_frame = text_append_surface.frame(
                     TextRowAppendPlacement {
                         row,
                         y,
                         glyph_y: y + raise_y_offset,
-                    },
-                    TextRowAppendArea {
-                        content_x,
-                        width: avail_width,
-                        text_width,
-                        line_number_width: lnum_pixel_width,
                     },
                     TextRowAppendMetrics {
                         height: face_h,
@@ -5812,7 +5767,6 @@ impl LayoutEngine {
                         space_width: face_space_w,
                         default_row_height: char_h,
                     },
-                    text_display_tab_policy(content_x, params),
                 );
                 let mut measurer = FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
                 if let Some((_progress, position)) = append_synthetic_text_to_text_row(
@@ -6186,29 +6140,23 @@ impl LayoutEngine {
                     crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
                     crate::display_item::DisplayItemKind::ControlChar { ch },
                 );
-                let append_spec = TextRowAppendFrame::from_parts(
-                    TextRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
-                    TextRowAppendArea {
-                        content_x,
-                        width: avail_width,
-                        text_width,
-                        line_number_width: lnum_pixel_width,
-                    },
-                    TextRowAppendMetrics {
-                        height: face_h,
-                        ascent: face_ascent_val,
-                        char_width: face_char_w,
-                        space_width: face_space_w,
-                        default_row_height: char_h,
-                    },
-                    text_display_tab_policy(content_x, params),
-                )
-                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                .append_spec(TextRowAppendKind::ControlChar);
+                let append_spec = text_append_surface
+                    .frame(
+                        TextRowAppendPlacement {
+                            row,
+                            y,
+                            glyph_y: y + raise_y_offset,
+                        },
+                        TextRowAppendMetrics {
+                            height: face_h,
+                            ascent: face_ascent_val,
+                            char_width: face_char_w,
+                            space_width: face_space_w,
+                            default_row_height: char_h,
+                        },
+                    )
+                    .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                    .append_spec(TextRowAppendKind::ControlChar);
                 if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -6257,29 +6205,23 @@ impl LayoutEngine {
                             crate::display_item::DisplaySourceMappedText::new(mapped_text),
                         ),
                     );
-                    let append_spec = TextRowAppendFrame::from_parts(
-                        TextRowAppendPlacement {
-                            row,
-                            y,
-                            glyph_y: y + raise_y_offset,
-                        },
-                        TextRowAppendArea {
-                            content_x,
-                            width: avail_width,
-                            text_width,
-                            line_number_width: lnum_pixel_width,
-                        },
-                        TextRowAppendMetrics {
-                            height: face_h,
-                            ascent: face_ascent_val,
-                            char_width: face_char_w,
-                            space_width: face_space_w,
-                            default_row_height: char_h,
-                        },
-                        text_display_tab_policy(content_x, params),
-                    )
-                    .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                    .append_spec(TextRowAppendKind::SourceMappedText);
+                    let append_spec = text_append_surface
+                        .frame(
+                            TextRowAppendPlacement {
+                                row,
+                                y,
+                                glyph_y: y + raise_y_offset,
+                            },
+                            TextRowAppendMetrics {
+                                height: face_h,
+                                ascent: face_ascent_val,
+                                char_width: face_char_w,
+                                space_width: face_space_w,
+                                default_row_height: char_h,
+                            },
+                        )
+                        .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                        .append_spec(TextRowAppendKind::SourceMappedText);
                     if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -6341,29 +6283,23 @@ impl LayoutEngine {
                         crate::display_item::DisplayGlyphless { ch, method },
                     ),
                 );
-                let append_spec = TextRowAppendFrame::from_parts(
-                    TextRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
-                    TextRowAppendArea {
-                        content_x,
-                        width: avail_width,
-                        text_width,
-                        line_number_width: lnum_pixel_width,
-                    },
-                    TextRowAppendMetrics {
-                        height: face_h,
-                        ascent: face_ascent_val,
-                        char_width: face_char_w,
-                        space_width: face_space_w,
-                        default_row_height: char_h,
-                    },
-                    text_display_tab_policy(content_x, params),
-                )
-                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-                .append_spec(TextRowAppendKind::Glyphless);
+                let append_spec = text_append_surface
+                    .frame(
+                        TextRowAppendPlacement {
+                            row,
+                            y,
+                            glyph_y: y + raise_y_offset,
+                        },
+                        TextRowAppendMetrics {
+                            height: face_h,
+                            ascent: face_ascent_val,
+                            char_width: face_char_w,
+                            space_width: face_space_w,
+                            default_row_height: char_h,
+                        },
+                    )
+                    .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                    .append_spec(TextRowAppendKind::Glyphless);
                 if let Some((_progress, position)) = append_text_row_spec_item_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -6808,33 +6744,27 @@ impl LayoutEngine {
                 crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
             );
             let mut context = crate::display_source::DisplaySourceContext::empty();
-            let append_spec = TextRowAppendFrame::from_parts(
-                TextRowAppendPlacement {
-                    row,
-                    y,
-                    glyph_y: y + raise_y_offset,
-                },
-                TextRowAppendArea {
-                    content_x,
-                    width: avail_width,
-                    text_width,
-                    line_number_width: lnum_pixel_width,
-                },
-                TextRowAppendMetrics {
-                    height: face_h,
-                    ascent: face_ascent_val,
-                    char_width: face_char_w,
-                    space_width: face_space_w,
-                    default_row_height: char_h,
-                },
-                text_display_tab_policy(content_x, params),
-            )
-            .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
-            .append_spec(if ch == '\t' {
-                TextRowAppendKind::Tab
-            } else {
-                TextRowAppendKind::SourceText
-            });
+            let append_spec = text_append_surface
+                .frame(
+                    TextRowAppendPlacement {
+                        row,
+                        y,
+                        glyph_y: y + raise_y_offset,
+                    },
+                    TextRowAppendMetrics {
+                        height: face_h,
+                        ascent: face_ascent_val,
+                        char_width: face_char_w,
+                        space_width: face_space_w,
+                        default_row_height: char_h,
+                    },
+                )
+                .at(DisplayRowPosition { x_px: x, col }, current_text_face_id)
+                .append_spec(if ch == '\t' {
+                    TextRowAppendKind::Tab
+                } else {
+                    TextRowAppendKind::SourceText
+                });
             let mut measurer = FixedGlyphAdvance::new(ch, current_text_face_id, advance);
             let progress = source.next_item(&mut context).and_then(|item| {
                 append_measured_text_row_spec_item_and_emit(

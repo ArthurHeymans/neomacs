@@ -3770,6 +3770,52 @@ fn text_row_append_frame_builds_positioned_context() {
 }
 
 #[test]
+fn text_row_append_surface_builds_frames_with_shared_area() {
+    let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
+    let surface = TextRowAppendSurface::new(
+        TextRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        tab_policy.clone(),
+    );
+
+    let frame = surface.frame(
+        TextRowAppendPlacement {
+            row: 3,
+            y: 20.0,
+            glyph_y: 22.0,
+        },
+        TextRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+    );
+
+    assert_eq!(frame.row, 3);
+    assert_eq!(frame.glyph_y, 22.0);
+    assert_eq!(
+        frame.geometry,
+        DisplayRowGeometry {
+            y: 20.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 9.0,
+            ascent: 11.0,
+            tab_policy,
+        }
+    );
+    assert_eq!(frame.content_x, 8.0);
+    assert_eq!(frame.text_width, 150.0);
+    assert_eq!(frame.line_number_width, 10.0);
+}
+
+#[test]
 fn text_row_append_frame_from_parts_preserves_geometry_and_area() {
     let tab_policy = crate::display_row_builder::DisplayTabPolicy::every(4);
     let frame = TextRowAppendFrame::from_parts(
