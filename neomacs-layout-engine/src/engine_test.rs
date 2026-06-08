@@ -3591,6 +3591,35 @@ fn body_text_row_append_context_derives_layout_output_and_bounds() {
 }
 
 #[test]
+fn body_text_row_append_frame_builds_positioned_context() {
+    let mut params = test_window_params();
+    params.tab_width = 4;
+    let frame = BodyTextRowAppendFrame {
+        row: 3,
+        row_y: 20.0,
+        glyph_y: 22.0,
+        face_height: 16.0,
+        face_ascent: 11.0,
+        default_row_height: 14.0,
+        content_x: 8.0,
+        avail_width: 120.0,
+        text_width: 150.0,
+        line_number_width: 10.0,
+        face_char_width: 9.0,
+        face_space_width: 7.0,
+    };
+
+    let spec = frame
+        .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
+        .append_spec(&params, BodyTextAppendKind::SourceText);
+
+    assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
+    assert_eq!(spec.max_x, 128.0);
+    assert_eq!(spec.layout.base_face, RenderFaceRef::FaceId(42));
+    assert_eq!(spec.output.row, 3);
+}
+
+#[test]
 fn body_text_row_append_spec_appends_item_to_matrix_row() {
     let params = test_window_params();
     let context = BodyTextRowAppendContext {
