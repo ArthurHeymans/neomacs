@@ -787,6 +787,36 @@ fn display_row_builder_uses_glyph_measurer_for_text_pixel_widths() {
 }
 
 #[test]
+fn display_row_builder_push_measured_item_accepts_per_call_measurer() {
+    struct TestMeasurer;
+
+    impl DisplayGlyphMeasurer for TestMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            ch: char,
+            _face_id: u32,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            (ch == '中').then_some(24.0)
+        }
+    }
+
+    let mut builder = DisplayRowBuilder::new(layout());
+    let mut measurer = TestMeasurer;
+
+    builder.push_measured_item(text_item("A中"), &mut measurer);
+    let row = builder.finish();
+    let cjk = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
+        .expect("CJK glyph");
+
+    assert_eq!(row_text(&row), "A中");
+    assert_eq!(cjk.pixel_width, 24.0);
+}
+
+#[test]
 fn display_row_builder_emits_cjk_wide_char_with_padding() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(text_item("A中B"));

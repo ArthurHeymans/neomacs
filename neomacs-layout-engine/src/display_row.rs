@@ -598,7 +598,6 @@ impl LayoutEngine {
         let row_face = face_realizer.realize_face(base_face_id, base_face, char_w, ascent, height);
         let char_width = face_realizer.char_width(&row_face, char_w).max(1.0);
         let mut row_faces = vec![row_face.clone()];
-        let mut items = Vec::new();
 
         struct RowFaceResolver<'a, 'metrics> {
             face_realizer: &'a mut DisplayRowFaceRealizer<'metrics>,
@@ -642,24 +641,6 @@ impl LayoutEngine {
             }
         }
 
-        {
-            let mut row_face_resolver = RowFaceResolver {
-                face_realizer: &mut face_realizer,
-                face_resolver,
-                base_face,
-                base_face_id: row_face.face_id,
-                next_face_id,
-                char_w,
-                ascent,
-                height,
-                row_faces: &mut row_faces,
-            };
-            let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
-            while let Some(item) = source.next_item(&mut context) {
-                items.push(item);
-            }
-        }
-
         let parsed_symbol_values = symbol_values
             .into_iter()
             .filter_map(|(name, value)| parse_display_length_expr(value).map(|expr| (name, expr)))
@@ -675,19 +656,34 @@ impl LayoutEngine {
             base_face: RenderFaceRef::FaceId(row_face.face_id),
             symbol_values: parsed_symbol_values,
         };
-        let row = {
+        let mut row_builder = DisplayRowBuilder::new(row_layout);
+        loop {
+            let item = {
+                let mut row_face_resolver = RowFaceResolver {
+                    face_realizer: &mut face_realizer,
+                    face_resolver,
+                    base_face,
+                    base_face_id: row_face.face_id,
+                    next_face_id,
+                    char_w,
+                    ascent,
+                    height,
+                    row_faces: &mut row_faces,
+                };
+                let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
+                source.next_item(&mut context)
+            };
+            let Some(item) = item else {
+                break;
+            };
             let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
                 &row_faces,
                 face_realizer.font_metrics_service_mut(),
                 char_width,
             );
-            let mut row_builder =
-                DisplayRowBuilder::with_glyph_measurer(row_layout, &mut glyph_measurer);
-            for item in items {
-                row_builder.push_item(item);
-            }
-            row_builder.finish()
-        };
+            row_builder.push_measured_item(item, &mut glyph_measurer);
+        }
+        let row = row_builder.finish();
         let progress = display_source_row_progress(&row, width, char_width, y, height);
         let faces = row_faces
             .into_iter()

@@ -426,6 +426,16 @@ impl<'a> DisplayRowBuilder<'a> {
         }
     }
 
+    pub(crate) fn push_measured_item(
+        &mut self,
+        item: DisplayItem,
+        glyph_measurer: &mut dyn DisplayGlyphMeasurer,
+    ) -> DisplayRowWriteMetrics {
+        let mut writer =
+            DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
+        writer.push_item(item)
+    }
+
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
