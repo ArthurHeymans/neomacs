@@ -2754,7 +2754,7 @@ pub(crate) fn builtin_treesit_linecol_at(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("treesit--linecol-at", &args, 1)?;
-    let pos = expect_integer_or_marker(&args[0])?;
+    let pos = expect_number(&args[0])? as i64;
     let buffer_id = eval
         .buffers
         .current_buffer_id()
@@ -3087,5 +3087,23 @@ mod tests {
             "wrong-type-argument",
         );
         assert_eq!(sig.data, vec![Value::symbol("integerp"), marker]);
+    }
+
+    #[test]
+    fn treesit_linecol_at_rejects_markers_like_gnu() {
+        let (mut eval, _parser) = eval_with_json_parser("{}");
+        let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+        let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            LispCharPos1::new(1),
+            false,
+        );
+
+        let sig = expect_signal(
+            builtin_treesit_linecol_at(&mut eval, vec![marker]),
+            "wrong-type-argument",
+        );
+        assert_eq!(sig.data, vec![Value::symbol("numberp"), marker]);
     }
 }
