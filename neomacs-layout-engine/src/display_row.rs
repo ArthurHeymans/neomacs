@@ -720,6 +720,33 @@ pub(crate) fn install_rendered_frame_chrome_row(
     });
 }
 
+pub(crate) fn install_rendered_display_row_fragment_assets(
+    builder: &mut GlyphMatrixBuilder,
+    role: GlyphRowRole,
+    matrix_row: usize,
+    faces: &[Face],
+    media: &[RenderedDisplayRowMedia],
+) {
+    for face in faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    for media in media {
+        media.install(builder, role, matrix_row);
+    }
+}
+
+pub(crate) fn merge_display_row_source_slot_bounds_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    slots: &[DisplayRowGlyphSlot],
+) {
+    let Some((start, end)) = buffer_source_slot_bounds(slots) else {
+        return;
+    };
+    builder.with_current_row_mut(|row| {
+        merge_row_buffer_source_bounds(row, start, end);
+    });
+}
+
 #[cfg(test)]
 pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     builder: &mut GlyphMatrixBuilder,
@@ -747,25 +774,6 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             merge_row_buffer_source_bounds(row, start, end);
         }
     });
-    for media in &rendered.media {
-        media.install(builder, rendered.row.role, matrix_row);
-    }
-    display_row_output_end_position(rendered.progress)
-}
-
-pub(crate) fn replace_current_row_with_rendered_display_row_fragment(
-    builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplayRow,
-    matrix_row: usize,
-) -> DisplayRowPosition {
-    for face in &rendered.faces {
-        builder.insert_face(face.id, face.clone());
-    }
-    let mut row = rendered.row.clone();
-    if let Some((start, end)) = buffer_source_slot_bounds(&rendered.source_slots) {
-        merge_row_buffer_source_bounds(&mut row, start, end);
-    }
-    builder.install_prebuilt_current_row(&row);
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
     }
@@ -908,6 +916,7 @@ fn set_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
     row.end_charpos = end;
 }
 
+#[cfg(test)]
 fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
     DisplayRowPosition {
         x_px: progress.end_x,
@@ -1193,34 +1202,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             next_face_id,
             &mut policy,
         )
-    }
-
-    pub(crate) fn render_display_item_source_row_fragment_step_from_row_with_policy<
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    >(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        initial_row: GlyphRow,
-        source: &mut S,
-        state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
-        policy: &mut P,
-    ) -> Option<DisplayRowRenderResult> {
-        let mut row = initial_row;
-        let result = self.render_display_item_source_row_fragment_step_into_row_with_policy(
-            spec,
-            &mut row,
-            source,
-            state,
-            face_resolver,
-            display_host,
-            next_face_id,
-            policy,
-        )?;
-        Some(result.with_row(row))
     }
 
     pub(crate) fn render_display_item_source_row_fragment_step_into_row_with_policy<

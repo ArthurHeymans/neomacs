@@ -33,7 +33,7 @@ use crate::display_row_append::{
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
-    render_natural_display_item_source_fragment_to_text_row_and_emit,
+    render_natural_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
@@ -1330,7 +1330,7 @@ fn render_overlay_string(
             role: GlyphRowRole::Text,
             symbol_values: std::collections::HashMap::new(),
         };
-        let Some(outcome) = render_natural_display_item_source_fragment_to_text_row_and_emit(
+        let Some(outcome) = render_natural_display_item_source_into_current_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
@@ -1350,14 +1350,13 @@ fn render_overlay_string(
             break;
         };
         let stop = outcome.stop;
-        let rendered = outcome.rendered;
         include_glyph_vertical_metrics(
             row_max_height,
             row_max_ascent,
-            rendered.row.height_px,
-            rendered.row.ascent_px,
+            outcome.row_height_px,
+            outcome.row_ascent_px,
         );
-        for slot in &rendered.source_slots {
+        for slot in &outcome.source_slots {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
                 slot,

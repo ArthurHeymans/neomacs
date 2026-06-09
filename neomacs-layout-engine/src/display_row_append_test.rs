@@ -239,7 +239,7 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
 }
 
 #[test]
-fn render_natural_display_item_source_fragment_to_text_row_and_emit_uses_current_row_tail() {
+fn render_natural_display_item_source_into_current_text_row_and_emit_uses_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -279,7 +279,7 @@ fn render_natural_display_item_source_fragment_to_text_row_and_emit_uses_current
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
 
-    let outcome = render_natural_display_item_source_fragment_to_text_row_and_emit(
+    let outcome = render_natural_display_item_source_into_current_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,

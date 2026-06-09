@@ -6,12 +6,14 @@ use crate::display_item::{DisplayMediaReplacement, DisplayMediaReplacementKind};
 #[cfg(test)]
 use crate::display_row::DisplayRowSourceWalker;
 #[cfg(test)]
+use crate::display_row::RenderedDisplayRow;
+#[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
-    replace_current_row_with_rendered_display_row_fragment,
+    DisplayRowSourceState, DisplayRowSpec, install_rendered_display_row_fragment_assets,
+    merge_display_row_source_slot_bounds_to_current_row,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
@@ -113,28 +115,12 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     end
 }
 
-pub(crate) fn replace_current_row_with_rendered_display_row_fragment_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    rendered: &RenderedDisplayRow,
-    output: TextRowOutput,
-) -> DisplayRowPosition {
-    let end = replace_current_row_with_rendered_display_row_fragment(builder, rendered, output.row);
-    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
-    end
-}
-
-pub(crate) struct TextRowFragmentRenderOutcome {
-    pub(crate) stop: DisplayRowRenderStop,
-    pub(crate) rendered: RenderedDisplayRow,
-    pub(crate) end: DisplayRowPosition,
-}
-
 pub(crate) struct CurrentTextRowRenderOutcome {
     pub(crate) stop: DisplayRowRenderStop,
     pub(crate) source_slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
     pub(crate) end: DisplayRowPosition,
+    pub(crate) row_height_px: f32,
+    pub(crate) row_ascent_px: f32,
 }
 
 fn display_row_position_from_output_progress(
@@ -144,51 +130,6 @@ fn display_row_position_from_output_progress(
         x_px: progress.end_x,
         col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn render_display_item_source_fragment_to_text_row_and_emit<
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    next_face_id: &mut u32,
-    row_spec: DisplayRowSpec<'_>,
-    output: TextRowOutput,
-    render_policy: &mut P,
-) -> Option<TextRowFragmentRenderOutcome> {
-    let initial_row = builder.with_current_row_mut(|row| row.clone())?;
-    let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let result = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
-        row_spec,
-        initial_row,
-        source,
-        source_state,
-        face_resolver,
-        evaluator.display_host.as_deref(),
-        next_face_id,
-        render_policy,
-    )?;
-    let stop = result.stop;
-    let rendered = result.rendered;
-    let end = replace_current_row_with_rendered_display_row_fragment_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        &rendered,
-        output,
-    );
-    Some(TextRowFragmentRenderOutcome {
-        stop,
-        rendered,
-        end,
-    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -208,9 +149,10 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
     output: TextRowOutput,
     render_policy: &mut P,
 ) -> Option<CurrentTextRowRenderOutcome> {
+    let role = row_spec.role;
     let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let result = builder.with_current_row_mut(|row| {
-        renderer.render_display_item_source_row_fragment_step_into_row_with_policy(
+    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
+        let result = renderer.render_display_item_source_row_fragment_step_into_row_with_policy(
             row_spec,
             row,
             source,
@@ -219,19 +161,31 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
             evaluator.display_host.as_deref(),
             next_face_id,
             render_policy,
-        )
+        )?;
+        Some((result, row.height_px, row.ascent_px))
     })??;
     let end = display_row_position_from_output_progress(result.progress);
-    output_emitter.emit_text_source_slots(evaluator, output, &result.source_slots, end);
+    install_rendered_display_row_fragment_assets(
+        builder,
+        role,
+        output.row,
+        &result.faces,
+        &result.media,
+    );
+    merge_display_row_source_slot_bounds_to_current_row(builder, &result.source_slots);
+    let source_slots = result.source_slots;
+    output_emitter.emit_text_source_slots(evaluator, output, &source_slots, end);
     Some(CurrentTextRowRenderOutcome {
         stop: result.stop,
-        source_slots: result.source_slots,
+        source_slots,
         end,
+        row_height_px,
+        row_ascent_px,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_natural_display_item_source_fragment_to_text_row_and_emit<
+pub(crate) fn render_natural_display_item_source_into_current_text_row_and_emit<
     S: DisplayItemSource,
 >(
     builder: &mut GlyphMatrixBuilder,
@@ -244,9 +198,9 @@ pub(crate) fn render_natural_display_item_source_fragment_to_text_row_and_emit<
     next_face_id: &mut u32,
     row_spec: DisplayRowSpec<'_>,
     output: TextRowOutput,
-) -> Option<TextRowFragmentRenderOutcome> {
+) -> Option<CurrentTextRowRenderOutcome> {
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    render_display_item_source_fragment_to_text_row_and_emit(
+    render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -354,7 +308,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
         glyph_y: request.frame.glyph_y,
         height: request.output_height,
     };
-    let outcome = render_display_item_source_fragment_to_text_row_and_emit(
+    let outcome = render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -367,14 +321,11 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
         output,
         render_policy,
     )?;
-    let slots = outcome.rendered.source_slots.clone();
-    let progress = display_row_append_progress_from_render_result(
-        request.position,
-        outcome.end,
-        outcome.stop,
-        slots,
-    );
-    Some((progress, outcome.end))
+    let slots = outcome.source_slots;
+    let end = outcome.end;
+    let progress =
+        display_row_append_progress_from_render_result(request.position, end, outcome.stop, slots);
+    Some((progress, end))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -411,7 +362,7 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         symbol_values: HashMap::new(),
     };
     let mut source_state = DisplayRowSourceState::default();
-    let Some(outcome) = render_natural_display_item_source_fragment_to_text_row_and_emit(
+    let Some(outcome) = render_natural_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -895,7 +846,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     let mut source_state = DisplayRowSourceState::default();
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
     let mut font_metrics = None;
-    let Some(outcome) = render_display_item_source_fragment_to_text_row_and_emit(
+    let Some(outcome) = render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
