@@ -4,6 +4,7 @@ use crate::display_item::{
     DisplayLengthExpr, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
 };
+#[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -275,7 +276,7 @@ pub(crate) struct DisplayRowAppendProgress {
     pub(crate) slots: Vec<DisplayRowGlyphSlot>,
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
     row: GlyphRow,
@@ -381,7 +382,7 @@ pub(crate) fn append_measured_display_item_to_current_matrix_row(
     })
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);
@@ -397,7 +398,7 @@ impl DisplayRowBuilder<'_> {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl<'a> DisplayRowBuilder<'a> {
     pub(crate) fn with_glyph_measurer(
         layout: DisplayRowLayout,
@@ -429,7 +430,6 @@ impl<'a> DisplayRowBuilder<'a> {
         writer.push_item(item)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
@@ -451,6 +451,7 @@ impl<'a> DisplayRowBuilder<'a> {
     }
 }
 
+#[cfg(test)]
 impl<'layout, 'row> DisplayRowWriter<'layout, 'row, '_> {
     pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
         row.enabled = true;
@@ -712,6 +713,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
