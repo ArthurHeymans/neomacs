@@ -449,7 +449,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
 }
 
 #[test]
-fn display_item_source_walker_reuses_face_cache_across_items() {
+fn display_row_source_walker_reuses_face_cache_across_items() {
     let _eval = Context::new();
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
@@ -478,47 +478,26 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
     let source =
         crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
             .expect("string source");
-    let mut source = DisplayItemSourceWalker::new(source);
-
-    let first = source
-        .next_item(
-            &mut builder,
-            &face_resolver,
-            base_face,
-            0,
-            &mut current_face_id,
-            None,
-            8.0,
-            12.0,
-            16.0,
-        )
-        .expect("first source item");
-    let second = source
-        .next_item(
-            &mut builder,
-            &face_resolver,
-            base_face,
-            0,
-            &mut current_face_id,
-            None,
-            8.0,
-            12.0,
-            16.0,
-        )
-        .expect("second source item");
-    let third = source
-        .next_item(
-            &mut builder,
-            &face_resolver,
-            base_face,
-            0,
-            &mut current_face_id,
-            None,
-            8.0,
-            12.0,
-            16.0,
-        )
-        .expect("third source item");
+    let mut source = crate::display_row::DisplayRowSourceWalker::new(source);
+    let (first, second, third) = {
+        let mut next_item = |label: &str| {
+            let mut step = source
+                .next_step(
+                    &face_resolver,
+                    base_face,
+                    0,
+                    &mut current_face_id,
+                    None,
+                    8.0,
+                    12.0,
+                    16.0,
+                )
+                .unwrap_or_else(|| panic!("{label} source item"));
+            apply_pending_display_source_faces(&mut builder, &mut step.pending_faces);
+            step.item
+        };
+        (next_item("first"), next_item("second"), next_item("third"))
+    };
 
     assert_eq!(first.face, RenderFaceRef::FaceId(20));
     assert_eq!(second.face, RenderFaceRef::FaceId(0));

@@ -3,14 +3,14 @@ use crate::display_item::{
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowSourceState, insert_resolved_display_row_face,
+    DisplayRowGeometry, DisplayRowSourceWalker, insert_resolved_display_row_face,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
-use crate::display_source_resolver::{DisplaySourceResolveParams, PendingDisplaySourceFace};
+use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
@@ -68,84 +68,6 @@ pub(crate) fn apply_pending_display_source_faces(
 ) {
     for pending in pending_faces.drain(..) {
         insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
-    }
-}
-
-pub(crate) struct DisplayItemSourceStep {
-    pub(crate) item: DisplayItem,
-    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
-}
-
-pub(crate) struct DisplayItemSourceWalker<S> {
-    source: S,
-    state: DisplayRowSourceState,
-}
-
-impl<S> DisplayItemSourceWalker<S> {
-    pub(crate) fn new(source: S) -> Self {
-        Self {
-            source,
-            state: DisplayRowSourceState::default(),
-        }
-    }
-}
-
-impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
-    pub(crate) fn next_step(
-        &mut self,
-        face_resolver: &FaceResolver,
-        base_face: &ResolvedFace,
-        base_face_id: u32,
-        current_face_id: &mut u32,
-        display_host: Option<&dyn DisplayHost>,
-        fallback_char_width: f32,
-        fallback_ascent: f32,
-        fallback_row_height: f32,
-    ) -> Option<DisplayItemSourceStep> {
-        let resolved = self.state.next_resolved_item(
-            &mut self.source,
-            DisplaySourceResolveParams {
-                face_resolver,
-                display_host,
-                base_face,
-                canonical_face: face_resolver.default_face(),
-                base_face_id,
-                fallback_char_width,
-                fallback_ascent,
-                fallback_row_height,
-            },
-            current_face_id,
-        );
-        resolved.item.map(|item| DisplayItemSourceStep {
-            item,
-            pending_faces: resolved.pending_faces,
-        })
-    }
-
-    pub(crate) fn next_item(
-        &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        face_resolver: &FaceResolver,
-        base_face: &ResolvedFace,
-        base_face_id: u32,
-        current_face_id: &mut u32,
-        display_host: Option<&dyn DisplayHost>,
-        fallback_char_width: f32,
-        fallback_ascent: f32,
-        fallback_row_height: f32,
-    ) -> Option<DisplayItem> {
-        let mut step = self.next_step(
-            face_resolver,
-            base_face,
-            base_face_id,
-            current_face_id,
-            display_host,
-            fallback_char_width,
-            fallback_ascent,
-            fallback_row_height,
-        )?;
-        apply_pending_display_source_faces(builder, &mut step.pending_faces);
-        Some(step.item)
     }
 }
 
@@ -452,7 +374,7 @@ pub(crate) fn append_display_item_source_to_text_row<
     position: DisplayRowPosition,
     policy: &mut P,
 ) -> DisplayRowPosition {
-    let mut source = DisplayItemSourceWalker::new(source);
+    let mut source = DisplayRowSourceWalker::new(source);
     let fallback_char_width = frame.geometry.char_width;
     let fallback_ascent = frame.geometry.ascent;
     let fallback_row_height = frame.geometry.height;
@@ -465,8 +387,7 @@ pub(crate) fn append_display_item_source_to_text_row<
         position,
         policy,
         |builder, display_host| {
-            source.next_item(
-                builder,
+            let mut step = source.next_step(
                 face_resolver,
                 base_face,
                 fallback_face_id,
@@ -475,7 +396,9 @@ pub(crate) fn append_display_item_source_to_text_row<
                 fallback_char_width,
                 fallback_ascent,
                 fallback_row_height,
-            )
+            )?;
+            apply_pending_display_source_faces(builder, &mut step.pending_faces);
+            Some(step.item)
         },
     )
     .position

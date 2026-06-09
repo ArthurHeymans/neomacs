@@ -22,15 +22,15 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
-    insert_resolved_display_row_face, install_rendered_display_row,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSourceWalker, DisplayRowSpec,
+    RenderedDisplayRow, insert_resolved_display_row_face, install_rendered_display_row,
     install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
-    DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
-    DisplayRowAppendMetrics, DisplayRowAppendPlacement, DisplayRowAppendSurface,
-    DisplayRowItemMeasurer, append_buffer_text_char_to_text_row,
-    append_buffer_text_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
+    DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
+    DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
+    append_buffer_text_char_to_text_row, append_buffer_text_item_to_text_row_and_emit,
+    append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
     append_synthetic_text_to_display_row, apply_pending_display_source_faces,
@@ -1331,7 +1331,7 @@ fn render_overlay_string(
     ) else {
         return;
     };
-    let mut source = DisplayItemSourceWalker::new(source);
+    let mut source = DisplayRowSourceWalker::new(source);
 
     while *row < max_rows {
         let step = source.next_step(

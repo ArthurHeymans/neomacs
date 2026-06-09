@@ -10,8 +10,8 @@ use crate::display_row_builder::{
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
-    resolve_next_display_source_item,
+    DisplaySourceResolveParams, DisplaySourceResolveState, PendingDisplaySourceFace,
+    ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -451,6 +451,58 @@ impl DisplayRowSourceState {
 
     pub(crate) fn is_finished(&self) -> bool {
         self.exhausted && self.pending_item.is_none()
+    }
+}
+
+pub(crate) struct DisplayRowSourceStep {
+    pub(crate) item: DisplayItem,
+    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
+}
+
+pub(crate) struct DisplayRowSourceWalker<S> {
+    source: S,
+    state: DisplayRowSourceState,
+}
+
+impl<S> DisplayRowSourceWalker<S> {
+    pub(crate) fn new(source: S) -> Self {
+        Self {
+            source,
+            state: DisplayRowSourceState::default(),
+        }
+    }
+}
+
+impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
+    pub(crate) fn next_step(
+        &mut self,
+        face_resolver: &FaceResolver,
+        base_face: &ResolvedFace,
+        base_face_id: u32,
+        next_face_id: &mut u32,
+        display_host: Option<&dyn DisplayHost>,
+        fallback_char_width: f32,
+        fallback_ascent: f32,
+        fallback_row_height: f32,
+    ) -> Option<DisplayRowSourceStep> {
+        let resolved = self.state.next_resolved_item(
+            &mut self.source,
+            DisplaySourceResolveParams {
+                face_resolver,
+                display_host,
+                base_face,
+                canonical_face: face_resolver.default_face(),
+                base_face_id,
+                fallback_char_width,
+                fallback_ascent,
+                fallback_row_height,
+            },
+            next_face_id,
+        );
+        resolved.item.map(|item| DisplayRowSourceStep {
+            item,
+            pending_faces: resolved.pending_faces,
+        })
     }
 }
 
