@@ -2461,6 +2461,27 @@ impl crate::emacs_core::eval::Context {
             // GNU keyboard.c::echo_add_key appends this when a help event is
             // the first echoed key, while waiting for the following help-map key.
             message.push_str(" (Type ? for further options, C-q for quick help)");
+        } else {
+            // GNU keyboard.c::echo_dash turns a pending prefix into a
+            // mini-prompt for the next key, then help.el appends the default
+            // keystroke-help hint when `echo-keystrokes-help' is enabled.
+            message.push('-');
+            if self
+                .eval_symbol("echo-keystrokes-help")
+                .unwrap_or(Value::NIL)
+                .is_truthy()
+            {
+                let help_char = self.eval_symbol("help-char").unwrap_or(Value::NIL);
+                if !help_char.is_nil() {
+                    let key_vec = Value::vector(vec![help_char]);
+                    if let Ok(desc) =
+                        crate::emacs_core::builtins::keymaps::builtin_key_description(vec![key_vec])
+                        && let Some(help_desc) = desc.as_utf8_str()
+                    {
+                        message.push_str(&format!(" ({} for help)", help_desc));
+                    }
+                }
+            }
         }
         Some(message)
     }

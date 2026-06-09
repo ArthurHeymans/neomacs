@@ -2418,6 +2418,40 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
 }
 
 #[test]
+fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.assign("help-char", Value::fixnum(8));
+    ev.assign("echo-keystrokes", Value::fixnum(1));
+    ev.assign("echo-keystrokes-help", Value::T);
+    ev.eval_str(
+        r#"(fset 'neomacs-test-prefix-target-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup prefix target command");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum(' ' as i64), Value::fixnum('f' as i64)],
+        Value::symbol("neomacs-test-prefix-target-command"),
+    )
+    .expect("define prefix command");
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum(' ' as i64));
+
+    let _ = ev.read_key_sequence();
+
+    assert_eq!(
+        ev.current_message_text().as_deref(),
+        Some("SPC- (C-h for help)")
+    );
+}
+
+#[test]
 fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
