@@ -3618,7 +3618,9 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
     assert_eq!(video.height, 45.0);
     assert_eq!(video.loop_count, -1);
     assert!(video.autoplay);
-    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
+    let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
+    let slot_id = video.slot_id.expect("video slot id");
+    assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = video_requests.lock().expect("video requests lock");
     assert_eq!(requests.len(), 1);
