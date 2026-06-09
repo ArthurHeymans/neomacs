@@ -8,9 +8,9 @@
 use super::display_status_line::DisplayRowOutputProgress;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_item::DisplaySourcePosition;
-use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
-};
+#[cfg(test)]
+use crate::display_row_builder::DisplayRowAppendProgress;
+use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::LispCharPos1;
@@ -172,6 +172,7 @@ pub(crate) fn finish_and_maybe_begin_text_matrix_row(
 }
 
 pub(crate) trait DisplayProgressSink {
+    #[cfg(test)]
     fn emit_text_progress(
         &mut self,
         evaluator: &mut Context,
@@ -208,6 +209,7 @@ pub(crate) struct WindowOutputEmitter {
 }
 
 impl DisplayProgressSink for WindowOutputEmitter {
+    #[cfg(test)]
     fn emit_text_progress(
         &mut self,
         evaluator: &mut Context,

@@ -10,7 +10,7 @@ use crate::display_row::{
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
-use crate::neovm_bridge::LayoutBufferSnapshot;
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -20,6 +20,7 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::face::FaceTable;
 use std::sync::{Arc, Mutex};
 
 struct RecordingAppendImageHost {
@@ -1011,6 +1012,10 @@ fn append_buffer_text_char_to_text_row_appends_source_char() {
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
         LayoutBufferSnapshot::from_buffer(buffer)
     };
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1040,6 +1045,9 @@ fn append_buffer_text_char_to_text_row_appends_source_char() {
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+        base_face,
         buf_id,
         &snapshot,
         CharPos0::new(0),
@@ -1060,6 +1068,100 @@ fn append_buffer_text_char_to_text_row_appends_source_char() {
             assert!(matches!(
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_buffer_text_char_to_text_row_composes_with_current_row_tail() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("e\u{301}");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-buffer-combining-char", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    };
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base_face = face_resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_char_with_pixel_width('e', 7, 0, 8.0);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let (progress, end) = append_buffer_text_char_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+        &base_face,
+        buf_id,
+        &snapshot,
+        CharPos0::new(1),
+        7,
+        '\u{301}',
+        0.0,
+        frame,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+    )
+    .expect("appended combining buffer char");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(progress.metrics.width_px, 0.0);
+    assert_eq!(progress.metrics.width_cols, 0);
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(
+                &text[0].glyph_type,
+                GlyphType::Composite { text } if text.as_ref() == "e\u{301}"
             ));
         })
         .expect("current row");

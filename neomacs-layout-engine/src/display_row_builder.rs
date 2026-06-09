@@ -295,12 +295,14 @@ pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
     max_x_px: f32,
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendCursor {
     position: DisplayRowPosition,
     max_x_px: f32,
 }
 
+#[cfg(test)]
 impl DisplayRowAppendCursor {
     pub(crate) fn new(position: DisplayRowPosition, max_x_px: f32) -> Self {
         Self { position, max_x_px }
@@ -362,6 +364,7 @@ pub(crate) fn append_display_item_to_current_matrix_row(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn append_measured_display_item_to_current_matrix_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,

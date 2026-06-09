@@ -8,22 +8,27 @@ use crate::display_row::DisplayRowSourceWalker;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
-    DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, RenderedDisplayRow, replace_current_row_with_rendered_display_row_fragment,
+    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds,
+    DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
+    replace_current_row_with_rendered_display_row_fragment,
 };
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowAppendStatus,
-    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition,
-    DisplayRowWriteMetrics, DisplayTabPolicy, FixedGlyphAdvance,
+    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
+    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics,
+    DisplayTabPolicy, FixedGlyphAdvance,
 };
+#[cfg(test)]
+use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
-use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
+#[cfg(test)]
+use crate::window_output::DisplayProgressSink;
+use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0};
 #[cfg(test)]
@@ -73,6 +78,7 @@ struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
+#[cfg(test)]
 pub(crate) fn emit_text_progress_slots(
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -125,6 +131,21 @@ pub(crate) struct TextRowFragmentRenderOutcome {
     pub(crate) end: DisplayRowPosition,
 }
 
+pub(crate) struct CurrentTextRowRenderOutcome {
+    pub(crate) stop: DisplayRowRenderStop,
+    pub(crate) source_slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
+    pub(crate) end: DisplayRowPosition,
+}
+
+fn display_row_position_from_output_progress(
+    progress: DisplayRowOutputProgress,
+) -> DisplayRowPosition {
+    DisplayRowPosition {
+        x_px: progress.end_x,
+        col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_display_item_source_fragment_to_text_row_and_emit<
     S: DisplayItemSource,
@@ -166,6 +187,45 @@ pub(crate) fn render_display_item_source_fragment_to_text_row_and_emit<
     Some(TextRowFragmentRenderOutcome {
         stop,
         rendered,
+        end,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    next_face_id: &mut u32,
+    row_spec: DisplayRowSpec<'_>,
+    output: TextRowOutput,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut renderer = DisplayRowRenderer::new(font_metrics);
+    let result = builder.with_current_row_mut(|row| {
+        renderer.render_display_item_source_row_fragment_step_into_row_with_policy(
+            row_spec,
+            row,
+            source,
+            source_state,
+            face_resolver,
+            evaluator.display_host.as_deref(),
+            next_face_id,
+            render_policy,
+        )
+    })??;
+    let end = display_row_position_from_output_progress(result.progress);
+    output_emitter.emit_text_source_slots(evaluator, output, &result.source_slots, end);
+    Some(CurrentTextRowRenderOutcome {
+        stop: result.stop,
+        source_slots: result.source_slots,
         end,
     })
 }
@@ -450,6 +510,9 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
     buffer_id: BufferId,
     buffer: &B,
     char_pos: CharPos0,
@@ -465,21 +528,58 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
     );
-    let mut append_spec = LiveRowAppendSpec::source_text(&frame, position, face_id);
+    let mut geometry = frame.geometry.clone();
+    let mut max_x_px = frame.content_x + frame.geometry.width;
+    let mut output_height = frame.geometry.height;
     if ch == '\t' {
-        append_spec.layout.char_width_px = frame.face_space_width;
-        append_spec.max_x_px = f32::INFINITY;
-        append_spec.output.height = frame.default_row_height;
+        geometry.char_width = frame.face_space_width;
+        max_x_px = f32::INFINITY;
+        output_height = frame.default_row_height;
     }
+    let row_spec = DisplayRowSpec {
+        geometry,
+        render_bounds: DisplayRowRenderBounds {
+            start: position,
+            max_x_px,
+        },
+        base_face_id: face_id,
+        base_face,
+        role: GlyphRowRole::Text,
+        symbol_values: HashMap::new(),
+    };
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let mut next_face_id = face_id.saturating_add(1);
     let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
-    append_measured_live_row_item_and_emit(
+    let mut render_policy = MeasuredDisplayRowRenderPolicy {
+        glyph_measurer: &mut measurer,
+    };
+    let output = TextRowOutput {
+        row: frame.row,
+        row_y: frame.geometry.y,
+        glyph_y: frame.glyph_y,
+        height: output_height,
+    };
+    let outcome = render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        append_spec,
-        item,
-        &mut measurer,
-    )
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        &mut next_face_id,
+        row_spec,
+        output,
+        &mut render_policy,
+    )?;
+    let progress = display_row_append_progress_from_render_result(
+        position,
+        outcome.end,
+        outcome.stop,
+        outcome.source_slots,
+    );
+    Some((progress, outcome.end))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -818,6 +918,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     outcome.end
 }
 
+#[cfg(test)]
 pub(crate) struct DisplayRowAppendOutput {
     pub(crate) row: usize,
     pub(crate) row_y: f32,
@@ -967,39 +1068,6 @@ impl DisplayRowAppendKind {
             DisplayItemKind::RowBreak(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => None,
-        }
-    }
-}
-
-pub(crate) struct LiveRowAppendSpec {
-    pub(crate) layout: DisplayRowLayout,
-    pub(crate) position: DisplayRowPosition,
-    pub(crate) max_x_px: f32,
-    pub(crate) output: DisplayRowAppendOutput,
-}
-
-impl LiveRowAppendSpec {
-    fn source_text(
-        frame: &DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        face_id: u32,
-    ) -> Self {
-        Self {
-            layout: frame.geometry.to_layout(
-                GlyphRowRole::Text,
-                frame.geometry.char_width,
-                frame.geometry.ascent,
-                RenderFaceRef::FaceId(face_id),
-                HashMap::new(),
-            ),
-            position,
-            max_x_px: frame.content_x + frame.geometry.width,
-            output: DisplayRowAppendOutput {
-                row: frame.row,
-                row_y: frame.geometry.y,
-                glyph_y: frame.glyph_y,
-                height: frame.geometry.height,
-            },
         }
     }
 }
@@ -1173,25 +1241,6 @@ fn display_slot_col(col: usize) -> u16 {
     col.min(usize::from(u16::MAX)) as u16
 }
 
-pub(crate) fn append_measured_display_row_item(
-    builder: &mut GlyphMatrixBuilder,
-    layout: &DisplayRowLayout,
-    position: DisplayRowPosition,
-    max_x: f32,
-    item: DisplayItem,
-    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
-    let progress = append_cursor.append_measured_item_to_current_matrix_row(
-        builder,
-        layout,
-        item,
-        glyph_measurer,
-    )?;
-    let position = append_cursor.position();
-    Some((progress, position))
-}
-
 #[cfg(test)]
 pub(crate) fn append_display_row_spec_item_and_emit(
     builder: &mut GlyphMatrixBuilder,
@@ -1209,52 +1258,6 @@ pub(crate) fn append_display_row_spec_item_and_emit(
         spec.output.row_y,
         spec.output.glyph_y,
         spec.output.height,
-    );
-    Some((progress, position))
-}
-
-pub(crate) fn append_measured_live_row_item_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    spec: LiveRowAppendSpec,
-    item: DisplayItem,
-    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_measured_display_row_item_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        &spec.layout,
-        spec.position,
-        spec.max_x_px,
-        item,
-        glyph_measurer,
-        spec.output,
-    )
-}
-
-pub(crate) fn append_measured_display_row_item_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    layout: &DisplayRowLayout,
-    position: DisplayRowPosition,
-    max_x: f32,
-    item: DisplayItem,
-    glyph_measurer: &mut dyn DisplayGlyphMeasurer,
-    output: DisplayRowAppendOutput,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let (progress, position) =
-        append_measured_display_row_item(builder, layout, position, max_x, item, glyph_measurer)?;
-    emit_text_progress_slots(
-        output_emitter,
-        evaluator,
-        &progress,
-        output.row,
-        output.row_y,
-        output.glyph_y,
-        output.height,
     );
     Some((progress, position))
 }
