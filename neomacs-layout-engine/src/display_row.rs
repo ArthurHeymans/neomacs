@@ -1,6 +1,7 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
-    DisplayMediaReplacementKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayMediaReplacementKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
@@ -699,31 +700,43 @@ fn clipped_display_item_remainder(
         kind,
         layout,
     } = item;
-    let DisplayItemKind::TextRun(run) = kind else {
-        return None;
-    };
     let emitted_chars = progress.slots.len();
-    let total_chars = run.text.chars().count();
-    if emitted_chars >= total_chars {
+    match kind {
+        DisplayItemKind::TextRun(run) => {
+            let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
+            Some(DisplayItem {
+                span: SourceSpan::new(
+                    display_source_position_advance(&span.start, emitted_chars, split_byte),
+                    span.end,
+                ),
+                face,
+                kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
+                layout,
+            })
+        }
+        DisplayItemKind::SourceMappedText(text) => {
+            let (_, remaining) = clipped_text_remainder(text.text.as_ref(), emitted_chars)?;
+            Some(DisplayItem {
+                span,
+                face,
+                kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(remaining)),
+                layout,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn clipped_text_remainder(text: &str, emitted_chars: usize) -> Option<(usize, String)> {
+    if emitted_chars >= text.chars().count() {
         return None;
     }
-
-    let split_byte = run
-        .text
+    let split_byte = text
         .char_indices()
         .nth(emitted_chars)
         .map(|(byte, _)| byte)
-        .unwrap_or(run.text.len());
-    let remaining = run.text[split_byte..].to_string();
-    Some(DisplayItem {
-        span: SourceSpan::new(
-            display_source_position_advance(&span.start, emitted_chars, split_byte),
-            span.end,
-        ),
-        face,
-        kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
-        layout,
-    })
+        .unwrap_or(text.len());
+    Some((split_byte, text[split_byte..].to_string()))
 }
 
 fn display_source_position_advance(

@@ -181,6 +181,98 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     assert_eq!(rendered.progress.end_col, 2);
 }
 
+#[test]
+fn display_row_renderer_continues_source_mapped_text_after_clip() {
+    struct OnceSource {
+        item: Option<crate::display_item::DisplayItem>,
+    }
+
+    impl crate::display_source::DisplayItemSource for OnceSource {
+        fn next_item(
+            &mut self,
+            _context: &mut crate::display_source::DisplaySourceContext<'_>,
+        ) -> Option<crate::display_item::DisplayItem> {
+            self.item.take()
+        }
+
+        fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
+            crate::display_item::DisplaySourcePosition::synthetic(9, 0)
+        }
+    }
+
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut test_base_face = resolver.default_face().clone();
+    test_base_face.font_char_width = 8.0;
+    test_base_face.font_ascent = 12.0;
+    let base_face_id = 1;
+    let mut next_face_id = 2;
+    let mut source = OnceSource {
+        item: Some(crate::display_item::DisplayItem::new(
+            crate::display_item::SourceSpan::synthetic(9, 0, 1),
+            crate::display_item::RenderFaceRef::FaceId(base_face_id),
+            crate::display_item::DisplayItemKind::SourceMappedText(
+                crate::display_item::DisplaySourceMappedText::new("ABC"),
+            ),
+        )),
+    };
+    let mut state = DisplayRowSourceState::default();
+
+    let first = renderer
+        .render_display_item_source_row_step_with_display_host(
+            DisplayRowSpec {
+                geometry: DisplayRowGeometry {
+                    y: 0.0,
+                    width: 16.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+                },
+                base_face_id,
+                base_face: &test_base_face,
+                role: GlyphRowRole::Text,
+                symbol_values: std::collections::HashMap::new(),
+            },
+            &mut source,
+            &mut state,
+            &resolver,
+            None,
+            &mut next_face_id,
+        )
+        .expect("first row");
+    let second = renderer
+        .render_display_item_source_row_step_with_display_host(
+            DisplayRowSpec {
+                geometry: DisplayRowGeometry {
+                    y: 16.0,
+                    width: 16.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+                },
+                base_face_id,
+                base_face: &test_base_face,
+                role: GlyphRowRole::Text,
+                symbol_values: std::collections::HashMap::new(),
+            },
+            &mut source,
+            &mut state,
+            &resolver,
+            None,
+            &mut next_face_id,
+        )
+        .expect("second row");
+
+    assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
+    assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
+    assert_eq!(second.stop, DisplayRowRenderStop::SourceExhausted);
+    assert_eq!(row_text_expanding_stretches(&second.rendered.row), "C");
+}
+
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()

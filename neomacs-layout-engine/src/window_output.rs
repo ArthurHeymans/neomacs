@@ -49,6 +49,21 @@ struct TextOutputSpan {
     end: DisplayRowPosition,
 }
 
+impl TextOutputSpan {
+    fn can_merge(self, next: Self) -> bool {
+        self.buffer_pos == next.buffer_pos
+            && self.row == next.row
+            && self.row_y == next.row_y
+            && self.glyph_y == next.glyph_y
+            && self.height == next.height
+            && self.end == next.start
+    }
+
+    fn merge(&mut self, next: Self) {
+        self.end = next.end;
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextRowOutput {
     pub(crate) row: usize,
@@ -200,12 +215,25 @@ impl DisplayProgressSink for WindowOutputEmitter {
         progress: &DisplayRowAppendProgress,
     ) {
         let mut emitted = false;
+        let mut pending_span: Option<TextOutputSpan> = None;
         for slot in &progress.slots {
             let Some(span) = output.span_for_buffer_slot(slot) else {
                 continue;
             };
-            self.emit_text_output_span(evaluator, span);
             emitted = true;
+            if let Some(pending) = pending_span.as_mut()
+                && pending.can_merge(span)
+            {
+                pending.merge(span);
+                continue;
+            }
+            if let Some(pending) = pending_span.take() {
+                self.emit_text_output_span(evaluator, pending);
+            }
+            pending_span = Some(span);
+        }
+        if let Some(pending) = pending_span.take() {
+            self.emit_text_output_span(evaluator, pending);
         }
         if !emitted {
             self.move_text_output_to(

@@ -500,7 +500,7 @@ fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
 }
 
 #[test]
-fn display_row_progress_writer_reports_source_mapped_text_as_single_source_slot() {
+fn display_row_progress_writer_reports_source_mapped_text_slots_with_same_source() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
     let mut writer = DisplayRowProgressWriter::new(
@@ -514,9 +514,17 @@ fn display_row_progress_writer_reports_source_mapped_text_as_single_source_slot(
 
     assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
     assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
-    assert_eq!(progress.slots.len(), 1);
-    assert_eq!(progress.slots[0].width_px, 16.0);
-    assert_eq!(progress.slots[0].width_cols, 2);
+    assert_eq!(progress.slots.len(), 2);
+    assert!(
+        progress
+            .slots
+            .iter()
+            .all(|slot| slot.source == DisplaySourcePosition::lisp_string(1, 0, 0))
+    );
+    assert_eq!(progress.slots[0].width_px, 8.0);
+    assert_eq!(progress.slots[0].width_cols, 1);
+    assert_eq!(progress.slots[1].width_px, 8.0);
+    assert_eq!(progress.slots[1].width_cols, 1);
     assert_eq!(row_text(&row), "\\-");
 }
 

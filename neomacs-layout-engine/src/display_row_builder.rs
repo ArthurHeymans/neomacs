@@ -534,6 +534,37 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 }
                 status
             }
+            DisplayItemKind::SourceMappedText(text) => {
+                let face_id = self.writer.face_id(face);
+                let charpos = source_span_start_char(&span);
+                let mut status = DisplayRowAppendStatus::Complete;
+                for ch in text.text.chars() {
+                    let advance =
+                        self.writer
+                            .text_char_advance_px_at_position(ch, face_id, self.position);
+                    if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
+                        status = DisplayRowAppendStatus::Clipped;
+                        break;
+                    }
+
+                    let before_len = self.text_area_len();
+                    let slot_start = self.position;
+                    self.writer
+                        .push_text_char_at_position(ch, face_id, charpos, self.position);
+                    self.writer.apply_item_layout_since(before_len, item_layout);
+                    let written = self.metrics_since(before_len);
+                    slots.push(DisplayRowGlyphSlot {
+                        source: span.start.clone(),
+                        x_px: slot_start.x_px,
+                        col: slot_start.col,
+                        width_px: written.width_px,
+                        width_cols: written.width_cols,
+                    });
+                    self.advance(written);
+                    metrics.add(written);
+                }
+                status
+            }
             kind => {
                 let slot_start = self.position;
                 let slot_source = span.start.clone();

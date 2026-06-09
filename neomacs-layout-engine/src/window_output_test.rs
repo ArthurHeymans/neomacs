@@ -146,6 +146,70 @@ fn display_progress_sink_emits_buffer_slots_from_row_builder_progress() {
 }
 
 #[test]
+fn display_progress_sink_merges_contiguous_slots_for_same_buffer_position() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-merged-slots", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let source = DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(0), EmacsBytePos::new(0));
+    emitter.emit_text_progress(
+        &mut eval,
+        TextRowOutput {
+            row: 0,
+            row_y: 0.0,
+            glyph_y: 0.0,
+            height: 16.0,
+        },
+        &DisplayRowAppendProgress {
+            start: DisplayRowPosition { x_px: 8.0, col: 1 },
+            end: DisplayRowPosition { x_px: 24.0, col: 3 },
+            metrics: DisplayRowWriteMetrics {
+                width_px: 16.0,
+                width_cols: 2,
+            },
+            status: DisplayRowAppendStatus::Complete,
+            slots: vec![
+                DisplayRowGlyphSlot {
+                    source: source.clone(),
+                    x_px: 8.0,
+                    col: 1,
+                    width_px: 8.0,
+                    width_cols: 1,
+                },
+                DisplayRowGlyphSlot {
+                    source,
+                    x_px: 16.0,
+                    col: 2,
+                    width_px: 8.0,
+                    width_cols: 1,
+                },
+            ],
+        },
+    );
+
+    let point = emitter
+        .point_for_buffer_pos(LispCharPos1::ONE)
+        .expect("merged display point");
+    assert_eq!(emitter.display_point_len(), 1);
+    assert_eq!(point.x, 8);
+    assert_eq!(point.width, 16);
+}
+
+#[test]
 fn display_progress_sink_advances_without_points_for_non_buffer_slots() {
     let mut eval = Context::new();
     let buf_id = eval
