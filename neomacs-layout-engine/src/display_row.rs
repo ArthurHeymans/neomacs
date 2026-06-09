@@ -644,6 +644,8 @@ impl RenderedDisplayRowMedia {
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
                 .push_current_window_xwidget(
                     role,
+                    row,
+                    self.col,
                     xwidget_id,
                     self.x,
                     self.y,

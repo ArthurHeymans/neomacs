@@ -1272,6 +1272,14 @@ fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
     assert_eq!(xwidget.window_id, 77);
     assert_eq!(xwidget.row_role, GlyphRowRole::Text);
     assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert_eq!(
+        xwidget.slot_id,
+        Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
+            window_id: 77,
+            row: 0,
+            col: 2,
+        })
+    );
     assert_eq!(xwidget.xwidget_id, 1234);
     assert_eq!(xwidget.x, 16.0);
     assert_eq!(xwidget.y, 6.0);

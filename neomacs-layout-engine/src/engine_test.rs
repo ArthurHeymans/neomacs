@@ -3738,7 +3738,9 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
     assert_eq!(xwidget.xwidget_id, 1234);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
-    assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 96);
+    let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 96);
+    let slot_id = xwidget.slot_id.expect("xwidget slot id");
+    assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
     assert!(requests.is_empty());

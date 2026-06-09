@@ -1066,11 +1066,36 @@ impl GlyphMatrixBuilder {
         w: f32,
         h: f32,
     ) {
+        self.push_xwidget_with_slot_id(
+            window_id,
+            role,
+            clip,
+            DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0),
+            xwidget_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
+    pub fn push_xwidget_with_slot_id(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
         self.xwidgets.push(XwidgetItem {
             window_id,
             row_role: role,
             clip_rect: clip,
-            slot_id: Some(DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0)),
+            slot_id: Some(slot_id),
             xwidget_id,
             x,
             y,
@@ -1082,16 +1107,24 @@ impl GlyphMatrixBuilder {
     pub(crate) fn push_current_window_xwidget(
         &mut self,
         role: GlyphRowRole,
+        row: u32,
+        col: u16,
         xwidget_id: u32,
         x: f32,
         y: f32,
         w: f32,
         h: f32,
     ) {
-        self.push_xwidget(
-            self.current_window_id as i64,
+        let window_id = self.current_window_id as i64;
+        self.push_xwidget_with_slot_id(
+            window_id,
             role,
             Some(self.current_text_pixel_bounds),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
             xwidget_id,
             x,
             y,

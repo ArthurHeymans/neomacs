@@ -846,6 +846,8 @@ fn install_media_replacement(
         ),
         DisplayMediaReplacementKind::Xwidget { xwidget_id } => builder.push_current_window_xwidget(
             spec.layout.role,
+            display_slot_row(spec.output.row),
+            display_slot_col(progress.start.col),
             xwidget_id,
             progress.start.x_px,
             spec.output.glyph_y,

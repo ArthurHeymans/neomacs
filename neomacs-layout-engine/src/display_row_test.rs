@@ -1047,6 +1047,14 @@ fn install_display_source_row_installs_media_fragments_in_current_window() {
     assert_eq!(xwidget.window_id, 77);
     assert_eq!(xwidget.row_role, GlyphRowRole::TabLine);
     assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert_eq!(
+        xwidget.slot_id,
+        Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
+            window_id: 77,
+            row: 0,
+            col: 1,
+        })
+    );
     assert_eq!(xwidget.xwidget_id, 1234);
     assert_eq!(xwidget.x, 8.0);
     assert_eq!(xwidget.y, 4.0);
