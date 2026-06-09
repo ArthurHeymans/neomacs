@@ -261,9 +261,13 @@ pub(crate) struct DisplayImageItem {
     pub(crate) height: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayVideoItem {
     pub(crate) video_id: i32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) loop_count: i32,
+    pub(crate) autoplay: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -72,7 +72,13 @@ fn display_item_inline_media_slots_are_source_neutral() {
     let video = DisplayItem::new(
         span.clone(),
         RenderFaceRef::Inherit,
-        DisplayItemKind::Video(DisplayVideoItem { video_id: 43 }),
+        DisplayItemKind::Video(DisplayVideoItem {
+            video_id: 43,
+            width: 80.0,
+            height: 45.0,
+            loop_count: -1,
+            autoplay: true,
+        }),
     );
     let xwidget = DisplayItem::new(
         span,
@@ -94,7 +100,13 @@ fn display_item_inline_media_slots_are_source_neutral() {
     );
     assert_eq!(
         video.kind,
-        DisplayItemKind::Video(DisplayVideoItem { video_id: 43 })
+        DisplayItemKind::Video(DisplayVideoItem {
+            video_id: 43,
+            width: 80.0,
+            height: 45.0,
+            loop_count: -1,
+            autoplay: true,
+        })
     );
     assert_eq!(
         xwidget.kind,

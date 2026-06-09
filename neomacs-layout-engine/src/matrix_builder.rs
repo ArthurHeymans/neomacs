@@ -977,11 +977,40 @@ impl GlyphMatrixBuilder {
         loop_count: i32,
         autoplay: bool,
     ) {
+        self.push_video_with_slot_id(
+            window_id,
+            role,
+            clip,
+            DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0),
+            video_id,
+            x,
+            y,
+            w,
+            h,
+            loop_count,
+            autoplay,
+        );
+    }
+
+    pub fn push_video_with_slot_id(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        video_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        loop_count: i32,
+        autoplay: bool,
+    ) {
         self.videos.push(VideoItem {
             window_id,
             row_role: role,
             clip_rect: clip,
-            slot_id: Some(DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0)),
+            slot_id: Some(slot_id),
             video_id,
             x,
             y,
@@ -990,6 +1019,40 @@ impl GlyphMatrixBuilder {
             loop_count,
             autoplay,
         });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_current_window_video(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        video_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        loop_count: i32,
+        autoplay: bool,
+    ) {
+        let window_id = self.current_window_id as i64;
+        self.push_video_with_slot_id(
+            window_id,
+            role,
+            Some(self.current_text_pixel_bounds),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
+            video_id,
+            x,
+            y,
+            w,
+            h,
+            loop_count,
+            autoplay,
+        );
     }
 
     pub fn push_xwidget(

@@ -1,6 +1,7 @@
 use crate::display_item::{
     DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem, RenderFaceRef, SourceSpan,
+    DisplayStretchWidth, DisplayTextRun, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -786,12 +787,16 @@ pub(crate) fn append_display_row_spec_item(
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let media = match &item.kind {
         DisplayItemKind::Image(image) => Some(DisplayRowAppendMedia::Image(*image)),
+        DisplayItemKind::Video(video) => Some(DisplayRowAppendMedia::Video(*video)),
         DisplayItemKind::Xwidget(xwidget) => Some(DisplayRowAppendMedia::Xwidget(*xwidget)),
         _ => None,
     };
     match media {
         Some(DisplayRowAppendMedia::Image(image)) => {
             append_image_display_row_spec_item(builder, spec, item, image)
+        }
+        Some(DisplayRowAppendMedia::Video(video)) => {
+            append_video_display_row_spec_item(builder, spec, item, video)
         }
         Some(DisplayRowAppendMedia::Xwidget(xwidget)) => {
             append_xwidget_display_row_spec_item(builder, spec, item, xwidget)
@@ -803,6 +808,7 @@ pub(crate) fn append_display_row_spec_item(
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DisplayRowAppendMedia {
     Image(DisplayImageItem),
+    Video(DisplayVideoItem),
     Xwidget(DisplayXwidgetItem),
 }
 
@@ -828,6 +834,35 @@ fn append_image_display_row_spec_item(
             spec.output.glyph_y,
             width,
             height,
+        );
+    }
+    Some((progress, position))
+}
+
+fn append_video_display_row_spec_item(
+    builder: &mut GlyphMatrixBuilder,
+    spec: &DisplayRowAppendSpec,
+    item: DisplayItem,
+    video: DisplayVideoItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let width = display_replacement_dimension(video.width);
+    let height = display_replacement_dimension(video.height);
+    let (progress, position) =
+        append_display_replacement_box_item(builder, spec, item, width, height)?;
+    if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
+        && progress.metrics.width_px > 0.0
+    {
+        builder.push_current_window_video(
+            spec.layout.role,
+            display_slot_row(spec.output.row),
+            display_slot_col(progress.start.col),
+            video.video_id.max(0) as u32,
+            progress.start.x_px,
+            spec.output.glyph_y,
+            width,
+            height,
+            video.loop_count,
+            video.autoplay,
         );
     }
     Some((progress, position))
