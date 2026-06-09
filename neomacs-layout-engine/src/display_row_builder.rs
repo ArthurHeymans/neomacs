@@ -1,8 +1,8 @@
 use crate::composition::{base_width_cols, continues_cluster, continues_complex_run};
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
+    DisplayLengthExpr, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
 };
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -490,7 +490,12 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let start = self.position;
         let mut metrics = DisplayRowWriteMetrics::default();
         let mut slots = Vec::new();
-        let DisplayItem { span, face, kind } = item;
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout: item_layout,
+        } = item;
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
             DisplayItemKind::TextRun(run) => {
@@ -512,6 +517,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     let slot_start = self.position;
                     self.writer
                         .push_text_char_at_position(ch, face_id, charpos, self.position);
+                    self.writer.apply_item_layout_since(before_len, item_layout);
                     let written = self.metrics_since(before_len);
                     slots.push(DisplayRowGlyphSlot {
                         source: source_position_advance(&span.start, char_offset, byte_offset),
@@ -532,7 +538,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
                 let checkpoint = DisplayRowGlyphCheckpoint::capture(self.writer.row);
-                let written = self.writer.push_item(DisplayItem::new(span, face, kind));
+                let written = self
+                    .writer
+                    .push_item(DisplayItem::new(span, face, kind).with_layout(item_layout));
                 if written.width_px > 0.0 && self.position.x_px + written.width_px > self.max_x_px {
                     checkpoint.restore(self.writer.row);
                     return DisplayRowAppendProgress {
@@ -604,6 +612,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
+        let item_layout = item.layout;
         let face_id = self.face_id(item.face);
         let text_area = GlyphArea::Text.index();
         let before_len = self.row.glyphs[text_area].len();
@@ -630,6 +639,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     pixel_width: 0.0,
                     pixel_height: 0.0,
                     pixel_ascent: 0.0,
+                    vertical_offset_px: 0.0,
                     padding: false,
                 };
                 self.row.glyphs[GlyphArea::Text.index()].push(glyph);
@@ -647,6 +657,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }
+        self.apply_item_layout_since(before_len, item_layout);
         DisplayRowWriteMetrics::from_glyphs(
             &self.row.glyphs[text_area][before_len..],
             self.layout.char_width_px,
@@ -708,6 +719,17 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             GlyphMatrixBuilder::push_wide_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         } else {
             GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+        }
+    }
+
+    fn apply_item_layout_since(&mut self, before_len: usize, item_layout: DisplayItemLayout) {
+        let vertical_offset_px = item_layout.vertical_offset_px(self.layout.height_px);
+        if vertical_offset_px == 0.0 {
+            return;
+        }
+        let text_area = GlyphArea::Text.index();
+        for glyph in &mut self.row.glyphs[text_area][before_len..] {
+            glyph.vertical_offset_px = vertical_offset_px;
         }
     }
 
@@ -836,6 +858,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_width,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: false,
         };
         self.row.glyphs[GlyphArea::Text.index()].push(glyph);

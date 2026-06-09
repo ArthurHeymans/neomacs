@@ -1290,6 +1290,7 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
             pixel_width: 0.0,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: false,
         });
         cp += 1;
@@ -1334,6 +1335,7 @@ fn rtl_paragraph_row_is_marked_reversed() {
             pixel_width: 40.0,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: false,
         });
         text.push(Glyph::padding_for(0, 1));

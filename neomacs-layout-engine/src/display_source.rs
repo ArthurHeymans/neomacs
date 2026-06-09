@@ -1,8 +1,8 @@
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayRowBreak,
-    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    SourceSpan, glyphless_method_for_char,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
+    DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod,
+    RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::LayoutBufferView;
@@ -387,16 +387,36 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                match display_property_source_action(context, display_prop, face) {
+                let item_layout = match display_property_source_action(context, display_prop, face)
+                {
                     DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                         self.replacement_strings.push(value, base_face);
                         continue;
                     }
-                    DisplayPropertySourceAction::Emit(kind) => {
-                        return Some(DisplayItem::new(span, face, kind));
+                    DisplayPropertySourceAction::Emit { kind, layout } => {
+                        return Some(DisplayItem::new(span, face, kind).with_layout(layout));
                     }
-                    DisplayPropertySourceAction::Ignore => {}
+                    DisplayPropertySourceAction::Ignore { layout } => layout,
+                };
+                let ch = self.char_at(start)?;
+                if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+                    self.char_pos = start.add_len(CharLen::new(1));
+                    return Some(
+                        DisplayItem::new(self.span(start, self.char_pos), face, kind)
+                            .with_layout(item_layout),
+                    );
                 }
+
+                let end = self.next_text_run_end(start, property_end);
+                self.char_pos = end;
+                return Some(
+                    DisplayItem::new(
+                        self.span(start, end),
+                        face,
+                        DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+                    )
+                    .with_layout(item_layout),
+                );
             }
 
             let ch = self.char_at(start)?;
@@ -408,7 +428,6 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
                     kind,
                 ));
             }
-
             let end = self.next_text_run_end(start, property_end);
             self.char_pos = end;
             return Some(DisplayItem::new(
@@ -538,16 +557,21 @@ impl LispStringSourceFrame {
         let face = self.face_at(start, context);
         let span = self.span(start, property_end);
 
+        let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
             match display_property_source_action(context, display_prop, face) {
                 DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                     return LispStringAction::PushReplacement { value, base_face };
                 }
-                DisplayPropertySourceAction::Emit(kind) => {
-                    return LispStringAction::Emit(DisplayItem::new(span, face, kind));
+                DisplayPropertySourceAction::Emit { kind, layout } => {
+                    return LispStringAction::Emit(
+                        DisplayItem::new(span, face, kind).with_layout(layout),
+                    );
                 }
-                DisplayPropertySourceAction::Ignore => {}
+                DisplayPropertySourceAction::Ignore { layout } => {
+                    item_layout = layout;
+                }
             }
         }
 
@@ -556,20 +580,21 @@ impl LispStringSourceFrame {
         };
         if let Some(kind) = display_item_kind_for_text_source_char(ch) {
             self.char_index = start + 1;
-            return LispStringAction::Emit(DisplayItem::new(
-                self.span(start, start + 1),
-                face,
-                kind,
-            ));
+            return LispStringAction::Emit(
+                DisplayItem::new(self.span(start, start + 1), face, kind).with_layout(item_layout),
+            );
         }
 
         let end = self.next_text_run_end(start, property_end);
         self.char_index = end;
-        LispStringAction::Emit(DisplayItem::new(
-            self.span(start, end),
-            face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-        ))
+        LispStringAction::Emit(
+            DisplayItem::new(
+                self.span(start, end),
+                face,
+                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+            )
+            .with_layout(item_layout),
+        )
     }
 
     fn char_count(&self) -> usize {
@@ -662,8 +687,13 @@ enum DisplayPropertySourceAction {
         value: Value,
         base_face: RenderFaceRef,
     },
-    Emit(DisplayItemKind),
-    Ignore,
+    Emit {
+        kind: DisplayItemKind,
+        layout: DisplayItemLayout,
+    },
+    Ignore {
+        layout: DisplayItemLayout,
+    },
 }
 
 fn display_property_source_action(
@@ -680,12 +710,22 @@ fn display_property_source_action(
         Some(replacement) => replacement
             .display_item_kind()
             .or_else(|| context.resolve_display_property(display_prop, face))
-            .map(DisplayPropertySourceAction::Emit)
-            .unwrap_or(DisplayPropertySourceAction::Ignore),
+            .map(|kind| DisplayPropertySourceAction::Emit {
+                kind,
+                layout: classification.modifiers,
+            })
+            .unwrap_or(DisplayPropertySourceAction::Ignore {
+                layout: classification.modifiers,
+            }),
         None => context
             .resolve_display_property(display_prop, face)
-            .map(DisplayPropertySourceAction::Emit)
-            .unwrap_or(DisplayPropertySourceAction::Ignore),
+            .map(|kind| DisplayPropertySourceAction::Emit {
+                kind,
+                layout: classification.modifiers,
+            })
+            .unwrap_or(DisplayPropertySourceAction::Ignore {
+                layout: classification.modifiers,
+            }),
     }
 }
 

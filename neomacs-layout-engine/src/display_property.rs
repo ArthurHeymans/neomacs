@@ -1,6 +1,6 @@
 use crate::display_item::{
-    DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol, DisplayStretch,
-    DisplayStretchWidth, DisplayXwidgetItem,
+    DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
+    DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
 use crate::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
@@ -64,11 +64,7 @@ impl DisplayReplacementProperty {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(crate) struct DisplayTextPropertyModifiers {
-    pub(crate) raise: Option<f32>,
-    pub(crate) height: Option<f32>,
-}
+pub(crate) type DisplayTextPropertyModifiers = DisplayItemLayout;
 
 pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassification {
     let replacement = if value.is_string() {

@@ -239,21 +239,29 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             Value::fixnum(2),
         ]);
         match display_property_source_action(&mut context, space_spec, base_face) {
-            DisplayPropertySourceAction::Emit(DisplayItemKind::Stretch(DisplayStretch {
-                width: DisplayStretchWidth::Length(DisplayLength::Em(2.0)),
-                height: None,
-                ascent: None,
-            })) => {}
+            DisplayPropertySourceAction::Emit {
+                kind:
+                    DisplayItemKind::Stretch(DisplayStretch {
+                        width: DisplayStretchWidth::Length(DisplayLength::Em(2.0)),
+                        height: None,
+                        ascent: None,
+                    }),
+                layout,
+            } => assert_eq!(layout, DisplayItemLayout::default()),
             action => panic!("expected typed space action, got {action:?}"),
         }
 
         let image_spec = Value::list(vec![Value::symbol("image")]);
         match display_property_source_action(&mut context, image_spec, base_face) {
-            DisplayPropertySourceAction::Emit(DisplayItemKind::Image(DisplayImageItem {
-                image_id: 42,
-                width: 64.0,
-                height: 32.0,
-            })) => {}
+            DisplayPropertySourceAction::Emit {
+                kind:
+                    DisplayItemKind::Image(DisplayImageItem {
+                        image_id: 42,
+                        width: 64.0,
+                        height: 32.0,
+                    }),
+                layout,
+            } => assert_eq!(layout, DisplayItemLayout::default()),
             action => panic!("expected resolved image action, got {action:?}"),
         }
     }

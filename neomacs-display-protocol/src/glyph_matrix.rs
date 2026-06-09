@@ -124,6 +124,11 @@ pub struct Glyph {
     /// Used with `pixel_height`; materialization positions the stretch
     /// relative to the row baseline.  `0.0` falls back to row ascent.
     pub pixel_ascent: f32,
+    /// Glyph vertical offset in pixels.
+    ///
+    /// Mirrors GNU `struct glyph::voffset`: negative values raise the
+    /// glyph, positive values lower it.
+    pub vertical_offset_px: f32,
     /// Padding glyph — second cell of a wide character.
     pub padding: bool,
 }
@@ -140,6 +145,7 @@ impl Glyph {
             pixel_width: 0.0,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: false,
         }
     }
@@ -155,6 +161,7 @@ impl Glyph {
             pixel_width: 0.0,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: false,
         }
     }
@@ -170,6 +177,7 @@ impl Glyph {
             pixel_width: 0.0,
             pixel_height: 0.0,
             pixel_ascent: 0.0,
+            vertical_offset_px: 0.0,
             padding: true,
         }
     }
@@ -203,6 +211,15 @@ impl Glyph {
         };
         self.pixel_ascent = if self.pixel_height > 0.0 && pixel_ascent.is_finite() {
             pixel_ascent.max(0.0).min(self.pixel_height)
+        } else {
+            0.0
+        };
+        self
+    }
+
+    pub fn with_vertical_offset(mut self, vertical_offset_px: f32) -> Self {
+        self.vertical_offset_px = if vertical_offset_px.is_finite() {
+            vertical_offset_px
         } else {
             0.0
         };
@@ -322,6 +339,8 @@ impl GlyphRow {
                 hash ^= glyph.pixel_height.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_ascent.to_bits() as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.vertical_offset_px.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
@@ -1345,6 +1364,7 @@ impl FrameDisplayState {
                         } else {
                             row_height
                         };
+                        let baseline = y + row_ascent + glyph.vertical_offset_px;
                         buf.glyphs.push(FrameGlyph::Char {
                             window_id,
                             row_role,
@@ -1355,7 +1375,7 @@ impl FrameDisplayState {
                             composed: None,
                             x,
                             y,
-                            baseline: y + row_ascent,
+                            baseline,
                             width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
@@ -1387,6 +1407,7 @@ impl FrameDisplayState {
                         } else {
                             row_height
                         };
+                        let baseline = y + row_ascent + glyph.vertical_offset_px;
                         buf.glyphs.push(FrameGlyph::Char {
                             window_id,
                             row_role,
@@ -1397,7 +1418,7 @@ impl FrameDisplayState {
                             composed: Some(text.clone()),
                             x,
                             y,
-                            baseline: y + row_ascent,
+                            baseline,
                             width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {
@@ -1436,7 +1457,7 @@ impl FrameDisplayState {
                             y + row_ascent - stretch_ascent
                         } else {
                             y
-                        };
+                        } + glyph.vertical_offset_px;
                         buf.glyphs.push(FrameGlyph::Stretch {
                             window_id,
                             row_role,
@@ -1461,7 +1482,7 @@ impl FrameDisplayState {
                             slot_id: Some(slot_id),
                             image_id: *image_id as u32,
                             x,
-                            y,
+                            y: y + glyph.vertical_offset_px,
                             width: materialized_width,
                             height: row_height,
                         });
@@ -1475,6 +1496,7 @@ impl FrameDisplayState {
                         } else {
                             row_height
                         };
+                        let baseline = y + row_ascent + glyph.vertical_offset_px;
                         buf.glyphs.push(FrameGlyph::Char {
                             window_id,
                             row_role,
@@ -1485,7 +1507,7 @@ impl FrameDisplayState {
                             composed: None,
                             x,
                             y,
-                            baseline: y + row_ascent,
+                            baseline,
                             width: materialized_width,
                             height: row_height,
                             ascent: if face_data.font_ascent > 0.0 {

@@ -111,11 +111,40 @@ pub(crate) struct DisplayItem {
     pub(crate) span: SourceSpan,
     pub(crate) face: RenderFaceRef,
     pub(crate) kind: DisplayItemKind,
+    pub(crate) layout: DisplayItemLayout,
 }
 
 impl DisplayItem {
     pub(crate) const fn new(span: SourceSpan, face: RenderFaceRef, kind: DisplayItemKind) -> Self {
-        Self { span, face, kind }
+        Self {
+            span,
+            face,
+            kind,
+            layout: DisplayItemLayout {
+                raise: None,
+                height: None,
+            },
+        }
+    }
+
+    pub(crate) const fn with_layout(mut self, layout: DisplayItemLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DisplayItemLayout {
+    pub(crate) raise: Option<f32>,
+    pub(crate) height: Option<f32>,
+}
+
+impl DisplayItemLayout {
+    pub(crate) fn vertical_offset_px(self, row_height_px: f32) -> f32 {
+        self.raise
+            .filter(|factor| factor.is_finite())
+            .map(|factor| -(factor * row_height_px.max(1.0)))
+            .unwrap_or(0.0)
     }
 }
 

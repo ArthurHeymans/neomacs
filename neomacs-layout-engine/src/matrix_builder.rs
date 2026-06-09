@@ -801,6 +801,7 @@ impl GlyphMatrixBuilder {
                     pixel_width: 0.0,
                     pixel_height: 0.0,
                     pixel_ascent: 0.0,
+                    vertical_offset_px: 0.0,
                     padding: false,
                 };
                 matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()].push(glyph);

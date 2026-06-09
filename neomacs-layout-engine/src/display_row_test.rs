@@ -758,6 +758,49 @@ fn display_row_buffer_and_lisp_sources_share_face_property_semantics() {
 }
 
 #[test]
+fn display_row_buffer_and_lisp_sources_share_raise_property_semantics() {
+    let _eval = Context::new();
+    let raise = Value::list(vec![Value::symbol("raise"), Value::make_float(0.25)]);
+    let lisp_row = render_lisp_display_row(
+        Value::string_with_text_properties(
+            "AB",
+            vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("display"), raise.clone()]),
+            }],
+        ),
+        GlyphRowRole::ModeLine,
+    );
+    let buffer_row = render_buffer_display_row_with_property(
+        "AB",
+        1,
+        2,
+        Value::symbol("display"),
+        raise,
+        GlyphRowRole::ModeLine,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&buffer_row), "AB");
+    assert_eq!(
+        row_text_expanding_stretches(&buffer_row),
+        row_text_expanding_stretches(&lisp_row)
+    );
+    assert_eq!(
+        buffer_row.glyphs[1]
+            .iter()
+            .map(|glyph| glyph.vertical_offset_px)
+            .collect::<Vec<_>>(),
+        lisp_row.glyphs[1]
+            .iter()
+            .map(|glyph| glyph.vertical_offset_px)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(buffer_row.glyphs[1][0].vertical_offset_px, 0.0);
+    assert_eq!(buffer_row.glyphs[1][1].vertical_offset_px, -4.0);
+}
+
+#[test]
 fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
     let _eval = Context::new();
     let text = "a\u{0001}\u{fff0}b";
@@ -913,6 +956,31 @@ fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
         glyphs[0].face_id, glyphs[1].face_id,
         "propertized tab-bar chars should keep separate face ids"
     );
+}
+
+#[test]
+fn display_row_baseline_tab_bar_preserves_lisp_string_raise_property() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "AB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![Value::symbol("raise"), Value::make_float(0.25)]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::TabBar);
+    let glyphs = &row.glyphs[1];
+
+    assert_eq!(row.role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(&row), "AB");
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(glyphs[0].vertical_offset_px, 0.0);
+    assert_eq!(glyphs[1].vertical_offset_px, -4.0);
 }
 
 #[test]

@@ -107,6 +107,17 @@ fn row_hash_differs_for_different_pixel_widths() {
 }
 
 #[test]
+fn row_hash_differs_for_different_vertical_offsets() {
+    let mut row_a = GlyphRow::new(GlyphRowRole::Text);
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_vertical_offset(-4.0));
+
+    let mut row_b = GlyphRow::new(GlyphRowRole::Text);
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+
+    assert_ne!(row_a.compute_hash(), row_b.compute_hash());
+}
+
+#[test]
 fn identical_rows_have_same_hash() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
     row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 5, 100));
@@ -618,6 +629,34 @@ fn materialize_uses_explicit_row_metrics() {
             assert_eq!(*baseline, 23.0);
             assert_eq!(*height, 18.0);
             assert_eq!(*ascent, 14.0);
+        }
+        other => panic!("expected Char, got {:?}", other),
+    }
+}
+
+#[test]
+fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
+    let mut state = FrameDisplayState::new(2, 1, 10.0, 20.0);
+    let mut matrix = GlyphMatrix::new(1, 2);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].height_px = 20.0;
+    matrix.rows[0].ascent_px = 15.0;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize]
+        .push(Glyph::char('A', 0, 0).with_vertical_offset(-4.0));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    assert_eq!(buf.glyphs.len(), 1);
+    match &buf.glyphs[0] {
+        FrameGlyph::Char { baseline, .. } => {
+            assert_eq!(*baseline, 11.0);
         }
         other => panic!("expected Char, got {:?}", other),
     }
