@@ -886,31 +886,7 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    pub fn push_image(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        self.push_image_with_slot_id(
-            window_id,
-            role,
-            clip,
-            DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0),
-            image_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    pub fn push_image_with_slot_id(
+    fn push_image_with_slot_id(
         &mut self,
         window_id: i64,
         role: GlyphRowRole,
@@ -964,35 +940,7 @@ impl GlyphMatrixBuilder {
         );
     }
 
-    pub fn push_video(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        video_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
-        self.push_video_with_slot_id(
-            window_id,
-            role,
-            clip,
-            DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0),
-            video_id,
-            x,
-            y,
-            w,
-            h,
-            loop_count,
-            autoplay,
-        );
-    }
-
-    pub fn push_video_with_slot_id(
+    fn push_video_with_slot_id(
         &mut self,
         window_id: i64,
         role: GlyphRowRole,
@@ -1055,31 +1003,7 @@ impl GlyphMatrixBuilder {
         );
     }
 
-    pub fn push_xwidget(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        self.push_xwidget_with_slot_id(
-            window_id,
-            role,
-            clip,
-            DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0),
-            xwidget_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    pub fn push_xwidget_with_slot_id(
+    fn push_xwidget_with_slot_id(
         &mut self,
         window_id: i64,
         role: GlyphRowRole,
