@@ -57,39 +57,35 @@ impl LayoutEngine {
         )
     }
 
-    pub(crate) fn render_window_chrome_display_source_row(
+    pub(crate) fn render_window_chrome_display_row(
         &mut self,
         evaluator: &mut Context,
         output_emitter: &mut WindowOutputEmitter,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
-        request: WindowChromeDisplayRowRequest<'_>,
+        matrix_row: usize,
+        output: ChromeRowOutput,
+        row_spec: DisplayRowSpec<'_>,
         rendered_text: Value,
     ) {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
-        output_emitter.begin_chrome_progress(evaluator, request.output);
+        output_emitter.begin_chrome_progress(evaluator, output);
         let rendered_row = self.render_display_source_row_with_display_host(
-            request.row_spec,
+            row_spec,
             rendered_text,
             face_resolver,
             evaluator.display_host.as_deref(),
             next_face_id,
         );
         if let Some(ref rendered_row) = rendered_row {
-            install_rendered_display_source_row(&mut builder, rendered_row, request.matrix_row);
-            output_emitter.emit_chrome_progress(evaluator, request.output, rendered_row.progress);
+            install_rendered_display_source_row(&mut builder, rendered_row, matrix_row);
+            output_emitter.emit_chrome_progress(evaluator, output, rendered_row.progress);
         }
         self.matrix_builder = builder;
         if let Some(rendered_row) = rendered_row {
             output_emitter.finish_chrome_progress(rendered_row.progress);
         }
     }
-}
-
-pub(crate) struct WindowChromeDisplayRowRequest<'a> {
-    pub(crate) matrix_row: usize,
-    pub(crate) output: ChromeRowOutput,
-    pub(crate) row_spec: DisplayRowSpec<'a>,
 }
 
 #[cfg(test)]

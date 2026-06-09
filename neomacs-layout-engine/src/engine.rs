@@ -6651,16 +6651,14 @@ impl LayoutEngine {
                 GlyphRowRole::TabLine,
                 status_line_symbol_values.clone(),
             );
-            self.render_window_chrome_display_source_row(
+            self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
-                WindowChromeDisplayRowRequest {
-                    matrix_row: 0,
-                    output: tab_row_output,
-                    row_spec: tab_row_spec,
-                },
+                0,
+                tab_row_output,
+                tab_row_spec,
                 tab_text,
             );
         }
@@ -6706,16 +6704,14 @@ impl LayoutEngine {
                 GlyphRowRole::HeaderLine,
                 status_line_symbol_values.clone(),
             );
-            self.render_window_chrome_display_source_row(
+            self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
-                WindowChromeDisplayRowRequest {
-                    matrix_row: usize::from(tab_line_height > 0.0),
-                    output: header_row_output,
-                    row_spec: header_row_spec,
-                },
+                usize::from(tab_line_height > 0.0),
+                header_row_output,
+                header_row_spec,
                 header_text,
             );
         }
@@ -6776,16 +6772,14 @@ impl LayoutEngine {
                 GlyphRowRole::ModeLine,
                 status_line_symbol_values.clone(),
             );
-            self.render_window_chrome_display_source_row(
+            self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut current_face_id,
-                WindowChromeDisplayRowRequest {
-                    matrix_row: mode_line_matrix_row,
-                    output: mode_row_output,
-                    row_spec: mode_row_spec,
-                },
+                mode_line_matrix_row,
+                mode_row_output,
+                mode_row_spec,
                 mode_text,
             );
         }
