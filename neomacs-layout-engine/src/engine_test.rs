@@ -1305,6 +1305,61 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
     );
 }
 
+#[test]
+fn minibuffer_echo_rows_continue_after_display_property_clips() {
+    let eval = Context::new();
+    let resolver = crate::neovm_bridge::FaceResolver::new(
+        eval.face_table(),
+        0x00FFFFFF,
+        0x00000000,
+        14.0,
+        None,
+    );
+    let mut default_face = resolver.default_face().clone();
+    default_face.font_char_width = 8.0;
+    default_face.font_ascent = 12.0;
+    default_face.font_line_height = 16.0;
+    let echo = Value::string_with_text_properties(
+        "A B",
+        vec![StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("relative-width"),
+                    Value::fixnum(2),
+                ]),
+            ]),
+        }],
+    );
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    let mut next_face_id = 1;
+
+    let rows = engine.render_minibuffer_echo_rows(
+        0.0,
+        24.0,
+        8.0,
+        12.0,
+        16.0,
+        &default_face,
+        &resolver,
+        None,
+        echo,
+        2,
+        false,
+        false,
+        &mut next_face_id,
+    );
+    let rendered = rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.row.glyphs[1]))
+        .collect::<Vec<_>>();
+
+    assert_eq!(rendered, vec!["A  ".to_string(), "B".to_string()]);
+}
+
 fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) {
     let mut eval = Context::new();
     let buf_id = eval

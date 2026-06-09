@@ -1,5 +1,6 @@
 use crate::display_item::{
-    DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind, RenderFaceRef,
+    DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
+    DisplayMediaReplacementKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
@@ -19,6 +20,7 @@ use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineSty
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::{Color, Rect};
+use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 
@@ -393,6 +395,43 @@ pub(crate) struct RenderedDisplayRow {
     pub(crate) media: Vec<RenderedDisplayRowMedia>,
 }
 
+#[derive(Default)]
+pub(crate) struct DisplayRowSourceState {
+    resolve_state: DisplaySourceResolveState,
+    pending_item: Option<DisplayItem>,
+    exhausted: bool,
+}
+
+impl DisplayRowSourceState {
+    fn take_pending_item(&mut self) -> Option<DisplayItem> {
+        self.pending_item.take()
+    }
+
+    fn remember_pending_item(&mut self, item: Option<DisplayItem>) {
+        self.pending_item = item;
+    }
+
+    fn mark_exhausted(&mut self) {
+        self.exhausted = true;
+    }
+
+    fn is_finished(&self) -> bool {
+        self.exhausted && self.pending_item.is_none()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowRenderStop {
+    SourceExhausted,
+    Clipped,
+    RowBreak,
+}
+
+pub(crate) struct DisplayRowRenderResult {
+    pub(crate) rendered: RenderedDisplayRow,
+    pub(crate) stop: DisplayRowRenderStop,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RenderedDisplayRowMedia {
     pub(crate) kind: RenderedDisplayRowMediaKind,
@@ -650,6 +689,73 @@ fn display_row_progress(
     }
 }
 
+fn clipped_display_item_remainder(
+    item: DisplayItem,
+    progress: &crate::display_row_builder::DisplayRowAppendProgress,
+) -> Option<DisplayItem> {
+    let DisplayItem {
+        span,
+        face,
+        kind,
+        layout,
+    } = item;
+    let DisplayItemKind::TextRun(run) = kind else {
+        return None;
+    };
+    let emitted_chars = progress.slots.len();
+    let total_chars = run.text.chars().count();
+    if emitted_chars >= total_chars {
+        return None;
+    }
+
+    let split_byte = run
+        .text
+        .char_indices()
+        .nth(emitted_chars)
+        .map(|(byte, _)| byte)
+        .unwrap_or(run.text.len());
+    let remaining = run.text[split_byte..].to_string();
+    Some(DisplayItem {
+        span: SourceSpan::new(
+            display_source_position_advance(&span.start, emitted_chars, split_byte),
+            span.end,
+        ),
+        face,
+        kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
+        layout,
+    })
+}
+
+fn display_source_position_advance(
+    start: &DisplaySourcePosition,
+    char_offset: usize,
+    byte_offset: usize,
+) -> DisplaySourcePosition {
+    match start {
+        DisplaySourcePosition::Buffer {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        } => DisplaySourcePosition::buffer(
+            *buffer_id,
+            CharPos0::new(char_pos.get() + char_offset),
+            EmacsBytePos::new(byte_pos.get() + byte_offset),
+        ),
+        DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            byte_index,
+        } => DisplaySourcePosition::lisp_string(
+            source_id.get(),
+            char_index + char_offset,
+            byte_index + byte_offset,
+        ),
+        DisplaySourcePosition::Synthetic { source_id, offset } => {
+            DisplaySourcePosition::synthetic(source_id.get(), offset + char_offset)
+        }
+    }
+}
+
 fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
     let glyph_ascent = face.font_ascent.max(0.0);
     let glyph_height = (glyph_ascent + face.font_descent.max(0) as f32).max(1.0);
@@ -764,6 +870,31 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplayRow> {
+        let mut state = DisplayRowSourceState::default();
+        self.render_display_item_source_row_step_with_display_host(
+            spec,
+            source,
+            &mut state,
+            face_resolver,
+            display_host,
+            next_face_id,
+        )
+        .map(|result| result.rendered)
+    }
+
+    pub(crate) fn render_display_item_source_row_step_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<DisplayRowRenderResult> {
+        if state.is_finished() {
+            return None;
+        }
+
         let DisplayRowSpec {
             geometry,
             base_face_id,
@@ -784,7 +915,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .char_width(&row_face, geometry.char_width)
             .max(1.0);
         let mut row_faces = vec![row_face.clone()];
-        let mut resolve_state = DisplaySourceResolveState::default();
 
         let parsed_symbol_values = symbol_values
             .into_iter()
@@ -804,23 +934,28 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut row = GlyphRow::new(role);
         let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
         let mut media = Vec::new();
-        loop {
-            let resolved = resolve_next_display_source_item(
-                source,
-                DisplaySourceResolveParams {
-                    face_resolver,
-                    display_host,
-                    base_face,
-                    canonical_face: face_resolver.default_face(),
-                    base_face_id: row_face.face_id,
-                    fallback_char_width: char_width,
-                    fallback_ascent: geometry.ascent,
-                    fallback_row_height: geometry.height,
-                },
-                &mut resolve_state,
-                next_face_id,
-            );
-            for pending in resolved.pending_faces {
+        let stop = loop {
+            let (item, pending_faces) = if let Some(item) = state.take_pending_item() {
+                (Some(item), Vec::new())
+            } else {
+                let resolved = resolve_next_display_source_item(
+                    source,
+                    DisplaySourceResolveParams {
+                        face_resolver,
+                        display_host,
+                        base_face,
+                        canonical_face: face_resolver.default_face(),
+                        base_face_id: row_face.face_id,
+                        fallback_char_width: char_width,
+                        fallback_ascent: geometry.ascent,
+                        fallback_row_height: geometry.height,
+                    },
+                    &mut state.resolve_state,
+                    next_face_id,
+                );
+                (resolved.item, resolved.pending_faces)
+            };
+            for pending in pending_faces {
                 let row_face = face_realizer.realize_face(
                     pending.face_id,
                     &pending.resolved,
@@ -831,10 +966,28 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 include_display_row_face_metrics(&mut row_layout, &row_face);
                 row_faces.push(row_face);
             }
-            let Some(item) = resolved.item else {
-                break;
+            let Some(item) = item else {
+                state.mark_exhausted();
+                break DisplayRowRenderStop::SourceExhausted;
             };
+            if let RenderFaceRef::FaceId(face_id) = item.face {
+                if face_id != row_face.face_id
+                    && !row_faces.iter().any(|face| face.face_id == face_id)
+                    && let Some(resolved) = state.resolve_state.resolved_face(face_id).cloned()
+                {
+                    let realized = face_realizer.realize_face(
+                        face_id,
+                        &resolved,
+                        char_width,
+                        geometry.ascent,
+                        geometry.height,
+                    );
+                    include_display_row_face_metrics(&mut row_layout, &realized);
+                    row_faces.push(realized);
+                }
+            }
             let media_descriptor = DisplayMediaReplacement::from_item_kind(&item.kind);
+            let source_item = item.clone();
             let item = media_descriptor
                 .map(|descriptor| descriptor.replacement_item(item.clone()))
                 .unwrap_or(item);
@@ -858,10 +1011,20 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             {
                 media.push(descriptor.rendered_media(progress.start, row_layout.y_px));
             }
-            if progress.status != DisplayRowAppendStatus::Complete {
-                break;
+            match progress.status {
+                DisplayRowAppendStatus::Complete => {}
+                DisplayRowAppendStatus::Clipped => {
+                    state.remember_pending_item(clipped_display_item_remainder(
+                        source_item,
+                        &progress,
+                    ));
+                    break DisplayRowRenderStop::Clipped;
+                }
+                DisplayRowAppendStatus::RowBreak => {
+                    break DisplayRowRenderStop::RowBreak;
+                }
             }
-        }
+        };
         GlyphMatrixBuilder::normalize_external_row(&mut row);
         let progress_height = if row.height_px > 0.0 {
             row.height_px
@@ -879,11 +1042,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .into_iter()
             .map(|face| face.render_face())
             .collect();
-        Some(RenderedDisplayRow {
-            row,
-            progress,
-            faces,
-            media,
+        Some(DisplayRowRenderResult {
+            rendered: RenderedDisplayRow {
+                row,
+                progress,
+                faces,
+                media,
+            },
+            stop,
         })
     }
 }

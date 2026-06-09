@@ -30,6 +30,10 @@ impl DisplaySourceResolveState {
         self.resolved_faces.insert(face_id, face.clone());
     }
 
+    pub(crate) fn resolved_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+        self.resolved_faces.get(&face_id)
+    }
+
     fn cached_face(&self, face_value: &Value) -> Option<RenderFaceRef> {
         self.face_cache
             .get(face_value)

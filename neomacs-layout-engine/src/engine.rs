@@ -21,8 +21,9 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec,
-    RenderedDisplayRow, insert_resolved_display_row_face, install_rendered_display_row,
+    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderStop,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
+    insert_resolved_display_row_face, install_rendered_display_row,
     install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
@@ -51,15 +52,10 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{
-    BufferId, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
-};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
-use neovm_core::emacs_core::value::{
-    get_string_text_properties_table_for_value, list_to_vec,
-    set_string_text_properties_table_for_value,
-};
+use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
@@ -1076,6 +1072,7 @@ fn message_truncate_lines(evaluator: &Context) -> bool {
         .is_some_and(|value| !value.is_nil())
 }
 
+#[cfg(test)]
 fn plain_echo_display_rows(
     message: &str,
     text_width: f32,
@@ -1121,30 +1118,6 @@ fn minibuffer_echo_message_for_window(
             .as_runtime_string_owned()
             .is_some_and(|text| !text.is_empty())
     })
-}
-
-fn lisp_string_slice_preserving_properties(
-    source: Value,
-    source_text: &str,
-    start: usize,
-    end: usize,
-) -> Value {
-    let sliced_text = source_text
-        .chars()
-        .skip(start)
-        .take(end.saturating_sub(start))
-        .collect::<String>();
-    let sliced = Value::string(sliced_text);
-    if let Some(props) = get_string_text_properties_table_for_value(source) {
-        let sliced_props = props.slice_copy_text_properties_char_range(CharRange::new(
-            CharPos0::new(start),
-            CharPos0::new(end),
-        ));
-        if !sliced_props.is_empty() {
-            set_string_text_properties_table_for_value(sliced, sliced_props);
-        }
-    }
-    sliced
 }
 
 #[inline]
@@ -1656,6 +1629,24 @@ pub struct LayoutEngine {
     pending_frame_chrome_rows: Vec<neomacs_display_protocol::glyph_matrix::FrameChromeRow>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pending_tab_bar: Option<neomacs_display_protocol::frame_glyphs::FrameTabBarState>,
+}
+
+fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<RenderedDisplayRow> {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Minibuffer);
+    row.enabled = true;
+    row.height_px = row_height.max(1.0);
+    row.ascent_px = ascent.max(0.0).min(row.height_px);
+    vec![RenderedDisplayRow {
+        row,
+        progress: DisplayRowOutputProgress {
+            end_x: 0.0,
+            end_col: 0,
+            y,
+            height: row_height.max(1.0),
+        },
+        faces: Vec::new(),
+        media: Vec::new(),
+    }]
 }
 
 impl LayoutEngine {
@@ -3200,26 +3191,8 @@ impl LayoutEngine {
             let reserve_right_special_col =
                 !frame_params.window_system && params.right_fringe_width == 0.0;
             let truncate_echo_lines = message_truncate_lines(evaluator);
-            let echo_text = echo_message.as_runtime_string_owned().unwrap_or_default();
-            let echo_lines = plain_echo_display_rows(
-                &echo_text,
-                text_width,
-                char_w,
-                truncate_echo_lines,
-                reserve_right_special_col,
-            );
             let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
-            let max_rows_echo = echo_lines.clamp(1, max_mini);
-            let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
-            self.matrix_builder.begin_window_with_text_bounds(
-                params.window_id as u64,
-                max_rows_echo,
-                cols_echo,
-                params.bounds,
-                params.text_bounds,
-                params.selected,
-            );
             let rows = self.render_minibuffer_echo_rows(
                 params.bounds.y,
                 text_width,
@@ -3230,10 +3203,20 @@ impl LayoutEngine {
                 face_resolver,
                 evaluator.display_host.as_deref(),
                 echo_message,
-                max_rows_echo,
+                max_mini,
                 truncate_echo_lines,
                 reserve_right_special_col,
                 &mut current_face_id,
+            );
+            let max_rows_echo = rows.len().clamp(1, max_mini);
+            let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
+            self.matrix_builder.begin_window_with_text_bounds(
+                params.window_id as u64,
+                max_rows_echo,
+                cols_echo,
+                params.bounds,
+                params.text_bounds,
+                params.selected,
             );
             for (row_index, rendered) in rows.iter().enumerate() {
                 install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
@@ -6512,10 +6495,8 @@ impl LayoutEngine {
         reserve_right_special_col: bool,
         next_face_id: &mut u32,
     ) -> Vec<RenderedDisplayRow> {
-        use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
+        use neomacs_display_protocol::glyph_matrix::Glyph;
 
-        // Reuse the shared face realization so GUI and TTY echo text use the
-        // same measured face data as the rest of redisplay.
         let mut base_face = default_resolved.clone();
         if base_face.font_char_width <= 0.0 {
             base_face.font_char_width = char_w.max(1.0);
@@ -6538,124 +6519,85 @@ impl LayoutEngine {
         };
         let matrix_cols = (text_width / char_w.max(1.0)).ceil().max(1.0) as usize;
         let special_col = matrix_cols.saturating_sub(1);
-        let echo_text = echo_message.as_runtime_string_owned().unwrap_or_default();
-        let chars = echo_text.chars().collect::<Vec<_>>();
+        let base_face_id = if base_face.face_id != 0 {
+            base_face.face_id
+        } else {
+            let face_id = *next_face_id;
+            *next_face_id += 1;
+            face_id
+        };
+        let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+            1,
+            echo_message,
+            crate::display_item::RenderFaceRef::FaceId(base_face_id),
+        ) else {
+            return empty_minibuffer_echo_row(y, ascent, row_height);
+        };
+        let mut source_state = DisplayRowSourceState::default();
+        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
 
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
-        let mut line_start = 0usize;
-        while line_start <= chars.len() {
-            if rows.len() >= max_rows {
+        while rows.len() < max_rows {
+            let row_spec = DisplayRowSpec {
+                geometry: DisplayRowGeometry {
+                    y: y + rows.len() as f32 * row_height,
+                    width: wrap_width,
+                    height: row_height,
+                    char_width: char_w,
+                    ascent,
+                    tab_policy: DisplayTabPolicy::every(8),
+                },
+                base_face_id,
+                base_face: &base_face,
+                role: GlyphRowRole::Minibuffer,
+                symbol_values: std::collections::HashMap::new(),
+            };
+            let Some(result) = renderer.render_display_item_source_row_step_with_display_host(
+                row_spec,
+                &mut source,
+                &mut source_state,
+                face_resolver,
+                display_host,
+                next_face_id,
+            ) else {
                 break;
-            }
-            let line_end = chars[line_start..]
-                .iter()
-                .position(|ch| *ch == '\n' || *ch == '\r')
-                .map(|offset| line_start + offset)
-                .unwrap_or(chars.len());
-            let mut offset = line_start;
-            loop {
-                if rows.len() >= max_rows {
-                    break;
-                }
-                let mut x_offset = 0.0f32;
-                let row_start = offset;
-                while offset < line_end {
-                    let ch = chars[offset];
-                    let advance =
-                        neovm_core::encoding::char_width(ch).max(1) as f32 * char_width.max(1.0);
-                    if truncate_lines && x_offset + advance > wrap_width {
-                        break;
-                    }
-                    if offset > row_start && x_offset + advance > wrap_width {
-                        break;
-                    }
-                    x_offset += advance;
-                    offset += 1;
-                    if x_offset >= wrap_width {
-                        break;
-                    }
-                }
-                let needs_special_glyph = reserve_right_special_col && offset < line_end;
-                let segment = lisp_string_slice_preserving_properties(
-                    echo_message,
-                    &echo_text,
-                    row_start,
-                    offset,
-                );
-                let row_spec = DisplayRowSpec::from_base_face(
-                    DisplayRowGeometry {
-                        y: y + rows.len() as f32 * row_height,
-                        width: wrap_width,
-                        height: row_height,
-                        char_width: char_w,
-                        ascent,
-                        tab_policy: DisplayTabPolicy::every(8),
-                    },
-                    next_face_id,
-                    &base_face,
-                    GlyphRowRole::Minibuffer,
-                    std::collections::HashMap::new(),
-                );
-                let Some(mut rendered) = self.render_lisp_string_row_with_display_host(
-                    row_spec,
-                    segment,
-                    face_resolver,
-                    display_host,
-                    next_face_id,
-                ) else {
-                    break;
-                };
-                let special_face_id = rendered
-                    .faces
-                    .first()
-                    .map(|face| face.id)
-                    .unwrap_or(base_render_face.id);
-                rendered.row.role = GlyphRowRole::Minibuffer;
-                rendered.row.mode_line = false;
-                if needs_special_glyph {
-                    let ch = if truncate_lines { '$' } else { '\\' };
-                    while rendered.row.glyphs[1].len() < special_col {
-                        rendered.row.glyphs[1].push(
-                            Glyph::char(' ', special_face_id, 0)
-                                .with_pixel_width(char_width.max(1.0)),
-                        );
-                    }
+            };
+            let stop = result.stop;
+            let mut rendered = result.rendered;
+            let special_face_id = rendered
+                .faces
+                .first()
+                .map(|face| face.id)
+                .unwrap_or(base_render_face.id);
+            rendered.row.role = GlyphRowRole::Minibuffer;
+            rendered.row.mode_line = false;
+            if reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
+                let ch = if truncate_lines { '$' } else { '\\' };
+                while rendered.row.glyphs[1].len() < special_col {
                     rendered.row.glyphs[1].push(
-                        Glyph::char(ch, special_face_id, 0).with_pixel_width(char_width.max(1.0)),
+                        Glyph::char(' ', special_face_id, 0).with_pixel_width(char_width.max(1.0)),
                     );
-                    rendered.progress.end_x = text_width.max(0.0);
-                    rendered.progress.end_col = matrix_cols as i64;
+                }
+                rendered.row.glyphs[1].push(
+                    Glyph::char(ch, special_face_id, 0).with_pixel_width(char_width.max(1.0)),
+                );
+                rendered.progress.end_x = text_width.max(0.0);
+                rendered.progress.end_col = matrix_cols as i64;
+            }
+            rows.push(rendered);
+            match stop {
+                DisplayRowRenderStop::SourceExhausted => break,
+                DisplayRowRenderStop::RowBreak => {}
+                DisplayRowRenderStop::Clipped => {
                     if truncate_lines {
-                        offset = line_end;
+                        break;
                     }
                 }
-                rows.push(rendered);
-                if offset >= line_end {
-                    break;
-                }
             }
-            if line_end == chars.len() {
-                break;
-            }
-            line_start = line_end + 1;
         }
         if rows.is_empty() {
-            let mut row = GlyphRow::new(GlyphRowRole::Minibuffer);
-            row.enabled = true;
-            row.height_px = row_height.max(1.0);
-            row.ascent_px = ascent.max(0.0).min(row.height_px);
-            rows.push(RenderedDisplayRow {
-                row,
-                progress: DisplayRowOutputProgress {
-                    end_x: 0.0,
-                    end_col: 0,
-                    y,
-                    height: row_height.max(1.0),
-                },
-                faces: Vec::new(),
-                media: Vec::new(),
-            });
+            return empty_minibuffer_echo_row(y, ascent, row_height);
         }
         rows
     }
