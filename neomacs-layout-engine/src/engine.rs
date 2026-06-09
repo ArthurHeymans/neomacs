@@ -556,6 +556,18 @@ fn skip_to_newline(text: &[u8], byte_idx: &mut usize, charpos: &mut i64) -> bool
     false
 }
 
+#[inline]
+fn skip_text_to_charpos(text: &[u8], byte_idx: &mut usize, charpos: &mut i64, target: i64) {
+    while *charpos < target && *byte_idx < text.len() {
+        let (_ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            break;
+        }
+        *byte_idx += ch_len;
+        *charpos += 1;
+    }
+}
+
 fn row_metrics_for_cursor(
     row_metrics: &[RowMetricsSnapshot],
     cursor_row: usize,
@@ -3693,12 +3705,7 @@ impl LayoutEngine {
                         );
                     }
 
-                    // Skip to next_visible position
-                    while charpos < skip_to && byte_idx < text.len() {
-                        let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                        byte_idx += ch_len;
-                        charpos += 1;
-                    }
+                    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                     invis_next_check = next_visible;
 
                     // GNU displays ellipsis only when the matching
@@ -4111,11 +4118,7 @@ impl LayoutEngine {
                         }
 
                         // Skip the buffer text that this display property covers
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 
@@ -4230,11 +4233,7 @@ impl LayoutEngine {
                         }
 
                         // Skip covered buffer text
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 
@@ -4375,11 +4374,7 @@ impl LayoutEngine {
                         }
 
                         // Skip covered buffer text
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 
@@ -4519,11 +4514,7 @@ impl LayoutEngine {
                         }
 
                         // Skip covered buffer text
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 
@@ -4603,11 +4594,7 @@ impl LayoutEngine {
                             col = position.col;
                         }
 
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 
@@ -4747,11 +4734,7 @@ impl LayoutEngine {
                         }
 
                         // Skip covered buffer text
-                        while charpos < skip_to && byte_idx < text.len() {
-                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                            byte_idx += ch_len;
-                            charpos += 1;
-                        }
+                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
                         continue;
                     }
 

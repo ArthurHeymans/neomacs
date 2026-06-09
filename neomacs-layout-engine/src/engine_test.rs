@@ -4551,6 +4551,23 @@ fn display_space_geometry_accepts_pixel_ascent_expression() {
     assert_eq!(geometry.ascent, 3.0);
 }
 
+#[test]
+fn skip_text_to_charpos_advances_utf8_character_positions() {
+    let text = "a中b".as_bytes();
+    let mut byte_idx = 0;
+    let mut charpos = 10;
+
+    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, 12);
+
+    assert_eq!(charpos, 12);
+    assert_eq!(byte_idx, "a中".len());
+
+    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, 20);
+
+    assert_eq!(charpos, 13);
+    assert_eq!(byte_idx, text.len());
+}
+
 fn scaled_face_plist() -> Value {
     Value::list(vec![
         Value::keyword("family"),
