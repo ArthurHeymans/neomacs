@@ -3298,7 +3298,7 @@ impl LayoutEngine {
                 std::collections::HashMap::new(),
             );
             let rendered = self
-                .render_display_source_row_with_display_host(
+                .render_lisp_string_row_with_display_host(
                     row_spec,
                     Value::string(""),
                     face_resolver,
@@ -7000,7 +7000,7 @@ impl LayoutEngine {
                     GlyphRowRole::Minibuffer,
                     std::collections::HashMap::new(),
                 );
-                let Some(mut rendered) = self.render_display_source_row_with_display_host(
+                let Some(mut rendered) = self.render_lisp_string_row_with_display_host(
                     row_spec,
                     segment,
                     face_resolver,
@@ -7118,7 +7118,7 @@ impl LayoutEngine {
             GlyphRowRole::TabBar,
             std::collections::HashMap::new(),
         );
-        let Some(rendered) = self.render_display_source_row_with_display_host(
+        let Some(rendered) = self.render_lisp_string_row_with_display_host(
             tab_bar_spec,
             tab_bar.text,
             face_resolver,

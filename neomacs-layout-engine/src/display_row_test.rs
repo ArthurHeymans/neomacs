@@ -138,7 +138,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     );
 
     let rendered = renderer
-        .render_display_source_row(spec, Value::string("A中"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("A中"), &resolver, &mut next_face_id)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -237,7 +237,7 @@ fn render_lisp_display_row_with_symbols(
         symbol_values,
     );
     renderer
-        .render_display_source_row(spec, rendered, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
         .row
 }
@@ -388,7 +388,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
 }
 
 #[test]
-fn render_display_source_row_records_xwidget_media_fragments() {
+fn render_lisp_string_row_records_xwidget_media_fragments() {
     let eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -443,7 +443,7 @@ fn render_display_source_row_records_xwidget_media_fragments() {
     );
 
     let rendered = renderer
-        .render_display_source_row(spec, rendered_text, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered_text, &resolver, &mut next_face_id)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -498,7 +498,7 @@ fn render_tab_line_with_media_host(
         std::collections::HashMap::new(),
     );
     let rendered = renderer
-        .render_display_source_row_with_display_host(
+        .render_lisp_string_row_with_display_host(
             spec,
             rendered_text,
             &resolver,
@@ -510,7 +510,7 @@ fn render_tab_line_with_media_host(
 }
 
 #[test]
-fn render_display_source_row_resolves_image_display_property_through_display_host() {
+fn render_lisp_string_row_resolves_image_display_property_through_display_host() {
     let _eval = Context::new();
     let rendered_text = Value::string_with_text_properties(
         "AXB",
@@ -549,7 +549,7 @@ fn render_display_source_row_resolves_image_display_property_through_display_hos
 }
 
 #[test]
-fn render_display_source_row_resolves_video_display_property_through_display_host() {
+fn render_lisp_string_row_resolves_video_display_property_through_display_host() {
     let _eval = Context::new();
     let rendered_text = Value::string_with_text_properties(
         "AVB",
@@ -601,7 +601,7 @@ fn render_display_source_row_resolves_video_display_property_through_display_hos
 }
 
 #[test]
-fn render_display_source_row_resolves_webkit_display_property_through_display_host() {
+fn render_lisp_string_row_resolves_webkit_display_property_through_display_host() {
     let _eval = Context::new();
     let rendered_text = Value::string_with_text_properties(
         "AWB",
@@ -839,7 +839,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
 }
 
 #[test]
-fn render_display_source_row_uses_explicit_tab_policy() {
+fn render_lisp_string_row_uses_explicit_tab_policy() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
@@ -865,7 +865,7 @@ fn render_display_source_row_uses_explicit_tab_policy() {
     );
 
     let rendered = engine
-        .render_display_source_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -1062,7 +1062,7 @@ fn display_row_baseline_header_line_align_to_after_multibyte_prefix_uses_charact
 }
 
 #[test]
-fn render_display_source_row_uses_face_specific_glyph_widths() {
+fn render_lisp_string_row_uses_face_specific_glyph_widths() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
@@ -1103,7 +1103,7 @@ fn render_display_source_row_uses_face_specific_glyph_widths() {
     );
 
     let row = engine
-        .render_display_source_row(spec, rendered, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
         .row;
     let glyphs = &row.glyphs[1];
@@ -1203,7 +1203,7 @@ fn display_row_baseline_tab_line_rtl_text_is_reordered_after_row_build() {
 }
 
 #[test]
-fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
+fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
@@ -1224,7 +1224,7 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
         std::collections::HashMap::new(),
     );
     let rendered = engine
-        .render_display_source_row(spec, Value::string("אב"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("אב"), &resolver, &mut next_face_id)
         .expect("display source row");
 
     assert!(rendered.row.reversed_p);
@@ -1242,7 +1242,7 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
 }
 
 #[test]
-fn install_display_source_row_installs_media_fragments_in_current_window() {
+fn install_rendered_display_row_installs_media_fragments_in_current_window() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.enabled = true;
     row.height_px = 16.0;

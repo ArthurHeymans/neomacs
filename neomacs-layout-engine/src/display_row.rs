@@ -713,14 +713,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
-    pub(crate) fn render_display_source_row(
+    pub(crate) fn render_lisp_string_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
         rendered: Value,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplayRow> {
-        self.render_display_source_row_with_display_host(
+        self.render_lisp_string_row_with_display_host(
             spec,
             rendered,
             face_resolver,
@@ -729,7 +729,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )
     }
 
-    pub(crate) fn render_display_source_row_with_display_host(
+    pub(crate) fn render_lisp_string_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
         rendered: Value,
@@ -898,14 +898,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
 impl LayoutEngine {
     #[cfg(test)]
-    pub(crate) fn render_display_source_row(
+    pub(crate) fn render_lisp_string_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
         rendered: Value,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplayRow> {
-        self.render_display_source_row_with_display_host(
+        self.render_lisp_string_row_with_display_host(
             spec,
             rendered,
             face_resolver,
@@ -914,7 +914,7 @@ impl LayoutEngine {
         )
     }
 
-    pub(crate) fn render_display_source_row_with_display_host(
+    pub(crate) fn render_lisp_string_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
         rendered: Value,
@@ -922,7 +922,7 @@ impl LayoutEngine {
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplayRow> {
-        DisplayRowRenderer::new(&mut self.font_metrics).render_display_source_row_with_display_host(
+        DisplayRowRenderer::new(&mut self.font_metrics).render_lisp_string_row_with_display_host(
             spec,
             rendered,
             face_resolver,

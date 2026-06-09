@@ -70,7 +70,7 @@ impl LayoutEngine {
     ) {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, output);
-        let rendered_row = self.render_display_source_row_with_display_host(
+        let rendered_row = self.render_lisp_string_row_with_display_host(
             row_spec,
             rendered_text,
             face_resolver,
