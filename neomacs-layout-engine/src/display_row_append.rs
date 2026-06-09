@@ -119,6 +119,88 @@ pub(crate) fn replace_current_row_with_rendered_display_row_fragment_and_emit(
     end
 }
 
+pub(crate) struct TextRowFragmentRenderOutcome {
+    pub(crate) stop: DisplayRowRenderStop,
+    pub(crate) rendered: RenderedDisplayRow,
+    pub(crate) end: DisplayRowPosition,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_display_item_source_fragment_to_text_row_and_emit<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    next_face_id: &mut u32,
+    row_spec: DisplayRowSpec<'_>,
+    output: TextRowOutput,
+    render_policy: &mut P,
+) -> Option<TextRowFragmentRenderOutcome> {
+    let initial_row = builder.with_current_row_mut(|row| row.clone())?;
+    let mut renderer = DisplayRowRenderer::new(font_metrics);
+    let result = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
+        row_spec,
+        initial_row,
+        source,
+        source_state,
+        face_resolver,
+        evaluator.display_host.as_deref(),
+        next_face_id,
+        render_policy,
+    )?;
+    let stop = result.stop;
+    let rendered = result.rendered;
+    let end = replace_current_row_with_rendered_display_row_fragment_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &rendered,
+        output,
+    );
+    Some(TextRowFragmentRenderOutcome {
+        stop,
+        rendered,
+        end,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_natural_display_item_source_fragment_to_text_row_and_emit<
+    S: DisplayItemSource,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    next_face_id: &mut u32,
+    row_spec: DisplayRowSpec<'_>,
+    output: TextRowOutput,
+) -> Option<TextRowFragmentRenderOutcome> {
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    render_display_item_source_fragment_to_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        source_state,
+        face_resolver,
+        next_face_id,
+        row_spec,
+        output,
+        &mut render_policy,
+    )
+}
+
 fn display_row_append_progress_from_render_result(
     start: DisplayRowPosition,
     end: DisplayRowPosition,
@@ -206,35 +288,33 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
     let mut next_face_id = request.base_face_id.saturating_add(1);
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let initial_row = builder.with_current_row_mut(|row| row.clone())?;
-    let result = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
-        row_spec,
-        initial_row,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        evaluator.display_host.as_deref(),
-        &mut next_face_id,
-        render_policy,
-    )?;
-    let stop = result.stop;
-    let slots = result.rendered.source_slots.clone();
-    let end = replace_current_row_with_rendered_display_row_fragment_and_emit(
+    let output = TextRowOutput {
+        row: request.frame.row,
+        row_y: request.frame.geometry.y,
+        glyph_y: request.frame.glyph_y,
+        height: request.output_height,
+    };
+    let outcome = render_display_item_source_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        &result.rendered,
-        TextRowOutput {
-            row: request.frame.row,
-            row_y: request.frame.geometry.y,
-            glyph_y: request.frame.glyph_y,
-            height: request.output_height,
-        },
+        &mut font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        &mut next_face_id,
+        row_spec,
+        output,
+        render_policy,
+    )?;
+    let slots = outcome.rendered.source_slots.clone();
+    let progress = display_row_append_progress_from_render_result(
+        request.position,
+        outcome.end,
+        outcome.stop,
+        slots,
     );
-    let progress =
-        display_row_append_progress_from_render_result(request.position, end, stop, slots);
-    Some((progress, end))
+    Some((progress, outcome.end))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -271,35 +351,26 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         symbol_values: HashMap::new(),
     };
     let mut source_state = DisplayRowSourceState::default();
-    let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
-        return position;
-    };
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let Some(result) = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
-        row_spec,
-        initial_row,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        evaluator.display_host.as_deref(),
-        current_face_id,
-        &mut render_policy,
-    ) else {
-        return position;
-    };
-    replace_current_row_with_rendered_display_row_fragment_and_emit(
+    let Some(outcome) = render_natural_display_item_source_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        &result.rendered,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        current_face_id,
+        row_spec,
         TextRowOutput {
             row: frame.row,
             row_y: frame.geometry.y,
             glyph_y: frame.glyph_y,
             height: frame.geometry.height,
         },
-    )
+    ) else {
+        return position;
+    };
+    outcome.end
 }
 
 pub(crate) fn synthetic_display_text_item(
@@ -724,34 +795,27 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     let mut source_state = DisplayRowSourceState::default();
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
-        return position;
-    };
-    let Some(result) = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
-        row_spec,
-        initial_row,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        evaluator.display_host.as_deref(),
-        current_face_id,
-        &mut render_policy,
-    ) else {
-        return position;
-    };
-    replace_current_row_with_rendered_display_row_fragment_and_emit(
+    let Some(outcome) = render_display_item_source_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        &result.rendered,
+        &mut font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        current_face_id,
+        row_spec,
         TextRowOutput {
             row: frame.row,
             row_y: frame.geometry.y,
             glyph_y: frame.glyph_y,
             height: frame.geometry.height,
         },
-    )
+        &mut render_policy,
+    ) else {
+        return position;
+    };
+    outcome.end
 }
 
 pub(crate) struct DisplayRowAppendOutput {

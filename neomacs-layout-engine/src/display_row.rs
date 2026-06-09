@@ -1148,29 +1148,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )
     }
 
-    pub(crate) fn render_display_item_source_row_fragment_step_from_row_with_display_host(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        initial_row: GlyphRow,
-        source: &mut impl DisplayItemSource,
-        state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
-    ) -> Option<DisplayRowRenderResult> {
-        let mut policy = NaturalDisplayRowRenderPolicy;
-        self.render_display_item_source_row_fragment_step_from_row_with_policy(
-            spec,
-            initial_row,
-            source,
-            state,
-            face_resolver,
-            display_host,
-            next_face_id,
-            &mut policy,
-        )
-    }
-
     pub(crate) fn render_display_item_source_row_fragment_step_with_policy<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,

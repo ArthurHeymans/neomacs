@@ -33,7 +33,7 @@ use crate::display_row_append::{
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
-    replace_current_row_with_rendered_display_row_fragment_and_emit,
+    render_natural_display_item_source_fragment_to_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
@@ -1330,25 +1330,27 @@ fn render_overlay_string(
             role: GlyphRowRole::Text,
             symbol_values: std::collections::HashMap::new(),
         };
-        let mut renderer = DisplayRowRenderer::new(font_metrics);
-        let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
+        let Some(outcome) = render_natural_display_item_source_fragment_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            &mut source,
+            &mut source_state,
+            face_resolver,
+            current_face_id,
+            row_spec,
+            TextRowOutput {
+                row: *row,
+                row_y: *y,
+                glyph_y: *y,
+                height: char_h,
+            },
+        ) else {
             break;
         };
-        let Some(result) = renderer
-            .render_display_item_source_row_fragment_step_from_row_with_display_host(
-                row_spec,
-                initial_row,
-                &mut source,
-                &mut source_state,
-                face_resolver,
-                evaluator.display_host.as_deref(),
-                current_face_id,
-            )
-        else {
-            break;
-        };
-        let stop = result.stop;
-        let rendered = result.rendered;
+        let stop = outcome.stop;
+        let rendered = outcome.rendered;
         include_glyph_vertical_metrics(
             row_max_height,
             row_max_ascent,
@@ -1368,20 +1370,8 @@ fn render_overlay_string(
                 Color::from_pixel(overlay_base_face.bg),
             );
         }
-        let position = replace_current_row_with_rendered_display_row_fragment_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            &rendered,
-            TextRowOutput {
-                row: *row,
-                row_y: *y,
-                glyph_y: *y,
-                height: char_h,
-            },
-        );
-        *x = position.x_px;
-        *col = position.col;
+        *x = outcome.end.x_px;
+        *col = outcome.end.col;
 
         if stop == DisplayRowRenderStop::RowBreak {
             // End current row, start a new one — mirrors the main text loop.
