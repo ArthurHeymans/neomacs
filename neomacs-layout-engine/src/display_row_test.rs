@@ -146,6 +146,41 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     assert_eq!(rendered.progress.end_col, 3);
 }
 
+#[test]
+fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut test_base_face = resolver.default_face().clone();
+    test_base_face.font_char_width = 8.0;
+    test_base_face.font_ascent = 12.0;
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 16.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        &test_base_face,
+        GlyphRowRole::ModeLine,
+        std::collections::HashMap::new(),
+    );
+
+    let rendered = renderer
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut next_face_id)
+        .expect("display source row");
+
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
+    assert_eq!(rendered.progress.end_x, 16.0);
+    assert_eq!(rendered.progress.end_col, 2);
+}
+
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()

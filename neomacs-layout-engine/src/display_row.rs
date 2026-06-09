@@ -848,7 +848,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 &mut row,
                 &mut glyph_measurer,
                 position,
-                f32::INFINITY,
+                row_layout.width_px,
             );
             let progress = row_writer.push_item(item);
             position = row_writer.position();
