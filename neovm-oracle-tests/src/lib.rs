@@ -2624,6 +2624,8 @@ mod divergence_combo_clone_narrow_marker_overlay_textprop;
 mod divergence_combo_coding_marker_overlay_undo_textprop;
 #[path = "divergence-combo-column-indent-tab-marker-overlay-undo.rs"]
 mod divergence_combo_column_indent_tab_marker_overlay_undo;
+#[path = "divergence-combo-command-loop-timer-hooks.rs"]
+mod divergence_combo_command_loop_timer_hooks;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 mod divergence_combo_completion_try_all_completions_deep;
@@ -2749,6 +2751,8 @@ mod divergence_combo_iteration_mapcar_nreverse_accumulate;
 mod divergence_combo_keymap_command;
 #[path = "divergence-combo-keymap-command-advice-error.rs"]
 mod divergence_combo_keymap_command_advice_error;
+#[path = "divergence-combo-keymap-command-timer.rs"]
+mod divergence_combo_keymap_command_timer;
 mod divergence_combo_keymap_define_lookup_where_is;
 mod divergence_combo_kill_ring_yank_undo_proprs_deep;
 #[path = "divergence-combo-kill-yank-marker-overlay-undo.rs"]
