@@ -19,9 +19,7 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
-use crate::display_row::{
-    DisplayRowSpec, DisplaySourceRowSpecInput, install_rendered_display_source_row,
-};
+use crate::display_row::{DisplayRowSpec, install_rendered_display_source_row};
 #[cfg(test)]
 pub(crate) use crate::display_row::{
     OverlayFaceRun, apply_overlay_face_run, parse_overlay_face_runs,
@@ -71,7 +69,7 @@ impl LayoutEngine {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, request.output);
         let rendered_row = self.render_display_source_row_with_display_host(
-            request.display_row_spec(next_face_id),
+            request.row_spec,
             rendered_text,
             face_resolver,
             evaluator.display_host.as_deref(),
@@ -91,13 +89,7 @@ impl LayoutEngine {
 pub(crate) struct WindowChromeDisplayRowRequest<'a> {
     pub(crate) matrix_row: usize,
     pub(crate) output: ChromeRowOutput,
-    pub(crate) row_spec_input: DisplaySourceRowSpecInput<'a>,
-}
-
-impl<'a> WindowChromeDisplayRowRequest<'a> {
-    pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
-        self.row_spec_input.display_row_spec(next_face_id)
-    }
+    pub(crate) row_spec: DisplayRowSpec<'a>,
 }
 
 #[cfg(test)]

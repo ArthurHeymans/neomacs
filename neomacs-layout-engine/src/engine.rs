@@ -22,9 +22,8 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_item::DisplayItemKind;
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowOutputProgress, DisplaySourceRowSpecInput,
-    RenderedDisplaySourceRow, insert_resolved_display_row_face,
-    install_rendered_display_source_row,
+    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplaySourceRow,
+    insert_resolved_display_row_face, install_rendered_display_source_row,
 };
 use crate::display_row_append::{
     DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
@@ -3284,8 +3283,8 @@ impl LayoutEngine {
                 params.text_bounds,
                 params.selected,
             );
-            let row_spec_input = DisplaySourceRowSpecInput {
-                geometry: DisplayRowGeometry {
+            let row_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
                     y: params.bounds.y,
                     width: text_width,
                     height: char_h,
@@ -3293,13 +3292,14 @@ impl LayoutEngine {
                     ascent: default_face_ascent,
                     tab_policy: DisplayTabPolicy::every(8),
                 },
-                base_face: default_resolved,
-                role: GlyphRowRole::Minibuffer,
-                symbol_values: std::collections::HashMap::new(),
-            };
+                &mut current_face_id,
+                default_resolved,
+                GlyphRowRole::Minibuffer,
+                std::collections::HashMap::new(),
+            );
             let rendered = self
                 .render_display_source_row_with_display_host(
-                    row_spec_input.display_row_spec(&mut current_face_id),
+                    row_spec,
                     Value::string(""),
                     face_resolver,
                     evaluator.display_host.as_deref(),
@@ -6637,6 +6637,20 @@ impl LayoutEngine {
                 row: tl_row,
                 y: tl_y,
             };
+            let tab_row_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: tl_y,
+                    width: params.bounds.width,
+                    height: tab_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
+                &mut current_face_id,
+                tl_face,
+                GlyphRowRole::TabLine,
+                status_line_symbol_values.clone(),
+            );
             self.render_window_chrome_display_source_row(
                 evaluator,
                 &mut output_emitter,
@@ -6645,19 +6659,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: 0,
                     output: tab_row_output,
-                    row_spec_input: DisplaySourceRowSpecInput {
-                        geometry: DisplayRowGeometry {
-                            y: tl_y,
-                            width: params.bounds.width,
-                            height: tab_line_height,
-                            char_width: char_w,
-                            ascent: font_ascent,
-                            tab_policy: text_display_tab_policy(0.0, params),
-                        },
-                        base_face: tl_face,
-                        role: GlyphRowRole::TabLine,
-                        symbol_values: status_line_symbol_values.clone(),
-                    },
+                    row_spec: tab_row_spec,
                 },
                 tab_text,
             );
@@ -6690,6 +6692,20 @@ impl LayoutEngine {
                 row: hl_row,
                 y: hl_y,
             };
+            let header_row_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: hl_y,
+                    width: params.bounds.width,
+                    height: header_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
+                &mut current_face_id,
+                hl_face,
+                GlyphRowRole::HeaderLine,
+                status_line_symbol_values.clone(),
+            );
             self.render_window_chrome_display_source_row(
                 evaluator,
                 &mut output_emitter,
@@ -6698,19 +6714,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: usize::from(tab_line_height > 0.0),
                     output: header_row_output,
-                    row_spec_input: DisplaySourceRowSpecInput {
-                        geometry: DisplayRowGeometry {
-                            y: hl_y,
-                            width: params.bounds.width,
-                            height: header_line_height,
-                            char_width: char_w,
-                            ascent: font_ascent,
-                            tab_policy: text_display_tab_policy(0.0, params),
-                        },
-                        base_face: hl_face,
-                        role: GlyphRowRole::HeaderLine,
-                        symbol_values: status_line_symbol_values.clone(),
-                    },
+                    row_spec: header_row_spec,
                 },
                 header_text,
             );
@@ -6758,6 +6762,20 @@ impl LayoutEngine {
                 row: ml_row,
                 y: ml_y,
             };
+            let mode_row_spec = DisplayRowSpec::from_base_face(
+                DisplayRowGeometry {
+                    y: ml_y,
+                    width: params.bounds.width,
+                    height: mode_line_height,
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                },
+                &mut current_face_id,
+                ml_face,
+                GlyphRowRole::ModeLine,
+                status_line_symbol_values.clone(),
+            );
             self.render_window_chrome_display_source_row(
                 evaluator,
                 &mut output_emitter,
@@ -6766,19 +6784,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: mode_line_matrix_row,
                     output: mode_row_output,
-                    row_spec_input: DisplaySourceRowSpecInput {
-                        geometry: DisplayRowGeometry {
-                            y: ml_y,
-                            width: params.bounds.width,
-                            height: mode_line_height,
-                            char_width: char_w,
-                            ascent: font_ascent,
-                            tab_policy: text_display_tab_policy(0.0, params),
-                        },
-                        base_face: ml_face,
-                        role: GlyphRowRole::ModeLine,
-                        symbol_values: status_line_symbol_values.clone(),
-                    },
+                    row_spec: mode_row_spec,
                 },
                 mode_text,
             );
@@ -6986,8 +6992,8 @@ impl LayoutEngine {
                     row_start,
                     offset,
                 );
-                let row_spec_input = DisplaySourceRowSpecInput {
-                    geometry: DisplayRowGeometry {
+                let row_spec = DisplayRowSpec::from_base_face(
+                    DisplayRowGeometry {
                         y: y + rows.len() as f32 * row_height,
                         width: wrap_width,
                         height: row_height,
@@ -6995,11 +7001,11 @@ impl LayoutEngine {
                         ascent,
                         tab_policy: DisplayTabPolicy::every(8),
                     },
-                    base_face: &base_face,
-                    role: GlyphRowRole::Minibuffer,
-                    symbol_values: std::collections::HashMap::new(),
-                };
-                let row_spec = row_spec_input.display_row_spec(next_face_id);
+                    next_face_id,
+                    &base_face,
+                    GlyphRowRole::Minibuffer,
+                    std::collections::HashMap::new(),
+                );
                 let Some(mut rendered) = self.render_display_source_row_with_display_host(
                     row_spec,
                     segment,
@@ -7104,8 +7110,8 @@ impl LayoutEngine {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let tab_bar_spec_input = DisplaySourceRowSpecInput {
-            geometry: DisplayRowGeometry {
+        let tab_bar_spec = DisplayRowSpec::from_base_face(
+            DisplayRowGeometry {
                 y: 0.0,
                 width,
                 height: tab_bar_height,
@@ -7113,11 +7119,11 @@ impl LayoutEngine {
                 ascent: tab_bar_face.font_ascent,
                 tab_policy: DisplayTabPolicy::every(8),
             },
-            base_face: &tab_bar_face,
-            role: GlyphRowRole::TabBar,
-            symbol_values: std::collections::HashMap::new(),
-        };
-        let tab_bar_spec = tab_bar_spec_input.display_row_spec(&mut current_face_id);
+            &mut current_face_id,
+            &tab_bar_face,
+            GlyphRowRole::TabBar,
+            std::collections::HashMap::new(),
+        );
         let Some(rendered) = self.render_display_source_row_with_display_host(
             tab_bar_spec,
             tab_bar.text,

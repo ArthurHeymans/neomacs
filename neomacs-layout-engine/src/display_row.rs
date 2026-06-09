@@ -579,25 +579,6 @@ impl<'a> DisplayRowSpec<'a> {
     }
 }
 
-pub(crate) struct DisplaySourceRowSpecInput<'a> {
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) base_face: &'a ResolvedFace,
-    pub(crate) role: GlyphRowRole,
-    pub(crate) symbol_values: std::collections::HashMap<String, Value>,
-}
-
-impl<'a> DisplaySourceRowSpecInput<'a> {
-    pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
-        DisplayRowSpec::from_base_face(
-            self.geometry.clone(),
-            next_face_id,
-            self.base_face,
-            self.role,
-            self.symbol_values.clone(),
-        )
-    }
-}
-
 pub(crate) fn install_rendered_display_source_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplaySourceRow,
