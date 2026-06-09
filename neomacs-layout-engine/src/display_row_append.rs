@@ -80,7 +80,7 @@ fn apply_pending_string_faces(
     }
 }
 
-pub(crate) fn next_layout_string_source_item(
+fn next_layout_string_source_item(
     builder: &mut GlyphMatrixBuilder,
     source: &mut impl DisplayItemSource,
     face_resolver: &FaceResolver,
@@ -102,6 +102,39 @@ pub(crate) fn next_layout_string_source_item(
     };
     apply_pending_string_faces(builder, &mut pending_faces);
     item
+}
+
+pub(crate) struct LayoutStringSourceWalker<S> {
+    source: S,
+    string_face_cache: HashMap<Value, u32>,
+}
+
+impl<S> LayoutStringSourceWalker<S> {
+    pub(crate) fn new(source: S) -> Self {
+        Self {
+            source,
+            string_face_cache: HashMap::new(),
+        }
+    }
+}
+
+impl<S: DisplayItemSource> LayoutStringSourceWalker<S> {
+    pub(crate) fn next_item(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        face_resolver: &FaceResolver,
+        base_face: &ResolvedFace,
+        current_face_id: &mut u32,
+    ) -> Option<DisplayItem> {
+        next_layout_string_source_item(
+            builder,
+            &mut self.source,
+            face_resolver,
+            base_face,
+            &mut self.string_face_cache,
+            current_face_id,
+        )
+    }
 }
 
 impl DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
@@ -138,22 +171,15 @@ pub(crate) fn append_lisp_string_to_text_row(
     frame: DisplayRowAppendFrame,
     mut position: DisplayRowPosition,
 ) -> DisplayRowPosition {
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+    let Some(source) = crate::display_source::LispStringSourceCursor::new(
         source_id,
         text_value,
         RenderFaceRef::FaceId(base_face_id),
     ) else {
         return position;
     };
-    let mut string_face_cache = HashMap::new();
-    while let Some(item) = next_layout_string_source_item(
-        builder,
-        &mut source,
-        face_resolver,
-        base_face,
-        &mut string_face_cache,
-        current_face_id,
-    ) {
+    let mut source = LayoutStringSourceWalker::new(source);
+    while let Some(item) = source.next_item(builder, face_resolver, base_face, current_face_id) {
         let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
             continue;
         };
@@ -317,7 +343,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    source: &mut S,
+    source: S,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
@@ -326,15 +352,8 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     mut position: DisplayRowPosition,
     item_measurer: &mut impl DisplayRowItemMeasurer,
 ) -> DisplayRowPosition {
-    let mut string_face_cache = HashMap::new();
-    while let Some(item) = next_layout_string_source_item(
-        builder,
-        source,
-        face_resolver,
-        base_face,
-        &mut string_face_cache,
-        current_face_id,
-    ) {
+    let mut source = LayoutStringSourceWalker::new(source);
+    while let Some(item) = source.next_item(builder, face_resolver, base_face, current_face_id) {
         if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
             break;
         }

@@ -380,6 +380,73 @@ fn next_layout_string_source_item_installs_pending_faces() {
 }
 
 #[test]
+fn layout_string_source_walker_reuses_face_cache_across_items() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
+    let value = Value::string_with_text_properties(
+        "aba",
+        vec![
+            StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("face"), face_value.clone()]),
+            },
+            StringTextPropertyRun {
+                start: 2,
+                end: 3,
+                plist: Value::list(vec![Value::symbol("face"), face_value]),
+            },
+        ],
+    );
+    let source =
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+            .expect("string source");
+    let mut source = LayoutStringSourceWalker::new(source);
+
+    let first = source
+        .next_item(
+            &mut builder,
+            &face_resolver,
+            base_face,
+            &mut current_face_id,
+        )
+        .expect("first source item");
+    let second = source
+        .next_item(
+            &mut builder,
+            &face_resolver,
+            base_face,
+            &mut current_face_id,
+        )
+        .expect("second source item");
+    let third = source
+        .next_item(
+            &mut builder,
+            &face_resolver,
+            base_face,
+            &mut current_face_id,
+        )
+        .expect("third source item");
+
+    assert_eq!(first.face, RenderFaceRef::FaceId(20));
+    assert_eq!(second.face, RenderFaceRef::FaceId(0));
+    assert_eq!(third.face, RenderFaceRef::FaceId(20));
+    assert_eq!(current_face_id, 21);
+    assert_eq!(
+        builder.faces().get(&20).map(|face| face.foreground),
+        Some(Color::from_pixel(0x00ff0000))
+    );
+}
+
+#[test]
 fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -706,7 +773,7 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
             .expect("string source");
     let replacement_source =
         crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
-    let mut source = crate::display_source::BufferDisplayReplacementStringSource::new(
+    let source = crate::display_source::BufferDisplayReplacementStringSource::new(
         replacement_source,
         string_source,
     );
@@ -737,7 +804,7 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
         &mut builder,
         &mut output_emitter,
         &mut eval,
-        &mut source,
+        source,
         &face_resolver,
         base_face,
         7,

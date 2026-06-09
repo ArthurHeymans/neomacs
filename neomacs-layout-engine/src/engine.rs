@@ -21,11 +21,11 @@ use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_dis
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
-    append_buffer_text_char_to_text_row, append_display_item_to_text_row_and_emit,
-    append_display_replacement_item_to_text_row,
+    LayoutStringSourceWalker, append_buffer_text_char_to_text_row,
+    append_display_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
-    append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
+    append_synthetic_text_to_display_row, emit_text_progress_slots,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -1406,8 +1406,6 @@ fn render_overlay_string(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let mut string_face_cache = std::collections::HashMap::new();
-
     let (overlay_base_face, overlay_base_face_id) = if let Some(face) = overlay_face {
         let face_id = *current_face_id;
         insert_resolved_display_row_face(builder, face_id, face, None);
@@ -1454,23 +1452,17 @@ fn render_overlay_string(
         }};
     }
 
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+    let Some(source) = crate::display_source::LispStringSourceCursor::new(
         1,
         text_value,
         crate::display_item::RenderFaceRef::FaceId(overlay_base_face_id),
     ) else {
         return;
     };
+    let mut source = LayoutStringSourceWalker::new(source);
 
     while *row < max_rows {
-        let item = next_layout_string_source_item(
-            builder,
-            &mut source,
-            face_resolver,
-            overlay_base_face,
-            &mut string_face_cache,
-            current_face_id,
-        );
+        let item = source.next_item(builder, face_resolver, overlay_base_face, current_face_id);
         let Some(item) = item else {
             break;
         };
@@ -4143,7 +4135,7 @@ impl LayoutEngine {
                                 prop_val,
                                 crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
                             ) {
-                                let mut source = BufferDisplayReplacementStringSource::new(
+                                let source = BufferDisplayReplacementStringSource::new(
                                     replacement_source,
                                     source,
                                 );
@@ -4177,7 +4169,7 @@ impl LayoutEngine {
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
-                                    &mut source,
+                                    source,
                                     face_resolver,
                                     &current_resolved_face,
                                     current_text_face_id,
