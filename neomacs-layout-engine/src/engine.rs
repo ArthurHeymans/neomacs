@@ -4257,32 +4257,17 @@ impl LayoutEngine {
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
-                            let item = crate::display_item::DisplayItem::new(
-                                crate::display_item::SourceSpan::new(
-                                    crate::display_item::DisplaySourcePosition::buffer(
-                                        buf_id,
-                                        CharPos0::new(charpos as usize),
-                                        EmacsBytePos::new(text_start_byte + byte_idx),
-                                    ),
-                                    crate::display_item::DisplaySourcePosition::buffer(
-                                        buf_id,
-                                        CharPos0::new(charpos.saturating_add(1) as usize),
-                                        EmacsBytePos::new(text_start_byte + byte_idx),
-                                    ),
-                                ),
-                                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                                crate::display_item::DisplayItemKind::Stretch(
-                                    crate::display_item::DisplayStretch {
-                                        width: crate::display_item::DisplayStretchWidth::Length(
-                                            crate::display_item::DisplayLength::Pixels(space_width),
-                                        ),
-                                        height: Some(crate::display_item::DisplayLength::Pixels(
-                                            space_geometry.height,
-                                        )),
-                                        ascent: Some(crate::display_item::DisplayLength::Pixels(
-                                            space_geometry.ascent,
-                                        )),
-                                    },
+                            let replacement_source = BufferDisplayReplacementSource::new(
+                                buf_id,
+                                charpos,
+                                text_start_byte + byte_idx,
+                            );
+                            let item = replacement_source.stretch_item(
+                                current_text_face_id,
+                                DisplayReplacementBox::new(
+                                    space_width,
+                                    space_geometry.height,
+                                    space_geometry.ascent,
                                 ),
                             );
                             let replacement_frame = text_append_surface.frame(
