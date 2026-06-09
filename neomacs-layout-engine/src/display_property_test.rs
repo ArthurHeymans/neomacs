@@ -167,3 +167,42 @@ fn display_replacement_property_accepts_only_matching_resolved_media_items() {
     assert!(DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&xwidget_item));
     assert!(!DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&image_item));
 }
+
+#[test]
+fn display_replacement_property_describes_media_replacement_behavior() {
+    let xwidget = DisplayXwidgetItem {
+        xwidget_id: 3,
+        width: 50.0,
+        height: 60.0,
+    };
+
+    assert!(DisplayReplacementProperty::Image.is_media_replacement());
+    assert!(DisplayReplacementProperty::Video.is_media_replacement());
+    assert!(DisplayReplacementProperty::Webkit.is_media_replacement());
+    assert!(DisplayReplacementProperty::Xwidget(xwidget).is_media_replacement());
+    assert!(!DisplayReplacementProperty::String.is_media_replacement());
+    assert_eq!(
+        DisplayReplacementProperty::Image.media_fallback_placeholder(),
+        Some("[img]")
+    );
+    assert_eq!(
+        DisplayReplacementProperty::Video.media_fallback_placeholder(),
+        Some("     ")
+    );
+    assert_eq!(
+        DisplayReplacementProperty::Webkit.media_fallback_placeholder(),
+        Some("     ")
+    );
+    assert_eq!(
+        DisplayReplacementProperty::Xwidget(xwidget).media_fallback_placeholder(),
+        None
+    );
+    assert_eq!(
+        DisplayReplacementProperty::Xwidget(xwidget).direct_media_item_kind(),
+        Some(DisplayItemKind::Xwidget(xwidget))
+    );
+    assert_eq!(
+        DisplayReplacementProperty::Image.direct_media_item_kind(),
+        None
+    );
+}

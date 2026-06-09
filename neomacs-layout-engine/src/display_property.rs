@@ -40,6 +40,28 @@ impl DisplayReplacementProperty {
                 | (Self::Webkit, DisplayItemKind::Xwidget(_))
         )
     }
+
+    pub(crate) fn is_media_replacement(&self) -> bool {
+        matches!(
+            self,
+            Self::Image | Self::Video | Self::Xwidget(_) | Self::Webkit
+        )
+    }
+
+    pub(crate) fn direct_media_item_kind(&self) -> Option<DisplayItemKind> {
+        match self {
+            Self::Xwidget(xwidget) => Some(DisplayItemKind::Xwidget(*xwidget)),
+            Self::String | Self::Space(_) | Self::Image | Self::Video | Self::Webkit => None,
+        }
+    }
+
+    pub(crate) fn media_fallback_placeholder(&self) -> Option<&'static str> {
+        match self {
+            Self::Image => Some("[img]"),
+            Self::Video | Self::Webkit => Some("     "),
+            Self::String | Self::Space(_) | Self::Xwidget(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

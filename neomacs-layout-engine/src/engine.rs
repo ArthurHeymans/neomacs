@@ -4236,29 +4236,27 @@ impl LayoutEngine {
                         continue;
                     }
 
-                    // Case 3: media specs — image/video/webkit resolve through the
-                    // display host; unresolved specs keep their TTY placeholders.
+                    // Case 3: media specs — direct xwidget specs already carry a
+                    // media item; image/video/webkit resolve through the display
+                    // host and keep TTY placeholders when unresolved.
                     if let Some(replacement) = display_property.replacement.as_ref()
-                        && matches!(
-                            replacement,
-                            DisplayReplacementProperty::Image
-                                | DisplayReplacementProperty::Video
-                                | DisplayReplacementProperty::Webkit
-                        )
+                        && replacement.is_media_replacement()
                     {
                         let replacement_source = BufferDisplayReplacementSource::new(
                             buf_id,
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_media_item = resolve_display_property_media(
-                            &prop_val,
-                            evaluator.display_host.as_deref(),
-                            &current_resolved_face,
-                            face_char_w,
-                            face_h,
-                        )
-                        .filter(|kind| replacement.accepts_resolved_media_item(kind));
+                        let maybe_media_item = replacement.direct_media_item_kind().or_else(|| {
+                            resolve_display_property_media(
+                                &prop_val,
+                                evaluator.display_host.as_deref(),
+                                &current_resolved_face,
+                                face_char_w,
+                                face_h,
+                            )
+                            .filter(|kind| replacement.accepts_resolved_media_item(kind))
+                        });
 
                         if let Some(media_item) = maybe_media_item {
                             let media =
@@ -4268,6 +4266,15 @@ impl LayoutEngine {
                                 .expect("resolved media item should have media geometry");
                             let display_width = media.width;
                             let display_height = media.height;
+                            let (cursor_face_h, cursor_face_ascent) =
+                                if matches!(replacement, DisplayReplacementProperty::Xwidget(_)) {
+                                    (
+                                        display_height.max(face_h),
+                                        display_height.max(face_ascent_val),
+                                    )
+                                } else {
+                                    (display_height, display_height)
+                                };
 
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4276,8 +4283,8 @@ impl LayoutEngine {
                                         x,
                                         y,
                                         face_w: face_char_w,
-                                        face_h: display_height,
-                                        face_ascent: display_height,
+                                        face_h: cursor_face_h,
+                                        face_ascent: cursor_face_ascent,
                                         bg: current_bg,
                                         byte_idx,
                                         col,
@@ -4322,7 +4329,7 @@ impl LayoutEngine {
                                 x = position.x_px;
                                 col = position.col;
                             }
-                        } else {
+                        } else if let Some(placeholder) = replacement.media_fallback_placeholder() {
                             if point_in_display_replacement {
                                 capture_cursor_info(
                                     &mut cursor_info,
@@ -4341,12 +4348,6 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let placeholder = match replacement {
-                                DisplayReplacementProperty::Image => "[img]",
-                                DisplayReplacementProperty::Video
-                                | DisplayReplacementProperty::Webkit => "     ",
-                                _ => "",
-                            };
                             let replacement_frame = text_append_surface.frame(
                                 DisplayRowAppendPlacement {
                                     row,
@@ -4384,93 +4385,13 @@ impl LayoutEngine {
                         continue;
                     }
 
-                    // Case 4: Xwidget — GNU display spec `(xwidget :xwidget XWIDGET)`.
-                    // The model object already owns the native xwidget id and geometry.
-                    if let Some(DisplayReplacementProperty::Xwidget(spec)) =
-                        display_property.replacement.as_ref()
-                    {
-                        let replacement_source = BufferDisplayReplacementSource::new(
-                            buf_id,
-                            charpos,
-                            text_start_byte + byte_idx,
-                        );
-                        let display_width = spec.width;
-                        let display_height = spec.height;
-
-                        if point_in_display_replacement {
-                            capture_cursor_info(
-                                &mut cursor_info,
-                                CapturedCursorInfo {
-                                    x,
-                                    y,
-                                    face_w: face_char_w,
-                                    face_h: display_height.max(face_h),
-                                    face_ascent: display_height.max(face_ascent_val),
-                                    bg: current_bg,
-                                    byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: Some(display_width.max(1.0)),
-                                    stretch_like: false,
-                                },
-                            );
-                        }
-
-                        let replacement_frame = text_append_surface.frame(
-                            DisplayRowAppendPlacement {
-                                row,
-                                y,
-                                glyph_y: y + raise_y_offset,
-                            },
-                            DisplayRowAppendMetrics {
-                                height: display_height,
-                                ascent: display_height,
-                                char_width: face_char_w,
-                                space_width: face_space_w,
-                                default_row_height: char_h,
-                            },
-                        );
-                        let item = replacement_source.item(
-                            current_text_face_id,
-                            crate::display_item::DisplayItemKind::Xwidget(
-                                crate::display_item::DisplayXwidgetItem {
-                                    xwidget_id: spec.xwidget_id,
-                                    width: display_width,
-                                    height: display_height,
-                                },
-                            ),
-                        );
-                        if let Some((progress, position)) =
-                            append_display_replacement_item_to_text_row_and_emit(
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                item,
-                                current_text_face_id,
-                                replacement_frame,
-                                DisplayRowPosition { x_px: x, col },
-                            )
-                            && progress.status
-                                == crate::display_row_builder::DisplayRowAppendStatus::Complete
-                            && progress.metrics.width_px > 0.0
-                        {
-                            row_max_height = row_max_height.max(display_height);
-                            row_max_ascent = row_max_ascent.max(display_height);
-                            x = position.x_px;
-                            col = position.col;
-                        }
-
-                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
-                        continue;
-                    }
-
-                    // Case 5: Raise — (raise FACTOR) or plist with :raise
+                    // Case 4: Raise — (raise FACTOR) or plist with :raise
                     if let Some(factor) = display_property.modifiers.raise {
                         raise_y_offset = -(factor * char_h);
                         raise_end = display_next_check;
                     }
 
-                    // Case 6: Height — (height FACTOR) or plist with :height
+                    // Case 5: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = display_property.modifiers.height {
                         if factor > 0.0 {
                             height_scale = factor;
