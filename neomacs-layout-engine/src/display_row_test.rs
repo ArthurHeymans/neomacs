@@ -327,6 +327,87 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
 }
 
 #[test]
+fn render_display_source_row_records_xwidget_media_fragments() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let xwidget = Value::make_xwidget(
+        Value::symbol("webkit"),
+        Value::string("Title"),
+        Value::make_buffer(buf_id),
+        96,
+        54,
+        1234,
+    );
+    let rendered_text = Value::string_with_text_properties(
+        "AXB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("xwidget"),
+                    Value::keyword("xwidget"),
+                    xwidget,
+                ]),
+            ]),
+        }],
+    );
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    base_face.font_line_height = 16.0;
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 4.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        &base_face,
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
+
+    let rendered = renderer
+        .render_display_source_row(spec, rendered_text, &resolver, &mut next_face_id)
+        .expect("display source row");
+
+    let glyphs = &rendered.row.glyphs[1];
+    assert_eq!(
+        row_text_expanding_stretches(&rendered.row),
+        "A            B"
+    );
+    assert!(matches!(
+        glyphs[1].glyph_type,
+        GlyphType::Stretch { width_cols: 12 }
+    ));
+    assert_eq!(
+        rendered.media,
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
+            x: 8.0,
+            y: 4.0,
+            col: 1,
+            width: 96.0,
+            height: 54.0,
+        }]
+    );
+}
+
+#[test]
 fn display_row_buffer_and_lisp_sources_share_display_space_semantics() {
     let _eval = Context::new();
     let display_space = Value::list(vec![
@@ -921,4 +1002,54 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
     let row = &state.window_matrices[0].matrix.rows[0];
     assert!(row.reversed_p);
     assert_eq!(row_text_expanding_stretches(row), "בא");
+}
+
+#[test]
+fn install_display_source_row_installs_media_fragments_in_current_window() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabLine);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    let rendered = RenderedDisplaySourceRow {
+        row,
+        progress: DisplayRowOutputProgress {
+            end_x: 0.0,
+            end_col: 0,
+            y: 4.0,
+            height: 16.0,
+        },
+        faces: Vec::new(),
+        media: vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
+            x: 8.0,
+            y: 4.0,
+            col: 1,
+            width: 96.0,
+            height: 54.0,
+        }],
+    };
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
+    builder.begin_window_with_text_bounds(
+        77,
+        1,
+        10,
+        Rect::new(0.0, 0.0, 200.0, 80.0),
+        text_bounds,
+        true,
+    );
+
+    install_rendered_display_source_row(&mut builder, &rendered, 0);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let xwidget = state.xwidgets.first().expect("xwidget side item");
+    assert_eq!(xwidget.window_id, 77);
+    assert_eq!(xwidget.row_role, GlyphRowRole::TabLine);
+    assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.x, 8.0);
+    assert_eq!(xwidget.y, 4.0);
+    assert_eq!(xwidget.width, 96.0);
+    assert_eq!(xwidget.height, 54.0);
 }

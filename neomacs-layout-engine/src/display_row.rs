@@ -1,6 +1,10 @@
-use crate::display_item::{DisplayLengthExpr, RenderFaceRef};
+use crate::display_item::{
+    DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
+    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
+};
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowBuilder, DisplayRowLayout, DisplayTabPolicy,
+    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
+    DisplayRowProgressWriter, DisplayTabPolicy,
 };
 use crate::display_source::{
     DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
@@ -479,6 +483,32 @@ pub(crate) struct RenderedDisplaySourceRow {
     pub(crate) row: GlyphRow,
     pub(crate) progress: DisplayRowOutputProgress,
     pub(crate) faces: Vec<Face>,
+    pub(crate) media: Vec<RenderedDisplayRowMedia>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RenderedDisplayRowMedia {
+    pub(crate) kind: RenderedDisplayRowMediaKind,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) col: u16,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum RenderedDisplayRowMediaKind {
+    Image {
+        image_id: u32,
+    },
+    Video {
+        video_id: u32,
+        loop_count: i32,
+        autoplay: bool,
+    },
+    Xwidget {
+        xwidget_id: u32,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -577,6 +607,52 @@ pub(crate) fn install_rendered_display_source_row(
     builder.begin_row(matrix_row, rendered.row.role);
     builder.install_prebuilt_current_row(&rendered.row);
     builder.end_prebuilt_row();
+    for media in &rendered.media {
+        media.install(builder, rendered.row.role, matrix_row);
+    }
+}
+
+impl RenderedDisplayRowMedia {
+    fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
+        let row = matrix_row.min(u32::MAX as usize) as u32;
+        match self.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => builder.push_current_window_image(
+                role,
+                row,
+                self.col,
+                image_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+            ),
+            RenderedDisplayRowMediaKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => builder.push_current_window_video(
+                role,
+                row,
+                self.col,
+                video_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                loop_count,
+                autoplay,
+            ),
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
+                .push_current_window_xwidget(
+                    role,
+                    xwidget_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                ),
+        }
+    }
 }
 
 fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
@@ -628,6 +704,84 @@ fn display_source_row_progress(
         end_col: (end_x / fallback).round().max(0.0) as i64,
         y,
         height,
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowMediaDescriptor {
+    kind: RenderedDisplayRowMediaKind,
+    width: f32,
+    height: f32,
+}
+
+impl DisplayRowMediaDescriptor {
+    fn from_item_kind(kind: &DisplayItemKind) -> Option<Self> {
+        match kind {
+            DisplayItemKind::Image(image) => Some(Self::image(*image)),
+            DisplayItemKind::Video(video) => Some(Self::video(*video)),
+            DisplayItemKind::Xwidget(xwidget) => Some(Self::xwidget(*xwidget)),
+            _ => None,
+        }
+    }
+
+    fn image(image: DisplayImageItem) -> Self {
+        Self {
+            kind: RenderedDisplayRowMediaKind::Image {
+                image_id: image.image_id.max(0) as u32,
+            },
+            width: display_replacement_dimension(image.width),
+            height: display_replacement_dimension(image.height),
+        }
+    }
+
+    fn video(video: DisplayVideoItem) -> Self {
+        Self {
+            kind: RenderedDisplayRowMediaKind::Video {
+                video_id: video.video_id.max(0) as u32,
+                loop_count: video.loop_count,
+                autoplay: video.autoplay,
+            },
+            width: display_replacement_dimension(video.width),
+            height: display_replacement_dimension(video.height),
+        }
+    }
+
+    fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
+        Self {
+            kind: RenderedDisplayRowMediaKind::Xwidget {
+                xwidget_id: xwidget.xwidget_id.max(0) as u32,
+            },
+            width: display_replacement_dimension(xwidget.width),
+            height: display_replacement_dimension(xwidget.height),
+        }
+    }
+
+    fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
+        item.kind = DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
+            height: Some(DisplayLength::Pixels(self.height)),
+            ascent: Some(DisplayLength::Pixels(self.height)),
+        });
+        item
+    }
+
+    fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
+        RenderedDisplayRowMedia {
+            kind: self.kind,
+            x: start.x_px,
+            y,
+            col: start.col.min(usize::from(u16::MAX)) as u16,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+fn display_replacement_dimension(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(1.0)
+    } else {
+        1.0
     }
 }
 
@@ -738,7 +892,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             RenderFaceRef::FaceId(row_face.face_id),
             parsed_symbol_values,
         );
-        let mut row_builder = DisplayRowBuilder::new(row_layout);
+        let mut row = GlyphRow::new(role);
+        let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
+        let mut media = Vec::new();
         loop {
             let item = {
                 let mut row_face_resolver = RowFaceResolver {
@@ -758,14 +914,35 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let Some(item) = item else {
                 break;
             };
+            let media_descriptor = DisplayRowMediaDescriptor::from_item_kind(&item.kind);
+            let item = media_descriptor
+                .map(|descriptor| descriptor.replacement_item(item.clone()))
+                .unwrap_or(item);
             let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
                 &row_faces,
                 face_realizer.font_metrics_service_mut(),
                 char_width,
             );
-            row_builder.push_measured_item(item, &mut glyph_measurer);
+            let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
+                &row_layout,
+                &mut row,
+                &mut glyph_measurer,
+                position,
+                f32::INFINITY,
+            );
+            let progress = row_writer.push_item(item);
+            position = row_writer.position();
+            if let Some(descriptor) = media_descriptor
+                && progress.status == DisplayRowAppendStatus::Complete
+                && progress.metrics.width_px > 0.0
+            {
+                media.push(descriptor.rendered_media(progress.start, row_layout.y_px));
+            }
+            if progress.status != DisplayRowAppendStatus::Complete {
+                break;
+            }
         }
-        let row = row_builder.finish();
+        GlyphMatrixBuilder::normalize_external_row(&mut row);
         let progress = display_source_row_progress(
             &row,
             geometry.width,
@@ -781,6 +958,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             row,
             progress,
             faces,
+            media,
         })
     }
 }

@@ -7127,6 +7127,7 @@ impl LayoutEngine {
                     height: row_height.max(1.0),
                 },
                 faces: Vec::new(),
+                media: Vec::new(),
             });
         }
         rows
