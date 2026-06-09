@@ -100,6 +100,22 @@ fn row_text_expanding_stretches(row: &GlyphRow) -> String {
         .collect()
 }
 
+fn row_text_glyph_types(row: &GlyphRow) -> Vec<GlyphType> {
+    row.glyphs[1]
+        .iter()
+        .filter(|glyph| !glyph.padding)
+        .map(|glyph| glyph.glyph_type.clone())
+        .collect()
+}
+
+fn row_text_face_ids(row: &GlyphRow) -> Vec<u32> {
+    row.glyphs[1]
+        .iter()
+        .filter(|glyph| !glyph.padding)
+        .map(|glyph| glyph.face_id)
+        .collect()
+}
+
 #[test]
 fn display_row_geometry_builds_row_layout() {
     let tab_policy =
@@ -165,12 +181,28 @@ fn render_lisp_display_row_with_symbols(
         .row
 }
 
+fn render_buffer_display_row(text: &str, role: GlyphRowRole) -> GlyphRow {
+    render_buffer_display_row_with_properties(text, Vec::new(), role)
+}
+
 fn render_buffer_display_row_with_property(
     text: &str,
     property_start: usize,
     property_end: usize,
     property_name: Value,
     property_value: Value,
+    role: GlyphRowRole,
+) -> GlyphRow {
+    render_buffer_display_row_with_properties(
+        text,
+        vec![(property_start, property_end, property_name, property_value)],
+        role,
+    )
+}
+
+fn render_buffer_display_row_with_properties(
+    text: &str,
+    properties: Vec<(usize, usize, Value, Value)>,
     role: GlyphRowRole,
 ) -> GlyphRow {
     let mut eval = Context::new();
@@ -182,13 +214,15 @@ fn render_buffer_display_row_with_property(
     {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert(text);
-        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_start));
-        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_end));
-        buffer.text_props_put_property_in_emacs_byte_range(
-            EmacsByteRange::new(start, end),
-            property_name,
-            property_value,
-        );
+        for (property_start, property_end, property_name, property_value) in properties {
+            let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_start));
+            let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_end));
+            buffer.text_props_put_property_in_emacs_byte_range(
+                EmacsByteRange::new(start, end),
+                property_name,
+                property_value,
+            );
+        }
     }
 
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -334,6 +368,93 @@ fn display_row_buffer_and_lisp_sources_share_display_space_semantics() {
             .iter()
             .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
             .count()
+    );
+}
+
+#[test]
+fn display_row_buffer_and_lisp_sources_share_display_replacement_string_semantics() {
+    let _eval = Context::new();
+    let replacement = Value::string("YZ");
+    let lisp_row = render_lisp_display_row(
+        Value::string_with_text_properties(
+            "axb",
+            vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("display"), replacement]),
+            }],
+        ),
+        GlyphRowRole::TabLine,
+    );
+    let buffer_row = render_buffer_display_row_with_property(
+        "axb",
+        1,
+        2,
+        Value::symbol("display"),
+        replacement,
+        GlyphRowRole::TabLine,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&buffer_row), "aYZb");
+    assert_eq!(
+        row_text_expanding_stretches(&buffer_row),
+        row_text_expanding_stretches(&lisp_row)
+    );
+    assert_eq!(
+        row_text_glyph_types(&buffer_row),
+        row_text_glyph_types(&lisp_row)
+    );
+}
+
+#[test]
+fn display_row_buffer_and_lisp_sources_share_face_property_semantics() {
+    let _eval = Context::new();
+    let face = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
+    let lisp_row = render_lisp_display_row(
+        Value::string_with_text_properties(
+            "AB",
+            vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("face"), face.clone()]),
+            }],
+        ),
+        GlyphRowRole::ModeLine,
+    );
+    let buffer_row = render_buffer_display_row_with_property(
+        "AB",
+        1,
+        2,
+        Value::symbol("face"),
+        face,
+        GlyphRowRole::ModeLine,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&buffer_row), "AB");
+    assert_eq!(row_text_face_ids(&buffer_row), row_text_face_ids(&lisp_row));
+    let face_ids = row_text_face_ids(&buffer_row);
+    assert_ne!(
+        face_ids[0], face_ids[1],
+        "buffer face property should split the row face like Lisp-string chrome"
+    );
+}
+
+#[test]
+fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
+    let _eval = Context::new();
+    let text = "a\u{0001}\u{fff0}b";
+    let lisp_row = render_lisp_display_row(Value::string(text), GlyphRowRole::HeaderLine);
+    let buffer_row = render_buffer_display_row(text, GlyphRowRole::HeaderLine);
+
+    assert_eq!(
+        row_text_glyph_types(&buffer_row),
+        row_text_glyph_types(&lisp_row)
+    );
+    assert!(
+        row_text_glyph_types(&buffer_row)
+            .iter()
+            .any(|kind| matches!(kind, GlyphType::Glyphless { ch: '\u{fff0}' })),
+        "glyphless buffer source chars should reach the same row builder path as Lisp strings"
     );
 }
 
