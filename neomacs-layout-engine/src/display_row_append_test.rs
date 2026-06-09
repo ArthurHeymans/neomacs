@@ -1,7 +1,7 @@
 use super::*;
 use crate::display_item::{
-    DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    DisplayXwidgetItem, RenderFaceRef,
+    DisplayImageItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvances};
@@ -1277,6 +1277,125 @@ fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
     assert_eq!(xwidget.y, 6.0);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
+}
+
+#[test]
+fn append_display_item_to_text_row_and_emit_installs_image_replacements() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("append-image-item", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
+    builder.begin_window_with_text_bounds(
+        77,
+        1,
+        24,
+        Rect::new(0.0, 0.0, 200.0, 80.0),
+        text_bounds,
+        true,
+    );
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 4.0,
+            glyph_y: 6.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 160.0,
+            text_width: 160.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::FaceId(3),
+        DisplayItemKind::Image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        }),
+    );
+
+    let (progress, end) = append_display_item_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        item,
+        7,
+        frame,
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+    )
+    .expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.metrics.width_px, 64.0);
+    assert_eq!(
+        end,
+        DisplayRowPosition {
+            x_px: 80.0,
+            col: 10
+        }
+    );
+    builder
+        .with_current_row_mut(|row| {
+            let glyph = &row.glyphs[1][0];
+            assert_eq!(glyph.face_id, 3);
+            assert_eq!(glyph.pixel_width, 64.0);
+            assert_eq!(glyph.pixel_height, 32.0);
+            assert_eq!(glyph.pixel_ascent, 32.0);
+            assert!(matches!(
+                glyph.glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 8 }
+            ));
+        })
+        .expect("current row");
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(24, 1, 8.0, 16.0);
+    let image = state.images.first().expect("image side item");
+    assert_eq!(image.window_id, 77);
+    assert_eq!(image.row_role, GlyphRowRole::Text);
+    assert_eq!(image.clip_rect, Some(text_bounds));
+    assert_eq!(
+        image.slot_id,
+        Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
+            window_id: 77,
+            row: 0,
+            col: 2,
+        })
+    );
+    assert_eq!(image.image_id, 42);
+    assert_eq!(image.x, 16.0);
+    assert_eq!(image.y, 6.0);
+    assert_eq!(image.width, 64.0);
+    assert_eq!(image.height, 32.0);
 }
 
 #[test]

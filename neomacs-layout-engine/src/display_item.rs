@@ -254,9 +254,11 @@ pub(crate) struct DisplayStretch {
     pub(crate) ascent: Option<DisplayLength>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayImageItem {
     pub(crate) image_id: i32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

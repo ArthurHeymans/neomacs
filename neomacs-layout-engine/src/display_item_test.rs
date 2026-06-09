@@ -63,7 +63,11 @@ fn display_item_inline_media_slots_are_source_neutral() {
     let image = DisplayItem::new(
         span.clone(),
         RenderFaceRef::Inherit,
-        DisplayItemKind::Image(DisplayImageItem { image_id: 42 }),
+        DisplayItemKind::Image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        }),
     );
     let video = DisplayItem::new(
         span.clone(),
@@ -82,7 +86,11 @@ fn display_item_inline_media_slots_are_source_neutral() {
 
     assert_eq!(
         image.kind,
-        DisplayItemKind::Image(DisplayImageItem { image_id: 42 })
+        DisplayItemKind::Image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        })
     );
     assert_eq!(
         video.kind,

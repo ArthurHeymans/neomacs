@@ -935,6 +935,35 @@ impl GlyphMatrixBuilder {
         });
     }
 
+    pub(crate) fn push_current_window_image(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        image_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        let window_id = self.current_window_id as i64;
+        self.push_image_with_slot_id(
+            window_id,
+            role,
+            Some(self.current_text_pixel_bounds),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
+            image_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
     pub fn push_video(
         &mut self,
         window_id: i64,

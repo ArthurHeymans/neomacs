@@ -1,6 +1,6 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
-    DisplayTextRun, DisplayXwidgetItem, RenderFaceRef, SourceSpan,
+    DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -784,32 +784,65 @@ pub(crate) fn append_display_row_spec_item(
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let xwidget = match &item.kind {
-        DisplayItemKind::Xwidget(xwidget) => Some(*xwidget),
+    let media = match &item.kind {
+        DisplayItemKind::Image(image) => Some(DisplayRowAppendMedia::Image(*image)),
+        DisplayItemKind::Xwidget(xwidget) => Some(DisplayRowAppendMedia::Xwidget(*xwidget)),
         _ => None,
     };
-    if let Some(xwidget) = xwidget {
-        return append_xwidget_display_row_spec_item(builder, spec, item, xwidget);
+    match media {
+        Some(DisplayRowAppendMedia::Image(image)) => {
+            append_image_display_row_spec_item(builder, spec, item, image)
+        }
+        Some(DisplayRowAppendMedia::Xwidget(xwidget)) => {
+            append_xwidget_display_row_spec_item(builder, spec, item, xwidget)
+        }
+        None => append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item),
     }
-    append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DisplayRowAppendMedia {
+    Image(DisplayImageItem),
+    Xwidget(DisplayXwidgetItem),
+}
+
+fn append_image_display_row_spec_item(
+    builder: &mut GlyphMatrixBuilder,
+    spec: &DisplayRowAppendSpec,
+    item: DisplayItem,
+    image: DisplayImageItem,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let width = display_replacement_dimension(image.width);
+    let height = display_replacement_dimension(image.height);
+    let (progress, position) =
+        append_display_replacement_box_item(builder, spec, item, width, height)?;
+    if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
+        && progress.metrics.width_px > 0.0
+    {
+        builder.push_current_window_image(
+            spec.layout.role,
+            display_slot_row(spec.output.row),
+            display_slot_col(progress.start.col),
+            image.image_id.max(0) as u32,
+            progress.start.x_px,
+            spec.output.glyph_y,
+            width,
+            height,
+        );
+    }
+    Some((progress, position))
 }
 
 fn append_xwidget_display_row_spec_item(
     builder: &mut GlyphMatrixBuilder,
     spec: &DisplayRowAppendSpec,
-    mut item: DisplayItem,
+    item: DisplayItem,
     xwidget: DisplayXwidgetItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let width = display_replacement_dimension(xwidget.width);
     let height = display_replacement_dimension(xwidget.height);
-    item.kind = DisplayItemKind::Stretch(DisplayStretch {
-        width: DisplayStretchWidth::Length(DisplayLength::Pixels(width)),
-        height: Some(DisplayLength::Pixels(height)),
-        ascent: Some(DisplayLength::Pixels(height)),
-    });
-
     let (progress, position) =
-        append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)?;
+        append_display_replacement_box_item(builder, spec, item, width, height)?;
     if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
         && progress.metrics.width_px > 0.0
     {
@@ -825,12 +858,36 @@ fn append_xwidget_display_row_spec_item(
     Some((progress, position))
 }
 
+fn append_display_replacement_box_item(
+    builder: &mut GlyphMatrixBuilder,
+    spec: &DisplayRowAppendSpec,
+    mut item: DisplayItem,
+    width: f32,
+    height: f32,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    item.kind = DisplayItemKind::Stretch(DisplayStretch {
+        width: DisplayStretchWidth::Length(DisplayLength::Pixels(width)),
+        height: Some(DisplayLength::Pixels(height)),
+        ascent: Some(DisplayLength::Pixels(height)),
+    });
+
+    append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
+}
+
 fn display_replacement_dimension(value: f32) -> f32 {
     if value.is_finite() {
         value.max(1.0)
     } else {
         1.0
     }
+}
+
+fn display_slot_row(row: usize) -> u32 {
+    row.min(u32::MAX as usize) as u32
+}
+
+fn display_slot_col(col: usize) -> u16 {
+    col.min(usize::from(u16::MAX)) as u16
 }
 
 pub(crate) fn append_measured_display_row_item(
