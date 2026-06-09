@@ -18,6 +18,7 @@ use super::window_output::{
     finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplayRow,
@@ -129,7 +130,6 @@ struct LigatureRunBuffer {
     face_id: u32,
     total_advance: f32,
     is_overlay: bool,
-    height_scale: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -447,7 +447,6 @@ impl LigatureRunBuffer {
             face_id: 0,
             total_advance: 0.0,
             is_overlay: false,
-            height_scale: 0.0,
         }
     }
 
@@ -481,7 +480,6 @@ impl LigatureRunBuffer {
         face_ascent: f32,
         face_id: u32,
         is_overlay: bool,
-        height_scale: f32,
     ) {
         self.clear();
         self.start_x = x;
@@ -490,7 +488,6 @@ impl LigatureRunBuffer {
         self.face_ascent = face_ascent;
         self.face_id = face_id;
         self.is_overlay = is_overlay;
-        self.height_scale = height_scale;
     }
 }
 
@@ -3273,8 +3270,9 @@ impl LayoutEngine {
         let mut raise_y_offset: f32 = 0.0;
         let mut raise_end: i64 = window_start;
 
-        // Display :height property: font scale factor
-        let mut height_scale: f32 = 0.0; // 0.0 = no scaling
+        // Display :height property: font scale factor applied as a real face
+        // transformation, matching GNU `face_with_height`.
+        let mut height_factor: Option<f32> = None;
         let mut height_end: i64 = window_start;
 
         // Fringe state tracking
@@ -3417,8 +3415,23 @@ impl LayoutEngine {
                 if (charpos as usize) >= face_next_check {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let resolved =
+                    let mut resolved =
                         face_resolver.face_at_pos(buffer, charpos as usize, &mut face_next_check);
+                    if let Some(factor) = height_factor
+                        && let Some(adjusted) = height_adjusted_face(
+                            &resolved,
+                            DisplayHeightFaceBasis {
+                                canonical_face: default_resolved,
+                                base_face: default_resolved,
+                                fallback_char_width: default_face_char_w,
+                                fallback_ascent: default_face_ascent,
+                                fallback_row_height: default_face_h,
+                            },
+                            factor,
+                        )
+                    {
+                        resolved = adjusted;
+                    }
                     let face_id = current_face_id;
 
                     let metrics = if frame_params.window_system {
@@ -3977,6 +3990,11 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
+            if height_end > window_start && charpos >= height_end {
+                height_factor = None;
+                height_end = window_start;
+                face_next_check = 0;
+            }
             resolve_current_face_state!();
             if charpos >= display_next_check {
                 let display_prop_val: Option<neovm_core::emacs_core::Value> = {
@@ -4394,9 +4412,11 @@ impl LayoutEngine {
 
                     // Case 5: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = display_property.modifiers.height {
-                        if factor > 0.0 {
-                            height_scale = factor;
+                        if factor.is_finite() && factor > 0.0 {
+                            height_factor = Some(factor);
                             height_end = display_next_check;
+                            face_next_check = 0;
+                            resolve_current_face_state!();
                         }
                     }
                     // Other display property types: fall through to normal rendering
@@ -5361,11 +5381,6 @@ impl LayoutEngine {
                 raise_y_offset = 0.0;
                 raise_end = window_start;
             }
-            // Reset height scale when past the height region
-            if height_end > window_start && charpos >= height_end {
-                height_scale = 0.0;
-                height_end = window_start;
-            }
 
             // Capture cursor metrics at point position during the main layout
             // so cursor emission uses the correct per-face height/width.
@@ -5448,15 +5463,8 @@ impl LayoutEngine {
                 self.run_buf.clear();
             } else if self.run_buf.is_empty() {
                 let gy = y + raise_y_offset;
-                self.run_buf.start(
-                    x,
-                    gy,
-                    face_h,
-                    face_ascent_val,
-                    current_text_face_id,
-                    false,
-                    height_scale,
-                );
+                self.run_buf
+                    .start(x, gy, face_h, face_ascent_val, current_text_face_id, false);
             }
             if ch != '\t' {
                 self.run_buf.push(ch, advance);

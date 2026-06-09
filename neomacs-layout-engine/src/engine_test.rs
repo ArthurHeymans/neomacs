@@ -1368,7 +1368,6 @@ fn test_ligature_run_buffer_new() {
     assert_eq!(buf.face_id, 0);
     assert_eq!(buf.total_advance, 0.0);
     assert_eq!(buf.is_overlay, false);
-    assert_eq!(buf.height_scale, 0.0);
 
     // Vectors should be pre-allocated
     assert!(buf.chars.capacity() >= MAX_LIGATURE_RUN_LEN);
@@ -2911,6 +2910,90 @@ fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     assert!(
         text_row.ascent_px > 0.0,
         "expected ordinary text rows to record authoritative ascent, got {text_row:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_applies_display_height_to_buffer_text_faces() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("AB\n");
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+        );
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-display-height-text-face", 640, 160, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert_eq!(glyphs_logical_text(&text_row.glyphs[1]), "AB");
+    let text_faces = text_row.glyphs[1]
+        .iter()
+        .filter(|glyph| !glyph.padding)
+        .map(|glyph| glyph.face_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        text_faces.len(),
+        2,
+        "expected two visible glyphs in {text_row:?}"
+    );
+    assert_ne!(
+        text_faces[0], text_faces[1],
+        "display height should realize a separate face for the covered glyph"
+    );
+    let base_face = state
+        .faces
+        .get(&text_faces[0])
+        .expect("base text face should be registered");
+    let adjusted_face = state
+        .faces
+        .get(&text_faces[1])
+        .expect("height-adjusted text face should be registered");
+    assert!(
+        adjusted_face.font_size > base_face.font_size,
+        "display height should scale the realized render face, base={base_face:?} adjusted={adjusted_face:?}"
+    );
+    assert!(
+        text_row.height_px > state.char_height.max(1.0),
+        "height display property should grow text row metrics, frame_char_height={} row={text_row:?}",
+        state.char_height
     );
 }
 
@@ -8103,7 +8186,6 @@ fn test_ligature_run_buffer_clear() {
     buf.face_ascent = 12.0;
     buf.face_id = 42;
     buf.is_overlay = true;
-    buf.height_scale = 1.5;
 
     buf.clear();
 
@@ -8119,7 +8201,6 @@ fn test_ligature_run_buffer_clear() {
     assert_eq!(buf.face_ascent, 12.0);
     assert_eq!(buf.face_id, 42);
     assert_eq!(buf.is_overlay, true);
-    assert_eq!(buf.height_scale, 1.5);
 }
 
 #[test]
@@ -8129,7 +8210,7 @@ fn test_ligature_run_buffer_start() {
     buf.push('x', 10.0);
     buf.start_x = 999.0;
 
-    buf.start(50.0, 60.0, 20.0, 15.0, 5, true, 1.2);
+    buf.start(50.0, 60.0, 20.0, 15.0, 5, true);
 
     // Clears chars/advances/total_advance
     assert_eq!(buf.chars.len(), 0);
@@ -8143,7 +8224,6 @@ fn test_ligature_run_buffer_start() {
     assert_eq!(buf.face_ascent, 15.0);
     assert_eq!(buf.face_id, 5);
     assert_eq!(buf.is_overlay, true);
-    assert_eq!(buf.height_scale, 1.2);
 }
 
 #[test]
@@ -8155,7 +8235,7 @@ fn test_max_ligature_run_len_constant() {
 fn test_flush_run_is_noop() {
     // flush_run is now a no-op: glyph output has been migrated to GlyphMatrixBuilder.
     let mut run = LigatureRunBuffer::new();
-    run.start(10.0, 20.0, 16.0, 12.0, 1, false, 0.0);
+    run.start(10.0, 20.0, 16.0, 12.0, 1, false);
     run.push('a', 8.0);
     let len_before = run.len();
     let advance_before = run.total_advance;
@@ -8195,21 +8275,21 @@ fn test_is_ligature_char() {
 fn test_run_is_pure_ligature() {
     // Pure symbol run
     let mut run = LigatureRunBuffer::new();
-    run.start(0.0, 0.0, 16.0, 12.0, 1, false, 0.0);
+    run.start(0.0, 0.0, 16.0, 12.0, 1, false);
     run.push('-', 8.0);
     run.push('>', 8.0);
     assert!(run_is_pure_ligature(&run));
 
     // Mixed run (alpha + symbol)
     let mut run2 = LigatureRunBuffer::new();
-    run2.start(0.0, 0.0, 16.0, 12.0, 1, false, 0.0);
+    run2.start(0.0, 0.0, 16.0, 12.0, 1, false);
     run2.push('a', 8.0);
     run2.push(':', 8.0);
     assert!(!run_is_pure_ligature(&run2));
 
     // Pure alpha run
     let mut run3 = LigatureRunBuffer::new();
-    run3.start(0.0, 0.0, 16.0, 12.0, 1, false, 0.0);
+    run3.start(0.0, 0.0, 16.0, 12.0, 1, false);
     run3.push('h', 8.0);
     run3.push('i', 8.0);
     assert!(!run_is_pure_ligature(&run3));

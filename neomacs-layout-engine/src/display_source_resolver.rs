@@ -1,3 +1,4 @@
+use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
@@ -122,7 +123,19 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         }
 
         let source = self.state.resolved_face_for(face, self.params.base_face);
-        let resolved = self.height_adjusted_face(&source, factor);
+        let Some(resolved) = height_adjusted_face(
+            &source,
+            DisplayHeightFaceBasis {
+                canonical_face: self.params.canonical_face,
+                base_face: self.params.base_face,
+                fallback_char_width: self.params.fallback_char_width,
+                fallback_ascent: self.params.fallback_ascent,
+                fallback_row_height: self.params.fallback_row_height,
+            },
+            factor,
+        ) else {
+            return face;
+        };
         if same_resolved_face(&resolved, &source) {
             return face;
         }
@@ -134,33 +147,6 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         self.pending_faces
             .push(PendingDisplaySourceFace { face_id, resolved });
         RenderFaceRef::FaceId(face_id)
-    }
-
-    fn height_adjusted_face(&self, source: &ResolvedFace, factor: f32) -> ResolvedFace {
-        let mut resolved = source.clone();
-        let canonical = self.params.canonical_face;
-        let canonical_font_size = positive_f32(canonical.font_size)
-            .or_else(|| positive_f32(self.params.base_face.font_size))
-            .or_else(|| positive_f32(source.font_size))
-            .unwrap_or_else(|| self.params.fallback_row_height.max(1.0));
-        let canonical_line_height = positive_f32(canonical.font_line_height)
-            .or_else(|| positive_f32(self.params.fallback_row_height))
-            .unwrap_or(canonical_font_size);
-        let canonical_ascent = positive_f32(canonical.font_ascent)
-            .or_else(|| positive_f32(self.params.fallback_ascent))
-            .unwrap_or(canonical_line_height * 0.8)
-            .min(canonical_line_height);
-        let canonical_char_width = positive_f32(canonical.font_char_width)
-            .or_else(|| positive_f32(self.params.fallback_char_width))
-            .unwrap_or(canonical_font_size * 0.5);
-
-        resolved.font_size = (canonical_font_size * factor).max(1.0);
-        resolved.font_line_height = (canonical_line_height * factor).max(1.0);
-        resolved.font_ascent = (canonical_ascent * factor)
-            .max(1.0)
-            .min(resolved.font_line_height);
-        resolved.font_char_width = (canonical_char_width * factor).max(1.0);
-        resolved
     }
 }
 
@@ -265,8 +251,4 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.box_line_width == rhs.box_line_width
         && lhs.extend == rhs.extend
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
-}
-
-fn positive_f32(value: f32) -> Option<f32> {
-    (value.is_finite() && value > 0.0).then_some(value)
 }
