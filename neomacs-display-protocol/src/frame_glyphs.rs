@@ -1383,37 +1383,24 @@ impl FrameGlyphBuffer {
     pub fn set_phys_cursor(&mut self, mut cursor: PhysCursor) {
         if let Some(slot) = self.slot_glyph(cursor.slot_id) {
             match slot {
-                FrameGlyph::Image {
-                    x,
-                    y,
-                    width,
-                    height,
-                    ..
-                }
-                | FrameGlyph::Video {
-                    x,
-                    y,
-                    width,
-                    height,
-                    ..
-                }
-                | FrameGlyph::Xwidget {
-                    x,
-                    y,
-                    width,
-                    height,
-                    ..
-                } => {
+                FrameGlyph::Image { .. }
+                | FrameGlyph::Video { .. }
+                | FrameGlyph::Xwidget { .. } => {
                     cursor.style = CursorStyle::Hollow;
-                    cursor.x = *x;
-                    cursor.y = *y;
-                    cursor.width = *width;
-                    cursor.height = *height;
-                    cursor.ascent = cursor.ascent.min(*height).max(1.0);
                 }
                 _ => {}
             }
         }
+        let (x, y, width, height) = self.cursor_draw_rect(
+            cursor.slot_id,
+            cursor.style,
+            (cursor.x, cursor.y, cursor.width, cursor.height),
+        );
+        cursor.x = x;
+        cursor.y = y;
+        cursor.width = width;
+        cursor.height = height;
+        cursor.ascent = cursor.ascent.min(height).max(1.0);
         let entry = WindowCursor {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,

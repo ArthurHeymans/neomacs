@@ -632,6 +632,37 @@ fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     )
 }
 
+#[test]
+fn layout_frame_rust_line_number_cursor_tracks_first_text_column_after_c_n() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-line-number-cursor-first-text-column",
+        "abc\ndef\n",
+        360,
+        140,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(4));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+                *window_start = LispCharPos1::ONE;
+            }
+        },
+    );
+
+    let cursor = trace.phys_cursor.as_ref().expect("phys cursor");
+    let point = trace
+        .points
+        .iter()
+        .find(|point| point.buffer_pos == LispCharPos1::from_one_based_usize(5))
+        .expect("display point for first character on second line");
+
+    assert_eq!(cursor.row, point.row);
+    assert_eq!(cursor.col, point.col);
+    assert_eq!(cursor.x, point.x);
+}
+
 fn display_replacement_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     let text = "abcXYZdef\n";
     backend_layout_trace_with_buffer_setup(

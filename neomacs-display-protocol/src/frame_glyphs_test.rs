@@ -1137,6 +1137,37 @@ fn set_frame_identity_root_frame() {
 // =======================================================================
 
 #[test]
+fn set_phys_cursor_normalizes_text_slot_geometry() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(1, GlyphRowRole::Text, None);
+    buf.add_char('2', 8.0, 70.0, 8.108109, 18.0, 14.0, false);
+    buf.add_stretch(16.108109, 70.0, 8.108109, 18.0, Color::WHITE, 0, false);
+    buf.add_char('d', 24.216217, 70.0, 8.0, 18.0, 14.0, false);
+    let text_slot = buf.glyphs[2].slot_id().expect("text slot");
+
+    buf.set_phys_cursor(PhysCursor {
+        window_id: 1,
+        charpos: 5,
+        row: text_slot.row as usize,
+        col: text_slot.col,
+        slot_id: text_slot,
+        x: 16.86,
+        y: 70.0,
+        width: 8.0,
+        height: 18.0,
+        ascent: 14.0,
+        style: CursorStyle::FilledBox,
+        color: Color::BLACK,
+        cursor_fg: Color::WHITE,
+    });
+
+    let stored = buf.active_cursor().expect("active cursor");
+    assert_eq!(stored.slot_id, text_slot);
+    assert_eq!(stored.x, 24.216217);
+    assert_eq!(stored.width, 8.0);
+}
+
+#[test]
 fn set_phys_cursor_stores_info() {
     let mut buf = FrameGlyphBuffer::new();
     let cursor_fg = Color::rgb(0.0, 0.0, 0.0);
