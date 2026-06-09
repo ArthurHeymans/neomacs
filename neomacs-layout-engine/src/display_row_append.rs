@@ -9,8 +9,8 @@ use crate::display_row_builder::{
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 use crate::display_source_resolver::{
-    DisplaySourcePropertyResolver, DisplaySourceResolveParams, DisplaySourceResolveState,
-    PendingDisplaySourceFace,
+    DisplaySourceResolveParams, DisplaySourceResolveState, PendingDisplaySourceFace,
+    resolve_next_display_source_item,
 };
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -72,41 +72,6 @@ fn apply_pending_display_source_faces(
     }
 }
 
-fn next_layout_display_source_item(
-    builder: &mut GlyphMatrixBuilder,
-    source: &mut impl DisplayItemSource,
-    face_resolver: &FaceResolver,
-    display_host: Option<&dyn DisplayHost>,
-    base_face: &ResolvedFace,
-    base_face_id: u32,
-    resolve_state: &mut DisplaySourceResolveState,
-    current_face_id: &mut u32,
-    fallback_char_width: f32,
-    fallback_row_height: f32,
-) -> Option<DisplayItem> {
-    let mut pending_faces = Vec::new();
-    let item = {
-        let params = DisplaySourceResolveParams {
-            face_resolver,
-            display_host,
-            base_face,
-            base_face_id,
-            fallback_char_width,
-            fallback_row_height,
-        };
-        let mut resolver = DisplaySourcePropertyResolver::new(
-            params,
-            resolve_state,
-            current_face_id,
-            &mut pending_faces,
-        );
-        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
-        source.next_item(&mut context)
-    };
-    apply_pending_display_source_faces(builder, &mut pending_faces);
-    item
-}
-
 pub(crate) struct DisplayItemSourceWalker<S> {
     source: S,
     resolve_state: DisplaySourceResolveState,
@@ -133,18 +98,21 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
         fallback_char_width: f32,
         fallback_row_height: f32,
     ) -> Option<DisplayItem> {
-        next_layout_display_source_item(
-            builder,
+        let mut resolved = resolve_next_display_source_item(
             &mut self.source,
-            face_resolver,
-            display_host,
-            base_face,
-            base_face_id,
+            DisplaySourceResolveParams {
+                face_resolver,
+                display_host,
+                base_face,
+                base_face_id,
+                fallback_char_width,
+                fallback_row_height,
+            },
             &mut self.resolve_state,
             current_face_id,
-            fallback_char_width,
-            fallback_row_height,
-        )
+        );
+        apply_pending_display_source_faces(builder, &mut resolved.pending_faces);
+        resolved.item
     }
 }
 

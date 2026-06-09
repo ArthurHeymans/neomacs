@@ -6,9 +6,9 @@ use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy,
 };
-use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
+use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 use crate::display_source_resolver::{
-    DisplaySourcePropertyResolver, DisplaySourceResolveParams, DisplaySourceResolveState,
+    DisplaySourceResolveParams, DisplaySourceResolveState, resolve_next_display_source_item,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -720,26 +720,20 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
         let mut media = Vec::new();
         loop {
-            let mut pending_faces = Vec::new();
-            let item = {
-                let params = DisplaySourceResolveParams {
+            let resolved = resolve_next_display_source_item(
+                source,
+                DisplaySourceResolveParams {
                     face_resolver,
                     display_host,
                     base_face,
                     base_face_id: row_face.face_id,
                     fallback_char_width: char_width,
                     fallback_row_height: geometry.height,
-                };
-                let mut row_face_resolver = DisplaySourcePropertyResolver::new(
-                    params,
-                    &mut resolve_state,
-                    next_face_id,
-                    &mut pending_faces,
-                );
-                let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
-                source.next_item(&mut context)
-            };
-            for pending in pending_faces {
+                },
+                &mut resolve_state,
+                next_face_id,
+            );
+            for pending in resolved.pending_faces {
                 let row_face = face_realizer.realize_face(
                     pending.face_id,
                     &pending.resolved,
@@ -749,7 +743,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 );
                 row_faces.push(row_face);
             }
-            let Some(item) = item else {
+            let Some(item) = resolved.item else {
                 break;
             };
             let media_descriptor = DisplayMediaReplacement::from_item_kind(&item.kind);

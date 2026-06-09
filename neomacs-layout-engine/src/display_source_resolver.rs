@@ -1,6 +1,6 @@
-use crate::display_item::{DisplayItemKind, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
-use crate::display_source::DisplayItemFaceResolver;
+use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -53,6 +53,12 @@ impl DisplaySourceResolveState {
 pub(crate) struct PendingDisplaySourceFace {
     pub(crate) face_id: u32,
     pub(crate) resolved: ResolvedFace,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedDisplaySourceItem {
+    pub(crate) item: Option<DisplayItem>,
+    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
@@ -119,6 +125,25 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             self.params.fallback_char_width,
             self.params.fallback_row_height,
         )
+    }
+}
+
+pub(crate) fn resolve_next_display_source_item(
+    source: &mut impl DisplayItemSource,
+    params: DisplaySourceResolveParams<'_>,
+    state: &mut DisplaySourceResolveState,
+    next_face_id: &mut u32,
+) -> ResolvedDisplaySourceItem {
+    let mut pending_faces = Vec::new();
+    let item = {
+        let mut resolver =
+            DisplaySourcePropertyResolver::new(params, state, next_face_id, &mut pending_faces);
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        source.next_item(&mut context)
+    };
+    ResolvedDisplaySourceItem {
+        item,
+        pending_faces,
     }
 }
 
