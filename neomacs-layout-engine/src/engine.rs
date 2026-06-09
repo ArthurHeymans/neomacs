@@ -241,7 +241,7 @@ fn include_glyph_vertical_metrics(
     *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn eval_status_line_format(
     evaluator: &mut neovm_core::emacs_core::Context,
     format_symbol: &str,
@@ -498,7 +498,7 @@ impl LigatureRunBuffer {
 /// Check if a character is a ligature-eligible symbol/punctuation.
 /// Programming font ligatures only form between these characters.
 #[inline]
-#[allow(dead_code)]
+#[cfg(test)]
 fn is_ligature_char(ch: char) -> bool {
     matches!(
         ch,
@@ -529,7 +529,7 @@ fn is_ligature_char(ch: char) -> bool {
 /// Mixed runs (e.g., "arrow:" or "Font:") should NOT be composed,
 /// only pure symbol runs (e.g., "->", "!=", "===").
 #[inline]
-#[allow(dead_code)]
+#[cfg(test)]
 fn run_is_pure_ligature(run: &LigatureRunBuffer) -> bool {
     run.chars.iter().all(|&ch| is_ligature_char(ch))
 }
