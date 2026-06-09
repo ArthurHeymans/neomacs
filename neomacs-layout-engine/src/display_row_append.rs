@@ -220,6 +220,14 @@ pub(crate) enum DisplayRowAppendMeasurement<'a> {
     Measured(&'a mut dyn DisplayGlyphMeasurer),
 }
 
+pub(crate) trait DisplayRowItemMeasurer {
+    fn measurement_for<'a>(
+        &'a mut self,
+        item: &DisplayItem,
+        face_id: u32,
+    ) -> DisplayRowAppendMeasurement<'a>;
+}
+
 pub(crate) fn append_display_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -302,6 +310,57 @@ pub(crate) fn append_display_replacement_string_item_to_text_row(
             )
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    source: &mut S,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    current_face_id: &mut u32,
+    frame: DisplayRowAppendFrame,
+    mut position: DisplayRowPosition,
+    item_measurer: &mut impl DisplayRowItemMeasurer,
+) -> DisplayRowPosition {
+    let mut string_face_cache = HashMap::new();
+    while let Some(item) = next_layout_string_source_item(
+        builder,
+        source,
+        face_resolver,
+        base_face,
+        &mut string_face_cache,
+        current_face_id,
+    ) {
+        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
+            break;
+        }
+        let stop_on_clipped = matches!(item.kind, DisplayItemKind::SourceMappedText(_));
+        let face_id = render_face_ref_id(item.face, fallback_face_id);
+        let measurement = item_measurer.measurement_for(&item, face_id);
+        let Some((progress, next_position)) = append_display_replacement_string_item_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            item,
+            fallback_face_id,
+            frame.clone(),
+            position,
+            measurement,
+        ) else {
+            break;
+        };
+        position = next_position;
+        if stop_on_clipped
+            && progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped
+        {
+            break;
+        }
+    }
+    position
 }
 
 pub(crate) struct DisplayRowAppendOutput {

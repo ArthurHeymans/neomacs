@@ -20,12 +20,12 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
-    DisplayRowAppendPlacement, DisplayRowAppendSurface, append_buffer_text_char_to_text_row,
-    append_display_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
+    DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
+    append_buffer_text_char_to_text_row, append_display_item_to_text_row_and_emit,
+    append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
-    append_display_replacement_string_item_to_text_row, append_lisp_string_to_text_row,
+    append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
     append_synthetic_text_to_display_row, emit_text_progress_slots, next_layout_string_source_item,
-    render_face_ref_id,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -698,6 +698,57 @@ impl AsciiWidthCacheKey {
             italic,
             font_size,
         }
+    }
+}
+
+struct ReplacementStringItemMeasurer<'a> {
+    ascii_width_cache: &'a mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
+    use_font_metrics: bool,
+    font_metrics_svc: &'a mut Option<FontMetricsService>,
+    char_w: f32,
+    font_size: i32,
+    face_char_w: f32,
+    font_family: &'a str,
+    font_weight: u16,
+    font_italic: bool,
+    scratch: FixedGlyphAdvances,
+}
+
+impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
+    fn measurement_for<'a>(
+        &'a mut self,
+        item: &crate::display_item::DisplayItem,
+        face_id: u32,
+    ) -> DisplayRowAppendMeasurement<'a> {
+        self.scratch = FixedGlyphAdvances::new();
+        let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
+            return DisplayRowAppendMeasurement::Default;
+        };
+        for ch in text.text.chars() {
+            if ch == '\t' {
+                continue;
+            }
+            let cols = crate::composition::base_width_cols(ch) as i32;
+            let advance = if cols == 0 {
+                0.0
+            } else {
+                char_pixel_advance(
+                    self.ascii_width_cache,
+                    self.use_font_metrics,
+                    self.font_metrics_svc,
+                    ch,
+                    cols,
+                    self.char_w,
+                    self.font_size,
+                    self.face_char_w,
+                    self.font_family,
+                    self.font_weight,
+                    self.font_italic,
+                )
+            };
+            self.scratch.insert(ch, face_id, advance);
+        }
+        DisplayRowAppendMeasurement::Measured(&mut self.scratch)
     }
 }
 
@@ -4096,139 +4147,47 @@ impl LayoutEngine {
                                     replacement_source,
                                     source,
                                 );
-                                let mut string_face_cache = std::collections::HashMap::new();
-                                loop {
-                                    let item = next_layout_string_source_item(
-                                        &mut self.matrix_builder,
-                                        &mut source,
-                                        face_resolver,
-                                        &current_resolved_face,
-                                        &mut string_face_cache,
-                                        &mut current_face_id,
-                                    );
-                                    let Some(item) = item else {
-                                        break;
-                                    };
-                                    let crate::display_item::DisplayItem {
-                                        span,
-                                        face: item_face,
-                                        kind,
-                                    } = item;
-                                    match kind {
-                                        crate::display_item::DisplayItemKind::SourceMappedText(
-                                            text,
-                                        ) => {
-                                            let face_id =
-                                                render_face_ref_id(item_face, current_text_face_id);
-                                            let mut measurer = FixedGlyphAdvances::new();
-                                            for rch in text.text.chars() {
-                                                if rch == '\t' {
-                                                    continue;
-                                                }
-                                                let cols =
-                                                    crate::composition::base_width_cols(rch) as i32;
-                                                let advance = if cols == 0 {
-                                                    0.0
-                                                } else {
-                                                    char_pixel_advance(
-                                                        &mut self.ascii_width_cache,
-                                                        frame_params.window_system,
-                                                        &mut self.font_metrics,
-                                                        rch,
-                                                        cols,
-                                                        char_w,
-                                                        current_font_size_px,
-                                                        face_char_w,
-                                                        &self.current_resolved_family,
-                                                        current_font_weight,
-                                                        current_font_italic,
-                                                    )
-                                                };
-                                                measurer.insert(rch, face_id, advance);
-                                            }
-                                            let item = crate::display_item::DisplayItem::new(
-                                                span,
-                                                item_face,
-                                                crate::display_item::DisplayItemKind::SourceMappedText(
-                                                    text,
-                                                ),
-                                            );
-                                            let append_frame = replacement_string_surface.frame(
-                                                DisplayRowAppendPlacement {
-                                                    row,
-                                                    y,
-                                                    glyph_y: y + raise_y_offset,
-                                                },
-                                                DisplayRowAppendMetrics {
-                                                    height: face_h,
-                                                    ascent: face_ascent_val,
-                                                    char_width: face_char_w,
-                                                    space_width: face_space_w,
-                                                    default_row_height: char_h,
-                                                },
-                                            );
-                                            let Some((progress, position)) =
-                                                append_display_replacement_string_item_to_text_row(
-                                                    &mut self.matrix_builder,
-                                                    &mut output_emitter,
-                                                    evaluator,
-                                                    item,
-                                                    current_text_face_id,
-                                                    append_frame,
-                                                    DisplayRowPosition { x_px: x, col },
-                                                    DisplayRowAppendMeasurement::Measured(
-                                                        &mut measurer,
-                                                    ),
-                                                )
-                                            else {
-                                                break;
-                                            };
-                                            x = position.x_px;
-                                            col = position.col;
-                                            if progress.status
-                                                == crate::display_row_builder::DisplayRowAppendStatus::Clipped
-                                            {
-                                                break;
-                                            }
-                                        }
-                                        crate::display_item::DisplayItemKind::RowBreak(_) => break,
-                                        kind => {
-                                            let item = crate::display_item::DisplayItem::new(
-                                                span, item_face, kind,
-                                            );
-                                            let append_frame = replacement_string_surface.frame(
-                                                DisplayRowAppendPlacement {
-                                                    row,
-                                                    y,
-                                                    glyph_y: y + raise_y_offset,
-                                                },
-                                                DisplayRowAppendMetrics {
-                                                    height: face_h,
-                                                    ascent: face_ascent_val,
-                                                    char_width: face_char_w,
-                                                    space_width: face_space_w,
-                                                    default_row_height: char_h,
-                                                },
-                                            );
-                                            let Some((_progress, position)) =
-                                                append_display_replacement_string_item_to_text_row(
-                                                    &mut self.matrix_builder,
-                                                    &mut output_emitter,
-                                                    evaluator,
-                                                    item,
-                                                    current_text_face_id,
-                                                    append_frame,
-                                                    DisplayRowPosition { x_px: x, col },
-                                                    DisplayRowAppendMeasurement::Default,
-                                                )
-                                            else {
-                                                break;
-                                            };
-                                            x = position.x_px;
-                                            col = position.col;
-                                        }
-                                    }
-                                }
+                                let append_frame = replacement_string_surface.frame(
+                                    DisplayRowAppendPlacement {
+                                        row,
+                                        y,
+                                        glyph_y: y + raise_y_offset,
+                                    },
+                                    DisplayRowAppendMetrics {
+                                        height: face_h,
+                                        ascent: face_ascent_val,
+                                        char_width: face_char_w,
+                                        space_width: face_space_w,
+                                        default_row_height: char_h,
+                                    },
+                                );
+                                let mut item_measurer = ReplacementStringItemMeasurer {
+                                    ascii_width_cache: &mut self.ascii_width_cache,
+                                    use_font_metrics: frame_params.window_system,
+                                    font_metrics_svc: &mut self.font_metrics,
+                                    char_w,
+                                    font_size: current_font_size_px,
+                                    face_char_w,
+                                    font_family: &self.current_resolved_family,
+                                    font_weight: current_font_weight,
+                                    font_italic: current_font_italic,
+                                    scratch: FixedGlyphAdvances::new(),
+                                };
+                                let position = append_display_replacement_string_source_to_text_row(
+                                    &mut self.matrix_builder,
+                                    &mut output_emitter,
+                                    evaluator,
+                                    &mut source,
+                                    face_resolver,
+                                    &current_resolved_face,
+                                    current_text_face_id,
+                                    &mut current_face_id,
+                                    append_frame,
+                                    DisplayRowPosition { x_px: x, col },
+                                    &mut item_measurer,
+                                );
+                                x = position.x_px;
+                                col = position.col;
                             }
                         }
 

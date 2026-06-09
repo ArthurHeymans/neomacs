@@ -631,6 +631,140 @@ fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_
         .expect("current row");
 }
 
+struct SourceMappedTextWidthByFace {
+    scratch: FixedGlyphAdvances,
+}
+
+impl SourceMappedTextWidthByFace {
+    fn new() -> Self {
+        Self {
+            scratch: FixedGlyphAdvances::new(),
+        }
+    }
+}
+
+impl DisplayRowItemMeasurer for SourceMappedTextWidthByFace {
+    fn measurement_for<'a>(
+        &'a mut self,
+        item: &crate::display_item::DisplayItem,
+        face_id: u32,
+    ) -> DisplayRowAppendMeasurement<'a> {
+        self.scratch = FixedGlyphAdvances::new();
+        let DisplayItemKind::SourceMappedText(text) = &item.kind else {
+            return DisplayRowAppendMeasurement::Default;
+        };
+        for ch in text.text.chars() {
+            self.scratch
+                .insert(ch, face_id, if face_id == 20 { 13.0 } else { 11.0 });
+        }
+        DisplayRowAppendMeasurement::Measured(&mut self.scratch)
+    }
+}
+
+#[test]
+fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_measurements() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-replacement-string-source", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let value = Value::string_with_text_properties(
+        "ab",
+        vec![StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+            ]),
+        }],
+    );
+    let string_source =
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(7))
+            .expect("string source");
+    let replacement_source =
+        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
+    let mut source = crate::display_source::BufferDisplayReplacementStringSource::new(
+        replacement_source,
+        string_source,
+    );
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let mut measurer = SourceMappedTextWidthByFace::new();
+
+    let end = append_display_replacement_string_source_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut source,
+        &face_resolver,
+        base_face,
+        7,
+        &mut current_face_id,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        &mut measurer,
+    );
+
+    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 2 });
+    assert_eq!(current_face_id, 21);
+    assert_eq!(
+        builder.faces().get(&20).map(|face| face.foreground),
+        Some(Color::from_pixel(0x00ff0000))
+    );
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 2);
+            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].pixel_width, 11.0);
+            assert_eq!(text[1].face_id, 20);
+            assert_eq!(text[1].pixel_width, 13.0);
+        })
+        .expect("current row");
+}
+
 #[test]
 fn append_display_replacement_item_to_text_row_uses_face_fallback_without_emitting() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
