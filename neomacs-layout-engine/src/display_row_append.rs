@@ -96,6 +96,7 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
         current_face_id: &mut u32,
         display_host: Option<&dyn DisplayHost>,
         fallback_char_width: f32,
+        fallback_ascent: f32,
         fallback_row_height: f32,
     ) -> Option<DisplayItem> {
         let mut resolved = resolve_next_display_source_item(
@@ -104,8 +105,10 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
                 face_resolver,
                 display_host,
                 base_face,
+                canonical_face: face_resolver.default_face(),
                 base_face_id,
                 fallback_char_width,
+                fallback_ascent,
                 fallback_row_height,
             },
             &mut self.resolve_state,
@@ -421,6 +424,7 @@ pub(crate) fn append_display_item_source_to_text_row<
 ) -> DisplayRowPosition {
     let mut source = DisplayItemSourceWalker::new(source);
     let fallback_char_width = frame.geometry.char_width;
+    let fallback_ascent = frame.geometry.ascent;
     let fallback_row_height = frame.geometry.height;
     append_display_item_stream_to_text_row(
         builder,
@@ -439,6 +443,7 @@ pub(crate) fn append_display_item_source_to_text_row<
                 current_face_id,
                 display_host,
                 fallback_char_width,
+                fallback_ascent,
                 fallback_row_height,
             )
         },

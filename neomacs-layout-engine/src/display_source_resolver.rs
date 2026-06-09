@@ -10,14 +10,17 @@ pub(crate) struct DisplaySourceResolveParams<'a> {
     pub(crate) face_resolver: &'a FaceResolver,
     pub(crate) display_host: Option<&'a dyn DisplayHost>,
     pub(crate) base_face: &'a ResolvedFace,
+    pub(crate) canonical_face: &'a ResolvedFace,
     pub(crate) base_face_id: u32,
     pub(crate) fallback_char_width: f32,
+    pub(crate) fallback_ascent: f32,
     pub(crate) fallback_row_height: f32,
 }
 
 #[derive(Default)]
 pub(crate) struct DisplaySourceResolveState {
     face_cache: HashMap<Value, u32>,
+    height_face_cache: HashMap<DisplayHeightFaceKey, u32>,
     resolved_faces: HashMap<u32, ResolvedFace>,
 }
 
@@ -47,6 +50,12 @@ impl DisplaySourceResolveState {
             .cloned()
             .unwrap_or_else(|| base_face.clone())
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DisplayHeightFaceKey {
+    base_face_id: u32,
+    factor_bits: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +91,76 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             next_face_id,
             pending_faces,
         }
+    }
+
+    fn resolve_item_layout(&mut self, mut item: DisplayItem) -> DisplayItem {
+        if let Some(factor) = item
+            .layout
+            .height
+            .filter(|factor| factor.is_finite() && *factor > 0.0)
+        {
+            item.face = self.resolve_height_face_ref(item.face, factor);
+        }
+        item
+    }
+
+    fn resolve_height_face_ref(&mut self, face: RenderFaceRef, factor: f32) -> RenderFaceRef {
+        if self.params.fallback_char_width <= 1.0 && self.params.fallback_row_height <= 1.0 {
+            return face;
+        }
+
+        let base_face_id = match face {
+            RenderFaceRef::FaceId(face_id) => face_id,
+            RenderFaceRef::Inherit => self.params.base_face_id,
+        };
+        let key = DisplayHeightFaceKey {
+            base_face_id,
+            factor_bits: factor.to_bits(),
+        };
+        if let Some(face_id) = self.state.height_face_cache.get(&key).copied() {
+            return RenderFaceRef::FaceId(face_id);
+        }
+
+        let source = self.state.resolved_face_for(face, self.params.base_face);
+        let resolved = self.height_adjusted_face(&source, factor);
+        if same_resolved_face(&resolved, &source) {
+            return face;
+        }
+
+        let face_id = *self.next_face_id;
+        *self.next_face_id += 1;
+        self.state.height_face_cache.insert(key, face_id);
+        self.state.remember_face(face_id, &resolved);
+        self.pending_faces
+            .push(PendingDisplaySourceFace { face_id, resolved });
+        RenderFaceRef::FaceId(face_id)
+    }
+
+    fn height_adjusted_face(&self, source: &ResolvedFace, factor: f32) -> ResolvedFace {
+        let mut resolved = source.clone();
+        let canonical = self.params.canonical_face;
+        let canonical_font_size = positive_f32(canonical.font_size)
+            .or_else(|| positive_f32(self.params.base_face.font_size))
+            .or_else(|| positive_f32(source.font_size))
+            .unwrap_or_else(|| self.params.fallback_row_height.max(1.0));
+        let canonical_line_height = positive_f32(canonical.font_line_height)
+            .or_else(|| positive_f32(self.params.fallback_row_height))
+            .unwrap_or(canonical_font_size);
+        let canonical_ascent = positive_f32(canonical.font_ascent)
+            .or_else(|| positive_f32(self.params.fallback_ascent))
+            .unwrap_or(canonical_line_height * 0.8)
+            .min(canonical_line_height);
+        let canonical_char_width = positive_f32(canonical.font_char_width)
+            .or_else(|| positive_f32(self.params.fallback_char_width))
+            .unwrap_or(canonical_font_size * 0.5);
+
+        resolved.font_size = (canonical_font_size * factor).max(1.0);
+        resolved.font_line_height = (canonical_line_height * factor).max(1.0);
+        resolved.font_ascent = (canonical_ascent * factor)
+            .max(1.0)
+            .min(resolved.font_line_height);
+        resolved.font_char_width = (canonical_char_width * factor).max(1.0);
+        resolved
     }
 }
 
@@ -139,7 +218,9 @@ pub(crate) fn resolve_next_display_source_item(
         let mut resolver =
             DisplaySourcePropertyResolver::new(params, state, next_face_id, &mut pending_faces);
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
-        source.next_item(&mut context)
+        source
+            .next_item(&mut context)
+            .map(|item| resolver.resolve_item_layout(item))
     };
     ResolvedDisplaySourceItem {
         item,
@@ -184,4 +265,8 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.box_line_width == rhs.box_line_width
         && lhs.extend == rhs.extend
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
+}
+
+fn positive_f32(value: f32) -> Option<f32> {
+    (value.is_finite() && value > 0.0).then_some(value)
 }

@@ -1373,6 +1373,7 @@ fn render_overlay_string(
             current_face_id,
             evaluator.display_host.as_deref(),
             face_char_w,
+            default_row_ascent,
             char_h,
         );
         let Some(item) = item else {

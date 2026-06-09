@@ -324,8 +324,10 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
         face_resolver: &face_resolver,
         display_host: None,
         base_face,
+        canonical_face: face_resolver.default_face(),
         base_face_id: 0,
         fallback_char_width: 8.0,
+        fallback_ascent: 12.0,
         fallback_row_height: 16.0,
     };
     let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
@@ -379,8 +381,10 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
             face_resolver: &face_resolver,
             display_host: None,
             base_face,
+            canonical_face: face_resolver.default_face(),
             base_face_id: 0,
             fallback_char_width: 8.0,
+            fallback_ascent: 12.0,
             fallback_row_height: 16.0,
         },
         &mut resolve_state,
@@ -392,6 +396,56 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
     assert_eq!(resolved.pending_faces.len(), 1);
     assert_eq!(resolved.pending_faces[0].face_id, 20);
     assert_eq!(resolved.pending_faces[0].resolved.fg, 0x00ff0000);
+}
+
+#[test]
+fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
+    let value = Value::string_with_text_properties(
+        "a",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+            ]),
+        }],
+    );
+    let mut source =
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+            .expect("string source");
+
+    let resolved = crate::display_source_resolver::resolve_next_display_source_item(
+        &mut source,
+        crate::display_source_resolver::DisplaySourceResolveParams {
+            face_resolver: &face_resolver,
+            display_host: None,
+            base_face,
+            canonical_face: face_resolver.default_face(),
+            base_face_id: 0,
+            fallback_char_width: 8.0,
+            fallback_ascent: 12.0,
+            fallback_row_height: 16.0,
+        },
+        &mut resolve_state,
+        &mut current_face_id,
+    );
+
+    let item = resolved.item.expect("source item");
+    assert_eq!(item.face, RenderFaceRef::FaceId(20));
+    assert_eq!(resolved.pending_faces.len(), 1);
+    assert_eq!(resolved.pending_faces[0].face_id, 20);
+    assert_eq!(resolved.pending_faces[0].resolved.font_size, 28.0);
+    assert_eq!(resolved.pending_faces[0].resolved.font_line_height, 32.0);
+    assert_eq!(resolved.pending_faces[0].resolved.font_ascent, 24.0);
+    assert_eq!(resolved.pending_faces[0].resolved.font_char_width, 16.0);
 }
 
 #[test]
@@ -435,6 +489,7 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut current_face_id,
             None,
             8.0,
+            12.0,
             16.0,
         )
         .expect("first source item");
@@ -447,6 +502,7 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut current_face_id,
             None,
             8.0,
+            12.0,
             16.0,
         )
         .expect("second source item");
@@ -459,6 +515,7 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut current_face_id,
             None,
             8.0,
+            12.0,
             16.0,
         )
         .expect("third source item");

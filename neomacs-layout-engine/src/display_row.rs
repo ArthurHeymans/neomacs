@@ -577,6 +577,18 @@ fn display_row_progress(
     }
 }
 
+fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
+    let glyph_ascent = face.font_ascent.max(0.0);
+    let glyph_height = (glyph_ascent + face.font_descent.max(0) as f32).max(1.0);
+    let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
+    let row_descent = (layout.height_px - layout.ascent_px).max(0.0);
+    layout.ascent_px = layout
+        .ascent_px
+        .max(glyph_ascent)
+        .min(glyph_height.max(layout.height_px));
+    layout.height_px = (layout.ascent_px + row_descent.max(glyph_descent)).max(glyph_height);
+}
+
 impl DisplayMediaReplacement {
     fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
         RenderedDisplayRowMedia {
@@ -709,7 +721,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .font_ascent
             .max(geometry.ascent)
             .min(geometry.height.max(1.0));
-        let row_layout = geometry.to_layout(
+        let mut row_layout = geometry.to_layout(
             role,
             char_width,
             row_ascent,
@@ -726,8 +738,10 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     face_resolver,
                     display_host,
                     base_face,
+                    canonical_face: face_resolver.default_face(),
                     base_face_id: row_face.face_id,
                     fallback_char_width: char_width,
+                    fallback_ascent: geometry.ascent,
                     fallback_row_height: geometry.height,
                 },
                 &mut resolve_state,
@@ -741,6 +755,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     geometry.ascent,
                     geometry.height,
                 );
+                include_display_row_face_metrics(&mut row_layout, &row_face);
                 row_faces.push(row_face);
             }
             let Some(item) = resolved.item else {
@@ -775,12 +790,17 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             }
         }
         GlyphMatrixBuilder::normalize_external_row(&mut row);
+        let progress_height = if row.height_px > 0.0 {
+            row.height_px
+        } else {
+            row_layout.height_px
+        };
         let progress = display_row_progress(
             &row,
             geometry.width,
             char_width,
             geometry.y,
-            geometry.height,
+            progress_height,
         );
         let faces = row_faces
             .into_iter()

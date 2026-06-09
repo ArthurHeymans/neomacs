@@ -217,6 +217,18 @@ fn render_lisp_display_row_with_symbols(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> GlyphRow {
+    render_lisp_display_row_output_with_symbols(rendered, role, symbol_values).row
+}
+
+fn render_lisp_display_row_output(rendered: Value, role: GlyphRowRole) -> RenderedDisplayRow {
+    render_lisp_display_row_output_with_symbols(rendered, role, std::collections::HashMap::new())
+}
+
+fn render_lisp_display_row_output_with_symbols(
+    rendered: Value,
+    role: GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
+) -> RenderedDisplayRow {
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
@@ -239,7 +251,6 @@ fn render_lisp_display_row_with_symbols(
     renderer
         .render_lisp_string_row(spec, rendered, &resolver, &mut next_face_id)
         .expect("display source row")
-        .row
 }
 
 fn render_buffer_display_row(text: &str, role: GlyphRowRole) -> GlyphRow {
@@ -801,6 +812,46 @@ fn display_row_buffer_and_lisp_sources_share_raise_property_semantics() {
 }
 
 #[test]
+fn display_row_buffer_and_lisp_sources_share_height_property_semantics() {
+    let _eval = Context::new();
+    let height = Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]);
+    let lisp_row = render_lisp_display_row(
+        Value::string_with_text_properties(
+            "AB",
+            vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("display"), height.clone()]),
+            }],
+        ),
+        GlyphRowRole::ModeLine,
+    );
+    let buffer_row = render_buffer_display_row_with_property(
+        "AB",
+        1,
+        2,
+        Value::symbol("display"),
+        height,
+        GlyphRowRole::ModeLine,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&buffer_row), "AB");
+    assert_eq!(
+        row_text_expanding_stretches(&buffer_row),
+        row_text_expanding_stretches(&lisp_row)
+    );
+    assert_eq!(row_text_face_ids(&buffer_row), row_text_face_ids(&lisp_row));
+    assert_ne!(
+        buffer_row.glyphs[1][0].face_id,
+        buffer_row.glyphs[1][1].face_id
+    );
+    assert_eq!(buffer_row.height_px, lisp_row.height_px);
+    assert_eq!(buffer_row.ascent_px, lisp_row.ascent_px);
+    assert_eq!(buffer_row.height_px, 32.0);
+    assert_eq!(buffer_row.ascent_px, 24.0);
+}
+
+#[test]
 fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
     let _eval = Context::new();
     let text = "a\u{0001}\u{fff0}b";
@@ -981,6 +1032,44 @@ fn display_row_baseline_tab_bar_preserves_lisp_string_raise_property() {
     assert_eq!(glyphs.len(), 2);
     assert_eq!(glyphs[0].vertical_offset_px, 0.0);
     assert_eq!(glyphs[1].vertical_offset_px, -4.0);
+}
+
+#[test]
+fn display_row_baseline_tab_bar_preserves_lisp_string_height_property() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "AB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+            ]),
+        }],
+    );
+
+    let rendered = render_lisp_display_row_output(rendered, GlyphRowRole::TabBar);
+    let row = &rendered.row;
+    let glyphs = &row.glyphs[1];
+
+    assert_eq!(row.role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(row), "AB");
+    assert_eq!(glyphs.len(), 2);
+    assert_ne!(
+        glyphs[0].face_id, glyphs[1].face_id,
+        "height display property should realize a separate face like GNU face_with_height"
+    );
+    let raised_face = rendered
+        .faces
+        .iter()
+        .find(|face| face.id == glyphs[1].face_id)
+        .expect("height-adjusted face");
+    assert_eq!(raised_face.font_size, 28.0);
+    assert_eq!(raised_face.font_ascent, 24);
+    assert_eq!(row.height_px, 32.0);
+    assert_eq!(row.ascent_px, 24.0);
+    assert_eq!(rendered.progress.height, 32.0);
 }
 
 #[test]
