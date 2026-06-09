@@ -3320,11 +3320,82 @@ pub(crate) fn builtin_tab_bar_height_ctx(
 
 /// (line-number-display-width &optional ON-DISPLAY) -> integer
 ///
-/// Get the width of the line number display. Returns 0 (no line numbers).
-pub(crate) fn builtin_line_number_display_width(args: Vec<Value>) -> EvalResult {
+/// Return the selected window's line-number width.  GNU returns the digit
+/// width without the two display padding columns when ON-DISPLAY is nil; with
+/// non-nil ON-DISPLAY it returns the actual displayed gutter width in pixels,
+/// except the symbol `columns' returns that gutter in canonical columns.
+pub(crate) fn builtin_line_number_display_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args_range("line-number-display-width", &args, 0, 1)?;
-    // Return 0 (no line numbers)
-    Ok(Value::fixnum(0))
+    let Some(frame) = eval.frames.selected_frame() else {
+        return Ok(Value::fixnum(0));
+    };
+    let wid = frame.selected_window;
+    let Some(window) = frame.find_window(wid) else {
+        return Ok(Value::fixnum(0));
+    };
+    let Some(buffer_id) = window.buffer_id() else {
+        return Ok(Value::fixnum(0));
+    };
+    let Some(buffer) = eval.buffers.get(buffer_id) else {
+        return Ok(Value::fixnum(0));
+    };
+    let enabled = buffer
+        .buffer_local_value("display-line-numbers")
+        .is_some_and(|value| value.is_truthy());
+    if !enabled {
+        return Ok(Value::fixnum(0));
+    }
+
+    let char_width = frame.char_width.max(1.0).round() as i64;
+    let char_height = frame.char_height.max(1.0).round() as i64;
+    let visible_lines = match window {
+        Window::Leaf { bounds, .. } => {
+            ((bounds.height / char_height.max(1) as f32).floor() as i64).max(1)
+        }
+        Window::Internal { .. } => 1,
+    };
+    let total_lines = display_line_number_total_lines(buffer)
+        .max(visible_lines)
+        .max(1);
+    let digit_count = total_lines.to_string().len() as i64;
+    let min_width = buffer
+        .buffer_local_value("display-line-numbers-width")
+        .and_then(|value| value.as_fixnum())
+        .filter(|width| *width > 0)
+        .unwrap_or(1);
+    let digit_width = digit_count.max(min_width);
+    let displayed_columns = digit_width + 2;
+
+    match args.first() {
+        Some(value) if value == &Value::symbol("columns") => {
+            Ok(Value::make_float(displayed_columns as f64))
+        }
+        Some(value) if value.is_truthy() => Ok(Value::fixnum(displayed_columns * char_width)),
+        _ => Ok(Value::fixnum(digit_width)),
+    }
+}
+
+fn display_line_number_total_lines(buffer: &Buffer) -> i64 {
+    let end = buffer.total_emacs_byte_end_pos();
+    let mut pos = EmacsBytePos::ZERO;
+    let mut lines = 1_i64;
+    while pos < end {
+        if buffer.char_code_at_emacs_byte_pos(pos) == Some('\n' as u32) {
+            lines += 1;
+        }
+        let next_char = buffer
+            .emacs_byte_pos_to_char_pos_clamped(pos)
+            .add_len(CharLen::new(1));
+        let next = buffer.char_pos_to_emacs_byte_pos_clamped(next_char);
+        if next <= pos {
+            break;
+        }
+        pos = next;
+    }
+    lines
 }
 
 /// (long-line-optimizations-p) -> boolean

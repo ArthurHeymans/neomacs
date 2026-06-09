@@ -9260,7 +9260,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "line-number-display-width",
-        |_ctx, args| super::xdisp::builtin_line_number_display_width(args),
+        super::xdisp::builtin_line_number_display_width,
         0,
         None,
     );

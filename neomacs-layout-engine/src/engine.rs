@@ -2860,18 +2860,25 @@ impl LayoutEngine {
         let vscroll = (-params.vscroll).max(0) as f32;
         let text_height = (text_height - vscroll).max(0.0);
 
-        // Compute line number column width
+        let max_rows = (text_height / char_h).floor() as usize;
+
+        // Compute line number column width.  GNU's
+        // `maybe_produce_line_number' reserves `lnum_width + 2` columns: the
+        // right-aligned number plus one blank on each side.  `lnum_width` is
+        // wide enough for the largest line number that can appear in the
+        // current window, so a tiny buffer in a tall window still gets the
+        // same two-digit gutter GNU displays for visible rows 1..N.
         let lnum_cols = if lnum_enabled {
             let total_lines = buf_access.count_lines(0, buf_access.zv()) + 1;
-            let digit_count = format!("{}", total_lines).len() as i32;
+            let visible_lines = max_rows.max(1) as i64;
+            let digit_count = total_lines.max(visible_lines).max(1).to_string().len() as i32;
             let min = lnum_min_width.max(1);
-            digit_count.max(min) + 1 // +1 for trailing space separator
+            digit_count.max(min) + 2
         } else {
             0
         };
         let lnum_pixel_width = lnum_cols as f32 * char_w;
 
-        let max_rows = (text_height / char_h).floor() as usize;
         // The minibuffer must always render at least 1 row.  Its pixel
         // height may be fractionally smaller than char_h (e.g. 24px vs
         // 24.15 with line-spacing) causing floor() to yield 0.

@@ -2728,11 +2728,36 @@ fn test_tab_bar_height_eval_reflects_tab_bar_lines_and_pixels() {
 #[test]
 fn test_line_number_display_width() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_line_number_display_width(vec![]).unwrap();
+    let mut eval = interactive_context();
+
+    let result = builtin_line_number_display_width(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::fixnum(0));
 
-    let result = builtin_line_number_display_width(vec![Value::T]).unwrap();
-    assert_eq!(result, Value::fixnum(0));
+    let frame_id = super::super::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .char_width = 8.0;
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        for _ in 0..100 {
+            buffer.insert("x\n");
+        }
+    }
+
+    let result = builtin_line_number_display_width(&mut eval, vec![]).unwrap();
+    assert_eq!(result, Value::fixnum(3));
+
+    let result = builtin_line_number_display_width(&mut eval, vec![Value::T]).unwrap();
+    assert_eq!(result, Value::fixnum(40));
+
+    let result =
+        builtin_line_number_display_width(&mut eval, vec![Value::symbol("columns")]).unwrap();
+    match result.kind() {
+        ValueKind::Float => assert_eq!(result.xfloat(), 5.0),
+        other => panic!("expected float, got {other:?}"),
+    }
 }
 
 #[test]

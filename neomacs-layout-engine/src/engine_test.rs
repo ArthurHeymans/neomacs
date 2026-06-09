@@ -4,7 +4,7 @@ use crate::display_source::DisplayItemSource;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
@@ -661,6 +661,44 @@ fn layout_frame_rust_line_number_cursor_tracks_first_text_column_after_c_n() {
     assert_eq!(cursor.row, point.row);
     assert_eq!(cursor.col, point.col);
     assert_eq!(cursor.x, point.x);
+}
+
+#[test]
+fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-line-number-width-visible-rows",
+        "abc\ndef\n",
+        360,
+        430,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+                *window_start = LispCharPos1::ONE;
+            }
+        },
+    );
+
+    let first_text_row = trace
+        .matrix_rows
+        .iter()
+        .find(|row| row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("first text row");
+    let left_margin = &first_text_row.glyph_areas[GlyphArea::LeftMargin.index()];
+
+    assert_eq!(
+        left_margin
+            .iter()
+            .map(|glyph| glyph.kind.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            GlyphKindTrace::Stretch(2),
+            GlyphKindTrace::Char('1'),
+            GlyphKindTrace::Stretch(1),
+        ]
+    );
 }
 
 fn display_replacement_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
