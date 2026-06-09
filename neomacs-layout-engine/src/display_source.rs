@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
     DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
@@ -59,6 +57,7 @@ impl Default for DisplaySourceContext<'_> {
 
 pub(crate) trait DisplayItemSource {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem>;
+    #[allow(dead_code)]
     fn source_position(&self) -> DisplaySourcePosition;
 }
 

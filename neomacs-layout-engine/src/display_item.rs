@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -79,6 +77,7 @@ impl SourceSpan {
         Self { start, end }
     }
 
+    #[cfg(test)]
     pub(crate) const fn lisp_string(
         source_id: u64,
         start_char: usize,
@@ -102,6 +101,7 @@ impl SourceSpan {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RenderFaceRef {
+    #[allow(dead_code)]
     Inherit,
     FaceId(u32),
 }
@@ -123,14 +123,18 @@ impl DisplayItem {
 pub(crate) enum DisplayItemKind {
     TextRun(DisplayTextRun),
     SourceMappedText(DisplaySourceMappedText),
-    ControlChar { ch: char },
+    ControlChar {
+        ch: char,
+    },
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
     Image(DisplayImageItem),
     Video(DisplayVideoItem),
     Xwidget(DisplayXwidgetItem),
     RowBreak(DisplayRowBreak),
+    #[allow(dead_code)]
     CursorAnchor(CursorAnchor),
+    #[allow(dead_code)]
     HitTestAnchor(DisplayHitTestAnchor),
 }
 
@@ -159,6 +163,7 @@ impl DisplaySourceMappedText {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GlyphlessMethod {
     ZeroWidth,
+    #[allow(dead_code)]
     ThinSpace,
     HexCode,
     EmptyBox,
@@ -210,6 +215,7 @@ pub(crate) fn glyphless_method_for_char(
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayLength {
+    #[allow(dead_code)]
     Columns(u16),
     Pixels(f32),
     Em(f32),
@@ -367,8 +373,11 @@ pub(crate) struct DisplayRowBreak {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowBreakReason {
     ExplicitNewline,
+    #[allow(dead_code)]
     Wrap,
+    #[allow(dead_code)]
     Truncate,
+    #[allow(dead_code)]
     EndOfSource,
 }
 
@@ -380,8 +389,11 @@ pub(crate) struct CursorAnchor {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CursorAnchorKind {
+    #[allow(dead_code)]
     Point,
+    #[allow(dead_code)]
     WindowStart,
+    #[allow(dead_code)]
     SourceBoundary,
 }
 

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::composition::{base_width_cols, continues_cluster, continues_complex_run};
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
@@ -264,6 +262,7 @@ pub(crate) struct DisplayRowAppendProgress {
     pub(crate) slots: Vec<DisplayRowGlyphSlot>,
 }
 
+#[allow(dead_code)]
 pub(crate) struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
     row: GlyphRow,
@@ -367,6 +366,7 @@ pub(crate) fn append_measured_display_item_to_current_matrix_row(
     })
 }
 
+#[allow(dead_code)]
 impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
         let mut row = GlyphRow::new(layout.role);
@@ -382,6 +382,7 @@ impl DisplayRowBuilder<'_> {
     }
 }
 
+#[allow(dead_code)]
 impl<'a> DisplayRowBuilder<'a> {
     pub(crate) fn with_glyph_measurer(
         layout: DisplayRowLayout,
@@ -413,6 +414,7 @@ impl<'a> DisplayRowBuilder<'a> {
         writer.push_item(item)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
@@ -709,10 +711,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn text_char_advance_px(&mut self, ch: char, face_id: u32) -> f32 {
-        self.text_char_advance_px_at_position(ch, face_id, self.current_text_position())
-    }
-
     fn text_char_advance_px_at_position(
         &mut self,
         ch: char,
@@ -735,10 +733,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             return self.glyph_advance_px(ch, face_id, 1);
         }
         self.glyph_advance_px(ch, face_id, base_width_cols(ch))
-    }
-
-    fn push_tab(&mut self, face_id: u32) {
-        self.push_tab_at_position(face_id, self.current_text_position());
     }
 
     fn push_tab_at_position(&mut self, face_id: u32, position: DisplayRowPosition) {
