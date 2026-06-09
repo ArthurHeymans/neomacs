@@ -1,13 +1,12 @@
 use crate::display_item::{
     DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind, RenderFaceRef,
 };
+use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy,
 };
-use crate::display_source::{
-    DisplayItemSource, DisplaySourceContext, LispStringSourceCursor, parse_display_length_expr,
-};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
 use crate::display_source_resolver::{
     DisplaySourcePropertyResolver, DisplaySourceResolveParams, DisplaySourceResolveState,
 };

@@ -1,18 +1,17 @@
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
-    DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem,
-    GlyphlessJoinerPolicy, RenderFaceRef, SourceSpan, glyphless_method_for_char,
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayRowBreak,
+    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, RenderFaceRef, SourceSpan,
+    glyphless_method_for_char,
 };
-use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
-use crate::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
+use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, text_props::TextPropertyTable,
 };
 use neovm_core::emacs_core::Value;
-use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
+use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 
 pub(crate) struct DisplaySourceContext<'a> {
     face_resolver: Option<&'a mut dyn DisplayItemFaceResolver>,
@@ -377,14 +376,25 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                if display_prop.is_string() {
-                    self.replacement_strings.push(display_prop, face);
-                    continue;
-                }
-                if let Some(kind) = parse_display_property(display_prop)
-                    .or_else(|| context.resolve_display_property(display_prop, face))
-                {
-                    return Some(DisplayItem::new(span, face, kind));
+                let classification = classify_display_property(display_prop);
+                match classification.replacement {
+                    Some(DisplayReplacementProperty::String) => {
+                        self.replacement_strings.push(display_prop, face);
+                        continue;
+                    }
+                    Some(replacement) => {
+                        if let Some(kind) = replacement
+                            .display_item_kind()
+                            .or_else(|| context.resolve_display_property(display_prop, face))
+                        {
+                            return Some(DisplayItem::new(span, face, kind));
+                        }
+                    }
+                    None => {
+                        if let Some(kind) = context.resolve_display_property(display_prop, face) {
+                            return Some(DisplayItem::new(span, face, kind));
+                        }
+                    }
                 }
             }
 
@@ -556,16 +566,27 @@ impl LispStringSourceFrame {
 
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
-            if display_prop.is_string() {
-                return LispStringAction::PushReplacement {
-                    value: display_prop,
-                    base_face: face,
-                };
-            }
-            if let Some(kind) = parse_display_property(display_prop)
-                .or_else(|| context.resolve_display_property(display_prop, face))
-            {
-                return LispStringAction::Emit(DisplayItem::new(span, face, kind));
+            let classification = classify_display_property(display_prop);
+            match classification.replacement {
+                Some(DisplayReplacementProperty::String) => {
+                    return LispStringAction::PushReplacement {
+                        value: display_prop,
+                        base_face: face,
+                    };
+                }
+                Some(replacement) => {
+                    if let Some(kind) = replacement
+                        .display_item_kind()
+                        .or_else(|| context.resolve_display_property(display_prop, face))
+                    {
+                        return LispStringAction::Emit(DisplayItem::new(span, face, kind));
+                    }
+                }
+                None => {
+                    if let Some(kind) = context.resolve_display_property(display_prop, face) {
+                        return LispStringAction::Emit(DisplayItem::new(span, face, kind));
+                    }
+                }
             }
         }
 
@@ -698,133 +719,6 @@ impl LispStringSourceFrame {
         face.map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face)
     }
-}
-
-fn parse_display_property(value: Value) -> Option<DisplayItemKind> {
-    if is_display_space_spec(&value) {
-        return parse_display_space(value).map(DisplayItemKind::Stretch);
-    }
-    if DisplaySpecHead::Xwidget.is_head_of(&value) {
-        return parse_display_xwidget_layout(&value).map(|layout| {
-            DisplayItemKind::Xwidget(DisplayXwidgetItem {
-                xwidget_id: layout.xwidget_id as i32,
-                width: layout.width,
-                height: layout.height,
-            })
-        });
-    }
-    None
-}
-
-fn parse_display_space(value: Value) -> Option<DisplayStretch> {
-    let items = list_to_vec(&value)?;
-    let mut width = None;
-    let mut height = None;
-    let mut ascent = None;
-    let mut i = 1usize;
-    while i + 1 < items.len() {
-        let key = items[i];
-        let val = items[i + 1];
-        match DisplaySpaceKey::from_lisp_value(key) {
-            Some(DisplaySpaceKey::Width | DisplaySpaceKey::RelativeWidth) => {
-                width = parse_display_length(val).map(DisplayStretchWidth::Length);
-            }
-            Some(DisplaySpaceKey::AlignTo) => {
-                width = parse_display_length_expr(val).map(DisplayStretchWidth::AlignTo);
-            }
-            Some(DisplaySpaceKey::Height | DisplaySpaceKey::RelativeHeight) => {
-                height = parse_display_length(val);
-            }
-            Some(DisplaySpaceKey::Ascent) => {
-                ascent = parse_display_length(val);
-            }
-            None => {}
-        }
-        i += 2;
-    }
-
-    width.map(|width| DisplayStretch {
-        width,
-        height,
-        ascent,
-    })
-}
-
-fn parse_display_length(value: Value) -> Option<DisplayLength> {
-    if let Some(number) = lisp_number(value) {
-        return Some(DisplayLength::Em(number));
-    }
-    parse_display_length_expr(value).map(DisplayLength::Expr)
-}
-
-pub(crate) fn parse_display_length_expr(value: Value) -> Option<DisplayLengthExpr> {
-    if let Some(number) = lisp_number(value) {
-        return Some(DisplayLengthExpr::Em(number));
-    }
-
-    if value.is_symbol() {
-        let name = value.as_symbol_name()?;
-        return Some(
-            display_length_symbol(name)
-                .map(DisplayLengthExpr::Symbol)
-                .unwrap_or_else(|| DisplayLengthExpr::Variable(name.into())),
-        );
-    }
-
-    if !value.is_cons() {
-        return None;
-    }
-
-    let items = list_to_vec(&value)?;
-    let head = items.first()?;
-    if head.is_symbol_named("+") {
-        return items[1..]
-            .iter()
-            .copied()
-            .map(parse_display_length_expr)
-            .collect::<Option<Vec<_>>>()
-            .map(DisplayLengthExpr::Add);
-    }
-    if head.is_symbol_named("-") {
-        return items[1..]
-            .iter()
-            .copied()
-            .map(parse_display_length_expr)
-            .collect::<Option<Vec<_>>>()
-            .map(DisplayLengthExpr::Sub);
-    }
-    if items.len() == 1
-        && let Some(number) = lisp_number(items[0])
-    {
-        return Some(DisplayLengthExpr::Pixels(number));
-    }
-
-    None
-}
-
-fn display_length_symbol(name: &str) -> Option<DisplayLengthSymbol> {
-    match name {
-        "height" => Some(DisplayLengthSymbol::Height),
-        "width" => Some(DisplayLengthSymbol::Width),
-        "text" => Some(DisplayLengthSymbol::Text),
-        "left" => Some(DisplayLengthSymbol::Left),
-        "right" => Some(DisplayLengthSymbol::Right),
-        "center" => Some(DisplayLengthSymbol::Center),
-        "left-fringe" => Some(DisplayLengthSymbol::LeftFringe),
-        "right-fringe" => Some(DisplayLengthSymbol::RightFringe),
-        "left-margin" => Some(DisplayLengthSymbol::LeftMargin),
-        "right-margin" => Some(DisplayLengthSymbol::RightMargin),
-        "scroll-bar" => Some(DisplayLengthSymbol::ScrollBar),
-        _ => None,
-    }
-}
-
-fn lisp_number(value: Value) -> Option<f32> {
-    value
-        .as_float()
-        .or_else(|| value.as_fixnum().map(|number| number as f64))
-        .filter(|number| number.is_finite())
-        .map(|number| number as f32)
 }
 
 #[cfg(test)]

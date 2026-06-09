@@ -4,8 +4,7 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
-use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
-use super::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
+use super::display_space::{DisplaySpaceKey, display_space_positive_number};
 use super::display_status_line::*;
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -21,6 +20,7 @@ use super::window_output::{
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_item::DisplayItemKind;
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
+use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplayRow,
     insert_resolved_display_row_face, install_rendered_display_row,
@@ -1237,86 +1237,6 @@ fn visual_cursor_source_from_point(
         ends_at_visible_eob: false,
         cursor_fg: Color::BLACK,
     }
-}
-
-/// Parse `:raise` factor from a display property value.
-///
-/// Handles two forms:
-/// 1. `(raise FACTOR)` — a list whose car is the symbol `raise`
-/// 2. A plist containing `:raise FACTOR` (e.g., `(space :raise 0.3 :width 5)`)
-///
-/// Returns the raise factor as f32, or None if not a raise spec.
-fn parse_display_raise_factor(prop_val: &neovm_core::emacs_core::Value) -> Option<f32> {
-    // Form 1: (raise FACTOR)
-    if prop_val.is_cons() {
-        let car = prop_val.cons_car();
-        let cdr = prop_val.cons_cdr();
-        if car.is_symbol_named("raise") {
-            // cdr should be (FACTOR . nil) or FACTOR
-            if cdr.is_cons() {
-                let cdr_car = cdr.cons_car();
-                if let Some(f) = cdr_car.as_number_f64() {
-                    return Some(f as f32);
-                }
-            } else if let Some(f) = cdr.as_number_f64() {
-                return Some(f as f32);
-            }
-        }
-    }
-
-    // Form 2: plist with :raise key
-    if let Some(items) = neovm_core::emacs_core::value::list_to_vec(prop_val) {
-        let mut i = 0;
-        while i + 1 < items.len() {
-            if items[i].is_symbol_named(":raise") {
-                if let Some(f) = items[i + 1].as_number_f64() {
-                    return Some(f as f32);
-                }
-            }
-            i += 1;
-        }
-    }
-    None
-}
-
-/// Parse `:height` factor from a display property value.
-///
-/// Handles two forms:
-/// 1. `(height FACTOR)` — a list whose car is the symbol `height`
-/// 2. A plist containing `:height FACTOR` (e.g., `(space :height 1.5)`)
-///
-/// Returns the height scale factor as f32, or None if not a height spec.
-fn parse_display_height_factor(prop_val: &neovm_core::emacs_core::Value) -> Option<f32> {
-    // Form 1: (height FACTOR)
-    if prop_val.is_cons() {
-        let car = prop_val.cons_car();
-        let cdr = prop_val.cons_cdr();
-        if car.is_symbol_named("height") {
-            // cdr should be (FACTOR . nil) or FACTOR
-            if cdr.is_cons() {
-                let cdr_car = cdr.cons_car();
-                if let Some(f) = cdr_car.as_number_f64() {
-                    return Some(f as f32);
-                }
-            } else if let Some(f) = cdr.as_number_f64() {
-                return Some(f as f32);
-            }
-        }
-    }
-
-    // Form 2: plist with :height key
-    if let Some(items) = neovm_core::emacs_core::value::list_to_vec(prop_val) {
-        let mut i = 0;
-        while i + 1 < items.len() {
-            if items[i].is_symbol_named(":height") {
-                if let Some(f) = items[i + 1].as_number_f64() {
-                    return Some(f as f32);
-                }
-            }
-            i += 1;
-        }
-    }
-    None
 }
 
 fn text_display_tab_policy(
@@ -4066,8 +3986,13 @@ impl LayoutEngine {
                     let point_in_display_replacement = cursor_info.is_none()
                         && point_charpos >= charpos
                         && point_charpos < skip_to;
+                    let display_property = classify_display_property(prop_val);
                     // Case 1: String replacement — render the string instead of buffer text
-                    if let Some(replacement) = prop_val.as_utf8_str() {
+                    if matches!(
+                        display_property.replacement,
+                        Some(DisplayReplacementProperty::String)
+                    ) && let Some(replacement) = prop_val.as_utf8_str()
+                    {
                         if point_in_display_replacement {
                             let slot_width = replacement
                                 .chars()
@@ -4195,7 +4120,10 @@ impl LayoutEngine {
                     }
 
                     // Case 2: Space spec — (space :width …) or (space :align-to …)
-                    if is_display_space_spec(&prop_val) {
+                    if matches!(
+                        display_property.replacement,
+                        Some(DisplayReplacementProperty::Space(_))
+                    ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
                         let display_ch_cols = if is_cluster_extender(display_ch) {
                             0
@@ -4312,7 +4240,10 @@ impl LayoutEngine {
 
                     // Case 3: Image — emit a real inline image glyph when a GUI
                     // display host can resolve it, otherwise keep the TTY placeholder.
-                    if DisplaySpecHead::Image.is_head_of(&prop_val) {
+                    if matches!(
+                        display_property.replacement,
+                        Some(DisplayReplacementProperty::Image)
+                    ) {
                         let replacement_source = BufferDisplayReplacementSource::new(
                             buf_id,
                             charpos,
@@ -4462,7 +4393,10 @@ impl LayoutEngine {
 
                     // Case 4: Video — resolve the declarative video source to a stable
                     // renderer handle, then emit an inline video glyph.
-                    if DisplaySpecHead::Video.is_head_of(&prop_val) {
+                    if matches!(
+                        display_property.replacement,
+                        Some(DisplayReplacementProperty::Video)
+                    ) {
                         let replacement_source = BufferDisplayReplacementSource::new(
                             buf_id,
                             charpos,
@@ -4611,91 +4545,94 @@ impl LayoutEngine {
 
                     // Case 5: Xwidget — GNU display spec `(xwidget :xwidget XWIDGET)`.
                     // The model object already owns the native xwidget id and geometry.
-                    if DisplaySpecHead::Xwidget.is_head_of(&prop_val) {
-                        if let Some(spec) = parse_display_xwidget_layout(&prop_val) {
-                            let replacement_source = BufferDisplayReplacementSource::new(
-                                buf_id,
-                                charpos,
-                                text_start_byte + byte_idx,
-                            );
-                            let display_width = spec.width;
-                            let display_height = spec.height;
+                    if let Some(DisplayReplacementProperty::Xwidget(spec)) =
+                        display_property.replacement.as_ref()
+                    {
+                        let replacement_source = BufferDisplayReplacementSource::new(
+                            buf_id,
+                            charpos,
+                            text_start_byte + byte_idx,
+                        );
+                        let display_width = spec.width;
+                        let display_height = spec.height;
 
-                            if point_in_display_replacement {
-                                capture_cursor_info(
-                                    &mut cursor_info,
-                                    CapturedCursorInfo {
-                                        x,
-                                        y,
-                                        face_w: face_char_w,
-                                        face_h: display_height.max(face_h),
-                                        face_ascent: display_height.max(face_ascent_val),
-                                        bg: current_bg,
-                                        byte_idx,
-                                        col,
-                                        matrix_row: row,
-                                        slot_width: Some(display_width.max(1.0)),
-                                        stretch_like: false,
-                                    },
-                                );
-                            }
-
-                            let replacement_frame = text_append_surface.frame(
-                                DisplayRowAppendPlacement {
-                                    row,
+                        if point_in_display_replacement {
+                            capture_cursor_info(
+                                &mut cursor_info,
+                                CapturedCursorInfo {
+                                    x,
                                     y,
-                                    glyph_y: y + raise_y_offset,
-                                },
-                                DisplayRowAppendMetrics {
-                                    height: display_height,
-                                    ascent: display_height,
-                                    char_width: face_char_w,
-                                    space_width: face_space_w,
-                                    default_row_height: char_h,
+                                    face_w: face_char_w,
+                                    face_h: display_height.max(face_h),
+                                    face_ascent: display_height.max(face_ascent_val),
+                                    bg: current_bg,
+                                    byte_idx,
+                                    col,
+                                    matrix_row: row,
+                                    slot_width: Some(display_width.max(1.0)),
+                                    stretch_like: false,
                                 },
                             );
-                            let item = replacement_source.item(
-                                current_text_face_id,
-                                crate::display_item::DisplayItemKind::Xwidget(
-                                    crate::display_item::DisplayXwidgetItem {
-                                        xwidget_id: spec.xwidget_id.min(i32::MAX as u32) as i32,
-                                        width: display_width,
-                                        height: display_height,
-                                    },
-                                ),
-                            );
-                            if let Some((progress, position)) =
-                                append_display_replacement_item_to_text_row_and_emit(
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                    item,
-                                    current_text_face_id,
-                                    replacement_frame,
-                                    DisplayRowPosition { x_px: x, col },
-                                )
-                                && progress.status
-                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
-                                && progress.metrics.width_px > 0.0
-                            {
-                                row_max_height = row_max_height.max(display_height);
-                                row_max_ascent = row_max_ascent.max(display_height);
-                                x = position.x_px;
-                                col = position.col;
-                            }
-
-                            while charpos < skip_to && byte_idx < text.len() {
-                                let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                                byte_idx += ch_len;
-                                charpos += 1;
-                            }
-                            continue;
                         }
+
+                        let replacement_frame = text_append_surface.frame(
+                            DisplayRowAppendPlacement {
+                                row,
+                                y,
+                                glyph_y: y + raise_y_offset,
+                            },
+                            DisplayRowAppendMetrics {
+                                height: display_height,
+                                ascent: display_height,
+                                char_width: face_char_w,
+                                space_width: face_space_w,
+                                default_row_height: char_h,
+                            },
+                        );
+                        let item = replacement_source.item(
+                            current_text_face_id,
+                            crate::display_item::DisplayItemKind::Xwidget(
+                                crate::display_item::DisplayXwidgetItem {
+                                    xwidget_id: spec.xwidget_id,
+                                    width: display_width,
+                                    height: display_height,
+                                },
+                            ),
+                        );
+                        if let Some((progress, position)) =
+                            append_display_replacement_item_to_text_row_and_emit(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                item,
+                                current_text_face_id,
+                                replacement_frame,
+                                DisplayRowPosition { x_px: x, col },
+                            )
+                            && progress.status
+                                == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                            && progress.metrics.width_px > 0.0
+                        {
+                            row_max_height = row_max_height.max(display_height);
+                            row_max_ascent = row_max_ascent.max(display_height);
+                            x = position.x_px;
+                            col = position.col;
+                        }
+
+                        while charpos < skip_to && byte_idx < text.len() {
+                            let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
+                            byte_idx += ch_len;
+                            charpos += 1;
+                        }
+                        continue;
                     }
 
                     // Case 6: WebKit — resolve the declarative browser source to a
                     // stable renderer handle, then emit an inline WebKit glyph.
-                    if DisplaySpecHead::Webkit.is_head_of(&prop_val) {
+                    if matches!(
+                        display_property.replacement,
+                        Some(DisplayReplacementProperty::Webkit)
+                    ) {
                         let replacement_source = BufferDisplayReplacementSource::new(
                             buf_id,
                             charpos,
@@ -4843,13 +4780,13 @@ impl LayoutEngine {
                     }
 
                     // Case 7: Raise — (raise FACTOR) or plist with :raise
-                    if let Some(factor) = parse_display_raise_factor(&prop_val) {
+                    if let Some(factor) = display_property.modifiers.raise {
                         raise_y_offset = -(factor * char_h);
                         raise_end = display_next_check;
                     }
 
                     // Case 8: Height — (height FACTOR) or plist with :height
-                    if let Some(factor) = parse_display_height_factor(&prop_val) {
+                    if let Some(factor) = display_property.modifiers.height {
                         if factor > 0.0 {
                             height_scale = factor;
                             height_end = display_next_check;
