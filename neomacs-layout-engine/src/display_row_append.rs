@@ -5,11 +5,12 @@ use crate::display_item::{
 use crate::display_item::{DisplayMediaReplacement, DisplayMediaReplacementKind};
 #[cfg(test)]
 use crate::display_row::DisplayRowSourceWalker;
+#[cfg(test)]
+use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
     DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
-    replace_current_row_with_rendered_display_row_fragment,
+    DisplayRowSpec, RenderedDisplayRow, replace_current_row_with_rendered_display_row_fragment,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowAppendStatus,
@@ -93,6 +94,7 @@ pub(crate) fn emit_text_progress_slots(
     );
 }
 
+#[cfg(test)]
 pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,

@@ -22,7 +22,9 @@ use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
+#[cfg(test)]
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
@@ -695,6 +697,7 @@ pub(crate) fn install_rendered_frame_chrome_row(
     });
 }
 
+#[cfg(test)]
 pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplayRow,
@@ -1136,6 +1139,29 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut policy = NaturalDisplayRowRenderPolicy;
         self.render_display_item_source_row_fragment_step_with_policy(
             spec,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+            &mut policy,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_from_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        initial_row: GlyphRow,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<DisplayRowRenderResult> {
+        let mut policy = NaturalDisplayRowRenderPolicy;
+        self.render_display_item_source_row_fragment_step_from_row_with_policy(
+            spec,
+            initial_row,
             source,
             state,
             face_resolver,

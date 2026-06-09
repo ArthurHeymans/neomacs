@@ -32,9 +32,8 @@ use crate::display_row_append::{
     append_buffer_text_item_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
-    append_lisp_string_fragment_to_text_row_and_emit,
-    append_rendered_display_row_fragment_to_text_row_and_emit,
-    append_synthetic_text_to_display_row,
+    append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
+    replace_current_row_with_rendered_display_row_fragment_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
@@ -1332,14 +1331,20 @@ fn render_overlay_string(
             symbol_values: std::collections::HashMap::new(),
         };
         let mut renderer = DisplayRowRenderer::new(font_metrics);
-        let Some(result) = renderer.render_display_item_source_row_fragment_step_with_display_host(
-            row_spec,
-            &mut source,
-            &mut source_state,
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            current_face_id,
-        ) else {
+        let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
+            break;
+        };
+        let Some(result) = renderer
+            .render_display_item_source_row_fragment_step_from_row_with_display_host(
+                row_spec,
+                initial_row,
+                &mut source,
+                &mut source_state,
+                face_resolver,
+                evaluator.display_host.as_deref(),
+                current_face_id,
+            )
+        else {
             break;
         };
         let stop = result.stop;
@@ -1363,7 +1368,7 @@ fn render_overlay_string(
                 Color::from_pixel(overlay_base_face.bg),
             );
         }
-        let position = append_rendered_display_row_fragment_to_text_row_and_emit(
+        let position = replace_current_row_with_rendered_display_row_fragment_and_emit(
             builder,
             output_emitter,
             evaluator,
