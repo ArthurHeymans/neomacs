@@ -146,6 +146,70 @@ fn display_progress_sink_emits_buffer_slots_from_row_builder_progress() {
 }
 
 #[test]
+fn text_source_slot_emission_accepts_rendered_row_slots() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-rendered-row-slots",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    emitter.begin_text_row(&mut eval, 0, 1, 0.0, 4.0);
+    emitter.emit_text_source_slots(
+        &mut eval,
+        TextRowOutput {
+            row: 0,
+            row_y: 0.0,
+            glyph_y: 0.0,
+            height: 16.0,
+        },
+        &[DisplayRowGlyphSlot {
+            source: DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::ZERO),
+            x_px: 4.0,
+            col: 1,
+            width_px: 16.0,
+            width_cols: 2,
+        }],
+        DisplayRowPosition { x_px: 20.0, col: 3 },
+    );
+
+    let display = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.display())
+        .expect("window display state");
+    let point = emitter
+        .point_for_lisp_buffer_pos(LispCharPos1::ONE)
+        .expect("buffer display point");
+
+    assert_eq!(point.x, 4);
+    assert_eq!(point.width, 16);
+    assert_eq!(
+        display.output_cursor,
+        Some(neovm_core::window::WindowCursorPos {
+            x: 20,
+            y: 0,
+            row: 0,
+            col: 3,
+        })
+    );
+}
+
+#[test]
 fn display_progress_sink_merges_contiguous_slots_for_same_buffer_position() {
     let mut eval = Context::new();
     let buf_id = eval

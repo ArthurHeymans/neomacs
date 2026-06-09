@@ -214,36 +214,7 @@ impl DisplayProgressSink for WindowOutputEmitter {
         output: TextRowOutput,
         progress: &DisplayRowAppendProgress,
     ) {
-        let mut emitted = false;
-        let mut pending_span: Option<TextOutputSpan> = None;
-        for slot in &progress.slots {
-            let Some(span) = output.span_for_buffer_slot(slot) else {
-                continue;
-            };
-            emitted = true;
-            if let Some(pending) = pending_span.as_mut()
-                && pending.can_merge(span)
-            {
-                pending.merge(span);
-                continue;
-            }
-            if let Some(pending) = pending_span.take() {
-                self.emit_text_output_span(evaluator, pending);
-            }
-            pending_span = Some(span);
-        }
-        if let Some(pending) = pending_span.take() {
-            self.emit_text_output_span(evaluator, pending);
-        }
-        if !emitted {
-            self.move_text_output_to(
-                evaluator,
-                output.row,
-                progress.end.col,
-                output.row_y,
-                progress.end.x_px,
-            );
-        }
+        self.emit_text_source_slots(evaluator, output, &progress.slots, progress.end);
     }
 
     fn begin_chrome_progress(&mut self, evaluator: &mut Context, output: ChromeRowOutput) {
@@ -265,6 +236,39 @@ impl DisplayProgressSink for WindowOutputEmitter {
 }
 
 impl WindowOutputEmitter {
+    pub(crate) fn emit_text_source_slots(
+        &mut self,
+        evaluator: &mut Context,
+        output: TextRowOutput,
+        slots: &[DisplayRowGlyphSlot],
+        end: DisplayRowPosition,
+    ) {
+        let mut emitted = false;
+        let mut pending_span: Option<TextOutputSpan> = None;
+        for slot in slots {
+            let Some(span) = output.span_for_buffer_slot(slot) else {
+                continue;
+            };
+            emitted = true;
+            if let Some(pending) = pending_span.as_mut()
+                && pending.can_merge(span)
+            {
+                pending.merge(span);
+                continue;
+            }
+            if let Some(pending) = pending_span.take() {
+                self.emit_text_output_span(evaluator, pending);
+            }
+            pending_span = Some(span);
+        }
+        if let Some(pending) = pending_span.take() {
+            self.emit_text_output_span(evaluator, pending);
+        }
+        if !emitted {
+            self.move_text_output_to(evaluator, output.row, end.col, output.row_y, end.x_px);
+        }
+    }
+
     pub(crate) fn new(
         frame_id: neovm_core::window::FrameId,
         window_id: neovm_core::window::WindowId,
