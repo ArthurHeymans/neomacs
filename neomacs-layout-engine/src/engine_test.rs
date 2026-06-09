@@ -6411,6 +6411,77 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
 }
 
 #[test]
+fn layout_frame_rust_continues_eob_before_string_after_overlong_line() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let eob = buf.point_max_emacs_byte_pos().get();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsecond.el\nthird.el"),
+        );
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-eob-overlong-before-overlay",
+        96,
+        180,
+        buf_id,
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 8.0;
+        frame.char_height = 16.0;
+        frame.font_pixel_size = 16.0;
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    assert!(
+        rows.iter().any(|row| row.contains("second.el")),
+        "expected overlong overlay row not to suppress the next candidate row, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("third.el")),
+        "expected rendering to continue after later overlay newlines, rows={rows:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
     let mut eval = Context::new();
     let buf_id = eval

@@ -1409,6 +1409,43 @@ fn render_overlay_string(
 
     let mut idx = 0;
     let mut char_idx = 0usize;
+    macro_rules! finish_overlay_string_row {
+        () => {{
+            hit_rows.push(HitRow {
+                y_start: *y,
+                y_end: *y + *row_max_height,
+                charpos_start: *hit_row_charpos_start,
+                charpos_end: anchor_charpos,
+            });
+            *hit_row_charpos_start = anchor_charpos;
+            finish_text_row(
+                builder,
+                output_emitter,
+                *y,
+                *row_max_height,
+                *row_max_ascent,
+            );
+            builder.end_row();
+            *row += 1;
+            if *row >= max_rows {
+                false
+            } else {
+                *y = text_y + *row as f32 * char_h + row_extra_y;
+                *row_max_height = char_h;
+                *row_max_ascent = default_row_ascent;
+                row_y_positions.push(*y);
+                builder.begin_row(
+                    row_base + *row,
+                    neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+                );
+                *x = content_x;
+                *col = 0;
+                output_emitter.begin_text_row(evaluator, *row, *col, *y, *x);
+                true
+            }
+        }};
+    }
+
     while idx < text_bytes.len() {
         if *row >= max_rows {
             break;
@@ -1545,36 +1582,9 @@ fn render_overlay_string(
 
         if ch == '\n' {
             // End current row, start a new one — mirrors the main text loop.
-            hit_rows.push(HitRow {
-                y_start: *y,
-                y_end: *y + *row_max_height,
-                charpos_start: *hit_row_charpos_start,
-                charpos_end: anchor_charpos,
-            });
-            *hit_row_charpos_start = anchor_charpos;
-            finish_text_row(
-                builder,
-                output_emitter,
-                *y,
-                *row_max_height,
-                *row_max_ascent,
-            );
-            builder.end_row();
-            *row += 1;
-            if *row >= max_rows {
+            if !finish_overlay_string_row!() {
                 break;
             }
-            *y = text_y + *row as f32 * char_h + row_extra_y;
-            *row_max_height = char_h;
-            *row_max_ascent = default_row_ascent;
-            row_y_positions.push(*y);
-            builder.begin_row(
-                row_base + *row,
-                neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
-            );
-            *x = content_x;
-            *col = 0;
-            output_emitter.begin_text_row(evaluator, *row, *col, *y, *x);
             continue;
         }
 
@@ -1592,6 +1602,19 @@ fn render_overlay_string(
         };
         let ch_advance = cols as f32 * face_char_w;
         if *x + ch_advance > max_x {
+            let mut found_newline = false;
+            while idx < text_bytes.len() {
+                let (skip_ch, skip_len) = decode_utf8(&text_bytes[idx..]);
+                idx += skip_len;
+                char_idx += 1;
+                if skip_ch == '\n' {
+                    found_newline = true;
+                    break;
+                }
+            }
+            if found_newline && finish_overlay_string_row!() {
+                continue;
+            }
             break;
         }
 
@@ -3162,67 +3185,7 @@ impl LayoutEngine {
             let content_lines = evaluator
                 .buffer_manager()
                 .get(buf_id)
-                .map(|b| {
-                    // Count newlines in accessible buffer text.
-                    let text_lines = b
-                        .buffer_substring_bytes_range(b.accessible_emacs_byte_range())
-                        .into_iter()
-                        .filter(|&byte| byte == b'\n')
-                        .count();
-                    // Count newlines in overlay strings for the mini-window
-                    // resize measurement.  GNU `resize_mini_window`
-                    // measures with `move_it_to (..., ZV, ..., MOVE_TO_POS)`.
-                    // That measurement can include before-strings before ZV
-                    // and after-strings at ZV, but it does not consume a
-                    // zero-length overlay's before-string at ZV.  Completion
-                    // UIs such as vertico-posframe keep their candidate list
-                    // in exactly that EOB before-string; the parent
-                    // minibuffer must not grow for it, while a child frame
-                    // displaying the same buffer can still render it.
-                    // Scan all overlays in the buffer's Emacs-byte range.
-                    let window_sym = Value::symbol("window");
-                    let current_window_id = params.window_id as u64;
-                    let accessible_end_byte = b.accessible_emacs_byte_region().end();
-                    let overlays = b.overlays();
-                    let overlay_lines: usize = overlays
-                        .overlays_in_emacs_byte_range(EmacsByteRange::new(
-                            EmacsBytePos::ZERO,
-                            EmacsBytePos::ZERO.add_len(b.total_emacs_byte_len()),
-                        ))
-                        .iter()
-                        .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
-                            Some(prop) => prop
-                                .as_window_id()
-                                .is_none_or(|window_id| window_id == current_window_id),
-                            None => true,
-                        })
-                        .map(|ov| {
-                            let before_lines = if overlays
-                                .overlay_start_emacs_byte_pos(*ov)
-                                .is_some_and(|start| start < accessible_end_byte)
-                            {
-                                overlays
-                                    .overlay_get_named(*ov, Value::symbol("before-string"))
-                                    .and_then(|v| v.as_lisp_string())
-                                    .map(|s| {
-                                        s.as_bytes().iter().filter(|&&byte| byte == b'\n').count()
-                                    })
-                                    .unwrap_or(0)
-                            } else {
-                                0
-                            };
-                            let after_lines = overlays
-                                .overlay_get_named(*ov, Value::symbol("after-string"))
-                                .and_then(|v| v.as_lisp_string())
-                                .map(|s| s.as_bytes().iter().filter(|&&byte| byte == b'\n').count())
-                                .unwrap_or(0);
-                            before_lines + after_lines
-                        })
-                        .sum();
-                    // Total lines = text lines + overlay lines + 1
-                    // (the first line doesn't need a preceding \n)
-                    text_lines + overlay_lines + 1
-                })
+                .map(|buffer| minibuffer_resize_line_count(buffer, params.window_id as u64))
                 .unwrap_or(1);
             let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
@@ -7051,6 +7014,65 @@ impl LayoutEngine {
             tracing::debug!("ensure_fontified_rust: fontification error: {:?}", e);
         }
     }
+}
+
+fn minibuffer_resize_line_count(buffer: &neovm_core::buffer::Buffer, window_id: u64) -> usize {
+    let text_lines = buffer
+        .buffer_substring_bytes_range(buffer.accessible_emacs_byte_range())
+        .into_iter()
+        .filter(|&byte| byte == b'\n')
+        .count();
+
+    let window_sym = Value::symbol("window");
+    let accessible_end_byte = buffer.accessible_emacs_byte_region().end();
+    let overlays = buffer.overlays();
+    let overlay_lines: usize = overlays
+        .overlays_in_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::ZERO,
+            EmacsBytePos::ZERO.add_len(buffer.total_emacs_byte_len()),
+        ))
+        .iter()
+        .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
+            Some(prop) => prop
+                .as_window_id()
+                .is_none_or(|overlay_window_id| overlay_window_id == window_id),
+            None => true,
+        })
+        .map(|ov| {
+            let before_lines = if overlays
+                .overlay_start_emacs_byte_pos(*ov)
+                .is_some_and(|start| start < accessible_end_byte)
+            {
+                overlays
+                    .overlay_get_named(*ov, Value::symbol("before-string"))
+                    .and_then(|value| value.as_lisp_string())
+                    .map(|string| {
+                        string
+                            .as_bytes()
+                            .iter()
+                            .filter(|&&byte| byte == b'\n')
+                            .count()
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            let after_lines = overlays
+                .overlay_get_named(*ov, Value::symbol("after-string"))
+                .and_then(|value| value.as_lisp_string())
+                .map(|string| {
+                    string
+                        .as_bytes()
+                        .iter()
+                        .filter(|&&byte| byte == b'\n')
+                        .count()
+                })
+                .unwrap_or(0);
+            before_lines + after_lines
+        })
+        .sum();
+
+    text_lines + overlay_lines + 1
 }
 
 impl LayoutEngine {

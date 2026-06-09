@@ -3968,7 +3968,7 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
     let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
     {
         let parent = ev.frames.get_mut(parent_id).expect("parent frame");
-        parent.set_window_system(Some(Value::symbol("x")));
+        parent.set_window_system(Some(Value::symbol("neo")));
         parent.char_width = 10.0;
         parent.char_height = 20.0;
         parent.font_pixel_size = 20.0;
@@ -4028,6 +4028,100 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
 }
 
 #[test]
+fn x_create_frame_accepts_text_pixel_size_on_gui_child_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let requests = host.realized.clone();
+    ev.set_display_host(Box::new(host));
+
+    let text_pixels = |n| Value::cons(Value::symbol("text-pixels"), Value::fixnum(n));
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), text_pixels(190)),
+        Value::cons(Value::symbol("height"), text_pixels(78)),
+        Value::cons(Value::symbol("child-frame-border-width"), Value::fixnum(2)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame"));
+
+    let child = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(requests.borrow().len(), 0);
+    assert_eq!(child.width, 194);
+    assert_eq!(child.height, 82);
+    assert_eq!(child.internal_border_width(), 2);
+    assert_eq!(
+        *child.root_window.bounds(),
+        crate::window::Rect::new(2.0, 2.0, 190.0, 78.0)
+    );
+}
+
+#[test]
+fn modify_frame_parameters_resizes_gui_child_frame_text_pixels() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    ev.set_display_host(Box::new(RecordingDisplayHost::new()));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(1)),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("child-frame-border-width"), Value::fixnum(2)),
+        Value::cons(Value::symbol("vertical-scroll-bars"), Value::NIL),
+        Value::cons(Value::symbol("left-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("right-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame"));
+    let text_pixels = |n| Value::cons(Value::symbol("text-pixels"), Value::fixnum(n));
+    let alist = Value::list(vec![
+        Value::cons(Value::symbol("width"), text_pixels(190)),
+        Value::cons(Value::symbol("height"), text_pixels(78)),
+    ]);
+
+    super::builtin_modify_frame_parameters(&mut ev, vec![created, alist])
+        .expect("modify-frame-parameters");
+
+    let child = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(child.width, 194);
+    assert_eq!(child.height, 82);
+    assert_eq!(child.internal_border_width(), 2);
+    assert_eq!(
+        *child.root_window.bounds(),
+        crate::window::Rect::new(2.0, 2.0, 190.0, 78.0)
+    );
+}
+
+#[test]
 fn delete_frame_removes_gui_child_overlay_from_display_host() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -4060,6 +4154,44 @@ fn delete_frame_removes_gui_child_overlay_from_display_host() {
     super::builtin_delete_frame(&mut ev, vec![created]).expect("delete child frame");
 
     assert!(ev.frames.get(child_id).is_none());
+    assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
+fn make_frame_invisible_removes_gui_child_overlay_from_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let removed_child_frames = host.removed_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
+
+    super::builtin_make_frame_invisible(&mut ev, vec![created])
+        .expect("make child frame invisible");
+
+    let child = ev.frames.get(child_id).expect("child frame remains live");
+    assert!(!child.visible);
     assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
 }
 
@@ -4672,11 +4804,9 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
     }
 
     let frame_value = Value::make_frame(fid.0);
-    let direct = super::builtin_frame_parameter(
-        &mut ev,
-        vec![frame_value, FrameParam::Font.symbol()],
-    )
-    .expect("frame-parameter");
+    let direct =
+        super::builtin_frame_parameter(&mut ev, vec![frame_value, FrameParam::Font.symbol()])
+            .expect("frame-parameter");
     assert_eq!(
         direct.as_utf8_str(),
         Some("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*")

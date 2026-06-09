@@ -4883,6 +4883,15 @@ enum FrameSizeParam {
     TextPixels(u32),
 }
 
+impl FrameSizeParam {
+    fn is_zero(self) -> bool {
+        match self {
+            Self::Cells(n) => n == 0,
+            Self::TextPixels(px) => px == 0,
+        }
+    }
+}
+
 fn sync_live_gui_resize_for_geometry_queries(
     eval: &mut super::eval::Context,
     fid: FrameId,
@@ -4925,19 +4934,38 @@ fn frame_non_text_width_pixels_in_state(frames: &FrameManager, fid: FrameId) -> 
         .unwrap_or(0)
 }
 
+fn frame_internal_border_total_pixels(frame: &crate::window::Frame) -> u32 {
+    u32::try_from(frame.internal_border_width().max(0))
+        .unwrap_or(u32::MAX / 2)
+        .saturating_mul(2)
+}
+
+fn frame_non_text_total_width_pixels_in_state(frames: &FrameManager, fid: FrameId) -> u32 {
+    let border = frames
+        .get(fid)
+        .map(frame_internal_border_total_pixels)
+        .unwrap_or(0);
+    frame_non_text_width_pixels_in_state(frames, fid).saturating_add(border)
+}
+
+fn frame_non_text_total_height_pixels(frame: &crate::window::Frame) -> u32 {
+    frame_non_text_height_pixels(frame).saturating_add(frame_internal_border_total_pixels(frame))
+}
+
 fn frame_text_width_pixels_in_state(frames: &FrameManager, fid: FrameId) -> u32 {
     let Some(frame) = frames.get(fid) else {
         return 0;
     };
     frame
         .width
-        .saturating_sub(frame_non_text_width_pixels_in_state(frames, fid))
+        .saturating_sub(frame_non_text_total_width_pixels_in_state(frames, fid))
+        .max(1)
 }
 
 fn frame_text_height_pixels(frame: &crate::window::Frame) -> u32 {
     frame
         .height
-        .saturating_sub(frame_non_text_height_pixels(frame))
+        .saturating_sub(frame_non_text_total_height_pixels(frame))
         .max(1)
 }
 
@@ -5094,8 +5122,8 @@ fn resize_live_gui_frame(
         let char_height = frame.char_height.max(1.0).round();
         let cols = ((text_width_px as f32) / char_width).floor().max(1.0) as i64;
         let text_lines = ((text_height_px as f32) / char_height).floor().max(1.0) as i64;
-        let non_text_width = frame_non_text_width_pixels_in_state(frames, fid);
-        let non_text_height = frame_non_text_height_pixels(frame);
+        let non_text_width = frame_non_text_total_width_pixels_in_state(frames, fid);
+        let non_text_height = frame_non_text_total_height_pixels(frame);
         let title = frame.host_title_lisp_string();
         (
             text_width_px.saturating_add(non_text_width).max(1),
@@ -5183,8 +5211,8 @@ fn request_live_gui_frame_resize(
         let char_height = frame.char_height.max(1.0).round();
         let cols = ((text_width_px as f32) / char_width).floor().max(1.0) as i64;
         let text_lines = ((text_height_px as f32) / char_height).floor().max(1.0) as i64;
-        let non_text_width = frame_non_text_width_pixels_in_state(frames, fid);
-        let non_text_height = frame_non_text_height_pixels(frame);
+        let non_text_width = frame_non_text_total_width_pixels_in_state(frames, fid);
+        let non_text_height = frame_non_text_total_height_pixels(frame);
         let title = frame.host_title_lisp_string();
         (
             text_width_px.saturating_add(non_text_width).max(1),
@@ -5263,8 +5291,8 @@ fn request_live_gui_frame_resize_and_keep_pending(
         let frame = frames
             .get(fid)
             .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-        let non_text_width = frame_non_text_width_pixels_in_state(frames, fid);
-        let non_text_height = frame_non_text_height_pixels(frame);
+        let non_text_width = frame_non_text_total_width_pixels_in_state(frames, fid);
+        let non_text_height = frame_non_text_total_height_pixels(frame);
         (
             text_width_px.saturating_add(non_text_width).max(1),
             text_height_px.saturating_add(non_text_height).max(1),
@@ -5684,7 +5712,22 @@ pub(crate) fn builtin_iconify_frame(
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     frame.visible = false;
+    notify_gui_child_frame_hidden(eval, fid)?;
     Ok(Value::NIL)
+}
+
+fn notify_gui_child_frame_hidden(
+    eval: &mut super::eval::Context,
+    fid: FrameId,
+) -> Result<(), Flow> {
+    let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
+        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
+    });
+    if is_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
+        host.remove_gui_child_frame(fid)
+            .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    }
+    Ok(())
 }
 
 fn mru_rooted_frame_in_state(frames: &FrameManager, hidden: FrameId) -> FrameId {
@@ -5754,6 +5797,9 @@ pub(crate) fn builtin_make_frame_invisible(
     if is_tty_child || is_window_frame {
         if let Some(frame) = eval.frames.get_mut(fid) {
             frame.visible = false;
+        }
+        if is_window_frame {
+            notify_gui_child_frame_hidden(eval, fid)?;
         }
         if is_tty_child
             && eval
@@ -6807,8 +6853,8 @@ fn make_frame_plain(
 struct ParsedGuiFrameParams {
     name: Option<Value>,
     title: Option<Value>,
-    width_columns: Option<u32>,
-    height_lines: Option<u32>,
+    width: Option<FrameSizeParam>,
+    height: Option<FrameSizeParam>,
     visibility: Option<bool>,
     parent_frame: Option<FrameId>,
     left: Option<i64>,
@@ -6886,18 +6932,10 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
             "name" => parsed.name = stringish_value(&pair_cdr),
             "title" => parsed.title = stringish_value(&pair_cdr),
             "width" => {
-                if let Some(n) = pair_cdr.as_int() {
-                    if n > 0 {
-                        parsed.width_columns = Some(n as u32);
-                    }
-                }
+                parsed.width = parse_frame_size_param(pair_cdr).filter(|size| !size.is_zero());
             }
             "height" => {
-                if let Some(n) = pair_cdr.as_int() {
-                    if n > 0 {
-                        parsed.height_lines = Some(n as u32);
-                    }
-                }
+                parsed.height = parse_frame_size_param(pair_cdr).filter(|size| !size.is_zero());
             }
             "visibility" => parsed.visibility = Some(pair_cdr.is_truthy()),
             "parent-frame" => {
@@ -7050,9 +7088,10 @@ pub(crate) fn x_create_frame_impl(
     let is_child_frame = parent_id.is_some();
     let internal_border_width = parsed_effective_internal_border_width(&parsed, is_child_frame);
     let width_px = parsed
-        .width_columns
-        .map(|cols| {
-            ((cols as f32 * metrics.char_width).round().max(1.0)) as u32 + 2 * internal_border_width
+        .width
+        .map(|size| {
+            frame_size_param_to_pixels(size, metrics.char_width)
+                .saturating_add(2 * internal_border_width)
         })
         .unwrap_or_else(|| {
             if is_child_frame {
@@ -7061,11 +7100,9 @@ pub(crate) fn x_create_frame_impl(
                 host_size.map(|size| size.width).unwrap_or(metrics.width_px)
             }
         });
-    let text_height_px = parsed.height_lines.map(|lines| {
-        ((lines as f32 * metrics.char_height)
-            .round()
-            .max(metrics.char_height)) as u32
-            + 2 * internal_border_width
+    let text_height_px = parsed.height.map(|size| {
+        frame_size_param_to_pixels(size, metrics.char_height)
+            .saturating_add(2 * internal_border_width)
     });
     let height_px = text_height_px.map(|text| text).unwrap_or_else(|| {
         if is_child_frame {
@@ -7077,9 +7114,9 @@ pub(crate) fn x_create_frame_impl(
         }
     });
     tracing::debug!(
-        "x-create-frame: parsed width_cols={:?} height_lines={:?} host_size={:?} metrics={}x{} char={}x{} mini_h={} -> size={}x{}",
-        parsed.width_columns,
-        parsed.height_lines,
+        "x-create-frame: parsed width={:?} height={:?} host_size={:?} metrics={}x{} char={}x{} mini_h={} -> size={}x{}",
+        parsed.width,
+        parsed.height,
         host_size,
         metrics.width_px,
         metrics.height_px,
