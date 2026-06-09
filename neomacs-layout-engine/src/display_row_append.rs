@@ -2,6 +2,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
@@ -15,6 +16,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0};
+use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
@@ -62,10 +64,14 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
 
 struct LayoutDisplaySourceFaceResolver<'a> {
     face_resolver: &'a FaceResolver,
+    display_host: Option<&'a dyn DisplayHost>,
     base_face: &'a ResolvedFace,
     face_cache: &'a mut HashMap<Value, u32>,
+    resolved_faces: &'a mut HashMap<u32, ResolvedFace>,
     current_face_id: &'a mut u32,
     pending_faces: &'a mut Vec<PendingLayoutDisplayFace>,
+    fallback_char_width: f32,
+    fallback_row_height: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -87,18 +93,28 @@ fn next_layout_display_source_item(
     builder: &mut GlyphMatrixBuilder,
     source: &mut impl DisplayItemSource,
     face_resolver: &FaceResolver,
+    display_host: Option<&dyn DisplayHost>,
     base_face: &ResolvedFace,
+    base_face_id: u32,
     face_cache: &mut HashMap<Value, u32>,
+    resolved_faces: &mut HashMap<u32, ResolvedFace>,
     current_face_id: &mut u32,
+    fallback_char_width: f32,
+    fallback_row_height: f32,
 ) -> Option<DisplayItem> {
     let mut pending_faces = Vec::new();
+    resolved_faces.insert(base_face_id, base_face.clone());
     let item = {
         let mut resolver = LayoutDisplaySourceFaceResolver {
             face_resolver,
+            display_host,
             base_face,
             face_cache,
+            resolved_faces,
             current_face_id,
             pending_faces: &mut pending_faces,
+            fallback_char_width,
+            fallback_row_height,
         };
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
         source.next_item(&mut context)
@@ -110,6 +126,7 @@ fn next_layout_display_source_item(
 pub(crate) struct DisplayItemSourceWalker<S> {
     source: S,
     face_cache: HashMap<Value, u32>,
+    resolved_faces: HashMap<u32, ResolvedFace>,
 }
 
 impl<S> DisplayItemSourceWalker<S> {
@@ -117,6 +134,7 @@ impl<S> DisplayItemSourceWalker<S> {
         Self {
             source,
             face_cache: HashMap::new(),
+            resolved_faces: HashMap::new(),
         }
     }
 }
@@ -127,15 +145,24 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
         builder: &mut GlyphMatrixBuilder,
         face_resolver: &FaceResolver,
         base_face: &ResolvedFace,
+        base_face_id: u32,
         current_face_id: &mut u32,
+        display_host: Option<&dyn DisplayHost>,
+        fallback_char_width: f32,
+        fallback_row_height: f32,
     ) -> Option<DisplayItem> {
         next_layout_display_source_item(
             builder,
             &mut self.source,
             face_resolver,
+            display_host,
             base_face,
+            base_face_id,
             &mut self.face_cache,
+            &mut self.resolved_faces,
             current_face_id,
+            fallback_char_width,
+            fallback_row_height,
         )
     }
 }
@@ -155,9 +182,34 @@ impl DisplayItemFaceResolver for LayoutDisplaySourceFaceResolver<'_> {
         let face_id = *self.current_face_id;
         *self.current_face_id += 1;
         self.face_cache.insert(face_value, face_id);
+        self.resolved_faces.insert(face_id, resolved.clone());
         self.pending_faces
             .push(PendingLayoutDisplayFace { face_id, resolved });
         RenderFaceRef::FaceId(face_id)
+    }
+
+    fn resolve_display_property(
+        &mut self,
+        display_prop: Value,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItemKind> {
+        let display_host = self.display_host?;
+        let resolved_face = match face {
+            RenderFaceRef::FaceId(face_id) => {
+                self.resolved_faces.get(&face_id).unwrap_or(self.base_face)
+            }
+            RenderFaceRef::Inherit => self.base_face,
+        };
+        resolve_display_media_property(
+            &display_prop,
+            DisplayMediaResolveParams {
+                display_host,
+                default_fg: resolved_face.fg,
+                default_bg: resolved_face.bg,
+                fallback_char_width: self.fallback_char_width,
+                fallback_row_height: self.fallback_row_height,
+            },
+        )
     }
 }
 
@@ -235,7 +287,7 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
         frame,
         position,
         &mut policy,
-        |_builder| source.next_item(&mut context),
+        |_builder, _display_host| source.next_item(&mut context),
     );
     result
         .last_progress
@@ -394,10 +446,14 @@ fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
     frame: DisplayRowAppendFrame,
     mut position: DisplayRowPosition,
     policy: &mut P,
-    mut next_item: impl FnMut(&mut GlyphMatrixBuilder) -> Option<DisplayItem>,
+    mut next_item: impl FnMut(&mut GlyphMatrixBuilder, Option<&dyn DisplayHost>) -> Option<DisplayItem>,
 ) -> DisplayItemSourceAppendResult {
     let mut last_progress = None;
-    while let Some(mut item) = next_item(builder) {
+    loop {
+        let item = next_item(builder, evaluator.display_host.as_deref());
+        let Some(mut item) = item else {
+            break;
+        };
         let (kind, on_clipped) = match policy.decision_for(&item) {
             DisplayRowSourceAppendDecision::Append { kind, on_clipped } => (kind, on_clipped),
             DisplayRowSourceAppendDecision::Skip => continue,
@@ -461,6 +517,8 @@ pub(crate) fn append_display_item_source_to_text_row<
     policy: &mut P,
 ) -> DisplayRowPosition {
     let mut source = DisplayItemSourceWalker::new(source);
+    let fallback_char_width = frame.geometry.char_width;
+    let fallback_row_height = frame.geometry.height;
     append_display_item_stream_to_text_row(
         builder,
         output_emitter,
@@ -469,7 +527,18 @@ pub(crate) fn append_display_item_source_to_text_row<
         frame,
         position,
         policy,
-        |builder| source.next_item(builder, face_resolver, base_face, current_face_id),
+        |builder, display_host| {
+            source.next_item(
+                builder,
+                face_resolver,
+                base_face,
+                fallback_face_id,
+                current_face_id,
+                display_host,
+                fallback_char_width,
+                fallback_row_height,
+            )
+        },
     )
     .position
 }

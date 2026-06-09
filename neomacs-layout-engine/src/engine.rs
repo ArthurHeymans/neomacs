@@ -1436,7 +1436,16 @@ fn render_overlay_string(
     let mut source = DisplayItemSourceWalker::new(source);
 
     while *row < max_rows {
-        let item = source.next_item(builder, face_resolver, overlay_base_face, current_face_id);
+        let item = source.next_item(
+            builder,
+            face_resolver,
+            overlay_base_face,
+            overlay_base_face_id,
+            current_face_id,
+            evaluator.display_host.as_deref(),
+            face_char_w,
+            char_h,
+        );
         let Some(item) = item else {
             break;
         };

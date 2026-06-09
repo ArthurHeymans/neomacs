@@ -9,8 +9,46 @@ use crate::neovm_bridge::LayoutBufferSnapshot;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
+use neovm_core::emacs_core::eval::{
+    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
+};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
+use std::sync::{Arc, Mutex};
+
+struct RecordingAppendImageHost {
+    requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
+}
+
+impl DisplayHost for RecordingAppendImageHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_image(
+        &self,
+        _request: ImageResolveRequest,
+    ) -> Result<Option<ResolvedImage>, String> {
+        panic!("append display source rendering must use nonblocking request_image");
+    }
+
+    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        self.requests
+            .lock()
+            .expect("image requests lock")
+            .push(request);
+        Ok(Some(ResolvedImage {
+            image_id: 42,
+            width: 64,
+            height: 32,
+            dimensions_known: true,
+        }))
+    }
+}
 
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
@@ -280,14 +318,19 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_cache = std::collections::HashMap::new();
+    let mut resolved_faces = std::collections::HashMap::new();
     let mut current_face_id = 20;
     let mut pending_faces = Vec::new();
     let mut resolver = LayoutDisplaySourceFaceResolver {
         face_resolver: &face_resolver,
+        display_host: None,
         base_face,
         face_cache: &mut face_cache,
+        resolved_faces: &mut resolved_faces,
         current_face_id: &mut current_face_id,
         pending_faces: &mut pending_faces,
+        fallback_char_width: 8.0,
+        fallback_row_height: 16.0,
     };
     let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
 
@@ -313,6 +356,7 @@ fn next_layout_display_source_item_installs_pending_faces() {
     let base_face = face_resolver.default_face();
     let mut current_face_id = 20;
     let mut face_cache = std::collections::HashMap::new();
+    let mut resolved_faces = std::collections::HashMap::new();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -354,9 +398,14 @@ fn next_layout_display_source_item_installs_pending_faces() {
         &mut builder,
         &mut source,
         &face_resolver,
+        None,
         base_face,
+        0,
         &mut face_cache,
+        &mut resolved_faces,
         &mut current_face_id,
+        8.0,
+        16.0,
     )
     .expect("source item");
 
@@ -416,7 +465,11 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut builder,
             &face_resolver,
             base_face,
+            0,
             &mut current_face_id,
+            None,
+            8.0,
+            16.0,
         )
         .expect("first source item");
     let second = source
@@ -424,7 +477,11 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut builder,
             &face_resolver,
             base_face,
+            0,
             &mut current_face_id,
+            None,
+            8.0,
+            16.0,
         )
         .expect("second source item");
     let third = source
@@ -432,7 +489,11 @@ fn display_item_source_walker_reuses_face_cache_across_items() {
             &mut builder,
             &face_resolver,
             base_face,
+            0,
             &mut current_face_id,
+            None,
+            8.0,
+            16.0,
         )
         .expect("third source item");
 
@@ -805,6 +866,125 @@ fn append_display_item_source_to_text_row_uses_policy_decisions() {
             ));
         })
         .expect("current row");
+}
+
+#[test]
+fn append_lisp_string_to_text_row_resolves_image_display_property_through_display_host() {
+    let mut eval = Context::new();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingAppendImageHost {
+        requests: Arc::clone(&requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-lisp-string-image", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 6.0);
+
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00112233, 0x00445566, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
+    builder.begin_window_with_text_bounds(
+        77,
+        1,
+        24,
+        Rect::new(0.0, 0.0, 200.0, 80.0),
+        text_bounds,
+        true,
+    );
+    builder.begin_row(0, GlyphRowRole::Text);
+    let value = Value::string_with_text_properties(
+        "A",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("png"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/append-lisp-string.png"),
+                ]),
+            ]),
+        }],
+    );
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 6.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 160.0,
+            text_width: 160.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let end = append_lisp_string_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        value,
+        1,
+        &face_resolver,
+        base_face,
+        7,
+        &mut current_face_id,
+        frame,
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+    );
+
+    assert_eq!(
+        end,
+        DisplayRowPosition {
+            x_px: 80.0,
+            col: 10
+        }
+    );
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(24, 1, 8.0, 16.0);
+    let image = state.images.first().expect("image side item");
+    assert_eq!(image.window_id, 77);
+    assert_eq!(image.row_role, GlyphRowRole::Text);
+    assert_eq!(image.clip_rect, Some(text_bounds));
+    assert_eq!(image.image_id, 42);
+    assert_eq!(image.x, 16.0);
+    assert_eq!(image.y, 6.0);
+    assert_eq!(image.width, 64.0);
+    assert_eq!(image.height, 32.0);
+    let requests = requests.lock().expect("image requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].fg_color, 0x00112233);
+    assert_eq!(requests[0].bg_color, 0x00445566);
 }
 
 struct SourceMappedTextWidthByFace {

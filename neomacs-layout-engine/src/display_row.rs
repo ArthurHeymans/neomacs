@@ -1,7 +1,8 @@
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
-    DisplayMediaReplacementKind, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
+    DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind,
+    RenderFaceRef,
 };
+use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy,
@@ -9,9 +10,6 @@ use crate::display_row_builder::{
 use crate::display_source::{
     DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
     parse_display_length_expr,
-};
-use crate::display_spec::{
-    parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -681,10 +679,6 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
 }
 
-fn display_media_id(id: u32) -> i32 {
-    id.min(i32::MAX as u32) as i32
-}
-
 fn display_source_row_progress(
     row: &GlyphRow,
     width: f32,
@@ -866,68 +860,23 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     .unwrap_or(self.base_face)
             }
 
-            fn resolve_image_display_property(
+            fn resolve_media_display_property_for_face(
                 &self,
                 display_prop: &Value,
                 face: RenderFaceRef,
             ) -> Option<DisplayItemKind> {
                 let host = self.display_host?;
-                let (fg, bg) = {
-                    let resolved_face = self.resolved_face_for(face);
-                    (resolved_face.fg, resolved_face.bg)
-                };
-                let spec = parse_display_image_layout(display_prop, fg, bg)?;
-                let scale = spec.scale;
-                let resolved = host.request_image(spec.request).ok().flatten()?;
-                let mut width = resolved.width.max(1) as f32;
-                let mut height = resolved.height.max(1) as f32;
-                if (scale - 1.0).abs() > f32::EPSILON && scale.is_finite() && scale > 0.0 {
-                    width = (width * scale).round().max(1.0);
-                    height = (height * scale).round().max(1.0);
-                }
-                Some(DisplayItemKind::Image(DisplayImageItem {
-                    image_id: display_media_id(resolved.image_id),
-                    width,
-                    height,
-                }))
-            }
-
-            fn resolve_video_display_property(
-                &self,
-                display_prop: &Value,
-            ) -> Option<DisplayItemKind> {
-                let host = self.display_host?;
-                let spec = parse_display_video_layout(
+                let resolved_face = self.resolved_face_for(face);
+                resolve_display_media_property(
                     display_prop,
-                    self.char_w * 40.0,
-                    self.height * 12.0,
-                )?;
-                let resolved = host.request_video(spec.request.clone()).ok().flatten()?;
-                Some(DisplayItemKind::Video(DisplayVideoItem {
-                    video_id: display_media_id(resolved.video_id),
-                    width: spec.width.max(1.0),
-                    height: spec.height.max(1.0),
-                    loop_count: spec.loop_count,
-                    autoplay: spec.autoplay,
-                }))
-            }
-
-            fn resolve_webkit_display_property(
-                &self,
-                display_prop: &Value,
-            ) -> Option<DisplayItemKind> {
-                let host = self.display_host?;
-                let spec = parse_display_webkit_layout(
-                    display_prop,
-                    self.char_w * 40.0,
-                    self.height * 12.0,
-                )?;
-                let resolved = host.request_webkit(spec.request.clone()).ok().flatten()?;
-                Some(DisplayItemKind::Xwidget(DisplayXwidgetItem {
-                    xwidget_id: display_media_id(resolved.webkit_id),
-                    width: spec.width.max(1.0),
-                    height: spec.height.max(1.0),
-                }))
+                    DisplayMediaResolveParams {
+                        display_host: host,
+                        default_fg: resolved_face.fg,
+                        default_bg: resolved_face.bg,
+                        fallback_char_width: self.char_w,
+                        fallback_row_height: self.height,
+                    },
+                )
             }
         }
 
@@ -966,9 +915,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 display_prop: Value,
                 face: RenderFaceRef,
             ) -> Option<DisplayItemKind> {
-                self.resolve_image_display_property(&display_prop, face)
-                    .or_else(|| self.resolve_video_display_property(&display_prop))
-                    .or_else(|| self.resolve_webkit_display_property(&display_prop))
+                self.resolve_media_display_property_for_face(&display_prop, face)
             }
         }
 

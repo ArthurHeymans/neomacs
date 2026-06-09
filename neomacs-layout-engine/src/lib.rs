@@ -13,6 +13,7 @@ pub(crate) mod coords;
 pub mod display_backend;
 pub(crate) mod display_item;
 pub mod display_iterator;
+pub(crate) mod display_media;
 pub mod display_pixel_calc;
 pub(crate) mod display_row;
 pub(crate) mod display_row_append;
