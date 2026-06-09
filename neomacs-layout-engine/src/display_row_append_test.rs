@@ -7,7 +7,9 @@ use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderer, DisplayRowSourceState,
     DisplayRowSpec,
 };
-use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvances};
+use crate::display_row_builder::{
+    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
+};
 use crate::neovm_bridge::LayoutBufferSnapshot;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
@@ -65,6 +67,93 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "..."),
         other => panic!("expected text run, got {other:?}"),
     }
+}
+
+#[test]
+fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("append-synthetic-text", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let mut measurer = FixedGlyphAdvance::new('.', 7, 5.0);
+
+    let (progress, end) = append_synthetic_text_to_display_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &face_resolver,
+        base_face,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        99,
+        "...",
+        7,
+        Some(&mut measurer),
+    )
+    .expect("synthetic text progress");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 15.0, col: 3 });
+    assert_eq!(progress.metrics.width_px, 15.0);
+    assert_eq!(progress.metrics.width_cols, 3);
+    assert_eq!(progress.slots.len(), 3);
+    assert_eq!(
+        progress.slots[0].source,
+        DisplaySourcePosition::synthetic(99, 0)
+    );
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 3);
+            assert!(text.iter().all(|glyph| glyph.face_id == 7));
+            assert!(
+                text.iter()
+                    .all(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '.' }))
+            );
+        })
+        .expect("current row");
 }
 
 #[test]
