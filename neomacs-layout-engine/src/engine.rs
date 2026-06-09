@@ -1072,39 +1072,6 @@ fn message_truncate_lines(evaluator: &Context) -> bool {
         .is_some_and(|value| !value.is_nil())
 }
 
-#[cfg(test)]
-fn plain_echo_display_rows(
-    message: &str,
-    text_width: f32,
-    char_width: f32,
-    truncate_lines: bool,
-    reserve_right_special_col: bool,
-) -> usize {
-    let cell_width = char_width.max(1.0);
-    let max_cells = (text_width / cell_width).floor().max(1.0) as usize;
-    let wrap_cells = if truncate_lines {
-        max_cells
-    } else if reserve_right_special_col {
-        max_cells.saturating_sub(1).max(1)
-    } else {
-        max_cells
-    };
-    message
-        .split(|ch| ch == '\n' || ch == '\r')
-        .map(|line| {
-            if truncate_lines {
-                return 1;
-            }
-            let cells = line
-                .chars()
-                .map(|ch| neovm_core::encoding::char_width(ch).max(1) as usize)
-                .sum::<usize>();
-            cells.div_ceil(wrap_cells).max(1)
-        })
-        .sum::<usize>()
-        .max(1)
-}
-
 fn minibuffer_echo_message_for_window(
     is_minibuffer_window: bool,
     active_minibuffer_window: bool,
