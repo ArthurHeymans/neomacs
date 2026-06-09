@@ -1,8 +1,9 @@
 use super::*;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
+use neovm_core::buffer::{CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 
@@ -164,6 +165,67 @@ fn render_lisp_display_row_with_symbols(
         .row
 }
 
+fn render_buffer_display_row_with_property(
+    text: &str,
+    property_start: usize,
+    property_end: usize,
+    property_name: Value,
+    property_value: Value,
+    role: GlyphRowRole,
+) -> GlyphRow {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert(text);
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_start));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property_end));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            property_name,
+            property_value,
+        );
+    }
+
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        snapshot.layout_point_max_char_pos(),
+        RenderFaceRef::FaceId(1),
+    );
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        role,
+        std::collections::HashMap::new(),
+    );
+
+    renderer
+        .render_display_item_source_row(spec, &mut source, &resolver, &mut next_face_id)
+        .expect("buffer display source row")
+        .row
+}
+
 #[test]
 fn render_display_item_source_row_accepts_buffer_text_source() {
     let mut eval = Context::new();
@@ -227,6 +289,51 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         glyphs.iter().any(
             |glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.contains('\u{200d}'))
         )
+    );
+}
+
+#[test]
+fn display_row_buffer_and_lisp_sources_share_display_space_semantics() {
+    let _eval = Context::new();
+    let display_space = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("align-to"),
+        Value::fixnum(4),
+    ]);
+    let lisp_row = render_lisp_display_row(
+        Value::string_with_text_properties(
+            "A B",
+            vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("display"), display_space.clone()]),
+            }],
+        ),
+        GlyphRowRole::HeaderLine,
+    );
+    let buffer_row = render_buffer_display_row_with_property(
+        "A B",
+        1,
+        2,
+        Value::symbol("display"),
+        display_space,
+        GlyphRowRole::HeaderLine,
+    );
+
+    assert_eq!(row_text_expanding_stretches(&buffer_row), "A   B");
+    assert_eq!(
+        row_text_expanding_stretches(&buffer_row),
+        row_text_expanding_stretches(&lisp_row)
+    );
+    assert_eq!(
+        buffer_row.glyphs[1]
+            .iter()
+            .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+            .count(),
+        lisp_row.glyphs[1]
+            .iter()
+            .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+            .count()
     );
 }
 
