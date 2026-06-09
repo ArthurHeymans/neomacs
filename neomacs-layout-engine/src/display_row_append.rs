@@ -6,8 +6,8 @@ use crate::display_item::{
 use crate::display_row::DisplayRowSourceWalker;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
-    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
-    RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
+    DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
+    DisplayRowSpec, RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowAppendStatus,
@@ -23,6 +23,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0};
+#[cfg(test)]
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
@@ -82,6 +83,28 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
     output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
     end
+}
+
+fn display_row_append_progress_from_render_result(
+    start: DisplayRowPosition,
+    end: DisplayRowPosition,
+    stop: DisplayRowRenderStop,
+    slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
+) -> DisplayRowAppendProgress {
+    DisplayRowAppendProgress {
+        start,
+        end,
+        metrics: DisplayRowWriteMetrics {
+            width_px: (end.x_px - start.x_px).max(0.0),
+            width_cols: end.col.saturating_sub(start.col),
+        },
+        status: match stop {
+            DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
+            DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
+            DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
+        },
+        slots,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -229,36 +252,30 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
-        buffer_id,
-        buffer,
-        char_pos,
-        char_pos.add_len(CharLen::new(1)),
+    let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(char_pos);
+    let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(char_pos.add_len(CharLen::new(1)));
+    let item = BufferTextItemSource::single_char(buffer_id, char_pos, byte_start, byte_end).item(
         RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
     );
-    let mut context = DisplaySourceContext::empty();
+    let mut append_spec = frame
+        .clone()
+        .at(position, face_id)
+        .append_spec(DisplayRowAppendKind::SourceText);
+    if ch == '\t' {
+        append_spec.layout.char_width_px = frame.face_space_width;
+        append_spec.max_x = f32::INFINITY;
+        append_spec.output.height = frame.default_row_height;
+    }
     let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
-    let mut policy = MeasuredDisplayItemAppendPolicy {
-        kind: if ch == '\t' {
-            DisplayRowAppendKind::Tab
-        } else {
-            DisplayRowAppendKind::SourceText
-        },
-        measurer: &mut measurer,
-    };
-    let result = append_display_item_stream_to_text_row(
+    append_measured_display_row_spec_item_and_emit(
         builder,
         output_emitter,
         evaluator,
-        face_id,
-        frame,
-        position,
-        &mut policy,
-        |_builder, _display_host| source.next_item(&mut context),
-    );
-    result
-        .last_progress
-        .map(|progress| (progress, result.position))
+        append_spec,
+        item,
+        &mut measurer,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -284,11 +301,13 @@ pub(crate) fn append_buffer_text_item_to_text_row_and_emit(
     )
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendClipBehavior {
     Stop,
 }
 
+#[cfg(test)]
 impl DisplayRowAppendClipBehavior {
     fn stops_on(self, progress: &DisplayRowAppendProgress) -> bool {
         self == Self::Stop
@@ -296,6 +315,7 @@ impl DisplayRowAppendClipBehavior {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowSourceAppendDecision {
     Append {
@@ -308,18 +328,12 @@ pub(crate) enum DisplayRowSourceAppendDecision {
     Stop,
 }
 
+#[cfg(test)]
 pub(crate) trait DisplayRowSourceAppendPolicy {
     fn decision_for(&mut self, item: &DisplayItem) -> DisplayRowSourceAppendDecision;
-
-    fn measurement_for<'a>(
-        &'a mut self,
-        _item: &DisplayItem,
-        _face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
-        DisplayRowItemMeasurement::Default
-    }
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, PartialEq)]
 struct DisplayItemSourceAppendResult {
     position: DisplayRowPosition,
@@ -339,28 +353,6 @@ impl DisplayRowSourceAppendPolicy for NaturalDisplaySourceAppendPolicy {
             kind,
             on_clipped: DisplayRowAppendClipBehavior::Stop,
         }
-    }
-}
-
-struct MeasuredDisplayItemAppendPolicy<'a> {
-    kind: DisplayRowAppendKind,
-    measurer: &'a mut dyn DisplayGlyphMeasurer,
-}
-
-impl DisplayRowSourceAppendPolicy for MeasuredDisplayItemAppendPolicy<'_> {
-    fn decision_for(&mut self, _item: &DisplayItem) -> DisplayRowSourceAppendDecision {
-        DisplayRowSourceAppendDecision::Append {
-            kind: self.kind,
-            on_clipped: DisplayRowAppendClipBehavior::Stop,
-        }
-    }
-
-    fn measurement_for<'a>(
-        &'a mut self,
-        _item: &DisplayItem,
-        _face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
-        DisplayRowItemMeasurement::Measured(&mut *self.measurer)
     }
 }
 
@@ -392,6 +384,7 @@ impl<M: DisplayRowItemMeasurer> DisplayRowRenderPolicy
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
     builder: &mut GlyphMatrixBuilder,
@@ -419,28 +412,15 @@ fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
             }
         };
         let face_id = render_face_ref_id(item.face, fallback_face_id);
-        let measurement = policy.measurement_for(&item, face_id);
         item.face = RenderFaceRef::FaceId(face_id);
         let append_spec = frame.clone().at(position, face_id).append_spec(kind);
-        let Some((progress, next_position)) = (match measurement {
-            DisplayRowItemMeasurement::Default => append_display_row_spec_item_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                append_spec,
-                item,
-            ),
-            DisplayRowItemMeasurement::Measured(measurer) => {
-                append_measured_display_row_spec_item_and_emit(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    append_spec,
-                    item,
-                    measurer,
-                )
-            }
-        }) else {
+        let Some((progress, next_position)) = append_display_row_spec_item_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            append_spec,
+            item,
+        ) else {
             break;
         };
         position = next_position;
@@ -587,22 +567,7 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
             height: frame.geometry.height,
         },
     );
-    let progress = DisplayRowAppendProgress {
-        start: position,
-        end,
-        metrics: DisplayRowWriteMetrics {
-            width_px: (end.x_px - position.x_px).max(0.0),
-            width_cols: end.col.saturating_sub(position.col),
-        },
-        status: match stop {
-            crate::display_row::DisplayRowRenderStop::SourceExhausted => {
-                DisplayRowAppendStatus::Complete
-            }
-            crate::display_row::DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
-            crate::display_row::DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
-        },
-        slots,
-    };
+    let progress = display_row_append_progress_from_render_result(position, end, stop, slots);
     Some((progress, end))
 }
 
@@ -762,6 +727,7 @@ impl DisplayRowAppendFrame {
             content_x: self.content_x,
             text_width: self.text_width,
             line_number_width: self.line_number_width,
+            #[cfg(test)]
             face_space_width: self.face_space_width,
             face_id,
         }
@@ -778,6 +744,7 @@ pub(crate) struct DisplayRowAppendContext {
     pub(crate) content_x: f32,
     pub(crate) text_width: f32,
     pub(crate) line_number_width: f32,
+    #[cfg(test)]
     pub(crate) face_space_width: f32,
     pub(crate) face_id: u32,
 }
@@ -785,6 +752,7 @@ pub(crate) struct DisplayRowAppendContext {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendKind {
     SourceText,
+    #[cfg(test)]
     Tab,
     ControlChar,
     SourceMappedText,
@@ -822,6 +790,7 @@ pub(crate) struct DisplayRowAppendSpec {
 impl DisplayRowAppendContext {
     pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
         let char_width = match kind {
+            #[cfg(test)]
             DisplayRowAppendKind::Tab => self.face_space_width,
             #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacementString => self.face_space_width,
@@ -832,6 +801,7 @@ impl DisplayRowAppendContext {
             | DisplayRowAppendKind::DisplayReplacement => self.geometry.char_width,
         };
         let max_x = match kind {
+            #[cfg(test)]
             DisplayRowAppendKind::Tab => f32::INFINITY,
             DisplayRowAppendKind::ControlChar => {
                 self.content_x + (self.text_width - self.line_number_width)
@@ -849,9 +819,11 @@ impl DisplayRowAppendContext {
             | DisplayRowAppendKind::DisplayReplacement => self.geometry.height,
             #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
-            DisplayRowAppendKind::Tab
-            | DisplayRowAppendKind::ControlChar
-            | DisplayRowAppendKind::SourceMappedText => self.default_row_height,
+            #[cfg(test)]
+            DisplayRowAppendKind::Tab => self.default_row_height,
+            DisplayRowAppendKind::ControlChar | DisplayRowAppendKind::SourceMappedText => {
+                self.default_row_height
+            }
         };
 
         DisplayRowAppendSpec {

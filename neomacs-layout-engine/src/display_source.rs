@@ -261,6 +261,7 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
+    #[cfg(test)]
     pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'a B,
@@ -461,6 +462,7 @@ struct LispStringSourceStack {
 }
 
 impl LispStringSourceStack {
+    #[cfg(test)]
     const fn empty(next_source_id: u64) -> Self {
         Self {
             frames: Vec::new(),
