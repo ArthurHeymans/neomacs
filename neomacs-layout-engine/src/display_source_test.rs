@@ -1,7 +1,7 @@
 use super::*;
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
-    DisplayLengthSymbol, DisplaySourceId, DisplaySourcePosition, DisplayStretch,
+    DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
+    DisplayLengthExpr, DisplayLengthSymbol, DisplaySourceId, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
@@ -132,6 +132,36 @@ impl DisplayItemFaceResolver for SymbolFaceResolver {
     }
 }
 
+struct ResolvedDisplayPropertyResolver {
+    seen_face: Option<RenderFaceRef>,
+}
+
+impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
+    fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
+        match face_value.as_symbol_name() {
+            Some("bold") => RenderFaceRef::FaceId(7),
+            _ => base,
+        }
+    }
+
+    fn resolve_display_property(
+        &mut self,
+        display_prop: Value,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItemKind> {
+        self.seen_face = Some(face);
+        if display_prop.cons_car().is_symbol_named("image") {
+            Some(DisplayItemKind::Image(DisplayImageItem {
+                image_id: 42,
+                width: 64.0,
+                height: 32.0,
+            }))
+        } else {
+            None
+        }
+    }
+}
+
 #[test]
 fn lisp_string_source_cursor_resolves_face_property() {
     let _eval = Context::new();
@@ -157,6 +187,46 @@ fn lisp_string_source_cursor_resolves_face_property() {
     assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
     assert_eq!(items[1].face, RenderFaceRef::FaceId(7));
     assert_eq!(items[2].face, RenderFaceRef::FaceId(3));
+}
+
+#[test]
+fn lisp_string_source_cursor_resolves_display_property_through_context() {
+    let _eval = Context::new();
+    let display_spec = Value::list(vec![Value::symbol("image")]);
+    let value = Value::string_with_text_properties(
+        "x",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::symbol("bold"),
+                Value::symbol("display"),
+                display_spec,
+            ]),
+        }],
+    );
+    let mut source =
+        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(3)).expect("string source");
+    let mut resolver = ResolvedDisplayPropertyResolver { seen_face: None };
+
+    let item = {
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        let item = source.next_item(&mut context).expect("display item");
+        assert!(source.next_item(&mut context).is_none());
+        item
+    };
+
+    assert_eq!(resolver.seen_face, Some(RenderFaceRef::FaceId(7)));
+    assert_eq!(
+        item.kind,
+        DisplayItemKind::Image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        })
+    );
+    assert_eq!(item.face, RenderFaceRef::FaceId(7));
 }
 
 #[test]

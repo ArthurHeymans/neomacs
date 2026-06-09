@@ -39,6 +39,16 @@ impl<'a> DisplaySourceContext<'a> {
             .map(|resolver| resolver.resolve_face_ref(base, face_value))
             .unwrap_or(base)
     }
+
+    fn resolve_display_property(
+        &mut self,
+        display_prop: Value,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItemKind> {
+        self.face_resolver
+            .as_mut()
+            .and_then(|resolver| resolver.resolve_display_property(display_prop, face))
+    }
 }
 
 impl Default for DisplaySourceContext<'_> {
@@ -54,6 +64,14 @@ pub(crate) trait DisplayItemSource {
 
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
+
+    fn resolve_display_property(
+        &mut self,
+        _display_prop: Value,
+        _face: RenderFaceRef,
+    ) -> Option<DisplayItemKind> {
+        None
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -364,7 +382,9 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
                     self.replacement_strings.push(display_prop, face);
                     continue;
                 }
-                if let Some(kind) = parse_display_property(display_prop) {
+                if let Some(kind) = parse_display_property(display_prop)
+                    .or_else(|| context.resolve_display_property(display_prop, face))
+                {
                     return Some(DisplayItem::new(span, face, kind));
                 }
             }
@@ -543,7 +563,9 @@ impl LispStringSourceFrame {
                     base_face: face,
                 };
             }
-            if let Some(kind) = parse_display_property(display_prop) {
+            if let Some(kind) = parse_display_property(display_prop)
+                .or_else(|| context.resolve_display_property(display_prop, face))
+            {
                 return LispStringAction::Emit(DisplayItem::new(span, face, kind));
             }
         }
