@@ -2998,6 +2998,82 @@ fn layout_frame_rust_applies_display_height_to_buffer_text_faces() {
 }
 
 #[test]
+fn layout_frame_rust_applies_display_height_to_overlay_strings() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x\n");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let after_string = Value::string_with_text_properties(
+            "Y",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+                ]),
+            }],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("after-string"), after_string);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-display-height", 640, 160, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert_eq!(glyphs_logical_text(&text_row.glyphs[1]), "xY");
+    assert!(
+        text_row.height_px > state.char_height.max(1.0),
+        "display height in overlay string should grow text row metrics, frame_char_height={} row={text_row:?}",
+        state.char_height
+    );
+}
+
+#[test]
 fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
     let mut eval = Context::new();
     let buf_id = eval

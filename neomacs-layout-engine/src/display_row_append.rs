@@ -63,13 +63,18 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     }
 }
 
-fn apply_pending_display_source_faces(
+pub(crate) fn apply_pending_display_source_faces(
     builder: &mut GlyphMatrixBuilder,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
         insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
     }
+}
+
+pub(crate) struct DisplayItemSourceStep {
+    pub(crate) item: DisplayItem,
+    pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
 pub(crate) struct DisplayItemSourceWalker<S> {
@@ -87,9 +92,8 @@ impl<S> DisplayItemSourceWalker<S> {
 }
 
 impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
-    pub(crate) fn next_item(
+    pub(crate) fn next_step(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
         face_resolver: &FaceResolver,
         base_face: &ResolvedFace,
         base_face_id: u32,
@@ -98,8 +102,8 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
         fallback_char_width: f32,
         fallback_ascent: f32,
         fallback_row_height: f32,
-    ) -> Option<DisplayItem> {
-        let mut resolved = resolve_next_display_source_item(
+    ) -> Option<DisplayItemSourceStep> {
+        let resolved = resolve_next_display_source_item(
             &mut self.source,
             DisplaySourceResolveParams {
                 face_resolver,
@@ -114,8 +118,36 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
             &mut self.resolve_state,
             current_face_id,
         );
-        apply_pending_display_source_faces(builder, &mut resolved.pending_faces);
-        resolved.item
+        resolved.item.map(|item| DisplayItemSourceStep {
+            item,
+            pending_faces: resolved.pending_faces,
+        })
+    }
+
+    pub(crate) fn next_item(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        face_resolver: &FaceResolver,
+        base_face: &ResolvedFace,
+        base_face_id: u32,
+        current_face_id: &mut u32,
+        display_host: Option<&dyn DisplayHost>,
+        fallback_char_width: f32,
+        fallback_ascent: f32,
+        fallback_row_height: f32,
+    ) -> Option<DisplayItem> {
+        let mut step = self.next_step(
+            face_resolver,
+            base_face,
+            base_face_id,
+            current_face_id,
+            display_host,
+            fallback_char_width,
+            fallback_ascent,
+            fallback_row_height,
+        )?;
+        apply_pending_display_source_faces(builder, &mut step.pending_faces);
+        Some(step.item)
     }
 }
 

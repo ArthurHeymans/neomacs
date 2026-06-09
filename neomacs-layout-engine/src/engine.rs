@@ -21,8 +21,8 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplayRow,
-    insert_resolved_display_row_face, install_rendered_display_row,
+    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec,
+    RenderedDisplayRow, insert_resolved_display_row_face, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
@@ -31,7 +31,8 @@ use crate::display_row_append::{
     append_buffer_text_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
-    append_synthetic_text_to_display_row, emit_text_progress_slots,
+    append_synthetic_text_to_display_row, apply_pending_display_source_faces,
+    emit_text_progress_slots, render_face_ref_id,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -40,7 +41,7 @@ use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayReplacementBox,
 };
-use crate::display_source_resolver::resolve_display_property_media;
+use crate::display_source_resolver::{PendingDisplaySourceFace, resolve_display_property_media};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -238,6 +239,35 @@ fn include_glyph_vertical_metrics(
     let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
     *row_ascent = (*row_ascent).max(glyph_ascent);
     *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
+}
+
+fn include_pending_display_source_face_metrics(
+    font_metrics: &mut Option<FontMetricsService>,
+    row_height: &mut f32,
+    row_ascent: &mut f32,
+    pending_faces: &[PendingDisplaySourceFace],
+    face_id: u32,
+    fallback_char_width: f32,
+    fallback_ascent: f32,
+    fallback_row_height: f32,
+) {
+    let Some(pending) = pending_faces
+        .iter()
+        .find(|pending| pending.face_id == face_id)
+    else {
+        return;
+    };
+    let mut realizer = DisplayRowFaceRealizer::new(font_metrics);
+    let face = realizer.realize_face(
+        pending.face_id,
+        &pending.resolved,
+        fallback_char_width,
+        fallback_ascent,
+        fallback_row_height,
+    );
+    let glyph_ascent = face.font_ascent.max(0.0);
+    let glyph_height = (glyph_ascent + face.font_descent.max(0) as f32).max(1.0);
+    include_glyph_vertical_metrics(row_height, row_ascent, glyph_height, glyph_ascent);
 }
 
 #[cfg(test)]
@@ -1267,6 +1297,7 @@ fn render_overlay_string(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     text_value: Value,
+    font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
     base_face: &super::neovm_bridge::ResolvedFace,
     base_face_id: u32,
@@ -1362,8 +1393,7 @@ fn render_overlay_string(
     let mut source = DisplayItemSourceWalker::new(source);
 
     while *row < max_rows {
-        let item = source.next_item(
-            builder,
+        let step = source.next_step(
             face_resolver,
             overlay_base_face,
             overlay_base_face_id,
@@ -1373,9 +1403,22 @@ fn render_overlay_string(
             default_row_ascent,
             char_h,
         );
-        let Some(item) = item else {
+        let Some(mut step) = step else {
             break;
         };
+        let item_face_id = render_face_ref_id(step.item.face, overlay_base_face_id);
+        include_pending_display_source_face_metrics(
+            font_metrics,
+            row_max_height,
+            row_max_ascent,
+            &step.pending_faces,
+            item_face_id,
+            face_char_w,
+            default_row_ascent,
+            char_h,
+        );
+        apply_pending_display_source_faces(builder, &mut step.pending_faces);
+        let item = step.item;
 
         if matches!(item.kind, crate::display_item::DisplayItemKind::RowBreak(_)) {
             // End current row, start a new one — mirrors the main text loop.
@@ -3799,6 +3842,7 @@ impl LayoutEngine {
                                     evaluator,
                                     &mut output_emitter,
                                     overlay_string.string,
+                                    &mut self.font_metrics,
                                     face_resolver,
                                     &current_resolved_face,
                                     current_text_face_id,
@@ -5424,6 +5468,7 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             overlay_string.string,
+                            &mut self.font_metrics,
                             face_resolver,
                             &current_resolved_face,
                             current_text_face_id,
@@ -5531,6 +5576,7 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             overlay_string.string,
+                            &mut self.font_metrics,
                             face_resolver,
                             &current_resolved_face,
                             current_text_face_id,
@@ -5639,6 +5685,7 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     overlay_string.string,
+                    &mut self.font_metrics,
                     face_resolver,
                     &current_resolved_face,
                     current_text_face_id,
