@@ -113,6 +113,23 @@ pub fn read_one_with_source_multibyte(
     Ok(Some((value, reader.pos)))
 }
 
+pub(crate) fn read_one_with_source_multibyte_and_shorthands(
+    input: &str,
+    source_multibyte: bool,
+    start: usize,
+    obarray: &super::symbol::Obarray,
+    shorthands: Option<&ReadSymbolShorthands>,
+) -> Result<Option<(Value, usize)>, ReadError> {
+    let mut reader = Reader::new(input, source_multibyte, obarray);
+    reader.shorthands = shorthands;
+    reader.pos = start;
+    if !reader.skip_ws_and_comments() {
+        return Ok(None);
+    }
+    let value = reader.read_form()?;
+    Ok(Some((value, reader.pos)))
+}
+
 /// Read a single form from `input`, optionally wrapping interned symbols
 /// in `symbol-with-pos` objects that record the byte offset where the
 /// symbol was found.  Used by `read-positioning-symbols`.
@@ -197,6 +214,21 @@ impl<'a> LispReadSource<'a> {
         self.read_one_range(start, self.logical_len(), obarray)
     }
 
+    pub(crate) fn read_one_with_shorthands(
+        &self,
+        start: usize,
+        obarray: &super::symbol::Obarray,
+        shorthands: Option<&ReadSymbolShorthands>,
+    ) -> Result<Option<(Value, usize)>, ReadError> {
+        let mut reader = Reader::new_lisp_string(self.input, start, self.logical_len(), obarray);
+        reader.shorthands = shorthands;
+        if !reader.skip_ws_and_comments() {
+            return Ok(None);
+        }
+        let value = reader.read_form()?;
+        Ok(Some((value, reader.pos)))
+    }
+
     pub fn read_one_range(
         &self,
         start: usize,
@@ -234,6 +266,49 @@ impl<'a> LispReadSource<'a> {
         }
         let value = reader.read_form()?;
         Ok(Some((value, reader.pos)))
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ReadSymbolShorthands {
+    pairs: Vec<(crate::heap_types::LispString, crate::heap_types::LispString)>,
+}
+
+impl ReadSymbolShorthands {
+    pub(crate) fn from_lisp_value(value: Value) -> Option<Self> {
+        let mut pairs = crate::emacs_core::value::list_to_vec(&value)?
+            .into_iter()
+            .filter_map(|entry| {
+                if !entry.is_cons() {
+                    return None;
+                }
+                let shorthand = entry.cons_car().as_lisp_string()?.clone();
+                let longhand = entry.cons_cdr().as_lisp_string()?.clone();
+                Some((shorthand, longhand))
+            })
+            .collect::<Vec<_>>();
+        pairs.sort_by(|left, right| right.0.sbytes().cmp(&left.0.sbytes()));
+        Some(Self { pairs })
+    }
+
+    fn rewrite(
+        &self,
+        name: &crate::heap_types::LispString,
+    ) -> Option<crate::heap_types::LispString> {
+        let input = name.as_bytes();
+        for (short, long) in &self.pairs {
+            let short_bytes = short.as_bytes();
+            if input.starts_with(short_bytes) {
+                let mut rewritten = long.as_bytes().to_vec();
+                rewritten.extend_from_slice(&input[short_bytes.len()..]);
+                return Some(if name.is_multibyte() || long.is_multibyte() {
+                    crate::heap_types::LispString::from_emacs_bytes(rewritten)
+                } else {
+                    crate::heap_types::LispString::from_unibyte(rewritten)
+                });
+            }
+        }
+        None
     }
 }
 
@@ -288,6 +363,9 @@ struct Reader<'a> {
     /// The active obarray, for resolving `#$` to the current value of
     /// `load-file-name` (matching GNU's `Vload_file_name`).
     obarray: &'a super::symbol::Obarray,
+    /// Active `read-symbol-shorthands`, if any.  GNU's reader rewrites symbol
+    /// names before interning when this dynamic variable is non-nil.
+    shorthands: Option<&'a ReadSymbolShorthands>,
     /// One-entry decode cache: `(pos, code, next_pos)` for the most recently
     /// decoded position.  neomacs's reader peeks the current char
     /// (`source_code_at`) then advances (`next_pos`) as separate steps, which
@@ -387,6 +465,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            shorthands: None,
             step_cache: Cell::new(None),
         }
     }
@@ -411,6 +490,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            shorthands: None,
             step_cache: Cell::new(None),
         }
     }
@@ -436,6 +516,7 @@ impl<'a> Reader<'a> {
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
             obarray,
+            shorthands: None,
             step_cache: Cell::new(None),
         }
     }
@@ -2013,7 +2094,11 @@ impl<'a> Reader<'a> {
             }
         }
 
-        Ok(Value::from_sym_id(intern_lisp_string(&token.name)))
+        let name = self
+            .shorthands
+            .and_then(|shorthands| shorthands.rewrite(&token.name))
+            .unwrap_or(token.name);
+        Ok(Value::from_sym_id(intern_lisp_string(&name)))
     }
 
     fn read_symbol_token(&mut self) -> ReaderToken {

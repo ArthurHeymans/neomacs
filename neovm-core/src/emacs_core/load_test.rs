@@ -7226,6 +7226,35 @@ fn fresh_bootstrap_eval_with_loaded_file(path: &std::path::Path, form: &str) -> 
 }
 
 #[test]
+fn load_source_applies_read_symbol_shorthands_from_file_local_variables() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("shorthand-source.el");
+    std::fs::write(
+        &path,
+        r#"(defmacro neomacs-long$ (&rest body) (cons 'progn body))
+(defmacro neomacs-longer$ (&rest body) (cons 'list body))
+(setq neomacs-shorthand-result (short$ 42))
+(setq neomacs-shorthand-sorted-result (short$-extra 1 2))
+
+;; Local Variables:
+;; read-symbol-shorthands: (("short$" . "neomacs-long$")
+;;                          ("short$-extra" . "neomacs-longer$"))
+;; End:
+"#,
+    )
+    .expect("write shorthand source fixture");
+
+    assert_eq!(
+        fresh_bootstrap_eval_with_loaded_file(
+            &path,
+            "(list neomacs-shorthand-result neomacs-shorthand-sorted-result)"
+        ),
+        "OK (42 (1 2))"
+    );
+}
+
+#[test]
 fn profile_single_bootstrap_file_load() {
     crate::test_utils::init_test_tracing();
     if std::env::var("NEOVM_PROFILE_BOOTSTRAP_FILE").is_err() {

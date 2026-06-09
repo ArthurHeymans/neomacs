@@ -5,6 +5,7 @@ use super::error::{EvalError, Flow, map_flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::keymap::{is_list_keymap, list_keymap_lookup_one};
 use super::value::{HashKey, Value, ValueKind, VecLikeType, list_to_vec};
+use super::value_reader::ReadSymbolShorthands;
 use crate::heap_types::LispString;
 use sha2::{Digest, Sha256};
 use std::cell::Cell;
@@ -1199,6 +1200,82 @@ pub(crate) fn source_lexical_binding_for_lisp_source(
     lexical_binding_from_cookie(eval, lexical_binding_cookie_for_lisp_source(source), from)
 }
 
+fn strip_local_variables_comment_prefix(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let rest = trimmed.strip_prefix(";;")?;
+    Some(rest.strip_prefix(' ').unwrap_or(rest))
+}
+
+fn source_read_symbol_shorthands_text(source: &str) -> Option<String> {
+    let mut local_variables_seen = false;
+    let mut collecting = false;
+    let mut value = String::new();
+
+    for raw_line in source.lines() {
+        let Some(line) = strip_local_variables_comment_prefix(raw_line) else {
+            continue;
+        };
+        let trimmed = line.trim();
+        if trimmed == "Local Variables:" {
+            local_variables_seen = true;
+            collecting = false;
+            value.clear();
+            continue;
+        }
+        if !local_variables_seen {
+            continue;
+        }
+        if trimmed == "End:" {
+            break;
+        }
+        if collecting {
+            value.push_str(line);
+            value.push('\n');
+            continue;
+        }
+        if let Some(rest) = line.trim_start().strip_prefix("read-symbol-shorthands:") {
+            collecting = true;
+            value.push_str(rest.trim_start());
+            value.push('\n');
+        }
+    }
+
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn source_read_symbol_shorthands(
+    source: &str,
+    source_multibyte: bool,
+    obarray: &super::symbol::Obarray,
+) -> Result<Option<ReadSymbolShorthands>, EvalError> {
+    let Some(text) = source_read_symbol_shorthands_text(source) else {
+        return Ok(None);
+    };
+    read_symbol_shorthands_value_text(&text, source_multibyte, obarray)
+}
+
+fn read_symbol_shorthands_value_text(
+    text: &str,
+    source_multibyte: bool,
+    obarray: &super::symbol::Obarray,
+) -> Result<Option<ReadSymbolShorthands>, EvalError> {
+    let Some((value, _)) =
+        super::value_reader::read_one_with_source_multibyte(text, source_multibyte, 0, obarray)
+            .map_err(|err| EvalError::Signal {
+                symbol: intern("invalid-read-syntax"),
+                data: vec![Value::string(err.message)],
+                raw_data: None,
+            })?
+    else {
+        return Ok(None);
+    };
+    Ok(ReadSymbolShorthands::from_lisp_value(value))
+}
+
 fn is_unsupported_compiled_path(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
         return false;
@@ -1481,6 +1558,7 @@ fn streaming_readevalloop(
     hist_file_name: &LispString,
     content: &str,
     source_multibyte: bool,
+    shorthands: Option<&ReadSymbolShorthands>,
     macroexpand_fn: Option<Value>,
 ) -> Result<Value, EvalError> {
     let file_name = path
@@ -1499,11 +1577,12 @@ fn streaming_readevalloop(
             load_specpdl_base,
             "streaming_readevalloop leaked specpdl entries before {file_name} form {form_idx}",
         );
-        let read_result = super::value_reader::read_one_with_source_multibyte(
+        let read_result = super::value_reader::read_one_with_source_multibyte_and_shorthands(
             content,
             source_multibyte,
             pos,
             &eval.obarray,
+            shorthands,
         )
         .map_err(|e| read_error_for_load(path, e))?;
 
@@ -1574,6 +1653,7 @@ fn streaming_readevalloop_lisp_source(
     path: &Path,
     hist_file_name: &LispString,
     content: &LispString,
+    shorthands: Option<&ReadSymbolShorthands>,
     macroexpand_fn: Option<Value>,
 ) -> Result<Value, EvalError> {
     let file_name = path
@@ -1594,7 +1674,7 @@ fn streaming_readevalloop_lisp_source(
             "streaming_readevalloop_lisp_source leaked specpdl entries before {file_name} form {form_idx}",
         );
         let read_result = read_source
-            .read_one(pos, &eval.obarray)
+            .read_one_with_shorthands(pos, &eval.obarray, shorthands)
             .map_err(|e| read_error_for_load(path, e))?;
 
         let Some((form, next_pos)) = read_result else {
@@ -1919,6 +1999,12 @@ fn load_file_body(
     // 2. readevalloop [streaming_readevalloop]
     // 3. unbind_to [with_load_context returns]
     // 4. do-after-load-evaluation [record_load_history]
+    let shorthands = if is_elc {
+        None
+    } else {
+        source_read_symbol_shorthands(&content, source_multibyte, &eval.obarray)?
+    };
+
     let result = with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
         let macroexpand_fn = if is_elc {
             None
@@ -1932,6 +2018,7 @@ fn load_file_body(
             &hist_file_name,
             &content,
             source_multibyte,
+            shorthands.as_ref(),
             macroexpand_fn,
         )
     });
@@ -1961,6 +2048,7 @@ pub(crate) fn eval_decoded_source_file_in_context(
         &found,
         content,
         source_multibyte,
+        None,
         macroexpand_fn,
     )
 }
@@ -1972,7 +2060,22 @@ pub(crate) fn eval_lisp_source_file_in_context(
 ) -> Result<Value, EvalError> {
     let macroexpand_fn = get_eager_macroexpand_fn(eval);
     let path = load_path_buf(found);
-    streaming_readevalloop_lisp_source(eval, &path, found, content, macroexpand_fn)
+    let source_text = super::builtins::runtime_string_from_lisp_string(content);
+    let shorthands_text = source_read_symbol_shorthands_text(&source_text);
+    let shorthands = match shorthands_text {
+        Some(text) => {
+            read_symbol_shorthands_value_text(&text, content.is_multibyte(), &eval.obarray)?
+        }
+        None => None,
+    };
+    streaming_readevalloop_lisp_source(
+        eval,
+        &path,
+        found,
+        content,
+        shorthands.as_ref(),
+        macroexpand_fn,
+    )
 }
 
 /// Skip the `;ELC` magic header in a byte-compiled Elisp file.
