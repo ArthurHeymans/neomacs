@@ -13,7 +13,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowMetrics,
-    TextMatrixRowTransition, WindowOutputEmitter, begin_text_matrix_row,
+    TextMatrixRowTransition, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
     finish_and_begin_text_matrix_row, finish_and_maybe_begin_text_matrix_row,
     finish_text_matrix_row,
 };
@@ -21,20 +21,20 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSourceWalker,
-    DisplayRowSpec, RenderedDisplayRow, insert_resolved_display_row_face,
-    install_rendered_display_row, install_rendered_frame_chrome_row,
+    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderStop,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
+    insert_resolved_display_row_face, install_rendered_display_row,
+    install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
     append_buffer_text_char_to_text_row, append_buffer_text_item_to_text_row_and_emit,
-    append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
-    append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
-    apply_pending_display_source_faces, emit_text_progress_slots, render_face_ref_id,
+    append_lisp_string_fragment_to_text_row_and_emit,
+    append_rendered_display_row_fragment_to_text_row_and_emit,
+    append_synthetic_text_to_display_row,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -43,7 +43,7 @@ use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayReplacementBox,
 };
-use crate::display_source_resolver::{PendingDisplaySourceFace, resolve_display_property_media};
+use crate::display_source_resolver::resolve_display_property_media;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -236,35 +236,6 @@ fn include_glyph_vertical_metrics(
     let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
     *row_ascent = (*row_ascent).max(glyph_ascent);
     *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
-}
-
-fn include_pending_display_source_face_metrics(
-    font_metrics: &mut Option<FontMetricsService>,
-    row_height: &mut f32,
-    row_ascent: &mut f32,
-    pending_faces: &[PendingDisplaySourceFace],
-    face_id: u32,
-    fallback_char_width: f32,
-    fallback_ascent: f32,
-    fallback_row_height: f32,
-) {
-    let Some(pending) = pending_faces
-        .iter()
-        .find(|pending| pending.face_id == face_id)
-    else {
-        return;
-    };
-    let mut realizer = DisplayRowFaceRealizer::new(font_metrics);
-    let face = realizer.realize_face(
-        pending.face_id,
-        &pending.resolved,
-        fallback_char_width,
-        fallback_ascent,
-        fallback_row_height,
-    );
-    let glyph_ascent = face.font_ascent.max(0.0);
-    let glyph_height = (glyph_ascent + face.font_descent.max(0) as f32).max(1.0);
-    include_glyph_vertical_metrics(row_height, row_ascent, glyph_height, glyph_ascent);
 }
 
 #[cfg(test)]
@@ -1324,90 +1295,61 @@ fn render_overlay_string(
         }};
     }
 
-    let Some(source) = crate::display_source::LispStringSourceCursor::new(
+    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
         1,
         text_value,
         crate::display_item::RenderFaceRef::FaceId(overlay_base_face_id),
     ) else {
         return;
     };
-    let mut source = DisplayRowSourceWalker::new(source);
+    let mut source_state = DisplayRowSourceState::default();
 
     while *row < max_rows {
-        let step = source.next_step(
-            face_resolver,
-            overlay_base_face,
-            overlay_base_face_id,
-            current_face_id,
-            evaluator.display_host.as_deref(),
-            face_char_w,
-            default_row_ascent,
-            char_h,
-        );
-        let Some(mut step) = step else {
-            break;
-        };
-        let item_face_id = render_face_ref_id(step.item.face, overlay_base_face_id);
-        include_pending_display_source_face_metrics(
-            font_metrics,
-            row_max_height,
-            row_max_ascent,
-            &step.pending_faces,
-            item_face_id,
-            face_char_w,
-            default_row_ascent,
-            char_h,
-        );
-        apply_pending_display_source_faces(builder, &mut step.pending_faces);
-        let item = step.item;
-
-        if matches!(item.kind, crate::display_item::DisplayItemKind::RowBreak(_)) {
-            // End current row, start a new one — mirrors the main text loop.
-            if !finish_overlay_string_row!() {
-                break;
-            }
-            continue;
-        }
-
         if *x >= max_x {
             break;
         }
-        let overlay_surface = DisplayRowAppendSurface::new(
-            DisplayRowAppendArea {
-                content_x,
-                width: max_x - content_x,
-                text_width: max_x - content_x,
-                line_number_width: 0.0,
-            },
-            text_display_tab_policy(content_x, params),
-        );
-        let overlay_frame = overlay_surface.frame(
-            DisplayRowAppendPlacement {
-                row: *row,
+
+        let row_spec = DisplayRowSpec {
+            geometry: DisplayRowGeometry {
                 y: *y,
-                glyph_y: *y,
-            },
-            DisplayRowAppendMetrics {
+                width: max_x - content_x,
                 height: char_h,
-                ascent: default_row_ascent,
                 char_width: face_char_w,
-                space_width: face_char_w,
-                default_row_height: char_h,
+                ascent: default_row_ascent,
+                tab_policy: text_display_tab_policy(content_x, params),
             },
-        );
-        let Some((progress, position)) = append_display_replacement_item_to_text_row(
-            builder,
-            item,
-            overlay_base_face_id,
-            overlay_frame,
-            DisplayRowPosition {
-                x_px: *x,
-                col: *col,
+            render_bounds: DisplayRowRenderBounds {
+                start: DisplayRowPosition {
+                    x_px: *x,
+                    col: *col,
+                },
+                max_x_px: max_x,
             },
+            base_face_id: overlay_base_face_id,
+            base_face: overlay_base_face,
+            role: GlyphRowRole::Text,
+            symbol_values: std::collections::HashMap::new(),
+        };
+        let mut renderer = DisplayRowRenderer::new(font_metrics);
+        let Some(result) = renderer.render_display_item_source_row_fragment_step_with_display_host(
+            row_spec,
+            &mut source,
+            &mut source_state,
+            face_resolver,
+            evaluator.display_host.as_deref(),
+            current_face_id,
         ) else {
             break;
         };
-        for slot in &progress.slots {
+        let stop = result.stop;
+        let rendered = result.rendered;
+        include_glyph_vertical_metrics(
+            row_max_height,
+            row_max_ascent,
+            rendered.row.height_px,
+            rendered.row.ascent_px,
+        );
+        for slot in &rendered.source_slots {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
                 slot,
@@ -1420,11 +1362,31 @@ fn render_overlay_string(
                 Color::from_pixel(overlay_base_face.bg),
             );
         }
+        let position = append_rendered_display_row_fragment_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            &rendered,
+            TextRowOutput {
+                row: *row,
+                row_y: *y,
+                glyph_y: *y,
+                height: char_h,
+            },
+        );
         *x = position.x_px;
         *col = position.col;
-        emit_text_progress_slots(output_emitter, evaluator, &progress, *row, *y, *y, char_h);
-        if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Clipped {
-            break;
+
+        if stop == DisplayRowRenderStop::RowBreak {
+            // End current row, start a new one — mirrors the main text loop.
+            if !finish_overlay_string_row!() {
+                break;
+            }
+            continue;
+        }
+        match stop {
+            DisplayRowRenderStop::SourceExhausted | DisplayRowRenderStop::Clipped => break,
+            DisplayRowRenderStop::RowBreak => unreachable!("row break handled above"),
         }
     }
 }

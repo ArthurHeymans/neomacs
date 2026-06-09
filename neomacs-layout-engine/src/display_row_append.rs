@@ -499,6 +499,7 @@ pub(crate) fn append_display_item_to_text_row_and_emit(
     append_display_row_spec_item_and_emit(builder, output_emitter, evaluator, append_spec, item)
 }
 
+#[cfg(test)]
 pub(crate) fn append_display_replacement_item_to_text_row(
     builder: &mut GlyphMatrixBuilder,
     mut item: DisplayItem,

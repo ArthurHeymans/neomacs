@@ -245,8 +245,9 @@ impl<'a> DisplayRowFaceRealizer<'a> {
     }
 
     pub(crate) fn char_width(&mut self, face: &DisplayRowFace, fallback_char_width: f32) -> f32 {
+        let fallback_char_width = fallback_char_width.max(1.0);
         if face.font_char_width > 0.0 {
-            return face.font_char_width;
+            return face.font_char_width.max(fallback_char_width);
         }
         if let Some(svc) = self.font_metrics.as_mut() {
             let metrics = svc.font_metrics(
@@ -255,27 +256,20 @@ impl<'a> DisplayRowFaceRealizer<'a> {
                 face.italic,
                 face.font_size,
             );
-            return metrics.char_width;
+            return metrics.char_width.max(fallback_char_width);
         }
         fallback_char_width
     }
 
-    pub(crate) fn font_metrics_for_face(&mut self, face: &DisplayRowFace) -> FontMetrics {
-        if let Some(svc) = self.font_metrics.as_mut() {
-            return svc.font_metrics(
+    fn measured_font_metrics_for_face(&mut self, face: &DisplayRowFace) -> Option<FontMetrics> {
+        self.font_metrics.as_mut().map(|svc| {
+            svc.font_metrics(
                 &face.font_family,
                 face.font_weight,
                 face.italic,
                 face.font_size,
-            );
-        }
-
-        FontMetrics {
-            ascent: face.font_ascent.max(1.0),
-            descent: face.font_descent.max(0) as f32,
-            line_height: (face.font_ascent + face.font_descent as f32).max(1.0),
-            char_width: face.font_char_width.max(1.0),
-        }
+            )
+        })
     }
 
     pub(crate) fn font_metrics_service_mut(&mut self) -> Option<&mut FontMetricsService> {
@@ -293,9 +287,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
             || face.font_ascent <= 0.0
             || (face.font_ascent + face.font_descent as f32) <= 0.0;
 
-        if needs_metrics {
-            let metrics = self.font_metrics_for_face(face);
-
+        if needs_metrics && let Some(metrics) = self.measured_font_metrics_for_face(face) {
             if face.font_char_width <= 0.0 && metrics.char_width > 0.0 {
                 face.font_char_width = metrics.char_width;
             }
@@ -310,10 +302,13 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         if face.font_char_width <= 0.0 {
             face.font_char_width = fallback_char_width.max(1.0);
         }
+        face.font_char_width = face.font_char_width.max(fallback_char_width.max(1.0));
         if face.font_ascent <= 0.0 {
             face.font_ascent = fallback_ascent.max(1.0);
         }
-        if (face.font_ascent + face.font_descent as f32) <= 0.0 {
+        if (face.font_ascent + face.font_descent as f32) <= 0.0
+            || (face.font_descent <= 0 && row_height > face.font_ascent)
+        {
             face.font_descent = (row_height - face.font_ascent).max(0.0).ceil() as i32;
         }
     }

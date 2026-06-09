@@ -87,9 +87,9 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
     let rendered = realizer.realize_face(7, &face, 8.0, 12.0, 16.0);
 
     assert_eq!(rendered.face_id, 7);
-    assert_eq!(rendered.font_char_width, 1.0);
-    assert_eq!(rendered.font_ascent, 1.0);
-    assert_eq!(rendered.font_descent, 0);
+    assert_eq!(rendered.font_char_width, 8.0);
+    assert_eq!(rendered.font_ascent, 12.0);
+    assert_eq!(rendered.font_descent, 4);
 }
 
 #[test]
