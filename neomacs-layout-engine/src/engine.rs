@@ -19,7 +19,6 @@ use super::window_output::{
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_item::DisplayItemKind;
-use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplayRow,
@@ -41,6 +40,7 @@ use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayReplacementBox,
 };
+use crate::display_source_resolver::resolve_display_property_media;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -4249,28 +4249,20 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_image = evaluator
-                            .display_host
-                            .as_ref()
-                            .and_then(|host| {
-                                resolve_display_media_property(
-                                    &prop_val,
-                                    DisplayMediaResolveParams {
-                                        display_host: host.as_ref(),
-                                        default_fg: current_resolved_face.fg,
-                                        default_bg: current_resolved_face.bg,
-                                        fallback_char_width: face_char_w,
-                                        fallback_row_height: face_h,
-                                    },
-                                )
-                            })
-                            .and_then(|kind| {
-                                if let DisplayItemKind::Image(image) = kind {
-                                    Some(image)
-                                } else {
-                                    None
-                                }
-                            });
+                        let maybe_image = resolve_display_property_media(
+                            &prop_val,
+                            evaluator.display_host.as_deref(),
+                            &current_resolved_face,
+                            face_char_w,
+                            face_h,
+                        )
+                        .and_then(|kind| {
+                            if let DisplayItemKind::Image(image) = kind {
+                                Some(image)
+                            } else {
+                                None
+                            }
+                        });
 
                         if let Some(image) = maybe_image {
                             let display_width = image.width.max(1.0);
@@ -4402,28 +4394,20 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_video = evaluator
-                            .display_host
-                            .as_ref()
-                            .and_then(|host| {
-                                resolve_display_media_property(
-                                    &prop_val,
-                                    DisplayMediaResolveParams {
-                                        display_host: host.as_ref(),
-                                        default_fg: current_resolved_face.fg,
-                                        default_bg: current_resolved_face.bg,
-                                        fallback_char_width: face_char_w,
-                                        fallback_row_height: face_h,
-                                    },
-                                )
-                            })
-                            .and_then(|kind| {
-                                if let DisplayItemKind::Video(video) = kind {
-                                    Some(video)
-                                } else {
-                                    None
-                                }
-                            });
+                        let maybe_video = resolve_display_property_media(
+                            &prop_val,
+                            evaluator.display_host.as_deref(),
+                            &current_resolved_face,
+                            face_char_w,
+                            face_h,
+                        )
+                        .and_then(|kind| {
+                            if let DisplayItemKind::Video(video) = kind {
+                                Some(video)
+                            } else {
+                                None
+                            }
+                        });
 
                         if let Some(video) = maybe_video {
                             let display_width = video.width.max(1.0);
@@ -4638,28 +4622,20 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_webkit = evaluator
-                            .display_host
-                            .as_ref()
-                            .and_then(|host| {
-                                resolve_display_media_property(
-                                    &prop_val,
-                                    DisplayMediaResolveParams {
-                                        display_host: host.as_ref(),
-                                        default_fg: current_resolved_face.fg,
-                                        default_bg: current_resolved_face.bg,
-                                        fallback_char_width: face_char_w,
-                                        fallback_row_height: face_h,
-                                    },
-                                )
-                            })
-                            .and_then(|kind| {
-                                if let DisplayItemKind::Xwidget(xwidget) = kind {
-                                    Some(xwidget)
-                                } else {
-                                    None
-                                }
-                            });
+                        let maybe_webkit = resolve_display_property_media(
+                            &prop_val,
+                            evaluator.display_host.as_deref(),
+                            &current_resolved_face,
+                            face_char_w,
+                            face_h,
+                        )
+                        .and_then(|kind| {
+                            if let DisplayItemKind::Xwidget(xwidget) = kind {
+                                Some(xwidget)
+                            } else {
+                                None
+                            }
+                        });
 
                         if let Some(xwidget) = maybe_webkit {
                             let display_width = xwidget.width.max(1.0);

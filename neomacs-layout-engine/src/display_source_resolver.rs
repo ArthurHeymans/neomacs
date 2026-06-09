@@ -111,19 +111,34 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
         display_prop: Value,
         face: RenderFaceRef,
     ) -> Option<DisplayItemKind> {
-        let display_host = self.params.display_host?;
         let resolved_face = self.state.resolved_face_for(face, self.params.base_face);
-        resolve_display_media_property(
+        resolve_display_property_media(
             &display_prop,
-            DisplayMediaResolveParams {
-                display_host,
-                default_fg: resolved_face.fg,
-                default_bg: resolved_face.bg,
-                fallback_char_width: self.params.fallback_char_width,
-                fallback_row_height: self.params.fallback_row_height,
-            },
+            self.params.display_host,
+            &resolved_face,
+            self.params.fallback_char_width,
+            self.params.fallback_row_height,
         )
     }
+}
+
+pub(crate) fn resolve_display_property_media(
+    display_prop: &Value,
+    display_host: Option<&dyn DisplayHost>,
+    resolved_face: &ResolvedFace,
+    fallback_char_width: f32,
+    fallback_row_height: f32,
+) -> Option<DisplayItemKind> {
+    resolve_display_media_property(
+        display_prop,
+        DisplayMediaResolveParams {
+            display_host: display_host?,
+            default_fg: resolved_face.fg,
+            default_bg: resolved_face.bg,
+            fallback_char_width,
+            fallback_row_height,
+        },
+    )
 }
 
 fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
