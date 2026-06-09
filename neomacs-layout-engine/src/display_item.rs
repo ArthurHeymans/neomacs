@@ -277,6 +277,88 @@ pub(crate) struct DisplayXwidgetItem {
     pub(crate) height: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayMediaReplacement {
+    pub(crate) kind: DisplayMediaReplacementKind,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayMediaReplacementKind {
+    Image {
+        image_id: u32,
+    },
+    Video {
+        video_id: u32,
+        loop_count: i32,
+        autoplay: bool,
+    },
+    Xwidget {
+        xwidget_id: u32,
+    },
+}
+
+impl DisplayMediaReplacement {
+    pub(crate) fn from_item_kind(kind: &DisplayItemKind) -> Option<Self> {
+        match kind {
+            DisplayItemKind::Image(image) => Some(Self::image(*image)),
+            DisplayItemKind::Video(video) => Some(Self::video(*video)),
+            DisplayItemKind::Xwidget(xwidget) => Some(Self::xwidget(*xwidget)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
+        item.kind = DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
+            height: Some(DisplayLength::Pixels(self.height)),
+            ascent: Some(DisplayLength::Pixels(self.height)),
+        });
+        item
+    }
+
+    fn image(image: DisplayImageItem) -> Self {
+        Self {
+            kind: DisplayMediaReplacementKind::Image {
+                image_id: image.image_id.max(0) as u32,
+            },
+            width: display_replacement_dimension(image.width),
+            height: display_replacement_dimension(image.height),
+        }
+    }
+
+    fn video(video: DisplayVideoItem) -> Self {
+        Self {
+            kind: DisplayMediaReplacementKind::Video {
+                video_id: video.video_id.max(0) as u32,
+                loop_count: video.loop_count,
+                autoplay: video.autoplay,
+            },
+            width: display_replacement_dimension(video.width),
+            height: display_replacement_dimension(video.height),
+        }
+    }
+
+    fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
+        Self {
+            kind: DisplayMediaReplacementKind::Xwidget {
+                xwidget_id: xwidget.xwidget_id.max(0) as u32,
+            },
+            width: display_replacement_dimension(xwidget.width),
+            height: display_replacement_dimension(xwidget.height),
+        }
+    }
+}
+
+fn display_replacement_dimension(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(1.0)
+    } else {
+        1.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayRowBreak {
     pub(crate) reason: DisplayRowBreakReason,

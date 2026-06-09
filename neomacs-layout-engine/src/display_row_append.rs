@@ -1,7 +1,6 @@
 use crate::display_item::{
-    DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
-    SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
+    DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -785,135 +784,74 @@ pub(crate) fn append_display_row_spec_item(
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let media = match &item.kind {
-        DisplayItemKind::Image(image) => Some(DisplayRowAppendMedia::Image(*image)),
-        DisplayItemKind::Video(video) => Some(DisplayRowAppendMedia::Video(*video)),
-        DisplayItemKind::Xwidget(xwidget) => Some(DisplayRowAppendMedia::Xwidget(*xwidget)),
-        _ => None,
-    };
-    match media {
-        Some(DisplayRowAppendMedia::Image(image)) => {
-            append_image_display_row_spec_item(builder, spec, item, image)
-        }
-        Some(DisplayRowAppendMedia::Video(video)) => {
-            append_video_display_row_spec_item(builder, spec, item, video)
-        }
-        Some(DisplayRowAppendMedia::Xwidget(xwidget)) => {
-            append_xwidget_display_row_spec_item(builder, spec, item, xwidget)
-        }
+    match DisplayMediaReplacement::from_item_kind(&item.kind) {
+        Some(media) => append_media_display_row_spec_item(builder, spec, item, media),
         None => append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item),
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum DisplayRowAppendMedia {
-    Image(DisplayImageItem),
-    Video(DisplayVideoItem),
-    Xwidget(DisplayXwidgetItem),
-}
-
-fn append_image_display_row_spec_item(
+fn append_media_display_row_spec_item(
     builder: &mut GlyphMatrixBuilder,
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,
-    image: DisplayImageItem,
+    media: DisplayMediaReplacement,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let width = display_replacement_dimension(image.width);
-    let height = display_replacement_dimension(image.height);
-    let (progress, position) =
-        append_display_replacement_box_item(builder, spec, item, width, height)?;
+    let (progress, position) = append_display_row_item(
+        builder,
+        &spec.layout,
+        spec.position,
+        spec.max_x,
+        media.replacement_item(item),
+    )?;
     if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
         && progress.metrics.width_px > 0.0
     {
-        builder.push_current_window_image(
+        install_media_replacement(builder, spec, &progress, media);
+    }
+    Some((progress, position))
+}
+
+fn install_media_replacement(
+    builder: &mut GlyphMatrixBuilder,
+    spec: &DisplayRowAppendSpec,
+    progress: &DisplayRowAppendProgress,
+    media: DisplayMediaReplacement,
+) {
+    match media.kind {
+        DisplayMediaReplacementKind::Image { image_id } => builder.push_current_window_image(
             spec.layout.role,
             display_slot_row(spec.output.row),
             display_slot_col(progress.start.col),
-            image.image_id.max(0) as u32,
+            image_id,
             progress.start.x_px,
             spec.output.glyph_y,
-            width,
-            height,
-        );
-    }
-    Some((progress, position))
-}
-
-fn append_video_display_row_spec_item(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    item: DisplayItem,
-    video: DisplayVideoItem,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let width = display_replacement_dimension(video.width);
-    let height = display_replacement_dimension(video.height);
-    let (progress, position) =
-        append_display_replacement_box_item(builder, spec, item, width, height)?;
-    if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
-        && progress.metrics.width_px > 0.0
-    {
-        builder.push_current_window_video(
+            media.width,
+            media.height,
+        ),
+        DisplayMediaReplacementKind::Video {
+            video_id,
+            loop_count,
+            autoplay,
+        } => builder.push_current_window_video(
             spec.layout.role,
             display_slot_row(spec.output.row),
             display_slot_col(progress.start.col),
-            video.video_id.max(0) as u32,
+            video_id,
             progress.start.x_px,
             spec.output.glyph_y,
-            width,
-            height,
-            video.loop_count,
-            video.autoplay,
-        );
-    }
-    Some((progress, position))
-}
-
-fn append_xwidget_display_row_spec_item(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    item: DisplayItem,
-    xwidget: DisplayXwidgetItem,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let width = display_replacement_dimension(xwidget.width);
-    let height = display_replacement_dimension(xwidget.height);
-    let (progress, position) =
-        append_display_replacement_box_item(builder, spec, item, width, height)?;
-    if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
-        && progress.metrics.width_px > 0.0
-    {
-        builder.push_current_window_xwidget(
+            media.width,
+            media.height,
+            loop_count,
+            autoplay,
+        ),
+        DisplayMediaReplacementKind::Xwidget { xwidget_id } => builder.push_current_window_xwidget(
             spec.layout.role,
-            xwidget.xwidget_id.max(0) as u32,
+            xwidget_id,
             progress.start.x_px,
             spec.output.glyph_y,
-            width,
-            height,
-        );
-    }
-    Some((progress, position))
-}
-
-fn append_display_replacement_box_item(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    mut item: DisplayItem,
-    width: f32,
-    height: f32,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    item.kind = DisplayItemKind::Stretch(DisplayStretch {
-        width: DisplayStretchWidth::Length(DisplayLength::Pixels(width)),
-        height: Some(DisplayLength::Pixels(height)),
-        ascent: Some(DisplayLength::Pixels(height)),
-    });
-
-    append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
-}
-
-fn display_replacement_dimension(value: f32) -> f32 {
-    if value.is_finite() {
-        value.max(1.0)
-    } else {
-        1.0
+            media.width,
+            media.height,
+        ),
     }
 }
 

@@ -1,6 +1,5 @@
 use crate::display_item::{
-    DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
-    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
+    DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind, RenderFaceRef,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
@@ -707,67 +706,10 @@ fn display_source_row_progress(
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct DisplayRowMediaDescriptor {
-    kind: RenderedDisplayRowMediaKind,
-    width: f32,
-    height: f32,
-}
-
-impl DisplayRowMediaDescriptor {
-    fn from_item_kind(kind: &DisplayItemKind) -> Option<Self> {
-        match kind {
-            DisplayItemKind::Image(image) => Some(Self::image(*image)),
-            DisplayItemKind::Video(video) => Some(Self::video(*video)),
-            DisplayItemKind::Xwidget(xwidget) => Some(Self::xwidget(*xwidget)),
-            _ => None,
-        }
-    }
-
-    fn image(image: DisplayImageItem) -> Self {
-        Self {
-            kind: RenderedDisplayRowMediaKind::Image {
-                image_id: image.image_id.max(0) as u32,
-            },
-            width: display_replacement_dimension(image.width),
-            height: display_replacement_dimension(image.height),
-        }
-    }
-
-    fn video(video: DisplayVideoItem) -> Self {
-        Self {
-            kind: RenderedDisplayRowMediaKind::Video {
-                video_id: video.video_id.max(0) as u32,
-                loop_count: video.loop_count,
-                autoplay: video.autoplay,
-            },
-            width: display_replacement_dimension(video.width),
-            height: display_replacement_dimension(video.height),
-        }
-    }
-
-    fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
-        Self {
-            kind: RenderedDisplayRowMediaKind::Xwidget {
-                xwidget_id: xwidget.xwidget_id.max(0) as u32,
-            },
-            width: display_replacement_dimension(xwidget.width),
-            height: display_replacement_dimension(xwidget.height),
-        }
-    }
-
-    fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
-        item.kind = DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
-            height: Some(DisplayLength::Pixels(self.height)),
-            ascent: Some(DisplayLength::Pixels(self.height)),
-        });
-        item
-    }
-
+impl DisplayMediaReplacement {
     fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
         RenderedDisplayRowMedia {
-            kind: self.kind,
+            kind: self.kind.into(),
             x: start.x_px,
             y,
             col: start.col.min(usize::from(u16::MAX)) as u16,
@@ -777,11 +719,21 @@ impl DisplayRowMediaDescriptor {
     }
 }
 
-fn display_replacement_dimension(value: f32) -> f32 {
-    if value.is_finite() {
-        value.max(1.0)
-    } else {
-        1.0
+impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
+    fn from(kind: DisplayMediaReplacementKind) -> Self {
+        match kind {
+            DisplayMediaReplacementKind::Image { image_id } => Self::Image { image_id },
+            DisplayMediaReplacementKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => Self::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            },
+            DisplayMediaReplacementKind::Xwidget { xwidget_id } => Self::Xwidget { xwidget_id },
+        }
     }
 }
 
@@ -914,7 +866,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let Some(item) = item else {
                 break;
             };
-            let media_descriptor = DisplayRowMediaDescriptor::from_item_kind(&item.kind);
+            let media_descriptor = DisplayMediaReplacement::from_item_kind(&item.kind);
             let item = media_descriptor
                 .map(|descriptor| descriptor.replacement_item(item.clone()))
                 .unwrap_or(item);
