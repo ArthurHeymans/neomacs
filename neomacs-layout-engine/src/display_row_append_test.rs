@@ -157,6 +157,87 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
 }
 
 #[test]
+fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-synthetic-combining", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 1, 0.0, 8.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_char_with_pixel_width('e', 7, 0, 8.0);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let (progress, end) = append_synthetic_text_to_display_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &face_resolver,
+        base_face,
+        frame,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        100,
+        "\u{301}",
+        7,
+        None,
+    )
+    .expect("combining fragment progress");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(progress.metrics.width_px, 0.0);
+    assert_eq!(progress.metrics.width_cols, 0);
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(
+                &text[0].glyph_type,
+                GlyphType::Composite { text } if text.as_ref() == "e\u{301}"
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
 fn render_face_ref_id_uses_fallback_for_inherit() {
     assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
     assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);

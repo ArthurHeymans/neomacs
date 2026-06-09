@@ -727,6 +727,25 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     display_row_output_end_position(rendered.progress)
 }
 
+pub(crate) fn replace_current_row_with_rendered_display_row_fragment(
+    builder: &mut GlyphMatrixBuilder,
+    rendered: &RenderedDisplayRow,
+    matrix_row: usize,
+) -> DisplayRowPosition {
+    for face in &rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    let mut row = rendered.row.clone();
+    if let Some((start, end)) = buffer_source_slot_bounds(&rendered.source_slots) {
+        merge_row_buffer_source_bounds(&mut row, start, end);
+    }
+    builder.install_prebuilt_current_row(&row);
+    for media in &rendered.media {
+        media.install(builder, rendered.row.role, matrix_row);
+    }
+    display_row_output_end_position(rendered.progress)
+}
+
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
         let row = matrix_row.min(u32::MAX as usize) as u32;
@@ -1139,6 +1158,33 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         next_face_id: &mut u32,
         policy: &mut P,
     ) -> Option<DisplayRowRenderResult> {
+        let initial_row = GlyphRow::new(spec.role);
+        self.render_display_item_source_row_fragment_step_from_row_with_policy(
+            spec,
+            initial_row,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+            policy,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_from_row_with_policy<
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    >(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        initial_row: GlyphRow,
+        source: &mut S,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+        policy: &mut P,
+    ) -> Option<DisplayRowRenderResult> {
         if state.is_finished() {
             return None;
         }
@@ -1180,7 +1226,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             RenderFaceRef::FaceId(row_face.face_id),
             parsed_symbol_values,
         );
-        let mut row = GlyphRow::new(role);
+        let mut row = initial_row;
         let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();

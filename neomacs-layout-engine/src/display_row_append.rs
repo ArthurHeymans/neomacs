@@ -9,6 +9,7 @@ use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
     DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
     DisplayRowSpec, RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
+    replace_current_row_with_rendered_display_row_fragment,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowAppendStatus,
@@ -104,6 +105,18 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     end
 }
 
+pub(crate) fn replace_current_row_with_rendered_display_row_fragment_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    rendered: &RenderedDisplayRow,
+    output: TextRowOutput,
+) -> DisplayRowPosition {
+    let end = replace_current_row_with_rendered_display_row_fragment(builder, rendered, output.row);
+    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
+    end
+}
+
 fn display_row_append_progress_from_render_result(
     start: DisplayRowPosition,
     end: DisplayRowPosition,
@@ -192,8 +205,10 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     let mut font_metrics = None;
     let mut next_face_id = request.base_face_id.saturating_add(1);
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let result = renderer.render_display_item_source_row_fragment_step_with_policy(
+    let initial_row = builder.with_current_row_mut(|row| row.clone())?;
+    let result = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
         row_spec,
+        initial_row,
         &mut source,
         &mut source_state,
         face_resolver,
@@ -203,7 +218,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     )?;
     let stop = result.stop;
     let slots = result.rendered.source_slots.clone();
-    let end = append_rendered_display_row_fragment_to_text_row_and_emit(
+    let end = replace_current_row_with_rendered_display_row_fragment_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -255,17 +270,23 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
     };
     let mut source_state = DisplayRowSourceState::default();
     let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let Some(result) = renderer.render_display_item_source_row_fragment_step_with_display_host(
+    let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
+        return position;
+    };
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    let Some(result) = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
         row_spec,
+        initial_row,
         &mut source,
         &mut source_state,
         face_resolver,
         evaluator.display_host.as_deref(),
         current_face_id,
+        &mut render_policy,
     ) else {
         return position;
     };
-    append_rendered_display_row_fragment_to_text_row_and_emit(
+    replace_current_row_with_rendered_display_row_fragment_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -702,8 +723,12 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let Some(result) = renderer.render_display_item_source_row_fragment_step_with_policy(
+    let Some(initial_row) = builder.with_current_row_mut(|row| row.clone()) else {
+        return position;
+    };
+    let Some(result) = renderer.render_display_item_source_row_fragment_step_from_row_with_policy(
         row_spec,
+        initial_row,
         &mut source,
         &mut source_state,
         face_resolver,
@@ -713,7 +738,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     ) else {
         return position;
     };
-    append_rendered_display_row_fragment_to_text_row_and_emit(
+    replace_current_row_with_rendered_display_row_fragment_and_emit(
         builder,
         output_emitter,
         evaluator,
