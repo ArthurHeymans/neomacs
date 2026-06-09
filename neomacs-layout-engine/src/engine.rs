@@ -340,9 +340,32 @@ struct BuiltTabBar {
     items: Vec<neomacs_display_protocol::ui_types::TabBarItem>,
 }
 
+struct ScratchGcRootScope {
+    saved_len: usize,
+}
+
+impl ScratchGcRootScope {
+    fn new() -> Self {
+        Self {
+            saved_len: neovm_core::emacs_core::eval::save_scratch_gc_roots(),
+        }
+    }
+
+    fn root(&self, value: Value) {
+        neovm_core::emacs_core::eval::push_scratch_gc_root(value);
+    }
+}
+
+impl Drop for ScratchGcRootScope {
+    fn drop(&mut self) {
+        neovm_core::emacs_core::eval::restore_scratch_gc_roots(self.saved_len);
+    }
+}
+
 fn build_tab_bar_display(
     evaluator: &mut neovm_core::emacs_core::Context,
     frame_id: u64,
+    gc_roots: &ScratchGcRootScope,
 ) -> Option<BuiltTabBar> {
     evaluator.setup_thread_locals();
     if !evaluator.obarray().fboundp("tab-bar-make-keymap-1") {
@@ -352,9 +375,15 @@ fn build_tab_bar_display(
     let saved_frame = evaluator
         .eval_form(Value::list(vec![Value::symbol("selected-frame")]))
         .ok();
+    if let Some(frame) = saved_frame {
+        gc_roots.root(frame);
+    }
     let saved_window = evaluator
         .eval_form(Value::list(vec![Value::symbol("selected-window")]))
         .ok();
+    if let Some(window) = saved_window {
+        gc_roots.root(window);
+    }
     let saved_buffer = evaluator
         .buffer_manager()
         .current_buffer()
@@ -409,6 +438,9 @@ fn build_tab_bar_display(
                 .is_some_and(|text| !text.is_empty())
                 .then_some(BuiltTabBar { text, items })
         });
+    if let Some(tab_bar) = &result {
+        gc_roots.root(tab_bar.text);
+    }
 
     if let Some(frame) = saved_frame {
         let _ = evaluator.eval_form(Value::list(vec![
@@ -6585,7 +6617,9 @@ impl LayoutEngine {
         frame_params: &FrameParams,
         tab_bar_height: f32,
     ) {
-        let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64) else {
+        let gc_roots = ScratchGcRootScope::new();
+        let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)
+        else {
             return;
         };
 

@@ -8135,6 +8135,58 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
 }
 
 #[test]
+fn build_tab_bar_display_roots_transient_string_across_gc() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-tab-bar-gc", 1600, 160, buf_id);
+    eval.obarray_mut()
+        .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
+    eval.eval_str(
+        r#"
+          (require 'tab-bar)
+          (setq tab-bar-show 1)
+          (tab-bar-mode 1)
+          (select-frame layout-target-frame)
+          (switch-to-buffer (get-buffer-create "*tab-root*"))
+          (tab-bar-new-tab)
+          (switch-to-buffer (get-buffer-create "*tab-second*"))
+          (tab-bar-select-tab 1)
+        "#,
+    )
+    .expect("eval tab-bar forms");
+
+    let gc_roots = ScratchGcRootScope::new();
+    let tab_bar = build_tab_bar_display(&mut eval, frame_id.0, &gc_roots).expect("tab-bar display");
+    eval.gc_collect_exact();
+
+    let text = tab_bar
+        .text
+        .as_runtime_string_owned()
+        .expect("tab-bar text should survive exact GC");
+    assert!(
+        text.contains("*tab-root*") || text.contains("tab-root"),
+        "expected tab-bar label after exact GC, got {text:?}"
+    );
+    let props =
+        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(tab_bar.text)
+            .expect("tab-bar string properties should survive exact GC");
+    assert!(
+        props
+            .next_property_change_after_char_pos(CharPos0::ZERO)
+            .is_some(),
+        "tab-bar text properties should remain traversable after exact GC"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
