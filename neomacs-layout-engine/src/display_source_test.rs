@@ -49,6 +49,33 @@ fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) 
 }
 
 #[test]
+fn text_source_char_classification_matches_display_items() {
+    assert_eq!(
+        classify_text_source_char('\n'),
+        TextSourceCharClassification::RowBreak
+    );
+    assert_eq!(
+        classify_text_source_char('\u{7f}'),
+        TextSourceCharClassification::ControlChar { ch: '\u{7f}' }
+    );
+    assert_eq!(
+        classify_text_source_char('\u{feff}'),
+        TextSourceCharClassification::Glyphless {
+            ch: '\u{feff}',
+            method: GlyphlessMethod::ZeroWidth,
+        }
+    );
+    assert_eq!(
+        classify_text_source_char('\t'),
+        TextSourceCharClassification::Text
+    );
+    assert_eq!(
+        classify_text_source_char('x'),
+        TextSourceCharClassification::Text
+    );
+}
+
+#[test]
 fn buffer_display_replacement_source_builds_items_without_appending() {
     let source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
 

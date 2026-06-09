@@ -1,8 +1,8 @@
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayRowBreak,
     DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, RenderFaceRef, SourceSpan,
-    glyphless_method_for_char,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::LayoutBufferView;
@@ -342,11 +342,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if ch == '\n'
-                || is_control_char(ch)
-                || glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
-                    .is_some()
-            {
+            if classify_text_source_char(ch) != TextSourceCharClassification::Text {
                 break;
             }
             end = end.add_len(CharLen::new(1));
@@ -399,34 +395,12 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
             }
 
             let ch = self.char_at(start)?;
-            if ch == '\n' {
+            if let Some(kind) = display_item_kind_for_text_source_char(ch) {
                 self.char_pos = start.add_len(CharLen::new(1));
                 return Some(DisplayItem::new(
                     self.span(start, self.char_pos),
                     face,
-                    DisplayItemKind::RowBreak(DisplayRowBreak {
-                        reason: DisplayRowBreakReason::ExplicitNewline,
-                    }),
-                ));
-            }
-
-            if is_control_char(ch) {
-                self.char_pos = start.add_len(CharLen::new(1));
-                return Some(DisplayItem::new(
-                    self.span(start, self.char_pos),
-                    face,
-                    DisplayItemKind::ControlChar { ch },
-                ));
-            }
-
-            if let Some(method) =
-                glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
-            {
-                self.char_pos = start.add_len(CharLen::new(1));
-                return Some(DisplayItem::new(
-                    self.span(start, self.char_pos),
-                    face,
-                    DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+                    kind,
                 ));
             }
 
@@ -446,11 +420,6 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
         }
         DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
     }
-}
-
-fn is_control_char(ch: char) -> bool {
-    let code = ch as u32;
-    (code <= 0x1f && ch != '\n' && ch != '\t') || code == 0x7f
 }
 
 enum LispStringAction {
@@ -590,37 +559,15 @@ impl LispStringSourceFrame {
             }
         }
 
-        if self.char_at(start) == Some('\n') {
-            self.char_index = start + 1;
-            return LispStringAction::Emit(DisplayItem::new(
-                self.span(start, start + 1),
-                face,
-                DisplayItemKind::RowBreak(DisplayRowBreak {
-                    reason: DisplayRowBreakReason::ExplicitNewline,
-                }),
-            ));
-        }
-
         let Some(ch) = self.char_at(start) else {
             return LispStringAction::PopFrame;
         };
-        if is_control_char(ch) {
+        if let Some(kind) = display_item_kind_for_text_source_char(ch) {
             self.char_index = start + 1;
             return LispStringAction::Emit(DisplayItem::new(
                 self.span(start, start + 1),
                 face,
-                DisplayItemKind::ControlChar { ch },
-            ));
-        }
-
-        if let Some(method) =
-            glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
-        {
-            self.char_index = start + 1;
-            return LispStringAction::Emit(DisplayItem::new(
-                self.span(start, start + 1),
-                face,
-                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+                kind,
             ));
         }
 
@@ -690,11 +637,7 @@ impl LispStringSourceFrame {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if ch == '\n'
-                || is_control_char(ch)
-                || glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
-                    .is_some()
-            {
+            if classify_text_source_char(ch) != TextSourceCharClassification::Text {
                 break;
             }
             end += 1;
@@ -719,6 +662,51 @@ impl LispStringSourceFrame {
         face.map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TextSourceCharClassification {
+    Text,
+    RowBreak,
+    ControlChar { ch: char },
+    Glyphless { ch: char, method: GlyphlessMethod },
+}
+
+fn classify_text_source_char(ch: char) -> TextSourceCharClassification {
+    if ch == '\n' {
+        return TextSourceCharClassification::RowBreak;
+    }
+    if is_control_char(ch) {
+        return TextSourceCharClassification::ControlChar { ch };
+    }
+    if let Some(method) =
+        glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
+    {
+        return TextSourceCharClassification::Glyphless { ch, method };
+    }
+    TextSourceCharClassification::Text
+}
+
+fn display_item_kind_for_text_source_char(ch: char) -> Option<DisplayItemKind> {
+    match classify_text_source_char(ch) {
+        TextSourceCharClassification::Text => None,
+        TextSourceCharClassification::RowBreak => {
+            Some(DisplayItemKind::RowBreak(DisplayRowBreak {
+                reason: DisplayRowBreakReason::ExplicitNewline,
+            }))
+        }
+        TextSourceCharClassification::ControlChar { ch } => {
+            Some(DisplayItemKind::ControlChar { ch })
+        }
+        TextSourceCharClassification::Glyphless { ch, method } => {
+            Some(DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }))
+        }
+    }
+}
+
+fn is_control_char(ch: char) -> bool {
+    let code = ch as u32;
+    (code <= 0x1f && ch != '\n' && ch != '\t') || code == 0x7f
 }
 
 #[cfg(test)]
