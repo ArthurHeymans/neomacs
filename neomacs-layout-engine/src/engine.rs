@@ -23,6 +23,7 @@ use crate::display_property::{DisplayReplacementProperty, classify_display_prope
 use crate::display_row::{
     DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec,
     RenderedDisplayRow, insert_resolved_display_row_face, install_rendered_display_row,
+    install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
     DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
@@ -6699,10 +6700,22 @@ impl LayoutEngine {
         if tab_bar_face.font_ascent <= 0.0 {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
+        let chrome_before_tab = frame_params.menu_bar_height
+            + frame_params.tool_bar_height
+            + frame_params.compact_bar_height;
+        let row_index = if frame_params.char_height > 0.0 {
+            (chrome_before_tab / frame_params.char_height)
+                .round()
+                .max(0.0) as u32
+        } else {
+            0
+        };
+        let tab_bar_y = chrome_before_tab;
+        let pixel_bounds = Rect::new(0.0, tab_bar_y, width, tab_bar_height);
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
         let tab_bar_spec = DisplayRowSpec::from_base_face(
             DisplayRowGeometry {
-                y: 0.0,
+                y: tab_bar_y,
                 width,
                 height: tab_bar_height,
                 char_width: frame_params.char_width,
@@ -6724,33 +6737,17 @@ impl LayoutEngine {
             return;
         };
         self.frame_face_id_counter = current_face_id;
-        for face in &rendered.faces {
-            self.matrix_builder.insert_face(face.id, face.clone());
-        }
-        let mut row = rendered.row;
-        if row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].is_empty() {
+        if rendered.row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
+            .is_empty()
+        {
             return;
         }
-
-        let chrome_before_tab = frame_params.menu_bar_height
-            + frame_params.tool_bar_height
-            + frame_params.compact_bar_height;
-        let row_index = if frame_params.char_height > 0.0 {
-            (chrome_before_tab / frame_params.char_height)
-                .round()
-                .max(0.0) as u32
-        } else {
-            0
-        };
-        let tab_bar_y = chrome_before_tab;
-        row.pixel_y = tab_bar_y;
-
-        self.pending_frame_chrome_rows.push(
-            neomacs_display_protocol::glyph_matrix::FrameChromeRow {
-                row_index,
-                pixel_bounds: Rect::new(0.0, tab_bar_y, width, tab_bar_height),
-                row,
-            },
+        install_rendered_frame_chrome_row(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &rendered,
+            row_index,
+            pixel_bounds,
         );
         self.pending_tab_bar = Some(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
             items: tab_bar.items,

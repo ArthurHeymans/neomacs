@@ -17,8 +17,8 @@ use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 
@@ -500,6 +500,28 @@ pub(crate) fn install_rendered_display_row(
     }
 }
 
+pub(crate) fn install_rendered_frame_chrome_row(
+    builder: &mut GlyphMatrixBuilder,
+    frame_chrome_rows: &mut Vec<FrameChromeRow>,
+    rendered: &RenderedDisplayRow,
+    row_index: u32,
+    pixel_bounds: Rect,
+) {
+    for face in &rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    for media in &rendered.media {
+        media.install_frame_chrome(builder, rendered.row.role, row_index, pixel_bounds);
+    }
+    let mut row = rendered.row.clone();
+    row.pixel_y = pixel_bounds.y;
+    frame_chrome_rows.push(FrameChromeRow {
+        row_index,
+        pixel_bounds,
+        row,
+    });
+}
+
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
         let row = matrix_row.min(u32::MAX as usize) as u32;
@@ -535,6 +557,57 @@ impl RenderedDisplayRowMedia {
                     role,
                     row,
                     self.col,
+                    xwidget_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                ),
+        }
+    }
+
+    fn install_frame_chrome(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        role: GlyphRowRole,
+        row: u32,
+        clip: Rect,
+    ) {
+        match self.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => builder.push_frame_chrome_image(
+                role,
+                row,
+                self.col,
+                clip,
+                image_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+            ),
+            RenderedDisplayRowMediaKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => builder.push_frame_chrome_video(
+                role,
+                row,
+                self.col,
+                clip,
+                video_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                loop_count,
+                autoplay,
+            ),
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
+                .push_frame_chrome_xwidget(
+                    role,
+                    row,
+                    self.col,
+                    clip,
                     xwidget_id,
                     self.x,
                     self.y,

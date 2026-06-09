@@ -941,6 +941,37 @@ impl GlyphMatrixBuilder {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_frame_chrome_image(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        image_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        const FRAME_CHROME_WINDOW_ID: i64 = 0;
+        self.push_image_with_slot_id(
+            FRAME_CHROME_WINDOW_ID,
+            role,
+            Some(clip),
+            DisplaySlotId {
+                window_id: FRAME_CHROME_WINDOW_ID,
+                row,
+                col,
+            },
+            image_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
     fn push_video_with_slot_id(
         &mut self,
         window_id: i64,
@@ -1004,6 +1035,41 @@ impl GlyphMatrixBuilder {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_frame_chrome_video(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        video_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        loop_count: i32,
+        autoplay: bool,
+    ) {
+        const FRAME_CHROME_WINDOW_ID: i64 = 0;
+        self.push_video_with_slot_id(
+            FRAME_CHROME_WINDOW_ID,
+            role,
+            Some(clip),
+            DisplaySlotId {
+                window_id: FRAME_CHROME_WINDOW_ID,
+                row,
+                col,
+            },
+            video_id,
+            x,
+            y,
+            w,
+            h,
+            loop_count,
+            autoplay,
+        );
+    }
+
     fn push_xwidget_with_slot_id(
         &mut self,
         window_id: i64,
@@ -1027,6 +1093,37 @@ impl GlyphMatrixBuilder {
             width: w,
             height: h,
         });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_frame_chrome_xwidget(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        const FRAME_CHROME_WINDOW_ID: i64 = 0;
+        self.push_xwidget_with_slot_id(
+            FRAME_CHROME_WINDOW_ID,
+            role,
+            Some(clip),
+            DisplaySlotId {
+                window_id: FRAME_CHROME_WINDOW_ID,
+                row,
+                col,
+            },
+            xwidget_id,
+            x,
+            y,
+            w,
+            h,
+        );
     }
 
     pub(crate) fn push_current_window_xwidget(
