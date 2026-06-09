@@ -2410,6 +2410,13 @@ pub(crate) fn builtin_y_or_n_p(eval: &mut super::eval::Context, args: Vec<Value>
 /// In interactive mode, uses read-from-minibuffer.
 /// In batch mode, signals end-of-file.
 pub(crate) fn builtin_yes_or_no_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    if eval
+        .obarray
+        .symbol_value("use-short-answers")
+        .is_some_and(|v| v.is_truthy())
+    {
+        return builtin_y_or_n_p(eval, args);
+    }
     if let Some(result) = builtin_yes_or_no_p_in_runtime(eval, &args)? {
         return Ok(result);
     }
