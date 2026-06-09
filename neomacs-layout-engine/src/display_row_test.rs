@@ -1661,6 +1661,58 @@ fn display_row_baseline_tab_line_rtl_text_is_reordered_after_row_build() {
 }
 
 #[test]
+fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
+    let base_face_id = spec.base_face_id;
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        Value::string("אב"),
+        RenderFaceRef::FaceId(base_face_id),
+    )
+    .expect("lisp string source");
+    let mut state = DisplayRowSourceState::default();
+
+    let fragment = renderer
+        .render_display_item_source_row_fragment_step_with_display_host(
+            spec,
+            &mut source,
+            &mut state,
+            &resolver,
+            None,
+            &mut next_face_id,
+        )
+        .expect("unfinalized row fragment")
+        .rendered
+        .row;
+
+    assert!(!fragment.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&fragment), "אב");
+
+    let finalized = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
+    assert!(finalized.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&finalized), "בא");
+}
+
+#[test]
 fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();

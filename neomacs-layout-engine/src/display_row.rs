@@ -1012,6 +1012,27 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<DisplayRowRenderResult> {
+        let mut result = self.render_display_item_source_row_fragment_step_with_display_host(
+            spec,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+        )?;
+        GlyphMatrixBuilder::normalize_external_row(&mut result.rendered.row);
+        Some(result)
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<DisplayRowRenderResult> {
         if state.is_finished() {
             return None;
         }
@@ -1143,7 +1164,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 }
             }
         };
-        GlyphMatrixBuilder::normalize_external_row(&mut row);
         let progress_height = if row.height_px > 0.0 {
             row.height_px
         } else {
