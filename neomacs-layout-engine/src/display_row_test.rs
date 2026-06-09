@@ -507,6 +507,26 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         )
         .expect("display source row");
 
+    assert_eq!(rendered.source_slots.len(), 5);
+    assert_eq!(
+        rendered.source_slots[0].source,
+        crate::display_item::DisplaySourcePosition::buffer(
+            buf_id,
+            CharPos0::new(0),
+            EmacsBytePos::new(0)
+        )
+    );
+    assert_eq!(
+        rendered.source_slots[1].source,
+        crate::display_item::DisplaySourcePosition::buffer(
+            buf_id,
+            CharPos0::new(1),
+            EmacsBytePos::new(1)
+        )
+    );
+    assert_eq!(rendered.source_slots[0].width_cols, 1);
+    assert_eq!(rendered.source_slots[1].width_cols, 2);
+
     let row = rendered.row;
     let glyphs = &row.glyphs[1];
     let cjk = glyphs
@@ -1539,6 +1559,7 @@ fn install_rendered_display_row_installs_media_fragments_in_current_window() {
             y: 4.0,
             height: 16.0,
         },
+        source_slots: Vec::new(),
         faces: Vec::new(),
         media: vec![RenderedDisplayRowMedia {
             kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },

@@ -1611,6 +1611,7 @@ fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<Render
             y,
             height: row_height.max(1.0),
         },
+        source_slots: Vec::new(),
         faces: Vec::new(),
         media: Vec::new(),
     }]

@@ -5,8 +5,8 @@ use crate::display_item::{
 };
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
-    DisplayRowProgressWriter, DisplayTabPolicy,
+    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowLayout,
+    DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 use crate::display_source_resolver::{
@@ -392,6 +392,8 @@ pub(crate) struct DisplayRowOutputProgress {
 pub(crate) struct RenderedDisplayRow {
     pub(crate) row: GlyphRow,
     pub(crate) progress: DisplayRowOutputProgress,
+    #[allow(dead_code)]
+    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
     pub(crate) faces: Vec<Face>,
     pub(crate) media: Vec<RenderedDisplayRowMedia>,
 }
@@ -946,6 +948,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         );
         let mut row = GlyphRow::new(role);
         let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
+        let mut source_slots = Vec::new();
         let mut media = Vec::new();
         let stop = loop {
             let (item, pending_faces) = if let Some(item) = state.take_pending_item() {
@@ -1018,6 +1021,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             );
             let progress = row_writer.push_item(item);
             position = row_writer.position();
+            source_slots.extend(progress.slots.iter().cloned());
             if let Some(descriptor) = media_descriptor
                 && progress.status == DisplayRowAppendStatus::Complete
                 && progress.metrics.width_px > 0.0
@@ -1059,6 +1063,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             rendered: RenderedDisplayRow {
                 row,
                 progress,
+                source_slots,
                 faces,
                 media,
             },
