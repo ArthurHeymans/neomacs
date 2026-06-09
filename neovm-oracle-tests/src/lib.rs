@@ -574,6 +574,8 @@ mod combination_workflow;
 mod combination_zipper_datastructure;
 #[path = "combine-and-quote-strings-semantics.rs"]
 mod combine_and_quote_strings_semantics;
+#[path = "command-loop-keyboard-semantics.rs"]
+mod command_loop_keyboard_semantics;
 #[path = "command-modes.rs"]
 mod command_modes;
 #[path = "commandp-functionp-advanced.rs"]
