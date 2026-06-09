@@ -1,6 +1,6 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
-    DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 #[cfg(test)]
 use crate::display_row::DisplayRowSourceWalker;
@@ -10,9 +10,9 @@ use crate::display_row::{
     RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
 };
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress,
+    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowAppendStatus,
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition,
-    DisplayTabPolicy, FixedGlyphAdvance,
+    DisplayRowWriteMetrics, DisplayTabPolicy, FixedGlyphAdvance,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
@@ -26,6 +26,30 @@ use neovm_core::buffer::{BufferId, CharLen, CharPos0};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
+
+struct SingleDisplayItemSource {
+    source_position: DisplaySourcePosition,
+    item: Option<DisplayItem>,
+}
+
+impl SingleDisplayItemSource {
+    fn new(item: DisplayItem) -> Self {
+        Self {
+            source_position: item.span.start.clone(),
+            item: Some(item),
+        }
+    }
+}
+
+impl DisplayItemSource for SingleDisplayItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.item.take()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
 
 pub(crate) fn emit_text_progress_slots(
     output_emitter: &mut WindowOutputEmitter,
@@ -517,16 +541,69 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     mut item: DisplayItem,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
     fallback_face_id: u32,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let face_id = render_face_ref_id(item.face, fallback_face_id);
     item.face = RenderFaceRef::FaceId(face_id);
-    let append_spec = frame
-        .at(position, face_id)
-        .append_spec(DisplayRowAppendKind::DisplayReplacement);
-    append_display_row_spec_item_and_emit(builder, output_emitter, evaluator, append_spec, item)
+    let mut source = SingleDisplayItemSource::new(item);
+    let row_spec = DisplayRowSpec {
+        geometry: frame.geometry.clone(),
+        render_bounds: DisplayRowRenderBounds {
+            start: position,
+            max_x_px: frame.content_x + frame.geometry.width,
+        },
+        base_face_id: face_id,
+        base_face,
+        role: GlyphRowRole::Text,
+        symbol_values: HashMap::new(),
+    };
+    let mut source_state = DisplayRowSourceState::default();
+    let mut font_metrics = None;
+    let mut next_face_id = face_id.saturating_add(1);
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let result = renderer.render_display_item_source_row_fragment_step_with_display_host(
+        row_spec,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        evaluator.display_host.as_deref(),
+        &mut next_face_id,
+    )?;
+    let stop = result.stop;
+    let slots = result.rendered.source_slots.clone();
+    let end = append_rendered_display_row_fragment_to_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        &result.rendered,
+        TextRowOutput {
+            row: frame.row,
+            row_y: frame.geometry.y,
+            glyph_y: frame.glyph_y,
+            height: frame.geometry.height,
+        },
+    );
+    let progress = DisplayRowAppendProgress {
+        start: position,
+        end,
+        metrics: DisplayRowWriteMetrics {
+            width_px: (end.x_px - position.x_px).max(0.0),
+            width_cols: end.col.saturating_sub(position.col),
+        },
+        status: match stop {
+            crate::display_row::DisplayRowRenderStop::SourceExhausted => {
+                DisplayRowAppendStatus::Complete
+            }
+            crate::display_row::DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
+            crate::display_row::DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
+        },
+        slots,
+    };
+    Some((progress, end))
 }
 
 #[allow(clippy::too_many_arguments)]

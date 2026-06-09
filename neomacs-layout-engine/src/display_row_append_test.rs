@@ -825,7 +825,6 @@ fn append_buffer_text_item_to_text_row_and_emit_builds_buffer_source_item() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1326,6 +1325,10 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -1366,6 +1369,8 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
         &mut output_emitter,
         &mut eval,
         item,
+        &face_resolver,
+        base_face,
         7,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
