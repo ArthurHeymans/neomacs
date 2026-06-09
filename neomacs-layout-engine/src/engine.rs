@@ -3307,16 +3307,28 @@ impl LayoutEngine {
                 params.text_bounds,
                 params.selected,
             );
-            self.matrix_builder.begin_row(
-                0,
-                neomacs_display_protocol::frame_glyphs::GlyphRowRole::Minibuffer,
-            );
-            self.matrix_builder.set_current_row_metrics(
-                params.bounds.y,
-                char_h,
-                default_face_ascent,
-            );
-            self.matrix_builder.end_row();
+            let row_spec_input = DisplaySourceRowSpecInput {
+                geometry: DisplayRowGeometry {
+                    y: params.bounds.y,
+                    width: text_width,
+                    height: char_h,
+                    char_width: char_w,
+                    ascent: default_face_ascent,
+                    tab_policy: DisplayTabPolicy::every(8),
+                },
+                base_face: default_resolved,
+                role: GlyphRowRole::Minibuffer,
+                symbol_values: std::collections::HashMap::new(),
+            };
+            let rendered = self
+                .render_display_source_row(
+                    row_spec_input.display_row_spec(&mut current_face_id),
+                    Value::string(""),
+                    face_resolver,
+                    &mut current_face_id,
+                )
+                .expect("empty Lisp string should render an inactive minibuffer row");
+            install_rendered_display_source_row(&mut self.matrix_builder, &rendered, 0);
             self.matrix_builder.end_window();
             return;
         }
