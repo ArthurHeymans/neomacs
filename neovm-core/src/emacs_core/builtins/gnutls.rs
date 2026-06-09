@@ -1,7 +1,14 @@
 use super::{
-    EvalResult, Value, ValueKind, expect_args, expect_range_args, expect_strict_string, signal,
+    EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args,
+    expect_strict_string, signal,
 };
 use crate::emacs_core::tls::format_x509_certificate_pem;
+use crate::emacs_core::value::list_to_vec;
+use aes::Aes256;
+use aes::cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit, block_padding::NoPadding};
+use hmac::{KeyInit, Mac, SimpleHmac};
+use sha1::Sha1;
+use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 
 pub(crate) fn builtin_gnutls_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-available-p", &args, 0)?;
@@ -15,17 +22,32 @@ pub(crate) fn builtin_gnutls_available_p(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_gnutls_ciphers(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-ciphers", &args, 0)?;
-    gnutls_crypto_unavailable()
+    Ok(Value::list(
+        CIPHER_ALGORITHMS
+            .iter()
+            .map(|algorithm| algorithm.cipher_plist())
+            .collect(),
+    ))
 }
 
 pub(crate) fn builtin_gnutls_digests(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-digests", &args, 0)?;
-    gnutls_crypto_unavailable()
+    Ok(Value::list(
+        DIGEST_ALGORITHMS
+            .iter()
+            .map(|algorithm| algorithm.digest_plist())
+            .collect(),
+    ))
 }
 
 pub(crate) fn builtin_gnutls_macs(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-macs", &args, 0)?;
-    gnutls_crypto_unavailable()
+    Ok(Value::list(
+        MAC_ALGORITHMS
+            .iter()
+            .map(|algorithm| algorithm.mac_plist())
+            .collect(),
+    ))
 }
 
 pub(crate) fn builtin_gnutls_errorp(args: Vec<Value>) -> EvalResult {
@@ -164,22 +186,27 @@ pub(crate) fn builtin_gnutls_format_certificate(args: Vec<Value>) -> EvalResult 
 
 pub(crate) fn builtin_gnutls_hash_digest(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-hash-digest", &args, 2)?;
-    gnutls_crypto_unavailable()
+    let algorithm = gnutls_digest_algorithm(&args[0])?;
+    let input = gnutls_crypto_input_bytes(&args[1], "digest input")?;
+    Ok(unibyte_value(&algorithm.digest(&input)))
 }
 
 pub(crate) fn builtin_gnutls_hash_mac(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-hash-mac", &args, 3)?;
-    gnutls_crypto_unavailable()
+    let algorithm = gnutls_mac_algorithm(&args[0])?;
+    let key = gnutls_crypto_input_bytes(&args[1], "MAC key")?;
+    let input = gnutls_crypto_input_bytes(&args[2], "MAC input")?;
+    Ok(unibyte_value(&algorithm.hmac(&key, &input)?))
 }
 
 pub(crate) fn builtin_gnutls_symmetric_decrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-decrypt", &args, 4, 5)?;
-    gnutls_crypto_unavailable()
+    gnutls_symmetric_cipher(args, GnutlsCipherOperation::Decrypt)
 }
 
 pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
     expect_range_args("gnutls-symmetric-encrypt", &args, 4, 5)?;
-    gnutls_crypto_unavailable()
+    gnutls_symmetric_cipher(args, GnutlsCipherOperation::Encrypt)
 }
 
 fn gnutls_crypto_unavailable() -> EvalResult {
@@ -187,4 +214,417 @@ fn gnutls_crypto_unavailable() -> EvalResult {
         "error",
         vec![Value::string("GnuTLS crypto capability is not available")],
     ))
+}
+
+#[derive(Clone, Copy)]
+struct GnutlsDigestAlgorithm {
+    name: &'static str,
+    id: i64,
+    length: usize,
+}
+
+const DIGEST_ALGORITHMS: &[GnutlsDigestAlgorithm] = &[
+    GnutlsDigestAlgorithm {
+        name: "SHA1",
+        id: 1,
+        length: 20,
+    },
+    GnutlsDigestAlgorithm {
+        name: "SHA224",
+        id: 2,
+        length: 28,
+    },
+    GnutlsDigestAlgorithm {
+        name: "SHA256",
+        id: 3,
+        length: 32,
+    },
+    GnutlsDigestAlgorithm {
+        name: "SHA384",
+        id: 4,
+        length: 48,
+    },
+    GnutlsDigestAlgorithm {
+        name: "SHA512",
+        id: 5,
+        length: 64,
+    },
+];
+
+const MAC_ALGORITHMS: &[GnutlsDigestAlgorithm] = DIGEST_ALGORITHMS;
+
+#[derive(Clone, Copy)]
+struct GnutlsCipherAlgorithm {
+    name: &'static str,
+    id: i64,
+    block_size: usize,
+    key_size: usize,
+    iv_size: usize,
+}
+
+const CIPHER_ALGORITHMS: &[GnutlsCipherAlgorithm] = &[GnutlsCipherAlgorithm {
+    name: "AES-256-CBC",
+    id: 5,
+    block_size: 16,
+    key_size: 32,
+    iv_size: 16,
+}];
+
+impl GnutlsDigestAlgorithm {
+    fn digest_plist(self) -> Value {
+        Value::list(vec![
+            Value::symbol(self.name),
+            Value::keyword(":digest-algorithm-id"),
+            Value::fixnum(self.id),
+            Value::keyword(":type"),
+            Value::symbol("gnutls-digest-algorithm"),
+            Value::keyword(":digest-algorithm-length"),
+            Value::fixnum(self.length as i64),
+        ])
+    }
+
+    fn mac_plist(self) -> Value {
+        Value::list(vec![
+            Value::symbol(self.name),
+            Value::keyword(":mac-algorithm-id"),
+            Value::fixnum(self.id),
+            Value::keyword(":type"),
+            Value::symbol("gnutls-mac-algorithm"),
+            Value::keyword(":mac-algorithm-length"),
+            Value::fixnum(self.length as i64),
+            Value::keyword(":mac-algorithm-keysize"),
+            Value::fixnum(self.length as i64),
+            Value::keyword(":mac-algorithm-noncesize"),
+            Value::fixnum(0),
+        ])
+    }
+
+    fn digest(self, input: &[u8]) -> Vec<u8> {
+        match self.name {
+            "SHA1" => digest_with::<Sha1>(input),
+            "SHA224" => digest_with::<Sha224>(input),
+            "SHA256" => digest_with::<Sha256>(input),
+            "SHA384" => digest_with::<Sha384>(input),
+            "SHA512" => digest_with::<Sha512>(input),
+            _ => unreachable!("unknown GnuTLS digest algorithm"),
+        }
+    }
+
+    fn hmac(self, key: &[u8], input: &[u8]) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+        match self.name {
+            "SHA1" => hmac_with::<Sha1>(key, input),
+            "SHA224" => hmac_with::<Sha224>(key, input),
+            "SHA256" => hmac_with::<Sha256>(key, input),
+            "SHA384" => hmac_with::<Sha384>(key, input),
+            "SHA512" => hmac_with::<Sha512>(key, input),
+            _ => unreachable!("unknown GnuTLS MAC algorithm"),
+        }
+    }
+}
+
+impl GnutlsCipherAlgorithm {
+    fn cipher_plist(self) -> Value {
+        Value::list(vec![
+            Value::symbol(self.name),
+            Value::keyword(":cipher-id"),
+            Value::fixnum(self.id),
+            Value::keyword(":type"),
+            Value::symbol("gnutls-symmetric-cipher"),
+            Value::keyword(":cipher-aead-capable"),
+            Value::NIL,
+            Value::keyword(":cipher-tagsize"),
+            Value::fixnum(0),
+            Value::keyword(":cipher-blocksize"),
+            Value::fixnum(self.block_size as i64),
+            Value::keyword(":cipher-keysize"),
+            Value::fixnum(self.key_size as i64),
+            Value::keyword(":cipher-ivsize"),
+            Value::fixnum(self.iv_size as i64),
+        ])
+    }
+}
+
+enum GnutlsCipherOperation {
+    Encrypt,
+    Decrypt,
+}
+
+fn gnutls_symmetric_cipher(
+    args: Vec<Value>,
+    operation: GnutlsCipherOperation,
+) -> Result<Value, crate::emacs_core::error::Flow> {
+    let algorithm = gnutls_cipher_algorithm(&args[0])?;
+    if args.len() == 5 && !args[4].is_nil() {
+        return Err(signal(
+            "error",
+            vec![Value::string("GnuTLS cipher does not support AEAD data")],
+        ));
+    }
+
+    let key = gnutls_crypto_input_bytes(&args[1], "cipher key")?;
+    if key.len() != algorithm.key_size {
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "GnuTLS cipher key length must be {} bytes",
+                algorithm.key_size
+            ))],
+        ));
+    }
+
+    let iv = gnutls_cipher_iv_bytes(&args[2], algorithm.iv_size)?;
+    let input = gnutls_crypto_input_bytes(&args[3], "cipher input")?;
+    if input.len() % algorithm.block_size != 0 {
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "GnuTLS cipher input length must be a multiple of {} bytes",
+                algorithm.block_size
+            ))],
+        ));
+    }
+
+    let output = match operation {
+        GnutlsCipherOperation::Encrypt => encrypt_aes_256_cbc(&key, &iv, &input)?,
+        GnutlsCipherOperation::Decrypt => decrypt_aes_256_cbc(&key, &iv, &input)?,
+    };
+    Ok(Value::list(vec![
+        unibyte_value(&output),
+        unibyte_value(&iv),
+    ]))
+}
+
+fn encrypt_aes_256_cbc(
+    key: &[u8],
+    iv: &[u8],
+    input: &[u8],
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    Ok(cbc::Encryptor::<Aes256>::new_from_slices(key, iv)
+        .map_err(|_| gnutls_cipher_extraction_error("cipher parameters"))?
+        .encrypt_padded_vec::<NoPadding>(input))
+}
+
+fn decrypt_aes_256_cbc(
+    key: &[u8],
+    iv: &[u8],
+    input: &[u8],
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    cbc::Decryptor::<Aes256>::new_from_slices(key, iv)
+        .map_err(|_| gnutls_cipher_extraction_error("cipher parameters"))?
+        .decrypt_padded_vec::<NoPadding>(input)
+        .map_err(|_| {
+            signal(
+                "error",
+                vec![Value::string("GnuTLS cipher decryption failed")],
+            )
+        })
+}
+
+fn digest_with<D>(input: &[u8]) -> Vec<u8>
+where
+    D: Digest + Default,
+{
+    let mut digest = D::new();
+    digest.update(input);
+    digest.finalize().to_vec()
+}
+
+fn hmac_with<D>(key: &[u8], input: &[u8]) -> Result<Vec<u8>, crate::emacs_core::error::Flow>
+where
+    D: Digest + Default + Clone + hmac::digest::block_api::BlockSizeUser,
+{
+    let mut mac = SimpleHmac::<D>::new_from_slice(key).map_err(|_| {
+        signal(
+            "error",
+            vec![Value::string("GnuTLS MAC key extraction failed")],
+        )
+    })?;
+    Mac::update(&mut mac, input);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+fn gnutls_digest_algorithm(
+    value: &Value,
+) -> Result<GnutlsDigestAlgorithm, crate::emacs_core::error::Flow> {
+    gnutls_algorithm(
+        value,
+        DIGEST_ALGORITHMS,
+        ":digest-algorithm-id",
+        "digest-method",
+    )
+}
+
+fn gnutls_mac_algorithm(
+    value: &Value,
+) -> Result<GnutlsDigestAlgorithm, crate::emacs_core::error::Flow> {
+    gnutls_algorithm(value, MAC_ALGORITHMS, ":mac-algorithm-id", "MAC-method")
+}
+
+fn gnutls_cipher_algorithm(
+    value: &Value,
+) -> Result<GnutlsCipherAlgorithm, crate::emacs_core::error::Flow> {
+    if let Some(name) = value.as_symbol_name().or_else(|| value.as_utf8_str()) {
+        if let Some(algorithm) = CIPHER_ALGORITHMS
+            .iter()
+            .find(|algorithm| algorithm.name == name)
+        {
+            return Ok(*algorithm);
+        }
+        return Err(invalid_gnutls_algorithm("cipher", *value));
+    }
+
+    if let ValueKind::Fixnum(id) = value.kind() {
+        if let Some(algorithm) = CIPHER_ALGORITHMS
+            .iter()
+            .find(|algorithm| algorithm.id == id)
+        {
+            return Ok(*algorithm);
+        }
+        return Err(invalid_gnutls_algorithm("cipher", *value));
+    }
+
+    if let Some(items) = list_to_vec(value) {
+        if let Some(id) = plist_fixnum(&items, ":cipher-id")
+            && let Some(algorithm) = CIPHER_ALGORITHMS
+                .iter()
+                .find(|algorithm| algorithm.id == id)
+        {
+            return Ok(*algorithm);
+        }
+    }
+
+    Err(invalid_gnutls_algorithm("cipher", *value))
+}
+
+fn gnutls_algorithm(
+    value: &Value,
+    algorithms: &[GnutlsDigestAlgorithm],
+    id_key: &str,
+    description: &str,
+) -> Result<GnutlsDigestAlgorithm, crate::emacs_core::error::Flow> {
+    if let Some(name) = value.as_symbol_name().or_else(|| value.as_utf8_str()) {
+        if let Some(algorithm) = algorithms.iter().find(|algorithm| algorithm.name == name) {
+            return Ok(*algorithm);
+        }
+        return Err(invalid_gnutls_algorithm(description, *value));
+    }
+
+    if let ValueKind::Fixnum(id) = value.kind() {
+        if let Some(algorithm) = algorithms.iter().find(|algorithm| algorithm.id == id) {
+            return Ok(*algorithm);
+        }
+        return Err(invalid_gnutls_algorithm(description, *value));
+    }
+
+    if let Some(items) = list_to_vec(value) {
+        if let Some(id) = plist_fixnum(&items, id_key)
+            && let Some(algorithm) = algorithms.iter().find(|algorithm| algorithm.id == id)
+        {
+            return Ok(*algorithm);
+        }
+    }
+
+    Err(invalid_gnutls_algorithm(description, *value))
+}
+
+fn plist_fixnum(items: &[Value], key: &str) -> Option<i64> {
+    items.windows(2).find_map(|pair| {
+        if pair[0].is_symbol_named(key)
+            && let ValueKind::Fixnum(id) = pair[1].kind()
+        {
+            return Some(id);
+        }
+        None
+    })
+}
+
+fn invalid_gnutls_algorithm(description: &str, value: Value) -> crate::emacs_core::error::Flow {
+    signal(
+        "error",
+        vec![
+            Value::string(format!("GnuTLS {description} is invalid or not found")),
+            value,
+        ],
+    )
+}
+
+fn gnutls_crypto_input_bytes(
+    value: &Value,
+    description: &str,
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    if let Some(string) = value.as_lisp_string() {
+        return Ok(string.as_bytes().to_vec());
+    }
+
+    let Some(items) = list_to_vec(value) else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("consp"), *value],
+        ));
+    };
+
+    let mut bytes = Vec::new();
+    for item in items {
+        let string = expect_lisp_string(&item).map_err(|_| {
+            signal(
+                "error",
+                vec![Value::string(format!(
+                    "GnuTLS {description} extraction failed"
+                ))],
+            )
+        })?;
+        bytes.extend_from_slice(string.as_bytes());
+    }
+    Ok(bytes)
+}
+
+fn gnutls_cipher_iv_bytes(
+    value: &Value,
+    expected_size: usize,
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    if let Some(items) = list_to_vec(value)
+        && items.len() == 2
+        && items[0].as_symbol_name() == Some("iv-auto")
+    {
+        let ValueKind::Fixnum(size) = items[1].kind() else {
+            return Err(gnutls_cipher_extraction_error("cipher IV"));
+        };
+        if size < 0 || size as usize != expected_size {
+            return Err(gnutls_cipher_extraction_error("cipher IV"));
+        }
+        let mut iv = vec![0; expected_size];
+        getrandom::fill(&mut iv).map_err(|err| {
+            signal(
+                "error",
+                vec![Value::string(format!(
+                    "GnuTLS cipher IV generation failed: {err}"
+                ))],
+            )
+        })?;
+        return Ok(iv);
+    }
+
+    let iv = gnutls_crypto_input_bytes(value, "cipher IV")?;
+    if iv.len() != expected_size {
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "GnuTLS cipher IV length must be {expected_size} bytes"
+            ))],
+        ));
+    }
+    Ok(iv)
+}
+
+fn gnutls_cipher_extraction_error(description: &str) -> crate::emacs_core::error::Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "GnuTLS {description} extraction failed"
+        ))],
+    )
+}
+
+fn unibyte_value(bytes: &[u8]) -> Value {
+    Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()))
 }

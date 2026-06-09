@@ -635,18 +635,24 @@ fn gnutls_hash_digest_nil_method_signals_error() {
 }
 
 #[test]
-fn gnutls_hash_mac_requires_gnutls_support() {
+fn gnutls_hash_mac_returns_raw_hmac_bytes() {
     crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::builtins::builtin_gnutls_hash_mac(vec![
+    let mac = crate::emacs_core::builtins::builtin_gnutls_hash_mac(vec![
         Value::symbol("SHA256"),
         Value::string("k"),
         Value::string("a"),
     ])
-    .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+    .expect("gnutls-hash-mac should evaluate");
+    assert_eq!(
+        mac.as_lisp_string()
+            .expect("mac should be a string")
+            .as_bytes(),
+        &[
+            0x78, 0xda, 0x91, 0x51, 0x1e, 0x67, 0x55, 0x87, 0xf5, 0xb9, 0xdf, 0x78, 0xbe, 0xde,
+            0xba, 0xf5, 0x56, 0x0d, 0xa2, 0xab, 0xb8, 0x81, 0x62, 0xee, 0x87, 0x5d, 0xcd, 0xf7,
+            0x44, 0x95, 0x1d, 0x9e,
+        ]
+    );
 }
 
 #[test]

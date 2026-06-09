@@ -10706,32 +10706,41 @@ fn dispatch_builtin_pure_handles_gnutls_query_and_error_placeholders() {
         .expect("gnutls-available-p should evaluate");
     assert_eq!(
         available,
-        Value::list(vec![Value::symbol("gnutls3"), Value::symbol("gnutls")])
+        Value::list(vec![
+            Value::symbol("ciphers"),
+            Value::symbol("macs"),
+            Value::symbol("digests"),
+            Value::symbol("gnutls3"),
+            Value::symbol("gnutls"),
+        ])
     );
 
-    let ciphers_err = dispatch_builtin_pure("gnutls-ciphers", vec![])
+    let ciphers = dispatch_builtin_pure("gnutls-ciphers", vec![])
         .expect("gnutls-ciphers should resolve")
-        .unwrap_err();
-    match ciphers_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+        .expect("gnutls-ciphers should evaluate");
+    assert!(
+        !list_to_vec(&ciphers)
+            .expect("gnutls-ciphers should return an alist")
+            .is_empty()
+    );
 
-    let digests_err = dispatch_builtin_pure("gnutls-digests", vec![])
+    let digests = dispatch_builtin_pure("gnutls-digests", vec![])
         .expect("gnutls-digests should resolve")
-        .unwrap_err();
-    match digests_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+        .expect("gnutls-digests should evaluate");
+    assert!(
+        !list_to_vec(&digests)
+            .expect("gnutls-digests should return an alist")
+            .is_empty()
+    );
 
-    let macs_err = dispatch_builtin_pure("gnutls-macs", vec![])
+    let macs = dispatch_builtin_pure("gnutls-macs", vec![])
         .expect("gnutls-macs should resolve")
-        .unwrap_err();
-    match macs_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+        .expect("gnutls-macs should evaluate");
+    assert!(
+        !list_to_vec(&macs)
+            .expect("gnutls-macs should return an alist")
+            .is_empty()
+    );
 
     let errorp = dispatch_builtin_pure("gnutls-errorp", vec![Value::fixnum(0)])
         .expect("gnutls-errorp should resolve")
@@ -10839,30 +10848,6 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         other => panic!("expected signal, got {other:?}"),
     }
 
-    let digest_err =
-        dispatch_builtin_pure("gnutls-hash-digest", vec![Value::NIL, Value::string("a")])
-            .expect("gnutls-hash-digest should resolve")
-            .unwrap_err();
-    match digest_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-
-    let mac_err = dispatch_builtin_pure(
-        "gnutls-hash-mac",
-        vec![
-            Value::symbol("SHA256"),
-            Value::string("k"),
-            Value::string("a"),
-        ],
-    )
-    .expect("gnutls-hash-mac should resolve")
-    .unwrap_err();
-    match mac_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-
     let enc_err = dispatch_builtin_pure(
         "gnutls-symmetric-encrypt",
         vec![
@@ -10896,6 +10881,174 @@ fn dispatch_builtin_pure_handles_gnutls_runtime_placeholders() {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected signal, got {other:?}"),
     }
+}
+
+#[test]
+fn gnutls_digest_and_mac_crypto_match_gnu_shape() {
+    crate::test_utils::init_test_tracing();
+
+    let digests = dispatch_builtin_pure("gnutls-digests", vec![])
+        .expect("gnutls-digests should resolve")
+        .expect("gnutls-digests should evaluate");
+    let digest_entries = list_to_vec(&digests).expect("gnutls-digests should return an alist");
+    assert!(
+        digest_entries.iter().any(|entry| {
+            let Some(pair) = list_to_vec(entry) else {
+                return false;
+            };
+            pair.first() == Some(&Value::symbol("SHA256"))
+                && pair.contains(&Value::keyword(":digest-algorithm-id"))
+                && pair.contains(&Value::keyword(":digest-algorithm-length"))
+        }),
+        "gnutls-digests should expose a GNU-shaped SHA256 entry: {digest_entries:?}"
+    );
+
+    let macs = dispatch_builtin_pure("gnutls-macs", vec![])
+        .expect("gnutls-macs should resolve")
+        .expect("gnutls-macs should evaluate");
+    let mac_entries = list_to_vec(&macs).expect("gnutls-macs should return an alist");
+    assert!(
+        mac_entries.iter().any(|entry| {
+            let Some(pair) = list_to_vec(entry) else {
+                return false;
+            };
+            pair.first() == Some(&Value::symbol("SHA256"))
+                && pair.contains(&Value::keyword(":mac-algorithm-id"))
+                && pair.contains(&Value::keyword(":mac-algorithm-length"))
+        }),
+        "gnutls-macs should expose a GNU-shaped SHA256 entry: {mac_entries:?}"
+    );
+
+    let digest = dispatch_builtin_pure(
+        "gnutls-hash-digest",
+        vec![Value::symbol("SHA256"), Value::string("abc")],
+    )
+    .expect("gnutls-hash-digest should resolve")
+    .expect("gnutls-hash-digest should evaluate");
+    assert_eq!(
+        digest
+            .as_lisp_string()
+            .expect("digest should be a string")
+            .as_bytes(),
+        &[
+            0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
+            0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
+            0xf2, 0x00, 0x15, 0xad,
+        ]
+    );
+
+    let mac = dispatch_builtin_pure(
+        "gnutls-hash-mac",
+        vec![
+            Value::symbol("SHA256"),
+            Value::string("key"),
+            Value::string("abc"),
+        ],
+    )
+    .expect("gnutls-hash-mac should resolve")
+    .expect("gnutls-hash-mac should evaluate");
+    assert_eq!(
+        mac.as_lisp_string()
+            .expect("mac should be a string")
+            .as_bytes(),
+        &[
+            0x9c, 0x19, 0x6e, 0x32, 0xdc, 0x01, 0x75, 0xf8, 0x6f, 0x4b, 0x1c, 0xb8, 0x92, 0x89,
+            0xd6, 0x61, 0x9d, 0xe6, 0xbe, 0xe6, 0x99, 0xe4, 0xc3, 0x78, 0xe6, 0x83, 0x09, 0xed,
+            0x97, 0xa1, 0xa6, 0xab,
+        ]
+    );
+}
+
+#[test]
+fn gnutls_aes_256_cbc_crypto_matches_gnu_auth_source_shape() {
+    crate::test_utils::init_test_tracing();
+
+    let ciphers = dispatch_builtin_pure("gnutls-ciphers", vec![])
+        .expect("gnutls-ciphers should resolve")
+        .expect("gnutls-ciphers should evaluate");
+    let cipher_entries = list_to_vec(&ciphers).expect("gnutls-ciphers should return an alist");
+    let aes_256_cbc = cipher_entries
+        .iter()
+        .find(|entry| {
+            let Some(pair) = list_to_vec(entry) else {
+                return false;
+            };
+            pair.first() == Some(&Value::symbol("AES-256-CBC"))
+        })
+        .expect("gnutls-ciphers should expose AES-256-CBC");
+    let aes_256_cbc_items = list_to_vec(aes_256_cbc).expect("cipher entry should be a list");
+    assert_eq!(
+        aes_256_cbc_items.first(),
+        Some(&Value::symbol("AES-256-CBC"))
+    );
+    assert!(aes_256_cbc_items.contains(&Value::keyword(":cipher-id")));
+    assert!(aes_256_cbc_items.contains(&Value::fixnum(5)));
+    assert!(aes_256_cbc_items.contains(&Value::keyword(":cipher-blocksize")));
+    assert!(aes_256_cbc_items.contains(&Value::fixnum(16)));
+    assert!(aes_256_cbc_items.contains(&Value::keyword(":cipher-keysize")));
+    assert!(aes_256_cbc_items.contains(&Value::fixnum(32)));
+    assert!(aes_256_cbc_items.contains(&Value::keyword(":cipher-ivsize")));
+
+    let encrypted = dispatch_builtin_pure(
+        "gnutls-symmetric-encrypt",
+        vec![
+            Value::symbol("AES-256-CBC"),
+            Value::string("0123456789abcdef0123456789abcdef"),
+            Value::string("0000000000000000"),
+            Value::string("abcdefghijklmnop"),
+        ],
+    )
+    .expect("gnutls-symmetric-encrypt should resolve")
+    .expect("gnutls-symmetric-encrypt should evaluate");
+    let encrypted_items =
+        list_to_vec(&encrypted).expect("gnutls-symmetric-encrypt should return a list");
+    assert_eq!(encrypted_items.len(), 2);
+    assert_eq!(
+        encrypted_items[0]
+            .as_lisp_string()
+            .expect("ciphertext should be a string")
+            .as_bytes(),
+        &[
+            0xfc, 0xab, 0x6d, 0x29, 0x1c, 0x83, 0xf7, 0xb7, 0x62, 0x07, 0x60, 0x26, 0xe9, 0x71,
+            0x30, 0x4e,
+        ]
+    );
+    assert_eq!(
+        encrypted_items[1]
+            .as_lisp_string()
+            .expect("actual IV should be a string")
+            .as_bytes(),
+        b"0000000000000000"
+    );
+
+    let decrypted = dispatch_builtin_pure(
+        "gnutls-symmetric-decrypt",
+        vec![
+            Value::symbol("AES-256-CBC"),
+            Value::string("0123456789abcdef0123456789abcdef"),
+            encrypted_items[1],
+            encrypted_items[0],
+        ],
+    )
+    .expect("gnutls-symmetric-decrypt should resolve")
+    .expect("gnutls-symmetric-decrypt should evaluate");
+    let decrypted_items =
+        list_to_vec(&decrypted).expect("gnutls-symmetric-decrypt should return a list");
+    assert_eq!(decrypted_items.len(), 2);
+    assert_eq!(
+        decrypted_items[0]
+            .as_lisp_string()
+            .expect("plaintext should be a string")
+            .as_bytes(),
+        b"abcdefghijklmnop"
+    );
+    assert_eq!(
+        decrypted_items[1]
+            .as_lisp_string()
+            .expect("actual IV should be a string")
+            .as_bytes(),
+        b"0000000000000000"
+    );
 }
 
 #[test]

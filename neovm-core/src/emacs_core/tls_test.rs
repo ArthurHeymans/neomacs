@@ -62,7 +62,10 @@ fn backend_errors_render_boundary_messages() {
 
 #[test]
 fn rustls_backend_advertises_conservative_gnutls_compatibility() {
-    assert_eq!(gnutls_available_capabilities(), &["gnutls3", "gnutls"]);
+    assert_eq!(
+        gnutls_available_capabilities(),
+        &["ciphers", "macs", "digests", "gnutls3", "gnutls"]
+    );
 }
 
 #[test]

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_pem};
 
 pub(crate) fn gnutls_available_capabilities() -> &'static [&'static str] {
-    &["gnutls3", "gnutls"]
+    &["ciphers", "macs", "digests", "gnutls3", "gnutls"]
 }
 
 pub(crate) fn builtin_neomacs_tls_available_p(args: Vec<Value>) -> EvalResult {
