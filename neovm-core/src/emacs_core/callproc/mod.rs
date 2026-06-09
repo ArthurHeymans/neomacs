@@ -193,7 +193,7 @@ fn fallback_subprocess_directory() -> Option<PathBuf> {
         .or_else(|| std::env::current_dir().ok())
 }
 
-fn subprocess_default_directory(eval: &super::eval::Context) -> Option<PathBuf> {
+pub(super) fn subprocess_default_directory(eval: &super::eval::Context) -> Option<PathBuf> {
     let default_dir =
         super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)?;
     let path = super::fileio::lisp_file_name_to_path_buf(&default_dir);

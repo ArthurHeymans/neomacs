@@ -371,6 +371,10 @@ pub struct Process {
     pub(crate) gnutls_boot_parameters: Value,
     /// End-of-output marker, matching GNU's `p->mark`.
     pub mark: Value,
+    /// Working directory for the subprocess, derived from
+    /// `default-directory` at the time the process was created.
+    /// If `None`, the child inherits the Rust process's cwd.
+    pub default_directory: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for Process {
@@ -1167,6 +1171,7 @@ impl ProcessManager {
             gnutls_initstage: GnutlsInitStage::Empty,
             gnutls_boot_parameters: Value::NIL,
             mark: super::marker::make_marker_value(None, None, false),
+            default_directory: None,
         };
         self.processes.insert(id, proc);
         id
@@ -1265,6 +1270,9 @@ impl ProcessManager {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+        if let Some(dir) = &proc.default_directory {
+            cmd.current_dir(dir);
+        }
 
         if let Some(entries) = process_environment_entries(process_environment) {
             cmd.env_clear();
@@ -1368,6 +1376,9 @@ impl ProcessManager {
             .map(lisp_string_to_os_string)
             .collect::<Vec<OsString>>();
         let mut cmd = portable_pty::CommandBuilder::from_argv(argv_os);
+        if let Some(dir) = &proc.default_directory {
+            cmd.cwd(dir);
+        }
         if let Some(entries) = process_environment_entries(process_environment) {
             cmd.env_clear();
             for (key, value) in entries {
@@ -6458,9 +6469,15 @@ pub(crate) fn builtin_start_process(
     };
 
     let use_pty = process_connection_type_is_pty(&eval.obarray);
+    let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
     let id = eval
         .processes
         .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
+    if let Some(cwd) = &subprocess_cwd {
+        if let Some(proc) = eval.processes.get_mut(id) {
+            proc.default_directory = Some(cwd.clone());
+        }
+    }
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
     // Actually spawn the OS process.
@@ -7105,6 +7122,7 @@ pub(crate) fn builtin_make_process(
         default_directory: default_directory.as_ref(),
     };
     let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
+    let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
     builtin_make_process_impl_with_environment(
         &mut eval.processes,
         &mut eval.buffers,
@@ -7113,6 +7131,7 @@ pub(crate) fn builtin_make_process(
         use_pty,
         process_environment,
         Some(lookup),
+        subprocess_cwd,
     )
 }
 
@@ -7131,6 +7150,7 @@ pub(crate) fn builtin_make_process_impl(
         default_use_pty,
         None,
         None,
+        None,
     )
 }
 
@@ -7142,6 +7162,7 @@ fn builtin_make_process_impl_with_environment(
     default_use_pty: bool,
     process_environment: Option<Value>,
     lookup: Option<ProcessExecLookup<'_>>,
+    subprocess_cwd: Option<PathBuf>,
 ) -> EvalResult {
     if args.is_empty() {
         return Ok(Value::NIL);
@@ -7252,6 +7273,9 @@ fn builtin_make_process_impl_with_environment(
         if let Some(proc) = processes.get_mut(id) {
             proc.stderrproc = stderrproc;
         }
+    }
+    if let Some(proc) = processes.get_mut(id) {
+        proc.default_directory = subprocess_cwd;
     }
 
     // Spawn the actual OS child process.
