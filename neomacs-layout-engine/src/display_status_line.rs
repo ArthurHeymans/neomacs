@@ -90,13 +90,23 @@ impl LayoutEngine {
 pub(crate) struct WindowChromeDisplayRowRequest<'a> {
     pub(crate) matrix_row: usize,
     pub(crate) output: ChromeRowOutput,
+    pub(crate) spec: ChromeDisplayRowSpecRequest<'a>,
+}
+
+impl<'a> WindowChromeDisplayRowRequest<'a> {
+    pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
+        self.spec.display_row_spec(next_face_id)
+    }
+}
+
+pub(crate) struct ChromeDisplayRowSpecRequest<'a> {
     pub(crate) geometry: DisplayRowGeometry,
     pub(crate) base_face: &'a ResolvedFace,
     pub(crate) role: GlyphRowRole,
     pub(crate) symbol_values: HashMap<String, Value>,
 }
 
-impl<'a> WindowChromeDisplayRowRequest<'a> {
+impl<'a> ChromeDisplayRowSpecRequest<'a> {
     pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
         DisplayRowSpec::from_base_face(
             self.geometry.clone(),

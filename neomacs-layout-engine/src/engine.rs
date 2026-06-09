@@ -6669,17 +6669,19 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: 0,
                     output: tab_row_output,
-                    geometry: DisplayRowGeometry {
-                        y: tl_y,
-                        width: params.bounds.width,
-                        height: tab_line_height,
-                        char_width: char_w,
-                        ascent: font_ascent,
-                        tab_policy: text_display_tab_policy(0.0, params),
+                    spec: ChromeDisplayRowSpecRequest {
+                        geometry: DisplayRowGeometry {
+                            y: tl_y,
+                            width: params.bounds.width,
+                            height: tab_line_height,
+                            char_width: char_w,
+                            ascent: font_ascent,
+                            tab_policy: text_display_tab_policy(0.0, params),
+                        },
+                        base_face: tl_face,
+                        role: GlyphRowRole::TabLine,
+                        symbol_values: status_line_symbol_values.clone(),
                     },
-                    base_face: tl_face,
-                    role: GlyphRowRole::TabLine,
-                    symbol_values: status_line_symbol_values.clone(),
                 },
                 tab_text,
             );
@@ -6720,17 +6722,19 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: usize::from(tab_line_height > 0.0),
                     output: header_row_output,
-                    geometry: DisplayRowGeometry {
-                        y: hl_y,
-                        width: params.bounds.width,
-                        height: header_line_height,
-                        char_width: char_w,
-                        ascent: font_ascent,
-                        tab_policy: text_display_tab_policy(0.0, params),
+                    spec: ChromeDisplayRowSpecRequest {
+                        geometry: DisplayRowGeometry {
+                            y: hl_y,
+                            width: params.bounds.width,
+                            height: header_line_height,
+                            char_width: char_w,
+                            ascent: font_ascent,
+                            tab_policy: text_display_tab_policy(0.0, params),
+                        },
+                        base_face: hl_face,
+                        role: GlyphRowRole::HeaderLine,
+                        symbol_values: status_line_symbol_values.clone(),
                     },
-                    base_face: hl_face,
-                    role: GlyphRowRole::HeaderLine,
-                    symbol_values: status_line_symbol_values.clone(),
                 },
                 header_text,
             );
@@ -6786,17 +6790,19 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: mode_line_matrix_row,
                     output: mode_row_output,
-                    geometry: DisplayRowGeometry {
-                        y: ml_y,
-                        width: params.bounds.width,
-                        height: mode_line_height,
-                        char_width: char_w,
-                        ascent: font_ascent,
-                        tab_policy: text_display_tab_policy(0.0, params),
+                    spec: ChromeDisplayRowSpecRequest {
+                        geometry: DisplayRowGeometry {
+                            y: ml_y,
+                            width: params.bounds.width,
+                            height: mode_line_height,
+                            char_width: char_w,
+                            ascent: font_ascent,
+                            tab_policy: text_display_tab_policy(0.0, params),
+                        },
+                        base_face: ml_face,
+                        role: GlyphRowRole::ModeLine,
+                        symbol_values: status_line_symbol_values.clone(),
                     },
-                    base_face: ml_face,
-                    role: GlyphRowRole::ModeLine,
-                    symbol_values: status_line_symbol_values.clone(),
                 },
                 mode_text,
             );
@@ -7111,8 +7117,8 @@ impl LayoutEngine {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let tab_bar_spec = DisplayRowSpec::from_base_face(
-            DisplayRowGeometry {
+        let tab_bar_spec_request = ChromeDisplayRowSpecRequest {
+            geometry: DisplayRowGeometry {
                 y: 0.0,
                 width,
                 height: tab_bar_height,
@@ -7120,11 +7126,11 @@ impl LayoutEngine {
                 ascent: tab_bar_face.font_ascent,
                 tab_policy: DisplayTabPolicy::every(8),
             },
-            &mut current_face_id,
-            &tab_bar_face,
-            neomacs_display_protocol::frame_glyphs::GlyphRowRole::TabBar,
-            std::collections::HashMap::new(),
-        );
+            base_face: &tab_bar_face,
+            role: GlyphRowRole::TabBar,
+            symbol_values: std::collections::HashMap::new(),
+        };
+        let tab_bar_spec = tab_bar_spec_request.display_row_spec(&mut current_face_id);
         let Some(rendered) = self.render_display_source_row(
             tab_bar_spec,
             tab_bar.text,
