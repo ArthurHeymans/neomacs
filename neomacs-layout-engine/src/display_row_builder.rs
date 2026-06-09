@@ -115,6 +115,19 @@ pub(crate) trait DisplayGlyphMeasurer {
     ) -> Option<f32>;
 }
 
+pub(crate) enum DisplayRowItemMeasurement<'a> {
+    Default,
+    Measured(&'a mut dyn DisplayGlyphMeasurer),
+}
+
+pub(crate) trait DisplayRowItemMeasurer {
+    fn measurement_for<'a>(
+        &'a mut self,
+        item: &DisplayItem,
+        face_id: u32,
+    ) -> DisplayRowItemMeasurement<'a>;
+}
+
 pub(crate) struct FixedGlyphAdvance {
     ch: char,
     face_id: u32,
@@ -482,6 +495,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn position(&self) -> DisplayRowPosition {
         self.position
     }

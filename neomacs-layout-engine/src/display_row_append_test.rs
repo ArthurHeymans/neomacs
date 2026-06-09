@@ -1128,16 +1128,16 @@ impl DisplayRowItemMeasurer for SourceMappedTextWidthByFace {
         &'a mut self,
         item: &crate::display_item::DisplayItem,
         face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a> {
+    ) -> DisplayRowItemMeasurement<'a> {
         self.scratch = FixedGlyphAdvances::new();
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
-            return DisplayRowAppendMeasurement::Default;
+            return DisplayRowItemMeasurement::Default;
         };
         for ch in text.text.chars() {
             self.scratch
                 .insert(ch, face_id, if face_id == 20 { 13.0 } else { 11.0 });
         }
-        DisplayRowAppendMeasurement::Measured(&mut self.scratch)
+        DisplayRowItemMeasurement::Measured(&mut self.scratch)
     }
 }
 

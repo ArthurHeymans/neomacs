@@ -5,13 +5,15 @@ use crate::display_item::{
 };
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowLayout,
-    DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
+    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
+    DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
+#[cfg(test)]
+use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, PendingDisplaySourceFace,
-    ResolvedDisplaySourceItem, resolve_next_display_source_item,
+    DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
+    resolve_next_display_source_item,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -448,16 +450,19 @@ impl DisplayRowSourceState {
     }
 }
 
+#[cfg(test)]
 pub(crate) struct DisplayRowSourceStep {
     pub(crate) item: DisplayItem,
     pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
+#[cfg(test)]
 pub(crate) struct DisplayRowSourceWalker<S> {
     source: S,
     state: DisplayRowSourceState,
 }
 
+#[cfg(test)]
 impl<S> DisplayRowSourceWalker<S> {
     pub(crate) fn new(source: S) -> Self {
         Self {
@@ -467,6 +472,7 @@ impl<S> DisplayRowSourceWalker<S> {
     }
 }
 
+#[cfg(test)]
 impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
     pub(crate) fn next_step(
         &mut self,
@@ -506,6 +512,35 @@ pub(crate) enum DisplayRowRenderStop {
     Clipped,
     RowBreak,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowRenderClipBehavior {
+    PreserveRemainderAndStop,
+    Stop,
+    Continue,
+}
+
+pub(crate) trait DisplayRowRenderPolicy {
+    fn stop_before_item(&mut self, _item: &DisplayItem) -> bool {
+        false
+    }
+
+    fn measurement_for<'a>(
+        &'a mut self,
+        _item: &DisplayItem,
+        _face_id: u32,
+    ) -> DisplayRowItemMeasurement<'a> {
+        DisplayRowItemMeasurement::Default
+    }
+
+    fn clipped_behavior(&mut self, _item: &DisplayItem) -> DisplayRowRenderClipBehavior {
+        DisplayRowRenderClipBehavior::PreserveRemainderAndStop
+    }
+}
+
+struct NaturalDisplayRowRenderPolicy;
+
+impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
 
 pub(crate) struct DisplayRowRenderResult {
     pub(crate) rendered: RenderedDisplayRow,
@@ -1079,6 +1114,31 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<DisplayRowRenderResult> {
+        let mut policy = NaturalDisplayRowRenderPolicy;
+        self.render_display_item_source_row_fragment_step_with_policy(
+            spec,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+            &mut policy,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_with_policy<
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    >(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut S,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+        policy: &mut P,
+    ) -> Option<DisplayRowRenderResult> {
         if state.is_finished() {
             return None;
         }
@@ -1154,6 +1214,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let Some(item) = item else {
                 break DisplayRowRenderStop::SourceExhausted;
             };
+            if policy.stop_before_item(&item) {
+                break DisplayRowRenderStop::SourceExhausted;
+            }
             if let RenderFaceRef::FaceId(face_id) = item.face {
                 if face_id != row_face.face_id
                     && !row_faces.iter().any(|face| face.face_id == face_id)
@@ -1175,20 +1238,39 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let item = media_descriptor
                 .map(|descriptor| descriptor.replacement_item(item.clone()))
                 .unwrap_or(item);
-            let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
-                &row_faces,
-                face_realizer.font_metrics_service_mut(),
-                char_width,
-            );
-            let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
-                &row_layout,
-                &mut row,
-                &mut glyph_measurer,
-                position,
-                render_bounds.max_x_px,
-            );
-            let progress = row_writer.push_item(item);
-            position = row_writer.position();
+            let item_face_id = match item.face {
+                RenderFaceRef::FaceId(face_id) => face_id,
+                RenderFaceRef::Inherit => row_face.face_id,
+            };
+            let measurement = policy.measurement_for(&item, item_face_id);
+            let progress = match measurement {
+                DisplayRowItemMeasurement::Default => {
+                    let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
+                        &row_faces,
+                        face_realizer.font_metrics_service_mut(),
+                        char_width,
+                    );
+                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
+                        &row_layout,
+                        &mut row,
+                        &mut glyph_measurer,
+                        position,
+                        render_bounds.max_x_px,
+                    );
+                    row_writer.push_item(item)
+                }
+                DisplayRowItemMeasurement::Measured(measurer) => {
+                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
+                        &row_layout,
+                        &mut row,
+                        measurer,
+                        position,
+                        render_bounds.max_x_px,
+                    );
+                    row_writer.push_item(item)
+                }
+            };
+            position = progress.end;
             source_slots.extend(progress.slots.iter().cloned());
             if let Some(descriptor) = media_descriptor
                 && progress.status == DisplayRowAppendStatus::Complete
@@ -1198,13 +1280,19 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             }
             match progress.status {
                 DisplayRowAppendStatus::Complete => {}
-                DisplayRowAppendStatus::Clipped => {
-                    state.remember_pending_item(clipped_display_item_remainder(
-                        source_item,
-                        &progress,
-                    ));
-                    break DisplayRowRenderStop::Clipped;
-                }
+                DisplayRowAppendStatus::Clipped => match policy.clipped_behavior(&source_item) {
+                    DisplayRowRenderClipBehavior::PreserveRemainderAndStop => {
+                        state.remember_pending_item(clipped_display_item_remainder(
+                            source_item,
+                            &progress,
+                        ));
+                        break DisplayRowRenderStop::Clipped;
+                    }
+                    DisplayRowRenderClipBehavior::Stop => {
+                        break DisplayRowRenderStop::Clipped;
+                    }
+                    DisplayRowRenderClipBehavior::Continue => {}
+                },
                 DisplayRowAppendStatus::RowBreak => {
                     break DisplayRowRenderStop::RowBreak;
                 }

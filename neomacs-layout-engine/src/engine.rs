@@ -27,9 +27,9 @@ use crate::display_row::{
     install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
-    DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
-    append_buffer_text_char_to_text_row, append_buffer_text_item_to_text_row_and_emit,
+    DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
+    DisplayRowAppendSurface, append_buffer_text_char_to_text_row,
+    append_buffer_text_item_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
@@ -37,7 +37,8 @@ use crate::display_row_append::{
     append_synthetic_text_to_display_row,
 };
 use crate::display_row_builder::{
-    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
+    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
+    FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -690,10 +691,10 @@ impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
         &'a mut self,
         item: &crate::display_item::DisplayItem,
         face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a> {
+    ) -> DisplayRowItemMeasurement<'a> {
         self.scratch = FixedGlyphAdvances::new();
         let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
-            return DisplayRowAppendMeasurement::Default;
+            return DisplayRowItemMeasurement::Default;
         };
         for ch in text.text.chars() {
             if ch == '\t' {
@@ -719,7 +720,7 @@ impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
             };
             self.scratch.insert(ch, face_id, advance);
         }
-        DisplayRowAppendMeasurement::Measured(&mut self.scratch)
+        DisplayRowItemMeasurement::Measured(&mut self.scratch)
     }
 }
 

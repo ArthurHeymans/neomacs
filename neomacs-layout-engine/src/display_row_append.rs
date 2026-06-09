@@ -2,16 +2,20 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+#[cfg(test)]
+use crate::display_row::DisplayRowSourceWalker;
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSourceWalker, DisplayRowSpec, RenderedDisplayRow,
-    append_rendered_display_row_fragment_to_current_row, insert_resolved_display_row_face,
+    DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
+    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
+    RenderedDisplayRow, append_rendered_display_row_fragment_to_current_row,
 };
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
-    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
+    DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress,
+    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition,
+    DisplayTabPolicy, FixedGlyphAdvance,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
+#[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -136,12 +140,18 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn apply_pending_display_source_faces(
     builder: &mut GlyphMatrixBuilder,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
-        insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
+        crate::display_row::insert_resolved_display_row_face(
+            builder,
+            pending.face_id,
+            &pending.resolved,
+            None,
+        );
     }
 }
 
@@ -250,23 +260,9 @@ pub(crate) fn append_buffer_text_item_to_text_row_and_emit(
     )
 }
 
-pub(crate) enum DisplayRowAppendMeasurement<'a> {
-    Default,
-    Measured(&'a mut dyn DisplayGlyphMeasurer),
-}
-
-pub(crate) trait DisplayRowItemMeasurer {
-    fn measurement_for<'a>(
-        &'a mut self,
-        item: &DisplayItem,
-        face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a>;
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendClipBehavior {
     Stop,
-    Continue,
 }
 
 impl DisplayRowAppendClipBehavior {
@@ -284,6 +280,7 @@ pub(crate) enum DisplayRowSourceAppendDecision {
     },
     #[cfg(test)]
     Skip,
+    #[cfg(test)]
     Stop,
 }
 
@@ -294,8 +291,8 @@ pub(crate) trait DisplayRowSourceAppendPolicy {
         &'a mut self,
         _item: &DisplayItem,
         _face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a> {
-        DisplayRowAppendMeasurement::Default
+    ) -> DisplayRowItemMeasurement<'a> {
+        DisplayRowItemMeasurement::Default
     }
 }
 
@@ -338,38 +335,36 @@ impl DisplayRowSourceAppendPolicy for MeasuredDisplayItemAppendPolicy<'_> {
         &'a mut self,
         _item: &DisplayItem,
         _face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a> {
-        DisplayRowAppendMeasurement::Measured(&mut *self.measurer)
+    ) -> DisplayRowItemMeasurement<'a> {
+        DisplayRowItemMeasurement::Measured(&mut *self.measurer)
     }
 }
 
-struct DisplayReplacementSourceAppendPolicy<'a, M> {
+struct DisplayReplacementStringRenderPolicy<'a, M> {
     item_measurer: &'a mut M,
 }
 
-impl<M: DisplayRowItemMeasurer> DisplayRowSourceAppendPolicy
-    for DisplayReplacementSourceAppendPolicy<'_, M>
+impl<M: DisplayRowItemMeasurer> DisplayRowRenderPolicy
+    for DisplayReplacementStringRenderPolicy<'_, M>
 {
-    fn decision_for(&mut self, item: &DisplayItem) -> DisplayRowSourceAppendDecision {
-        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
-            return DisplayRowSourceAppendDecision::Stop;
-        }
-        DisplayRowSourceAppendDecision::Append {
-            kind: DisplayRowAppendKind::DisplayReplacementString,
-            on_clipped: if matches!(item.kind, DisplayItemKind::SourceMappedText(_)) {
-                DisplayRowAppendClipBehavior::Stop
-            } else {
-                DisplayRowAppendClipBehavior::Continue
-            },
-        }
+    fn stop_before_item(&mut self, item: &DisplayItem) -> bool {
+        matches!(item.kind, DisplayItemKind::RowBreak(_))
     }
 
     fn measurement_for<'a>(
         &'a mut self,
         item: &DisplayItem,
         face_id: u32,
-    ) -> DisplayRowAppendMeasurement<'a> {
+    ) -> DisplayRowItemMeasurement<'a> {
         self.item_measurer.measurement_for(item, face_id)
+    }
+
+    fn clipped_behavior(&mut self, item: &DisplayItem) -> DisplayRowRenderClipBehavior {
+        if matches!(item.kind, DisplayItemKind::SourceMappedText(_)) {
+            DisplayRowRenderClipBehavior::Stop
+        } else {
+            DisplayRowRenderClipBehavior::Continue
+        }
     }
 }
 
@@ -394,6 +389,7 @@ fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
             DisplayRowSourceAppendDecision::Append { kind, on_clipped } => (kind, on_clipped),
             #[cfg(test)]
             DisplayRowSourceAppendDecision::Skip => continue,
+            #[cfg(test)]
             DisplayRowSourceAppendDecision::Stop => {
                 break;
             }
@@ -403,14 +399,14 @@ fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
         item.face = RenderFaceRef::FaceId(face_id);
         let append_spec = frame.clone().at(position, face_id).append_spec(kind);
         let Some((progress, next_position)) = (match measurement {
-            DisplayRowAppendMeasurement::Default => append_display_row_spec_item_and_emit(
+            DisplayRowItemMeasurement::Default => append_display_row_spec_item_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 append_spec,
                 item,
             ),
-            DisplayRowAppendMeasurement::Measured(measurer) => {
+            DisplayRowItemMeasurement::Measured(measurer) => {
                 append_measured_display_row_spec_item_and_emit(
                     builder,
                     output_emitter,
@@ -437,6 +433,7 @@ fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn append_display_item_source_to_text_row<
     S: DisplayItemSource,
     P: DisplayRowSourceAppendPolicy,
@@ -537,7 +534,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    source: S,
+    mut source: S,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
@@ -546,19 +543,45 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     position: DisplayRowPosition,
     item_measurer: &mut impl DisplayRowItemMeasurer,
 ) -> DisplayRowPosition {
-    let mut policy = DisplayReplacementSourceAppendPolicy { item_measurer };
-    append_display_item_source_to_text_row(
+    let mut geometry = frame.geometry.clone();
+    geometry.char_width = frame.face_space_width;
+    let row_spec = DisplayRowSpec {
+        geometry,
+        render_bounds: DisplayRowRenderBounds {
+            start: position,
+            max_x_px: frame.content_x + frame.geometry.width,
+        },
+        base_face_id: fallback_face_id,
+        base_face,
+        role: GlyphRowRole::Text,
+        symbol_values: HashMap::new(),
+    };
+    let mut source_state = DisplayRowSourceState::default();
+    let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let Some(result) = renderer.render_display_item_source_row_fragment_step_with_policy(
+        row_spec,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        evaluator.display_host.as_deref(),
+        current_face_id,
+        &mut render_policy,
+    ) else {
+        return position;
+    };
+    append_rendered_display_row_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        source,
-        face_resolver,
-        base_face,
-        fallback_face_id,
-        current_face_id,
-        frame,
-        position,
-        &mut policy,
+        &result.rendered,
+        TextRowOutput {
+            row: frame.row,
+            row_y: frame.geometry.y,
+            glyph_y: frame.glyph_y,
+            height: frame.geometry.height,
+        },
     )
 }
 
@@ -690,6 +713,7 @@ pub(crate) enum DisplayRowAppendKind {
     SourceMappedText,
     Glyphless,
     DisplayReplacement,
+    #[cfg(test)]
     DisplayReplacementString,
 }
 
@@ -721,9 +745,9 @@ pub(crate) struct DisplayRowAppendSpec {
 impl DisplayRowAppendContext {
     pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
         let char_width = match kind {
-            DisplayRowAppendKind::Tab | DisplayRowAppendKind::DisplayReplacementString => {
-                self.face_space_width
-            }
+            DisplayRowAppendKind::Tab => self.face_space_width,
+            #[cfg(test)]
+            DisplayRowAppendKind::DisplayReplacementString => self.face_space_width,
             DisplayRowAppendKind::SourceText
             | DisplayRowAppendKind::ControlChar
             | DisplayRowAppendKind::SourceMappedText
@@ -738,16 +762,16 @@ impl DisplayRowAppendContext {
             DisplayRowAppendKind::SourceText
             | DisplayRowAppendKind::SourceMappedText
             | DisplayRowAppendKind::Glyphless
-            | DisplayRowAppendKind::DisplayReplacement
-            | DisplayRowAppendKind::DisplayReplacementString => {
-                self.content_x + self.geometry.width
-            }
+            | DisplayRowAppendKind::DisplayReplacement => self.content_x + self.geometry.width,
+            #[cfg(test)]
+            DisplayRowAppendKind::DisplayReplacementString => self.content_x + self.geometry.width,
         };
         let output_height = match kind {
             DisplayRowAppendKind::SourceText
             | DisplayRowAppendKind::Glyphless
-            | DisplayRowAppendKind::DisplayReplacement
-            | DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
+            | DisplayRowAppendKind::DisplayReplacement => self.geometry.height,
+            #[cfg(test)]
+            DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
             DisplayRowAppendKind::Tab
             | DisplayRowAppendKind::ControlChar
             | DisplayRowAppendKind::SourceMappedText => self.default_row_height,
