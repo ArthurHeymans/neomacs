@@ -217,22 +217,28 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
         RenderFaceRef::FaceId(face_id),
     );
     let mut context = DisplaySourceContext::empty();
-    let append_spec = frame.at(position, face_id).append_spec(if ch == '\t' {
-        DisplayRowAppendKind::Tab
-    } else {
-        DisplayRowAppendKind::SourceText
-    });
     let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
-    source.next_item(&mut context).and_then(|item| {
-        append_measured_display_row_spec_item_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            append_spec,
-            item,
-            &mut measurer,
-        )
-    })
+    let mut policy = MeasuredDisplayItemAppendPolicy {
+        kind: if ch == '\t' {
+            DisplayRowAppendKind::Tab
+        } else {
+            DisplayRowAppendKind::SourceText
+        },
+        measurer: &mut measurer,
+    };
+    let result = append_display_item_stream_to_text_row(
+        builder,
+        output_emitter,
+        evaluator,
+        face_id,
+        frame,
+        position,
+        &mut policy,
+        |_builder| source.next_item(&mut context),
+    );
+    result
+        .last_progress
+        .map(|progress| (progress, result.position))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -306,6 +312,12 @@ pub(crate) trait DisplayRowSourceAppendPolicy {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct DisplayItemSourceAppendResult {
+    position: DisplayRowPosition,
+    last_progress: Option<DisplayRowAppendProgress>,
+}
+
 struct NaturalDisplaySourceAppendPolicy;
 
 impl DisplayRowSourceAppendPolicy for NaturalDisplaySourceAppendPolicy {
@@ -317,6 +329,28 @@ impl DisplayRowSourceAppendPolicy for NaturalDisplaySourceAppendPolicy {
             kind,
             on_clipped: DisplayRowAppendClipBehavior::Stop,
         }
+    }
+}
+
+struct MeasuredDisplayItemAppendPolicy<'a> {
+    kind: DisplayRowAppendKind,
+    measurer: &'a mut dyn DisplayGlyphMeasurer,
+}
+
+impl DisplayRowSourceAppendPolicy for MeasuredDisplayItemAppendPolicy<'_> {
+    fn decision_for(&mut self, _item: &DisplayItem) -> DisplayRowSourceAppendDecision {
+        DisplayRowSourceAppendDecision::Append {
+            kind: self.kind,
+            on_clipped: DisplayRowAppendClipBehavior::Stop,
+        }
+    }
+
+    fn measurement_for<'a>(
+        &'a mut self,
+        _item: &DisplayItem,
+        _face_id: u32,
+    ) -> DisplayRowAppendMeasurement<'a> {
+        DisplayRowAppendMeasurement::Measured(&mut *self.measurer)
     }
 }
 
@@ -351,25 +385,18 @@ impl<M: DisplayRowItemMeasurer> DisplayRowSourceAppendPolicy
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_item_source_to_text_row<
-    S: DisplayItemSource,
-    P: DisplayRowSourceAppendPolicy,
->(
+fn append_display_item_stream_to_text_row<P: DisplayRowSourceAppendPolicy>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    source: S,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
     fallback_face_id: u32,
-    current_face_id: &mut u32,
     frame: DisplayRowAppendFrame,
     mut position: DisplayRowPosition,
     policy: &mut P,
-) -> DisplayRowPosition {
-    let mut source = DisplayItemSourceWalker::new(source);
-    while let Some(mut item) = source.next_item(builder, face_resolver, base_face, current_face_id)
-    {
+    mut next_item: impl FnMut(&mut GlyphMatrixBuilder) -> Option<DisplayItem>,
+) -> DisplayItemSourceAppendResult {
+    let mut last_progress = None;
+    while let Some(mut item) = next_item(builder) {
         let (kind, on_clipped) = match policy.decision_for(&item) {
             DisplayRowSourceAppendDecision::Append { kind, on_clipped } => (kind, on_clipped),
             DisplayRowSourceAppendDecision::Skip => continue,
@@ -403,11 +430,47 @@ pub(crate) fn append_display_item_source_to_text_row<
             break;
         };
         position = next_position;
-        if on_clipped.stops_on(&progress) {
+        let stop_on_clipped = on_clipped.stops_on(&progress);
+        last_progress = Some(progress);
+        if stop_on_clipped {
             break;
         }
     }
-    position
+    DisplayItemSourceAppendResult {
+        position,
+        last_progress,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_display_item_source_to_text_row<
+    S: DisplayItemSource,
+    P: DisplayRowSourceAppendPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    source: S,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    current_face_id: &mut u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    policy: &mut P,
+) -> DisplayRowPosition {
+    let mut source = DisplayItemSourceWalker::new(source);
+    append_display_item_stream_to_text_row(
+        builder,
+        output_emitter,
+        evaluator,
+        fallback_face_id,
+        frame,
+        position,
+        policy,
+        |builder| source.next_item(builder, face_resolver, base_face, current_face_id),
+    )
+    .position
 }
 
 pub(crate) fn append_display_item_to_text_row_and_emit(
