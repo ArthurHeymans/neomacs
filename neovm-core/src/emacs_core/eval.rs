@@ -5720,6 +5720,16 @@ impl Context {
             let outgoing_prefix_arg = self.eval_symbol("current-prefix-arg").unwrap_or(Value::NIL);
             self.assign("last-prefix-arg", outgoing_prefix_arg);
 
+            // Reset this-command and related variables before reading
+            // the next key sequence.  GNU keyboard.c:1416-1419 clears
+            // Vthis_command, Vreal_this_command, Vthis_original_command,
+            // and Vthis_command_keys_shift_translated to nil so that idle
+            // timer callbacks (e.g. which-key) running inside
+            // read_key_sequence observe (null this-command) => t.
+            self.assign("this-command", Value::NIL);
+            self.assign("real-this-command", Value::NIL);
+            self.assign("this-original-command", Value::NIL);
+
             // Read a complete key sequence (may be multi-key, e.g. C-x C-f).
             let (keys, binding) = self.read_key_sequence()?;
             self.sync_current_buffer_to_selected_window();
