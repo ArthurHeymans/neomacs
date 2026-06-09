@@ -99,6 +99,30 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
 }
 
 #[test]
+fn buffer_text_item_source_single_char_maps_one_buffer_character() {
+    let source = BufferTextItemSource::single_char(
+        BufferId(7),
+        CharPos0::new(3),
+        EmacsBytePos::new(12),
+        EmacsBytePos::new(16),
+    );
+
+    let item = source.item(
+        RenderFaceRef::FaceId(42),
+        DisplayItemKind::TextRun(DisplayTextRun::new("x")),
+    );
+
+    assert_eq!(
+        item.span.start,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12))
+    );
+    assert_eq!(
+        item.span.end,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(4), EmacsBytePos::new(16))
+    );
+}
+
+#[test]
 fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
     let _eval = Context::new();
     let replacement_source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);

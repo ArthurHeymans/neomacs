@@ -4866,11 +4866,10 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     current_face_id += 1;
                 }
-                let source = BufferTextItemSource::new(
+                let source = BufferTextItemSource::single_char(
                     buf_id,
                     CharPos0::new(charpos as usize),
                     EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                    CharPos0::new(charpos.saturating_add(1) as usize),
                     EmacsBytePos::new(text_start_byte + byte_idx),
                 );
                 let text_item_frame = text_append_surface.frame(
@@ -4920,11 +4919,10 @@ impl LayoutEngine {
                         let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                         current_face_id += 1;
                     }
-                    let source = BufferTextItemSource::new(
+                    let source = BufferTextItemSource::single_char(
                         buf_id,
                         CharPos0::new(charpos as usize),
                         EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                        CharPos0::new(charpos.saturating_add(1) as usize),
                         EmacsBytePos::new(text_start_byte + byte_idx),
                     );
                     let text_item_frame = text_append_surface.frame(
@@ -4991,11 +4989,10 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let source = BufferTextItemSource::new(
+                let source = BufferTextItemSource::single_char(
                     buf_id,
                     CharPos0::new(charpos as usize),
                     EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                    CharPos0::new(charpos.saturating_add(1) as usize),
                     EmacsBytePos::new(text_start_byte + byte_idx),
                 );
                 let text_item_frame = text_append_surface.frame(

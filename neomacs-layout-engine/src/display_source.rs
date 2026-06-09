@@ -98,6 +98,21 @@ impl BufferTextItemSource {
         }
     }
 
+    pub(crate) fn single_char(
+        buffer_id: BufferId,
+        char_pos: CharPos0,
+        start_byte: EmacsBytePos,
+        end_byte: EmacsBytePos,
+    ) -> Self {
+        Self::new(
+            buffer_id,
+            char_pos,
+            start_byte,
+            char_pos.add_len(CharLen::new(1)),
+            end_byte,
+        )
+    }
+
     fn span(self) -> SourceSpan {
         SourceSpan::new(
             DisplaySourcePosition::buffer(self.buffer_id, self.start_char, self.start_byte),
