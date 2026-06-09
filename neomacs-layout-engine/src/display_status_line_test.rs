@@ -7,11 +7,11 @@ use neovm_core::emacs_core::Value;
 use neovm_core::face::FaceTable;
 
 #[test]
-fn chrome_display_row_spec_request_builds_display_row_spec() {
+fn display_source_row_spec_input_builds_display_row_spec() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut next_face_id = 42;
-    let request = ChromeDisplayRowSpecRequest {
+    let input = DisplaySourceRowSpecInput {
         geometry: DisplayRowGeometry {
             y: 20.0,
             width: 160.0,
@@ -28,7 +28,7 @@ fn chrome_display_row_spec_request_builds_display_row_spec() {
         )]),
     };
 
-    let spec = request.display_row_spec(&mut next_face_id);
+    let spec = input.display_row_spec(&mut next_face_id);
 
     assert_eq!(spec.role, GlyphRowRole::TabBar);
     assert_eq!(spec.geometry.y, 20.0);
@@ -51,7 +51,7 @@ fn window_chrome_display_row_request_builds_display_row_spec() {
     let request = WindowChromeDisplayRowRequest {
         matrix_row: 3,
         output: crate::window_output::ChromeRowOutput { row: 7, y: 20.0 },
-        spec: ChromeDisplayRowSpecRequest {
+        row_spec_input: DisplaySourceRowSpecInput {
             geometry: DisplayRowGeometry {
                 y: 20.0,
                 width: 160.0,

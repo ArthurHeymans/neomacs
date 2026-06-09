@@ -17,7 +17,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
-use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, insert_resolved_display_row_face};
+use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
@@ -6669,7 +6669,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: 0,
                     output: tab_row_output,
-                    spec: ChromeDisplayRowSpecRequest {
+                    row_spec_input: DisplaySourceRowSpecInput {
                         geometry: DisplayRowGeometry {
                             y: tl_y,
                             width: params.bounds.width,
@@ -6722,7 +6722,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: usize::from(tab_line_height > 0.0),
                     output: header_row_output,
-                    spec: ChromeDisplayRowSpecRequest {
+                    row_spec_input: DisplaySourceRowSpecInput {
                         geometry: DisplayRowGeometry {
                             y: hl_y,
                             width: params.bounds.width,
@@ -6790,7 +6790,7 @@ impl LayoutEngine {
                 WindowChromeDisplayRowRequest {
                     matrix_row: mode_line_matrix_row,
                     output: mode_row_output,
-                    spec: ChromeDisplayRowSpecRequest {
+                    row_spec_input: DisplaySourceRowSpecInput {
                         geometry: DisplayRowGeometry {
                             y: ml_y,
                             width: params.bounds.width,
@@ -7013,8 +7013,8 @@ impl LayoutEngine {
                     row_start,
                     offset,
                 );
-                let row_spec = DisplayRowSpec::from_base_face(
-                    DisplayRowGeometry {
+                let row_spec_input = DisplaySourceRowSpecInput {
+                    geometry: DisplayRowGeometry {
                         y: y + rows.len() as f32 * row_height,
                         width: wrap_width,
                         height: row_height,
@@ -7022,11 +7022,11 @@ impl LayoutEngine {
                         ascent,
                         tab_policy: DisplayTabPolicy::every(8),
                     },
-                    next_face_id,
-                    &base_face,
-                    GlyphRowRole::Minibuffer,
-                    std::collections::HashMap::new(),
-                );
+                    base_face: &base_face,
+                    role: GlyphRowRole::Minibuffer,
+                    symbol_values: std::collections::HashMap::new(),
+                };
+                let row_spec = row_spec_input.display_row_spec(next_face_id);
                 let Some(rendered) =
                     self.render_display_source_row(row_spec, segment, face_resolver, next_face_id)
                 else {
@@ -7117,7 +7117,7 @@ impl LayoutEngine {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
         }
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let tab_bar_spec_request = ChromeDisplayRowSpecRequest {
+        let tab_bar_spec_input = DisplaySourceRowSpecInput {
             geometry: DisplayRowGeometry {
                 y: 0.0,
                 width,
@@ -7130,7 +7130,7 @@ impl LayoutEngine {
             role: GlyphRowRole::TabBar,
             symbol_values: std::collections::HashMap::new(),
         };
-        let tab_bar_spec = tab_bar_spec_request.display_row_spec(&mut current_face_id);
+        let tab_bar_spec = tab_bar_spec_input.display_row_spec(&mut current_face_id);
         let Some(rendered) = self.render_display_source_row(
             tab_bar_spec,
             tab_bar.text,
