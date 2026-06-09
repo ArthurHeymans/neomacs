@@ -54,6 +54,7 @@ use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{
     BufferId, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
+use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{
     get_string_text_properties_table_for_value, list_to_vec,
@@ -3247,6 +3248,7 @@ impl LayoutEngine {
                 char_h,
                 default_resolved,
                 face_resolver,
+                evaluator.display_host.as_deref(),
                 echo_message,
                 max_rows_echo,
                 truncate_echo_lines,
@@ -3288,10 +3290,11 @@ impl LayoutEngine {
                 symbol_values: std::collections::HashMap::new(),
             };
             let rendered = self
-                .render_display_source_row(
+                .render_display_source_row_with_display_host(
                     row_spec_input.display_row_spec(&mut current_face_id),
                     Value::string(""),
                     face_resolver,
+                    evaluator.display_host.as_deref(),
                     &mut current_face_id,
                 )
                 .expect("empty Lisp string should render an inactive minibuffer row");
@@ -6904,6 +6907,7 @@ impl LayoutEngine {
         row_height: f32,
         default_resolved: &crate::neovm_bridge::ResolvedFace,
         face_resolver: &crate::neovm_bridge::FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
         echo_message: Value,
         max_rows: usize,
         truncate_lines: bool,
@@ -6995,9 +6999,13 @@ impl LayoutEngine {
                     symbol_values: std::collections::HashMap::new(),
                 };
                 let row_spec = row_spec_input.display_row_spec(next_face_id);
-                let Some(mut rendered) =
-                    self.render_display_source_row(row_spec, segment, face_resolver, next_face_id)
-                else {
+                let Some(mut rendered) = self.render_display_source_row_with_display_host(
+                    row_spec,
+                    segment,
+                    face_resolver,
+                    display_host,
+                    next_face_id,
+                ) else {
                     break;
                 };
                 let special_face_id = rendered
@@ -7109,10 +7117,11 @@ impl LayoutEngine {
             symbol_values: std::collections::HashMap::new(),
         };
         let tab_bar_spec = tab_bar_spec_input.display_row_spec(&mut current_face_id);
-        let Some(rendered) = self.render_display_source_row(
+        let Some(rendered) = self.render_display_source_row_with_display_host(
             tab_bar_spec,
             tab_bar.text,
             face_resolver,
+            evaluator.display_host.as_deref(),
             &mut current_face_id,
         ) else {
             return;

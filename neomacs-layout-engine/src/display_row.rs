@@ -1,5 +1,6 @@
 use crate::display_item::{
-    DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind, RenderFaceRef,
+    DisplayImageItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
+    DisplayMediaReplacementKind, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
@@ -8,6 +9,9 @@ use crate::display_row_builder::{
 use crate::display_source::{
     DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
     parse_display_length_expr,
+};
+use crate::display_spec::{
+    parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -19,6 +23,7 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::eval::DisplayHost;
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {
     UnderlineStyle::from_gnu_code(code).unwrap_or_default()
@@ -676,6 +681,10 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
 }
 
+fn display_media_id(id: u32) -> i32 {
+    id.min(i32::MAX as u32) as i32
+}
+
 fn display_source_row_progress(
     row: &GlyphRow,
     width: f32,
@@ -748,6 +757,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         Self { font_metrics }
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_source_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -755,17 +765,58 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplaySourceRow> {
+        self.render_display_source_row_with_display_host(
+            spec,
+            rendered,
+            face_resolver,
+            None,
+            next_face_id,
+        )
+    }
+
+    pub(crate) fn render_display_source_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        rendered: Value,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplaySourceRow> {
         let base_face_id = spec.base_face_id;
         let mut source =
             LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row(spec, &mut source, face_resolver, next_face_id)
+        self.render_display_item_source_row_with_display_host(
+            spec,
+            &mut source,
+            face_resolver,
+            display_host,
+            next_face_id,
+        )
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
         source: &mut impl DisplayItemSource,
         face_resolver: &FaceResolver,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplaySourceRow> {
+        self.render_display_item_source_row_with_display_host(
+            spec,
+            source,
+            face_resolver,
+            None,
+            next_face_id,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplaySourceRow> {
         let DisplayRowSpec {
@@ -788,10 +839,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .char_width(&row_face, geometry.char_width)
             .max(1.0);
         let mut row_faces = vec![row_face.clone()];
+        let mut resolved_faces = vec![(row_face.face_id, base_face.clone())];
 
         struct RowFaceResolver<'a, 'metrics> {
             face_realizer: &'a mut DisplayRowFaceRealizer<'metrics>,
             face_resolver: &'a FaceResolver,
+            display_host: Option<&'a dyn DisplayHost>,
             base_face: &'a ResolvedFace,
             base_face_id: u32,
             next_face_id: &'a mut u32,
@@ -799,6 +852,83 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             ascent: f32,
             height: f32,
             row_faces: &'a mut Vec<DisplayRowFace>,
+            resolved_faces: &'a mut Vec<(u32, ResolvedFace)>,
+        }
+
+        impl RowFaceResolver<'_, '_> {
+            fn resolved_face_for(&self, face: RenderFaceRef) -> &ResolvedFace {
+                let RenderFaceRef::FaceId(face_id) = face else {
+                    return self.base_face;
+                };
+                self.resolved_faces
+                    .iter()
+                    .find_map(|(id, resolved)| (*id == face_id).then_some(resolved))
+                    .unwrap_or(self.base_face)
+            }
+
+            fn resolve_image_display_property(
+                &self,
+                display_prop: &Value,
+                face: RenderFaceRef,
+            ) -> Option<DisplayItemKind> {
+                let host = self.display_host?;
+                let (fg, bg) = {
+                    let resolved_face = self.resolved_face_for(face);
+                    (resolved_face.fg, resolved_face.bg)
+                };
+                let spec = parse_display_image_layout(display_prop, fg, bg)?;
+                let scale = spec.scale;
+                let resolved = host.request_image(spec.request).ok().flatten()?;
+                let mut width = resolved.width.max(1) as f32;
+                let mut height = resolved.height.max(1) as f32;
+                if (scale - 1.0).abs() > f32::EPSILON && scale.is_finite() && scale > 0.0 {
+                    width = (width * scale).round().max(1.0);
+                    height = (height * scale).round().max(1.0);
+                }
+                Some(DisplayItemKind::Image(DisplayImageItem {
+                    image_id: display_media_id(resolved.image_id),
+                    width,
+                    height,
+                }))
+            }
+
+            fn resolve_video_display_property(
+                &self,
+                display_prop: &Value,
+            ) -> Option<DisplayItemKind> {
+                let host = self.display_host?;
+                let spec = parse_display_video_layout(
+                    display_prop,
+                    self.char_w * 40.0,
+                    self.height * 12.0,
+                )?;
+                let resolved = host.request_video(spec.request.clone()).ok().flatten()?;
+                Some(DisplayItemKind::Video(DisplayVideoItem {
+                    video_id: display_media_id(resolved.video_id),
+                    width: spec.width.max(1.0),
+                    height: spec.height.max(1.0),
+                    loop_count: spec.loop_count,
+                    autoplay: spec.autoplay,
+                }))
+            }
+
+            fn resolve_webkit_display_property(
+                &self,
+                display_prop: &Value,
+            ) -> Option<DisplayItemKind> {
+                let host = self.display_host?;
+                let spec = parse_display_webkit_layout(
+                    display_prop,
+                    self.char_w * 40.0,
+                    self.height * 12.0,
+                )?;
+                let resolved = host.request_webkit(spec.request.clone()).ok().flatten()?;
+                Some(DisplayItemKind::Xwidget(DisplayXwidgetItem {
+                    xwidget_id: display_media_id(resolved.webkit_id),
+                    width: spec.width.max(1.0),
+                    height: spec.height.max(1.0),
+                }))
+            }
         }
 
         impl DisplayItemFaceResolver for RowFaceResolver<'_, '_> {
@@ -827,7 +957,18 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     self.height,
                 );
                 self.row_faces.push(row_face);
+                self.resolved_faces.push((face_id, resolved));
                 crate::display_item::RenderFaceRef::FaceId(face_id)
+            }
+
+            fn resolve_display_property(
+                &mut self,
+                display_prop: Value,
+                face: RenderFaceRef,
+            ) -> Option<DisplayItemKind> {
+                self.resolve_image_display_property(&display_prop, face)
+                    .or_else(|| self.resolve_video_display_property(&display_prop))
+                    .or_else(|| self.resolve_webkit_display_property(&display_prop))
             }
         }
 
@@ -854,13 +995,15 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 let mut row_face_resolver = RowFaceResolver {
                     face_realizer: &mut face_realizer,
                     face_resolver,
+                    display_host,
                     base_face,
                     base_face_id: row_face.face_id,
                     next_face_id,
-                    char_w: geometry.char_width,
+                    char_w: char_width,
                     ascent: geometry.ascent,
                     height: geometry.height,
                     row_faces: &mut row_faces,
+                    resolved_faces: &mut resolved_faces,
                 };
                 let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
                 source.next_item(&mut context)
@@ -918,6 +1061,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 }
 
 impl LayoutEngine {
+    #[cfg(test)]
     pub(crate) fn render_display_source_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -925,10 +1069,28 @@ impl LayoutEngine {
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
     ) -> Option<RenderedDisplaySourceRow> {
-        DisplayRowRenderer::new(&mut self.font_metrics).render_display_source_row(
+        self.render_display_source_row_with_display_host(
             spec,
             rendered,
             face_resolver,
+            None,
+            next_face_id,
+        )
+    }
+
+    pub(crate) fn render_display_source_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        rendered: Value,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplaySourceRow> {
+        DisplayRowRenderer::new(&mut self.font_metrics).render_display_source_row_with_display_host(
+            spec,
+            rendered,
+            face_resolver,
+            display_host,
             next_face_id,
         )
     }

@@ -4,13 +4,74 @@ use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsByteRange};
+use neovm_core::emacs_core::eval::{
+    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
+    ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
+};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
+use std::sync::Mutex;
 
 fn base_face() -> crate::neovm_bridge::ResolvedFace {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     resolver.default_face().clone()
+}
+
+#[derive(Default)]
+struct RecordingDisplayRowMediaHost {
+    image_requests: Mutex<Vec<ImageResolveRequest>>,
+    video_requests: Mutex<Vec<VideoResolveRequest>>,
+    webkit_requests: Mutex<Vec<WebKitResolveRequest>>,
+}
+
+impl DisplayHost for RecordingDisplayRowMediaHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_image(
+        &self,
+        _request: ImageResolveRequest,
+    ) -> Result<Option<ResolvedImage>, String> {
+        panic!("display row rendering must use nonblocking request_image");
+    }
+
+    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        self.image_requests
+            .lock()
+            .expect("image requests lock")
+            .push(request);
+        Ok(Some(ResolvedImage {
+            image_id: 42,
+            width: 64,
+            height: 32,
+            dimensions_known: true,
+        }))
+    }
+
+    fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
+        self.video_requests
+            .lock()
+            .expect("video requests lock")
+            .push(request);
+        Ok(Some(ResolvedVideo { video_id: 84 }))
+    }
+
+    fn request_webkit(
+        &self,
+        request: WebKitResolveRequest,
+    ) -> Result<Option<ResolvedWebKit>, String> {
+        self.webkit_requests
+            .lock()
+            .expect("webkit requests lock")
+            .push(request);
+        Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+    }
 }
 
 #[test]
@@ -404,6 +465,182 @@ fn render_display_source_row_records_xwidget_media_fragments() {
             width: 96.0,
             height: 54.0,
         }]
+    );
+}
+
+fn render_tab_line_with_media_host(
+    rendered_text: Value,
+    default_fg: u32,
+    default_bg: u32,
+) -> (RenderedDisplaySourceRow, RecordingDisplayRowMediaHost) {
+    let host = RecordingDisplayRowMediaHost::default();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, default_fg, default_bg, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    base_face.font_line_height = 16.0;
+    let mut next_face_id = 1;
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 4.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        &base_face,
+        GlyphRowRole::TabLine,
+        std::collections::HashMap::new(),
+    );
+    let rendered = renderer
+        .render_display_source_row_with_display_host(
+            spec,
+            rendered_text,
+            &resolver,
+            Some(&host),
+            &mut next_face_id,
+        )
+        .expect("display source row");
+    (rendered, host)
+}
+
+#[test]
+fn render_display_source_row_resolves_image_display_property_through_display_host() {
+    let _eval = Context::new();
+    let rendered_text = Value::string_with_text_properties(
+        "AXB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("png"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/chrome.png"),
+                ]),
+            ]),
+        }],
+    );
+    let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00112233, 0x00445566);
+
+    assert_eq!(
+        rendered.media,
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Image { image_id: 42 },
+            x: 8.0,
+            y: 4.0,
+            col: 1,
+            width: 64.0,
+            height: 32.0,
+        }]
+    );
+    let requests = host.image_requests.lock().expect("image requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].fg_color, 0x00112233);
+    assert_eq!(requests[0].bg_color, 0x00445566);
+}
+
+#[test]
+fn render_display_source_row_resolves_video_display_property_through_display_host() {
+    let _eval = Context::new();
+    let rendered_text = Value::string_with_text_properties(
+        "AVB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("video"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/chrome.mp4"),
+                    Value::keyword("width"),
+                    Value::fixnum(120),
+                    Value::keyword("height"),
+                    Value::fixnum(45),
+                    Value::keyword("loop"),
+                    Value::symbol("t"),
+                    Value::keyword("autoplay"),
+                    Value::symbol("t"),
+                ]),
+            ]),
+        }],
+    );
+    let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
+
+    assert_eq!(
+        rendered.media,
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Video {
+                video_id: 84,
+                loop_count: -1,
+                autoplay: true,
+            },
+            x: 8.0,
+            y: 4.0,
+            col: 1,
+            width: 120.0,
+            height: 45.0,
+        }]
+    );
+    assert_eq!(
+        host.video_requests
+            .lock()
+            .expect("video requests lock")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn render_display_source_row_resolves_webkit_display_property_through_display_host() {
+    let _eval = Context::new();
+    let rendered_text = Value::string_with_text_properties(
+        "AWB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("webkit"),
+                    Value::keyword("uri"),
+                    Value::string("https://example.invalid/"),
+                    Value::keyword("width"),
+                    Value::fixnum(80),
+                    Value::keyword("height"),
+                    Value::fixnum(50),
+                ]),
+            ]),
+        }],
+    );
+    let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
+
+    assert_eq!(
+        rendered.media,
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 99 },
+            x: 8.0,
+            y: 4.0,
+            col: 1,
+            width: 80.0,
+            height: 50.0,
+        }]
+    );
+    assert_eq!(
+        host.webkit_requests
+            .lock()
+            .expect("webkit requests lock")
+            .len(),
+        1
     );
 }
 
