@@ -21,10 +21,10 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSourceWalker, DisplayRowSpec,
-    RenderedDisplayRow, insert_resolved_display_row_face, install_rendered_display_row,
-    install_rendered_frame_chrome_row,
+    DisplayRowFaceRealizer, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSourceWalker,
+    DisplayRowSpec, RenderedDisplayRow, insert_resolved_display_row_face,
+    install_rendered_display_row, install_rendered_frame_chrome_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
@@ -6516,6 +6516,7 @@ impl LayoutEngine {
                     ascent,
                     tab_policy: DisplayTabPolicy::every(8),
                 },
+                render_bounds: DisplayRowRenderBounds::whole_row(wrap_width),
                 base_face_id,
                 base_face: &base_face,
                 role: GlyphRowRole::Minibuffer,

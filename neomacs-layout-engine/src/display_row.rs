@@ -20,7 +20,7 @@ use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
@@ -577,10 +577,26 @@ impl DisplayRowGeometry {
 
 pub(crate) struct DisplayRowSpec<'a> {
     pub(crate) geometry: DisplayRowGeometry,
+    pub(crate) render_bounds: DisplayRowRenderBounds,
     pub(crate) base_face_id: u32,
     pub(crate) base_face: &'a ResolvedFace,
     pub(crate) role: GlyphRowRole,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowRenderBounds {
+    pub(crate) start: DisplayRowPosition,
+    pub(crate) max_x_px: f32,
+}
+
+impl DisplayRowRenderBounds {
+    pub(crate) fn whole_row(width_px: f32) -> Self {
+        Self {
+            start: DisplayRowPosition { x_px: 0.0, col: 0 },
+            max_x_px: width_px.max(0.0),
+        }
+    }
 }
 
 impl<'a> DisplayRowSpec<'a> {
@@ -599,6 +615,7 @@ impl<'a> DisplayRowSpec<'a> {
             id
         };
         Self {
+            render_bounds: DisplayRowRenderBounds::whole_row(geometry.width),
             geometry,
             base_face_id,
             base_face,
@@ -772,33 +789,10 @@ fn buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, us
     })
 }
 
-fn display_row_progress(
-    row: &GlyphRow,
-    width: f32,
-    char_width: f32,
-    y: f32,
-    height: f32,
-) -> DisplayRowOutputProgress {
-    let fallback = char_width.max(1.0);
-    let end_x: f32 = row.glyphs[GlyphArea::Text.index()]
-        .iter()
-        .map(|glyph| match glyph.glyph_type {
-            GlyphType::Stretch { width_cols } => {
-                if glyph.pixel_width > 0.0 {
-                    glyph.pixel_width
-                } else {
-                    f32::from(width_cols) * fallback
-                }
-            }
-            _ if glyph.padding => 0.0,
-            _ if glyph.pixel_width > 0.0 => glyph.pixel_width,
-            _ if glyph.wide => fallback * 2.0,
-            _ => fallback,
-        })
-        .sum();
+fn display_row_progress(end: DisplayRowPosition, y: f32, height: f32) -> DisplayRowOutputProgress {
     DisplayRowOutputProgress {
-        end_x: end_x.min(width).max(0.0),
-        end_col: (end_x / fallback).round().max(0.0) as i64,
+        end_x: end.x_px.max(0.0),
+        end_col: end.col.min(i64::MAX as usize) as i64,
         y,
         height,
     }
@@ -1024,6 +1018,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
         let DisplayRowSpec {
             geometry,
+            render_bounds,
             base_face_id,
             base_face,
             role,
@@ -1059,7 +1054,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             parsed_symbol_values,
         );
         let mut row = GlyphRow::new(role);
-        let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
+        let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
         let stop = loop {
@@ -1123,7 +1118,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 &mut row,
                 &mut glyph_measurer,
                 position,
-                row_layout.width_px,
+                render_bounds.max_x_px,
             );
             let progress = row_writer.push_item(item);
             position = row_writer.position();
@@ -1154,13 +1149,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         } else {
             row_layout.height_px
         };
-        let progress = display_row_progress(
-            &row,
-            geometry.width,
-            char_width,
-            geometry.y,
-            progress_height,
-        );
+        let progress = display_row_progress(position, geometry.y, progress_height);
         let faces = row_faces
             .into_iter()
             .map(|face| face.render_face())

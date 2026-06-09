@@ -248,6 +248,90 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
 }
 
 #[test]
+fn display_row_renderer_clips_from_render_bounds_start() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut test_base_face = resolver.default_face().clone();
+    test_base_face.font_char_width = 8.0;
+    test_base_face.font_ascent = 12.0;
+    let mut next_face_id = 1;
+    let mut spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        &test_base_face,
+        GlyphRowRole::ModeLine,
+        std::collections::HashMap::new(),
+    );
+    spec.render_bounds = DisplayRowRenderBounds {
+        start: DisplayRowPosition { x_px: 16.0, col: 2 },
+        max_x_px: 32.0,
+    };
+
+    let rendered = renderer
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut next_face_id)
+        .expect("display source row");
+
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
+    assert_eq!(rendered.progress.end_x, 32.0);
+    assert_eq!(rendered.progress.end_col, 4);
+    assert_eq!(rendered.source_slots[0].x_px, 16.0);
+    assert_eq!(rendered.source_slots[0].col, 2);
+}
+
+#[test]
+fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut test_base_face = resolver.default_face().clone();
+    test_base_face.font_char_width = 8.0;
+    test_base_face.font_ascent = 12.0;
+    let mut next_face_id = 1;
+    let mut spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(4),
+        },
+        &mut next_face_id,
+        &test_base_face,
+        GlyphRowRole::ModeLine,
+        std::collections::HashMap::new(),
+    );
+    spec.render_bounds = DisplayRowRenderBounds {
+        start: DisplayRowPosition { x_px: 16.0, col: 2 },
+        max_x_px: 240.0,
+    };
+
+    let rendered = renderer
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
+        .expect("display source row");
+
+    let glyphs = &rendered.row.glyphs[1];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
+    assert_eq!(glyphs[0].pixel_width, 16.0);
+    assert_eq!(rendered.progress.end_x, 40.0);
+    assert_eq!(rendered.progress.end_col, 5);
+    assert_eq!(rendered.source_slots[0].x_px, 16.0);
+    assert_eq!(rendered.source_slots[0].width_px, 16.0);
+}
+
+#[test]
 fn display_row_renderer_continues_source_mapped_text_after_clip() {
     struct OnceSource {
         item: Option<crate::display_item::DisplayItem>,
@@ -297,6 +381,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
+                render_bounds: DisplayRowRenderBounds::whole_row(16.0),
                 base_face_id,
                 base_face: &test_base_face,
                 role: GlyphRowRole::Text,
@@ -320,6 +405,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
+                render_bounds: DisplayRowRenderBounds::whole_row(16.0),
                 base_face_id,
                 base_face: &test_base_face,
                 role: GlyphRowRole::Text,
@@ -562,6 +648,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
+                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
                 base_face_id: 1,
                 base_face: resolver.default_face(),
                 role: GlyphRowRole::TabLine,
@@ -1125,6 +1212,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
                             &[2],
                         ),
                 },
+                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
                 base_face_id: 1,
                 base_face: resolver.default_face(),
                 role: GlyphRowRole::TabLine,
