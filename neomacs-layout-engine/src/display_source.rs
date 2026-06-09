@@ -56,6 +56,44 @@ pub(crate) trait DisplayItemFaceResolver {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferTextItemSource {
+    buffer_id: BufferId,
+    start_char: CharPos0,
+    start_byte: EmacsBytePos,
+    end_char: CharPos0,
+    end_byte: EmacsBytePos,
+}
+
+impl BufferTextItemSource {
+    pub(crate) const fn new(
+        buffer_id: BufferId,
+        start_char: CharPos0,
+        start_byte: EmacsBytePos,
+        end_char: CharPos0,
+        end_byte: EmacsBytePos,
+    ) -> Self {
+        Self {
+            buffer_id,
+            start_char,
+            start_byte,
+            end_char,
+            end_byte,
+        }
+    }
+
+    fn span(self) -> SourceSpan {
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(self.buffer_id, self.start_char, self.start_byte),
+            DisplaySourcePosition::buffer(self.buffer_id, self.end_char, self.end_byte),
+        )
+    }
+
+    pub(crate) fn item(self, face: RenderFaceRef, kind: DisplayItemKind) -> DisplayItem {
+        DisplayItem::new(self.span(), face, kind)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct DisplayReplacementBox {
     width_px: f32,
     height_px: f32,

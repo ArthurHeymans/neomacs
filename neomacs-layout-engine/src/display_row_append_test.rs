@@ -620,6 +620,88 @@ fn append_buffer_text_char_to_text_row_appends_source_char() {
         .expect("current row");
 }
 
+#[test]
+fn append_buffer_text_item_to_text_row_and_emit_builds_buffer_source_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-buffer-text-item", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let source = crate::display_source::BufferTextItemSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
+        CharPos0::new(1),
+        EmacsBytePos::new(1),
+    );
+
+    let (_progress, end) = append_buffer_text_item_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        source,
+        7,
+        DisplayItemKind::ControlChar { ch: '\u{0001}' },
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("appended buffer text item");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 2);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: '^' }
+            ));
+            assert!(matches!(
+                text[1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'A' }
+            ));
+        })
+        .expect("current row");
+}
+
 struct TextUntilRowBreakPolicy;
 
 impl DisplayRowSourceAppendPolicy for TextUntilRowBreakPolicy {

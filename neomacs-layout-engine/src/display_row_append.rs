@@ -6,7 +6,9 @@ use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
 };
-use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
+use crate::display_source::{
+    BufferTextItemSource, DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext,
+};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
@@ -231,6 +233,29 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
             &mut measurer,
         )
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_buffer_text_item_to_text_row_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    source: BufferTextItemSource,
+    face_id: u32,
+    kind: DisplayItemKind,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let item = source.item(RenderFaceRef::FaceId(face_id), kind);
+    append_display_item_to_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        item,
+        face_id,
+        frame,
+        position,
+    )
 }
 
 pub(crate) enum DisplayRowAppendMeasurement<'a> {

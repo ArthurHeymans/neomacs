@@ -22,7 +22,7 @@ use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
     LayoutStringSourceWalker, append_buffer_text_char_to_text_row,
-    append_display_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
+    append_buffer_text_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
     append_synthetic_text_to_display_row, emit_text_progress_slots,
@@ -31,7 +31,8 @@ use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
+    DisplayReplacementBox,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -5375,21 +5376,12 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     current_face_id += 1;
                 }
-                let item = crate::display_item::DisplayItem::new(
-                    crate::display_item::SourceSpan::new(
-                        crate::display_item::DisplaySourcePosition::buffer(
-                            buf_id,
-                            CharPos0::new(charpos as usize),
-                            EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                        ),
-                        crate::display_item::DisplaySourcePosition::buffer(
-                            buf_id,
-                            CharPos0::new(charpos.saturating_add(1) as usize),
-                            EmacsBytePos::new(text_start_byte + byte_idx),
-                        ),
-                    ),
-                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                    crate::display_item::DisplayItemKind::ControlChar { ch },
+                let source = BufferTextItemSource::new(
+                    buf_id,
+                    CharPos0::new(charpos as usize),
+                    EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
+                    CharPos0::new(charpos.saturating_add(1) as usize),
+                    EmacsBytePos::new(text_start_byte + byte_idx),
                 );
                 let text_item_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
@@ -5405,12 +5397,13 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
+                if let Some((_progress, position)) = append_buffer_text_item_to_text_row_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    item,
+                    source,
                     current_text_face_id,
+                    crate::display_item::DisplayItemKind::ControlChar { ch },
                     text_item_frame,
                     DisplayRowPosition { x_px: x, col },
                 ) {
@@ -5437,23 +5430,12 @@ impl LayoutEngine {
                         let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                         current_face_id += 1;
                     }
-                    let item = crate::display_item::DisplayItem::new(
-                        crate::display_item::SourceSpan::new(
-                            crate::display_item::DisplaySourcePosition::buffer(
-                                buf_id,
-                                CharPos0::new(charpos as usize),
-                                EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                            ),
-                            crate::display_item::DisplaySourcePosition::buffer(
-                                buf_id,
-                                CharPos0::new(charpos.saturating_add(1) as usize),
-                                EmacsBytePos::new(text_start_byte + byte_idx),
-                            ),
-                        ),
-                        crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                        crate::display_item::DisplayItemKind::SourceMappedText(
-                            crate::display_item::DisplaySourceMappedText::new(mapped_text),
-                        ),
+                    let source = BufferTextItemSource::new(
+                        buf_id,
+                        CharPos0::new(charpos as usize),
+                        EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
+                        CharPos0::new(charpos.saturating_add(1) as usize),
+                        EmacsBytePos::new(text_start_byte + byte_idx),
                     );
                     let text_item_frame = text_append_surface.frame(
                         DisplayRowAppendPlacement {
@@ -5469,15 +5451,20 @@ impl LayoutEngine {
                             default_row_height: char_h,
                         },
                     );
-                    if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        item,
-                        current_text_face_id,
-                        text_item_frame,
-                        DisplayRowPosition { x_px: x, col },
-                    ) {
+                    if let Some((_progress, position)) =
+                        append_buffer_text_item_to_text_row_and_emit(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            source,
+                            current_text_face_id,
+                            crate::display_item::DisplayItemKind::SourceMappedText(
+                                crate::display_item::DisplaySourceMappedText::new(mapped_text),
+                            ),
+                            text_item_frame,
+                            DisplayRowPosition { x_px: x, col },
+                        )
+                    {
                         x = position.x_px;
                         col = position.col;
                     }
@@ -5514,23 +5501,12 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let item = crate::display_item::DisplayItem::new(
-                    crate::display_item::SourceSpan::new(
-                        crate::display_item::DisplaySourcePosition::buffer(
-                            buf_id,
-                            CharPos0::new(charpos as usize),
-                            EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                        ),
-                        crate::display_item::DisplaySourcePosition::buffer(
-                            buf_id,
-                            CharPos0::new(charpos.saturating_add(1) as usize),
-                            EmacsBytePos::new(text_start_byte + byte_idx),
-                        ),
-                    ),
-                    crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
-                    crate::display_item::DisplayItemKind::Glyphless(
-                        crate::display_item::DisplayGlyphless { ch, method },
-                    ),
+                let source = BufferTextItemSource::new(
+                    buf_id,
+                    CharPos0::new(charpos as usize),
+                    EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
+                    CharPos0::new(charpos.saturating_add(1) as usize),
+                    EmacsBytePos::new(text_start_byte + byte_idx),
                 );
                 let text_item_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
@@ -5546,12 +5522,15 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                if let Some((_progress, position)) = append_display_item_to_text_row_and_emit(
+                if let Some((_progress, position)) = append_buffer_text_item_to_text_row_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    item,
+                    source,
                     current_text_face_id,
+                    crate::display_item::DisplayItemKind::Glyphless(
+                        crate::display_item::DisplayGlyphless { ch, method },
+                    ),
                     text_item_frame,
                     DisplayRowPosition { x_px: x, col },
                 ) {
