@@ -3,12 +3,16 @@ use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
-use crate::display_row::DisplayRowGeometry;
+use crate::display_row::{
+    DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderer, DisplayRowSourceState,
+    DisplayRowSpec,
+};
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvances};
 use crate::neovm_bridge::LayoutBufferSnapshot;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
 };
@@ -67,6 +71,124 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
 fn render_face_ref_id_uses_fallback_for_inherit() {
     assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
     assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);
+}
+
+#[test]
+fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_slots() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("AB");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-rendered-fragment", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base_face = face_resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let mut next_face_id = 8;
+    let mut font_metrics = None;
+    let rendered = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        let mut source = crate::display_source::BufferTextSourceCursor::new(
+            buf_id,
+            buffer,
+            CharPos0::new(0),
+            CharPos0::new(2),
+            RenderFaceRef::FaceId(7),
+        );
+        let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+        let mut source_state = DisplayRowSourceState::default();
+        renderer
+            .render_display_item_source_row_fragment_step_with_display_host(
+                DisplayRowSpec {
+                    geometry: DisplayRowGeometry {
+                        y: 0.0,
+                        width: 160.0,
+                        height: 16.0,
+                        char_width: 8.0,
+                        ascent: 12.0,
+                        tab_policy: DisplayTabPolicy::every(8),
+                    },
+                    render_bounds: DisplayRowRenderBounds {
+                        start: DisplayRowPosition { x_px: 16.0, col: 2 },
+                        max_x_px: 160.0,
+                    },
+                    base_face_id: 7,
+                    base_face: &base_face,
+                    role: GlyphRowRole::Text,
+                    symbol_values: std::collections::HashMap::new(),
+                },
+                &mut source,
+                &mut source_state,
+                &face_resolver,
+                None,
+                &mut next_face_id,
+            )
+            .expect("rendered fragment")
+            .rendered
+    };
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 2, 0.0, 16.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_char_with_pixel_width('X', 7, 0, 8.0);
+    builder.push_char_with_pixel_width('Y', 7, 0, 8.0);
+
+    let end = append_rendered_display_row_fragment_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &rendered,
+        crate::window_output::TextRowOutput {
+            row: 0,
+            row_y: 0.0,
+            glyph_y: 0.0,
+            height: 16.0,
+        },
+    );
+
+    assert_eq!(end, DisplayRowPosition { x_px: 32.0, col: 4 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 4);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'X' }));
+            assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: 'Y' }));
+            assert!(matches!(text[2].glyph_type, GlyphType::Char { ch: 'A' }));
+            assert!(matches!(text[3].glyph_type, GlyphType::Char { ch: 'B' }));
+            assert_eq!(row.start_charpos, 0);
+            assert_eq!(row.end_charpos, 2);
+        })
+        .expect("current row");
+
+    let first = output_emitter
+        .point_for_lisp_buffer_pos(LispCharPos1::new(1))
+        .expect("first buffer display point");
+    assert_eq!(first.x, 16);
+    assert_eq!(first.col, 2);
+    let second = output_emitter
+        .point_for_lisp_buffer_pos(LispCharPos1::new(2))
+        .expect("second buffer display point");
+    assert_eq!(second.x, 24);
+    assert_eq!(second.col, 3);
 }
 
 #[test]

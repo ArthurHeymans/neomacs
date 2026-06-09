@@ -20,7 +20,7 @@ use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
@@ -665,6 +665,38 @@ pub(crate) fn install_rendered_frame_chrome_row(
     });
 }
 
+pub(crate) fn append_rendered_display_row_fragment_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    rendered: &RenderedDisplayRow,
+    matrix_row: usize,
+) -> DisplayRowPosition {
+    for face in &rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    let source_bounds = buffer_source_slot_bounds(&rendered.source_slots);
+    builder.with_current_row_mut(|row| {
+        row.enabled = true;
+        row.role = rendered.row.role;
+        row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
+        row.displays_text |=
+            rendered.row.displays_text || !rendered.row.glyphs[GlyphArea::Text.index()].is_empty();
+        row.glyphs[GlyphArea::Text.index()]
+            .extend(rendered.row.glyphs[GlyphArea::Text.index()].iter().cloned());
+        row.height_px = row.height_px.max(rendered.row.height_px);
+        row.ascent_px = row
+            .ascent_px
+            .max(rendered.row.ascent_px)
+            .min(row.height_px.max(1.0));
+        if let Some((start, end)) = source_bounds {
+            merge_row_buffer_source_bounds(row, start, end);
+        }
+    });
+    for media in &rendered.media {
+        media.install(builder, rendered.row.role, matrix_row);
+    }
+    display_row_output_end_position(rendered.progress)
+}
+
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
         let row = matrix_row.min(u32::MAX as usize) as u32;
@@ -771,8 +803,7 @@ fn apply_source_slot_bounds_to_row(row: &mut GlyphRow, slots: &[DisplayRowGlyphS
     let Some((start, end)) = buffer_source_slot_bounds(slots) else {
         return;
     };
-    row.start_charpos = start;
-    row.end_charpos = end;
+    set_row_buffer_source_bounds(row, start, end);
 }
 
 fn buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, usize)> {
@@ -787,6 +818,26 @@ fn buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, us
             None => (start, end),
         })
     })
+}
+
+fn merge_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
+    if row.start_charpos == row.end_charpos {
+        set_row_buffer_source_bounds(row, start, end);
+        return;
+    }
+    set_row_buffer_source_bounds(row, row.start_charpos.min(start), row.end_charpos.max(end));
+}
+
+fn set_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
+    row.start_charpos = start;
+    row.end_charpos = end;
+}
+
+fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
+    DisplayRowPosition {
+        x_px: progress.end_x,
+        col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
+    }
 }
 
 fn display_row_progress(end: DisplayRowPosition, y: f32, height: f32) -> DisplayRowOutputProgress {

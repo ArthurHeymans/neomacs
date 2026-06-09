@@ -32,9 +32,9 @@ use crate::display_row_append::{
     append_buffer_text_char_to_text_row, append_buffer_text_item_to_text_row_and_emit,
     append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
-    append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
-    append_synthetic_text_to_display_row, apply_pending_display_source_faces,
-    emit_text_progress_slots, render_face_ref_id,
+    append_display_replacement_string_source_to_text_row,
+    append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
+    apply_pending_display_source_faces, emit_text_progress_slots, render_face_ref_id,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
@@ -3665,10 +3665,11 @@ impl LayoutEngine {
                             default_row_height: char_h,
                         },
                     );
-                    let position = append_lisp_string_to_text_row(
+                    let position = append_lisp_string_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
+                        &mut self.font_metrics,
                         prefix_value,
                         2,
                         face_resolver,
