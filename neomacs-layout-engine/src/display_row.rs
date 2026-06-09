@@ -549,6 +549,29 @@ pub(crate) struct DisplayRowRenderResult {
     pub(crate) stop: DisplayRowRenderStop,
 }
 
+pub(crate) struct DisplayRowRenderIntoRowResult {
+    pub(crate) progress: DisplayRowOutputProgress,
+    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
+    pub(crate) faces: Vec<Face>,
+    pub(crate) media: Vec<RenderedDisplayRowMedia>,
+    pub(crate) stop: DisplayRowRenderStop,
+}
+
+impl DisplayRowRenderIntoRowResult {
+    fn with_row(self, row: GlyphRow) -> DisplayRowRenderResult {
+        DisplayRowRenderResult {
+            rendered: RenderedDisplayRow {
+                row,
+                progress: self.progress,
+                source_slots: self.source_slots,
+                faces: self.faces,
+                media: self.media,
+            },
+            stop: self.stop,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RenderedDisplayRowMedia {
     pub(crate) kind: RenderedDisplayRowMediaKind,
@@ -1136,41 +1159,39 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
     ) -> Option<DisplayRowRenderResult> {
-        let mut policy = NaturalDisplayRowRenderPolicy;
-        self.render_display_item_source_row_fragment_step_with_policy(
+        let mut row = GlyphRow::new(spec.role);
+        let result = self.render_display_item_source_row_fragment_step_into_row_with_display_host(
             spec,
+            &mut row,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+        )?;
+        Some(result.with_row(row))
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_into_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        row: &mut GlyphRow,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
+        let mut policy = NaturalDisplayRowRenderPolicy;
+        self.render_display_item_source_row_fragment_step_into_row_with_policy(
+            spec,
+            row,
             source,
             state,
             face_resolver,
             display_host,
             next_face_id,
             &mut policy,
-        )
-    }
-
-    pub(crate) fn render_display_item_source_row_fragment_step_with_policy<
-        S: DisplayItemSource,
-        P: DisplayRowRenderPolicy,
-    >(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        source: &mut S,
-        state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
-        policy: &mut P,
-    ) -> Option<DisplayRowRenderResult> {
-        let initial_row = GlyphRow::new(spec.role);
-        self.render_display_item_source_row_fragment_step_from_row_with_policy(
-            spec,
-            initial_row,
-            source,
-            state,
-            face_resolver,
-            display_host,
-            next_face_id,
-            policy,
         )
     }
 
@@ -1188,6 +1209,34 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         next_face_id: &mut u32,
         policy: &mut P,
     ) -> Option<DisplayRowRenderResult> {
+        let mut row = initial_row;
+        let result = self.render_display_item_source_row_fragment_step_into_row_with_policy(
+            spec,
+            &mut row,
+            source,
+            state,
+            face_resolver,
+            display_host,
+            next_face_id,
+            policy,
+        )?;
+        Some(result.with_row(row))
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_into_row_with_policy<
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    >(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        row: &mut GlyphRow,
+        source: &mut S,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+        policy: &mut P,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
         if state.is_finished() {
             return None;
         }
@@ -1229,7 +1278,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             RenderFaceRef::FaceId(row_face.face_id),
             parsed_symbol_values,
         );
-        let mut row = initial_row;
         let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
@@ -1301,7 +1349,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     );
                     let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
                         &row_layout,
-                        &mut row,
+                        &mut *row,
                         &mut glyph_measurer,
                         position,
                         render_bounds.max_x_px,
@@ -1311,7 +1359,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 DisplayRowItemMeasurement::Measured(measurer) => {
                     let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
                         &row_layout,
-                        &mut row,
+                        &mut *row,
                         measurer,
                         position,
                         render_bounds.max_x_px,
@@ -1357,14 +1405,11 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .into_iter()
             .map(|face| face.render_face())
             .collect();
-        Some(DisplayRowRenderResult {
-            rendered: RenderedDisplayRow {
-                row,
-                progress,
-                source_slots,
-                faces,
-                media,
-            },
+        Some(DisplayRowRenderIntoRowResult {
+            progress,
+            source_slots,
+            faces,
+            media,
             stop,
         })
     }

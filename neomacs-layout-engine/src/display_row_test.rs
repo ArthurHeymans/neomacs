@@ -2,7 +2,7 @@ use super::*;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -1710,6 +1710,70 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let finalized = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
     assert!(finalized.reversed_p);
     assert_eq!(row_text_expanding_stretches(&finalized), "בא");
+}
+
+#[test]
+fn display_row_renderer_can_render_source_fragment_into_existing_row() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut next_face_id = 1;
+    let mut spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut next_face_id,
+        resolver.default_face(),
+        GlyphRowRole::Text,
+        std::collections::HashMap::new(),
+    );
+    spec.render_bounds.start = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let base_face_id = spec.base_face_id;
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    GlyphMatrixBuilder::push_char_to_row(&mut row, 'e', base_face_id, 0, 8.0);
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        Value::string("\u{301}"),
+        RenderFaceRef::FaceId(base_face_id),
+    )
+    .expect("lisp string source");
+    let mut state = DisplayRowSourceState::default();
+
+    let result = renderer
+        .render_display_item_source_row_fragment_step_into_row_with_display_host(
+            spec,
+            &mut row,
+            &mut source,
+            &mut state,
+            &resolver,
+            None,
+            &mut next_face_id,
+        )
+        .expect("row render fragment");
+
+    assert_eq!(result.stop, DisplayRowRenderStop::SourceExhausted);
+    assert_eq!(
+        result.progress,
+        DisplayRowOutputProgress {
+            end_x: 8.0,
+            end_col: 1,
+            y: 0.0,
+            height: 16.0,
+        }
+    );
+    let text = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(text.len(), 1);
+    assert!(matches!(
+        &text[0].glyph_type,
+        GlyphType::Composite { text } if text.as_ref() == "e\u{301}"
+    ));
 }
 
 #[test]
