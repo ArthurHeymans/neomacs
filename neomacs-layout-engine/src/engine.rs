@@ -5,10 +5,7 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
-use super::display_spec::{
-    DisplaySpecHead, parse_display_image_layout, parse_display_video_layout,
-    parse_display_webkit_layout, parse_display_xwidget_layout,
-};
+use super::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
 use super::display_status_line::*;
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -22,6 +19,8 @@ use super::window_output::{
     finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::display_item::DisplayItemKind;
+use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplaySourceRowSpecInput,
     RenderedDisplaySourceRow, insert_resolved_display_row_face,
@@ -4319,29 +4318,32 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_image = parse_display_image_layout(
-                            &prop_val,
-                            current_resolved_face.fg,
-                            current_resolved_face.bg,
-                        )
-                        .and_then(|spec| {
-                            evaluator
-                                .display_host
-                                .as_ref()
-                                .and_then(|host| host.request_image(spec.request).ok().flatten())
-                                .map(|resolved| (spec.scale, resolved))
-                        });
+                        let maybe_image = evaluator
+                            .display_host
+                            .as_ref()
+                            .and_then(|host| {
+                                resolve_display_media_property(
+                                    &prop_val,
+                                    DisplayMediaResolveParams {
+                                        display_host: host.as_ref(),
+                                        default_fg: current_resolved_face.fg,
+                                        default_bg: current_resolved_face.bg,
+                                        fallback_char_width: face_char_w,
+                                        fallback_row_height: face_h,
+                                    },
+                                )
+                            })
+                            .and_then(|kind| {
+                                if let DisplayItemKind::Image(image) = kind {
+                                    Some(image)
+                                } else {
+                                    None
+                                }
+                            });
 
-                        if let Some((scale, resolved)) = maybe_image {
-                            let mut display_width = resolved.width.max(1) as f32;
-                            let mut display_height = resolved.height.max(1) as f32;
-                            if (scale - 1.0).abs() > f32::EPSILON
-                                && scale.is_finite()
-                                && scale > 0.0
-                            {
-                                display_width = (display_width * scale).round().max(1.0);
-                                display_height = (display_height * scale).round().max(1.0);
-                            }
+                        if let Some(image) = maybe_image {
+                            let display_width = image.width.max(1.0);
+                            let display_height = image.height.max(1.0);
 
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4376,16 +4378,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.item(
-                                current_text_face_id,
-                                crate::display_item::DisplayItemKind::Image(
-                                    crate::display_item::DisplayImageItem {
-                                        image_id: resolved.image_id.min(i32::MAX as u32) as i32,
-                                        width: display_width,
-                                        height: display_height,
-                                    },
-                                ),
-                            );
+                            let item = replacement_source
+                                .item(current_text_face_id, DisplayItemKind::Image(image));
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4474,24 +4468,32 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_video = parse_display_video_layout(
-                            &prop_val,
-                            face_char_w * 40.0,
-                            face_h * 12.0,
-                        )
-                        .and_then(|spec| {
-                            evaluator
-                                .display_host
-                                .as_ref()
-                                .and_then(|host| {
-                                    host.request_video(spec.request.clone()).ok().flatten()
-                                })
-                                .map(|resolved| (spec, resolved))
-                        });
+                        let maybe_video = evaluator
+                            .display_host
+                            .as_ref()
+                            .and_then(|host| {
+                                resolve_display_media_property(
+                                    &prop_val,
+                                    DisplayMediaResolveParams {
+                                        display_host: host.as_ref(),
+                                        default_fg: current_resolved_face.fg,
+                                        default_bg: current_resolved_face.bg,
+                                        fallback_char_width: face_char_w,
+                                        fallback_row_height: face_h,
+                                    },
+                                )
+                            })
+                            .and_then(|kind| {
+                                if let DisplayItemKind::Video(video) = kind {
+                                    Some(video)
+                                } else {
+                                    None
+                                }
+                            });
 
-                        if let Some((spec, resolved)) = maybe_video {
-                            let display_width = spec.width.max(1.0);
-                            let display_height = spec.height.max(1.0);
+                        if let Some(video) = maybe_video {
+                            let display_width = video.width.max(1.0);
+                            let display_height = video.height.max(1.0);
 
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4526,18 +4528,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.item(
-                                current_text_face_id,
-                                crate::display_item::DisplayItemKind::Video(
-                                    crate::display_item::DisplayVideoItem {
-                                        video_id: resolved.video_id.min(i32::MAX as u32) as i32,
-                                        width: display_width,
-                                        height: display_height,
-                                        loop_count: spec.loop_count,
-                                        autoplay: spec.autoplay,
-                                    },
-                                ),
-                            );
+                            let item = replacement_source
+                                .item(current_text_face_id, DisplayItemKind::Video(video));
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4709,24 +4701,32 @@ impl LayoutEngine {
                             charpos,
                             text_start_byte + byte_idx,
                         );
-                        let maybe_webkit = parse_display_webkit_layout(
-                            &prop_val,
-                            face_char_w * 40.0,
-                            face_h * 12.0,
-                        )
-                        .and_then(|spec| {
-                            evaluator
-                                .display_host
-                                .as_ref()
-                                .and_then(|host| {
-                                    host.request_webkit(spec.request.clone()).ok().flatten()
-                                })
-                                .map(|resolved| (spec, resolved))
-                        });
+                        let maybe_webkit = evaluator
+                            .display_host
+                            .as_ref()
+                            .and_then(|host| {
+                                resolve_display_media_property(
+                                    &prop_val,
+                                    DisplayMediaResolveParams {
+                                        display_host: host.as_ref(),
+                                        default_fg: current_resolved_face.fg,
+                                        default_bg: current_resolved_face.bg,
+                                        fallback_char_width: face_char_w,
+                                        fallback_row_height: face_h,
+                                    },
+                                )
+                            })
+                            .and_then(|kind| {
+                                if let DisplayItemKind::Xwidget(xwidget) = kind {
+                                    Some(xwidget)
+                                } else {
+                                    None
+                                }
+                            });
 
-                        if let Some((spec, resolved)) = maybe_webkit {
-                            let display_width = spec.width.max(1.0);
-                            let display_height = spec.height.max(1.0);
+                        if let Some(xwidget) = maybe_webkit {
+                            let display_width = xwidget.width.max(1.0);
+                            let display_height = xwidget.height.max(1.0);
 
                             if point_in_display_replacement {
                                 capture_cursor_info(
@@ -4761,16 +4761,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.item(
-                                current_text_face_id,
-                                crate::display_item::DisplayItemKind::Xwidget(
-                                    crate::display_item::DisplayXwidgetItem {
-                                        xwidget_id: resolved.webkit_id.min(i32::MAX as u32) as i32,
-                                        width: display_width,
-                                        height: display_height,
-                                    },
-                                ),
-                            );
+                            let item = replacement_source
+                                .item(current_text_face_id, DisplayItemKind::Xwidget(xwidget));
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
