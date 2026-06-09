@@ -987,6 +987,27 @@ impl GlyphMatrixBuilder {
         });
     }
 
+    pub(crate) fn push_current_window_xwidget(
+        &mut self,
+        role: GlyphRowRole,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        self.push_xwidget(
+            self.current_window_id as i64,
+            role,
+            Some(self.current_text_pixel_bounds),
+            xwidget_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
     /// Resolve the materialize-grid column the cursor at `cursor.charpos` on
     /// `cursor.row` actually occupies, or `None` when the cursor is not on the
     /// current window's matrix. This is the single authority for "which display

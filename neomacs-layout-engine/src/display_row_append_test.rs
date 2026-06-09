@@ -1,7 +1,7 @@
 use super::*;
 use crate::display_item::{
     DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    RenderFaceRef,
+    DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_row::DisplayRowGeometry;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvances};
@@ -1166,6 +1166,117 @@ fn append_display_item_to_text_row_and_emit_infers_kind_and_face_fallback() {
             .height,
         10
     );
+}
+
+#[test]
+fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("append-xwidget-item", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
+    builder.begin_window_with_text_bounds(
+        77,
+        1,
+        24,
+        Rect::new(0.0, 0.0, 200.0, 80.0),
+        text_bounds,
+        true,
+    );
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 4.0,
+            glyph_y: 6.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 160.0,
+            text_width: 160.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::FaceId(3),
+        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+            xwidget_id: 1234,
+            width: 96.0,
+            height: 54.0,
+        }),
+    );
+
+    let (progress, end) = append_display_item_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        item,
+        7,
+        frame,
+        DisplayRowPosition { x_px: 16.0, col: 2 },
+    )
+    .expect("append progress");
+
+    assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(progress.metrics.width_px, 96.0);
+    assert_eq!(
+        end,
+        DisplayRowPosition {
+            x_px: 112.0,
+            col: 14
+        }
+    );
+    builder
+        .with_current_row_mut(|row| {
+            let glyph = &row.glyphs[1][0];
+            assert_eq!(glyph.face_id, 3);
+            assert_eq!(glyph.pixel_width, 96.0);
+            assert_eq!(glyph.pixel_height, 54.0);
+            assert_eq!(glyph.pixel_ascent, 54.0);
+            assert!(matches!(
+                glyph.glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 12 }
+            ));
+        })
+        .expect("current row");
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(24, 1, 8.0, 16.0);
+    let xwidget = state.xwidgets.first().expect("xwidget side item");
+    assert_eq!(xwidget.window_id, 77);
+    assert_eq!(xwidget.row_role, GlyphRowRole::Text);
+    assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.x, 16.0);
+    assert_eq!(xwidget.y, 6.0);
+    assert_eq!(xwidget.width, 96.0);
+    assert_eq!(xwidget.height, 54.0);
 }
 
 #[test]
