@@ -309,6 +309,7 @@ impl DisplayRowAppendCursor {
         self.position
     }
 
+    #[cfg(test)]
     pub(crate) fn append_item_to_current_matrix_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
@@ -346,6 +347,7 @@ impl DisplayRowAppendCursor {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn append_display_item_to_current_matrix_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
@@ -466,6 +468,7 @@ impl<'layout, 'row> DisplayRowWriter<'layout, 'row, '_> {
 }
 
 impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
+    #[cfg(test)]
     pub(crate) fn new(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,

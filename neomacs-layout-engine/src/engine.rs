@@ -4884,6 +4884,8 @@ impl LayoutEngine {
                     &mut output_emitter,
                     evaluator,
                     source,
+                    face_resolver,
+                    &current_resolved_face,
                     current_text_face_id,
                     crate::display_item::DisplayItemKind::ControlChar { ch },
                     text_item_frame,
@@ -4938,6 +4940,8 @@ impl LayoutEngine {
                             &mut output_emitter,
                             evaluator,
                             source,
+                            face_resolver,
+                            &current_resolved_face,
                             current_text_face_id,
                             crate::display_item::DisplayItemKind::SourceMappedText(
                                 crate::display_item::DisplaySourceMappedText::new(mapped_text),
@@ -5007,6 +5011,8 @@ impl LayoutEngine {
                     &mut output_emitter,
                     evaluator,
                     source,
+                    face_resolver,
+                    &current_resolved_face,
                     current_text_face_id,
                     crate::display_item::DisplayItemKind::Glyphless(
                         crate::display_item::DisplayGlyphless { ch, method },
