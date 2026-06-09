@@ -59,68 +59,68 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     }
 }
 
-struct LayoutStringFaceResolver<'a> {
+struct LayoutDisplaySourceFaceResolver<'a> {
     face_resolver: &'a FaceResolver,
     base_face: &'a ResolvedFace,
-    string_face_cache: &'a mut HashMap<Value, u32>,
+    face_cache: &'a mut HashMap<Value, u32>,
     current_face_id: &'a mut u32,
-    pending_faces: &'a mut Vec<LayoutStringPendingFace>,
+    pending_faces: &'a mut Vec<PendingLayoutDisplayFace>,
 }
 
 #[derive(Clone, Debug)]
-struct LayoutStringPendingFace {
+struct PendingLayoutDisplayFace {
     face_id: u32,
     resolved: ResolvedFace,
 }
 
-fn apply_pending_string_faces(
+fn apply_pending_display_source_faces(
     builder: &mut GlyphMatrixBuilder,
-    pending_faces: &mut Vec<LayoutStringPendingFace>,
+    pending_faces: &mut Vec<PendingLayoutDisplayFace>,
 ) {
     for pending in pending_faces.drain(..) {
         insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
     }
 }
 
-fn next_layout_string_source_item(
+fn next_layout_display_source_item(
     builder: &mut GlyphMatrixBuilder,
     source: &mut impl DisplayItemSource,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
-    string_face_cache: &mut HashMap<Value, u32>,
+    face_cache: &mut HashMap<Value, u32>,
     current_face_id: &mut u32,
 ) -> Option<DisplayItem> {
     let mut pending_faces = Vec::new();
     let item = {
-        let mut resolver = LayoutStringFaceResolver {
+        let mut resolver = LayoutDisplaySourceFaceResolver {
             face_resolver,
             base_face,
-            string_face_cache,
+            face_cache,
             current_face_id,
             pending_faces: &mut pending_faces,
         };
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
         source.next_item(&mut context)
     };
-    apply_pending_string_faces(builder, &mut pending_faces);
+    apply_pending_display_source_faces(builder, &mut pending_faces);
     item
 }
 
-pub(crate) struct LayoutStringSourceWalker<S> {
+pub(crate) struct DisplayItemSourceWalker<S> {
     source: S,
-    string_face_cache: HashMap<Value, u32>,
+    face_cache: HashMap<Value, u32>,
 }
 
-impl<S> LayoutStringSourceWalker<S> {
+impl<S> DisplayItemSourceWalker<S> {
     pub(crate) fn new(source: S) -> Self {
         Self {
             source,
-            string_face_cache: HashMap::new(),
+            face_cache: HashMap::new(),
         }
     }
 }
 
-impl<S: DisplayItemSource> LayoutStringSourceWalker<S> {
+impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
     pub(crate) fn next_item(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
@@ -128,20 +128,20 @@ impl<S: DisplayItemSource> LayoutStringSourceWalker<S> {
         base_face: &ResolvedFace,
         current_face_id: &mut u32,
     ) -> Option<DisplayItem> {
-        next_layout_string_source_item(
+        next_layout_display_source_item(
             builder,
             &mut self.source,
             face_resolver,
             base_face,
-            &mut self.string_face_cache,
+            &mut self.face_cache,
             current_face_id,
         )
     }
 }
 
-impl DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
+impl DisplayItemFaceResolver for LayoutDisplaySourceFaceResolver<'_> {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
-        if let Some(face_id) = self.string_face_cache.get(&face_value) {
+        if let Some(face_id) = self.face_cache.get(&face_value) {
             return RenderFaceRef::FaceId(*face_id);
         }
         let Some(resolved) = self
@@ -153,9 +153,9 @@ impl DisplayItemFaceResolver for LayoutStringFaceResolver<'_> {
 
         let face_id = *self.current_face_id;
         *self.current_face_id += 1;
-        self.string_face_cache.insert(face_value, face_id);
+        self.face_cache.insert(face_value, face_id);
         self.pending_faces
-            .push(LayoutStringPendingFace { face_id, resolved });
+            .push(PendingLayoutDisplayFace { face_id, resolved });
         RenderFaceRef::FaceId(face_id)
     }
 }
@@ -180,8 +180,8 @@ pub(crate) fn append_lisp_string_to_text_row(
     ) else {
         return position;
     };
-    let mut policy = NaturalStringSourceAppendPolicy;
-    append_layout_string_source_to_text_row(
+    let mut policy = NaturalDisplaySourceAppendPolicy;
+    append_display_item_source_to_text_row(
         builder,
         output_emitter,
         evaluator,
@@ -306,9 +306,9 @@ pub(crate) trait DisplayRowSourceAppendPolicy {
     }
 }
 
-struct NaturalStringSourceAppendPolicy;
+struct NaturalDisplaySourceAppendPolicy;
 
-impl DisplayRowSourceAppendPolicy for NaturalStringSourceAppendPolicy {
+impl DisplayRowSourceAppendPolicy for NaturalDisplaySourceAppendPolicy {
     fn decision_for(&mut self, item: &DisplayItem) -> DisplayRowSourceAppendDecision {
         let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
             return DisplayRowSourceAppendDecision::Skip;
@@ -320,12 +320,12 @@ impl DisplayRowSourceAppendPolicy for NaturalStringSourceAppendPolicy {
     }
 }
 
-struct DisplayReplacementStringSourceAppendPolicy<'a, M> {
+struct DisplayReplacementSourceAppendPolicy<'a, M> {
     item_measurer: &'a mut M,
 }
 
 impl<M: DisplayRowItemMeasurer> DisplayRowSourceAppendPolicy
-    for DisplayReplacementStringSourceAppendPolicy<'_, M>
+    for DisplayReplacementSourceAppendPolicy<'_, M>
 {
     fn decision_for(&mut self, item: &DisplayItem) -> DisplayRowSourceAppendDecision {
         if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
@@ -351,7 +351,7 @@ impl<M: DisplayRowItemMeasurer> DisplayRowSourceAppendPolicy
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_layout_string_source_to_text_row<
+pub(crate) fn append_display_item_source_to_text_row<
     S: DisplayItemSource,
     P: DisplayRowSourceAppendPolicy,
 >(
@@ -367,7 +367,7 @@ pub(crate) fn append_layout_string_source_to_text_row<
     mut position: DisplayRowPosition,
     policy: &mut P,
 ) -> DisplayRowPosition {
-    let mut source = LayoutStringSourceWalker::new(source);
+    let mut source = DisplayItemSourceWalker::new(source);
     while let Some(mut item) = source.next_item(builder, face_resolver, base_face, current_face_id)
     {
         let (kind, on_clipped) = match policy.decision_for(&item) {
@@ -472,8 +472,8 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     position: DisplayRowPosition,
     item_measurer: &mut impl DisplayRowItemMeasurer,
 ) -> DisplayRowPosition {
-    let mut policy = DisplayReplacementStringSourceAppendPolicy { item_measurer };
-    append_layout_string_source_to_text_row(
+    let mut policy = DisplayReplacementSourceAppendPolicy { item_measurer };
+    append_display_item_source_to_text_row(
         builder,
         output_emitter,
         evaluator,

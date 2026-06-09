@@ -273,19 +273,19 @@ fn display_row_append_frame_from_parts_preserves_geometry_and_area() {
 }
 
 #[test]
-fn layout_string_face_resolver_records_pending_faces_without_builder() {
+fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     let _eval = Context::new();
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut string_face_cache = std::collections::HashMap::new();
+    let mut face_cache = std::collections::HashMap::new();
     let mut current_face_id = 20;
     let mut pending_faces = Vec::new();
-    let mut resolver = LayoutStringFaceResolver {
+    let mut resolver = LayoutDisplaySourceFaceResolver {
         face_resolver: &face_resolver,
         base_face,
-        string_face_cache: &mut string_face_cache,
+        face_cache: &mut face_cache,
         current_face_id: &mut current_face_id,
         pending_faces: &mut pending_faces,
     };
@@ -305,14 +305,14 @@ fn layout_string_face_resolver_records_pending_faces_without_builder() {
 }
 
 #[test]
-fn next_layout_string_source_item_installs_pending_faces() {
+fn next_layout_display_source_item_installs_pending_faces() {
     let _eval = Context::new();
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut current_face_id = 20;
-    let mut string_face_cache = std::collections::HashMap::new();
+    let mut face_cache = std::collections::HashMap::new();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -350,12 +350,12 @@ fn next_layout_string_source_item_installs_pending_faces() {
         80.0,
     );
 
-    let item = next_layout_string_source_item(
+    let item = next_layout_display_source_item(
         &mut builder,
         &mut source,
         &face_resolver,
         base_face,
-        &mut string_face_cache,
+        &mut face_cache,
         &mut current_face_id,
     )
     .expect("source item");
@@ -380,7 +380,7 @@ fn next_layout_string_source_item_installs_pending_faces() {
 }
 
 #[test]
-fn layout_string_source_walker_reuses_face_cache_across_items() {
+fn display_item_source_walker_reuses_face_cache_across_items() {
     let _eval = Context::new();
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
@@ -409,7 +409,7 @@ fn layout_string_source_walker_reuses_face_cache_across_items() {
     let source =
         crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
             .expect("string source");
-    let mut source = LayoutStringSourceWalker::new(source);
+    let mut source = DisplayItemSourceWalker::new(source);
 
     let first = source
         .next_item(
@@ -723,7 +723,7 @@ impl DisplayRowSourceAppendPolicy for TextUntilRowBreakPolicy {
 }
 
 #[test]
-fn append_layout_string_source_to_text_row_uses_policy_decisions() {
+fn append_display_item_source_to_text_row_uses_policy_decisions() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -732,7 +732,7 @@ fn append_layout_string_source_to_text_row_uses_policy_decisions() {
         .id();
     let frame_id =
         eval.frame_manager_mut()
-            .create_frame("append-layout-string-source", 320, 120, buf_id);
+            .create_frame("append-display-item-source", 320, 120, buf_id);
     let window_id = eval
         .frame_manager()
         .get(frame_id)
@@ -780,7 +780,7 @@ fn append_layout_string_source_to_text_row_uses_policy_decisions() {
     );
     let mut policy = TextUntilRowBreakPolicy;
 
-    let end = append_layout_string_source_to_text_row(
+    let end = append_display_item_source_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,

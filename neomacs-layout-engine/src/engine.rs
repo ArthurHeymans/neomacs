@@ -22,9 +22,9 @@ use crate::display_row::{
     insert_resolved_display_row_face, install_rendered_display_source_row,
 };
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendMeasurement, DisplayRowAppendMetrics,
-    DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowItemMeasurer,
-    LayoutStringSourceWalker, append_buffer_text_char_to_text_row,
+    DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
+    DisplayRowAppendMetrics, DisplayRowAppendPlacement, DisplayRowAppendSurface,
+    DisplayRowItemMeasurer, append_buffer_text_char_to_text_row,
     append_buffer_text_item_to_text_row_and_emit, append_display_replacement_item_to_text_row,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row, append_lisp_string_to_text_row,
@@ -1463,7 +1463,7 @@ fn render_overlay_string(
     ) else {
         return;
     };
-    let mut source = LayoutStringSourceWalker::new(source);
+    let mut source = DisplayItemSourceWalker::new(source);
 
     while *row < max_rows {
         let item = source.next_item(builder, face_resolver, overlay_base_face, current_face_id);
