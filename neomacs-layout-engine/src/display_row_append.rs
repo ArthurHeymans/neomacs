@@ -2,16 +2,15 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
+use crate::display_row::{
+    DisplayRowGeometry, DisplayRowSourceState, insert_resolved_display_row_face,
+};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
-use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, PendingDisplaySourceFace,
-    resolve_next_display_source_item,
-};
+use crate::display_source_resolver::{DisplaySourceResolveParams, PendingDisplaySourceFace};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{DisplayProgressSink, TextRowOutput, WindowOutputEmitter};
@@ -79,14 +78,14 @@ pub(crate) struct DisplayItemSourceStep {
 
 pub(crate) struct DisplayItemSourceWalker<S> {
     source: S,
-    resolve_state: DisplaySourceResolveState,
+    state: DisplayRowSourceState,
 }
 
 impl<S> DisplayItemSourceWalker<S> {
     pub(crate) fn new(source: S) -> Self {
         Self {
             source,
-            resolve_state: DisplaySourceResolveState::default(),
+            state: DisplayRowSourceState::default(),
         }
     }
 }
@@ -103,7 +102,7 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
         fallback_ascent: f32,
         fallback_row_height: f32,
     ) -> Option<DisplayItemSourceStep> {
-        let resolved = resolve_next_display_source_item(
+        let resolved = self.state.next_resolved_item(
             &mut self.source,
             DisplaySourceResolveParams {
                 face_resolver,
@@ -115,7 +114,6 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
                 fallback_ascent,
                 fallback_row_height,
             },
-            &mut self.resolve_state,
             current_face_id,
         );
         resolved.item.map(|item| DisplayItemSourceStep {

@@ -10,7 +10,8 @@ use crate::display_row_builder::{
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, resolve_next_display_source_item,
+    DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
+    resolve_next_display_source_item,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -406,11 +407,41 @@ pub(crate) struct DisplayRowSourceState {
 }
 
 impl DisplayRowSourceState {
+    pub(crate) fn next_resolved_item(
+        &mut self,
+        source: &mut impl DisplayItemSource,
+        params: DisplaySourceResolveParams<'_>,
+        next_face_id: &mut u32,
+    ) -> ResolvedDisplaySourceItem {
+        if self.is_finished() {
+            return ResolvedDisplaySourceItem {
+                item: None,
+                pending_faces: Vec::new(),
+            };
+        }
+        if let Some(item) = self.take_pending_item() {
+            return ResolvedDisplaySourceItem {
+                item: Some(item),
+                pending_faces: Vec::new(),
+            };
+        }
+        let resolved =
+            resolve_next_display_source_item(source, params, &mut self.resolve_state, next_face_id);
+        if resolved.item.is_none() {
+            self.mark_exhausted();
+        }
+        resolved
+    }
+
+    pub(crate) fn resolved_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+        self.resolve_state.resolved_face(face_id)
+    }
+
     fn take_pending_item(&mut self) -> Option<DisplayItem> {
         self.pending_item.take()
     }
 
-    fn remember_pending_item(&mut self, item: Option<DisplayItem>) {
+    pub(crate) fn remember_pending_item(&mut self, item: Option<DisplayItem>) {
         self.pending_item = item;
     }
 
@@ -418,7 +449,7 @@ impl DisplayRowSourceState {
         self.exhausted = true;
     }
 
-    fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.exhausted && self.pending_item.is_none()
     }
 }
@@ -951,27 +982,22 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
         let stop = loop {
-            let (item, pending_faces) = if let Some(item) = state.take_pending_item() {
-                (Some(item), Vec::new())
-            } else {
-                let resolved = resolve_next_display_source_item(
-                    source,
-                    DisplaySourceResolveParams {
-                        face_resolver,
-                        display_host,
-                        base_face,
-                        canonical_face: face_resolver.default_face(),
-                        base_face_id: row_face.face_id,
-                        fallback_char_width: char_width,
-                        fallback_ascent: geometry.ascent,
-                        fallback_row_height: geometry.height,
-                    },
-                    &mut state.resolve_state,
-                    next_face_id,
-                );
-                (resolved.item, resolved.pending_faces)
-            };
-            for pending in pending_faces {
+            let resolved = state.next_resolved_item(
+                source,
+                DisplaySourceResolveParams {
+                    face_resolver,
+                    display_host,
+                    base_face,
+                    canonical_face: face_resolver.default_face(),
+                    base_face_id: row_face.face_id,
+                    fallback_char_width: char_width,
+                    fallback_ascent: geometry.ascent,
+                    fallback_row_height: geometry.height,
+                },
+                next_face_id,
+            );
+            let item = resolved.item;
+            for pending in resolved.pending_faces {
                 let row_face = face_realizer.realize_face(
                     pending.face_id,
                     &pending.resolved,
@@ -983,13 +1009,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 row_faces.push(row_face);
             }
             let Some(item) = item else {
-                state.mark_exhausted();
                 break DisplayRowRenderStop::SourceExhausted;
             };
             if let RenderFaceRef::FaceId(face_id) = item.face {
                 if face_id != row_face.face_id
                     && !row_faces.iter().any(|face| face.face_id == face_id)
-                    && let Some(resolved) = state.resolve_state.resolved_face(face_id).cloned()
+                    && let Some(resolved) = state.resolved_face(face_id).cloned()
                 {
                     let realized = face_realizer.realize_face(
                         face_id,

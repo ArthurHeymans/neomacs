@@ -8,6 +8,7 @@ use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
     ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
 };
+use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 use std::sync::Mutex;
@@ -144,6 +145,71 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
     assert_eq!(rendered.row.role, GlyphRowRole::TabLine);
     assert_eq!(rendered.progress.end_col, 3);
+}
+
+#[test]
+fn display_row_source_state_reuses_face_cache_across_items() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
+    let value = Value::string_with_text_properties(
+        "aba",
+        vec![
+            StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("face"), face_value.clone()]),
+            },
+            StringTextPropertyRun {
+                start: 2,
+                end: 3,
+                plist: Value::list(vec![Value::symbol("face"), face_value]),
+            },
+        ],
+    );
+    let mut source =
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+            .expect("string source");
+    let mut state = DisplayRowSourceState::default();
+    let mut next_face_id = 20;
+    let (first, second, third) = {
+        let mut next_item = || {
+            state.next_resolved_item(
+                &mut source,
+                crate::display_source_resolver::DisplaySourceResolveParams {
+                    face_resolver: &face_resolver,
+                    display_host: None,
+                    base_face,
+                    canonical_face: face_resolver.default_face(),
+                    base_face_id: 0,
+                    fallback_char_width: 8.0,
+                    fallback_ascent: 12.0,
+                    fallback_row_height: 16.0,
+                },
+                &mut next_face_id,
+            )
+        };
+        (next_item(), next_item(), next_item())
+    };
+
+    assert_eq!(
+        first.item.expect("first source item").face,
+        RenderFaceRef::FaceId(20)
+    );
+    assert_eq!(first.pending_faces.len(), 1);
+    assert_eq!(
+        second.item.expect("second source item").face,
+        RenderFaceRef::FaceId(0)
+    );
+    assert!(second.pending_faces.is_empty());
+    assert_eq!(
+        third.item.expect("third source item").face,
+        RenderFaceRef::FaceId(20)
+    );
+    assert!(third.pending_faces.is_empty());
+    assert_eq!(next_face_id, 21);
 }
 
 #[test]
