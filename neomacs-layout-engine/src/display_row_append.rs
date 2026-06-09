@@ -371,17 +371,14 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
     );
-    let mut append_spec = frame
-        .clone()
-        .at(position, face_id)
-        .append_spec(DisplayRowAppendKind::SourceText);
+    let mut append_spec = LiveRowAppendSpec::source_text(&frame, position, face_id);
     if ch == '\t' {
         append_spec.layout.char_width_px = frame.face_space_width;
-        append_spec.max_x = f32::INFINITY;
+        append_spec.max_x_px = f32::INFINITY;
         append_spec.output.height = frame.default_row_height;
     }
     let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
-    append_measured_display_row_spec_item_and_emit(
+    append_measured_live_row_item_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -819,6 +816,7 @@ impl DisplayRowAppendFrame {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
         DisplayRowAppendContext {
             row: self.row,
@@ -826,57 +824,45 @@ impl DisplayRowAppendFrame {
             x: position.x_px,
             col: position.col,
             geometry: self.geometry,
-            #[cfg(test)]
             default_row_height: self.default_row_height,
             content_x: self.content_x,
-            #[cfg(test)]
             text_width: self.text_width,
-            #[cfg(test)]
             line_number_width: self.line_number_width,
-            #[cfg(test)]
             face_space_width: self.face_space_width,
             face_id,
         }
     }
 }
 
+#[cfg(test)]
 pub(crate) struct DisplayRowAppendContext {
     pub(crate) row: usize,
     pub(crate) glyph_y: f32,
     pub(crate) x: f32,
     pub(crate) col: usize,
     pub(crate) geometry: DisplayRowGeometry,
-    #[cfg(test)]
     pub(crate) default_row_height: f32,
     pub(crate) content_x: f32,
-    #[cfg(test)]
     pub(crate) text_width: f32,
-    #[cfg(test)]
     pub(crate) line_number_width: f32,
-    #[cfg(test)]
     pub(crate) face_space_width: f32,
     pub(crate) face_id: u32,
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendKind {
     SourceText,
-    #[cfg(test)]
     Tab,
-    #[cfg(test)]
     ControlChar,
-    #[cfg(test)]
     SourceMappedText,
-    #[cfg(test)]
     Glyphless,
-    #[cfg(test)]
     DisplayReplacement,
-    #[cfg(test)]
     DisplayReplacementString,
 }
 
+#[cfg(test)]
 impl DisplayRowAppendKind {
-    #[cfg(test)]
     pub(crate) fn from_display_item_kind(kind: &DisplayItemKind) -> Option<Self> {
         match kind {
             DisplayItemKind::TextRun(_) => Some(Self::SourceText),
@@ -894,6 +880,40 @@ impl DisplayRowAppendKind {
     }
 }
 
+pub(crate) struct LiveRowAppendSpec {
+    pub(crate) layout: DisplayRowLayout,
+    pub(crate) position: DisplayRowPosition,
+    pub(crate) max_x_px: f32,
+    pub(crate) output: DisplayRowAppendOutput,
+}
+
+impl LiveRowAppendSpec {
+    fn source_text(
+        frame: &DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        face_id: u32,
+    ) -> Self {
+        Self {
+            layout: frame.geometry.to_layout(
+                GlyphRowRole::Text,
+                frame.geometry.char_width,
+                frame.geometry.ascent,
+                RenderFaceRef::FaceId(face_id),
+                HashMap::new(),
+            ),
+            position,
+            max_x_px: frame.content_x + frame.geometry.width,
+            output: DisplayRowAppendOutput {
+                row: frame.row,
+                row_y: frame.geometry.y,
+                glyph_y: frame.glyph_y,
+                height: frame.geometry.height,
+            },
+        }
+    }
+}
+
+#[cfg(test)]
 pub(crate) struct DisplayRowAppendSpec {
     pub(crate) layout: DisplayRowLayout,
     pub(crate) position: DisplayRowPosition,
@@ -901,53 +921,36 @@ pub(crate) struct DisplayRowAppendSpec {
     pub(crate) output: DisplayRowAppendOutput,
 }
 
+#[cfg(test)]
 impl DisplayRowAppendContext {
     pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
         let char_width = match kind {
-            #[cfg(test)]
             DisplayRowAppendKind::Tab => self.face_space_width,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacementString => self.face_space_width,
             DisplayRowAppendKind::SourceText => self.geometry.char_width,
-            #[cfg(test)]
             DisplayRowAppendKind::ControlChar => self.geometry.char_width,
-            #[cfg(test)]
             DisplayRowAppendKind::SourceMappedText => self.geometry.char_width,
-            #[cfg(test)]
             DisplayRowAppendKind::Glyphless => self.geometry.char_width,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacement => self.geometry.char_width,
         };
         let max_x = match kind {
-            #[cfg(test)]
             DisplayRowAppendKind::Tab => f32::INFINITY,
-            #[cfg(test)]
             DisplayRowAppendKind::ControlChar => {
                 self.content_x + (self.text_width - self.line_number_width)
             }
             DisplayRowAppendKind::SourceText => self.content_x + self.geometry.width,
-            #[cfg(test)]
             DisplayRowAppendKind::SourceMappedText => self.content_x + self.geometry.width,
-            #[cfg(test)]
             DisplayRowAppendKind::Glyphless => self.content_x + self.geometry.width,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacement => self.content_x + self.geometry.width,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacementString => self.content_x + self.geometry.width,
         };
         let output_height = match kind {
             DisplayRowAppendKind::SourceText => self.geometry.height,
-            #[cfg(test)]
             DisplayRowAppendKind::Glyphless => self.geometry.height,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacement => self.geometry.height,
-            #[cfg(test)]
             DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
-            #[cfg(test)]
             DisplayRowAppendKind::Tab => self.default_row_height,
-            #[cfg(test)]
             DisplayRowAppendKind::ControlChar => self.default_row_height,
-            #[cfg(test)]
             DisplayRowAppendKind::SourceMappedText => self.default_row_height,
         };
 
@@ -1119,11 +1122,11 @@ pub(crate) fn append_display_row_spec_item_and_emit(
     Some((progress, position))
 }
 
-pub(crate) fn append_measured_display_row_spec_item_and_emit(
+pub(crate) fn append_measured_live_row_item_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
-    spec: DisplayRowAppendSpec,
+    spec: LiveRowAppendSpec,
     item: DisplayItem,
     glyph_measurer: &mut dyn DisplayGlyphMeasurer,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -1133,7 +1136,7 @@ pub(crate) fn append_measured_display_row_spec_item_and_emit(
         evaluator,
         &spec.layout,
         spec.position,
-        spec.max_x,
+        spec.max_x_px,
         item,
         glyph_measurer,
         spec.output,
