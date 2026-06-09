@@ -393,7 +393,6 @@ pub(crate) struct DisplayRowOutputProgress {
 pub(crate) struct RenderedDisplayRow {
     pub(crate) row: GlyphRow,
     pub(crate) progress: DisplayRowOutputProgress,
-    #[allow(dead_code)]
     pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
     pub(crate) faces: Vec<Face>,
     pub(crate) media: Vec<RenderedDisplayRowMedia>,
@@ -618,7 +617,8 @@ pub(crate) fn install_rendered_display_row(
         builder.insert_face(face.id, face.clone());
     }
     builder.begin_row(matrix_row, rendered.row.role);
-    builder.install_prebuilt_current_row(&rendered.row);
+    let row = rendered_row_with_source_bounds(rendered);
+    builder.install_prebuilt_current_row(&row);
     builder.end_prebuilt_row();
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
@@ -639,6 +639,7 @@ pub(crate) fn install_rendered_frame_chrome_row(
         media.install_frame_chrome(builder, rendered.row.role, row_index, pixel_bounds);
     }
     let mut row = rendered.row.clone();
+    apply_source_slot_bounds_to_row(&mut row, &rendered.source_slots);
     row.pixel_y = pixel_bounds.y;
     frame_chrome_rows.push(FrameChromeRow {
         row_index,
@@ -741,6 +742,34 @@ impl RenderedDisplayRowMedia {
                 ),
         }
     }
+}
+
+fn rendered_row_with_source_bounds(rendered: &RenderedDisplayRow) -> GlyphRow {
+    let mut row = rendered.row.clone();
+    apply_source_slot_bounds_to_row(&mut row, &rendered.source_slots);
+    row
+}
+
+fn apply_source_slot_bounds_to_row(row: &mut GlyphRow, slots: &[DisplayRowGlyphSlot]) {
+    let Some((start, end)) = buffer_source_slot_bounds(slots) else {
+        return;
+    };
+    row.start_charpos = start;
+    row.end_charpos = end;
+}
+
+fn buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, usize)> {
+    slots.iter().fold(None::<(usize, usize)>, |bounds, slot| {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+            return bounds;
+        };
+        let start = char_pos.get();
+        let end = start.saturating_add(1);
+        Some(match bounds {
+            Some((old_start, old_end)) => (old_start.min(start), old_end.max(end)),
+            None => (start, end),
+        })
+    })
 }
 
 fn display_row_progress(

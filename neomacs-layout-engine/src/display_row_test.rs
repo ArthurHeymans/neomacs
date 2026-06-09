@@ -1612,6 +1612,58 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
 }
 
 #[test]
+fn install_rendered_display_row_derives_buffer_bounds_from_source_slots() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    let rendered = RenderedDisplayRow {
+        row,
+        progress: DisplayRowOutputProgress {
+            end_x: 24.0,
+            end_col: 3,
+            y: 0.0,
+            height: 16.0,
+        },
+        source_slots: vec![
+            crate::display_row_builder::DisplayRowGlyphSlot {
+                source: DisplaySourcePosition::buffer(
+                    neovm_core::buffer::BufferId(7),
+                    CharPos0::new(5),
+                    EmacsBytePos::new(18),
+                ),
+                x_px: 16.0,
+                col: 2,
+                width_px: 8.0,
+                width_cols: 1,
+            },
+            crate::display_row_builder::DisplayRowGlyphSlot {
+                source: DisplaySourcePosition::buffer(
+                    neovm_core::buffer::BufferId(7),
+                    CharPos0::new(3),
+                    EmacsBytePos::new(10),
+                ),
+                x_px: 0.0,
+                col: 0,
+                width_px: 8.0,
+                width_cols: 1,
+            },
+        ],
+        faces: Vec::new(),
+        media: Vec::new(),
+    };
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    install_rendered_display_row(&mut builder, &rendered, 0);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.start_charpos, 3);
+    assert_eq!(row.end_charpos, 6);
+}
+
+#[test]
 fn install_rendered_display_row_installs_media_fragments_in_current_window() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.enabled = true;
