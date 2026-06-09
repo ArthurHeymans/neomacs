@@ -472,7 +472,7 @@ fn render_tab_line_with_media_host(
     rendered_text: Value,
     default_fg: u32,
     default_bg: u32,
-) -> (RenderedDisplaySourceRow, RecordingDisplayRowMediaHost) {
+) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
     let host = RecordingDisplayRowMediaHost::default();
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
@@ -1232,7 +1232,7 @@ fn install_display_source_row_preserves_prebuilt_bidi_metadata() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    install_rendered_display_source_row(&mut builder, &rendered, 0);
+    install_rendered_display_row(&mut builder, &rendered, 0);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
@@ -1247,7 +1247,7 @@ fn install_display_source_row_installs_media_fragments_in_current_window() {
     row.enabled = true;
     row.height_px = 16.0;
     row.ascent_px = 12.0;
-    let rendered = RenderedDisplaySourceRow {
+    let rendered = RenderedDisplayRow {
         row,
         progress: DisplayRowOutputProgress {
             end_x: 0.0,
@@ -1276,7 +1276,7 @@ fn install_display_source_row_installs_media_fragments_in_current_window() {
         true,
     );
 
-    install_rendered_display_source_row(&mut builder, &rendered, 0);
+    install_rendered_display_row(&mut builder, &rendered, 0);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);

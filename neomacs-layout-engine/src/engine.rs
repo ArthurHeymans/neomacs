@@ -22,8 +22,8 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_item::DisplayItemKind;
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplaySourceRow,
-    insert_resolved_display_row_face, install_rendered_display_source_row,
+    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowSpec, RenderedDisplayRow,
+    insert_resolved_display_row_face, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,
@@ -3263,7 +3263,7 @@ impl LayoutEngine {
                 &mut current_face_id,
             );
             for (row_index, rendered) in rows.iter().enumerate() {
-                install_rendered_display_source_row(&mut self.matrix_builder, rendered, row_index);
+                install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
             }
             self.matrix_builder.end_window();
             return;
@@ -3306,7 +3306,7 @@ impl LayoutEngine {
                     &mut current_face_id,
                 )
                 .expect("empty Lisp string should render an inactive minibuffer row");
-            install_rendered_display_source_row(&mut self.matrix_builder, &rendered, 0);
+            install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
             self.matrix_builder.end_window();
             return;
         }
@@ -6914,7 +6914,7 @@ impl LayoutEngine {
         truncate_lines: bool,
         reserve_right_special_col: bool,
         next_face_id: &mut u32,
-    ) -> Vec<RenderedDisplaySourceRow> {
+    ) -> Vec<RenderedDisplayRow> {
         use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
 
         // Reuse the shared face realization so GUI and TTY echo text use the
@@ -7048,7 +7048,7 @@ impl LayoutEngine {
             row.enabled = true;
             row.height_px = row_height.max(1.0);
             row.ascent_px = ascent.max(0.0).min(row.height_px);
-            rows.push(RenderedDisplaySourceRow {
+            rows.push(RenderedDisplayRow {
                 row,
                 progress: DisplayRowOutputProgress {
                     end_x: 0.0,

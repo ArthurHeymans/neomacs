@@ -481,7 +481,7 @@ pub(crate) struct DisplayRowOutputProgress {
     pub height: f32,
 }
 
-pub(crate) struct RenderedDisplaySourceRow {
+pub(crate) struct RenderedDisplayRow {
     pub(crate) row: GlyphRow,
     pub(crate) progress: DisplayRowOutputProgress,
     pub(crate) faces: Vec<Face>,
@@ -579,9 +579,9 @@ impl<'a> DisplayRowSpec<'a> {
     }
 }
 
-pub(crate) fn install_rendered_display_source_row(
+pub(crate) fn install_rendered_display_row(
     builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplaySourceRow,
+    rendered: &RenderedDisplayRow,
     matrix_row: usize,
 ) {
     for face in &rendered.faces {
@@ -640,7 +640,7 @@ impl RenderedDisplayRowMedia {
     }
 }
 
-fn display_source_row_progress(
+fn display_row_progress(
     row: &GlyphRow,
     width: f32,
     char_width: f32,
@@ -719,7 +719,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         rendered: Value,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         self.render_display_source_row_with_display_host(
             spec,
             rendered,
@@ -736,7 +736,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         let base_face_id = spec.base_face_id;
         let mut source =
             LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
@@ -756,7 +756,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         source: &mut impl DisplayItemSource,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         self.render_display_item_source_row_with_display_host(
             spec,
             source,
@@ -773,7 +773,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         let DisplayRowSpec {
             geometry,
             base_face_id,
@@ -876,7 +876,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             }
         }
         GlyphMatrixBuilder::normalize_external_row(&mut row);
-        let progress = display_source_row_progress(
+        let progress = display_row_progress(
             &row,
             geometry.width,
             char_width,
@@ -887,7 +887,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .into_iter()
             .map(|face| face.render_face())
             .collect();
-        Some(RenderedDisplaySourceRow {
+        Some(RenderedDisplayRow {
             row,
             progress,
             faces,
@@ -904,7 +904,7 @@ impl LayoutEngine {
         rendered: Value,
         face_resolver: &FaceResolver,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         self.render_display_source_row_with_display_host(
             spec,
             rendered,
@@ -921,7 +921,7 @@ impl LayoutEngine {
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
         next_face_id: &mut u32,
-    ) -> Option<RenderedDisplaySourceRow> {
+    ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics).render_display_source_row_with_display_host(
             spec,
             rendered,
