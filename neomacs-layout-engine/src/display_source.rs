@@ -372,25 +372,15 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                let classification = classify_display_property(display_prop);
-                match classification.replacement {
-                    Some(DisplayReplacementProperty::String) => {
-                        self.replacement_strings.push(display_prop, face);
+                match display_property_source_action(context, display_prop, face) {
+                    DisplayPropertySourceAction::PushReplacement { value, base_face } => {
+                        self.replacement_strings.push(value, base_face);
                         continue;
                     }
-                    Some(replacement) => {
-                        if let Some(kind) = replacement
-                            .display_item_kind()
-                            .or_else(|| context.resolve_display_property(display_prop, face))
-                        {
-                            return Some(DisplayItem::new(span, face, kind));
-                        }
+                    DisplayPropertySourceAction::Emit(kind) => {
+                        return Some(DisplayItem::new(span, face, kind));
                     }
-                    None => {
-                        if let Some(kind) = context.resolve_display_property(display_prop, face) {
-                            return Some(DisplayItem::new(span, face, kind));
-                        }
-                    }
+                    DisplayPropertySourceAction::Ignore => {}
                 }
             }
 
@@ -535,27 +525,14 @@ impl LispStringSourceFrame {
 
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
-            let classification = classify_display_property(display_prop);
-            match classification.replacement {
-                Some(DisplayReplacementProperty::String) => {
-                    return LispStringAction::PushReplacement {
-                        value: display_prop,
-                        base_face: face,
-                    };
+            match display_property_source_action(context, display_prop, face) {
+                DisplayPropertySourceAction::PushReplacement { value, base_face } => {
+                    return LispStringAction::PushReplacement { value, base_face };
                 }
-                Some(replacement) => {
-                    if let Some(kind) = replacement
-                        .display_item_kind()
-                        .or_else(|| context.resolve_display_property(display_prop, face))
-                    {
-                        return LispStringAction::Emit(DisplayItem::new(span, face, kind));
-                    }
+                DisplayPropertySourceAction::Emit(kind) => {
+                    return LispStringAction::Emit(DisplayItem::new(span, face, kind));
                 }
-                None => {
-                    if let Some(kind) = context.resolve_display_property(display_prop, face) {
-                        return LispStringAction::Emit(DisplayItem::new(span, face, kind));
-                    }
-                }
+                DisplayPropertySourceAction::Ignore => {}
             }
         }
 
@@ -661,6 +638,39 @@ impl LispStringSourceFrame {
             .or_else(|| props.get_property_at_char_pos(char_pos, Value::symbol("font-lock-face")));
         face.map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum DisplayPropertySourceAction {
+    PushReplacement {
+        value: Value,
+        base_face: RenderFaceRef,
+    },
+    Emit(DisplayItemKind),
+    Ignore,
+}
+
+fn display_property_source_action(
+    context: &mut DisplaySourceContext<'_>,
+    display_prop: Value,
+    face: RenderFaceRef,
+) -> DisplayPropertySourceAction {
+    let classification = classify_display_property(display_prop);
+    match classification.replacement {
+        Some(DisplayReplacementProperty::String) => DisplayPropertySourceAction::PushReplacement {
+            value: display_prop,
+            base_face: face,
+        },
+        Some(replacement) => replacement
+            .display_item_kind()
+            .or_else(|| context.resolve_display_property(display_prop, face))
+            .map(DisplayPropertySourceAction::Emit)
+            .unwrap_or(DisplayPropertySourceAction::Ignore),
+        None => context
+            .resolve_display_property(display_prop, face)
+            .map(DisplayPropertySourceAction::Emit)
+            .unwrap_or(DisplayPropertySourceAction::Ignore),
     }
 }
 

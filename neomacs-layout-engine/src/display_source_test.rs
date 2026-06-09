@@ -190,6 +190,54 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
 }
 
 #[test]
+fn display_property_source_action_classifies_strings_typed_items_and_resolver_fallback() {
+    let _eval = Context::new();
+    let base_face = RenderFaceRef::FaceId(7);
+    let mut resolver = ResolvedDisplayPropertyResolver { seen_face: None };
+
+    {
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+        match display_property_source_action(&mut context, Value::string("displayed"), base_face) {
+            DisplayPropertySourceAction::PushReplacement { value, base_face } => {
+                assert_eq!(
+                    value.as_runtime_string_owned().as_deref(),
+                    Some("displayed")
+                );
+                assert_eq!(base_face, RenderFaceRef::FaceId(7));
+            }
+            action => panic!("expected replacement string action, got {action:?}"),
+        }
+
+        let space_spec = Value::list(vec![
+            Value::symbol("space"),
+            Value::keyword(":width"),
+            Value::fixnum(2),
+        ]);
+        match display_property_source_action(&mut context, space_spec, base_face) {
+            DisplayPropertySourceAction::Emit(DisplayItemKind::Stretch(DisplayStretch {
+                width: DisplayStretchWidth::Length(DisplayLength::Em(2.0)),
+                height: None,
+                ascent: None,
+            })) => {}
+            action => panic!("expected typed space action, got {action:?}"),
+        }
+
+        let image_spec = Value::list(vec![Value::symbol("image")]);
+        match display_property_source_action(&mut context, image_spec, base_face) {
+            DisplayPropertySourceAction::Emit(DisplayItemKind::Image(DisplayImageItem {
+                image_id: 42,
+                width: 64.0,
+                height: 32.0,
+            })) => {}
+            action => panic!("expected resolved image action, got {action:?}"),
+        }
+    }
+
+    assert_eq!(resolver.seen_face, Some(base_face));
+}
+
+#[test]
 fn lisp_string_source_cursor_resolves_face_property() {
     let _eval = Context::new();
     let value = Value::string_with_text_properties(
