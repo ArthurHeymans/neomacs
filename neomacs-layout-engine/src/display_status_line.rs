@@ -19,7 +19,9 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
-use crate::display_row::{DisplayRowGeometry, DisplayRowSpec, install_rendered_display_source_row};
+use crate::display_row::{
+    DisplayRowSpec, DisplaySourceRowSpecInput, install_rendered_display_source_row,
+};
 #[cfg(test)]
 pub(crate) use crate::display_row::{
     OverlayFaceRun, apply_overlay_face_run, parse_overlay_face_runs,
@@ -27,9 +29,7 @@ pub(crate) use crate::display_row::{
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::{Context, Value};
-use std::collections::HashMap;
 
 impl LayoutEngine {
     pub(crate) fn realize_display_row_face(
@@ -96,25 +96,6 @@ pub(crate) struct WindowChromeDisplayRowRequest<'a> {
 impl<'a> WindowChromeDisplayRowRequest<'a> {
     pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
         self.row_spec_input.display_row_spec(next_face_id)
-    }
-}
-
-pub(crate) struct DisplaySourceRowSpecInput<'a> {
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) base_face: &'a ResolvedFace,
-    pub(crate) role: GlyphRowRole,
-    pub(crate) symbol_values: HashMap<String, Value>,
-}
-
-impl<'a> DisplaySourceRowSpecInput<'a> {
-    pub(crate) fn display_row_spec(&self, next_face_id: &mut u32) -> DisplayRowSpec<'a> {
-        DisplayRowSpec::from_base_face(
-            self.geometry.clone(),
-            next_face_id,
-            self.base_face,
-            self.role,
-            self.symbol_values.clone(),
-        )
     }
 }
 

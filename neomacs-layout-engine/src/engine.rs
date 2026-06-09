@@ -18,8 +18,9 @@ use super::unicode::*;
 use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmitter};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowOutputProgress, RenderedDisplaySourceRow,
-    insert_resolved_display_row_face, install_rendered_display_source_row,
+    DisplayRowGeometry, DisplayRowOutputProgress, DisplaySourceRowSpecInput,
+    RenderedDisplaySourceRow, insert_resolved_display_row_face,
+    install_rendered_display_source_row,
 };
 use crate::display_row_append::{
     DisplayItemSourceWalker, DisplayRowAppendArea, DisplayRowAppendMeasurement,

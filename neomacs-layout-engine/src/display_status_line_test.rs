@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_row::DisplayRowGeometry;
+use crate::display_row::{DisplayRowGeometry, DisplaySourceRowSpecInput};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::neovm_bridge::FaceResolver;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
