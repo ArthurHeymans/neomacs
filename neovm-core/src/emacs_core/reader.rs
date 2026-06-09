@@ -855,8 +855,24 @@ pub(crate) fn builtin_read_from_minibuffer(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_read_from_minibuffer_in_runtime(eval, &args)?;
+    if let Some(result) = builtin_read_from_minibuffer_in_runtime(eval, &args)? {
+        return Ok(result);
+    }
     finish_read_from_minibuffer_in_eval(eval, &args)
+}
+
+fn read_from_stdin_noninteractive(prompt: &str) -> EvalResult {
+    print!("{prompt}");
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    match std::io::stdin().read_line(&mut line) {
+        Ok(0) => Err(stdin_end_of_file_error()),
+        Ok(_) => {
+            let input = line.trim_end_matches(['\n', '\r']);
+            Ok(Value::string(input))
+        }
+        Err(_) => Err(stdin_end_of_file_error()),
+    }
 }
 
 pub(crate) fn finish_read_from_minibuffer_in_eval(
@@ -925,7 +941,7 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
 pub(crate) fn builtin_read_from_minibuffer_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
-) -> Result<(), Flow> {
+) -> Result<Option<Value>, Flow> {
     expect_min_args("read-from-minibuffer", args, 1)?;
     expect_max_args("read-from-minibuffer", args, 7)?;
     let prompt = expect_string(&args[0])?;
@@ -934,11 +950,9 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
     }
 
     if runtime.has_input_receiver() {
-        Ok(())
+        Ok(None)
     } else {
-        print!("{prompt}");
-        let _ = std::io::stdout().flush();
-        Err(stdin_end_of_file_error())
+        read_from_stdin_noninteractive(&prompt).map(Some)
     }
 }
 
@@ -1196,7 +1210,9 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
 ///
 /// Read a string from the minibuffer.  Delegates to `read-from-minibuffer`.
 pub(crate) fn builtin_read_string(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_read_string_in_runtime(eval, &args)?;
+    if let Some(result) = builtin_read_string_in_runtime(eval, &args)? {
+        return Ok(result);
+    }
     finish_read_string_in_eval(eval, &args)
 }
 
@@ -1212,7 +1228,7 @@ pub(crate) fn finish_read_string_in_eval(
 pub(crate) fn builtin_read_string_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
-) -> Result<(), Flow> {
+) -> Result<Option<Value>, Flow> {
     expect_min_args("read-string", args, 1)?;
     expect_max_args("read-string", args, 5)?;
     let prompt = args[0];
@@ -1220,20 +1236,12 @@ pub(crate) fn builtin_read_string_in_runtime(
         expect_initial_input_stringish(initial)?;
     }
 
-    let initial = args.get(1).copied().unwrap_or(Value::NIL);
-    let history = args.get(2).copied().unwrap_or(Value::NIL);
-    let default = args.get(3).copied().unwrap_or(Value::NIL);
-    let inherit = args.get(4).copied().unwrap_or(Value::NIL);
-    let minibuffer_args = [
-        prompt,
-        initial,
-        Value::NIL,
-        Value::NIL,
-        history,
-        default,
-        inherit,
-    ];
-    builtin_read_from_minibuffer_in_runtime(runtime, &minibuffer_args)
+    if runtime.has_input_receiver() {
+        return Ok(None);
+    }
+
+    let prompt_str = expect_string(&prompt)?;
+    read_from_stdin_noninteractive(&prompt_str).map(Some)
 }
 
 pub(crate) fn finish_read_string_with_minibuffer(
@@ -1513,7 +1521,9 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     args: &[Value],
     mut run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
 ) -> EvalResult {
-    builtin_read_from_minibuffer_in_runtime(shared, args)?;
+    if let Some(result) = builtin_read_from_minibuffer_in_runtime(shared, args)? {
+        return Ok(result);
+    }
 
     // Check inhibit-interaction — GNU Emacs signals an error when any
     // interactive read is attempted while this variable is non-nil.
@@ -2353,55 +2363,8 @@ pub(crate) fn builtin_waiting_for_user_input_p_ctx(
 }
 
 // ---------------------------------------------------------------------------
-// 15. y-or-n-p
+// 15. yes-or-no-p
 // ---------------------------------------------------------------------------
-
-/// `(y-or-n-p PROMPT)`
-///
-/// Ask user a yes-or-no question. Returns t for 'y', nil for 'n'.
-/// In interactive mode, reads a single character.
-/// In batch mode, signals end-of-file.
-pub(crate) fn builtin_y_or_n_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("y-or-n-p", &args, 1)?;
-    match args[0].kind() {
-        ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Nil => {}
-        other => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("sequencep"), args[0]],
-            ));
-        }
-    }
-
-    // Interactive mode: read single character
-    if eval.input_rx.is_some() {
-        // Display prompt in echo area (message)
-        if args[0].is_string() {
-            let prompt_str = reader_string_text(&args[0]).expect("checked string");
-            let msg = format!("{} (y or n) ", prompt_str);
-            eval.assign("minibuffer-message", Value::string(&msg));
-        }
-        loop {
-            let event = eval.read_char()?;
-            if let Some(n) = event_to_int(&event) {
-                match n as u32 {
-                    y if y == 'y' as u32 || y == 'Y' as u32 => return Ok(Value::T),
-                    n if n == 'n' as u32 || n == 'N' as u32 => return Ok(Value::NIL),
-                    _ => continue, // Invalid response, try again
-                }
-            }
-            // Non-character event, ignore
-        }
-    }
-
-    Err(signal(
-        "end-of-file",
-        vec![Value::string("Error reading from stdin")],
-    ))
-}
-
-// ---------------------------------------------------------------------------
-// 16. yes-or-no-p
 // ---------------------------------------------------------------------------
 
 /// `(yes-or-no-p PROMPT)`
@@ -2415,7 +2378,7 @@ pub(crate) fn builtin_yes_or_no_p(eval: &mut super::eval::Context, args: Vec<Val
         .symbol_value("use-short-answers")
         .is_some_and(|v| v.is_truthy())
     {
-        return builtin_y_or_n_p(eval, args);
+        return eval.apply(Value::symbol("y-or-n-p"), args);
     }
     if let Some(result) = builtin_yes_or_no_p_in_runtime(eval, &args)? {
         return Ok(result);
