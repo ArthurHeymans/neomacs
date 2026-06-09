@@ -620,8 +620,28 @@ fn append_buffer_text_char_to_text_row_appends_source_char() {
         .expect("current row");
 }
 
+struct TextUntilRowBreakPolicy;
+
+impl DisplayRowSourceAppendPolicy for TextUntilRowBreakPolicy {
+    fn decision_for(
+        &mut self,
+        item: &crate::display_item::DisplayItem,
+    ) -> DisplayRowSourceAppendDecision {
+        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
+            return DisplayRowSourceAppendDecision::Stop;
+        }
+        let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
+            return DisplayRowSourceAppendDecision::Skip;
+        };
+        DisplayRowSourceAppendDecision::Append {
+            kind,
+            on_clipped: DisplayRowAppendClipBehavior::Stop,
+        }
+    }
+}
+
 #[test]
-fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_fallback() {
+fn append_layout_string_source_to_text_row_uses_policy_decisions() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -630,7 +650,7 @@ fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_
         .id();
     let frame_id =
         eval.frame_manager_mut()
-            .create_frame("append-replacement-string", 320, 120, buf_id);
+            .create_frame("append-layout-string-source", 320, 120, buf_id);
     let window_id = eval
         .frame_manager()
         .get(frame_id)
@@ -641,9 +661,20 @@ fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
 
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut current_face_id = 20;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
+    let source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        Value::string("a\nb"),
+        RenderFaceRef::FaceId(7),
+    )
+    .expect("string source");
     let frame = DisplayRowAppendFrame::from_parts(
         DisplayRowAppendPlacement {
             row: 0,
@@ -665,35 +696,31 @@ fn append_display_replacement_string_item_to_text_row_uses_measurement_and_face_
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::Inherit,
-        crate::display_item::DisplayItemKind::SourceMappedText(
-            crate::display_item::DisplaySourceMappedText::new("x"),
-        ),
-    );
-    let mut measurer = FixedGlyphAdvances::new();
-    measurer.insert('x', 7, 11.0);
+    let mut policy = TextUntilRowBreakPolicy;
 
-    let (_progress, end) = append_display_replacement_string_item_to_text_row(
+    let end = append_layout_string_source_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
-        item,
+        source,
+        &face_resolver,
+        base_face,
         7,
+        &mut current_face_id,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        DisplayRowAppendMeasurement::Measured(&mut measurer),
-    )
-    .expect("append progress");
+        &mut policy,
+    );
 
-    assert_eq!(end, DisplayRowPosition { x_px: 11.0, col: 1 });
+    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
-            assert_eq!(text[0].face_id, 7);
-            assert_eq!(text[0].pixel_width, 11.0);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
+            ));
         })
         .expect("current row");
 }
