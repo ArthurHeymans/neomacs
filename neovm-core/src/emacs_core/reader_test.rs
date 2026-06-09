@@ -803,6 +803,7 @@ fn shared_read_from_minibuffer_runtime_runs_setup_and_exit_hooks_around_edit() {
         &mut ev.active_minibuffer_window,
         ev.command_loop.recursive_depth,
         &args,
+        || Ok(Value::NIL),
         move || {
             order_in_setup.borrow_mut().push("setup");
             Ok(Value::NIL)
@@ -811,6 +812,7 @@ fn shared_read_from_minibuffer_runtime_runs_setup_and_exit_hooks_around_edit() {
             order_in_exit.borrow_mut().push("exit");
             Ok(Value::NIL)
         },
+        || Ok(Value::NIL),
         move || {
             order_in_edit.borrow_mut().push("edit");
             Err(Flow::Throw {
@@ -829,6 +831,56 @@ fn shared_read_from_minibuffer_runtime_runs_setup_and_exit_hooks_around_edit() {
 }
 
 #[test]
+fn read_from_minibuffer_runs_minibuffer_modes_to_clear_stale_locals() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue space");
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r#"(let ((minibuffer-setup-hook nil)
+                  (minibuffer-exit-hook nil)
+                  (mode-seen nil)
+                  (setup-seen nil)
+                  (inactive-seen nil)
+                  (map (make-sparse-keymap)))
+              (setq minibuffer-setup-hook
+                    (list (lambda ()
+                            (setq setup-seen (local-variable-p 'minibuffer-completion-table)))))
+              (define-key map " " #'exit-minibuffer)
+              (with-current-buffer (get-buffer-create " *Minibuf-1*")
+                (setq-local minibuffer-completion-table '("BUGS"))
+                (setq-local stale-local t))
+              (let ((orig-minibuffer-mode (symbol-function 'minibuffer-mode))
+                    (orig-inactive-mode (symbol-function 'minibuffer-inactive-mode)))
+                (unwind-protect
+                    (progn
+                      (fset 'minibuffer-mode
+                            (lambda ()
+                              (funcall orig-minibuffer-mode)
+                              (setq mode-seen (list (local-variable-p 'minibuffer-completion-table)
+                                                    (local-variable-p 'stale-local)))))
+                      (fset 'minibuffer-inactive-mode
+                            (lambda ()
+                              (funcall orig-inactive-mode)
+                              (setq inactive-seen (list (local-variable-p 'minibuffer-completion-table)
+                                                        (local-variable-p 'stale-local)))))
+                      (read-from-minibuffer "Prompt: " nil map)
+                      (list mode-seen setup-seen inactive-seen))
+                  (fset 'minibuffer-mode orig-minibuffer-mode)
+                  (fset 'minibuffer-inactive-mode orig-inactive-mode))))"#,
+        )
+        .expect("eval should return minibuffer mode observations");
+    assert_eq!(format!("{result}"), "((nil nil) nil (nil nil))");
+}
+
+#[test]
 fn shared_read_from_minibuffer_runtime_swallows_exit_hook_signals() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -844,7 +896,9 @@ fn shared_read_from_minibuffer_runtime_swallows_exit_hook_signals() {
         ev.command_loop.recursive_depth,
         &args,
         || Ok(Value::NIL),
+        || Ok(Value::NIL),
         || Err(signal("error", vec![Value::string("ignored")])),
+        || Ok(Value::NIL),
         || {
             Err(Flow::Throw {
                 tag: Value::symbol("exit"),
@@ -874,6 +928,8 @@ fn shared_read_from_minibuffer_runtime_converts_unibyte_initial_input_to_buffer_
         &mut ev.active_minibuffer_window,
         ev.command_loop.recursive_depth,
         &args,
+        || Ok(Value::NIL),
+        || Ok(Value::NIL),
         || Ok(Value::NIL),
         || Ok(Value::NIL),
         || {
@@ -921,6 +977,8 @@ fn shared_read_from_minibuffer_runtime_restores_calling_frame_after_frame_switch
         &mut ev.active_minibuffer_window,
         ev.command_loop.recursive_depth,
         &args,
+        || Ok(Value::NIL),
+        || Ok(Value::NIL),
         || Ok(Value::NIL),
         || Ok(Value::NIL),
         move || unsafe {

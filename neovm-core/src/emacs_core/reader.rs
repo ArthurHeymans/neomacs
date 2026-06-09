@@ -474,6 +474,14 @@ fn find_or_create_minibuffer_buffer_in_state(
     minibuf_id
 }
 
+fn run_minibuffer_mode_if_bound(eval: &mut super::eval::Context, mode: &str) -> EvalResult {
+    if eval.obarray().symbol_function(mode).is_some() {
+        eval.apply0(Value::symbol(mode))
+    } else {
+        Ok(Value::NIL)
+    }
+}
+
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
     restore_minibuffer_window_in_state(
         &mut eval.frames,
@@ -875,6 +883,9 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
         command_loop_depth,
         args,
         move || unsafe {
+            run_minibuffer_mode_if_bound(eval_ptr.as_ptr().as_mut().unwrap(), "minibuffer-mode")
+        },
+        move || unsafe {
             let eval = eval_ptr.as_ptr().as_mut().unwrap();
             run_before_setup_hook(eval)?;
             eval.run_hook_if_bound("minibuffer-setup-hook")
@@ -890,6 +901,12 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
                 Err(Flow::Signal(_)) => Ok(Value::NIL),
                 Err(flow) => Err(flow),
             }
+        },
+        move || unsafe {
+            run_minibuffer_mode_if_bound(
+                eval_ptr.as_ptr().as_mut().unwrap(),
+                "minibuffer-inactive-mode",
+            )
         },
         move || unsafe {
             eval_ptr
@@ -940,8 +957,10 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     recursive_depth: usize,
     args: &[Value],
+    mut run_active_mode: impl FnMut() -> EvalResult,
     mut run_setup_hook: impl FnMut() -> EvalResult,
     mut run_exit_hook: impl FnMut() -> EvalResult,
+    mut run_inactive_mode: impl FnMut() -> EvalResult,
     mut run_recursive_edit: impl FnMut() -> EvalResult,
 ) -> EvalResult {
     // Check inhibit-interaction — GNU Emacs signals an error when any
@@ -988,20 +1007,6 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let minibuf_depth = minibuffers.depth() + 1;
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
 
-    // Clear the minibuffer buffer and insert prompt + initial input
-    let prompt_byte_pos;
-    let prompt_properties = obarray
-        .symbol_value("minibuffer-prompt-properties")
-        .copied()
-        .unwrap_or(Value::NIL);
-    prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
-        buffers,
-        minibuf_id,
-        &prompt,
-        initial_input.as_ref(),
-        prompt_properties,
-    );
-
     let active_window_state = activate_minibuffer_window_in_state(
         frames,
         buffers,
@@ -1014,6 +1019,20 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         // a realized GUI frame can exercise the minibuffer logic.
         buffers.switch_current(minibuf_id);
     }
+    run_active_mode()?;
+
+    // Clear the minibuffer buffer and insert prompt + initial input
+    let prompt_properties = obarray
+        .symbol_value("minibuffer-prompt-properties")
+        .copied()
+        .unwrap_or(Value::NIL);
+    let prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+        buffers,
+        minibuf_id,
+        &prompt,
+        initial_input.as_ref(),
+        prompt_properties,
+    );
     tracing::debug!(
         "read-from-minibuffer: prompt={:?} minibuf_id={:?} current_buffer={:?} active_window={:?} selected_window={:?}",
         prompt_display,
@@ -1091,8 +1110,14 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     }
 
     // Restore state
-    if let Some(saved) = active_window_state {
+    let inactive_mode_result = if active_window_state.is_some() {
+        let _ = buffers.switch_current_unrecorded(minibuf_id);
         erase_expired_minibuffer_buffer_in_state(buffers, minibuf_id);
+        run_inactive_mode()
+    } else {
+        Ok(Value::NIL)
+    };
+    if let Some(saved) = active_window_state {
         restore_minibuffer_window_in_state(
             frames,
             buffers,
@@ -1124,6 +1149,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         saved_minibuffer_history_position,
     );
     exit_hook_result?;
+    inactive_mode_result?;
 
     if exited_normally
         && history_add_new_input_enabled(obarray)
@@ -1536,20 +1562,6 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let minibuf_depth = shared.minibuffers.depth() + 1;
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
-    let prompt_byte_pos;
-    let prompt_properties = shared
-        .obarray
-        .symbol_value("minibuffer-prompt-properties")
-        .copied()
-        .unwrap_or(Value::NIL);
-    prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
-        &mut shared.buffers,
-        minibuf_id,
-        &prompt,
-        initial_input.as_ref(),
-        prompt_properties,
-    );
-
     let active_window_state = activate_minibuffer_window_in_state(
         &mut shared.frames,
         &mut shared.buffers,
@@ -1560,6 +1572,20 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     if active_window_state.is_none() {
         shared.buffers.switch_current(minibuf_id);
     }
+    run_minibuffer_mode_if_bound(shared, "minibuffer-mode")?;
+
+    let prompt_properties = shared
+        .obarray
+        .symbol_value("minibuffer-prompt-properties")
+        .copied()
+        .unwrap_or(Value::NIL);
+    let prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+        &mut shared.buffers,
+        minibuf_id,
+        &prompt,
+        initial_input.as_ref(),
+        prompt_properties,
+    );
     tracing::debug!(
         "read-from-minibuffer: prompt={:?} minibuf_id={:?} current_buffer={:?} active_window={:?} selected_window={:?}",
         prompt_display,
@@ -1652,8 +1678,14 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         }
     }
 
-    if let Some(saved) = active_window_state {
+    let inactive_mode_result = if active_window_state.is_some() {
+        let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
         erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_id);
+        run_minibuffer_mode_if_bound(shared, "minibuffer-inactive-mode")
+    } else {
+        Ok(Value::NIL)
+    };
+    if let Some(saved) = active_window_state {
         restore_minibuffer_window_in_state(
             &mut shared.frames,
             &mut shared.buffers,
@@ -1690,6 +1722,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         saved_minibuffer_history_position,
     );
     exit_hook_result?;
+    inactive_mode_result?;
 
     if exited_normally
         && history_add_new_input_enabled(&shared.obarray)
