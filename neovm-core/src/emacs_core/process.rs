@@ -7,10 +7,12 @@
 //!
 //! ## Network processes
 //!
-//! `make-network-process` supports TCP client connections. The socket fd
-//! is registered with the same `polling::Poller` used for child process
-//! stdout, so `accept-process-output` and `poll_process_output` wake on
-//! incoming data.
+//! `make-network-process` supports TCP client connections. Network sockets
+//! are registered with the process I/O poller so `accept-process-output` and
+//! `poll_process_output` wake on incoming data.  Unix child pipes are also
+//! poller-backed; Windows child pipes are deliberately kept on the synchronous
+//! service pass because Windows waitable pipe support needs a separate
+//! reader-thread/event design, as in GNU Emacs' w32 process layer.
 //!
 //! **TLS**: `gnutls-boot` upgrades a network process through the Neomacs TLS
 //! facade. The `TcpStream` is moved into the backend-neutral
@@ -992,13 +994,61 @@ impl ProcessManager {
         Self::register_readable_source(poller, &borrowed, id)
     }
 
+    #[cfg(unix)]
+    fn register_child_stdout_with_poller(
+        poller: &polling::Poller,
+        stdout: &std::process::ChildStdout,
+        id: ProcessId,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stdout.as_raw_fd();
+        // Set non-blocking before registering.
+        unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+        // Use process id as the event key so we know which process is ready.
+        let _ = Self::register_readable_raw_fd(poller, fd, id);
+    }
+
+    #[cfg(not(unix))]
+    fn register_child_stdout_with_poller(
+        _poller: &polling::Poller,
+        _stdout: &std::process::ChildStdout,
+        _id: ProcessId,
+    ) {
+        // GNU Emacs does not pass Windows subprocess pipe handles to Winsock
+        // select.  Its w32 layer uses a reader thread plus event objects.  Until
+        // Neomacs has the same backend, child pipe output is serviced by the
+        // regular non-blocking wait pass instead of the socket poller.
+    }
+
+    #[cfg(unix)]
+    fn unregister_child_stdout_from_poller(
+        poller: &polling::Poller,
+        stdout: &std::process::ChildStdout,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stdout.as_raw_fd();
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        let _ = poller.delete(&borrowed);
+    }
+
+    #[cfg(not(unix))]
+    fn unregister_child_stdout_from_poller(
+        _poller: &polling::Poller,
+        _stdout: &std::process::ChildStdout,
+    ) {
+        // See `register_child_stdout_with_poller`.
+    }
+
     fn unregister_process_poll_sources(poller: Option<&polling::Poller>, proc: &Process) {
         let Some(poller) = poller else {
             return;
         };
 
         if let Some(stdout) = proc.child_stdout.as_ref() {
-            let _ = poller.delete(stdout);
+            Self::unregister_child_stdout_from_poller(poller, stdout);
         }
         if let Some(tls) = proc.tls_stream.as_ref() {
             let _ = poller.delete(tls.tcp_stream());
@@ -1302,18 +1352,10 @@ impl ProcessManager {
             Ok(mut child) => {
                 let stdout = child.stdout.take();
 
-                // Register stdout with the poller for efficient I/O notification.
-                #[cfg(unix)]
+                // Register stdout with the poller where the platform exposes
+                // child pipe descriptors as pollable sources.
                 if let (Some(poller), Some(stdout)) = (&self.poller, &stdout) {
-                    use std::os::unix::io::AsRawFd;
-                    let fd = stdout.as_raw_fd();
-                    // Set non-blocking before registering.
-                    unsafe {
-                        let flags = libc::fcntl(fd, libc::F_GETFL);
-                        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                    }
-                    // Use process id as the event key so we know which process is ready.
-                    let _ = Self::register_readable_raw_fd(poller, fd, id);
+                    Self::register_child_stdout_with_poller(poller, stdout, id);
                 }
 
                 proc.child_stdout = stdout;
