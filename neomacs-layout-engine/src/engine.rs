@@ -4767,59 +4767,41 @@ impl LayoutEngine {
                                     glyph_y: y + raise_y_offset,
                                 },
                                 DisplayRowAppendMetrics {
-                                    height: face_h,
-                                    ascent: face_ascent_val,
+                                    height: display_height,
+                                    ascent: display_height,
                                     char_width: face_char_w,
                                     space_width: face_space_w,
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.stretch_item(
+                            let item = replacement_source.item(
                                 current_text_face_id,
-                                DisplayReplacementBox::new(
-                                    display_width,
-                                    display_height,
-                                    display_height,
+                                crate::display_item::DisplayItemKind::Xwidget(
+                                    crate::display_item::DisplayXwidgetItem {
+                                        xwidget_id: resolved.webkit_id.min(i32::MAX as u32) as i32,
+                                        width: display_width,
+                                        height: display_height,
+                                    },
                                 ),
                             );
                             if let Some((progress, position)) =
-                                append_display_replacement_item_to_text_row(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
+                                    &mut output_emitter,
+                                    evaluator,
                                     item,
                                     current_text_face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
-                            {
-                                if progress.status
+                                && progress.status
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
-                                    && progress.metrics.width_px > 0.0
-                                {
-                                    let webkit_y = y + raise_y_offset;
-                                    self.matrix_builder.push_xwidget(
-                                        params.window_id,
-                                        GlyphRowRole::Text,
-                                        Some(params.text_bounds),
-                                        resolved.webkit_id,
-                                        progress.start.x_px,
-                                        webkit_y,
-                                        display_width,
-                                        display_height,
-                                    );
-                                    row_max_height = row_max_height.max(display_height);
-                                    row_max_ascent = row_max_ascent.max(display_height);
-                                    x = position.x_px;
-                                    col = position.col;
-                                    emit_text_progress_slots(
-                                        &mut output_emitter,
-                                        evaluator,
-                                        &progress,
-                                        row,
-                                        y,
-                                        webkit_y,
-                                        display_height,
-                                    );
-                                }
+                                && progress.metrics.width_px > 0.0
+                            {
+                                row_max_height = row_max_height.max(display_height);
+                                row_max_ascent = row_max_ascent.max(display_height);
+                                x = position.x_px;
+                                col = position.col;
                             }
                         } else {
                             if point_in_display_replacement {
