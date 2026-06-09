@@ -900,6 +900,25 @@ impl ProcessOutputRead {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessOutputSource {
+    Pty,
+    ChildStdout,
+    Network,
+}
+
+fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
+    if proc.pty_reader.is_some() {
+        Some(ProcessOutputSource::Pty)
+    } else if proc.child_stdout.is_some() {
+        Some(ProcessOutputSource::ChildStdout)
+    } else if proc.tls_stream.is_some() || proc.network_socket.is_some() {
+        Some(ProcessOutputSource::Network)
+    } else {
+        None
+    }
+}
+
 fn process_status_is_run(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Run)
 }
@@ -1518,6 +1537,39 @@ impl ProcessManager {
         read
     }
 
+    fn read_network_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return ProcessOutputRead::NoSource;
+        };
+
+        if let Some(ref mut tls) = proc.tls_stream {
+            let mut buf = vec![0u8; 4096];
+            let read = ProcessOutputRead::from_io_result(
+                tls.read_process_output(&mut buf),
+                &buf,
+                proc.coding_decode,
+            );
+            if let ProcessOutputRead::Data(ref data) = read {
+                proc.stdout.push_str(&process_output_runtime_string(data));
+            }
+            return read;
+        }
+
+        if let Some(socket) = proc.network_socket.as_mut() {
+            let mut buf = vec![0u8; 4096];
+            let read = match socket.read_stream_output(&mut buf) {
+                Some(result) => ProcessOutputRead::from_io_result(result, &buf, proc.coding_decode),
+                None => ProcessOutputRead::WouldBlock,
+            };
+            if let ProcessOutputRead::Data(ref data) = read {
+                proc.stdout.push_str(&process_output_runtime_string(data));
+            }
+            return read;
+        }
+
+        ProcessOutputRead::NoSource
+    }
+
     /// Wait for any child process to have output ready, with timeout.
     ///
     /// Uses `polling::Poller` (epoll/kqueue/wepoll) for efficient blocking
@@ -2001,64 +2053,14 @@ impl ProcessManager {
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
     fn read_process_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
-        // Check what kind of I/O source this process has, without holding
-        // a long-lived mutable borrow.
-        let has_pty_reader = self
-            .processes
-            .get(&id)
-            .map(|p| p.pty_reader.is_some())
-            .unwrap_or(false);
+        let source = self.processes.get(&id).and_then(process_output_source);
 
-        if has_pty_reader {
-            return self.read_pty_output_result(id);
+        match source {
+            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id),
+            Some(ProcessOutputSource::ChildStdout) => self.read_child_stdout_result(id),
+            Some(ProcessOutputSource::Network) => self.read_network_output_result(id),
+            None => ProcessOutputRead::NoSource,
         }
-
-        let has_child_stdout = self
-            .processes
-            .get(&id)
-            .map(|p| p.child_stdout.is_some())
-            .unwrap_or(false);
-
-        if has_child_stdout {
-            return self.read_child_stdout_result(id);
-        }
-
-        // Try TLS stream first (encrypted network process), then plain socket.
-        {
-            let Some(proc) = self.processes.get_mut(&id) else {
-                return ProcessOutputRead::NoSource;
-            };
-
-            // TLS stream has priority over plain socket.
-            if let Some(ref mut tls) = proc.tls_stream {
-                let mut buf = vec![0u8; 4096];
-                let read = ProcessOutputRead::from_io_result(
-                    tls.read_process_output(&mut buf),
-                    &buf,
-                    proc.coding_decode,
-                );
-                if let ProcessOutputRead::Data(ref data) = read {
-                    proc.stdout.push_str(&process_output_runtime_string(data));
-                }
-                return read;
-            }
-
-            if let Some(socket) = proc.network_socket.as_mut() {
-                let mut buf = vec![0u8; 4096];
-                let read = match socket.read_stream_output(&mut buf) {
-                    Some(result) => {
-                        ProcessOutputRead::from_io_result(result, &buf, proc.coding_decode)
-                    }
-                    None => ProcessOutputRead::WouldBlock,
-                };
-                if let ProcessOutputRead::Data(ref data) = read {
-                    proc.stdout.push_str(&process_output_runtime_string(data));
-                }
-                return read;
-            }
-        }
-
-        ProcessOutputRead::NoSource
     }
 
     /// Read available output from a process — child stdout or network socket.
