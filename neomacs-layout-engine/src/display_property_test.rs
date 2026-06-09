@@ -1,7 +1,7 @@
 use super::*;
 use crate::display_item::{
-    DisplayLength, DisplayLengthExpr, DisplayLengthSymbol, DisplayStretch, DisplayStretchWidth,
-    DisplayXwidgetItem,
+    DisplayImageItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
+    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem,
 };
 use neovm_core::emacs_core::{Context, Value};
 
@@ -138,4 +138,32 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
             ascent: None,
         }))
     );
+}
+
+#[test]
+fn display_replacement_property_accepts_only_matching_resolved_media_items() {
+    let image_item = DisplayItemKind::Image(DisplayImageItem {
+        image_id: 1,
+        width: 10.0,
+        height: 20.0,
+    });
+    let video_item = DisplayItemKind::Video(DisplayVideoItem {
+        video_id: 2,
+        width: 30.0,
+        height: 40.0,
+        loop_count: 0,
+        autoplay: false,
+    });
+    let xwidget_item = DisplayItemKind::Xwidget(DisplayXwidgetItem {
+        xwidget_id: 3,
+        width: 50.0,
+        height: 60.0,
+    });
+
+    assert!(DisplayReplacementProperty::Image.accepts_resolved_media_item(&image_item));
+    assert!(!DisplayReplacementProperty::Image.accepts_resolved_media_item(&video_item));
+    assert!(DisplayReplacementProperty::Video.accepts_resolved_media_item(&video_item));
+    assert!(!DisplayReplacementProperty::Video.accepts_resolved_media_item(&image_item));
+    assert!(DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&xwidget_item));
+    assert!(!DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&image_item));
 }

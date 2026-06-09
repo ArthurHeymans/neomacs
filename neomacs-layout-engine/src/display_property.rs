@@ -31,6 +31,15 @@ impl DisplayReplacementProperty {
             Self::String | Self::Image | Self::Video | Self::Webkit => None,
         }
     }
+
+    pub(crate) fn accepts_resolved_media_item(&self, kind: &DisplayItemKind) -> bool {
+        matches!(
+            (self, kind),
+            (Self::Image, DisplayItemKind::Image(_))
+                | (Self::Video, DisplayItemKind::Video(_))
+                | (Self::Webkit, DisplayItemKind::Xwidget(_))
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
