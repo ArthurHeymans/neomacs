@@ -15,7 +15,12 @@ use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_b
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
-use super::window_output::{ChromeRowOutput, RowMetricsSnapshot, WindowOutputEmitter};
+use super::window_output::{
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowMetrics,
+    TextMatrixRowTransition, WindowOutputEmitter, begin_text_matrix_row,
+    finish_and_begin_text_matrix_row, finish_and_maybe_begin_text_matrix_row,
+    finish_text_matrix_row,
+};
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowOutputProgress, DisplaySourceRowSpecInput,
@@ -235,50 +240,6 @@ fn include_glyph_vertical_metrics(
     let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
     *row_ascent = (*row_ascent).max(glyph_ascent);
     *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
-}
-
-fn finish_text_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    row_y: f32,
-    row_height: f32,
-    row_ascent: f32,
-) {
-    builder.set_current_row_metrics(row_y, row_height, row_ascent);
-    output_emitter.push_text_row(row_y, row_height, row_ascent);
-}
-
-struct BufferTextRowFinish {
-    y: f32,
-    height: f32,
-    ascent: f32,
-}
-
-struct BufferTextRowBegin {
-    matrix_row: usize,
-    row: usize,
-    col: usize,
-    y: f32,
-    x: f32,
-}
-
-fn finish_and_begin_buffer_text_row(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut neovm_core::emacs_core::Context,
-    finish: BufferTextRowFinish,
-    begin: BufferTextRowBegin,
-) {
-    finish_text_row(
-        builder,
-        output_emitter,
-        finish.y,
-        finish.height,
-        finish.ascent,
-    );
-    builder.end_row();
-    builder.begin_row(begin.matrix_row, GlyphRowRole::Text);
-    output_emitter.begin_text_row(evaluator, begin.row, begin.col, begin.y, begin.x);
 }
 
 #[allow(dead_code)]
@@ -1429,29 +1390,36 @@ fn render_overlay_string(
                 charpos_end: anchor_charpos,
             });
             *hit_row_charpos_start = anchor_charpos;
-            finish_text_row(
-                builder,
-                output_emitter,
-                *y,
-                *row_max_height,
-                *row_max_ascent,
-            );
-            builder.end_row();
+            let finished_row = TextMatrixRowMetrics {
+                y: *y,
+                height: *row_max_height,
+                ascent: *row_max_ascent,
+            };
             *row += 1;
             if *row >= max_rows {
+                finish_text_matrix_row(builder, output_emitter, finished_row);
+                builder.end_row();
                 false
             } else {
                 *y = text_y + *row as f32 * char_h + row_extra_y;
                 *row_max_height = char_h;
                 *row_max_ascent = default_row_ascent;
                 row_y_positions.push(*y);
-                builder.begin_row(
-                    row_base + *row,
-                    neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
-                );
                 *x = content_x;
                 *col = 0;
-                output_emitter.begin_text_row(evaluator, *row, *col, *y, *x);
+                finish_and_begin_text_matrix_row(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    finished_row,
+                    TextMatrixRowBegin {
+                        matrix_row: row_base + *row,
+                        row: *row,
+                        col: *col,
+                        y: *y,
+                        x: *x,
+                    },
+                );
                 true
             }
         }};
@@ -3629,11 +3597,18 @@ impl LayoutEngine {
             params.text_bounds,
             params.selected,
         );
-        self.matrix_builder.begin_row(
-            text_matrix_row_base,
-            neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+        begin_text_matrix_row(
+            &mut self.matrix_builder,
+            &mut output_emitter,
+            evaluator,
+            TextMatrixRowBegin {
+                matrix_row: text_matrix_row_base,
+                row,
+                col,
+                y,
+                x,
+            },
         );
-        output_emitter.begin_text_row(evaluator, row, col, y, x);
 
         while byte_idx < text.len() && row < max_rows && y + row_max_height <= text_y + text_height
         {
@@ -3937,13 +3912,11 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    finish_text_row(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
+                    let finished_row = TextMatrixRowMetrics {
                         y,
-                        row_max_height,
-                        row_max_ascent,
-                    );
+                        height: row_max_height,
+                        ascent: row_max_ascent,
+                    };
                     hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
@@ -3953,7 +3926,23 @@ impl LayoutEngine {
                     row_max_height = char_h;
                     row_max_ascent = default_face_ascent;
                     row_y_positions.push(y);
-                    output_emitter.begin_text_row(evaluator, row, col, y, x);
+                    let row_transition = finish_and_maybe_begin_text_matrix_row(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        finished_row,
+                        TextMatrixRowBegin {
+                            matrix_row: text_matrix_row_base + row,
+                            row,
+                            col,
+                            y,
+                            x,
+                        },
+                        max_rows,
+                    );
+                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        break;
+                    }
                     col = 0;
                     current_line += 1;
                     need_line_number = lnum_enabled;
@@ -5040,13 +5029,11 @@ impl LayoutEngine {
                             charpos_start: hit_row_charpos_start,
                             charpos_end: charpos,
                         });
-                        finish_text_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
+                        let finished_row = TextMatrixRowMetrics {
                             y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        };
                         row_extend_bg = None;
                         row_extend_row = -1;
                         if box_active {
@@ -5058,7 +5045,23 @@ impl LayoutEngine {
                         row_max_height = char_h;
                         row_max_ascent = default_face_ascent;
                         row_y_positions.push(y);
-                        output_emitter.begin_text_row(evaluator, row, col, y, x);
+                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            finished_row,
+                            TextMatrixRowBegin {
+                                matrix_row: text_matrix_row_base + row,
+                                row,
+                                col,
+                                y,
+                                x,
+                            },
+                            max_rows,
+                        );
+                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                            break;
+                        }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_charpos_start = charpos;
                         col = 0;
@@ -5166,7 +5169,7 @@ impl LayoutEngine {
                     charpos_start: hit_row_charpos_start,
                     charpos_end: charpos,
                 });
-                let finished_row = BufferTextRowFinish {
+                let finished_row = TextMatrixRowMetrics {
                     y,
                     height: row_max_height,
                     ascent: row_max_ascent,
@@ -5176,19 +5179,23 @@ impl LayoutEngine {
                 row_max_height = char_h;
                 row_max_ascent = default_face_ascent;
                 row_y_positions.push(y);
-                finish_and_begin_buffer_text_row(
+                let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
                     finished_row,
-                    BufferTextRowBegin {
+                    TextMatrixRowBegin {
                         matrix_row: text_matrix_row_base + row,
                         row,
                         col,
                         y,
                         x,
                     },
+                    max_rows,
                 );
+                if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                    break;
+                }
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_charpos_start = charpos;
                 if box_active {
@@ -5290,13 +5297,11 @@ impl LayoutEngine {
                             charpos_start: hit_row_charpos_start,
                             charpos_end: charpos,
                         });
-                        finish_text_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
+                        let finished_row = TextMatrixRowMetrics {
                             y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        };
                         row_extend_bg = None;
                         row_extend_row = -1;
                         row += 1;
@@ -5304,7 +5309,23 @@ impl LayoutEngine {
                         row_max_height = char_h;
                         row_max_ascent = default_face_ascent;
                         row_y_positions.push(y);
-                        output_emitter.begin_text_row(evaluator, row, col, y, x);
+                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            finished_row,
+                            TextMatrixRowBegin {
+                                matrix_row: text_matrix_row_base + row,
+                                row,
+                                col,
+                                y,
+                                x,
+                            },
+                            max_rows,
+                        );
+                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                            break;
+                        }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_charpos_start = charpos;
                         col = 0;
@@ -5329,13 +5350,11 @@ impl LayoutEngine {
                             charpos_start: hit_row_charpos_start,
                             charpos_end: charpos,
                         });
-                        finish_text_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
+                        let finished_row = TextMatrixRowMetrics {
                             y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        };
                         hit_row_charpos_start = charpos;
                         row_extend_bg = None;
                         row_extend_row = -1;
@@ -5344,7 +5363,23 @@ impl LayoutEngine {
                         row_max_height = char_h;
                         row_max_ascent = default_face_ascent;
                         row_y_positions.push(y);
-                        output_emitter.begin_text_row(evaluator, row, col, y, x);
+                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            finished_row,
+                            TextMatrixRowBegin {
+                                matrix_row: text_matrix_row_base + row,
+                                row,
+                                col,
+                                y,
+                                x,
+                            },
+                            max_rows,
+                        );
+                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                            break;
+                        }
                         col = 0;
                         trailing_ws_start_col = -1;
                         if row < max_rows {
@@ -5680,7 +5715,7 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row = BufferTextRowFinish {
+                    let finished_row = TextMatrixRowMetrics {
                         y,
                         height: row_max_height,
                         ascent: row_max_ascent,
@@ -5692,19 +5727,23 @@ impl LayoutEngine {
                     row_max_height = char_h;
                     row_max_ascent = default_face_ascent;
                     row_y_positions.push(y);
-                    finish_and_begin_buffer_text_row(
+                    let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        BufferTextRowBegin {
+                        TextMatrixRowBegin {
                             matrix_row: text_matrix_row_base + row,
                             row,
                             col,
                             y,
                             x,
                         },
+                        max_rows,
                     );
+                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        break;
+                    }
                     col = 0;
                     word_wrap_may_wrap = false;
                     wrap_has_break = false;
@@ -5738,7 +5777,7 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row = BufferTextRowFinish {
+                    let finished_row = TextMatrixRowMetrics {
                         y,
                         height: row_max_height,
                         ascent: row_max_ascent,
@@ -5750,19 +5789,23 @@ impl LayoutEngine {
                     row_max_height = char_h;
                     row_max_ascent = default_face_ascent;
                     row_y_positions.push(y);
-                    finish_and_begin_buffer_text_row(
+                    let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        BufferTextRowBegin {
+                        TextMatrixRowBegin {
                             matrix_row: text_matrix_row_base + row,
                             row,
                             col,
                             y,
                             x,
                         },
+                        max_rows,
                     );
+                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        break;
+                    }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
                     if row < max_rows {
@@ -5798,7 +5841,7 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row = BufferTextRowFinish {
+                    let finished_row = TextMatrixRowMetrics {
                         y,
                         height: row_max_height,
                         ascent: row_max_ascent,
@@ -5810,19 +5853,23 @@ impl LayoutEngine {
                     row_max_height = char_h;
                     row_max_ascent = default_face_ascent;
                     row_y_positions.push(y);
-                    finish_and_begin_buffer_text_row(
+                    let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        BufferTextRowBegin {
+                        TextMatrixRowBegin {
                             matrix_row: text_matrix_row_base + row,
                             row,
                             col,
                             y,
                             x,
                         },
+                        max_rows,
                     );
+                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        break;
+                    }
                     col = 0;
                     trailing_ws_start_col = -1;
                     if row < max_rows {
@@ -6388,12 +6435,14 @@ impl LayoutEngine {
                 charpos_start: hit_row_charpos_start,
                 charpos_end: charpos,
             });
-            finish_text_row(
+            finish_text_matrix_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
-                row_y_start,
-                row_max_height,
-                row_max_ascent,
+                TextMatrixRowMetrics {
+                    y: row_y_start,
+                    height: row_max_height,
+                    ascent: row_max_ascent,
+                },
             );
         }
 

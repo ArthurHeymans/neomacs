@@ -1,13 +1,20 @@
 use super::ChromeRowOutput;
 use super::DisplayProgressSink;
+use super::TextMatrixRowBegin;
+use super::TextMatrixRowMetrics;
+use super::TextMatrixRowTransition;
 use super::TextRowOutput;
 use super::WindowOutputEmitter;
+use super::begin_text_matrix_row;
+use super::finish_and_maybe_begin_text_matrix_row;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
     DisplayRowWriteMetrics,
 };
 use crate::display_status_line::DisplayRowOutputProgress;
+use crate::matrix_builder::GlyphMatrixBuilder;
+use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
@@ -252,4 +259,66 @@ fn display_progress_sink_records_chrome_row_progress() {
     assert_eq!(emitter.rows().len(), 1);
     assert_eq!(emitter.rows()[0].row, 2);
     assert_eq!(emitter.rows()[0].height, 14);
+}
+
+#[test]
+fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-row-exhaustion", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    begin_text_matrix_row(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowBegin {
+            matrix_row: 0,
+            row: 0,
+            col: 0,
+            y: 0.0,
+            x: 0.0,
+        },
+    );
+
+    let transition = finish_and_maybe_begin_text_matrix_row(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowMetrics {
+            y: 0.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+        TextMatrixRowBegin {
+            matrix_row: 1,
+            row: 1,
+            col: 0,
+            y: 16.0,
+            x: 0.0,
+        },
+        1,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::ExhaustedRows);
+    assert_eq!(emitter.rows().len(), 1);
+
+    builder.end_window();
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert_eq!(state.window_matrices[0].matrix.rows.len(), 1);
 }

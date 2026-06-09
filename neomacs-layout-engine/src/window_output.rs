@@ -11,6 +11,8 @@ use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowGlyphSlot, DisplayRowPosition,
 };
+use crate::matrix_builder::GlyphMatrixBuilder;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
@@ -82,6 +84,76 @@ impl TextRowOutput {
 pub(crate) struct ChromeRowOutput {
     pub(crate) row: i64,
     pub(crate) y: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextMatrixRowMetrics {
+    pub(crate) y: f32,
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextMatrixRowBegin {
+    pub(crate) matrix_row: usize,
+    pub(crate) row: usize,
+    pub(crate) col: usize,
+    pub(crate) y: f32,
+    pub(crate) x: f32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TextMatrixRowTransition {
+    BeganNextRow,
+    ExhaustedRows,
+}
+
+pub(crate) fn finish_text_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    metrics: TextMatrixRowMetrics,
+) {
+    builder.set_current_row_metrics(metrics.y, metrics.height, metrics.ascent);
+    output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
+}
+
+pub(crate) fn begin_text_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    begin: TextMatrixRowBegin,
+) {
+    builder.begin_row(begin.matrix_row, GlyphRowRole::Text);
+    output_emitter.begin_text_row(evaluator, begin.row, begin.col, begin.y, begin.x);
+}
+
+pub(crate) fn finish_and_begin_text_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    finish: TextMatrixRowMetrics,
+    begin: TextMatrixRowBegin,
+) {
+    finish_text_matrix_row(builder, output_emitter, finish);
+    builder.end_row();
+    begin_text_matrix_row(builder, output_emitter, evaluator, begin);
+}
+
+pub(crate) fn finish_and_maybe_begin_text_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    finish: TextMatrixRowMetrics,
+    begin: TextMatrixRowBegin,
+    max_rows: usize,
+) -> TextMatrixRowTransition {
+    finish_text_matrix_row(builder, output_emitter, finish);
+    builder.end_row();
+    if begin.row >= max_rows {
+        return TextMatrixRowTransition::ExhaustedRows;
+    }
+    begin_text_matrix_row(builder, output_emitter, evaluator, begin);
+    TextMatrixRowTransition::BeganNextRow
 }
 
 pub(crate) trait DisplayProgressSink {
