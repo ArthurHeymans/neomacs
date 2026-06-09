@@ -3,10 +3,11 @@
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
     DisplayLengthSymbol, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem,
     GlyphlessJoinerPolicy, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
+use crate::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
@@ -681,6 +682,15 @@ impl LispStringSourceFrame {
 fn parse_display_property(value: Value) -> Option<DisplayItemKind> {
     if is_display_space_spec(&value) {
         return parse_display_space(value).map(DisplayItemKind::Stretch);
+    }
+    if DisplaySpecHead::Xwidget.is_head_of(&value) {
+        return parse_display_xwidget_layout(&value).map(|layout| {
+            DisplayItemKind::Xwidget(DisplayXwidgetItem {
+                xwidget_id: layout.xwidget_id as i32,
+                width: layout.width,
+                height: layout.height,
+            })
+        });
     }
     None
 }

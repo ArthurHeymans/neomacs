@@ -73,7 +73,11 @@ fn display_item_inline_media_slots_are_source_neutral() {
     let xwidget = DisplayItem::new(
         span,
         RenderFaceRef::Inherit,
-        DisplayItemKind::Xwidget(DisplayXwidgetItem { xwidget_id: 44 }),
+        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+            xwidget_id: 44,
+            width: 96.0,
+            height: 54.0,
+        }),
     );
 
     assert_eq!(
@@ -86,7 +90,11 @@ fn display_item_inline_media_slots_are_source_neutral() {
     );
     assert_eq!(
         xwidget.kind,
-        DisplayItemKind::Xwidget(DisplayXwidgetItem { xwidget_id: 44 })
+        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+            xwidget_id: 44,
+            width: 96.0,
+            height: 54.0,
+        })
     );
 }
 

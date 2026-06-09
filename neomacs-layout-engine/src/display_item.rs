@@ -264,9 +264,11 @@ pub(crate) struct DisplayVideoItem {
     pub(crate) video_id: i32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayXwidgetItem {
     pub(crate) xwidget_id: i32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

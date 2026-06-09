@@ -2,7 +2,7 @@ use super::*;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayLengthExpr,
     DisplayLengthSymbol, DisplaySourceId, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -330,6 +330,81 @@ fn lisp_string_source_cursor_pushes_display_string_replacement_source() {
         DisplaySourceId::new(7),
         "replacement string should be emitted from a nested source frame, not flattened into the parent span"
     );
+}
+
+#[test]
+fn display_sources_parse_xwidget_display_specs_as_typed_items() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let xwidget = Value::make_xwidget(
+        Value::symbol("webkit"),
+        Value::string("Title"),
+        Value::make_buffer(buffer_id),
+        96,
+        54,
+        1234,
+    );
+    let display_spec = Value::list(vec![
+        Value::symbol("xwidget"),
+        Value::keyword("xwidget"),
+        xwidget,
+    ]);
+
+    let mut lisp_source = LispStringSourceCursor::new(
+        8,
+        Value::string_with_text_properties(
+            "x",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("display"), display_spec]),
+            }],
+        ),
+        RenderFaceRef::FaceId(3),
+    )
+    .expect("string source");
+    let lisp_items = collect_items(&mut lisp_source);
+
+    assert_eq!(
+        lisp_items[0].kind,
+        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+            xwidget_id: 1234,
+            width: 96.0,
+            height: 54.0,
+        })
+    );
+
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("x");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(0));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("display"),
+            display_spec,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut buffer_source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+    let buffer_items = collect_items(&mut buffer_source);
+
+    assert_eq!(buffer_items[0].kind, lisp_items[0].kind);
 }
 
 #[test]
