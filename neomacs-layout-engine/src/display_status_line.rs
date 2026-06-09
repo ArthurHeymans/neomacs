@@ -20,10 +20,6 @@ pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
 use crate::display_row::{DisplayRowSpec, install_rendered_display_row};
-#[cfg(test)]
-pub(crate) use crate::display_row::{
-    OverlayFaceRun, apply_overlay_face_run, parse_overlay_face_runs,
-};
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;

@@ -114,29 +114,6 @@ impl DisplayRowFace {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn with_color_override(
-        &self,
-        face_id: u32,
-        fg: Option<Color>,
-        bg: Option<Color>,
-    ) -> Self {
-        let mut face = self.clone();
-        face.face_id = face_id;
-        if let Some(color) = fg {
-            face.foreground = color;
-            face.use_default_foreground = false;
-        }
-        if let Some(color) = bg {
-            face.background = color;
-            face.use_default_background = false;
-        }
-        if fg.is_some() || bg.is_some() {
-            face.terminal_inverse_video = false;
-        }
-        face
-    }
-
     pub(crate) fn render_face(&self) -> Face {
         let underline_style = underline_style_from_code(self.underline_style);
         let mut attrs = FaceAttributes::empty();
@@ -400,77 +377,6 @@ fn snap_glyph_advance(advance: f32, min_advance: f32) -> f32 {
         return snapped_min;
     }
     advance.round().max(snapped_min)
-}
-
-/// A face run within an overlay/display string: byte offset + fg/bg colors + face_id.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct OverlayFaceRun {
-    pub byte_offset: u16,
-    pub fg: u32,
-    pub bg: u32,
-    #[cfg(test)]
-    /// Emacs face ID for full face attribute resolution via FFI
-    pub extend: bool,
-    /// Emacs face ID for full face attribute resolution via FFI
-    pub face_id: u32,
-}
-
-/// Parse face runs appended after text in a buffer.
-/// Runs are stored as 14-byte records: u16 byte_offset + u32 fg + u32 bg + u32 face_id.
-#[cfg(test)]
-pub(crate) fn parse_overlay_face_runs(
-    buf: &[u8],
-    text_len: usize,
-    nruns: i32,
-) -> Vec<OverlayFaceRun> {
-    let mut runs = Vec::with_capacity(nruns as usize);
-    let runs_start = text_len;
-    for ri in 0..nruns as usize {
-        let off = runs_start + ri * 14;
-        if off + 14 <= buf.len() {
-            let byte_offset = u16::from_ne_bytes([buf[off], buf[off + 1]]);
-            let fg = u32::from_ne_bytes([buf[off + 2], buf[off + 3], buf[off + 4], buf[off + 5]]);
-            let raw_bg =
-                u32::from_ne_bytes([buf[off + 6], buf[off + 7], buf[off + 8], buf[off + 9]]);
-            #[cfg(test)]
-            let extend = (raw_bg & 0x80000000) != 0;
-            let bg = raw_bg & 0x00FFFFFF;
-            let face_id =
-                u32::from_ne_bytes([buf[off + 10], buf[off + 11], buf[off + 12], buf[off + 13]]);
-            runs.push(OverlayFaceRun {
-                byte_offset,
-                fg,
-                bg,
-                #[cfg(test)]
-                extend,
-                face_id,
-            });
-        }
-    }
-    runs
-}
-
-/// Apply the face run covering the current byte index.
-/// Returns the updated current_run index.
-#[cfg(test)]
-pub(crate) fn apply_overlay_face_run(
-    runs: &[OverlayFaceRun],
-    byte_idx: usize,
-    current_run: usize,
-) -> usize {
-    let mut cr = current_run;
-    // Advance to the correct run
-    while cr + 1 < runs.len() && byte_idx >= runs[cr + 1].byte_offset as usize {
-        cr += 1;
-    }
-    if byte_idx >= runs[cr].byte_offset as usize {
-        // Pre-advance if next run starts at next byte
-        if cr + 1 < runs.len() && byte_idx + 1 >= runs[cr + 1].byte_offset as usize {
-            cr += 1;
-        }
-    }
-    cr
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
