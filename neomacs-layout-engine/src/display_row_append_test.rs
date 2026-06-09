@@ -317,21 +317,23 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_cache = std::collections::HashMap::new();
-    let mut resolved_faces = std::collections::HashMap::new();
+    let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let mut current_face_id = 20;
     let mut pending_faces = Vec::new();
-    let mut resolver = LayoutDisplaySourceFaceResolver {
+    let params = crate::display_source_resolver::DisplaySourceResolveParams {
         face_resolver: &face_resolver,
         display_host: None,
         base_face,
-        face_cache: &mut face_cache,
-        resolved_faces: &mut resolved_faces,
-        current_face_id: &mut current_face_id,
-        pending_faces: &mut pending_faces,
+        base_face_id: 0,
         fallback_char_width: 8.0,
         fallback_row_height: 16.0,
     };
+    let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
+        params,
+        &mut resolve_state,
+        &mut current_face_id,
+        &mut pending_faces,
+    );
     let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
 
     let face = crate::display_source::DisplayItemFaceResolver::resolve_face_ref(
@@ -355,8 +357,7 @@ fn next_layout_display_source_item_installs_pending_faces() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut current_face_id = 20;
-    let mut face_cache = std::collections::HashMap::new();
-    let mut resolved_faces = std::collections::HashMap::new();
+    let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -401,8 +402,7 @@ fn next_layout_display_source_item_installs_pending_faces() {
         None,
         base_face,
         0,
-        &mut face_cache,
-        &mut resolved_faces,
+        &mut resolve_state,
         &mut current_face_id,
         8.0,
         16.0,

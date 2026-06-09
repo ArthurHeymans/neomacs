@@ -20,6 +20,7 @@ pub(crate) mod display_row_append;
 pub(crate) mod display_row_builder;
 pub(crate) mod display_row_sink;
 pub(crate) mod display_source;
+pub(crate) mod display_source_resolver;
 pub mod display_space;
 pub mod display_spec;
 pub mod display_status_line;

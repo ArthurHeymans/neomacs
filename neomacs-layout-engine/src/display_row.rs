@@ -1,15 +1,15 @@
 use crate::display_item::{
-    DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind,
-    RenderFaceRef,
+    DisplayLengthExpr, DisplayMediaReplacement, DisplayMediaReplacementKind, RenderFaceRef,
 };
-use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy,
 };
 use crate::display_source::{
-    DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
-    parse_display_length_expr,
+    DisplayItemSource, DisplaySourceContext, LispStringSourceCursor, parse_display_length_expr,
+};
+use crate::display_source_resolver::{
+    DisplaySourcePropertyResolver, DisplaySourceResolveParams, DisplaySourceResolveState,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -659,26 +659,6 @@ impl RenderedDisplayRowMedia {
     }
 }
 
-fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
-    lhs.fg == rhs.fg
-        && lhs.bg == rhs.bg
-        && lhs.font_family == rhs.font_family
-        && lhs.font_weight == rhs.font_weight
-        && lhs.italic == rhs.italic
-        && (lhs.font_size - rhs.font_size).abs() <= f32::EPSILON
-        && lhs.underline_style == rhs.underline_style
-        && lhs.underline_color == rhs.underline_color
-        && lhs.strike_through == rhs.strike_through
-        && lhs.strike_through_color == rhs.strike_through_color
-        && lhs.overline == rhs.overline
-        && lhs.overline_color == rhs.overline_color
-        && lhs.box_type == rhs.box_type
-        && lhs.box_color == rhs.box_color
-        && lhs.box_line_width == rhs.box_line_width
-        && lhs.extend == rhs.extend
-        && lhs.terminal_inverse_video == rhs.terminal_inverse_video
-}
-
 fn display_source_row_progress(
     row: &GlyphRow,
     width: f32,
@@ -833,91 +813,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .char_width(&row_face, geometry.char_width)
             .max(1.0);
         let mut row_faces = vec![row_face.clone()];
-        let mut resolved_faces = vec![(row_face.face_id, base_face.clone())];
-
-        struct RowFaceResolver<'a, 'metrics> {
-            face_realizer: &'a mut DisplayRowFaceRealizer<'metrics>,
-            face_resolver: &'a FaceResolver,
-            display_host: Option<&'a dyn DisplayHost>,
-            base_face: &'a ResolvedFace,
-            base_face_id: u32,
-            next_face_id: &'a mut u32,
-            char_w: f32,
-            ascent: f32,
-            height: f32,
-            row_faces: &'a mut Vec<DisplayRowFace>,
-            resolved_faces: &'a mut Vec<(u32, ResolvedFace)>,
-        }
-
-        impl RowFaceResolver<'_, '_> {
-            fn resolved_face_for(&self, face: RenderFaceRef) -> &ResolvedFace {
-                let RenderFaceRef::FaceId(face_id) = face else {
-                    return self.base_face;
-                };
-                self.resolved_faces
-                    .iter()
-                    .find_map(|(id, resolved)| (*id == face_id).then_some(resolved))
-                    .unwrap_or(self.base_face)
-            }
-
-            fn resolve_media_display_property_for_face(
-                &self,
-                display_prop: &Value,
-                face: RenderFaceRef,
-            ) -> Option<DisplayItemKind> {
-                let host = self.display_host?;
-                let resolved_face = self.resolved_face_for(face);
-                resolve_display_media_property(
-                    display_prop,
-                    DisplayMediaResolveParams {
-                        display_host: host,
-                        default_fg: resolved_face.fg,
-                        default_bg: resolved_face.bg,
-                        fallback_char_width: self.char_w,
-                        fallback_row_height: self.height,
-                    },
-                )
-            }
-        }
-
-        impl DisplayItemFaceResolver for RowFaceResolver<'_, '_> {
-            fn resolve_face_ref(
-                &mut self,
-                base: crate::display_item::RenderFaceRef,
-                face_value: Value,
-            ) -> crate::display_item::RenderFaceRef {
-                let Some(resolved) = self
-                    .face_resolver
-                    .resolve_face_value_over(self.base_face, &face_value)
-                else {
-                    return base;
-                };
-                if same_resolved_face(&resolved, self.base_face) {
-                    return crate::display_item::RenderFaceRef::FaceId(self.base_face_id);
-                }
-
-                let face_id = *self.next_face_id;
-                *self.next_face_id += 1;
-                let row_face = self.face_realizer.realize_face(
-                    face_id,
-                    &resolved,
-                    self.char_w,
-                    self.ascent,
-                    self.height,
-                );
-                self.row_faces.push(row_face);
-                self.resolved_faces.push((face_id, resolved));
-                crate::display_item::RenderFaceRef::FaceId(face_id)
-            }
-
-            fn resolve_display_property(
-                &mut self,
-                display_prop: Value,
-                face: RenderFaceRef,
-            ) -> Option<DisplayItemKind> {
-                self.resolve_media_display_property_for_face(&display_prop, face)
-            }
-        }
+        let mut resolve_state = DisplaySourceResolveState::default();
 
         let parsed_symbol_values = symbol_values
             .into_iter()
@@ -938,23 +834,35 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut position = DisplayRowPosition { x_px: 0.0, col: 0 };
         let mut media = Vec::new();
         loop {
+            let mut pending_faces = Vec::new();
             let item = {
-                let mut row_face_resolver = RowFaceResolver {
-                    face_realizer: &mut face_realizer,
+                let params = DisplaySourceResolveParams {
                     face_resolver,
                     display_host,
                     base_face,
                     base_face_id: row_face.face_id,
-                    next_face_id,
-                    char_w: char_width,
-                    ascent: geometry.ascent,
-                    height: geometry.height,
-                    row_faces: &mut row_faces,
-                    resolved_faces: &mut resolved_faces,
+                    fallback_char_width: char_width,
+                    fallback_row_height: geometry.height,
                 };
+                let mut row_face_resolver = DisplaySourcePropertyResolver::new(
+                    params,
+                    &mut resolve_state,
+                    next_face_id,
+                    &mut pending_faces,
+                );
                 let mut context = DisplaySourceContext::with_face_resolver(&mut row_face_resolver);
                 source.next_item(&mut context)
             };
+            for pending in pending_faces {
+                let row_face = face_realizer.realize_face(
+                    pending.face_id,
+                    &pending.resolved,
+                    char_width,
+                    geometry.ascent,
+                    geometry.height,
+                );
+                row_faces.push(row_face);
+            }
             let Some(item) = item else {
                 break;
             };

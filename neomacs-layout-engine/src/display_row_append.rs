@@ -2,14 +2,15 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayMediaReplacementKind,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_row::{DisplayRowGeometry, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendCursor, DisplayRowAppendProgress, DisplayRowLayout,
     DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance,
 };
-use crate::display_source::{
-    BufferTextItemSource, DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext,
+use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
+use crate::display_source_resolver::{
+    DisplaySourcePropertyResolver, DisplaySourceResolveParams, DisplaySourceResolveState,
+    PendingDisplaySourceFace,
 };
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -62,27 +63,9 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     }
 }
 
-struct LayoutDisplaySourceFaceResolver<'a> {
-    face_resolver: &'a FaceResolver,
-    display_host: Option<&'a dyn DisplayHost>,
-    base_face: &'a ResolvedFace,
-    face_cache: &'a mut HashMap<Value, u32>,
-    resolved_faces: &'a mut HashMap<u32, ResolvedFace>,
-    current_face_id: &'a mut u32,
-    pending_faces: &'a mut Vec<PendingLayoutDisplayFace>,
-    fallback_char_width: f32,
-    fallback_row_height: f32,
-}
-
-#[derive(Clone, Debug)]
-struct PendingLayoutDisplayFace {
-    face_id: u32,
-    resolved: ResolvedFace,
-}
-
 fn apply_pending_display_source_faces(
     builder: &mut GlyphMatrixBuilder,
-    pending_faces: &mut Vec<PendingLayoutDisplayFace>,
+    pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
         insert_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
@@ -96,26 +79,27 @@ fn next_layout_display_source_item(
     display_host: Option<&dyn DisplayHost>,
     base_face: &ResolvedFace,
     base_face_id: u32,
-    face_cache: &mut HashMap<Value, u32>,
-    resolved_faces: &mut HashMap<u32, ResolvedFace>,
+    resolve_state: &mut DisplaySourceResolveState,
     current_face_id: &mut u32,
     fallback_char_width: f32,
     fallback_row_height: f32,
 ) -> Option<DisplayItem> {
     let mut pending_faces = Vec::new();
-    resolved_faces.insert(base_face_id, base_face.clone());
     let item = {
-        let mut resolver = LayoutDisplaySourceFaceResolver {
+        let params = DisplaySourceResolveParams {
             face_resolver,
             display_host,
             base_face,
-            face_cache,
-            resolved_faces,
-            current_face_id,
-            pending_faces: &mut pending_faces,
+            base_face_id,
             fallback_char_width,
             fallback_row_height,
         };
+        let mut resolver = DisplaySourcePropertyResolver::new(
+            params,
+            resolve_state,
+            current_face_id,
+            &mut pending_faces,
+        );
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
         source.next_item(&mut context)
     };
@@ -125,16 +109,14 @@ fn next_layout_display_source_item(
 
 pub(crate) struct DisplayItemSourceWalker<S> {
     source: S,
-    face_cache: HashMap<Value, u32>,
-    resolved_faces: HashMap<u32, ResolvedFace>,
+    resolve_state: DisplaySourceResolveState,
 }
 
 impl<S> DisplayItemSourceWalker<S> {
     pub(crate) fn new(source: S) -> Self {
         Self {
             source,
-            face_cache: HashMap::new(),
-            resolved_faces: HashMap::new(),
+            resolve_state: DisplaySourceResolveState::default(),
         }
     }
 }
@@ -158,57 +140,10 @@ impl<S: DisplayItemSource> DisplayItemSourceWalker<S> {
             display_host,
             base_face,
             base_face_id,
-            &mut self.face_cache,
-            &mut self.resolved_faces,
+            &mut self.resolve_state,
             current_face_id,
             fallback_char_width,
             fallback_row_height,
-        )
-    }
-}
-
-impl DisplayItemFaceResolver for LayoutDisplaySourceFaceResolver<'_> {
-    fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
-        if let Some(face_id) = self.face_cache.get(&face_value) {
-            return RenderFaceRef::FaceId(*face_id);
-        }
-        let Some(resolved) = self
-            .face_resolver
-            .resolve_face_value_over(self.base_face, &face_value)
-        else {
-            return base;
-        };
-
-        let face_id = *self.current_face_id;
-        *self.current_face_id += 1;
-        self.face_cache.insert(face_value, face_id);
-        self.resolved_faces.insert(face_id, resolved.clone());
-        self.pending_faces
-            .push(PendingLayoutDisplayFace { face_id, resolved });
-        RenderFaceRef::FaceId(face_id)
-    }
-
-    fn resolve_display_property(
-        &mut self,
-        display_prop: Value,
-        face: RenderFaceRef,
-    ) -> Option<DisplayItemKind> {
-        let display_host = self.display_host?;
-        let resolved_face = match face {
-            RenderFaceRef::FaceId(face_id) => {
-                self.resolved_faces.get(&face_id).unwrap_or(self.base_face)
-            }
-            RenderFaceRef::Inherit => self.base_face,
-        };
-        resolve_display_media_property(
-            &display_prop,
-            DisplayMediaResolveParams {
-                display_host,
-                default_fg: resolved_face.fg,
-                default_bg: resolved_face.bg,
-                fallback_char_width: self.fallback_char_width,
-                fallback_row_height: self.fallback_row_height,
-            },
         )
     }
 }
