@@ -1227,27 +1227,16 @@ impl WgpuRenderer {
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
         for glyph in &frame_glyphs.glyphs {
-            // Extract position info from both Char and Stretch glyphs with box faces
-            let (gx, gy, gw, gh, gface_id, g_role) = match glyph {
-                FrameGlyph::Char {
-                    x,
-                    y,
-                    width,
-                    height,
-                    face_id,
-                    row_role,
-                    ..
-                } => (*x, *y, *width, *height, *face_id, *row_role),
-                FrameGlyph::Stretch {
-                    x,
-                    y,
-                    width,
-                    height,
-                    face_id,
-                    row_role,
-                    ..
-                } => (*x, *y, *width, *height, *face_id, *row_role),
-                _ => continue,
+            // The box-decoration pass applies only to the cursor-cell kinds that
+            // resolve a face (Char/Stretch); skip everything else.
+            let Some((gx, gy, gw, gh)) = glyph.cell_rect() else {
+                continue;
+            };
+            let Some(gface_id) = glyph.face_id() else {
+                continue;
+            };
+            let Some(g_role) = glyph.row_role() else {
+                continue;
             };
 
             // Only include glyphs whose face has box decorations. The box fill

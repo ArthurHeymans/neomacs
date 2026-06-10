@@ -385,6 +385,127 @@ impl FrameGlyph {
     pub fn cell_x(&self) -> Option<f32> {
         self.cell_rect().map(|(x, ..)| x)
     }
+
+    /// Owning window id for any window-attached glyph. `None` for the
+    /// frame-level background and detached terminal glyphs.
+    pub fn window_id(&self) -> Option<i64> {
+        match self {
+            FrameGlyph::Char { window_id, .. }
+            | FrameGlyph::Stretch { window_id, .. }
+            | FrameGlyph::Image { window_id, .. }
+            | FrameGlyph::Video { window_id, .. }
+            | FrameGlyph::Xwidget { window_id, .. }
+            | FrameGlyph::Border { window_id, .. }
+            | FrameGlyph::ScrollBar { window_id, .. } => Some(*window_id),
+            _ => None,
+        }
+    }
+
+    /// Layout row role used for z-ordering. `None` for the frame background
+    /// and detached terminal glyphs.
+    pub fn row_role(&self) -> Option<GlyphRowRole> {
+        match self {
+            FrameGlyph::Char { row_role, .. }
+            | FrameGlyph::Stretch { row_role, .. }
+            | FrameGlyph::Image { row_role, .. }
+            | FrameGlyph::Video { row_role, .. }
+            | FrameGlyph::Xwidget { row_role, .. }
+            | FrameGlyph::Border { row_role, .. }
+            | FrameGlyph::ScrollBar { row_role, .. } => Some(*row_role),
+            _ => None,
+        }
+    }
+
+    /// Authoritative clip rect in frame coordinates, if the glyph carries one.
+    pub fn clip_rect(&self) -> Option<Rect> {
+        match self {
+            FrameGlyph::Char { clip_rect, .. }
+            | FrameGlyph::Stretch { clip_rect, .. }
+            | FrameGlyph::Image { clip_rect, .. }
+            | FrameGlyph::Video { clip_rect, .. }
+            | FrameGlyph::Xwidget { clip_rect, .. }
+            | FrameGlyph::Border { clip_rect, .. }
+            | FrameGlyph::ScrollBar { clip_rect, .. } => *clip_rect,
+            _ => None,
+        }
+    }
+
+    /// Frame-absolute visual rect of this glyph. Unlike [`FrameGlyph::cell_rect`]
+    /// (which is only the cursor-cell kinds) this covers every drawn kind,
+    /// including borders, scroll bars, and the frame background (whose `bounds`
+    /// are its rect). Exhaustive on purpose: a new variant must declare its rect.
+    pub fn geometry(&self) -> Option<Rect> {
+        match self {
+            FrameGlyph::Char {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Stretch {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Image {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Video {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Xwidget {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Border {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::ScrollBar {
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => Some(Rect::new(*x, *y, *width, *height)),
+            FrameGlyph::Background { bounds, .. } => Some(*bounds),
+            #[cfg(feature = "neo-term")]
+            FrameGlyph::Terminal {
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => Some(Rect::new(*x, *y, *width, *height)),
+        }
+    }
+
+    /// Face id for the kinds that resolve a face (Char and Stretch).
+    pub fn face_id(&self) -> Option<u32> {
+        match self {
+            FrameGlyph::Char { face_id, .. } | FrameGlyph::Stretch { face_id, .. } => {
+                Some(*face_id)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Authoritative physical cursor snapshot for a frame.
