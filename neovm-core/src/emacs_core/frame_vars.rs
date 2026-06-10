@@ -16,6 +16,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("frame-title-format", Value::string("%b"));
     obarray.set_symbol_value("icon-title-format", Value::NIL);
     obarray.set_symbol_value("frame-resize-pixelwise", Value::NIL);
+    // GNU frame.c DEFVAR_BOOL (Emacs 31.1), default t: `delete-frame' selects
+    // the most recently used frame (vs. the oldest visible one). Exposed here
+    // so cus-start.el does not signal "built-in variable ... not bound".
+    obarray.set_symbol_value("after-delete-frame-select-mru-frame", Value::T);
     obarray.set_symbol_value("focus-follows-mouse", Value::NIL);
     obarray.set_symbol_value("frame-inhibit-implied-resize", Value::NIL);
     obarray.set_symbol_value("terminal-frame", Value::NIL);

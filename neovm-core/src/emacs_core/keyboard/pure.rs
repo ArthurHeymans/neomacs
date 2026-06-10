@@ -526,6 +526,12 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("num-input-keys", Value::fixnum(0));
     obarray.set_symbol_value("num-nonmacro-input-events", Value::fixnum(0));
     obarray.set_symbol_value("last-event-frame", Value::NIL);
+    // keyboard.c DEFVAR_BOOL (Emacs 31.1), default false. NeoMacs drives a
+    // single GUI terminal so the multi-terminal keyboard-merge behavior is
+    // moot, but the variable must be bound or cus-start.el signals
+    // "built-in variable `multiple-terminals-merge-keyboards' not bound".
+    obarray.set_symbol_value("multiple-terminals-merge-keyboards", Value::NIL);
+    obarray.make_special("multiple-terminals-merge-keyboards");
     obarray.set_symbol_value("tty-erase-char", Value::fixnum(0));
     obarray.set_symbol_value("extra-keyboard-modifiers", Value::fixnum(0));
     obarray.set_symbol_value("inhibit-local-menu-bar-menus", Value::NIL);
