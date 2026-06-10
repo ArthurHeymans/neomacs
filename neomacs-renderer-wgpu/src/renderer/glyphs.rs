@@ -781,24 +781,35 @@ impl WgpuRenderer {
             self.needs_continuous_redraw = true;
         }
 
+        // Compose the slide animation at draw time, never by mutating the
+        // frame's stored cursor geometry. The active window's cursor follows the
+        // render-local interpolated rect (animated_cursor); a non-animating
+        // cursor uses the static rect derived from its slot.
+        let (cx, cy, cw, ch) = match animated_cursor.as_ref() {
+            Some(anim) if anim.window_id == window_id && !style.is_hollow() => {
+                (anim.x, anim.y, anim.width, anim.height)
+            }
+            _ => static_rect,
+        };
+
         if matches!(style, CursorStyle::FilledBox) {
             if cursor_visible {
+                // Behavior-preserving: the box keeps its slot-derived x/width
+                // (static_rect) and only its y/height follow the slide -- exactly
+                // what the old frame-mutation path produced (cursor_draw_rect
+                // always took x/width from the slot). Bar/Hbar/Hollow slide on
+                // all axes, as they already did via animated_cursor.
                 if wake_active {
-                    let (sx, sy, sw, sh) = Self::scale_rect(
-                        static_rect.0,
-                        static_rect.1,
-                        static_rect.2,
-                        static_rect.3,
-                        wake,
-                    );
+                    let (sx, sy, sw, sh) =
+                        Self::scale_rect(static_rect.0, cy, static_rect.2, ch, wake);
                     self.add_rect(cursor_bg_vertices, sx, sy, sw, sh, effective_color);
                 } else {
                     self.add_rect(
                         cursor_bg_vertices,
                         static_rect.0,
-                        static_rect.1,
+                        cy,
                         static_rect.2,
-                        static_rect.3,
+                        ch,
                         effective_color,
                     );
                 }
@@ -842,16 +853,6 @@ impl WgpuRenderer {
             }
             return;
         }
-
-        let (cx, cy, cw, ch) = if let Some(anim) = animated_cursor.as_ref() {
-            if anim.window_id == window_id && !style.is_hollow() {
-                (anim.x, anim.y, anim.width, anim.height)
-            } else {
-                static_rect
-            }
-        } else {
-            static_rect
-        };
 
         let should_draw = style.is_hollow() || cursor_visible;
         if !should_draw {

@@ -406,14 +406,10 @@ impl RenderApp {
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor =
             animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
-        if let Some(cursor) = frame.active_cursor_mut()
-            && root_animated_cursor.is_some_and(|target| target.window_id == cursor.window_id)
-        {
-            cursor.x = render.cursor.current_x;
-            cursor.y = render.cursor.current_y;
-            cursor.width = render.cursor.current_w;
-            cursor.height = render.cursor.current_h;
-        }
+        // The slide animation is composed at draw time: emit_cursor_visual reads
+        // the interpolated rect from animated_cursor for the active window's
+        // cursor. The frame's stored cursor geometry is no longer mutated here,
+        // so the materialized frame stays a pure function of the layout snapshot.
 
         let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
             || frame_for_decision.effect_hints.iter().any(|hint| {
