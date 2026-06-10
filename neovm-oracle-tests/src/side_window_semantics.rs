@@ -2206,3 +2206,149 @@ fn oracle_side_window_deep_window_inside_edges_comparison() {
 "#;
     assert_oracle_parity(form);
 }
+
+// ===========================================================================
+// get-lru-window, get-largest-window, count-windows probes
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_get_lru_window_with_side_windows() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-lru*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (lru-all (get-lru-window nil nil 'visible))
+       (lru-nomini (get-lru-window nil 'nominibuf 'visible))
+       (lru-all-side (window-parameter lru-all 'window-side))
+       (lru-nomini-side (window-parameter lru-nomini 'window-side)))
+  (list lru-all-side lru-nomini-side))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_get_largest_window_with_side_windows() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-largest*"))
+       (sw (display-buffer-in-side-window buf '((side . bottom))))
+       (largest-all (get-largest-window nil nil 'visible))
+       (largest-nomini (get-largest-window nil 'nominibuf 'visible))
+       (main (window-main-window))
+       (largest-is-main (eq largest-nomini main))
+       (largest-side (window-parameter largest-all 'window-side)))
+  (list largest-is-main largest-side))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_count_windows_with_side() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-count*"))
+       (count-before (count-windows nil 'nominibuf))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (count-after (count-windows nil 'nominibuf))
+       (count-all (count-windows))
+       (diff (- count-after count-before)))
+  (list count-before count-after count-all diff))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ---------------------------------------------------------------------------
+// Full lifecycle: create → toggle → create → toggle → delete
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_side_window_deep_full_toggle_lifecycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-lifecycle*"))
+       ;; Phase 1: create side window
+       (sw1 (display-buffer-in-side-window buf '((side . left) (slot . 0))))
+       (side-after-create (window-parameter sw1 'window-side))
+       ;; Phase 2: toggle off
+       (_ (window-toggle-side-windows))
+       (after-toggle-off (window-with-parameter 'window-side 'left))
+       ;; Phase 3: toggle on (restore)
+       (_ (window-toggle-side-windows))
+       (after-toggle-on (window-with-parameter 'window-side 'left))
+       ;; Phase 4: delete the restored window
+       (_ (when after-toggle-on (delete-window after-toggle-on)))
+       (after-delete (window-with-parameter 'window-side 'left))
+       ;; Phase 5: toggle again - should error since all were deleted
+       (toggle-after-delete (condition-case err
+                                (progn
+                                  (window-toggle-side-windows)
+                                  'succeeded)
+                              (error 'no-saved-state))))
+  (list (eq side-after-create 'left)
+        (null after-toggle-off)
+        (and after-toggle-on t)
+        (null after-delete)
+        toggle-after-delete))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ---------------------------------------------------------------------------
+// window-first-child / window-last-child on root with side windows
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_side_window_deep_window_first_last_child_with_sides() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((bl (get-buffer-create "*sw-fl-child-l*"))
+       (br (get-buffer-create "*sw-fl-child-r*"))
+       (wl (display-buffer-in-side-window bl '((side . left))))
+       (wr (display-buffer-in-side-window br '((side . right))))
+       (root (frame-root-window))
+       (first (window-child root))
+       (last (window-last-child root))
+       (first-side (window-parameter first 'window-side))
+       (last-side (window-parameter last 'window-side)))
+  (list first-side last-side
+        (window-live-p first)
+        (window-live-p last)))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ---------------------------------------------------------------------------
+// delete-other-windows FROM a side window (should be allowed)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_side_window_deep_delete_other_windows_from_side_window_in_detail() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-del-other-side*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (main (window-main-window))
+       ;; Also create a non-side window below main
+       (_ (select-window main))
+       (lower (split-window main nil 'below))
+       (windows-before (window-list nil 'nominibuf))
+       (count-before (length windows-before))
+       ;; Now from the side window, delete all other windows
+       (_ (select-window sw))
+       (_ (condition-case err
+              (delete-other-windows sw)
+            (error (list 'delete-err (car (cdr err))))))
+       (windows-after (window-list nil 'nominibuf))
+       (count-after (length windows-after)))
+  (list count-before count-after
+        (eq (selected-window) sw)
+        (window-live-p main)))
+"#;
+    assert_oracle_parity(form);
+}
