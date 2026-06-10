@@ -828,3 +828,99 @@ fn delete_other_windows_via_cx_1_leaves_single_window() {
         );
     }
 }
+
+// ── Per-window tab-line (global-tab-line-mode) ──────────────────────────
+//
+// Regression for the bug where every window's tab line showed the buffer of
+// the globally selected window instead of its own buffer.  Root cause: the
+// redisplay path did not rebind `selected-window` to the window whose
+// mode/tab/header line was being evaluated, so the default
+// `tab-line-tabs-function` (`tab-line-tabs-window-buffers`, which reads
+// `(selected-window)`) saw the global selection.  GNU's `display_mode_lines`
+// (src/xdisp.c) sets `selected_window = w` for exactly this reason.
+
+/// Indices of rows whose tab line shows `name` as a tab.  Mode-line rows also
+/// contain the buffer name but carry the major-mode marker `(Fundamental)`,
+/// so they are excluded.
+fn tab_line_rows(grid: &[String], name: &str) -> Vec<usize> {
+    grid.iter()
+        .enumerate()
+        .filter(|(_, row)| row.contains(name) && !row.contains("Fundamental"))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+#[test]
+fn global_tab_line_shows_each_window_its_own_buffer() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // buffer1 above, buffer2 below; enable global-tab-line-mode *after* the
+    // buffers are displayed so its globalized turn-on applies to them (a
+    // globalized minor mode otherwise only turns on via the major-mode hook,
+    // which `get-buffer-create` does not fire).  Clear each window's prev/next
+    // buffers so its tab line shows exactly one tab (its own buffer).  Leaves
+    // focus on the upper window (buffer1).
+    // Disable the menu bar so the upper window's tab line is not in the same
+    // row as the (frame-top) menu bar.  This isolates the behaviour under test
+    // — each window's tab line reflecting its own buffer — from a separate
+    // menu-bar/tab-line chrome-layering issue where neomacs drops the top
+    // window's tab line when the menu bar occupies the frame's first row.
+    let setup = "(progn \
+        (menu-bar-mode -1) \
+        (with-current-buffer (get-buffer-create \"buffer1\") (erase-buffer) (insert \"ACONTENT\")) \
+        (with-current-buffer (get-buffer-create \"buffer2\") (erase-buffer) (insert \"BCONTENT\")) \
+        (delete-other-windows) \
+        (switch-to-buffer \"buffer1\") \
+        (split-window-below) \
+        (other-window 1) \
+        (switch-to-buffer \"buffer2\") \
+        (other-window 1) \
+        (global-tab-line-mode 1) \
+        (dolist (w (window-list)) (set-window-prev-buffers w nil) (set-window-next-buffers w nil)) \
+        (force-mode-line-update t))";
+    eval_expression(&mut gnu, &mut neo, setup);
+
+    let content_ready = |grid: &[String]| {
+        grid.iter().any(|r| r.contains("ACONTENT")) && grid.iter().any(|r| r.contains("BCONTENT"))
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), content_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    fn assert_per_window_tab_lines(label: &str, gnu: &TuiSession, neo: &TuiSession) {
+        let gg = gnu.text_grid();
+        let ng = neo.text_grid();
+        let g1 = tab_line_rows(&gg, "buffer1");
+        let g2 = tab_line_rows(&gg, "buffer2");
+        let n1 = tab_line_rows(&ng, "buffer1");
+        let n2 = tab_line_rows(&ng, "buffer2");
+        let ok = g1.len() == 1
+            && g2.len() == 1
+            && g1[0] < g2[0]
+            && n1.len() == 1
+            && n2.len() == 1
+            && n1[0] < n2[0];
+        if !ok {
+            dump_pair_grids(label, gnu, neo);
+            eprintln!(
+                "{label}: GNU buffer1 tab rows={g1:?} buffer2 tab rows={g2:?}; \
+                 NEO buffer1 tab rows={n1:?} buffer2 tab rows={n2:?}"
+            );
+        }
+        // GNU reference behaviour: one tab line per buffer, buffer1 above buffer2.
+        assert_eq!(g1.len(), 1, "{label}: GNU buffer1 tab-line count");
+        assert_eq!(g2.len(), 1, "{label}: GNU buffer2 tab-line count");
+        assert!(g1[0] < g2[0], "{label}: GNU buffer1 tab above buffer2");
+        // neomacs must match GNU: each window's tab line shows its own buffer.
+        assert_eq!(n1.len(), 1, "{label}: neomacs buffer1 tab-line count");
+        assert_eq!(n2.len(), 1, "{label}: neomacs buffer2 tab-line count");
+        assert!(n1[0] < n2[0], "{label}: neomacs buffer1 tab above buffer2");
+    }
+
+    // Focus on the upper window (buffer1): each window shows its own tab.
+    assert_per_window_tab_lines("focus-upper", &gnu, &neo);
+
+    // Move focus to the lower window (buffer2): tab lines must not change.
+    send_both(&mut gnu, &mut neo, "C-x o");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_per_window_tab_lines("focus-lower", &gnu, &neo);
+}
