@@ -1545,9 +1545,6 @@ pub struct Frame {
     pub compact_bar_height: u32,
     /// Tab bar height in pixels.
     pub tab_bar_height: u32,
-    /// Mirrors GNU `FRAME_MENU_BAR_LINES(f)`: NILP(Vmenu_bar_mode) ? 0 : 1.
-    /// Cached from `menu-bar-mode` Lisp variable.
-    pub menu_bar_mode_enabled: bool,
     /// Default font size in pixels.
     pub font_pixel_size: f32,
     /// Default character width.
@@ -1695,7 +1692,6 @@ impl Frame {
             visible: true,
             title: Value::NIL,
             menu_bar_height: 0,
-            menu_bar_mode_enabled: false,
             tool_bar_height: 0,
             compact_bar_height: 0,
             tab_bar_height: 0,
@@ -2164,11 +2160,6 @@ impl Frame {
     /// `sync_window_area_bounds()` here is enough to push the root window
     /// (and its mode line / minibuffer) down to make room.
     pub fn sync_menu_bar_height_from_parameters(&mut self) {
-        if !self.menu_bar_mode_enabled {
-            self.menu_bar_height = 0;
-            self.sync_window_area_bounds();
-            return;
-        }
         let lines = self
             .known_frame_parameter_int(FrameParam::MenuBarLines)
             .unwrap_or(0)
@@ -2920,6 +2911,9 @@ impl FrameManager {
             placement,
         )?;
 
+        // Mirror GNU: first split applies menu-bar-lines frame parameter,
+        // shifting root window down by menu_bar_height (typically 1 line).
+        frame.sync_menu_bar_height_from_parameters();
         frame.recalculate_minibuffer_bounds();
         Some(new_id)
     }
