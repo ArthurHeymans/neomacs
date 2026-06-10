@@ -1064,19 +1064,13 @@ DIRNAME must be the directory in which the desktop file will be saved."
 
 ;; ----------------------------------------------------------------------------
 (defun desktop--check-dont-save (frame)
-  (and (not (frame-parameter frame 'desktop-dont-save))
-       ;; Don't save daemon initial frames, since we cannot (and don't
-       ;; need to) restore them.
-       (not (and (daemonp)
-                 (equal (terminal-name (frame-terminal frame))
-                        "initial_terminal")))))
+  (not (frame-parameter frame 'desktop-dont-save)))
 
 (defconst desktop--app-id `(desktop . ,desktop-file-version))
 
 (defun desktop-save-frameset ()
   "Save the state of existing frames in `desktop-saved-frameset'.
-Frames with a non-nil `desktop-dont-save' parameter are not saved.
-Likewise the initial frame of a daemon sesion."
+Frames with a non-nil `desktop-dont-save' parameter are not saved."
   (setq desktop-saved-frameset
 	(and desktop-restore-frames
 	     (frameset-save nil

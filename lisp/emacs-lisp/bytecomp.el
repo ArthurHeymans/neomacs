@@ -1856,8 +1856,7 @@ It is too wide if it has any lines longer than the largest of
          ;; The native compiler doesn't use those dynamic docstrings.
          (not byte-native-compiling)
          ;; Docstrings can only be dynamic when compiling a file.
-         byte-compile--\#$
-         (not (equal doc "")))        ; empty lazy strings are pointless
+         byte-compile--\#$)
     (let* ((byte-pos (with-memoization
                          ;; Reuse a previously written identical docstring.
                          ;; This is not done out of thriftiness but to try and
@@ -5142,8 +5141,7 @@ binding slots have been popped."
          (when (stringp doc)
            (setq rest (byte-compile--list-with-n
                        rest 0
-                       (byte-compile--docstring doc (nth 0 form) name)))
-           (setq form (nconc (take 3 form) rest))))
+                       (byte-compile--docstring doc (nth 0 form) name)))))
        (pcase-let*
            ;; `macro' is non-nil if it defines a macro.
            ;; `fun' is the function part of `arg' (defaults to `arg').

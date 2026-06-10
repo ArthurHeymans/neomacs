@@ -464,18 +464,11 @@ type if we can't otherwise guess it."
                           (progn
                             (require 'image-converter)
                             (image-convert-p source))))))
-    ;; Neomacs: fallback to 'neomacs type if no type detected but neomacs is available
     (unless type
-      (if (image-type-available-p 'neomacs)
-          (setq type 'neomacs)
-        (signal 'unknown-image-type '("Cannot determine image type")))))
-  ;; Neomacs: if detected type is not available, try neomacs as fallback
+      (signal 'unknown-image-type '("Cannot determine image type"))))
   (when (and (not (eq type 'image-convert))
-             (not (eq type 'neo))
              (not (memq type (and (boundp 'image-types) image-types))))
-    (if (image-type-available-p 'neomacs)
-        (setq type 'neomacs)
-      (error "Invalid image type `%s'" type)))
+    (error "Invalid image type `%s'" type))
   type)
 
 ;;;###autoload

@@ -1362,18 +1362,9 @@ All keyword parameters default to nil."
     ;; Clean up the frame list
     (when cleanup-frames
       (let ((map nil)
-	    (cleanup
-             (if (eq cleanup-frames t)
-		 (lambda (frame action)
-		   (when (and (memq action '(:rejected :ignored))
-                              ;; Don't try deleting the daemon's initial
-                              ;; frame, as that would only trigger
-                              ;; warnings.
-                              (not
-                               (and (daemonp)
-                                    (equal (terminal-name (frame-terminal
-                                                           frame))
-                                           "initial_terminal"))))
+	    (cleanup (if (eq cleanup-frames t)
+			 (lambda (frame action)
+			   (when (memq action '(:rejected :ignored))
 			     (delete-frame frame)))
 		       cleanup-frames)))
 	(maphash (lambda (frame _action) (push frame map)) frameset--action-map)

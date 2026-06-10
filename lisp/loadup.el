@@ -252,7 +252,6 @@
 
 (load "indent")
 (load "emacs-lisp/cl-generic")
-(load "emacs-lisp/timer")
 (load "simple")
 (load "emacs-lisp/seq")
 (load "emacs-lisp/nadvice")
@@ -313,6 +312,18 @@
       (load "term/common-win")
       (load "term/x-win")))
 
+(if (featurep 'haiku)
+    (progn
+      (load "term/common-win")
+      (load "term/haiku-win")))
+
+(if (featurep 'android)
+    (progn
+      (load "ls-lisp")
+      (load "touch-screen")
+      (load "term/common-win")
+      (load "term/android-win")))
+
 (if (or (eq system-type 'windows-nt)
         (featurep 'w32))
     (progn
@@ -326,7 +337,33 @@
         (load "ls-lisp")
         (load "dos-w32"))
       (load "touch-screen")))
-
+(if (eq system-type 'ms-dos)
+    (progn
+      (load "dos-w32")
+      (load "dos-fns")
+      (load "dos-vars")
+      ;; Don't load term/common-win: it isn't appropriate for the `pc'
+      ;; ``window system'', which generally behaves like a terminal.
+      (load "term/internal")
+      (load "term/pc-win")
+      (load "ls-lisp")
+      (load "disp-table"))) ; needed to setup ibm-pc char set, see internal.el
+(if (featurep 'ns)
+    (progn
+      (load "term/common-win")
+      ;; Don't load ucs-normalize.el unless uni-*.el files were
+      ;; already produced, because it needs uni-*.el files that might
+      ;; not be built early enough during bootstrap.
+      (when (featurep 'charprop)
+        (load "international/mule-util")
+        (load "international/ucs-normalize")
+        (load "term/ns-win"))))
+(if (featurep 'pgtk)
+    (progn
+      (load "pgtk-dnd")
+      (load "touch-screen")
+      (load "term/common-win")
+      (load "term/pgtk-win")))
 (if (fboundp 'x-create-frame)
     ;; Do it after loading term/foo-win.el since the value of the
     ;; mouse-wheel-*-event vars depends on those files being loaded or not.
@@ -565,11 +602,11 @@ directory got moved.  This is set to be a pair in the form of:
                   nil)
               (error nil))))))
   (if dump-mode
-      (let ((output (cond ((equal dump-mode "pdump") "neomacs.pdump")
+      (let ((output (cond ((equal dump-mode "pdump") "emacs.pdmp")
                           ((equal dump-mode "pbootstrap")
                            (if (eq system-type 'ms-dos)
-                              "b-emacs.pdmp"
-                             "bootstrap-neomacs.pdump"))
+                               "b-emacs.pdmp"
+                             "bootstrap-emacs.pdmp"))
                           (t (error "Unrecognized dump mode %s" dump-mode)))))
         (when (and (featurep 'native-compile)
                    (equal dump-mode "pdump"))
@@ -598,20 +635,6 @@ directory got moved.  This is set to be a pair in the form of:
             (unless success
               (ignore-errors
                 (delete-file output)))))
-        (when (and (member dump-mode '("pdump" "pbootstrap"))
-                   (stringp pdumper-fingerprint)
-                   (> (length pdumper-fingerprint) 0))
-          (let ((fingerprinted
-                 (format "%s-%s.pdump"
-                         (if (equal dump-mode "pdump")
-                             "neomacs"
-                           "bootstrap-neomacs")
-                         pdumper-fingerprint)))
-            (message "Adding name %s" fingerprinted)
-            (add-name-to-file (expand-file-name output invocation-directory)
-                              (expand-file-name fingerprinted
-                                                invocation-directory)
-                              t)))
         ;; Recompute NAME now, so that it isn't set when we dump.
         (if (not (or (eq system-type 'ms-dos)
                      (eq system-type 'haiku) ;; BFS doesn't support hard links
@@ -635,14 +658,14 @@ directory got moved.  This is set to be a pair in the form of:
               (message "Adding name %s" (concat name exe))
               ;; When this runs on Windows, invocation-directory is not
               ;; necessarily the current directory.
-              (add-name-to-file (expand-file-name (concat "neomacs" exe)
+              (add-name-to-file (expand-file-name (concat "emacs" exe)
                                                   invocation-directory)
                                 (expand-file-name (concat name exe)
                                                   invocation-directory)
                                 t)
               (when (equal dump-mode "pdump")
                 (message "Adding name %s" (concat name ".pdmp"))
-                (add-name-to-file (expand-file-name "neomacs.pdump"
+                (add-name-to-file (expand-file-name "emacs.pdmp"
                                                     invocation-directory)
                                   (expand-file-name (concat name ".pdmp")
                                                     invocation-directory)
