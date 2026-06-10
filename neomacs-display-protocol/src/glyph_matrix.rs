@@ -1059,64 +1059,15 @@ impl FrameDisplayState {
         buf.transition_hints = self.transition_hints.clone();
         buf.tab_bar = self.tab_bar.clone();
 
-        // --- Materialize backgrounds ---
-        for bg in &self.backgrounds {
-            buf.glyphs.push(FrameGlyph::Background {
-                bounds: bg.bounds,
-                color: bg.color,
-            });
-        }
-
-        // --- Materialize grid content -> pixel-positioned Char/Stretch glyphs ---
-        for frame_row in &self.frame_chrome_rows {
-            self.materialize_grid_row(
-                &mut buf,
-                0,
-                frame_row.row_index,
-                &frame_row.row,
-                frame_row.pixel_bounds,
-                self.char_width,
-                self.char_height,
-            );
-        }
-        for entry in &self.window_matrices {
-            for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
-                let row_bounds = entry.row_pixel_bounds(glyph_row.role);
-                let char_w = if entry.matrix.ncols > 0 {
-                    row_bounds.width / entry.matrix.ncols as f32
-                } else {
-                    self.char_width
-                };
-                self.materialize_grid_row(
-                    &mut buf,
-                    entry.window_id as i64,
-                    row_idx as u32,
-                    glyph_row,
-                    row_bounds,
-                    char_w,
-                    self.char_height,
-                );
-            }
-        }
-
-        // --- Materialize borders ---
-        for border in &self.borders {
-            buf.glyphs.push(FrameGlyph::Border {
-                window_id: border.window_id,
-                row_role: GlyphRowRole::Text,
-                clip_rect: None,
-                x: border.x,
-                y: border.y,
-                width: border.width,
-                height: border.height,
-                color: border.color,
-            });
-        }
+        // --- Materialize all glyphs (backgrounds, grid, borders, images,
+        // videos, xwidgets, scroll bars) in the canonical order ---
+        self.for_each_glyph(|g| buf.glyphs.push(g));
 
         // --- Materialize cursors ---
         // These are non-selected (decorative) cursors; CursorItem has no
         // cursor_fg/ascent. The selected window's active cursor is pushed by
-        // set_phys_cursor below.
+        // set_phys_cursor below. These write to `buf.window_cursors`, not
+        // `buf.glyphs`, so the glyph order produced above is preserved.
         for cursor in &self.cursors {
             buf.window_cursors.push(WindowCursor {
                 window_id: cursor.window_id,
@@ -1134,9 +1085,80 @@ impl FrameDisplayState {
         }
         buf.cursor_effects_by_window = self.cursor_effects_by_window.clone();
 
+        if let Some(cursor) = self.phys_cursor.clone() {
+            buf.set_phys_cursor(cursor);
+        }
+
+        buf
+    }
+
+    /// Visit every `FrameGlyph` this state materializes, in the canonical
+    /// `materialize()` order, calling `push` for each.
+    ///
+    /// This is the glyph-production half of [`Self::materialize`], factored out
+    /// so callers can iterate the matrix directly without building the flat
+    /// `Vec<FrameGlyph>`. It emits, in order: backgrounds, frame-chrome grid
+    /// rows, window-matrix grid rows, borders, images, videos, xwidgets, and
+    /// scroll bars. It does NOT emit cursors or write any `FrameGlyphBuffer`
+    /// metadata.
+    pub fn for_each_glyph(&self, mut push: impl FnMut(FrameGlyph)) {
+        // --- Materialize backgrounds ---
+        for bg in &self.backgrounds {
+            push(FrameGlyph::Background {
+                bounds: bg.bounds,
+                color: bg.color,
+            });
+        }
+
+        // --- Materialize grid content -> pixel-positioned Char/Stretch glyphs ---
+        for frame_row in &self.frame_chrome_rows {
+            self.for_each_grid_row_glyph(
+                0,
+                frame_row.row_index,
+                &frame_row.row,
+                frame_row.pixel_bounds,
+                self.char_width,
+                self.char_height,
+                &mut push,
+            );
+        }
+        for entry in &self.window_matrices {
+            for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
+                let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let char_w = if entry.matrix.ncols > 0 {
+                    row_bounds.width / entry.matrix.ncols as f32
+                } else {
+                    self.char_width
+                };
+                self.for_each_grid_row_glyph(
+                    entry.window_id as i64,
+                    row_idx as u32,
+                    glyph_row,
+                    row_bounds,
+                    char_w,
+                    self.char_height,
+                    &mut push,
+                );
+            }
+        }
+
+        // --- Materialize borders ---
+        for border in &self.borders {
+            push(FrameGlyph::Border {
+                window_id: border.window_id,
+                row_role: GlyphRowRole::Text,
+                clip_rect: None,
+                x: border.x,
+                y: border.y,
+                width: border.width,
+                height: border.height,
+                color: border.color,
+            });
+        }
+
         // --- Materialize standalone images ---
         for img in &self.images {
-            buf.glyphs.push(FrameGlyph::Image {
+            push(FrameGlyph::Image {
                 window_id: img.window_id,
                 row_role: img.row_role,
                 clip_rect: img.clip_rect,
@@ -1151,7 +1173,7 @@ impl FrameDisplayState {
 
         // --- Materialize videos ---
         for vid in &self.videos {
-            buf.glyphs.push(FrameGlyph::Video {
+            push(FrameGlyph::Video {
                 window_id: vid.window_id,
                 row_role: vid.row_role,
                 clip_rect: vid.clip_rect,
@@ -1168,7 +1190,7 @@ impl FrameDisplayState {
 
         // --- Materialize xwidgets ---
         for xwidget in &self.xwidgets {
-            buf.glyphs.push(FrameGlyph::Xwidget {
+            push(FrameGlyph::Xwidget {
                 window_id: xwidget.window_id,
                 row_role: xwidget.row_role,
                 clip_rect: xwidget.clip_rect,
@@ -1183,7 +1205,7 @@ impl FrameDisplayState {
 
         // --- Materialize scroll bars ---
         for sb in &self.scroll_bars {
-            buf.glyphs.push(FrameGlyph::ScrollBar {
+            push(FrameGlyph::ScrollBar {
                 window_id: sb.window_id,
                 row_role: sb.row_role,
                 clip_rect: sb.clip_rect,
@@ -1201,12 +1223,6 @@ impl FrameDisplayState {
                 thumb_color: sb.thumb_color,
             });
         }
-
-        if let Some(cursor) = self.phys_cursor.clone() {
-            buf.set_phys_cursor(cursor);
-        }
-
-        buf
     }
 
     /// Resolve face attributes for grid materialization.
@@ -1258,15 +1274,15 @@ impl FrameDisplayState {
         }
     }
 
-    fn materialize_grid_row(
+    fn for_each_grid_row_glyph(
         &self,
-        buf: &mut FrameGlyphBuffer,
         window_id: i64,
         row_index: u32,
         glyph_row: &GlyphRow,
         pixel_bounds: Rect,
         char_w: f32,
         char_h: f32,
+        push: &mut impl FnMut(FrameGlyph),
     ) {
         if !glyph_row.enabled {
             return;
@@ -1367,7 +1383,7 @@ impl FrameDisplayState {
                             row_height
                         };
                         let baseline = y + row_ascent + glyph.vertical_offset_px;
-                        buf.glyphs.push(FrameGlyph::Char {
+                        push(FrameGlyph::Char {
                             window_id,
                             row_role,
                             clip_rect,
@@ -1399,7 +1415,7 @@ impl FrameDisplayState {
                             row_height
                         };
                         let baseline = y + row_ascent + glyph.vertical_offset_px;
-                        buf.glyphs.push(FrameGlyph::Char {
+                        push(FrameGlyph::Char {
                             window_id,
                             row_role,
                             clip_rect,
@@ -1437,7 +1453,7 @@ impl FrameDisplayState {
                         } else {
                             y
                         } + glyph.vertical_offset_px;
-                        buf.glyphs.push(FrameGlyph::Stretch {
+                        push(FrameGlyph::Stretch {
                             window_id,
                             row_role,
                             clip_rect,
@@ -1454,7 +1470,7 @@ impl FrameDisplayState {
                         });
                     }
                     GlyphType::Image { image_id } => {
-                        buf.glyphs.push(FrameGlyph::Image {
+                        push(FrameGlyph::Image {
                             window_id,
                             row_role,
                             clip_rect,
@@ -1477,7 +1493,7 @@ impl FrameDisplayState {
                             row_height
                         };
                         let baseline = y + row_ascent + glyph.vertical_offset_px;
-                        buf.glyphs.push(FrameGlyph::Char {
+                        push(FrameGlyph::Char {
                             window_id,
                             row_role,
                             clip_rect,
@@ -1525,7 +1541,7 @@ impl FrameDisplayState {
                 .map(|g| g.face_id)
                 .unwrap_or(0);
             let face_data = self.resolve_face_for_materialize(last_face_id);
-            buf.glyphs.push(FrameGlyph::Stretch {
+            push(FrameGlyph::Stretch {
                 window_id,
                 row_role,
                 clip_rect,

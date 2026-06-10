@@ -453,6 +453,89 @@ fn materialize_includes_scroll_bars() {
 }
 
 #[test]
+fn for_each_glyph_matches_materialize_glyphs() {
+    // Build a state exercising several glyph kinds at once: a background, a
+    // window row with both a Char and a Stretch slot, and a scroll bar. This
+    // pins down that `for_each_glyph` walks the matrix in the exact same order
+    // and with the exact same constructions as `materialize()` builds
+    // `buf.glyphs`.
+    let char_w = 8.0f32;
+    let char_h = 16.0f32;
+    let cols = 4;
+    let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
+    state.faces.insert(0, Face::new(0));
+
+    // One background (emits FrameGlyph::Background).
+    state.backgrounds.push(BackgroundItem {
+        bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        color: Color::RED,
+    });
+
+    // One window matrix row: two chars then a 2-col stretch
+    // (emits FrameGlyph::Char x2 and FrameGlyph::Stretch).
+    let mut matrix = GlyphMatrix::new(1, cols);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(2, 0));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        selected: true,
+    });
+
+    // One scroll bar (emits FrameGlyph::ScrollBar).
+    state.scroll_bars.push(ScrollBarItem {
+        window_id: 1,
+        row_role: GlyphRowRole::Text,
+        clip_rect: Some(Rect::new(0.0, 0.0, cols as f32 * char_w, char_h)),
+        horizontal: false,
+        x: 24.0,
+        y: 0.0,
+        width: 8.0,
+        height: char_h,
+        position: 10,
+        portion: 50,
+        whole: 200,
+        thumb_start: 10.0,
+        thumb_size: 50.0,
+        track_color: Color::BLACK,
+        thumb_color: Color::WHITE,
+    });
+
+    let buf = state.materialize();
+    let mut walked = Vec::new();
+    state.for_each_glyph(|g| walked.push(g));
+
+    // Sanity: all four kinds actually appeared, so the comparison is meaningful.
+    assert!(
+        buf.glyphs
+            .iter()
+            .any(|g| matches!(g, FrameGlyph::Background { .. }))
+    );
+    assert!(
+        buf.glyphs
+            .iter()
+            .any(|g| matches!(g, FrameGlyph::Char { .. }))
+    );
+    assert!(
+        buf.glyphs
+            .iter()
+            .any(|g| matches!(g, FrameGlyph::Stretch { .. }))
+    );
+    assert!(
+        buf.glyphs
+            .iter()
+            .any(|g| matches!(g, FrameGlyph::ScrollBar { .. }))
+    );
+
+    // FrameGlyph has no PartialEq, so compare via Debug strings.
+    assert_eq!(format!("{:?}", buf.glyphs), format!("{:?}", walked));
+}
+
+#[test]
 fn materialize_pixel_positions_from_grid() {
     let char_w = 10.0f32;
     let char_h = 20.0f32;
