@@ -1,6 +1,6 @@
 use super::{
     FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
-    WgpuGlyphAtlas, key_uses_default_font_metrics, normalize_subpixel_mask,
+    WgpuGlyphAtlas, effective_font_size, key_uses_default_font_metrics, normalize_subpixel_mask,
 };
 
 #[test]
@@ -55,6 +55,24 @@ fn default_metrics_accept_explicit_default_font_size() {
     };
 
     assert!(key_uses_default_font_metrics(&key, 13.0));
+}
+
+#[test]
+fn effective_font_size_resolves_zero_sentinel_to_default() {
+    // An explicit, positive size is honored verbatim.
+    assert_eq!(effective_font_size(Some(27.0), 13.0), 27.0);
+    // font_size 0.0 is the "unspecified" sentinel (see
+    // key_uses_default_font_metrics): a face that inherits the frame default
+    // font (minibuffer/echo-area) carries it, and it MUST resolve to the
+    // default. Feeding 0 into cosmic-text's Metrics panics ("line height
+    // cannot be 0").
+    assert_eq!(effective_font_size(Some(0.0), 13.0), 13.0);
+    // A degenerate (negative / non-finite) size is equally unusable and falls
+    // back to the default.
+    assert_eq!(effective_font_size(Some(-5.0), 13.0), 13.0);
+    assert_eq!(effective_font_size(Some(f32::NAN), 13.0), 13.0);
+    // A missing face resolves to the default as before.
+    assert_eq!(effective_font_size(None, 13.0), 13.0);
 }
 
 #[test]

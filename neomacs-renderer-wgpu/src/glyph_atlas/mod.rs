@@ -308,7 +308,7 @@ impl WgpuGlyphAtlas {
                     .contains(neomacs_display_protocol::face::FaceAttributes::ITALIC)
             })
             .unwrap_or(false);
-        let req_size = face.map(|f| f.font_size).unwrap_or(self.default_font_size);
+        let req_size = effective_font_size(face.map(|f| f.font_size), self.default_font_size);
 
         let span = tracing::Span::current();
         span.record("req_family", tracing::field::display(req_family));
@@ -1608,6 +1608,22 @@ fn key_uses_default_font_metrics(key: &GlyphKey, default_font_size: f32) -> bool
     }
     let font_size = f32::from_bits(key.font_size_bits);
     font_size == 0.0 || (font_size - default_font_size).abs() <= 0.1
+}
+
+/// Resolve the effective font size for shaping/rasterization.
+///
+/// A face `font_size` of `0.0` is the "unspecified" sentinel meaning "use the
+/// frame default" — the same convention `key_uses_default_font_metrics`
+/// encodes (a minibuffer/echo-area face, for instance, inherits the frame
+/// default font and carries size 0). cosmic-text panics ("line height cannot
+/// be 0") the moment it is handed a zero line height, so a zero, negative, or
+/// absent size must resolve to the default here rather than flow into
+/// `Metrics::new`.
+fn effective_font_size(face_size: Option<f32>, default_font_size: f32) -> f32 {
+    match face_size {
+        Some(size) if size.is_finite() && size > 0.0 => size,
+        _ => default_font_size,
+    }
 }
 
 #[cfg(test)]
