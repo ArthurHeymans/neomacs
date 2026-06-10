@@ -7215,6 +7215,11 @@ pub(crate) fn x_create_frame_impl(
                 metrics.minibuffer_height.min(height_px as f32),
             ));
         }
+        // x-create-frame builds a GUI frame that is shown, so its menu/tab/tool
+        // bars occupy window rows (GNU realizes FRAME_TOP_MARGIN only on shown
+        // frames). Mark it displaying chrome before the area reflow so the bar
+        // rows are reserved above the root window.
+        frame.displays_chrome = true;
         frame.sync_tab_bar_height_from_parameters();
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
