@@ -143,16 +143,41 @@ fn resolve_call_process_program(
     eval: &super::eval::Context,
     program: &LispString,
 ) -> Result<OsString, Flow> {
+    let program_path = lisp_string_to_output_path(program);
+
+    // Mirror resolve_async_process_program (process.rs:584-595) and GNU
+    // openp (lread.c:2027-2028): if the program is an absolute path,
+    // check it directly and return immediately — no exec-path search.
+    if program_path.is_absolute() {
+        if program_path.is_dir() {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Specified program for new process is a directory",
+                )],
+            ));
+        }
+        if executable_path_exists(&program_path) {
+            return Ok(program_path.into_os_string());
+        }
+        return Err(call_process_lookup_error(program));
+    }
+
+    // Relative program name — search exec-path with suffixes.
+    // Mirror GNU openp's just_use_str sentinel: when exec-path is nil,
+    // expand against default-directory and try the program directly.
     let exec_path = eval.visible_variable_value_or_nil("exec-path");
-    let path_entries = if exec_path.is_nil() {
-        Vec::new()
+    let path_entries: Vec<Value> = if exec_path.is_nil() {
+        // GNU openp (lread.c:1797-1808): when path is nil, use a
+        // sentinel that causes filename=str to be tried directly,
+        // expanded against default-directory.
+        vec![Value::NIL]
     } else {
         list_to_vec(&exec_path).ok_or_else(|| call_process_lookup_error(program))?
     };
     let suffixes = exec_suffixes(eval)?;
-    let program_path = lisp_string_to_output_path(program);
 
-    for entry in path_entries {
+    for entry in &path_entries {
         let Some(directory) = (match entry.kind() {
             ValueKind::Nil => subprocess_default_directory(eval),
             ValueKind::String => entry

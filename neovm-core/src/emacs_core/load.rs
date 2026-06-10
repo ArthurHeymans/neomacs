@@ -4178,6 +4178,43 @@ fn finalize_cached_bootstrap_eval(
     // let lisp/files.el repopulate its `home` plist entry.
     eval.set_variable("abbreviated-home-dir", Value::NIL);
 
+    // Mirror GNU `init_callproc` (src/callproc.c:1960-1963,2038-2044):
+    // re-initialize exec-path and shell-file-name from the RUNTIME
+    // environment so that CI-built release images don't bake in the
+    // build machine's $SHELL / $PATH.  The pdump carried build-time
+    // values; these must be overwritten after every pdump load.
+    //
+    // exec-path: list of dirs from runtime $PATH
+    // (GNU callproc.c: init_callproc_1 / init_callproc)
+    {
+        let path_dirs: Vec<Value> = std::env::var("PATH")
+            .unwrap_or_default()
+            .split(':')
+            .filter(|s| !s.is_empty())
+            .map(|s| Value::unibyte_string(s.to_string()))
+            .collect();
+        eval.set_variable("exec-path", Value::list(path_dirs));
+    }
+
+    // exec-directory: directory containing the neomacs binary
+    // (GNU callproc.c:1961 — Ffile_name_as_directory of car of exec-path,
+    //  then overridden in init_callproc with lib-src dir)
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        eval.set_variable(
+            "exec-directory",
+            Value::unibyte_string(lisp_directory_name_from_host_path(dir)),
+        );
+    }
+
+    // shell-file-name: $SHELL from runtime environment, or "/bin/sh"
+    // (GNU callproc.c:2038-2044)
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        eval.set_variable("shell-file-name", Value::unibyte_string(shell));
+    }
+
     eval.clear_top_level_eval_state();
 
     Ok(())
