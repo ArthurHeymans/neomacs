@@ -8035,7 +8035,16 @@ pub(crate) fn builtin_framep(eval: &mut super::eval::Context, args: Vec<Value>) 
     let Some(frame) = eval.frames.get(FrameId(id)) else {
         return Ok(Value::NIL);
     };
-    Ok(frame.parameter("window-system").unwrap_or(Value::T))
+    // GNU `Fframep` (frame.c) returns the frame's intrinsic output method
+    // (output_pgtk -> `pgtk`, output_x_window -> `x`, output_termcap /
+    // output_initial -> `t`), NOT a frame parameter. Mirror that by reading the
+    // frame's effective window system -- the same source redisplay uses -- so a
+    // graphic frame is never misreported as a termcap `t` frame merely because
+    // its `window-system` *parameter* is unset while the field is set. Reading
+    // the parameter alone made `display-graphic-p` (elisp, via
+    // `framep-on-display`) return nil for the GUI frame, sending it down the
+    // TTY branch of `face-spec-reset-face` (`:family "default" :height 1`).
+    Ok(frame.effective_window_system().unwrap_or(Value::T))
 }
 /// `(frame-live-p OBJ)` -> t if OBJ is a live frame object or frame id.
 pub(crate) fn builtin_frame_live_p(
