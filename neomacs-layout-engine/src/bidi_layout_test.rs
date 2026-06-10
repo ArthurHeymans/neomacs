@@ -22,19 +22,7 @@ fn make_char_glyph(ch: char, x: f32, width: f32) -> FrameGlyph {
         width,
         height: 16.0,
         ascent,
-        fg: Color::new(1.0, 1.0, 1.0, 1.0),
-        bg: None,
         face_id: 0,
-        font_weight: 400,
-        italic: false,
-        font_size: 14.0,
-        underline: 0,
-        underline_color: None,
-        strike_through: 0,
-        strike_through_color: None,
-        overline: 0,
-        overline_color: None,
-        overstrike: false,
     }
 }
 

@@ -16,7 +16,9 @@ use super::GlyphRenderStats;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, Face};
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, FrameGlyphBuffer};
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
+};
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::{HashMap, HashSet};
 use wgpu::util::DeviceExt;
@@ -197,19 +199,20 @@ impl WgpuRenderer {
                     y,
                     width,
                     height,
-                    bg,
+                    face_id,
                     ..
                 } => {
-                    if let Some(bg_color) = bg {
-                        self.add_rect(
-                            &mut bg_vertices,
-                            *x + offset_x,
-                            *y + offset_y,
-                            *width,
-                            *height,
-                            bg_color,
-                        );
-                    }
+                    // Per-glyph background was inlined as `Some(face.background)`;
+                    // resolve it from the face table for the same value.
+                    let bg_color = frame.resolved_face(*face_id).bg;
+                    self.add_rect(
+                        &mut bg_vertices,
+                        *x + offset_x,
+                        *y + offset_y,
+                        *width,
+                        *height,
+                        &bg_color,
+                    );
                 }
                 _ => {}
             }
@@ -365,6 +368,7 @@ impl WgpuRenderer {
         let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
 
+        let mut text_face_cache: Option<(u32, MaterializedFaceData)> = None;
         for glyph in &frame.glyphs {
             if let FrameGlyph::Char {
                 char: ch,
@@ -374,14 +378,26 @@ impl WgpuRenderer {
                 baseline,
                 width: _,
                 ascent: _,
-                fg,
-                bg,
                 face_id,
-                font_size,
-                overstrike,
                 ..
             } = glyph
             {
+                // Resolve the face-derived attributes (fg/bg/font_size/overstrike)
+                // that used to be inlined on the glyph. A one-entry cache reuses
+                // the resolve across runs of glyphs sharing a face.
+                let rf = match text_face_cache {
+                    Some((id, ref data)) if id == *face_id => *data,
+                    _ => {
+                        let data = frame.resolved_face(*face_id);
+                        text_face_cache = Some((*face_id, data));
+                        data
+                    }
+                };
+                let fg = &rf.fg;
+                let bg: Option<Color> = Some(rf.bg);
+                let font_size = rf.font_size;
+                let overstrike = rf.overstrike;
+
                 let face = faces.get(face_id);
 
                 // Decompose physical-pixel positions into integer + subpixel bin.
@@ -457,7 +473,7 @@ impl WgpuRenderer {
                     let glyph_h = content_rect.height() as f32 / sf;
 
                     let mut effective_fg = *fg;
-                    let mut effective_bg = (*bg)
+                    let mut effective_bg = bg
                         .or_else(|| face.map(|resolved| resolved.background))
                         .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                     if cursor_visible
@@ -516,7 +532,7 @@ impl WgpuRenderer {
                         },
                     ];
 
-                    let overstrike_vertices = if *overstrike {
+                    let overstrike_vertices = if overstrike {
                         let ox = 1.0 / sf;
                         Some([
                             GlyphVertex {
@@ -567,7 +583,7 @@ impl WgpuRenderer {
                         subpixel_bg,
                     );
 
-                    let overstrike_subpixel_vertices = if *overstrike {
+                    let overstrike_subpixel_vertices = if overstrike {
                         let ox = 1.0 / sf;
                         Some(build_subpixel_vertices(
                             glyph_x + ox,
@@ -607,6 +623,7 @@ impl WgpuRenderer {
 
         // --- Step 3: Collect decorations (underline, overline, strikethrough) ---
         let mut decoration_vertices: Vec<RectVertex> = Vec::new();
+        let mut deco_face_cache: Option<(u32, MaterializedFaceData)> = None;
         for glyph in &frame.glyphs {
             if let FrameGlyph::Char {
                 x,
@@ -614,17 +631,26 @@ impl WgpuRenderer {
                 baseline,
                 width,
                 ascent,
-                fg,
                 face_id,
-                underline,
-                underline_color,
-                strike_through,
-                strike_through_color,
-                overline,
-                overline_color,
                 ..
             } = glyph
             {
+                let rf = match deco_face_cache {
+                    Some((id, ref data)) if id == *face_id => *data,
+                    _ => {
+                        let data = frame.resolved_face(*face_id);
+                        deco_face_cache = Some((*face_id, data));
+                        data
+                    }
+                };
+                let fg = &rf.fg;
+                let underline = &rf.underline;
+                let underline_color = &rf.underline_color;
+                let strike_through = &rf.strike_through;
+                let strike_through_color = &rf.strike_through_color;
+                let overline = &rf.overline;
+                let overline_color = &rf.overline_color;
+
                 let gx = *x + offset_x;
                 let gy = *y + offset_y;
                 let baseline_y = *baseline + offset_y;
@@ -1492,31 +1518,33 @@ impl WgpuRenderer {
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
         for glyph in &frame.glyphs {
-            let (gx, gy, gw, gh, gface_id, g_bg) = match glyph {
+            let (gx, gy, gw, gh, gface_id) = match glyph {
                 FrameGlyph::Char {
                     x,
                     y,
                     width,
                     height,
                     face_id,
-                    bg,
                     ..
-                } => (*x, *y, *width, *height, *face_id, *bg),
+                } => (*x, *y, *width, *height, *face_id),
                 FrameGlyph::Stretch {
                     x,
                     y,
                     width,
                     height,
                     face_id,
-                    bg,
                     ..
-                } => (*x, *y, *width, *height, *face_id, Some(*bg)),
+                } => (*x, *y, *width, *height, *face_id),
                 _ => continue,
             };
 
-            // Only include glyphs whose face has box decorations
-            match faces.get(&gface_id) {
-                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {}
+            // Only include glyphs whose face has box decorations. The box fill
+            // background is the face's background (the value materialization used
+            // to inline on the glyph as `Some(face.background)`).
+            let g_bg = match faces.get(&gface_id) {
+                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                    Some(f.background)
+                }
                 _ => continue,
             };
 

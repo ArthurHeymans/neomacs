@@ -448,31 +448,20 @@ fn add_char_uses_current_face_attributes() {
     buf.add_char('X', 0.0, 0.0, 8.0, 16.0, 12.0, true);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Char {
-            fg: glyph_fg,
-            bg: glyph_bg,
-            face_id,
-            font_weight,
-            italic,
-            underline,
-            strike_through,
-            overline,
-            underline_color,
-            strike_through_color,
-            overline_color,
-            ..
-        } => {
-            assert_color_eq(glyph_fg, &fg);
-            assert_eq!(*glyph_bg, Some(bg));
+        FrameGlyph::Char { face_id, .. } => {
             assert_eq!(*face_id, 42);
-            assert_eq!(*font_weight, 700);
-            assert!(*italic);
-            assert_eq!(*underline, 1);
-            assert_eq!(*underline_color, Some(Color::GREEN));
-            assert_eq!(*strike_through, 1);
-            assert_eq!(*strike_through_color, Some(Color::RED));
-            assert_eq!(*overline, 1);
-            assert_eq!(*overline_color, Some(Color::BLUE));
+            // The face-derived attributes are resolved from the face table.
+            let rf = buf.resolved_face(*face_id);
+            assert_color_eq(&rf.fg, &fg);
+            assert_eq!(rf.bg, bg);
+            assert_eq!(rf.font_weight, 700);
+            assert!(rf.italic);
+            assert_eq!(rf.underline, 1);
+            assert_eq!(rf.underline_color, Some(Color::GREEN));
+            assert_eq!(rf.strike_through, 1);
+            assert_eq!(rf.strike_through_color, Some(Color::RED));
+            assert_eq!(rf.overline, 1);
+            assert_eq!(rf.overline_color, Some(Color::BLUE));
             assert!(buf.glyphs[0].is_overlay());
         }
         other => panic!("Expected Char glyph, got {:?}", other),
@@ -555,15 +544,13 @@ fn add_composed_char_uses_current_face() {
     buf.add_composed_char("e\u{0301}", 'e', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Char {
-            face_id,
-            fg: glyph_fg,
-            bg: glyph_bg,
-            ..
-        } => {
+        FrameGlyph::Char { face_id, .. } => {
             assert_eq!(*face_id, 10);
-            assert_color_eq(glyph_fg, &fg);
-            assert_eq!(*glyph_bg, None);
+            // Colors resolve from the face; a `None` background synthesizes a
+            // transparent face background.
+            let rf = buf.resolved_face(*face_id);
+            assert_color_eq(&rf.fg, &fg);
+            assert_eq!(rf.bg, Color::TRANSPARENT);
         }
         other => panic!("Expected Char glyph, got {:?}", other),
     }
@@ -908,32 +895,23 @@ fn set_face_affects_subsequent_chars() {
 
     // First char uses default face
     match &buf.glyphs[0] {
-        FrameGlyph::Char {
-            face_id,
-            font_weight,
-            italic,
-            ..
-        } => {
+        FrameGlyph::Char { face_id, .. } => {
             assert_eq!(*face_id, 0);
-            assert_eq!(*font_weight, 400);
-            assert!(!*italic);
+            let rf = buf.resolved_face(*face_id);
+            assert_eq!(rf.font_weight, 400);
+            assert!(!rf.italic);
         }
         _ => panic!("Expected Char"),
     }
 
     // Second char uses newly set face
     match &buf.glyphs[1] {
-        FrameGlyph::Char {
-            face_id,
-            font_weight,
-            italic,
-            fg,
-            ..
-        } => {
+        FrameGlyph::Char { face_id, .. } => {
             assert_eq!(*face_id, 5);
-            assert_eq!(*font_weight, 700);
-            assert!(*italic);
-            assert_color_eq(fg, &red);
+            let rf = buf.resolved_face(*face_id);
+            assert_eq!(rf.font_weight, 700);
+            assert!(rf.italic);
+            assert_color_eq(&rf.fg, &red);
         }
         _ => panic!("Expected Char"),
     }
@@ -989,8 +967,8 @@ fn set_face_with_font_updates_font_size() {
     buf.add_char('A', 0.0, 0.0, 12.0, 24.0, 18.0, false);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Char { font_size, .. } => {
-            assert_eq!(*font_size, 24.0);
+        FrameGlyph::Char { face_id, .. } => {
+            assert_eq!(buf.resolved_face(*face_id).font_size, 24.0);
         }
         _ => panic!("Expected Char"),
     }
@@ -1037,21 +1015,14 @@ fn set_face_with_font_decoration_attributes() {
     buf.add_char('D', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     match &buf.glyphs[0] {
-        FrameGlyph::Char {
-            underline,
-            underline_color,
-            strike_through,
-            strike_through_color,
-            overline,
-            overline_color,
-            ..
-        } => {
-            assert_eq!(*underline, 3);
-            assert_eq!(*underline_color, Some(ul_color));
-            assert_eq!(*strike_through, 1);
-            assert_eq!(*strike_through_color, Some(st_color));
-            assert_eq!(*overline, 1);
-            assert_eq!(*overline_color, Some(ol_color));
+        FrameGlyph::Char { face_id, .. } => {
+            let rf = buf.resolved_face(*face_id);
+            assert_eq!(rf.underline, 3);
+            assert_eq!(rf.underline_color, Some(ul_color));
+            assert_eq!(rf.strike_through, 1);
+            assert_eq!(rf.strike_through_color, Some(st_color));
+            assert_eq!(rf.overline, 1);
+            assert_eq!(rf.overline_color, Some(ol_color));
         }
         _ => panic!("Expected Char"),
     }
@@ -1217,10 +1188,14 @@ fn font_size_accessors() {
     buf.set_font_size(20.0);
     assert_eq!(buf.font_size(), 20.0);
 
-    // Affects subsequently added chars
+    // The current font size flows into the face synthesized by set_face, and
+    // a char added afterwards resolves its size from that face.
+    buf.set_face(1, Color::WHITE, None, 400, false, 0, None, 0, None, 0, None);
     buf.add_char('X', 0.0, 0.0, 10.0, 20.0, 15.0, false);
     match &buf.glyphs[0] {
-        FrameGlyph::Char { font_size, .. } => assert_eq!(*font_size, 20.0),
+        FrameGlyph::Char { face_id, .. } => {
+            assert_eq!(buf.resolved_face(*face_id).font_size, 20.0)
+        }
         _ => panic!("Expected Char"),
     }
 }

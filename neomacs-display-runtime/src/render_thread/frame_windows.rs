@@ -401,6 +401,30 @@ impl GuiFrameRenderState {
         true
     }
 
+    /// Append glyphs together with the faces they reference.
+    ///
+    /// Producers that emit `FrameGlyph::Char` with synthesized face ids (the
+    /// terminal-cell expansion) must register those faces so
+    /// `FrameGlyphBuffer::resolved_face` can resolve the glyph's colors and
+    /// decorations at draw time.
+    #[cfg(feature = "neo-term")]
+    pub(super) fn extend_current_frame_glyphs_and_faces(
+        &mut self,
+        glyphs: Vec<FrameGlyph>,
+        faces: HashMap<u32, crate::core::face::Face>,
+    ) -> bool {
+        if glyphs.is_empty() {
+            return false;
+        }
+        let Some(frame) = self.compositor.current_frame.as_mut() else {
+            return false;
+        };
+        frame.glyphs.extend(glyphs);
+        frame.faces.extend(faces);
+        self.compositor.dirty = true;
+        true
+    }
+
     pub(super) fn set_visual_bell_start(&mut self, start: Option<Instant>) {
         self.overlays.visual_bell_start = start;
         if start.is_some() {

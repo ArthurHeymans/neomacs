@@ -10,7 +10,7 @@ use super::{
     ScrollMomentumEntry, ScrollVelocityFadeEntry, WindowFadeEntry,
 };
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::FrameGlyph;
+use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::HashMap;
 
@@ -1386,7 +1386,6 @@ pub(super) fn emit_search_highlight(
             width,
             height,
             face_id,
-            bg,
             ..
         } = glyph
         {
@@ -1397,7 +1396,8 @@ pub(super) fn emit_search_highlight(
                 max_y = max_y.max(*y + *height);
                 found = true;
                 if match_bg.is_none() {
-                    match_bg = bg.clone();
+                    // Background was inlined as `Some(face.background)`.
+                    match_bg = Some(ctx.frame_glyphs.resolved_face(*face_id).bg);
                 }
             }
         }
@@ -1598,13 +1598,14 @@ pub(super) fn emit_minimap(ctx: &EffectCtx) -> Vec<RectVertex> {
         let bg_color = Color::new(0.0, 0.0, 0.0, 0.15);
         push_rect(&mut all_verts, map_x, map_y, minimap_w, map_h, &bg_color);
 
+        let mut mini_face_cache: Option<(u32, MaterializedFaceData)> = None;
         for glyph in &ctx.frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,
                 y,
                 width,
                 height: _,
-                fg,
+                face_id,
                 char: ch,
                 row_role,
                 ..
@@ -1616,6 +1617,14 @@ pub(super) fn emit_minimap(ctx: &EffectCtx) -> Vec<RectVertex> {
                 if *ch == ' ' || *ch == '\t' || *ch == '\n' {
                     continue;
                 }
+                let fg = match mini_face_cache {
+                    Some((id, ref data)) if id == *face_id => data.fg,
+                    _ => {
+                        let data = ctx.frame_glyphs.resolved_face(*face_id);
+                        mini_face_cache = Some((*face_id, data));
+                        data.fg
+                    }
+                };
                 if *x < b.x || *x >= b.x + b.width - minimap_w {
                     continue;
                 }
@@ -1980,12 +1989,14 @@ pub(super) fn emit_minibuffer_completion(ctx: &EffectCtx) -> Vec<RectVertex> {
         let mut highlighted_rows: Vec<(f32, f32, f32, f32)> = Vec::new();
 
         for glyph in &ctx.frame_glyphs.glyphs {
+            // Every materialized Char carried `Some(face.background)`, so this
+            // matched all char glyphs in the region; resolving by face is not
+            // needed here — the row geometry alone drives the highlight.
             if let FrameGlyph::Char {
                 x,
                 y,
                 width,
                 height,
-                bg: Some(_),
                 ..
             } = glyph
             {

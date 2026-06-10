@@ -413,10 +413,17 @@ fn colorful_glyph_box_logs(
             y,
             width,
             height,
-            fg,
+            face_id,
             ..
-        } if !char.is_whitespace() && !color_is_grayscale(*fg) => {
-            Some((*char, *x, *y, *width, *height, *fg))
+        } if !char.is_whitespace() && !color_is_grayscale(frame.resolved_face(*face_id).fg) => {
+            Some((
+                *char,
+                *x,
+                *y,
+                *width,
+                *height,
+                frame.resolved_face(*face_id).fg,
+            ))
         }
         _ => None,
     }) {

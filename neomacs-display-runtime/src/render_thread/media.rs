@@ -1,6 +1,10 @@
 use super::RenderApp;
 use super::frame_windows::GuiFrameRenderState;
+#[cfg(feature = "neo-term")]
+use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
+#[cfg(feature = "neo-term")]
+use crate::core::types::Color;
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
@@ -17,12 +21,13 @@ impl RenderApp {
     fn expanded_terminal_glyphs_for_frame(
         frame: &FrameGlyphBuffer,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
-    ) -> Vec<FrameGlyph> {
+    ) -> (Vec<FrameGlyph>, HashMap<u32, Face>) {
         let cell_w = frame.char_width;
         let cell_h = frame.char_height;
         let font_size = frame.font_pixel_size;
         let ascent = cell_h * 0.8;
         let mut extra_glyphs = Vec::new();
+        let mut extra_faces = HashMap::new();
 
         for glyph in &frame.glyphs {
             let FrameGlyph::Terminal {
@@ -66,10 +71,11 @@ impl RenderApp {
                 false,
                 1.0,
                 &mut extra_glyphs,
+                &mut extra_faces,
             );
         }
 
-        extra_glyphs
+        (extra_glyphs, extra_faces)
     }
 
     #[cfg(feature = "neo-term")]
@@ -80,8 +86,9 @@ impl RenderApp {
         let Some(frame) = render.compositor.current_frame.as_ref() else {
             return;
         };
-        let extra_glyphs = Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
-        render.extend_current_frame_glyphs(extra_glyphs);
+        let (extra_glyphs, extra_faces) =
+            Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
+        render.extend_current_frame_glyphs_and_faces(extra_glyphs, extra_faces);
     }
 
     #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
@@ -445,6 +452,7 @@ impl RenderApp {
 
         // Render Window-mode terminals as overlays covering the frame body.
         let mut win_glyphs = Vec::new();
+        let mut win_faces = HashMap::new();
         for id in self.terminal_manager.ids() {
             if let Some(view) = self.terminal_manager.get(id) {
                 if view.mode != TerminalMode::Window {
@@ -484,6 +492,7 @@ impl RenderApp {
                         true,
                         1.0,
                         &mut win_glyphs,
+                        &mut win_faces,
                     );
                 }
             }
@@ -494,11 +503,12 @@ impl RenderApp {
             .primary_window_mut()
             .map(|ws| &mut ws.render)
         {
-            primary_frame.extend_current_frame_glyphs(win_glyphs);
+            primary_frame.extend_current_frame_glyphs_and_faces(win_glyphs, win_faces);
         }
 
         // Render floating terminals
         let mut float_glyphs = Vec::new();
+        let mut float_faces = HashMap::new();
         for id in self.terminal_manager.ids() {
             if let Some(view) = self.terminal_manager.get(id) {
                 if view.mode != TerminalMode::Floating {
@@ -539,6 +549,7 @@ impl RenderApp {
                         true,
                         view.float_opacity,
                         &mut float_glyphs,
+                        &mut float_faces,
                     );
                 }
             }
@@ -549,11 +560,20 @@ impl RenderApp {
             .primary_window_mut()
             .map(|ws| &mut ws.render)
         {
-            primary_frame.extend_current_frame_glyphs(float_glyphs);
+            primary_frame.extend_current_frame_glyphs_and_faces(float_glyphs, float_faces);
         }
     }
 
     /// Expand terminal content cells into FrameGlyph entries.
+    ///
+    /// Terminal cells carry their own per-cell colors and SGR flags rather than
+    /// a GNU face. Since `FrameGlyph::Char` resolves its visual attributes from
+    /// the frame face table by `face_id`, each distinct (fg, bold, italic,
+    /// underline, strikeout) combination is interned as a synthesized `Face` in
+    /// `faces`, and the glyph references it. The synthesized face uses a
+    /// transparent background so no per-character background is painted (the
+    /// per-cell stretch above and the terminal's default-background stretch
+    /// supply the background, exactly as when `Char.bg` was `None`).
     #[cfg(feature = "neo-term")]
     fn expand_terminal_cells(
         content: &crate::terminal::content::TerminalContent,
@@ -566,6 +586,7 @@ impl RenderApp {
         is_overlay: bool,
         opacity: f32,
         out: &mut Vec<FrameGlyph>,
+        faces: &mut HashMap<u32, Face>,
     ) {
         use alacritty_terminal::term::cell::Flags as CellFlags;
         let row_role = if is_overlay {
@@ -601,6 +622,14 @@ impl RenderApp {
             if cell.c != ' ' && cell.c != '\0' {
                 let mut fg = cell.fg;
                 fg.a *= opacity;
+                let bold = cell.flags.contains(CellFlags::BOLD);
+                let italic = cell.flags.contains(CellFlags::ITALIC);
+                let underline = cell.flags.contains(CellFlags::UNDERLINE);
+                let strikeout = cell.flags.contains(CellFlags::STRIKEOUT);
+                let face_id = terminal_cell_face_id(fg, bold, italic, underline, strikeout);
+                faces.entry(face_id).or_insert_with(|| {
+                    terminal_cell_face(face_id, fg, bold, italic, underline, strikeout, font_size)
+                });
                 out.push(FrameGlyph::Char {
                     window_id: 0,
                     row_role,
@@ -615,31 +644,7 @@ impl RenderApp {
                     width: cell_w,
                     height: cell_h,
                     ascent,
-                    fg,
-                    bg: None,
-                    face_id: 0,
-                    font_weight: if cell.flags.contains(CellFlags::BOLD) {
-                        700
-                    } else {
-                        400
-                    },
-                    italic: cell.flags.contains(CellFlags::ITALIC),
-                    font_size,
-                    underline: if cell.flags.contains(CellFlags::UNDERLINE) {
-                        1
-                    } else {
-                        0
-                    },
-                    underline_color: None,
-                    strike_through: if cell.flags.contains(CellFlags::STRIKEOUT) {
-                        1
-                    } else {
-                        0
-                    },
-                    strike_through_color: None,
-                    overline: 0,
-                    overline_color: None,
-                    overstrike: false,
+                    face_id,
                 });
             }
         }
@@ -661,6 +666,95 @@ impl RenderApp {
                 color: fg,
             });
         }
+    }
+}
+
+/// Base for synthesized terminal-cell face ids. Kept far above any real GNU
+/// face id so terminal faces never collide with faces published by layout.
+#[cfg(feature = "neo-term")]
+const TERMINAL_FACE_ID_BASE: u32 = 0xF000_0000;
+
+/// Deterministic face id for a terminal cell's visual style.
+///
+/// Encodes the 8-bit-per-channel foreground plus the four SGR flags into the
+/// low 28 bits below [`TERMINAL_FACE_ID_BASE`]. Identical styles map to the
+/// same id, so equally styled cells share one synthesized face and one glyph
+/// atlas cache entry; distinct colors/flags never collide.
+#[cfg(feature = "neo-term")]
+fn terminal_cell_face_id(
+    fg: Color,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    strike: bool,
+) -> u32 {
+    let to_u8 = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
+    let rgb = (to_u8(fg.r) << 16) | (to_u8(fg.g) << 8) | to_u8(fg.b);
+    let flags =
+        (bold as u32) | ((italic as u32) << 1) | ((underline as u32) << 2) | ((strike as u32) << 3);
+    TERMINAL_FACE_ID_BASE | ((rgb << 4) | flags)
+}
+
+/// Synthesize the `Face` for a terminal cell so that
+/// [`FrameGlyphBuffer::resolved_face`] returns exactly the colors and
+/// decorations the cell glyph used to inline: foreground from the cell,
+/// transparent background (no per-character fill), bold via font weight 700,
+/// italic/underline/strike-through via attributes.
+#[cfg(feature = "neo-term")]
+fn terminal_cell_face(
+    face_id: u32,
+    fg: Color,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    strike: bool,
+    font_size: f32,
+) -> Face {
+    let mut attrs = FaceAttributes::empty();
+    if bold {
+        attrs |= FaceAttributes::BOLD;
+    }
+    if italic {
+        attrs |= FaceAttributes::ITALIC;
+    }
+    if underline {
+        attrs |= FaceAttributes::UNDERLINE;
+    }
+    if strike {
+        attrs |= FaceAttributes::STRIKE_THROUGH;
+    }
+    let underline_style = if underline {
+        UnderlineStyle::from_gnu_code(1).unwrap_or_default()
+    } else {
+        UnderlineStyle::None
+    };
+    Face {
+        id: face_id,
+        foreground: fg,
+        background: Color::TRANSPARENT,
+        use_default_foreground: false,
+        use_default_background: false,
+        underline_color: None,
+        overline_color: None,
+        strike_through_color: None,
+        box_color: None,
+        font_family: "monospace".to_string(),
+        font_size,
+        font_weight: if bold { 700 } else { 400 },
+        attributes: attrs,
+        underline_style,
+        box_type: BoxType::None,
+        box_line_width: 0,
+        box_corner_radius: 0,
+        box_border_style: 0,
+        box_border_speed: 1.0,
+        box_color2: None,
+        font_file_path: None,
+        font_ascent: 0,
+        font_descent: 0,
+        underline_position: 1,
+        underline_thickness: 1,
+        background_gradient: None,
     }
 }
 
@@ -710,7 +804,7 @@ mod tests {
             },
         );
 
-        let glyphs = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
+        let (glyphs, faces) = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
 
         assert!(matches!(
             glyphs.first(),
@@ -722,18 +816,26 @@ mod tests {
                 ..
             })
         ));
-        assert!(matches!(
-            glyphs.get(1),
-            Some(FrameGlyph::Char {
-                char: 'x',
-                x: 40.0,
-                y: 40.0,
-                width: 10.0,
-                height: 20.0,
-                font_size: 18.0,
-                ..
-            })
-        ));
+        // Geometry stays on the glyph; the font size now lives on the
+        // synthesized face referenced by the glyph's face_id.
+        let Some(FrameGlyph::Char {
+            char: ch,
+            x,
+            y,
+            width,
+            height,
+            face_id,
+            ..
+        }) = glyphs.get(1)
+        else {
+            panic!("expected a Char glyph at index 1");
+        };
+        assert_eq!(*ch, 'x');
+        assert_eq!(*x, 40.0);
+        assert_eq!(*y, 40.0);
+        assert_eq!(*width, 10.0);
+        assert_eq!(*height, 20.0);
+        assert_eq!(faces.get(face_id).expect("terminal face").font_size, 18.0);
     }
 
     #[test]
@@ -748,8 +850,9 @@ mod tests {
         });
         let contents = HashMap::new();
 
-        let glyphs = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
+        let (glyphs, faces) = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
 
         assert!(glyphs.is_empty());
+        assert!(faces.is_empty());
     }
 }

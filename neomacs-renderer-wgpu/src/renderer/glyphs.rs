@@ -13,7 +13,8 @@ use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, MaterializedFaceData,
+    WindowCursor,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
@@ -674,8 +675,6 @@ fn log_face_debug_summary(
             char,
             x,
             y,
-            fg,
-            bg,
             face_id,
             row_role,
             ..
@@ -684,6 +683,9 @@ fn log_face_debug_summary(
             continue;
         };
 
+        let rf = frame_glyphs.resolved_face(*face_id);
+        let fg = &rf.fg;
+        let bg: Option<Color> = Some(rf.bg);
         let colorful_fg = !color_is_grayscale(*fg);
         let colorful_bg = bg.is_some_and(|color| !color_is_grayscale(color));
         if colorful_fg || colorful_bg {
@@ -1118,20 +1120,17 @@ impl WgpuRenderer {
                         width,
                         height,
                         ascent,
-                        fg,
                         face_id,
-                        font_size,
-                        bg,
                         char: ch,
                         row_role,
                         ..
                     } => {
                         // Log first row chars AND any char touching y=24-32
                         if *y < 1.0 || (*y < 32.0 && *y + *height > 24.0) {
-                            let bg_str = bg
-                                .as_ref()
-                                .map(|c| format!("({:.3},{:.3},{:.3})", c.r, c.g, c.b))
-                                .unwrap_or("None".to_string());
+                            let rf = frame_glyphs.resolved_face(*face_id);
+                            let fg = rf.fg;
+                            let font_size = rf.font_size;
+                            let bg_str = format!("({:.3},{:.3},{:.3})", rf.bg.r, rf.bg.g, rf.bg.b);
                             tracing::trace!(
                                 "frame_glyph[{}]: Char '{}' face={} pos=({:.1},{:.1}) size=({:.1},{:.1}) ascent={:.1} fg=({:.3},{:.3},{:.3}) bg={} font_sz={:.1} role={:?}",
                                 i,
@@ -1229,7 +1228,7 @@ impl WgpuRenderer {
 
         for glyph in &frame_glyphs.glyphs {
             // Extract position info from both Char and Stretch glyphs with box faces
-            let (gx, gy, gw, gh, gface_id, g_role, g_bg) = match glyph {
+            let (gx, gy, gw, gh, gface_id, g_role) = match glyph {
                 FrameGlyph::Char {
                     x,
                     y,
@@ -1237,9 +1236,8 @@ impl WgpuRenderer {
                     height,
                     face_id,
                     row_role,
-                    bg,
                     ..
-                } => (*x, *y, *width, *height, *face_id, *row_role, *bg),
+                } => (*x, *y, *width, *height, *face_id, *row_role),
                 FrameGlyph::Stretch {
                     x,
                     y,
@@ -1247,15 +1245,18 @@ impl WgpuRenderer {
                     height,
                     face_id,
                     row_role,
-                    bg,
                     ..
-                } => (*x, *y, *width, *height, *face_id, *row_role, Some(*bg)),
+                } => (*x, *y, *width, *height, *face_id, *row_role),
                 _ => continue,
             };
 
-            // Only include glyphs whose face has box decorations
-            match faces.get(&gface_id) {
-                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {}
+            // Only include glyphs whose face has box decorations. The box fill
+            // background is the face's background (the value materialization used
+            // to inline on the glyph as `Some(face.background)`).
+            let g_bg = match faces.get(&gface_id) {
+                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                    Some(f.background)
+                }
                 _ => continue,
             };
 
@@ -1460,13 +1461,13 @@ impl WgpuRenderer {
             }
         }
         // Non-overlay char backgrounds (skip boxed chars — they get rounded bg instead)
+        let mut bg_face_cache: Option<(u32, MaterializedFaceData)> = None;
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,
                 y,
                 width,
                 height,
-                bg,
                 face_id,
                 row_role,
                 clip_rect,
@@ -1474,6 +1475,18 @@ impl WgpuRenderer {
             } = glyph
             {
                 if !row_role.is_chrome() {
+                    // The per-glyph background used to be inlined as
+                    // `Some(face.background)` by materialization, so resolving
+                    // it from the face reproduces that value exactly.
+                    let rf = match bg_face_cache {
+                        Some((id, ref data)) if id == *face_id => *data,
+                        _ => {
+                            let data = frame_glyphs.resolved_face(*face_id);
+                            bg_face_cache = Some((*face_id, data));
+                            data
+                        }
+                    };
+                    let bg: Option<Color> = Some(rf.bg);
                     let face = faces.get(face_id);
                     let has_gradient = face
                         .and_then(|resolved| resolved.background_gradient.as_deref())
@@ -1757,13 +1770,13 @@ impl WgpuRenderer {
             }
         }
         // Overlay char backgrounds (skip those inside a box span)
+        let mut overlay_bg_face_cache: Option<(u32, MaterializedFaceData)> = None;
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,
                 y,
                 width,
                 height,
-                bg,
                 face_id,
                 row_role,
                 clip_rect,
@@ -1771,6 +1784,16 @@ impl WgpuRenderer {
             } = glyph
             {
                 if row_role.is_chrome() {
+                    // Background was inlined as `Some(face.background)`.
+                    let rf = match overlay_bg_face_cache {
+                        Some((id, ref data)) if id == *face_id => *data,
+                        _ => {
+                            let data = frame_glyphs.resolved_face(*face_id);
+                            overlay_bg_face_cache = Some((*face_id, data));
+                            data
+                        }
+                    };
+                    let bg: Option<Color> = Some(rf.bg);
                     let face = faces.get(face_id);
                     let has_gradient = face
                         .and_then(|resolved| resolved.background_gradient.as_deref())
@@ -2105,6 +2128,7 @@ impl WgpuRenderer {
                     );
                 }
 
+                let mut glyph_face_cache: Option<(u32, MaterializedFaceData)> = None;
                 for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
                     if let FrameGlyph::Char {
                         window_id,
@@ -2117,19 +2141,31 @@ impl WgpuRenderer {
                         width,
                         height,
                         ascent,
-                        fg,
-                        bg,
                         face_id,
-                        font_size,
                         row_role,
                         clip_rect,
-                        overstrike,
                         ..
                     } = glyph
                     {
                         if row_role.is_chrome() != want_overlay {
                             continue;
                         }
+
+                        // Resolve the face-derived attributes that used to be
+                        // inlined on the glyph. Glyphs arrive in face-runs, so a
+                        // one-entry cache avoids re-resolving per glyph.
+                        let rf = match glyph_face_cache {
+                            Some((id, ref data)) if id == *face_id => *data,
+                            _ => {
+                                let data = frame_glyphs.resolved_face(*face_id);
+                                glyph_face_cache = Some((*face_id, data));
+                                data
+                            }
+                        };
+                        let fg = &rf.fg;
+                        let bg: Option<Color> = Some(rf.bg);
+                        let font_size = rf.font_size;
+                        let overstrike = rf.overstrike;
 
                         let face = faces.get(face_id);
 
@@ -2270,7 +2306,7 @@ impl WgpuRenderer {
                                         .map(str::to_owned)
                                         .unwrap_or_else(|| char.to_string()),
                                     face_id: *face_id,
-                                    font_size: *font_size,
+                                    font_size,
                                     cell_x: *x,
                                     cell_y: *y,
                                     cell_w: *width,
@@ -2290,7 +2326,7 @@ impl WgpuRenderer {
                             let mut effective_fg = *fg;
                             let mut effective_bg = Self::sample_face_background(
                                 face,
-                                *bg,
+                                bg,
                                 *x,
                                 *y,
                                 *width,
@@ -2416,7 +2452,7 @@ impl WgpuRenderer {
                             // glyph a second time shifted 1px right.
                             // This matches official Emacs behavior when
                             // a bold font variant is unavailable.
-                            let overstrike_vertices = if *overstrike {
+                            let overstrike_vertices = if overstrike {
                                 let ox = 1.0 / self.scale_factor;
                                 Some([
                                     GlyphVertex {
@@ -2467,7 +2503,7 @@ impl WgpuRenderer {
                                 subpixel_bg,
                             );
 
-                            let overstrike_subpixel_vertices = if *overstrike {
+                            let overstrike_subpixel_vertices = if overstrike {
                                 let ox = 1.0 / self.scale_factor;
                                 Some(build_subpixel_vertices(
                                     glyph_x + ox,
@@ -2740,6 +2776,7 @@ impl WgpuRenderer {
                 {
                     let mut decoration_vertices: Vec<RectVertex> = Vec::new();
 
+                    let mut deco_face_cache: Option<(u32, MaterializedFaceData)> = None;
                     for glyph in &frame_glyphs.glyphs {
                         if let FrameGlyph::Char {
                             x,
@@ -2748,14 +2785,7 @@ impl WgpuRenderer {
                             width,
                             height: _,
                             ascent,
-                            fg,
                             face_id,
-                            underline,
-                            underline_color,
-                            strike_through,
-                            strike_through_color,
-                            overline,
-                            overline_color,
                             row_role,
                             ..
                         } = glyph
@@ -2763,6 +2793,22 @@ impl WgpuRenderer {
                             if row_role.is_chrome() != want_overlay {
                                 continue;
                             }
+
+                            let rf = match deco_face_cache {
+                                Some((id, ref data)) if id == *face_id => *data,
+                                _ => {
+                                    let data = frame_glyphs.resolved_face(*face_id);
+                                    deco_face_cache = Some((*face_id, data));
+                                    data
+                                }
+                            };
+                            let fg = &rf.fg;
+                            let underline = &rf.underline;
+                            let underline_color = &rf.underline_color;
+                            let strike_through = &rf.strike_through;
+                            let strike_through_color = &rf.strike_through_color;
+                            let overline = &rf.overline;
+                            let overline_color = &rf.overline_color;
 
                             let y_offset = if has_line_anims {
                                 self.line_y_offset(*x, *y)

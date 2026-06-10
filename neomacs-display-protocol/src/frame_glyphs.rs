@@ -96,6 +96,31 @@ impl Default for DisplaySlotId {
     }
 }
 
+/// Resolved face attributes for one `face_id`, used at draw time by every
+/// consumer of [`FrameGlyph::Char`].
+///
+/// These fields were previously inlined on every character glyph as pure
+/// denormalization of the glyph's `face_id`. They are now resolved on demand
+/// from the frame face table by [`FrameGlyphBuffer::resolved_face`] (and the
+/// identical layout-side [`crate::glyph_matrix::FrameDisplayState`] resolver),
+/// keeping the per-glyph payload small.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaterializedFaceData {
+    pub fg: Color,
+    pub bg: Color,
+    pub font_ascent: f32,
+    pub font_weight: u16,
+    pub italic: bool,
+    pub font_size: f32,
+    pub underline: u8,
+    pub underline_color: Option<Color>,
+    pub strike_through: u8,
+    pub strike_through_color: Option<Color>,
+    pub overline: u8,
+    pub overline_color: Option<Color>,
+    pub overstrike: bool,
+}
+
 /// A single glyph to render
 #[derive(Debug, Clone)]
 pub enum FrameGlyph {
@@ -130,33 +155,16 @@ pub enum FrameGlyph {
         height: f32,
         /// Font ascent
         ascent: f32,
-        /// Foreground color
-        fg: Color,
-        /// Background color (if not transparent)
-        bg: Option<Color>,
-        /// Face ID for font lookup
+        /// Face ID for font lookup and all visual face attributes.
+        ///
+        /// Foreground/background colors, font weight/size, italic, and the
+        /// underline/strike-through/overline/overstrike decorations are NOT
+        /// stored per glyph; they are resolved from the frame face table by
+        /// this id at draw time via [`FrameGlyphBuffer::resolved_face`]. Both
+        /// build paths (`materialize` and `set_face`/`set_face_with_font`)
+        /// populate `FrameGlyphBuffer::faces` for every emitted `face_id`, so
+        /// the lookup is always valid.
         face_id: u32,
-        /// Font weight (CSS scale: 100=thin, 400=normal, 700=bold, 900=black)
-        font_weight: u16,
-        /// Italic flag
-        italic: bool,
-        /// Font size in pixels
-        font_size: f32,
-        /// Underline style (0=none, 1=single, 2=wave, 3=double, 4=dotted, 5=dashed)
-        underline: u8,
-        /// Underline color
-        underline_color: Option<Color>,
-        /// Strike-through (0=none, 1=enabled)
-        strike_through: u8,
-        /// Strike-through color
-        strike_through_color: Option<Color>,
-        /// Overline (0=none, 1=enabled)
-        overline: u8,
-        /// Overline color
-        overline_color: Option<Color>,
-        /// Overstrike: draw glyph twice (at x and x+1) to simulate bold.
-        /// Set when Emacs can't find a bold variant for the font.
-        overstrike: bool,
     },
 
     /// Stretch (whitespace) glyph
@@ -627,20 +635,18 @@ pub struct FrameGlyphBuffer {
     /// Frame-level tab bar metadata for hit-testing.
     pub tab_bar: Option<FrameTabBarState>,
 
-    /// Current face attributes (set before adding char glyphs)
+    /// Current face context (set before adding char glyphs).
+    ///
+    /// Only the fields still read after face-by-reference remain: the face id
+    /// stamped onto each glyph, the fg/bg returned by the public getters, and
+    /// the font family/size plus overstrike flag consumed when synthesizing the
+    /// baseline `Face` for `face_id`. The other face attributes live only in the
+    /// synthesized `Face` (resolved later via `resolved_face`).
     current_face_id: u32,
     current_fg: Color,
     current_bg: Option<Color>,
     current_font_family: String,
-    current_font_weight: u16,
-    current_italic: bool,
     current_font_size: f32,
-    current_underline: u8,
-    current_underline_color: Option<Color>,
-    current_strike_through: u8,
-    current_strike_through_color: Option<Color>,
-    current_overline: u8,
-    current_overline_color: Option<Color>,
     current_overstrike: bool,
     current_window_id: i64,
     current_row_role: GlyphRowRole,
@@ -750,15 +756,7 @@ impl FrameGlyphBuffer {
             current_fg: Color::WHITE,
             current_bg: None,
             current_font_family: "monospace".to_string(),
-            current_font_weight: 400,
-            current_italic: false,
             current_font_size: 14.0,
-            current_underline: 0,
-            current_underline_color: None,
-            current_strike_through: 0,
-            current_strike_through_color: None,
-            current_overline: 0,
-            current_overline_color: None,
             current_overstrike: false,
             current_window_id: 0,
             current_row_role: GlyphRowRole::Text,
@@ -864,15 +862,7 @@ impl FrameGlyphBuffer {
         self.current_fg = fg;
         self.current_bg = bg;
         self.current_font_family = font_family.to_string();
-        self.current_font_weight = font_weight;
-        self.current_italic = italic;
         self.current_font_size = font_size;
-        self.current_underline = underline;
-        self.current_underline_color = underline_color;
-        self.current_strike_through = strike_through;
-        self.current_strike_through_color = strike_through_color;
-        self.current_overline = overline;
-        self.current_overline_color = overline_color;
         self.current_overstrike = overstrike;
         self.faces.insert(
             face_id,
@@ -916,14 +906,6 @@ impl FrameGlyphBuffer {
         self.current_face_id = face_id;
         self.current_fg = fg;
         self.current_bg = bg;
-        self.current_font_weight = font_weight;
-        self.current_italic = italic;
-        self.current_underline = underline;
-        self.current_underline_color = underline_color;
-        self.current_strike_through = strike_through;
-        self.current_strike_through_color = strike_through_color;
-        self.current_overline = overline;
-        self.current_overline_color = overline_color;
         self.faces.insert(
             face_id,
             self.synthesize_face(
@@ -963,6 +945,60 @@ impl FrameGlyphBuffer {
             .get(&face_id)
             .map(|f| f.font_family.as_str())
             .unwrap_or("monospace")
+    }
+
+    /// Resolve the face-derived visual attributes for `face_id`.
+    ///
+    /// Returns exactly what `materialize` previously inlined onto every
+    /// [`FrameGlyph::Char`]: foreground/background colors, font weight/size,
+    /// italic, and the decoration codes/colors. The body is identical to the
+    /// layout-side `FrameDisplayState::resolve_face_for_materialize`, but reads
+    /// from this buffer's own `faces`, `background`, and `font_pixel_size`. The
+    /// not-found fallback matches materialization: white fg, frame background,
+    /// font weight 400, the frame font pixel size, and no decorations.
+    pub fn resolved_face(&self, face_id: u32) -> MaterializedFaceData {
+        if let Some(face) = self.faces.get(&face_id) {
+            let underline = face.underline_style.gnu_code();
+            MaterializedFaceData {
+                fg: face.foreground,
+                bg: face.background,
+                font_ascent: face.font_ascent.max(0) as f32,
+                font_weight: face.font_weight,
+                italic: face.attributes.contains(FaceAttributes::ITALIC),
+                font_size: face.font_size,
+                underline,
+                underline_color: face.underline_color,
+                strike_through: if face.attributes.contains(FaceAttributes::STRIKE_THROUGH) {
+                    1
+                } else {
+                    0
+                },
+                strike_through_color: face.strike_through_color,
+                overline: if face.attributes.contains(FaceAttributes::OVERLINE) {
+                    1
+                } else {
+                    0
+                },
+                overline_color: face.overline_color,
+                overstrike: false,
+            }
+        } else {
+            MaterializedFaceData {
+                fg: Color::new(1.0, 1.0, 1.0, 1.0),
+                bg: self.background,
+                font_ascent: 0.0,
+                font_weight: 400,
+                italic: false,
+                font_size: self.font_pixel_size,
+                underline: 0,
+                underline_color: None,
+                strike_through: 0,
+                strike_through_color: None,
+                overline: 0,
+                overline_color: None,
+                overstrike: false,
+            }
+        }
     }
 
     /// Get current font family
@@ -1020,19 +1056,7 @@ impl FrameGlyphBuffer {
             width,
             height,
             ascent,
-            fg: self.current_fg,
-            bg: self.current_bg,
             face_id: self.current_face_id,
-            font_weight: self.current_font_weight,
-            italic: self.current_italic,
-            font_size: self.current_font_size,
-            underline: self.current_underline,
-            underline_color: self.current_underline_color,
-            strike_through: self.current_strike_through,
-            strike_through_color: self.current_strike_through_color,
-            overline: self.current_overline,
-            overline_color: self.current_overline_color,
-            overstrike: self.current_overstrike,
         });
     }
 
@@ -1063,19 +1087,7 @@ impl FrameGlyphBuffer {
             width,
             height,
             ascent,
-            fg: self.current_fg,
-            bg: self.current_bg,
             face_id: self.current_face_id,
-            font_weight: self.current_font_weight,
-            italic: self.current_italic,
-            font_size: self.current_font_size,
-            underline: self.current_underline,
-            underline_color: self.current_underline_color,
-            strike_through: self.current_strike_through,
-            strike_through_color: self.current_strike_through_color,
-            overline: self.current_overline,
-            overline_color: self.current_overline_color,
-            overstrike: self.current_overstrike,
         });
     }
 

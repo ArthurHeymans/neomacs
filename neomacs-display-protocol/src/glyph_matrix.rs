@@ -12,7 +12,8 @@ use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, GlyphRowRole,
-    PhysCursor, StipplePattern, WindowCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint, WindowInfo,
+    WindowTransitionHint,
 };
 use super::types::{Color, Rect};
 use super::ui_types::{MenuBarItem, ToolBarItem};
@@ -1356,11 +1357,12 @@ impl FrameDisplayState {
 
                 match &glyph.glyph_type {
                     GlyphType::Char { ch } => {
-                        let face_data = self.resolve_face_for_materialize(glyph.face_id);
+                        let font_ascent =
+                            self.resolve_face_for_materialize(glyph.face_id).font_ascent;
                         let row_ascent = if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
-                        } else if face_data.font_ascent > 0.0 {
-                            face_data.font_ascent.min(row_height)
+                        } else if font_ascent > 0.0 {
+                            font_ascent.min(row_height)
                         } else {
                             row_height
                         };
@@ -1378,32 +1380,21 @@ impl FrameDisplayState {
                             baseline,
                             width: materialized_width,
                             height: row_height,
-                            ascent: if face_data.font_ascent > 0.0 {
-                                face_data.font_ascent.min(row_height)
+                            ascent: if font_ascent > 0.0 {
+                                font_ascent.min(row_height)
                             } else {
                                 row_ascent
                             },
-                            fg: face_data.fg,
-                            bg: Some(face_data.bg),
                             face_id: glyph.face_id,
-                            font_weight: face_data.font_weight,
-                            italic: face_data.italic,
-                            font_size: face_data.font_size,
-                            underline: face_data.underline,
-                            underline_color: face_data.underline_color,
-                            strike_through: face_data.strike_through,
-                            strike_through_color: face_data.strike_through_color,
-                            overline: face_data.overline,
-                            overline_color: face_data.overline_color,
-                            overstrike: face_data.overstrike,
                         });
                     }
                     GlyphType::Composite { text } => {
-                        let face_data = self.resolve_face_for_materialize(glyph.face_id);
+                        let font_ascent =
+                            self.resolve_face_for_materialize(glyph.face_id).font_ascent;
                         let row_ascent = if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
-                        } else if face_data.font_ascent > 0.0 {
-                            face_data.font_ascent.min(row_height)
+                        } else if font_ascent > 0.0 {
+                            font_ascent.min(row_height)
                         } else {
                             row_height
                         };
@@ -1421,24 +1412,12 @@ impl FrameDisplayState {
                             baseline,
                             width: materialized_width,
                             height: row_height,
-                            ascent: if face_data.font_ascent > 0.0 {
-                                face_data.font_ascent.min(row_height)
+                            ascent: if font_ascent > 0.0 {
+                                font_ascent.min(row_height)
                             } else {
                                 row_ascent
                             },
-                            fg: face_data.fg,
-                            bg: Some(face_data.bg),
                             face_id: glyph.face_id,
-                            font_weight: face_data.font_weight,
-                            italic: face_data.italic,
-                            font_size: face_data.font_size,
-                            underline: face_data.underline,
-                            underline_color: face_data.underline_color,
-                            strike_through: face_data.strike_through,
-                            strike_through_color: face_data.strike_through_color,
-                            overline: face_data.overline,
-                            overline_color: face_data.overline_color,
-                            overstrike: face_data.overstrike,
                         });
                     }
                     GlyphType::Stretch { .. } => {
@@ -1488,11 +1467,12 @@ impl FrameDisplayState {
                         });
                     }
                     GlyphType::Glyphless { ch } => {
-                        let face_data = self.resolve_face_for_materialize(glyph.face_id);
+                        let font_ascent =
+                            self.resolve_face_for_materialize(glyph.face_id).font_ascent;
                         let row_ascent = if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
-                        } else if face_data.font_ascent > 0.0 {
-                            face_data.font_ascent.min(row_height)
+                        } else if font_ascent > 0.0 {
+                            font_ascent.min(row_height)
                         } else {
                             row_height
                         };
@@ -1510,24 +1490,12 @@ impl FrameDisplayState {
                             baseline,
                             width: materialized_width,
                             height: row_height,
-                            ascent: if face_data.font_ascent > 0.0 {
-                                face_data.font_ascent.min(row_height)
+                            ascent: if font_ascent > 0.0 {
+                                font_ascent.min(row_height)
                             } else {
                                 row_ascent
                             },
-                            fg: face_data.fg,
-                            bg: Some(face_data.bg),
                             face_id: glyph.face_id,
-                            font_weight: face_data.font_weight,
-                            italic: face_data.italic,
-                            font_size: face_data.font_size,
-                            underline: 0,
-                            underline_color: None,
-                            strike_through: 0,
-                            strike_through_color: None,
-                            overline: 0,
-                            overline_color: None,
-                            overstrike: false,
                         });
                     }
                 }
@@ -1588,23 +1556,6 @@ impl WindowMatrixEntry {
             self.pixel_bounds
         }
     }
-}
-
-/// Helper struct for resolved face data used during materialization.
-struct MaterializedFaceData {
-    fg: Color,
-    bg: Color,
-    font_ascent: f32,
-    font_weight: u16,
-    italic: bool,
-    font_size: f32,
-    underline: u8,
-    underline_color: Option<Color>,
-    strike_through: u8,
-    strike_through_color: Option<Color>,
-    overline: u8,
-    overline_color: Option<Color>,
-    overstrike: bool,
 }
 
 #[derive(Clone, Debug)]

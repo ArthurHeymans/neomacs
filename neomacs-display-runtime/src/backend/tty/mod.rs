@@ -441,13 +441,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                 composed,
                 x,
                 y,
-                fg,
-                bg,
-                font_weight,
-                italic,
-                underline,
-                underline_color,
-                strike_through,
+                face_id,
                 ..
             } => {
                 let col = (*x / cw) as usize;
@@ -463,7 +457,18 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                     character.to_string()
                 };
 
-                let fg_rgb = color_to_rgb8(fg);
+                // Resolve the per-cell colors and decorations from the face
+                // table; these used to be inlined on the glyph.
+                let rf = frame.resolved_face(*face_id);
+                let fg = rf.fg;
+                let bg: Option<Color> = Some(rf.bg);
+                let font_weight = rf.font_weight;
+                let italic = rf.italic;
+                let underline = rf.underline;
+                let underline_color = rf.underline_color;
+                let strike_through = rf.strike_through;
+
+                let fg_rgb = color_to_rgb8(&fg);
                 let bg_rgb = bg.map(|c| color_to_rgb8(&c));
                 let ul_color = underline_color.map(|c| {
                     let (r, g, b) = color_to_rgb8(&c);
@@ -476,11 +481,11 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                     attrs: ansi::CellAttrs {
                         fg: Some(fg_rgb),
                         bg: bg_rgb,
-                        bold: *font_weight >= 700,
-                        italic: *italic,
-                        underline: *underline,
+                        bold: font_weight >= 700,
+                        italic,
+                        underline,
                         underline_color: ul_color,
-                        strikethrough: *strike_through > 0,
+                        strikethrough: strike_through > 0,
                         inverse: false,
                     },
                 };
