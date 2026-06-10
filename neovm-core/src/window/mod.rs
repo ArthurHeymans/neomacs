@@ -1535,6 +1535,12 @@ pub struct Frame {
     pub parameters: HashMap<Value, Value>,
     /// Whether the frame is visible.
     pub visible: bool,
+    /// Whether the menu / tab / tool bars are actually displayed and therefore
+    /// occupy rows of the window text area (mirrors GNU realizing
+    /// `FRAME_MENU_BAR_LINES` into `FRAME_TOP_MARGIN` only on a shown frame).
+    /// Set on interactively displayed frames; left false for non-displayed
+    /// frames (e.g. `--batch`), so window-edge coordinates match GNU there.
+    pub displays_chrome: bool,
     /// GNU `struct frame.title`: explicit title override, or nil.
     pub title: Value,
     /// Menu bar height in pixels.
@@ -1690,6 +1696,8 @@ impl Frame {
                 params
             },
             visible: true,
+            // Set true only once an interactive frontend displays this frame.
+            displays_chrome: false,
             title: Value::NIL,
             menu_bar_height: 0,
             tool_bar_height: 0,
@@ -2088,16 +2096,19 @@ impl Frame {
     fn window_text_area_bounds(&self) -> Rect {
         let frame_w = self.width as f32;
         let frame_h = self.height as f32;
-        // GNU TTY frames do not reserve window rows for the menu/tab bar:
-        // `frame-total-lines == frame-text-lines` and live window-edges report
-        // the leaf area starting at line 0 even with `menu-bar-lines` = 1 (the
-        // bars are overlaid chrome, not window space; verified against GNU
-        // Emacs 31.0.90, frame.h `FRAME_TOP_MARGIN`).  GUI frames, whose
-        // in-frame menu/tool bars consume real pixel rows, keep the offset.
-        let chrome_top = if self.window_system.is_none() {
-            0.0
-        } else {
+        // The menu / tab / tool bars reduce the window text area only when they
+        // are actually displayed.  GNU realizes `FRAME_MENU_BAR_LINES` (and the
+        // tab/tool bars) into the frame's top margin only on a frame that is
+        // being shown; a non-displayed frame (e.g. `--batch`, where the oracle
+        // checks `window-edges`) keeps `frame-total-lines == frame-text-lines`
+        // and the root window at line 0 even though `menu-bar-lines` is 1.
+        // `displays_chrome` mirrors that: it is set on interactively displayed
+        // frames and left false otherwise, so window-edge coordinates match GNU
+        // in batch while interactive frames place windows below the chrome.
+        let chrome_top = if self.displays_chrome {
             self.chrome_top_height().min(frame_h)
+        } else {
+            0.0
         };
         let border = self.internal_border_width().max(0) as f32;
         let horizontal_border = border.min(frame_w / 2.0);

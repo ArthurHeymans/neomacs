@@ -860,13 +860,7 @@ fn global_tab_line_shows_each_window_its_own_buffer() {
     // which `get-buffer-create` does not fire).  Clear each window's prev/next
     // buffers so its tab line shows exactly one tab (its own buffer).  Leaves
     // focus on the upper window (buffer1).
-    // Disable the menu bar so the upper window's tab line is not in the same
-    // row as the (frame-top) menu bar.  This isolates the behaviour under test
-    // — each window's tab line reflecting its own buffer — from a separate
-    // menu-bar/tab-line chrome-layering issue where neomacs drops the top
-    // window's tab line when the menu bar occupies the frame's first row.
     let setup = "(progn \
-        (menu-bar-mode -1) \
         (with-current-buffer (get-buffer-create \"buffer1\") (erase-buffer) (insert \"ACONTENT\")) \
         (with-current-buffer (get-buffer-create \"buffer2\") (erase-buffer) (insert \"BCONTENT\")) \
         (delete-other-windows) \

@@ -2457,6 +2457,17 @@ pub fn run(mode: RuntimeMode) {
     // `rx.recv()` in read_char_with_timeout and avoids spawning
     // unnecessary threads.
     if !startup.noninteractive {
+        // This is an interactively displayed session, so its frames show the
+        // menu / tab / tool bars, which occupy rows of the window text area.
+        // Mark each frame and recompute its window geometry so windows (and
+        // their tab / header lines) render below the chrome.  Batch sessions
+        // skip this block, leaving `displays_chrome` false so their
+        // `window-edges` stay GNU-batch-compatible (root at line 0).
+        for frame in evaluator.frame_manager_mut().frames_mut() {
+            frame.displays_chrome = true;
+            frame.sync_window_area_bounds();
+        }
+
         let (input_tx, input_rx) = crossbeam_channel::unbounded();
         let display_input_rx = emacs_comms.input_rx;
         let primary_window_size_for_input = Arc::clone(&primary_window_size);
