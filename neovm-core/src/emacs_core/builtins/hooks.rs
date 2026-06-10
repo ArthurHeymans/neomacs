@@ -865,6 +865,16 @@ pub(crate) fn builtin_run_window_configuration_change_hook(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("run-window-configuration-change-hook", &args, 1)?;
+    // GNU: window--sides-inhibit-check suppresses this hook during side-window ops.
+    // Dynamic let-bindings write to the symbol slot, so obarray.symbol_value
+    // returns the current binding (including let-bindings).
+    if eval
+        .obarray
+        .symbol_value("window--sides-inhibit-check")
+        .is_some_and(|v| v.is_truthy())
+    {
+        return Ok(Value::NIL);
+    }
     if let Some(frame) = args.first() {
         expect_optional_live_frame_designator(frame, eval)?;
     }

@@ -4555,6 +4555,17 @@ pub(crate) fn builtin_set_window_buffer(
                 scroll_bars: next_scroll_bars,
             },
         );
+        // Mirror GNU: non-T dedication (side, soft, etc.) is cleared
+        // when the buffer changes (switch-to-buffer / set-window-buffer).
+        if old_state.is_some_and(|(old_buf, _, _, ded)| {
+            old_buf != buf_id && ded != Value::NIL && ded != Value::T
+        }) {
+            if let Some(frame) = frames.get_mut(fid) {
+                if let Some(Window::Leaf { dedicated, .. }) = frame.find_window_mut(wid) {
+                    *dedicated = Value::NIL;
+                }
+            }
+        }
         update_buffer_display_metadata_in_state(buffers, buf_id)?;
         if let Some(frame) = frames.get_mut(fid) {
             if let Some(window) = frame.find_window_mut(wid) {
