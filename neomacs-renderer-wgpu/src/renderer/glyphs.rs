@@ -345,6 +345,7 @@ fn cursor_glyph_slot_rect(
     frame_glyphs.cursor_draw_rect(
         cursor.slot_id,
         cursor.style,
+        cursor.ascent,
         (cursor.x, cursor.y, cursor.width, cursor.height),
     )
 }
@@ -1926,6 +1927,7 @@ impl WgpuRenderer {
                 frame_glyphs.cursor_draw_rect(
                     cursor.slot_id,
                     cursor.style,
+                    cursor.ascent,
                     (cursor.x, cursor.y, cursor.width, cursor.height),
                 ),
                 cursor.style,

@@ -1394,6 +1394,7 @@ impl FrameGlyphBuffer {
         let (x, y, width, height) = self.cursor_draw_rect(
             cursor.slot_id,
             cursor.style,
+            cursor.ascent,
             (cursor.x, cursor.y, cursor.width, cursor.height),
         );
         cursor.x = x;
@@ -1496,10 +1497,16 @@ impl FrameGlyphBuffer {
         &self,
         slot_id: DisplaySlotId,
         style: CursorStyle,
+        ascent: f32,
         fallback: (f32, f32, f32, f32),
     ) -> (f32, f32, f32, f32) {
         let mut x = fallback.0;
-        let y = fallback.1;
+        // Position is derived from the matrix glyph at draw, like GNU draws the
+        // cursor over the glyph at (vpos, hpos): x = the glyph cell's x, and the
+        // cursor top y = the glyph baseline minus the cursor ascent (which
+        // already encodes the tall-glyph baseline shift). For a slot with no
+        // Char glyph (stretch, image, empty line) the layout fallback stands in.
+        let mut y = fallback.1;
         let mut width = fallback.2.max(1.0);
         let height = fallback.3.max(1.0);
 
@@ -1507,10 +1514,12 @@ impl FrameGlyphBuffer {
             match slot {
                 FrameGlyph::Char {
                     x: slot_x,
+                    baseline,
                     width: slot_width,
                     ..
                 } => {
                     x = *slot_x;
+                    y = *baseline - ascent;
                     if !matches!(style, CursorStyle::Bar(_)) {
                         width = slot_width.max(1.0);
                     }

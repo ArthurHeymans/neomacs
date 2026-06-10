@@ -129,6 +129,7 @@ impl RenderApp {
                     let (x, y, width, height) = entry.frame.cursor_draw_rect(
                         cursor.slot_id,
                         cursor.style,
+                        cursor.ascent,
                         (cursor.x, cursor.y, cursor.width, cursor.height),
                     );
                     active_cursor = Some(CursorTarget {

@@ -1362,6 +1362,7 @@ impl GuiFrameWindowManager {
             let (x, y, width, height) = frame.cursor_draw_rect(
                 cursor.slot_id,
                 cursor.style,
+                cursor.ascent,
                 (cursor.x, cursor.y, cursor.width, cursor.height),
             );
             CursorTarget {

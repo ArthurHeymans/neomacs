@@ -335,18 +335,19 @@ fn cursor_draw_rect_box_adopts_cell_while_bar_keeps_width() {
     buf.add_char('A', 30.0, 40.0, 18.0, 33.0, 26.0, false);
     let slot = buf.glyphs[0].slot_id().expect("char glyph has a slot");
 
-    // A box cursor adopts the glyph's actual cell x and full width, keeping the
-    // layout row's y/height fallback -- this is why a box cursor lands exactly
-    // on a scaled-font glyph instead of the grid-approximate column.
+    // A box cursor adopts the glyph's actual cell x and full width, and derives
+    // its top y from the glyph baseline (40 + 26 = 66) minus the cursor ascent
+    // (26) = 40 -- so it lands on the glyph, not the grid-approximate fallback y.
+    // height still comes from the fallback (the layout's computed cursor height).
     assert_eq!(
-        buf.cursor_draw_rect(slot, CursorStyle::FilledBox, (5.0, 41.0, 2.0, 33.0)),
-        (30.0, 41.0, 18.0, 33.0)
+        buf.cursor_draw_rect(slot, CursorStyle::FilledBox, 26.0, (5.0, 41.0, 2.0, 33.0)),
+        (30.0, 40.0, 18.0, 33.0)
     );
 
-    // A bar cursor adopts the same cell x but keeps its own thin fallback width.
+    // A bar cursor adopts the same derived cell x/y but keeps its thin fallback width.
     assert_eq!(
-        buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), (5.0, 41.0, 2.0, 33.0)),
-        (30.0, 41.0, 2.0, 33.0)
+        buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), 26.0, (5.0, 41.0, 2.0, 33.0)),
+        (30.0, 40.0, 2.0, 33.0)
     );
 }
 
@@ -359,7 +360,7 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
     // A cursor over an image covers the whole image rect, ignoring the
     // grid-derived fallback geometry entirely.
     assert_eq!(
-        buf.cursor_draw_rect(slot, CursorStyle::Hollow, (1.0, 2.0, 3.0, 4.0)),
+        buf.cursor_draw_rect(slot, CursorStyle::Hollow, 0.0, (1.0, 2.0, 3.0, 4.0)),
         (24.0, 48.0, 128.0, 96.0)
     );
 
@@ -370,7 +371,7 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
         col: 9,
     };
     assert_eq!(
-        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, (5.0, 6.0, 7.0, 8.0)),
+        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, 0.0, (5.0, 6.0, 7.0, 8.0)),
         (5.0, 6.0, 7.0, 8.0)
     );
 }
@@ -388,7 +389,8 @@ fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
 
     // A 2px bar on an 18px RTL cell sits at the cell's right edge:
     // 30 + (18 - 2) = 46, so the caret leads the character as it should in RTL.
-    let (x, _y, w, _h) = buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), (30.0, 40.0, 2.0, 33.0));
+    let (x, _y, w, _h) =
+        buf.cursor_draw_rect(slot, CursorStyle::Bar(2.0), 26.0, (30.0, 40.0, 2.0, 33.0));
     assert_eq!((x, w), (46.0, 2.0));
 }
 
@@ -410,7 +412,7 @@ fn cursor_draw_rect_empty_slot_snaps_to_preceding_glyph_right_edge() {
     // edge (58) -- flush with the text column -- not the grid-approximate
     // fallback x (5), which would land it back inside the line-number gutter.
     let (x, _y, _w, _h) =
-        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, (5.0, 11.0, 9.0, 33.0));
+        buf.cursor_draw_rect(empty, CursorStyle::FilledBox, 0.0, (5.0, 11.0, 9.0, 33.0));
     assert_eq!(x, 58.0);
 
     // A slot with nothing before it (no gutter) keeps the layout fallback x.
@@ -419,7 +421,8 @@ fn cursor_draw_rect_empty_slot_snaps_to_preceding_glyph_right_edge() {
         row: 9,
         col: 3,
     };
-    let (lx, _, _, _) = buf.cursor_draw_rect(lonely, CursorStyle::FilledBox, (5.0, 6.0, 7.0, 8.0));
+    let (lx, _, _, _) =
+        buf.cursor_draw_rect(lonely, CursorStyle::FilledBox, 0.0, (5.0, 6.0, 7.0, 8.0));
     assert_eq!(lx, 5.0);
 }
 
