@@ -72,7 +72,7 @@ fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer(
         let child = mgr.get_mut(child_id).expect("child frame");
         child.parent_frame = Value::make_frame(root_id.0);
         child.minibuffer_window = Some(root_minibuffer);
-        child.minibuffer_leaf = None;
+        child.minibuffer_window = None;
     }
 
     assert_eq!(mgr.find_window_frame_id(root_minibuffer), Some(root_id));
@@ -102,7 +102,7 @@ fn gui_internal_border_width_insets_root_and_minibuffer_geometry() {
     let frame = mgr.get(fid).expect("frame");
     assert_eq!(*frame.root_window.bounds(), Rect::new(4.0, 4.0, 92.0, 56.0));
     assert_eq!(
-        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
+        *frame.minibuffer_leaf().expect("minibuffer").bounds(),
         Rect::new(4.0, 60.0, 92.0, 16.0)
     );
 }
@@ -128,7 +128,7 @@ fn tty_internal_border_width_parameters_do_not_inset_geometry() {
         Rect::new(0.0, 0.0, 100.0, 64.0)
     );
     assert_eq!(
-        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
+        *frame.minibuffer_leaf().expect("minibuffer").bounds(),
         Rect::new(0.0, 64.0, 100.0, 16.0)
     );
 }
@@ -198,7 +198,7 @@ fn gui_child_frame_border_width_acts_as_child_internal_border() {
         child.set_window_system(Some(Value::symbol("x")));
         child.parent_frame = Value::make_frame(parent_id.0);
         child.minibuffer_window = Some(parent_minibuffer);
-        child.minibuffer_leaf = None;
+        child.minibuffer_window = None;
         child.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
         child.set_parameter(Value::symbol("child-frame-border-width"), Value::fixnum(2));
         child.sync_window_area_bounds();
@@ -224,7 +224,7 @@ fn tty_child_frame_border_width_parameters_do_not_inset_geometry() {
         let child = mgr.get_mut(child_id).expect("child frame");
         child.parent_frame = Value::make_frame(parent_id.0);
         child.minibuffer_window = Some(parent_minibuffer);
-        child.minibuffer_leaf = None;
+        child.minibuffer_window = None;
         child.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
         child.set_parameter(Value::symbol("child-frame-border-width"), Value::fixnum(2));
         child.sync_window_area_bounds();
@@ -1026,7 +1026,7 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     let root_bounds = *frame.root_window.bounds();
     assert_eq!(root_bounds, Rect::new(0.0, 0.0, 400.0, 244.0));
 
-    let mini_bounds = *frame.minibuffer_leaf.as_ref().unwrap().bounds();
+    let mini_bounds = *frame.minibuffer_leaf().unwrap().bounds();
     assert_eq!(mini_bounds, Rect::new(0.0, 244.0, 400.0, 16.0));
 
     assert_eq!(
@@ -1046,7 +1046,7 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
         Some(false)
     );
     assert_eq!(
-        frame.minibuffer_leaf.as_ref().unwrap().window_end_valid(),
+        frame.minibuffer_leaf().unwrap().window_end_valid(),
         Some(false)
     );
 }
@@ -1999,7 +1999,7 @@ fn frame_resize_pixelwise_reserves_tab_bar_height_above_root_window_tree() {
         Rect::new(0.0, 20.0, 400.0, 224.0)
     );
     assert_eq!(
-        *frame.minibuffer_leaf.as_ref().unwrap().bounds(),
+        *frame.minibuffer_leaf().unwrap().bounds(),
         Rect::new(0.0, 244.0, 400.0, 16.0)
     );
     assert_eq!(frame.parameter("height"), Some(Value::fixnum(12)));
@@ -2020,7 +2020,7 @@ fn grow_and_shrink_mini_window_adjusts_bounds() {
         let frame = mgr.get_mut(fid).unwrap();
         frame.char_height = 1.0;
         frame.char_width = 1.0;
-        if let Some(mini) = frame.minibuffer_leaf.as_mut() {
+        if let Some(mini) = frame.minibuffer_leaf_mut() {
             let mut b = *mini.bounds();
             b.height = 1.0;
             mini.set_bounds(b);
@@ -2028,13 +2028,13 @@ fn grow_and_shrink_mini_window_adjusts_bounds() {
         frame.sync_window_area_bounds();
     }
     let frame = mgr.get(fid).unwrap();
-    let initial_mini_h = frame.minibuffer_leaf.as_ref().unwrap().bounds().height;
+    let initial_mini_h = frame.minibuffer_leaf().unwrap().bounds().height;
 
     mgr.get_mut(fid).unwrap().grow_mini_window(3);
     let grown_h = mgr
         .get(fid)
         .unwrap()
-        .minibuffer_leaf
+        .minibuffer_leaf()
         .as_ref()
         .unwrap()
         .bounds()
@@ -2048,7 +2048,7 @@ fn grow_and_shrink_mini_window_adjusts_bounds() {
     let shrunk_h = mgr
         .get(fid)
         .unwrap()
-        .minibuffer_leaf
+        .minibuffer_leaf()
         .as_ref()
         .unwrap()
         .bounds()
@@ -2068,7 +2068,7 @@ fn grow_mini_window_with_explicit_max_lines_honors_integer_limit() {
         let frame = mgr.get_mut(fid).unwrap();
         frame.char_height = 1.0;
         frame.char_width = 1.0;
-        if let Some(mini) = frame.minibuffer_leaf.as_mut() {
+        if let Some(mini) = frame.minibuffer_leaf_mut() {
             let mut b = *mini.bounds();
             b.height = 1.0;
             mini.set_bounds(b);
@@ -2082,7 +2082,7 @@ fn grow_mini_window_with_explicit_max_lines_honors_integer_limit() {
     let grown_h = mgr
         .get(fid)
         .unwrap()
-        .minibuffer_leaf
+        .minibuffer_leaf()
         .as_ref()
         .unwrap()
         .bounds()

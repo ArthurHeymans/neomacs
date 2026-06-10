@@ -1420,7 +1420,7 @@ pub fn collect_layout_params_with_font_sizing(
     }
 
     // Add minibuffer window if present.
-    if let Some(mini_leaf) = &frame.minibuffer_leaf {
+    if let Some(mini_leaf) = frame.minibuffer_leaf() {
         let buf_id = mini_leaf.buffer_id();
         let buffer = buf_id.and_then(|id| evaluator.buffer_manager().get(id));
         if let Some(buffer) = buffer {

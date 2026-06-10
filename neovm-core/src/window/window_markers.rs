@@ -188,7 +188,7 @@ pub fn sync_window_positions_from_markers(
     edited_buffer_id: BufferId,
 ) {
     sync_subtree(&mut frame.root_window, bm, edited_buffer_id);
-    if let Some(ref mut mini) = frame.minibuffer_leaf {
+    if let Some(mini) = frame.minibuffer_leaf_mut() {
         sync_leaf(mini, bm, edited_buffer_id);
     }
 }
