@@ -511,8 +511,11 @@ pub enum Window {
         /// Marker id backing `old_point`.  `None` until the window is
         /// attached to a buffer via `create_window_markers`.
         old_point_marker_id: Option<u64>,
-        /// Whether this is a dedicated window.
-        dedicated: bool,
+        /// Mirror GNU `w->dedicated`: the dedication flag value.
+        /// nil = not dedicated, t = strongly dedicated,
+        /// side = side-window dedication (blocks display-buffer reuse but
+        /// allows switch-to-buffer / set-window-buffer).
+        dedicated: Value,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
         /// Live-window history state mirrored from GNU `struct window`.
@@ -611,7 +614,7 @@ impl Window {
             point_marker_id: None,
             old_point: LispCharPos1::ONE,
             old_point_marker_id: None,
-            dedicated: false,
+            dedicated: Value::NIL,
             parameters: Vec::new(),
             history: WindowHistoryState::default(),
             fixed_height: 0,
@@ -1542,6 +1545,9 @@ pub struct Frame {
     pub compact_bar_height: u32,
     /// Tab bar height in pixels.
     pub tab_bar_height: u32,
+    /// Mirrors GNU `FRAME_MENU_BAR_LINES(f)`: NILP(Vmenu_bar_mode) ? 0 : 1.
+    /// Cached from `menu-bar-mode` Lisp variable.
+    pub menu_bar_mode_enabled: bool,
     /// Default font size in pixels.
     pub font_pixel_size: f32,
     /// Default character width.
@@ -1689,6 +1695,7 @@ impl Frame {
             visible: true,
             title: Value::NIL,
             menu_bar_height: 0,
+            menu_bar_mode_enabled: false,
             tool_bar_height: 0,
             compact_bar_height: 0,
             tab_bar_height: 0,
@@ -2157,6 +2164,11 @@ impl Frame {
     /// `sync_window_area_bounds()` here is enough to push the root window
     /// (and its mode line / minibuffer) down to make room.
     pub fn sync_menu_bar_height_from_parameters(&mut self) {
+        if !self.menu_bar_mode_enabled {
+            self.menu_bar_height = 0;
+            self.sync_window_area_bounds();
+            return;
+        }
         let lines = self
             .known_frame_parameter_int(FrameParam::MenuBarLines)
             .unwrap_or(0)

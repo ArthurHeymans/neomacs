@@ -3649,7 +3649,7 @@ pub(crate) fn builtin_window_dedicated_p(
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let w = get_leaf(frames, fid, wid)?;
     match w {
-        Window::Leaf { dedicated, .. } => Ok(Value::bool_val(*dedicated)),
+        Window::Leaf { dedicated, .. } => Ok(dedicated.clone()),
         _ => Ok(Value::NIL),
     }
 }
@@ -3660,15 +3660,15 @@ pub(crate) fn builtin_set_window_dedicated_p(
 ) -> EvalResult {
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_args("set-window-dedicated-p", &args, 2)?;
-    let flag = args[1].is_truthy();
+    let flag = args[1].clone();
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     if let Some(w) = frames.get_mut(fid).and_then(|f| f.find_window_mut(wid)) {
         if let Window::Leaf { dedicated, .. } = w {
-            *dedicated = flag;
+            *dedicated = flag.clone();
         }
     }
-    Ok(Value::bool_val(flag))
+    Ok(flag)
 }
 /// `(windowp OBJ)` -> t if OBJ is a window object/designator that exists.
 ///
@@ -4367,7 +4367,7 @@ pub(crate) fn builtin_set_window_buffer(
         }
         let mut run_buffer_list_hook = false;
         if let Some((old_buffer_id, old_window_start, old_point, dedicated)) = old_state {
-            if dedicated && old_buffer_id != buf_id {
+            if dedicated == Value::T && old_buffer_id != buf_id {
                 let old_buffer_name = buffers
                     .get(old_buffer_id)
                     .map(|buffer| buffer.name_runtime_string_owned())
