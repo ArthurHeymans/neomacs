@@ -2088,7 +2088,17 @@ impl Frame {
     fn window_text_area_bounds(&self) -> Rect {
         let frame_w = self.width as f32;
         let frame_h = self.height as f32;
-        let chrome_top = self.chrome_top_height().min(frame_h);
+        // GNU TTY frames do not reserve window rows for the menu/tab bar:
+        // `frame-total-lines == frame-text-lines` and live window-edges report
+        // the leaf area starting at line 0 even with `menu-bar-lines` = 1 (the
+        // bars are overlaid chrome, not window space; verified against GNU
+        // Emacs 31.0.90, frame.h `FRAME_TOP_MARGIN`).  GUI frames, whose
+        // in-frame menu/tool bars consume real pixel rows, keep the offset.
+        let chrome_top = if self.window_system.is_none() {
+            0.0
+        } else {
+            self.chrome_top_height().min(frame_h)
+        };
         let border = self.internal_border_width().max(0) as f32;
         let horizontal_border = border.min(frame_w / 2.0);
         let available_height = (frame_h - chrome_top).max(0.0);
