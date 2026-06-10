@@ -159,6 +159,11 @@ if `confirm-kill-processes' is non-nil."
   "Return non-nil if FILE's compilation should be skipped.
 
 LOAD and SELECTOR work as described in `native--compile-async'."
+  ;; Reduce the FILE extension .el.gz to .el
+  (when (equal (file-name-extension file) "gz")
+    (let ((filenogz (file-name-sans-extension file)))
+      (when (string-match-p "\\.el\\'" filenogz)
+        (setq file filenogz))))
   ;; Make sure we are not already compiling `file' (bug#40838).
   (or (gethash file comp-async-compilations)
       (gethash (file-name-with-extension file "elc") comp--no-native-compile)
@@ -198,9 +203,10 @@ LOAD and SELECTOR work as described in `native--compile-async'."
                   ;; because power users often configure their batteries
                   ;; to stop charging at less than 100% as a way to
                   ;; extend the lifetime of their battery hardware.
-                  (string= (cdr (assq ?b res)) "+")
-                  (member (cdr (assq ?B res)) '("charging" "pending-charge"))
-                  (not (string= (cdr (assq ?B res)) "discharging")))))))
+                  ;; Further discussion in bug#80922.
+                  (and (not (equal (cdr (assq ?b res)) "+"))
+                       (not (member (cdr (assq ?B res))
+                                    '("charging" "pending-charge")))))))))
 
 (defvar comp-files-queue ()
   "List of Emacs Lisp files to be compiled.")

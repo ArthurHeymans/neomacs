@@ -911,6 +911,7 @@ region, instead of just filling the current paragraph."
             (fill-comment-paragraph justify)))
      ;; 4. If it all fails, default to the good ol' text paragraph filling.
      (let ((before (point))
+           (paragraph-start-orig paragraph-start)
            (paragraph-start paragraph-start)
            ;; Fill prefix used for filling the paragraph.
            fill-pfx)
@@ -933,6 +934,18 @@ region, instead of just filling the current paragraph."
              (setq fill-pfx "")
            (let ((end (point))
                  (beg (progn (fill-forward-paragraph -1) (point))))
+             ;; If the paragraph starts with a comment line preceding point
+             ;; on a non-comment line, skip such comment lines, so they
+             ;; are not filled together (bug#80449).
+             (when (and fill-paragraph-handle-comment comment-start-skip
+                        (< beg before))
+               (save-excursion
+                 (goto-char beg)
+                 (when (looking-at paragraph-start-orig)
+                   (goto-char (1+ (match-end 0))))
+                 (when (looking-at comment-start-skip)
+                   (forward-line 1)
+                   (setq beg (point)))))
              (goto-char before)
              (setq fill-pfx
                    (if use-hard-newlines
@@ -942,6 +955,45 @@ region, instead of just filling the current paragraph."
                        (fill-region beg end justify)
                      (fill-region-as-paragraph beg end justify))))))
        fill-pfx))))
+
+(defun unfill-paragraph (arg &optional beg end)
+  "Join lines of this paragraph and fix up whitespace at joins.
+Interactively, if the region is active, join lines of each paragraph in
+the region.  A numeric prefix argument means join the lines of the
+following ARG paragraphs.  In this case an active region is ignored.
+
+With an active region and no prefix argument this is roughly the same as
+`delete-indentation' with that active region, except that this command
+only joins lines within paragraphs, preserving the paragraphs
+themselves.
+
+When called from Lisp, ARG is the number of following paragraphs to join
+lines within, or if ARG is nil, optional arguments BEG and END non-nil
+means to join the lines of each paragraph in the region delimited by BEG
+and END."
+  (interactive "P\nR")
+  (when (or arg (not beg))
+    (let ((arg (prefix-numeric-value arg)))
+      (when (zerop arg)
+        (user-error "Invalid numeric argument to `unfill-paragraph'"))
+      (save-excursion
+        (fill-forward-paragraph 1)
+        (fill-forward-paragraph -1)
+        (setq beg (point))
+        (fill-forward-paragraph arg)
+        (setq end (point)))))
+  ;; FIXME: It would be better to use
+  ;;
+  ;;    (let ((fill-column (* (max 2 tab-width) (point-max))))
+  ;;      (fill-region beg end))
+  ;;
+  ;; multiplying by at least 2 to account for any wide characters in the
+  ;; region to be filled and by at least `tab-width' to account for any
+  ;; tab characters in the region to be filled.  Then we can easily
+  ;; prove that filling the region will actually unfill it.
+  ;; However, `fill-region' fails if `fill-column' is not a fixnum.
+  (let ((fill-column most-positive-fixnum))
+    (fill-region beg end)))
 
 (declare-function comment-search-forward "newcomment" (limit &optional noerror))
 (declare-function comment-string-strip "newcomment" (str beforep afterp))
@@ -1661,7 +1713,7 @@ and URL `https://rhodesmill.org/brandon/2012/one-sentence-per-line/'."
         (to (copy-marker (max from to) t))
         pfx)
     (goto-char from)
-    (let ((fill-column (* 2 (point-max)))) ; Wide characters span up to two columns.
+    (let ((fill-column most-positive-fixnum))
       (setq pfx (or (save-excursion
                       (fill-region-as-paragraph-default (point)
                                                         to

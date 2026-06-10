@@ -3,7 +3,7 @@
 ;; Copyright (C) 2006-2026 Free Software Foundation, Inc.
 
 ;; Author: Stefan Monnier <monnier@iro.umontreal.ca>
-;; Maintainer: Simen Heggestøyl <simenheg@gmail.com>
+;; Maintainer: Simen Heggestøyl <simenheg@runbox.com>
 ;; Keywords: hypermedia
 
 ;; This file is part of GNU Emacs.
@@ -66,7 +66,7 @@
 
 (defconst css-pseudo-class-ids
   '("active" "checked" "default" "disabled" "empty" "enabled" "first"
-    "first-child" "first-of-type" "focus" "focus-within" "hover"
+    "first-child" "first-of-type" "focus" "focus-within" "has" "hover"
     "in-range" "indeterminate" "invalid" "lang" "last-child"
     "last-of-type" "left" "link" "not" "nth-child" "nth-last-child"
     "nth-last-of-type" "nth-of-type" "only-child" "only-of-type"
@@ -1888,7 +1888,9 @@ can also be used to fill comments.
 
 \\{css-mode-map}"
   :syntax-table css-mode-syntax-table
-  (when (treesit-ensure-installed 'css)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'css)
+             (treesit-ready-p 'css))
     ;; Borrowed from `css-mode'.
     (setq-local syntax-propertize-function
                 css-syntax-propertize-function)

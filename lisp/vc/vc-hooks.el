@@ -253,6 +253,21 @@ VC commands are globally reachable under the prefix \\[vc-prefix-map]:
   "Get per-file VC PROPERTY for FILE."
   (get (intern (expand-file-name file) vc-file-prop-obarray) property))
 
+(defun vc--file-getinheprop (file property)
+  "Get VC PROPERTY for FILE, including inherited properties.
+An inherited property is a property of a directory containing FILE.
+(The property must have been set on the file name of the directory
+interpreted as a directory, i.e., passing the result of calling
+`file-name-as-directory' on the file name to `vc-file-setprop'.)
+Properties of FILE itself override any inherited properties, and
+properties further down the directory hierarchy override ones higher up."
+  (or (vc-file-getprop file property)
+      (catch 'done
+        (locate-dominating-file file
+                                (lambda (f)
+                                  (and-let* ((v (vc-file-getprop f property)))
+                                    (throw 'done v)))))))
+
 (defun vc-file-clearprops (file)
   "Clear all VC properties of FILE."
   (if (boundp 'vc-parent-buffer)
@@ -290,16 +305,18 @@ if that doesn't exist either, return nil."
       (require (intern (concat "vc-" (downcase (symbol-name backend)))))
       (if (fboundp f) f
 	(let ((def (vc-make-backend-sym 'default fun)))
+          ;; Load vc.el, for default implementations, if needed.
+	  (require 'vc)
 	  (if (fboundp def) (cons def backend) nil))))))
 
 (defun vc-call-backend (backend function-name &rest args)
-  "Call for BACKEND the implementation of FUNCTION-NAME with the given ARGS.
-Calls
+  "Call BACKEND's implementation of FUNCTION-NAME with arguments ARGS.
+Does
 
     (apply #\\='vc-BACKEND-FUN ARGS)
 
 if vc-BACKEND-FUN exists (after trying to find it in vc-BACKEND.el)
-and else calls
+and otherwise does
 
     (apply #\\='vc-default-FUN BACKEND ARGS)
 
@@ -938,10 +955,16 @@ In the latter case, VC mode is deactivated for this buffer."
       (cond
        ((setq backend (with-demoted-errors "VC refresh error: %S"
                         (vc-backend buffer-file-name)))
-        ;; Let the backend setup any buffer-local things he needs.
-        (vc-call-backend backend 'find-file-hook)
-	;; Compute the state and put it in the mode line.
-	(vc-mode-line buffer-file-name backend)
+        ;; When `auto-revert-handler' calls us then `default-directory'
+        ;; may be let-bound to something else for the purpose of some
+        ;; command that's currently doing some minibuffer prompting.
+        ;; Backend find-file-hook and mode-line-string functions should
+        ;; not need to be written so as to handle that possibility.
+        (let ((default-directory (buffer-local-toplevel-value 'default-directory)))
+          ;; Let the backend setup any buffer-local things it needs.
+          (vc-call-backend backend 'find-file-hook)
+	  ;; Compute the state and put it in the mode line.
+	  (vc-mode-line buffer-file-name backend))
 	(unless vc-make-backup-files
 	  ;; Use this variable, not make-backup-files,
 	  ;; because this is for things that depend on the file name.
@@ -960,6 +983,7 @@ In the latter case, VC mode is deactivated for this buffer."
 		     noninteractive
 		     ;; Copied from server-start.  Seems like there should
 		     ;; be a better way to ask "can we get user input?"...
+                     ;; Use `frame-initial-p'?
 		     (and (daemonp)
 			  (null (cdr (frame-list)))
 			  (eq (selected-frame) terminal-frame))
@@ -1018,10 +1042,22 @@ In the latter case, VC mode is deactivated for this buffer."
   "O"   #'vc-root-log-outgoing
   "M L" #'vc-log-mergebase
   "M D" #'vc-diff-mergebase
-  "T l" #'vc-log-outgoing-base
-  "T L" #'vc-root-log-outgoing-base
-  "T =" #'vc-diff-outgoing-base
-  "T D" #'vc-root-diff-outgoing-base
+  "T l" #'vc-log-unintegrated
+  "T L" #'vc-root-log-unintegrated
+  "T =" #'vc-diff-unintegrated
+  "T D" #'vc-root-diff-unintegrated
+  "T R l" #'vc-log-remote-unintegrated
+  "T R L" #'vc-root-log-remote-unintegrated
+  "T R =" #'vc-diff-remote-unintegrated
+  "T R D" #'vc-root-diff-remote-unintegrated
+  ;; There are no -log-outgoing-and-edited commands because by
+  ;; definition these are the same as -log-outgoing.
+  ;; Additionally bind the -log-outgoing commands under C-x v E l/L as
+  ;; nothing else could conceivably go there and it might help someone.
+  ;; (Fileset-specific outgoing log command coming in Emacs 32.  --spwhitton)
+  "E L" #'vc-root-log-outgoing
+  "E =" #'vc-diff-outgoing-and-edited
+  "E D" #'vc-root-diff-outgoing-and-edited
   "m"   #'vc-merge
   "r"   #'vc-retrieve-tag
   "s"   #'vc-create-tag

@@ -753,7 +753,13 @@ The value depends on `grep-command', `grep-template',
 	 (host-defaults (assq host-id grep-host-defaults-alist))
 	 (defaults (assq nil grep-host-defaults-alist))
          (quot-braces (shell-quote-argument "{}" remote))
-         (quot-scolon (shell-quote-argument ";" remote)))
+         (quot-scolon (shell-quote-argument ";" remote))
+	 ;; Windows shells need the program file name after the pipe
+	 ;; symbol be quoted if they use forward slashes as directory
+	 ;; separators.
+         (quot-xargs-program
+          (if (and (memq system-type '(ms-dos windows-nt)) (not remote))
+              (format "\"%s\"" xargs-program) xargs-program)))
     ;; There are different defaults on different hosts.  They must be
     ;; computed for every host once.
     (dolist (setting '(grep-command grep-template
@@ -871,14 +877,11 @@ The value depends on `grep-command', `grep-template',
 	(unless grep-find-command
 	  (setq grep-find-command
 		(cond ((eq grep-find-use-xargs 'gnu)
-		       ;; Windows shells need the program file name
-		       ;; after the pipe symbol be quoted if they use
-		       ;; forward slashes as directory separators.
-		       (format "%s . -type f -print0 | \"%s\" -0 %s"
-			       find-program xargs-program grep-command))
+		       (format "%s . -type f -print0 | %s -0 %s"
+			       find-program quot-xargs-program grep-command))
 		      ((eq grep-find-use-xargs 'gnu-sort)
-		       (format "%s . -type f -print0 | sort -z | \"%s\" -0 %s"
-			       find-program xargs-program grep-command))
+		       (format "%s . -type f -print0 | sort -z | %s -0 %s"
+			       find-program quot-xargs-program grep-command))
 		      ((memq grep-find-use-xargs '(exec exec-plus))
 		       (let ((cmd0 (format "%s . -type f -exec %s"
 					   find-program grep-command))
@@ -892,8 +895,8 @@ The value depends on `grep-command', `grep-template',
                                     cmd0 quot-braces null quot-scolon))
 			  (1+ (length cmd0)))))
 		      (t
-		       (format "%s . -type f -print | \"%s\" %s"
-			       find-program xargs-program grep-command)))))
+		       (format "%s . -type f -print | %s %s"
+			       find-program quot-xargs-program grep-command)))))
 	(unless grep-find-template
 	  (setq grep-find-template
 		(let ((gcmd (format "%s <C> %s <R>"
@@ -902,11 +905,11 @@ The value depends on `grep-command', `grep-template',
                                 (format "%s " (null-device))
                               "")))
                   (cond ((eq grep-find-use-xargs 'gnu)
-                         (format "%s -H <D> <X> -type f <F> -print0 | \"%s\" -0 %s"
-                                 find-program xargs-program gcmd))
+                         (format "%s -H <D> <X> -type f <F> -print0 | %s -0 %s"
+                                 find-program quot-xargs-program gcmd))
                         ((eq grep-find-use-xargs 'gnu-sort)
-                         (format "%s -H <D> <X> -type f <F> -print0 | sort -z | \"%s\" -0 %s"
-                                 find-program xargs-program gcmd))
+                         (format "%s -H <D> <X> -type f <F> -print0 | sort -z | %s -0 %s"
+                                 find-program quot-xargs-program gcmd))
                         ((eq grep-find-use-xargs 'exec)
                          (format "%s -H <D> <X> -type f <F> -exec %s %s %s%s"
                                  find-program gcmd quot-braces null quot-scolon))
@@ -914,8 +917,8 @@ The value depends on `grep-command', `grep-template',
                          (format "%s -H <D> <X> -type f <F> -exec %s %s%s +"
                                  find-program gcmd null quot-braces))
                         (t
-                         (format "%s -H <D> <X> -type f <F> -print | \"%s\" %s"
-                                 find-program xargs-program gcmd))))))
+                         (format "%s -H <D> <X> -type f <F> -print | %s %s"
+                                 find-program quot-xargs-program gcmd))))))
 
         (setq grep-quoting-style (and remote 'posix))))
 
@@ -1086,11 +1089,15 @@ list is empty)."
           match)
       (while (setq match (text-property-search-forward 'compilation-annotation))
         (add-text-properties (prop-match-beginning match) (prop-match-end match)
-                             '(read-only t)))
+                             '(read-only t front-sticky t)))
       (goto-char (point-min))
       (while (setq match (text-property-search-forward 'compilation-message))
         (add-text-properties (prop-match-beginning match) (prop-match-end match)
-                             '(read-only t occur-prefix t))
+                             '( read-only t occur-prefix t
+                                ;; Allow insertion of text right
+                                ;; after prefix, but not before.
+                                front-sticky t
+                                rear-nonsticky t))
         (let ((loc (compilation--message->loc (prop-match-value match)))
               m)
           ;; Update the markers if necessary.
@@ -1113,6 +1120,8 @@ list is empty)."
 (defvar grep-edit-mode-hook nil
   "Hooks run when changing to Grep-Edit mode.")
 
+(defvar grep-edit-original-mode-map nil)
+
 (defun grep-edit-mode ()
   "Major mode for editing *grep* buffers.
 In this mode, changes to the *grep* buffer are applied to the
@@ -1133,6 +1142,7 @@ The only editable texts in a Grep-Edit buffer are the match results."
     (error "Not a Grep buffer"))
   (when (get-buffer-process (current-buffer))
     (error "Cannot switch when grep is running"))
+  (setq-local grep-edit-original-mode-map (current-local-map))
   (use-local-map grep-edit-mode-map)
   (grep-edit--prepare-buffer)
   (setq buffer-read-only nil)
@@ -1152,7 +1162,7 @@ The only editable texts in a Grep-Edit buffer are the match results."
   (unless (derived-mode-p 'grep-edit-mode)
     (error "Not a Grep-Edit buffer"))
   (remove-hook 'after-change-functions #'occur-after-change-function t)
-  (use-local-map grep-mode-map)
+  (use-local-map grep-edit-original-mode-map)
   (setq buffer-read-only t)
   (setq major-mode 'grep-mode)
   (setq mode-name "Grep")

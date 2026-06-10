@@ -102,7 +102,9 @@
 
 ;;; Custom variables
 
-(defcustom c-ts-mode-indent-offset 2
+(define-obsolete-variable-alias 'c-ts-mode-indent-offset
+  'c-ts-indent-offset "31")
+(defcustom c-ts-indent-offset 2
   "Number of spaces for each indentation step in `c-ts-mode'."
   :version "29.1"
   :type 'integer
@@ -198,11 +200,10 @@ To set the default indent style globally, use
       (user-error "The current buffer is not in `c-ts-mode' nor `c++-ts-mode'")
     (setq-local c-ts-mode-indent-style style)
     (setq treesit-simple-indent-rules
-          (if (functionp style)
-              (funcall style)
-            (c-ts-mode--simple-indent-rules
-             (if (derived-mode-p 'c-ts-mode) 'c 'cpp)
-             style)))))
+          (let ((lang (if (derived-mode-p 'c-ts-mode) 'c 'cpp)))
+            (if (functionp style)
+                (list (cons lang (funcall style)))
+              (c-ts-mode--simple-indent-rules lang style))))))
 
 (defcustom c-ts-mode-emacs-sources-support t
   "Whether to enable Emacs source-specific C features.
@@ -292,7 +293,7 @@ is actually the parent of point at the moment of indentation."
                        (treesit-node-parent
                         (treesit-node-parent node))))
         0
-      c-ts-mode-indent-offset)))
+      c-ts-indent-offset)))
 
 (defun c-ts-mode--prev-sibling (node parent bol &rest _)
   "Return the start of the previous named sibling of NODE.
@@ -386,7 +387,7 @@ NODE and PARENT as usual."
      ;; change). Eg, for (;;) {...}
      ((treesit-node-eq node (treesit-node-child parent -1 'named))
       (cons (c-ts-common--standalone-parent parent)
-            c-ts-mode-indent-offset))
+            c-ts-indent-offset))
      ;; Initializer.
      ((and (treesit-node-check node 'named)
            (eq (treesit-node-index node 'named) 0 ))
@@ -418,11 +419,11 @@ NODE and PARENT as usual."
     ;; indents against parent, the rest statements indent to
     ;; their prev-sibling.
     ((match nil ,(rx "preproc_" (or "if" "elif")) nil 3 3)
-     c-ts-mode--standalone-parent c-ts-mode-indent-offset)
+     c-ts-mode--standalone-parent c-ts-indent-offset)
     ((match nil "preproc_ifdef" nil 2 2)
-     c-ts-mode--standalone-parent c-ts-mode-indent-offset)
+     c-ts-mode--standalone-parent c-ts-indent-offset)
     ((match nil "preproc_else" nil 1 1)
-     c-ts-mode--standalone-parent c-ts-mode-indent-offset)
+     c-ts-mode--standalone-parent c-ts-indent-offset)
     ((parent-is "preproc") c-ts-mode--prev-sibling 0))
   "Indent rules for preprocessors.")
 
@@ -458,7 +459,7 @@ NODE and PARENT are the same as other indent rules."
        ;; First sibling.
        ((treesit-node-eq (treesit-node-child parent 0 'named) node)
         (cons (funcall parent-bol)
-              c-ts-mode-indent-offset))))))
+              c-ts-indent-offset))))))
 
 (defun c-ts-mode--emacs-macro-rules (_ parent &rest _)
   "Rules for indenting macros in Emacs C source.
@@ -470,7 +471,7 @@ PARENT is the same as other simple-indent rules."
                  (treesit-node-child-by-field-name parent "type"))
                 "FOR_EACH_TAIL"))
     (cons (treesit-node-start parent)
-          c-ts-mode-indent-offset))))
+          c-ts-indent-offset))))
 
 (defun c-ts-mode--simple-indent-rules (mode style)
   "Return the indent rules for MODE and STYLE.
@@ -479,7 +480,7 @@ The returned value can be set to `treesit-simple-indent-rules'.
 MODE can be `c' or `cpp'.  STYLE can be `gnu', `k&r', `linux', `bsd'."
   (let ((rules
          `((c-ts-mode--for-each-tail-body-matcher
-            prev-line c-ts-mode-indent-offset)
+            prev-line c-ts-indent-offset)
 
            ;; Misc overrides.
            ((parent-is "translation_unit") column-0 0)
@@ -529,7 +530,7 @@ MODE can be `c' or `cpp'.  STYLE can be `gnu', `k&r', `linux', `bsd'."
            ;; C++
            ((node-is "access_specifier") parent-bol 0)
            ((prev-line-is "access_specifier")
-            parent-bol c-ts-mode-indent-offset)
+            parent-bol c-ts-indent-offset)
 
            c-ts-common-baseline-indent-rule)))
     (setq rules
@@ -544,7 +545,7 @@ MODE can be `c' or `cpp'.  STYLE can be `gnu', `k&r', `linux', `bsd'."
                ,@rules))
             ('bsd
              `(((match "compound_statement" "compound_statement")
-                standalone-parent c-ts-mode-indent-offset)
+                standalone-parent c-ts-indent-offset)
                ((node-is "compound_statement") standalone-parent 0)
                ,@rules))))
     (pcase mode
@@ -597,7 +598,7 @@ NODE, PARENT, BOL, ARGS are as usual."
    ;; Indent the statement below the label.
    ((treesit-node-match-p parent "labeled_statement")
     (cons (c-ts-mode--standalone-parent node parent bol args)
-          c-ts-mode-indent-offset))
+          c-ts-indent-offset))
    ;; If previous sibling is a labeled_statement, align to it's
    ;; children, which is the previous statement.
    ((and (not (treesit-node-match-p node "}"))
@@ -1273,7 +1274,8 @@ if `c-ts-mode-emacs-sources-support' is non-nil."
                     "goto_statement"
                     "case_statement")))
     (text ,(regexp-opt '("comment"
-                         "raw_string_literal"))))
+                         "raw_string_literal")))
+    (comment "comment"))
   "`treesit-thing-settings' for both C and C++.")
 
 ;;; Support for FOR_EACH_* macros
@@ -1410,7 +1412,7 @@ BEG and END are described in `treesit-range-rules'."
   ;; Indent.
   (when (eq c-ts-mode-indent-style 'linux)
     (setq-local indent-tabs-mode t))
-  (setq-local c-ts-common-indent-offset 'c-ts-mode-indent-offset)
+  (setq-local c-ts-common-indent-offset 'c-ts-indent-offset)
   ;; This setup is not needed anymore, but we might find uses for it
   ;; later, so I'm keeping it.
   (setq-local c-ts-common-indent-type-regexp-alist
@@ -1473,7 +1475,9 @@ in your init files, or customize `treesit-enabled-modes'."
   :group 'c
   :after-hook (c-ts-mode-set-modeline)
 
-  (when (treesit-ensure-installed 'c)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'c)
+             (treesit-ready-p 'c))
     ;; Create an "for-each" parser, see `c-ts-mode--emacs-set-ranges'
     ;; for more.
     (when c-ts-mode-emacs-sources-support
@@ -1552,7 +1556,9 @@ recommended to enable `electric-pair-mode' with this mode."
   :group 'c++
   :after-hook (c-ts-mode-set-modeline)
 
-  (when (treesit-ensure-installed 'cpp)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'cpp)
+             (treesit-ready-p 'cpp))
     (let ((primary-parser (treesit-parser-create 'cpp)))
 
       ;; Syntax.
@@ -1565,6 +1571,7 @@ recommended to enable `electric-pair-mode' with this mode."
                       (funcall c-ts-mode-indent-style)
                     (c-ts-mode--simple-indent-rules
                      'cpp c-ts-mode-indent-style)))
+      (setq-local editorconfig-indent-size-vars '(c-ts-indent-offset))
 
       ;; Font-lock.
       (setq-local treesit-font-lock-settings

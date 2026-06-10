@@ -379,6 +379,8 @@ The same keyword arguments are supported as in
   (ffap--gcc-is-clang-p))
 
 (defvar tramp-default-host-alist)
+(defvar tramp-default-remote-shell)
+(defvar tramp-encoding-shell)
 (defvar tramp-methods)
 (defvar tramp-remote-path)
 
@@ -394,16 +396,17 @@ The same keyword arguments are supported as in
     (cond
      ((getenv "REMOTE_TEMPORARY_FILE_DIRECTORY"))
      ((eq system-type 'windows-nt) null-device)
-     ;; Android's built-in shell is far too dysfunctional to support
+     ;; Android's built-in shell is far too dysfunctional to support.
      ;; Tramp.
      ((eq system-type 'android) null-device)
      (t (add-to-list
          'tramp-methods
-         '("mock"
-	   (tramp-login-program	     "sh")
+         `("mock"
+	   (tramp-login-program	     ,tramp-encoding-shell)
 	   (tramp-login-args	     (("-i")))
-           (tramp-direct-async       ("-c"))
-	   (tramp-remote-shell	     "/bin/sh")
+	   (tramp-direct-async       ("-c"))
+	   (tramp-tmpdir	     ,temporary-file-directory)
+	   (tramp-remote-shell	     ,tramp-default-remote-shell)
 	   (tramp-remote-shell-args  ("-c"))
 	   (tramp-connection-timeout 10)))
         (add-to-list
@@ -415,6 +418,19 @@ The same keyword arguments are supported as in
           (setenv "HOME" (directory-file-name temporary-file-directory)))
         (format "/mock::%s" temporary-file-directory))))
   "Temporary directory for remote file tests.")
+
+(defun ert-play-keys (keys)
+  "Play the key sequence KEYS as if it was user input.
+
+KEYS shall have the same format as in a call to function `kmacro'.
+
+This macro should be expanded within the body of
+`ert-with-buffer-selected' to select a buffer when keys KEYS start
+commands acting on this buffer, or within the body of
+`ert-with-test-buffer' used with `:selected' flag set."
+  (funcall
+    (kmacro keys)))
+
 
 
 ;;;; Obsolete

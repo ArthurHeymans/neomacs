@@ -192,14 +192,15 @@ Like `minibuffer-complete-word' but for `completing-read-multiple'."
   (crm--completion-command beg end
     (completion-in-region--single-word beg end)))
 
-(defun crm-complete-and-exit ()
-  "If all of the minibuffer elements are valid completions then exit.
-All elements in the minibuffer must match.  If there is a mismatch, move point
-to the location of mismatch and do not exit.
-
-This function is modeled after `minibuffer-complete-and-exit'."
-  (interactive)
-  (let ((doexit t))
+(defun crm-complete-and-exit (&optional no-exit)
+  "Exit if all of the minibuffer elements are valid completions.
+Otherwise, try to complete the minibuffer contents.
+This behaves like `minibuffer-complete-and-exit' (which see),
+adjusted for the presence of multiple elements."
+  (interactive "P")
+  (when (completion--selected-candidate)
+    (minibuffer-choose-completion t t))
+  (let ((doexit (not no-exit)))
     (goto-char (minibuffer-prompt-end))
     (while
         (and doexit
@@ -255,14 +256,11 @@ with empty strings removed."
                   crm-local-must-match-map
                 crm-local-completion-map))
          (map (minibuffer-visible-completions--maybe-compose-map map))
-         (buffer (current-buffer))
          input)
     (minibuffer-with-setup-hook
         (lambda ()
           (add-hook 'choose-completion-string-functions
                     'crm--choose-completion-string nil 'local)
-          (setq-local minibuffer-completion-table #'crm--collection-fn)
-          (setq-local minibuffer-completion-predicate predicate)
           (setq-local completion-list-insert-choice-function
                       (lambda (_start _end choice)
                         (let* ((beg (save-excursion
@@ -276,14 +274,9 @@ with empty strings removed."
                                           (1- (point))
                                         (point-max)))))
                           (completion--replace beg end choice))))
-          ;; see completing_read in src/minibuf.c
-          (setq-local minibuffer-completion-confirm
-                      (unless (eq require-match t) require-match))
-          (setq-local minibuffer--require-match require-match)
-          (setq-local minibuffer--original-buffer buffer)
           (setq-local crm-completion-table table)
-          (completions--start-eager-display))
-      (setq input (read-from-minibuffer
+          (use-local-map map))
+      (setq input (completing-read
                    (format-spec
                     crm-prompt
                     (let* ((sep (or (get-text-property 0 'separator crm-separator)
@@ -291,11 +284,8 @@ with empty strings removed."
                            (desc (or (get-text-property 0 'description crm-separator)
                                      (concat "list separated by " sep))))
                       `((?s . ,sep) (?d . ,desc) (?p . ,prompt))))
-                   initial-input map nil hist def inherit-input-method)))
-    ;; If the user enters empty input, `read-from-minibuffer'
-    ;; returns the empty string, not DEF.
-    (when (and def (string-equal input ""))
-      (setq input (if (consp def) (car def) def)))
+                   #'crm--collection-fn predicate
+                   require-match initial-input hist def inherit-input-method)))
     ;; Remove empty strings in the list of read strings.
     (split-string input crm-separator t)))
 

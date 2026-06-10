@@ -310,9 +310,7 @@ This does not modify SEQUENCE."
 (cl-defgeneric seq-concatenate (type &rest sequences)
   "Concatenate SEQUENCES into a single sequence of type TYPE.
 TYPE must be one of following symbols: `vector', `string' or `list'.
-This does not modify any of the SEQUENCES.
-
-\n(fn TYPE SEQUENCE...)"
+This does not modify any of the SEQUENCES."
   (setq sequences (mapcar #'seq-into-sequence sequences))
   (pcase type
     ('vector (apply #'vconcat sequences))
@@ -567,7 +565,7 @@ This does not modify SEQUENCE1 or SEQUENCE2."
 
 ;;;###autoload
 (cl-defgeneric seq-intersection (sequence1 sequence2 &optional testfn)
-  "Return copy of SEQUENCE1 with elements that appear in SEQUENCE2 removed.
+  "Return copy of SEQUENCE1 with elements that do not appear in SEQUENCE2 removed.
 \"Equality\" of elements is defined by the function TESTFN, which
 defaults to `equal'.
 This does not modify SEQUENCE1 or SEQUENCE2."
@@ -579,7 +577,7 @@ This does not modify SEQUENCE1 or SEQUENCE2."
               '()))
 
 (cl-defgeneric seq-difference (sequence1 sequence2 &optional testfn)
-  "Return list of all the elements that appear in SEQUENCE1 but not in SEQUENCE2.
+  "Return copy of SEQUENCE1 with elements that appear in SEQUENCE2 removed.
 \"Equality\" of elements is defined by the function TESTFN, which
 defaults to `equal'.
 This does not modify SEQUENCE1 or SEQUENCE2."

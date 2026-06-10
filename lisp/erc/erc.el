@@ -12,7 +12,7 @@
 ;;               David Edmondson (dme@dme.org)
 ;;               Michael Olson (mwolson@gnu.org)
 ;;               Kelvin White (kwhite@gnu.org)
-;; Version: 5.6.2-git
+;; Version: 5.6.2.31.1
 ;; Package-Requires: ((emacs "27.1") (compat "29.1.4.5"))
 ;; Keywords: IRC, chat, client, Internet
 ;; URL: https://www.gnu.org/software/emacs/erc.html
@@ -70,7 +70,7 @@
 (require 'auth-source)
 (eval-when-compile (require 'subr-x))
 
-(defconst erc-version "5.6.2-git"
+(defconst erc-version "5.6.2.31.1"
   "This version of ERC.")
 
 (defvar erc-official-location
@@ -1693,11 +1693,18 @@ time `erc-mode-hook' runs for any connection."
   (declare (indent 1))
   (cl-assert (stringp (car args)))
   (if (derived-mode-p 'erc-mode)
-      (unless (or (erc-with-server-buffer ; needs `erc-server-process'
-                    (apply #'erc-button--display-error-notice-with-keys
-                           (current-buffer) args)
-                    t)
-                  erc--target) ; unlikely
+      (unless
+          (or (erc-with-server-buffer ; needs `erc-server-process'
+                (let ((fn
+                       (lambda (buffer)
+                         (erc-with-buffer (buffer)
+                           (apply #'erc-button--display-error-notice-with-keys
+                                  buffer args)))))
+                  (if erc--msg-props
+                      (run-at-time nil nil fn (current-buffer))
+                    (funcall fn (current-buffer))))
+                t)
+              erc--target) ; unlikely
         (let (hook)
           (setq hook
                 (lambda (_)

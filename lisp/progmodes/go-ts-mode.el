@@ -62,7 +62,9 @@
           :commit "949a8a470559543857a62102c84700d291fc984c")
  t)
 
-(defcustom go-ts-mode-indent-offset 8
+(define-obsolete-variable-alias 'go-ts-mode-indent-offset
+  'go-ts-indent-offset "31")
+(defcustom go-ts-indent-offset 8
   "Number of spaces for each indentation step in `go-ts-mode'."
   :version "29.1"
   :type 'integer
@@ -109,27 +111,27 @@
      ((node-is "}") parent-bol 0)
      ((node-is "labeled_statement") no-indent 0)
      ((parent-is "raw_string_literal") no-indent 0)
-     ((parent-is "argument_list") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "block") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "communication_case") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "const_declaration") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "default_case") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "expression_case") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "selector_expression") parent-bol go-ts-mode-indent-offset)
+     ((parent-is "argument_list") parent-bol go-ts-indent-offset)
+     ((parent-is "block") parent-bol go-ts-indent-offset)
+     ((parent-is "communication_case") parent-bol go-ts-indent-offset)
+     ((parent-is "const_declaration") parent-bol go-ts-indent-offset)
+     ((parent-is "default_case") parent-bol go-ts-indent-offset)
+     ((parent-is "expression_case") parent-bol go-ts-indent-offset)
+     ((parent-is "selector_expression") parent-bol go-ts-indent-offset)
      ((parent-is "expression_switch_statement") parent-bol 0)
-     ((parent-is "field_declaration_list") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "import_spec_list") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "interface_type") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "labeled_statement") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "literal_value") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "parameter_list") parent-bol go-ts-mode-indent-offset)
+     ((parent-is "field_declaration_list") parent-bol go-ts-indent-offset)
+     ((parent-is "import_spec_list") parent-bol go-ts-indent-offset)
+     ((parent-is "interface_type") parent-bol go-ts-indent-offset)
+     ((parent-is "labeled_statement") parent-bol go-ts-indent-offset)
+     ((parent-is "literal_value") parent-bol go-ts-indent-offset)
+     ((parent-is "parameter_list") parent-bol go-ts-indent-offset)
      ((parent-is "select_statement") parent-bol 0)
-     ((parent-is "type_case") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "type_declaration") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "type_spec") parent-bol go-ts-mode-indent-offset)
+     ((parent-is "type_case") parent-bol go-ts-indent-offset)
+     ((parent-is "type_declaration") parent-bol go-ts-indent-offset)
+     ((parent-is "type_spec") parent-bol go-ts-indent-offset)
      ((parent-is "type_switch_statement") parent-bol 0)
-     ((parent-is "var_declaration") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "var_spec_list") parent-bol go-ts-mode-indent-offset)
+     ((parent-is "var_declaration") parent-bol go-ts-indent-offset)
+     ((parent-is "var_spec_list") parent-bol go-ts-indent-offset)
      (no-node parent-bol 0)))
   "Tree-sitter indent rules for `go-ts-mode'.")
 
@@ -285,7 +287,9 @@
   :group 'go
   :syntax-table go-ts-mode--syntax-table
 
-  (when (treesit-ensure-installed 'go)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'go)
+             (treesit-ready-p 'go))
     (setq treesit-primary-parser (treesit-parser-create 'go))
 
     ;; Comments.
@@ -541,12 +545,12 @@ be run."
 (defvar go-mod-ts-mode--indent-rules
   `((gomod
      ((node-is ")") parent-bol 0)
-     ((parent-is "exclude_directive") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "module_directive") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "replace_directive") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "require_directive") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "retract_directive") parent-bol go-ts-mode-indent-offset)
-     ((go-mod-ts-mode--directive-matcher) no-indent go-ts-mode-indent-offset)
+     ((parent-is "exclude_directive") parent-bol go-ts-indent-offset)
+     ((parent-is "module_directive") parent-bol go-ts-indent-offset)
+     ((parent-is "replace_directive") parent-bol go-ts-indent-offset)
+     ((parent-is "require_directive") parent-bol go-ts-indent-offset)
+     ((parent-is "retract_directive") parent-bol go-ts-indent-offset)
+     ((go-mod-ts-mode--directive-matcher) no-indent go-ts-indent-offset)
      (no-node no-indent 0)))
   "Tree-sitter indent rules for `go-mod-ts-mode'.")
 
@@ -606,7 +610,9 @@ what the parent of the node would be if it were a node."
   :group 'go
   :syntax-table go-mod-ts-mode--syntax-table
 
-  (when (treesit-ensure-installed 'gomod)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'gomod)
+             (treesit-ready-p 'gomod))
     (setq treesit-primary-parser (treesit-parser-create 'gomod))
 
     ;; Comments.
@@ -652,9 +658,9 @@ is t or contains the mode name."
 (defvar go-work-ts-mode--indent-rules
   `((gowork
      ((node-is ")") parent-bol 0)
-     ((parent-is "replace_directive") parent-bol go-ts-mode-indent-offset)
-     ((parent-is "use_directive") parent-bol go-ts-mode-indent-offset)
-     ((go-work-ts-mode--directive-matcher) no-indent go-ts-mode-indent-offset)
+     ((parent-is "replace_directive") parent-bol go-ts-indent-offset)
+     ((parent-is "use_directive") parent-bol go-ts-indent-offset)
+     ((go-work-ts-mode--directive-matcher) no-indent go-ts-indent-offset)
      (no-node no-indent 0)))
   "Tree-sitter indent rules for `go-work-ts-mode'.")
 
@@ -710,7 +716,9 @@ what the parent of the node would be if it were a node."
   "Major mode for editing go.work files, powered by tree-sitter."
   :group 'go
 
-  (when (treesit-ensure-installed 'gowork)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'gowork)
+             (treesit-ready-p 'gowork))
     (setq treesit-primary-parser (treesit-parser-create 'gowork))
 
     ;; Comments.

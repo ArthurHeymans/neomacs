@@ -1,4 +1,4 @@
-;;; elisp-scope.el --- Semantic analysis for Elisp symbols  -*- lexical-binding: t; -*-
+;;; elisp-scope.el --- Semantic analysis for Emacs Lisp symbols  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 Free Software Foundation, Inc.
 
@@ -596,6 +596,10 @@ Optional argument LOCAL is a local context to extend."
         (elisp-scope--variable
          bare beg (alist-get bare elisp-scope-local-bindings))))))
 
+(defsubst elisp-scope--variable-spec (var)
+  "Return a specification for the value of variable VAR, or nil if unknown."
+  (get var 'elisp-scope-variable-spec))
+
 (defun elisp-scope--let-1 (local bindings body)
   (if bindings
       (let* ((binding (ensure-list (car bindings)))
@@ -603,7 +607,7 @@ Optional argument LOCAL is a local context to extend."
              (bare (elisp-scope--sym-bare sym))
              (beg (elisp-scope--sym-pos sym)))
         (when beg (elisp-scope--binding bare beg))
-        (elisp-scope-1 (cadr binding))
+        (elisp-scope-1 (cadr binding) (elisp-scope--variable-spec bare))
         (elisp-scope--let-1 (if bare (elisp-scope--local-new bare beg local) local)
                             (cdr bindings) body))
     (let ((elisp-scope-local-bindings local))
@@ -621,7 +625,7 @@ Optional argument LOCAL is a local context to extend."
              (bare (bare-symbol sym))
              (beg (elisp-scope--sym-pos sym)))
         (when beg (elisp-scope--binding bare beg))
-        (elisp-scope-1 (cadr binding))
+        (elisp-scope-1 (cadr binding)  (elisp-scope--variable-spec bare))
         (let ((elisp-scope-local-bindings (elisp-scope--local-new bare beg elisp-scope-local-bindings)))
           (elisp-scope-let* (cdr bindings) body)))
     (elisp-scope-n body elisp-scope-output-spec)))
@@ -719,7 +723,13 @@ Optional argument LOCAL is a local context to extend."
      beg bare))
   (elisp-scope-lambda args body))
 
-(defun elisp-scope-setq (args) (elisp-scope-n args elisp-scope-output-spec))
+(defun elisp-scope-setq (args)
+  (while-let ((var (pop args)))
+    (let ((val (pop args)))
+      (elisp-scope-1 var)
+      (elisp-scope-1
+       val (or (elisp-scope--variable-spec (elisp-scope--sym-bare var))
+               elisp-scope-output-spec)))))
 
 (defvar elisp-scope-local-definitions nil
   "Alist associating (local) analyzer functions to function/macro names.")
@@ -2703,6 +2713,11 @@ ARGS bound to the analyzed arguments."
 
 (put 'unwind-protect 'elisp-scope-analyzer #'elisp-scope--analyze-prog1)
 
+;;; Specifications for some common variables:
+(put 'coding-system-for-read 'elisp-scope-variable-spec '(symbol . coding))
+(put 'coding-system-for-write 'elisp-scope-variable-spec '(symbol . coding))
+(put 'major-mode 'elisp-scope-variable-spec '(symbol . major-mode))
+
 (defun elisp-scope-report-s (sym role)
   "Report that symbol SYM has role ROLE.
 
@@ -2806,10 +2821,50 @@ It is passed to `elisp-scope-1', which see."
 Call CALLBACK for each analyzed symbol SYM with arguments ROLE, POS,
 SYM, ID and DEF, where ROLE is a symbol that specifies the semantics of
 SYM; POS is the position of SYM in STREAM; ID is an object that uniquely
-identifies (co-)occurrences of SYM in the current defun; and DEF is the
-position in which SYM is locally defined, or nil.  If SYM is itself a
-binding occurrence, then POS and DEF are equal.  If SYM is not lexically
-bound, then DEF is nil.
+identifies the local reference of SYM in the current defun, so different
+occurrences of SYM get the same ID (up to `equal') if and only if they
+refer to the same object; and lastly, DEF is the position in which SYM
+is locally defined, or nil.  For the occurrence of SYM at the position
+where it is locally defined (a.k.a. \"bound\"), the values of POS and
+DEF are equal.  If SYM is not lexically bound, then DEF is nil and so
+is ID.
+
+CALLBACK should use ID by checking if it is nil or `equal' to other ID
+values produced in the same call to this function.  The specific value
+of a given ID is otherwise meaningless.
+
+As an example, when this function analyzes the following form
+
+  (lambda (mode) (let ((mode (or mode major-mode))) (symbol-name mode)))
+
+the CALLBACK function is invoked four times with SYM `mode':
+
+- Once for the `mode' in the `lambda' arguments list, with ROLE
+  `binding-variable', some non-nil ID value MODE-ID1, and with POS and
+  DEF both being the same position POS1 where this `mode' occurs.
+
+- Another time for the binder in the let form, with ROLE
+  `binding-variable' some non-nil ID value MODE-ID2 that is not `equal'
+  to MODE-ID1, and with POS and DEF both being the same position POS2.
+
+- Another for the first argument of `or', with ROLE `bound-variable' and
+  ID of MODE-ID1, since this occurrence of `mode' is bound by the
+  `lambda' argument `mode'.  Similarly, DEF is POS1, and POS is now a
+  different position, POS3.
+
+- Finally, CALLBACK is also invoked for the `mode' that appears in the
+  body of `let' as the argument of `symbol-name', with ROLE set to
+  `bound-variable', ID set to MODE-ID2, and DEF set to POS3.
+
+In the above example, CALLBACK is also invoked for `lambda', `let',
+`or', `major-mode' and `symbol-name'.  Since those symbols do not have
+local references (they refer to global functions/macros/variables),
+CALLBACK gets nil ID and nil DEF.
+
+Note that if SYM is locally-bound, but has no specific binding position,
+then DEF is nil while ID is non-nil.  This is the case when SYM is bound
+by a binder that is only introduced during macro expansion and does not
+appear literally in the analyzed code.
 
 If STREAM is nil, it defaults to the current buffer.  When reading from
 the current buffer, this function leaves point at the end of the form.

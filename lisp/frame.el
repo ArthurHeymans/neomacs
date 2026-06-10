@@ -493,6 +493,7 @@ there (in decreasing order of priority)."
 	   (setq parms (append initial-frame-alist window-system-frame-alist
 			       default-frame-alist parms nil))
 	   ;; Don't enable tab-bar in daemon's initial frame.
+           ;; Use `frame-initial-p'?
 	   (when (and (daemonp) (eq (selected-frame) terminal-frame))
 	     (setq parms (delq (assq 'tab-bar-lines parms) parms)))
 	   parms))
@@ -1005,10 +1006,12 @@ In the return value, assign nil to each parameter in
 `frame-inherited-parameters', which is not in PARAMETERS, and remove all
 parameters in `frame-internal-parameters' from PARAMETERS."
   (dolist (p (append default-frame-alist
-                     window-system-default-frame-alist
-                     frame-inherited-parameters))
+                     window-system-default-frame-alist))
     (unless (assq (car p) parameters)
       (push (cons (car p) nil) parameters)))
+  (dolist (p frame-inherited-parameters)
+    (unless (assq p parameters)
+      (push (cons p nil) parameters)))
   (seq-remove (lambda (elem)
                 (memq (car elem) frame-internal-parameters))
               parameters))
@@ -2160,6 +2163,7 @@ live frame and defaults to the selected one."
 (declare-function pgtk-frame-geometry "pgtkfns.c" (&optional frame))
 (declare-function haiku-frame-geometry "haikufns.c" (&optional frame))
 (declare-function android-frame-geometry "androidfns.c" (&optional frame))
+(declare-function neomacs-frame-geometry "neomacsfns.c" (&optional frame))
 (declare-function tty-frame-geometry "term.c" (&optional frame))
 
 (defun frame-geometry (&optional frame)
@@ -2216,6 +2220,8 @@ and width values are in pixels.
       (haiku-frame-geometry frame))
      ((eq frame-type 'android)
       (android-frame-geometry frame))
+     ((eq frame-type 'neo)
+      (neomacs-frame-geometry frame))
      (t
       (tty-frame-geometry frame)))))
 
@@ -2326,6 +2332,7 @@ of frames like calls to map a frame or change its visibility."
 (declare-function pgtk-frame-edges "pgtkfns.c" (&optional frame type))
 (declare-function haiku-frame-edges "haikufns.c" (&optional frame type))
 (declare-function android-frame-edges "androidfns.c" (&optional frame type))
+(declare-function neomacs-frame-edges "neomacsfns.c" (&optional frame type))
 (declare-function tty-frame-edges "term.c" (&optional frame type))
 
 (defun frame-edges (&optional frame type)
@@ -2356,6 +2363,8 @@ FRAME."
       (haiku-frame-edges frame type))
      ((eq frame-type 'android)
       (android-frame-edges frame type))
+     ((eq frame-type 'neo)
+      (neomacs-frame-edges frame type))
      (t
       (tty-frame-edges frame type)))))
 
@@ -2365,6 +2374,7 @@ FRAME."
 (declare-function pgtk-mouse-absolute-pixel-position "pgtkfns.c")
 (declare-function haiku-mouse-absolute-pixel-position "haikufns.c")
 (declare-function android-mouse-absolute-pixel-position "androidfns.c")
+(declare-function neomacs-mouse-absolute-pixel-position "neomacsfns.c")
 
 (defun mouse-absolute-pixel-position ()
   "Return absolute position of mouse cursor in pixels.
@@ -2385,6 +2395,8 @@ position (0, 0) of the selected frame's terminal."
       (haiku-mouse-absolute-pixel-position))
      ((eq frame-type 'android)
       (android-mouse-absolute-pixel-position))
+     ((eq frame-type 'neo)
+      (neomacs-mouse-absolute-pixel-position))
      (t
       (cons 0 0)))))
 
@@ -2395,6 +2407,8 @@ position (0, 0) of the selected frame's terminal."
 (declare-function haiku-set-mouse-absolute-pixel-position "haikufns.c" (x y))
 (declare-function android-set-mouse-absolute-pixel-position
                   "androidfns.c" (x y))
+(declare-function neomacs-set-mouse-absolute-pixel-position
+                  "neomacsfns.c" (x y))
 
 (defun set-mouse-absolute-pixel-position (x y)
   "Move mouse pointer to absolute pixel position (X, Y).
@@ -2413,7 +2427,9 @@ position (0, 0) of the selected frame's terminal."
      ((eq frame-type 'haiku)
       (haiku-set-mouse-absolute-pixel-position x y))
      ((eq frame-type 'android)
-      (android-set-mouse-absolute-pixel-position x y)))))
+      (android-set-mouse-absolute-pixel-position x y))
+     ((eq frame-type 'neo)
+      (neomacs-set-mouse-absolute-pixel-position x y)))))
 
 (defun frame-monitor-attributes (&optional frame)
   "Return the attributes of the physical monitor dominating FRAME.
@@ -2535,6 +2551,9 @@ Return nil if DISPLAY contains no Emacs frame."
       ;; This is currently not supported on PGTK.
       ;; (pgtk-frame-list-z-order display)
       nil)
+     ((eq frame-type 'neo)
+      ;; Not yet supported on neomacs.
+      nil)
      ((eq frame-type 'haiku)
       (haiku-frame-list-z-order display))
      ((eq frame-type 'android)
@@ -2610,6 +2629,78 @@ for FRAME."
     (or (/= (window-old-pixel-width root) (window-pixel-width root))
         (/= (+ (window-old-pixel-height root) mini-old-height)
             (+ (window-pixel-height root) mini-height)))))
+
+(defun frame-use-time (&optional frame)
+  "Return FRAME's last use time.
+The result is the highest `window-use-time' of any window on FRAME.  If
+optional FRAME is nil, use the selected frame."
+  (let ((time 0))
+    (walk-window-tree
+     (lambda (window)
+       (setq time (max time (window-use-time window))))
+     frame)
+    time))
+
+(defun get-mru-frames (&optional all-frames
+                                 exclude-child-frames
+                                 exclude-frame)
+  "Return list of frames sorted by most recent use and filtered by ALL-FRAMES.
+Compute the result using `frame-use-time', which see.  Tooltip and
+minibuffer only frames are never candidates.  If optional argument
+EXCLUDE-CHILD-FRAMES is non-nil, eliminate child frames as candidates.
+If EXCLUDE-FRAME is non-nil, it is a frame to exclude, for example, the
+selected frame.
+
+The following non-nil values of the optional argument ALL-FRAMES
+have special meanings:
+
+- `visible' means consider all visible frames on the current terminal
+  or EXCLUDE-FRAME's terminal if EXCLUDE-FRAME is non-nil.
+
+- 0 (the number zero) means consider all visible and iconified
+  frames on the current terminal or EXCLUDE-FRAME's terminal if
+  EXCLUDE-FRAME is non-nil.
+
+Any other value means consider all frames."
+  (setq all-frames (or all-frames t))
+  (let* ((terminal (frame-terminal (or exclude-frame (selected-frame))))
+         (frame-list
+          (seq-remove (lambda (frame)
+                        (or (eq frame exclude-frame)
+                            (eq (frame-parameter frame 'minibuffer) 'only)
+                            (and exclude-child-frames (frame-parent frame))))
+                      (cond
+                       ((eq all-frames 'visible)
+                        (seq-filter (lambda (frame)
+                                      (eq (frame-terminal frame) terminal))
+                                    (visible-frame-list)))
+                       ((eq all-frames 0)
+                        (seq-filter (lambda (frame)
+                                      (eq (frame-terminal frame) terminal))
+                                    (frame-list)))
+                       (t (frame-list))))))
+    (sort frame-list :key #'frame-use-time :reverse t)))
+
+(defun get-mru-frame (&optional all-frames exclude-child-frames exclude-frame)
+  "Return the most recently used frame among frames specified by ALL-FRAMES.
+Compute the result using `frame-use-time', which see.  Tooltip, and
+minibuffer only frames are never candidates.  If optional argument
+EXCLUDE-CHILD-FRAMES is non-nil, eliminate child frames as candidates.
+If EXCLUDE-FRAME is non-nil, it is a frame to exclude, for example, the
+selected frame.
+
+The following non-nil values of the optional argument ALL-FRAMES
+have special meanings:
+
+- `visible' means consider all visible frames on the current terminal
+  or EXCLUDE-FRAME's terminal if EXCLUDE-FRAME is non-nil.
+
+- 0 (the number zero) means consider all visible and iconified frames on
+  the current terminal or EXCLUDE-FRAME's terminal if EXCLUDE-FRAME is
+  non-nil.
+
+Any other value means consider all frames."
+  (car (get-mru-frames all-frames exclude-child-frames exclude-frame)))
 
 ;;;; Frame/display capabilities.
 
@@ -2931,6 +3022,8 @@ If DISPLAY is omitted or nil, it defaults to the selected frame's display."
 		  (&optional terminal))
 (declare-function android-display-monitor-attributes-list "androidfns.c"
                   (&optional terminal))
+(declare-function neomacs-display-monitor-attributes-list "neomacsfns.c"
+		  (&optional terminal))
 
 (defun display-monitor-attributes-list (&optional display)
   "Return a list of physical monitor attributes on DISPLAY.
@@ -2990,6 +3083,8 @@ monitors."
       (haiku-display-monitor-attributes-list display))
      ((eq frame-type 'android)
       (android-display-monitor-attributes-list display))
+     ((eq frame-type 'neo)
+      (neomacs-display-monitor-attributes-list display))
      (t
       (let ((geometry (list 0 0 (display-pixel-width display)
 			    (display-pixel-height display))))

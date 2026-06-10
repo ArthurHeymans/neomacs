@@ -231,8 +231,8 @@ in the tool bar will close the current window where possible."
       '(menu-item "Open Project Directory" project-dired
                   :enable (menu-bar-non-minibuffer-window-p)
                   :help "Read the root directory of the current project, to operate on its files"))
-    (define-key menu [dired]
-      '(menu-item "Open Directory..." dired
+    (define-key menu [open-directory]
+      '(menu-item "Open Directory..." dired-from-menubar
                   :enable (menu-bar-non-minibuffer-window-p)
                   :help "Read a directory, to operate on its files"))
     (define-key menu [project-open-file]
@@ -2287,7 +2287,7 @@ this frame."
       (and menu-bar-close-window
            (window-parent (selected-window)))))
 
-(put 'dired 'menu-enable '(menu-bar-non-minibuffer-window-p))
+(put 'dired-from-menubar 'menu-enable '(menu-bar-non-minibuffer-window-p))
 
 ;; Permit deleting frame if it would leave a visible or iconified frame.
 (defun delete-frame-enabled-p ()
@@ -2496,8 +2496,7 @@ It must accept a buffer as its only required argument.")
          ;; Ignore the initial frame if present.  It can happen if
          ;; Emacs was started as a daemon.  (bug#53740)
          (dolist (frame (frame-list))
-           (unless (equal (terminal-name (frame-terminal frame))
-                          "initial_terminal")
+           (unless (frame-initial-p frame)
              (push frame frames)))
 	 ;; Make the menu of buffers proper.
 	 (setq buffers-menu
@@ -2677,6 +2676,7 @@ See `menu-bar-mode' for more information."
 (declare-function w32-menu-bar-open "term/w32-win" (&optional frame))
 (declare-function pgtk-menu-bar-open "term/pgtk-win" (&optional frame))
 (declare-function haiku-menu-bar-open "haikumenu.c" (&optional frame))
+(declare-function neomacs-menu-bar-open "term/neo-win" (&optional frame initial-x))
 
 (defun lookup-key-ignore-too-long (map key)
   "Call `lookup-key' and convert numeric values to nil."
@@ -2859,6 +2859,7 @@ If FRAME is nil or not given, use the selected frame."
      ((eq type 'w32) (w32-menu-bar-open frame))
      ((eq type 'haiku) (haiku-menu-bar-open frame))
      ((eq type 'pgtk) (pgtk-menu-bar-open frame))
+     ((eq type 'neo) (neomacs-menu-bar-open frame initial-x))
      ((and (null tty-menu-open-use-tmm)
 	   (not (zerop (or (frame-parameter frame 'menu-bar-lines) 0))))
       ;; Make sure the menu bar is up to date.  One situation where

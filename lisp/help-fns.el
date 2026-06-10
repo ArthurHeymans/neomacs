@@ -40,8 +40,8 @@
 
 (defvar help-fns-describe-function-functions nil
   "List of functions to run in help buffer in `describe-function'.
-Those functions will be run after the header line and argument
-list was inserted, and before the documentation is inserted.
+Those functions will be run after the header line, the argument
+list, and the function's documentation are inserted.
 The functions will be called with one argument: the function's symbol.
 They can assume that a newline was output just before they were called,
 and they should terminate any of their own output with a newline.
@@ -127,7 +127,7 @@ current help buffer.")
 (defcustom help-enable-completion-autoload t
   "Whether completion for Help commands can perform autoloading.
 If non-nil, whenever invoking completion for `describe-function'
-or `describe-variable' load files that might contain definitions
+or `describe-variable', load files that might contain definitions
 with the current prefix.  The files are chosen according to
 `definition-prefixes'."
   :type 'boolean
@@ -148,7 +148,10 @@ edited even if this option is enabled."
   :version "29.1")
 
 (defcustom help-enable-symbol-autoload nil
-  "Perform autoload if docs are missing from autoload objects."
+  "Perform autoload if doc string is missing from an autoloaded object.
+If non-nil, if an autoloaded object lacks a doc string, Help commands
+will load the file where the object is defined, in order to be able
+to show its documentation."
   :type 'boolean
   :group 'help
   :version "28.1")
@@ -215,7 +218,15 @@ type specifier when available."
           (help--load-prefixes prefixes))))
     (let ((prefix-completions
            (and help-enable-completion-autoload
-                (mapcar #'intern (all-completions string definition-prefixes)))))
+                ;; For `all-completions' and `try-completion', consider
+                ;; `definition-prefixes' as valid completions, to help users
+                ;; complete the input to the point where the above
+                ;; `help-enable-completion-autoload' code can take over.
+                ;; But don't do it for other operations, like `test-completion'
+                ;; (bug#80873).
+                (memq action '(nil t))
+                (mapcar #'intern (all-completions string
+                                                  definition-prefixes)))))
       (complete-with-action action obarray string
                             (if pred (lambda (sym)
                                        (or (funcall pred sym)
@@ -2242,7 +2253,7 @@ is enabled in the Help buffer."
             (insert (format "Minor mode%s enabled in this buffer:"
                             (if (length> local-minors 1)
                                 "s" ""))))
-          (describe-mode--minor-modes local-minors))
+          (describe-mode--minor-modes local-minors nil buffer))
 
         ;; Document the major mode.
         (let ((major (buffer-local-value 'major-mode buffer)))
@@ -2269,7 +2280,9 @@ is enabled in the Help buffer."
                                (help-function-def--button-function
                                 major file-name))))))
           (insert ":\n\n"
-                  (help-split-fundoc (documentation major) nil 'doc)
+                  (help-split-fundoc (with-current-buffer buffer
+                                       (documentation major))
+                                     nil 'doc)
                   (with-current-buffer buffer
                     (help-fns--list-local-commands)))
           (ensure-empty-lines 1)
@@ -2280,7 +2293,7 @@ is enabled in the Help buffer."
               (insert (format "Global minor mode%s enabled:"
                               (if (length> global-minor-modes 1)
                                   "s" ""))))
-            (describe-mode--minor-modes global-minor-modes t)
+            (describe-mode--minor-modes global-minor-modes t buffer)
             (unless describe-mode-outline
               (when (re-search-forward "^\f")
                 (beginning-of-line)
@@ -2297,7 +2310,7 @@ is enabled in the Help buffer."
           ;; For the sake of IELM and maybe others
           nil)))))
 
-(defun describe-mode--minor-modes (modes &optional global)
+(defun describe-mode--minor-modes (modes &optional global buffer)
   (dolist (mode (seq-sort #'string< modes))
     (let ((pretty-minor-mode
            (capitalize
@@ -2338,7 +2351,10 @@ is enabled in the Help buffer."
 			      "no indicator"
 			    (format "indicator%s"
 				    indicator)))))
-	(insert (or (help-split-fundoc (documentation mode) nil 'doc)
+	(insert (or (help-split-fundoc
+	             (with-current-buffer (or buffer (current-buffer))
+	               (documentation mode))
+	             nil 'doc)
 	            "No docstring"))
         (when describe-mode-outline
           (insert "\n\n")))))

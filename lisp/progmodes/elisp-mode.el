@@ -287,6 +287,12 @@ If this is non-nil, `emacs-lisp-mode' uses code analysis to determine
 the role of each symbol and highlight it accordingly.  We call this kind
 of highlighting \"semantic highlighting\".
 
+If `elisp-add-help-echo' is non-nil, also annotate the symbol with the
+`help-echo' text property.  If `cursor-sensor-mode' is enabled, also
+arrange for all occurrences of each local variable to be highlighted
+with the `elisp-variable-at-point' face whenever point is on any of that
+variable's occurrences.
+
 Semantic highlighting works best when you keep your code syntactically
 correct while editing it, for example by using `electric-pair-mode'.
 
@@ -571,7 +577,12 @@ This option has effect only if `elisp-fontify-semantically' is non-nil."
      ;; HLP is either a string, or a function that takes SYM as an
      ;; additional argument on top of the usual WINDOW, OBJECT and POS
      ;; that `help-echo' functions takes.
-     (if (stringp hlp) hlp (apply-partially hlp sym)))))
+     (if (stringp hlp) hlp
+       (let ((cache 'unset))
+         (lambda (win obj pos)
+           (if (eq cache 'unset)
+               (setq cache (funcall hlp sym win obj pos))
+             cache)))))))
 
 (defvar font-lock-beg)
 (defvar font-lock-end)
@@ -607,7 +618,13 @@ semantic highlighting takes precedence."
 
 If `elisp-add-help-echo' is non-nil, also annotate the symbol with the
 `help-echo' text property.  If `cursor-sensor-mode' is enabled and ID is
-non-nil, also annotate the symbol with `cursor-sensor-functions'."
+non-nil (i.e. SYM is local variable), also annotate the symbol with
+`cursor-sensor-functions' that highlight all occurrences of SYM with the
+same ID whenever point is on this SYM.
+
+For the precise meaning of the arguments of this function, see the
+docstring of `elisp-scope-analyze-form'.  This function is intended for
+use with `elisp-scope-analyze-form' as its CALLBACK argument."
   (let ((end (progn (goto-char beg) (read (current-buffer)) (point))))
     (let ((face (elisp-scope-get-symbol-role-property role :face)))
       (add-face-text-property
@@ -620,11 +637,8 @@ non-nil, also annotate the symbol with `cursor-sensor-functions'."
         (elisp--annotate-symbol-with-help-echo role beg end sym)
         (put-text-property beg end 'mouse-face `(,face elisp-symbol-at-mouse)))
       (when (and id (bound-and-true-p cursor-sensor-mode))
-        (put-text-property beg (1+ end) 'cursor-sensor-functions
-                           ;; Get a fresh list with SYM hardcoded,
-                           ;; so that the value is distinguishable
-                           ;; from the value in adjacent regions.
-                           (elisp-cursor-sensor beg))))))
+        (put-text-property
+         beg end 'cursor-sensor-functions (elisp-cursor-sensor beg))))))
 
 (defun elisp-fontify-symbols (end)
   "Fontify symbols from point to END according to their role in the code."
@@ -777,7 +791,9 @@ be used instead.
     ;; be any need to font-lock-flush all the Elisp buffers.
     (dolist (buf (buffer-list))
       (with-current-buffer buf
-	(when (derived-mode-p 'emacs-lisp-mode)
+        (when (and (derived-mode-p 'emacs-lisp-mode)
+                   ;; Don't flush if it refontifies the whole buffer eagerly.
+                   font-lock-support-mode)
           ;; So as to take into account new macros that may have been defined
           ;; by the just-loaded file.
 	  (font-lock-flush))))))
@@ -834,7 +850,8 @@ be used instead.
 (defvar elisp--local-macroenv
   `((cl-eval-when . ,(lambda (&rest args) `(progn . ,(cdr args))))
     (eval-when-compile . ,(lambda (&rest args) `(progn . ,args)))
-    (eval-and-compile . ,(lambda (&rest args) `(progn . ,args))))
+    (eval-and-compile . ,(lambda (&rest args) `(progn . ,args)))
+    (static-if . ,(lambda (&rest args) `(if . ,args))))
   "Environment to use while tentatively expanding macros.
 This is used to try and avoid the most egregious problems linked to the
 use of `macroexpand-all' as a way to find the \"underlying raw code\".")
@@ -870,29 +887,30 @@ use of `macroexpand-all' as a way to find the \"underlying raw code\".")
 
 (defun elisp--local-variables ()
   "Return a list of locally let-bound variables at point."
-  (save-excursion
-    (skip-syntax-backward "w_")
-    (let* ((ppss (syntax-ppss))
-           (txt (buffer-substring-no-properties (or (car (nth 9 ppss)) (point))
-                                                (or (nth 8 ppss) (point))))
-           (closer ()))
-      (dolist (p (nth 9 ppss))
-        (push (cdr (syntax-after p)) closer))
-      (setq closer (apply #'string closer))
-      (let* ((sexp (condition-case nil
-                       (car (read-from-string
-                             (concat txt "elisp--witness--lisp" closer)))
-                     ((invalid-read-syntax end-of-file) nil)))
-             (vars (elisp--local-variables-1
-                    nil (elisp--safe-macroexpand-all sexp))))
-        (delq nil
-              (mapcar (lambda (var)
-                        (and (symbolp var)
-                             (not (string-match (symbol-name var) "\\`[&_]"))
-                             ;; Eliminate uninterned vars.
-                             (intern-soft var)
-                             var))
-                      vars))))))
+  (let* ((sexp
+          (save-excursion
+            (skip-syntax-backward "w_")
+            (let* ((ppss (syntax-ppss))
+                   (txt (buffer-substring-no-properties
+                         (or (car (nth 9 ppss)) (point))
+                         (or (nth 8 ppss) (point))))
+                   (closer
+                    (nreverse (mapcar (lambda (p) (cdr (syntax-after p)))
+                                      (nth 9 ppss)))))
+              (condition-case nil
+                  (car (read-from-string
+                        (concat txt "elisp--witness--lisp" closer)))
+                ((invalid-read-syntax end-of-file) nil)))))
+         (vars (elisp--local-variables-1
+                nil (elisp--safe-macroexpand-all sexp))))
+    (delq nil
+          (mapcar (lambda (var)
+                    (and (symbolp var)
+                         (not (string-match (symbol-name var) "\\`[&_]"))
+                         ;; Eliminate uninterned vars.
+                         (intern-soft var)
+                         var))
+                  vars))))
 
 (defconst elisp--local-variables-completion-table
   (let ((lastpos nil) (lastvars nil))
@@ -1010,6 +1028,22 @@ The cache holds information specific to the current state of the
 Elisp obarray.  If the obarray is modified by any means (such as
 interning or uninterning a symbol), this variable is set to nil.")
 
+(defun elisp--read-symbol-shorthands (s)
+  "Return a fresh list of shorthand-ed alternative spellings of symbol S."
+  (let ((retval ()))
+    (cl-loop
+     for (shorthand . longhand) in read-symbol-shorthands
+     for full-name = (symbol-name s)
+     when (string-prefix-p longhand full-name)
+     do (let ((sym (make-symbol
+                    (concat shorthand
+                            (substring full-name
+                                       (length longhand))))))
+          (put sym 'elisp--longhand s)
+          (push sym retval)
+          retval))
+    retval))
+
 (defun elisp--completion-local-symbols ()
   "Compute collections of all Elisp symbols for completion purposes.
 The return value is compatible with the COLLECTION form described
@@ -1018,18 +1052,9 @@ in `completion-at-point-functions' (which see)."
               (let (retval)
                 (mapatoms
                  (lambda (s)
-                   (push s retval)
-                   (cl-loop
-                    for (shorthand . longhand) in read-symbol-shorthands
-                    for full-name = (symbol-name s)
-                    when (string-prefix-p longhand full-name)
-                    do (let ((sym (make-symbol
-                                   (concat shorthand
-                                           (substring full-name
-                                                      (length longhand))))))
-                         (put sym 'shorthand t)
-                         (push sym retval)
-                         retval))))
+                   (setq retval
+                         (cons s (nconc (elisp--read-symbol-shorthands s)
+                                        retval)))))
                 retval)))
     (cond ((null read-symbol-shorthands) obarray)
           ((and obarray-cache
@@ -1046,10 +1071,10 @@ in `completion-at-point-functions' (which see)."
                      obarray-cache)))))
 
 (defun elisp--shorthand-aware-fboundp (sym)
-  (fboundp (intern-soft (symbol-name sym))))
+  (fboundp (or (get sym 'elisp--longhand) sym)))
 
 (defun elisp--shorthand-aware-boundp (sym)
-  (boundp (intern-soft (symbol-name sym))))
+  (boundp (or (get sym 'elisp--longhand) sym)))
 
 (defun elisp-completion-at-point ()
   "Function used for `completion-at-point-functions' in `emacs-lisp-mode'.
@@ -1104,8 +1129,7 @@ functions are annotated with \"<f>\" via the
                     ;; specific completion table in more cases.
                     (is-ignore-error
                      (list t (elisp--completion-local-symbols)
-                           :predicate (lambda (sym)
-                                        (get sym 'error-conditions))))
+                           :predicate #'error-type-p))
                     ((elisp--expect-function-p beg)
                      (list nil (elisp--completion-local-symbols)
                            :predicate
@@ -1179,12 +1203,11 @@ functions are annotated with \"<f>\" via the
                                         (forward-sexp 2)
                                         (< (point) beg)))))
                         (list t (elisp--completion-local-symbols)
-                              :predicate (lambda (sym) (get sym 'error-conditions))))
+                              :predicate #'error-type-p))
                        ;; `ignore-error' with a list CONDITION parameter.
                        ('ignore-error
                         (list t (elisp--completion-local-symbols)
-                              :predicate (lambda (sym)
-                                           (get sym 'error-conditions))))
+                              :predicate #'error-type-p))
                        ((and (or ?\( 'let 'let* 'cond 'cond* 'bind*)
                              (guard (save-excursion
                                       (goto-char (1- beg))
@@ -1783,7 +1806,9 @@ and `eval-expression-print-level'.
   (funcall
    (syntax-propertize-rules
     (emacs-lisp-byte-code-comment-re
-     (1 (prog1 "< b" (elisp--byte-code-comment end (point))))))
+     (1 (prog1 "< b"
+          (goto-char (match-end 2))
+          (elisp--byte-code-comment end (point))))))
    start end))
 
 ;;;###autoload
@@ -2441,32 +2466,42 @@ ARGS is the argument list of function SYM."
                     start (match-beginning 0)
                     end   (match-end 0)))))))
     ;; Handle now positional arguments.
-    (while (and index (>= index 1))
-      (if (string-match "[^ ()]+" args end)
-	  (progn
-	    (setq start (match-beginning 0)
-		  end   (match-end 0))
-	    (let ((argument (match-string 0 args)))
-	      (cond ((string= argument "&rest")
-		     ;; All the rest arguments are the same.
-		     (setq index 1))
-		    ((string= argument "&optional"))         ; Skip.
-                    ((string= argument "&allow-other-keys")) ; Skip.
-                    ;; Back to index 0 in ARG1 ARG2 ARG2 ARG3 etc...
-                    ;; like in `setq'.
-		    ((or (and (string-match-p "\\.\\.\\.\\'" argument)
-                              (string= argument (car (last args-lst))))
-                         (and (string-match-p "\\.\\.\\.\\'"
-                                              (substring args 1 (1- (length args))))
-                              (= (length (remove "..." args-lst)) 2)
-                              (> index 1) (oddp index)))
-                     (setq index 0))
-		    (t
-		     (setq index (1- index))))))
-	(setq end           (length args)
-	      start         (1- end)
-	      argument-face 'font-lock-warning-face
-	      index         0)))
+    (with-temp-buffer
+      (insert args)
+      (goto-char (1+ (point-min)))
+      (while (and index (>= index 1))
+        (skip-chars-forward "[:blank:]")
+        (let ((origin (point)))
+          (skip-chars-forward "[")
+          (if (condition-case nil
+	          (forward-sexp)
+	        (:success t)
+	        (scan-error nil))
+	      (progn
+	        (skip-chars-forward "].")
+	        (setq start (- origin (point-min))
+		      end   (- (point) (point-min)))
+	        (let ((argument (substring args start end)))
+	          (cond ((string= argument "&rest")
+		         ;; All the rest arguments are the same.
+		         (setq index 1))
+		        ((string= argument "&optional"))         ; Skip.
+		        ((string= argument "&allow-other-keys")) ; Skip.
+		        ;; Back to index 0 in ARG1 ARG2 ARG2 ARG3 etc...
+		        ;; like in `setq'.
+		        ((or (and (string-match-p "\\.\\.\\.\\'" argument)
+			          (string= argument (car (last args-lst))))
+                             (and (string-match-p "\\.\\.\\.\\'"
+					          (substring args 1 (1- (length args))))
+			          (= (length (remove "..." args-lst)) 2)
+			          (> index 1) (oddp index)))
+		         (setq index 0))
+		        (t
+		         (setq index (1- index))))))
+	    (setq end           (length args)
+	          start         (1- end)
+	          argument-face 'font-lock-warning-face
+	          index         0)))))
     (let ((doc args))
       (when start
 	(setq doc (copy-sequence args))

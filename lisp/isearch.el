@@ -274,8 +274,6 @@ It is nil if none yet.")
 Default value, nil, means edit the string instead."
   :type 'boolean)
 
-(autoload 'char-fold-to-regexp "char-fold")
-
 (defcustom search-default-mode nil
   "Default mode to use when starting isearch.
 Value is nil, t, or a function.
@@ -349,6 +347,9 @@ you can define more of these faces using the same numbering scheme."
 When non-nil, all text currently visible on the screen
 matching the current search string is highlighted lazily
 (see `lazy-highlight-initial-delay' and `lazy-highlight-interval').
+However, if `lazy-highlight-buffer' is non-nil, all text in the
+entire buffer matching the search string is highlighted lazily.
+The highlighting uses the `lazy-highlight' face.
 
 When multiple windows display the current buffer, the
 highlighting is displayed only on the selected window, unless
@@ -387,8 +388,8 @@ If this is nil, extra highlighting can be \"manually\" removed with
 
 (defcustom lazy-highlight-initial-delay 0.25
   "Seconds to wait before beginning to lazily highlight all matches.
-This setting only has effect when the search string is less than
-`lazy-highlight-no-delay-length' characters long."
+This setting only has effect when the search string is shorter than
+`lazy-highlight-no-delay-length' characters."
   :type 'number
   :group 'lazy-highlight)
 
@@ -430,7 +431,9 @@ When non-nil, all text in the buffer matching the current search
 string is highlighted lazily (see `lazy-highlight-initial-delay',
 `lazy-highlight-interval' and `lazy-highlight-buffer-max-at-a-time').
 This is useful when `lazy-highlight-cleanup' is customized to nil
-and doesn't remove full-buffer highlighting after a search."
+and doesn't remove full-buffer highlighting after a search.
+If this is nil (the default), only the text currently visible in
+the window is highlighted, subject to `isearch-lazy-highlight'."
   :type 'boolean
   :group 'lazy-highlight
   :version "27.1")
@@ -445,7 +448,9 @@ and doesn't remove full-buffer highlighting after a search."
     (((class color) (min-colors 8))
      (:background "turquoise3" :distant-foreground "white"))
     (t (:underline t)))
-  "Face for lazy highlighting of matches other than the current one."
+  "Face for lazy highlighting of matches other than the current one.
+Used in Isearch when `isearch-lazy-highlight' is non-nil,
+and in `query-replace' when `query-replace-lazy-highlight' is non-nil."
   :group 'lazy-highlight
   :group 'basic-faces)
 
@@ -1008,6 +1013,9 @@ Each element is an `isearch--state' struct where the slots are
 With a prefix argument, do an incremental regular expression search instead.
 \\<isearch-mode-map>
 As you type characters, they add to the search string and are found.
+Current match for the search string is highlighted using the `isearch' face,
+and if `isearch-lazy-highlight' is non-nil, the other matches are
+highlighted using the `lazy-highlight' face.
 The following non-printing keys are bound in `isearch-mode-map'.
 
 Type \\[isearch-delete-char] to cancel last input item from end of search string.
@@ -2470,7 +2478,11 @@ the search words, ignoring punctuation.  If the last search
 command was a regular expression search, REGEXP is the regular
 expression used in that search.  If the last search command searched
 for a literal string, REGEXP is constructed by quoting all the special
-characters in that string."
+characters in that string.
+
+If the symbol property `isearch-exit' of this command is non-nil,
+and the command is invoked while in the middle of incremental
+search, it will exit the on-going search before it runs `occur'."
   (interactive
    (let* ((perform-collect (consp current-prefix-arg))
 	  (regexp (cond
@@ -2497,6 +2509,11 @@ characters in that string."
 	     ;; Otherwise normal occur takes numerical prefix argument.
 	     (when current-prefix-arg
 	       (prefix-numeric-value current-prefix-arg))))))
+  (when (and (symbolp this-command)
+             (get this-command 'isearch-exit))
+    (let ((isearch-recursive-edit nil))
+      (isearch-done nil t)
+      (isearch-clean-overlays)))
   (let ((case-fold-search isearch-case-fold-search)
 	;; Set `search-upper-case' to nil to not call
 	;; `isearch-no-upper-case-p' in `occur-1'.
@@ -2827,7 +2844,6 @@ With argument, add COUNT copies of the character."
 					   (mapconcat 'isearch-text-char-description
 						      string ""))))))))
 
-(autoload 'emoji--read-emoji "emoji")
 (defun isearch-emoji-by-name (&optional count)
   "Read an Emoji name and add it to the search string COUNT times.
 COUNT (interactively, the prefix argument) defaults to 1.
@@ -2835,6 +2851,7 @@ The command accepts Unicode names like \"smiling face\" or
 \"heart with arrow\", and completion is available."
   (interactive "p")
   (emoji--init)
+  (declare-function emoji--read-emoji "emoji" ())
   (with-isearch-suspended
    (pcase-let* ((`(,glyph . ,derived) (emoji--read-emoji))
                 (emoji (if derived

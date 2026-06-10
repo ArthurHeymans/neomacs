@@ -2405,11 +2405,15 @@ If you set `term-file-prefix' to nil, this function does nothing."
 
 ;; Called from C function init_display to initialize faces of the
 ;; dumped terminal frame on startup.
-
+(declare-function w32-tty-setup-colors "term/w32console" ())
 (defun tty-set-up-initial-frame-faces ()
-  (let ((frame (selected-frame)))
-    (frame-set-background-mode frame t)
-    (face-set-after-frame-default frame)))
+  (progn
+    (when (and (eq system-type 'windows-nt)
+               (featurep 'term/w32console))
+      (w32-tty-setup-colors))
+    (let ((frame (selected-frame)))
+      (frame-set-background-mode frame t)
+      (face-set-after-frame-default frame))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -2715,15 +2719,18 @@ non-nil."
   :version "22.1")
 
 (defface mode-line
-  '((((class color grayscale) (min-colors 88))
+  '((((class color grayscale) (min-colors 88) (background light))
      :box (:line-width -1 :style released-button)
      :background "grey75" :foreground "black")
+    (((class color grayscale) (min-colors 88) (background dark))
+     :box (:line-width -1 :style released-button)
+     :background "grey20" :foreground "white")
     (t
      :inverse-video t))
   "Face for the mode lines as well as header lines.
 See `mode-line-active' and `mode-line-inactive' for the faces
 used on mode lines."
-  :version "21.1"
+  :version "31.1"
   :group 'mode-line-faces
   :group 'basic-faces)
 
@@ -2752,12 +2759,16 @@ This inherits from the `mode-line' face."
   :group 'basic-faces)
 
 (defface mode-line-highlight
-  '((((supports :box t) (class color grayscale) (min-colors 88))
+  '((((supports :box t) (class color grayscale) (min-colors 88)
+      (background light))
      :box (:line-width 2 :color "grey40" :style released-button))
+    (((supports :box t) (class color grayscale) (min-colors 88)
+      (background dark))
+     :box (:line-width 2 :color "grey80" :style released-button))
     (t
      :inherit highlight))
   "Basic mode line face for highlighting."
-  :version "22.1"
+  :version "31.1"
   :group 'mode-line-faces
   :group 'basic-faces)
 
@@ -2902,6 +2913,13 @@ used to display the prompt text."
 (setq minibuffer-prompt-properties
       (append minibuffer-prompt-properties (list 'face 'minibuffer-prompt)))
 
+(defface margin
+  '((t :inherit default))
+  "Basic face for window margins (both left and right).
+This face is used to customize the appearance of the margin areas."
+  :version "31.1"
+  :group 'basic-faces)
+
 (defface fringe
   '((((class color) (background light))
      :background "grey95")
@@ -2994,7 +3012,22 @@ Note: Other faces cannot inherit from the cursor face."
      :background "grey")
     (t
      :inverse-video t))
-  "Tab line face."
+  "Basic tab line face.
+See `tab-line-active' and `tab-line-inactive' for the faces
+used on tab lines."
+  :version "31.1"
+  :group 'basic-faces)
+
+(defface tab-line-active
+  '((t :inherit tab-line))
+  "Face for the selected tab line.
+This inherits from the `tab-line' face."
+  :version "31.1"
+  :group 'basic-faces)
+
+(defface tab-line-inactive
+  '((t :inherit tab-line))
+  "Basic tab line face for non-selected windows."
   :version "31.1"
   :group 'basic-faces)
 
