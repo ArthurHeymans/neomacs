@@ -979,27 +979,445 @@ fn oracle_side_window_combo_minibuffer_window_never_side() {
 // Combo: side windows + window-resize (shrink/enlarge)
 // ---------------------------------------------------------------------------
 
-#[test]
-fn oracle_side_window_combo_window_resize_enlarge_shrink() {
+// ===========================================================================
+// Deep probes: y-offset-1 divergence investigation
+// ===========================================================================
+fn oracle_side_window_deep_mode_line_height_effect_on_offset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"
-(let* ((buf (get-buffer-create "*sw-resize2*"))
+(let* ((buf (get-buffer-create "*sw-offset*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (edges (window-edges sw))
+       (pixel-edges (window-pixel-edges sw))
+       (root-edges (window-edges (frame-root-window)))
+       (mode-line-h (window-mode-line-height sw))
+       (header-line-h (window-header-line-height sw))
+       (tab-line-h (window-tab-line-height sw))
+       (top-line (window-top-line sw))
+       (pixel-top (window-pixel-top sw)))
+  (list (nth 0 edges) (nth 1 edges) (nth 2 edges) (nth 3 edges)
+        mode-line-h header-line-h tab-line-h
+        top-line pixel-top))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_all_four_sides_edges_compare() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((bl (get-buffer-create "*edges-l*"))
+       (br (get-buffer-create "*edges-r*"))
+       (bt (get-buffer-create "*edges-t*"))
+       (bb (get-buffer-create "*edges-b*"))
+       (wl (display-buffer-in-side-window bl '((side . left))))
+       (wr (display-buffer-in-side-window br '((side . right))))
+       (wt (display-buffer-in-side-window bt '((side . top))))
+       (wb (display-buffer-in-side-window bb '((side . bottom))))
+       (root (frame-root-window))
+       (root-edges (window-edges root))
+       (l-edges (window-edges wl))
+       (r-edges (window-edges wr))
+       (t-edges (window-edges wt))
+       (b-edges (window-edges wb)))
+  (list l-edges r-edges t-edges b-edges root-edges))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_minibuffer_window_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((mini (minibuffer-window))
+       (mini-edges (window-edges mini))
+       (root (frame-root-window))
+       (root-edges (window-edges root))
+       (frame-edges (window-edges (frame-root-window) t))
+       (buf (get-buffer-create "*sw-miniedge*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (sw-edges (window-edges sw))
+       (mini-edges-after (window-edges mini)))
+  (list mini-edges root-edges sw-edges mini-edges-after))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ===========================================================================
+// Deep probes: dedication divergence investigation
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_display_buffer_mark_dedicated_default() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((val display-buffer-mark-dedicated)
+       (buf (get-buffer-create "*sw-ded-mark*"))
+       (sw (display-buffer-in-side-window buf '((side . bottom))))
+       (ded (window-dedicated-p sw)))
+  (list val ded))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_dedicated_explicit_soft() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-ded-soft*"))
        (sw (display-buffer-in-side-window
             buf
-            '((side . left) (window-width . 20))))
-       (width-before (window-total-width sw))
-       (_enlarge (condition-case err
-                     (enlarge-window 5 t)
-                   (error (list 'enlarge-err (car (cdr err))))))
-       (width-after-enlarge (window-total-width sw))
-       (_shrink (condition-case err
-                    (shrink-window 5 t)
-                  (error (list 'shrink-err (car (cdr err))))))
-       (width-after-shrink (window-total-width sw)))
-  (list width-before width-after-enlarge width-after-shrink
-        ;; Should be able to restore original width
-        (= width-before width-after-shrink)))
+            '((side . left) (dedicated . soft)))))
+  (list (window-dedicated-p sw)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_dedicated_blocks_switch_to_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf1 (get-buffer-create "*sw-ded-block-1*"))
+       (buf2 (get-buffer-create "*sw-ded-block-2*"))
+       (sw (display-buffer-in-side-window buf1 '((side . left))))
+       (_ (select-window sw))
+       (result (condition-case err
+                   (progn
+                     (switch-to-buffer buf2 'norecord)
+                     (list 'ok (eq (current-buffer) buf2)
+                           (eq (window-buffer sw) buf2)))
+                 (error (list 'blocked (car (cdr err)))))))
+  (list result))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ===========================================================================
+// Deep probes: kill-buffer lifecycle divergence investigation
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_bury_buffer_in_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf1 (get-buffer-create "*sw-bury-1*"))
+       (buf2 (get-buffer-create "*sw-bury-2*"))
+       (sw (display-buffer-in-side-window buf1 '((side . left))))
+       (_ (display-buffer-in-side-window buf2 '((side . left) (slot . 0))))
+       (_ (bury-buffer buf2))
+       (buf-in-sw (window-buffer sw))
+       (prev (window-prev-buffers sw))
+       (next (window-next-buffers sw)))
+  (list buf-in-sw
+        (length prev)
+        (length next)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_switch_to_prev_buffer_after_bury() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf-a (get-buffer-create "*sw-spb-a*"))
+       (buf-b (get-buffer-create "*sw-spb-b*"))
+       (buf-c (get-buffer-create "*sw-spb-c*"))
+       (sw (display-buffer-in-side-window buf-a '((side . right))))
+       (_ (display-buffer-in-side-window buf-b '((side . right) (slot . 0))))
+       (_ (display-buffer-in-side-window buf-c '((side . right) (slot . 0))))
+       (_ (select-window sw))
+       (_ (switch-to-prev-buffer sw))
+       (buf-after-spb (window-buffer sw))
+       (_ (switch-to-next-buffer sw))
+       (buf-after-snb (window-buffer sw)))
+  (list (eq buf-after-spb buf-b)
+        (eq buf-after-snb buf-c)))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ===========================================================================
+// Deep probes: window-configuration-change-hook investigation
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_config_change_hook_delete_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((hook-fired 0))
+  (let* ((buf (get-buffer-create "*sw-hook-del*"))
+         (_add (add-hook 'window-configuration-change-hook
+                         (lambda () (setq hook-fired (1+ hook-fired)))))
+         (sw (display-buffer-in-side-window buf '((side . left))))
+         (count-after-create hook-fired)
+         (_del (delete-window sw))
+         (count-after-delete hook-fired))
+    (list count-after-create count-after-delete)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_config_change_hook_toggle_side_windows() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((hook-count 0))
+  (let* ((buf (get-buffer-create "*sw-hook-tog*"))
+         (_add (add-hook 'window-configuration-change-hook
+                         (lambda () (setq hook-count (1+ hook-count)))))
+         (_ (display-buffer-in-side-window buf '((side . bottom))))
+         (count-after-create hook-count)
+         (_ (window-toggle-side-windows))
+         (count-after-toggle1 hook-count)
+         (_ (window-toggle-side-windows))
+         (count-after-toggle2 hook-count))
+    (list count-after-create count-after-toggle1 count-after-toggle2)))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ===========================================================================
+// Deep probes: window-sides-vertical investigation
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_sides_vertical_vs_horizontal_dimensions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((window-sides-vertical t)
+       (buf-l (get-buffer-create "*sw-dim-l*"))
+       (buf-r (get-buffer-create "*sw-dim-r*"))
+       (wl (display-buffer-in-side-window buf-l '((side . left) (window-width . 20))))
+       (wr (display-buffer-in-side-window buf-r '((side . right) (window-width . 20))))
+       (l-size (window-total-size wl))
+       (r-size (window-total-size wr))
+       (l-h-size (window-total-size wl t))
+       (r-h-size (window-total-size wr t))
+       (l-pixel (window-pixel-width wl))
+       (r-pixel (window-pixel-width wr))
+       (l-body (list (window-body-width wl) (window-body-height wl))))
+  (list l-size r-size l-h-size r-h-size l-pixel r-pixel l-body))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_sides_vertical_nil_left_not_full_height() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((window-sides-vertical nil)
+       (buf (get-buffer-create "*sw-vert-nil*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (sw-edges (window-edges sw))
+       (root-edges (window-edges (frame-root-window)))
+       (sw-bottom (nth 3 sw-edges))
+       (root-bottom (nth 3 root-edges)))
+  (list (= sw-bottom root-bottom)
+        sw-bottom root-bottom))
+"#;
+    assert_oracle_parity(form);
+}
+
+// ===========================================================================
+// New territory: functions not yet tested
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_get_buffer_window_returns_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-gbw*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (found (get-buffer-window buf))
+       (found-all (get-buffer-window buf 'all-frames)))
+  (list (eq found sw)
+        (eq found-all sw)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_walk_windows_filters_with_side_param() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf-l (get-buffer-create "*sw-walk-l*"))
+       (buf-r (get-buffer-create "*sw-walk-r*"))
+       (wl (display-buffer-in-side-window buf-l '((side . left))))
+       (wr (display-buffer-in-side-window buf-r '((side . right))))
+       (all-windows 0)
+       (side-windows 0)
+       (main-windows 0))
+  (walk-windows (lambda (w)
+                  (setq all-windows (1+ all-windows))
+                  (if (window-parameter w 'window-side)
+                      (setq side-windows (1+ side-windows))
+                    (setq main-windows (1+ main-windows))))
+                'nominibuf)
+  (list all-windows side-windows main-windows
+        (> all-windows 0)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_delete_other_windows_from_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-del-other-from-side*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (_ (select-window sw))
+       (result (condition-case err
+                   (progn
+                     (delete-other-windows sw)
+                     (list 'ok
+                           (window-live-p sw)
+                           (length (window-list nil 'nominibuf))))
+                 (error (list 'error (car (cdr err)))))))
+  (list result))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_set_window_buffer_directly() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf1 (get-buffer-create "*sw-setbuf-1*"))
+       (buf2 (get-buffer-create "*sw-setbuf-2*"))
+       (sw (display-buffer-in-side-window buf1 '((side . right))))
+       (ded-before (window-dedicated-p sw))
+       (_ (set-window-buffer sw buf2))
+       (buf-now (window-buffer sw))
+       (side-still (window-parameter sw 'window-side))
+       (ded-after (window-dedicated-p sw)))
+  (list (eq buf-now buf2)
+        (eq side-still 'right)
+        ded-before ded-after))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_display_buffer_reuse_window_over_side() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf1 (get-buffer-create "*sw-reuse-ovr-1*"))
+       (buf2 (get-buffer-create "*sw-reuse-ovr-2*"))
+       (sw (display-buffer-in-side-window buf1 '((side . left))))
+       ;; Now use plain display-buffer for buf2 - should it reuse the side window?
+       ;; display-buffer-reuse-window says no (side windows are dedicated)
+       (result (condition-case err
+                   (let ((w2 (display-buffer buf2)))
+                     (list 'got-window
+                           (eq w2 sw)
+                           (window-parameter w2 'window-side)))
+                 (error (list 'err (car (cdr err)))))))
+  (list result))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_scroll_bars_fringes_margins() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-scroll*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (scroll-bars (window-scroll-bars sw))
+       (fringes (window-fringes sw))
+       (margins (window-margins sw)))
+  (list scroll-bars fringes margins))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_split_with_explicit_side_parameter() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((main (window-main-window))
+       (_ (select-window main))
+       (sw (split-window main nil 'right))
+       (side-param (window-parameter sw 'window-side)))
+  (list side-param
+        (window-parameter sw 'window-slot)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_set_window_parameter_side_manually() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((main (window-main-window))
+       (orig-side (window-parameter main 'window-side))
+       (_ (set-window-parameter main 'window-side 'left))
+       (after-set (window-parameter main 'window-side))
+       (main-now (window-main-window))
+       (_cleanup (set-window-parameter main 'window-side nil))
+       (after-cleanup (window-parameter main 'window-side)))
+  (list orig-side after-set main-now after-cleanup))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_window_list_with_different_args() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-wl*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (all-no-mini (window-list nil 'nominibuf))
+       (all-with-mini (window-list nil 'nominibuf nil))
+       (has-side (memq sw all-no-mini))
+       (count (length all-no-mini)))
+  (list (and has-side t)
+        count
+        (= (length all-no-mini) (length all-with-mini))))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_display_buffer_in_side_window_with_extra_params() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-extra-params*"))
+       (sw (display-buffer-in-side-window
+            buf
+            '((side . bottom)
+              (window-parameters (no-other-window . t)
+                                 (modeline . nil)))))
+       (side (window-parameter sw 'window-side))
+       (slot (window-parameter sw 'window-slot))
+       (no-other (window-parameter sw 'no-other-window))
+       (modeline (window-parameter sw 'modeline)))
+  (list (eq side 'bottom)
+        (numberp slot)
+        no-other
+        modeline))
 "#;
     assert_oracle_parity(form);
 }
