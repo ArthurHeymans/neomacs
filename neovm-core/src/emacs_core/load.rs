@@ -2712,6 +2712,9 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
         ),
         ("installation-directory", Value::unibyte_string(source_dir)),
         ("exec-directory", Value::NIL),
+        // configure-info-directory is initialized to GNU's PATH_INFO default
+        // in eval.rs (obarray init); this guarded default only applies when
+        // unset, so it stays nil here to avoid clobbering that value.
         ("configure-info-directory", Value::NIL),
         ("charset-map-path", Value::NIL),
         ("path-separator", Value::string(path_separator)),

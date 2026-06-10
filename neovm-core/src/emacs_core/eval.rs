@@ -3121,7 +3121,16 @@ impl Context {
         obarray.make_special("invocation-directory");
         obarray.set_symbol_value("installation-directory", Value::NIL);
         obarray.make_special("installation-directory");
-        obarray.set_symbol_value("configure-info-directory", Value::NIL);
+        // GNU `callproc.c` initializes this from the build-time `PATH_INFO`
+        // (`epaths.h`, default "/usr/local/share/info"), never nil.  Lisp
+        // assumes it is a string: `Info--default-directory-list` runs
+        // `(file-name-as-directory configure-info-directory)`, which errors
+        // with `(wrong-type-argument stringp nil)` when nil and breaks
+        // `doom sync` (GitHub issue #127).  Mirror GNU's default constant.
+        obarray.set_symbol_value(
+            "configure-info-directory",
+            Value::string("/usr/local/share/info"),
+        );
         // GNU keyboard.c: internal--top-level-message for command loop entry
         obarray.set_symbol_value(
             "internal--top-level-message",
