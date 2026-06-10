@@ -2352,3 +2352,91 @@ fn oracle_side_window_deep_delete_other_windows_from_side_window_in_detail() {
 "#;
     assert_oracle_parity(form);
 }
+
+// ===========================================================================
+// Resize-boundary probes: main ↔ side window interaction
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_enlarge_main_window_into_side_space() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-enlarge-main*"))
+       (sw (display-buffer-in-side-window buf '((side . left) (window-width . 20))))
+       (main (window-main-window))
+       (sw-width-before (window-total-width sw))
+       (main-width-before (window-total-width main))
+       (_ (select-window main))
+       ;; Try to enlarge main horizontally (should shrink left side window)
+       (_enlarge (condition-case err
+                     (enlarge-window 3 t)
+                   (error (list 'err (car (cdr err))))))
+       (sw-width-after (window-total-width sw))
+       (main-width-after (window-total-width main)))
+  (list sw-width-before main-width-before
+        sw-width-after main-width-after
+        (< sw-width-after sw-width-before)
+        (> main-width-after main-width-before)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_shrink_main_window_side_window_grows() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-shrink-main*"))
+       (sw (display-buffer-in-side-window buf '((side . right) (window-width . 20))))
+       (main (window-main-window))
+       (sw-width-before (window-total-width sw))
+       (_ (select-window main))
+       (_shrink (condition-case err
+                    (shrink-window 3 t)
+                  (error (list 'err (car (cdr err))))))
+       (sw-width-after (window-total-width sw)))
+  (list sw-width-before sw-width-after
+        (> sw-width-after sw-width-before)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_enlarge_window_horizontally_in_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-enlarge-self*"))
+       (sw (display-buffer-in-side-window buf '((side . right) (window-width . 15))))
+       (width-before (window-total-width sw))
+       (_ (select-window sw))
+       (_enlarge (condition-case err
+                     (enlarge-window 3 t)
+                   (error (list 'err (car (cdr err))))))
+       (width-after (window-total-width sw)))
+  (list width-before width-after
+        (> width-after width-before)))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_window_pixel_width_after_resize() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-pix-resize*"))
+       (sw (display-buffer-in-side-window buf '((side . left) (window-width . 12))))
+       (pix-w-before (window-pixel-width sw))
+       (pix-total-w-before (window-total-width sw t))
+       (_ (select-window sw))
+       (_ (enlarge-window 5 t))
+       (pix-w-after (window-pixel-width sw))
+       (pix-total-w-after (window-total-width sw t)))
+  (list pix-w-before pix-total-w-before
+        pix-w-after pix-total-w-after
+        (> pix-w-after pix-w-before)))
+"#;
+    assert_oracle_parity(form);
+}
