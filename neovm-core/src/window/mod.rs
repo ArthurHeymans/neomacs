@@ -2657,6 +2657,53 @@ impl FrameManager {
         }
     }
 
+    /// Temporarily make `window_id` the selected window (and its frame the
+    /// selected frame) for the duration of mode/tab/header-line evaluation.
+    ///
+    /// Mirrors GNU `display_mode_lines` (`src/xdisp.c`), which assigns
+    /// `selected_window = w` and `XFRAME (new_frame)->selected_window` before
+    /// walking the format and restores them via `unwind_protect`.  Without
+    /// this, `:eval` forms that read `(selected-window)` — e.g.
+    /// `tab-line-tabs-window-buffers`, the default `tab-line-tabs-function`
+    /// (`lisp/tab-line.el`) — see the globally selected window instead of the
+    /// window being redisplayed, so every window's tab line shows the
+    /// selected window's buffer.  This is a lightweight assignment (no focus
+    /// redirection, no hooks), matching GNU's note that full `select_window`
+    /// is only needed if the format mutates point.  Pass the returned token to
+    /// [`Self::restore_selected_window_for_mode_line`].
+    #[must_use]
+    pub fn select_window_for_mode_line(
+        &mut self,
+        window_id: WindowId,
+    ) -> (Option<FrameId>, Option<(FrameId, WindowId)>) {
+        let prev_selected_frame = self.selected;
+        let frame_id = self.find_window_frame_id(window_id);
+        let prev_frame_window = frame_id.and_then(|fid| {
+            let frame = self.frames.get_mut(&fid)?;
+            let prev = frame.selected_window;
+            frame.selected_window = window_id;
+            Some((fid, prev))
+        });
+        if let Some(fid) = frame_id {
+            self.selected = Some(fid);
+        }
+        (prev_selected_frame, prev_frame_window)
+    }
+
+    /// Undo [`Self::select_window_for_mode_line`].
+    pub fn restore_selected_window_for_mode_line(
+        &mut self,
+        saved: (Option<FrameId>, Option<(FrameId, WindowId)>),
+    ) {
+        let (prev_selected_frame, prev_frame_window) = saved;
+        if let Some((fid, prev)) = prev_frame_window
+            && let Some(frame) = self.frames.get_mut(&fid)
+        {
+            frame.selected_window = prev;
+        }
+        self.selected = prev_selected_frame;
+    }
+
     /// Delete a frame.
     pub fn delete_frame(&mut self, id: FrameId) -> bool {
         if let Some(frame) = self.frames.remove(&id) {

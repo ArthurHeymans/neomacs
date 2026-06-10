@@ -370,6 +370,16 @@ pub fn format_mode_line_for_display(
         return Value::string("");
     }
 
+    // GNU `display_mode_lines` (xdisp.c) makes the window being redisplayed the
+    // selected window before walking its mode/tab/header-line format, so that
+    // `:eval` forms reading `(selected-window)` — e.g. the default
+    // `tab-line-tabs-function` `tab-line-tabs-window-buffers` — operate on this
+    // window rather than the globally selected one.  Without it every window's
+    // tab line shows the selected window's buffer.
+    let saved_window_selection = window
+        .as_window_id()
+        .map(|wid| eval.frames.select_window_for_mode_line(WindowId(wid)));
+
     let result_value = if format_val.is_nil() {
         Value::string("")
     } else {
@@ -387,6 +397,9 @@ pub fn format_mode_line_for_display(
         rendered.into_value(face_spec)
     };
 
+    if let Some(saved) = saved_window_selection {
+        eval.frames.restore_selected_window_for_mode_line(saved);
+    }
     if let Some(buffer_id) = saved_buffer {
         eval.restore_current_buffer_if_live(buffer_id);
     }
