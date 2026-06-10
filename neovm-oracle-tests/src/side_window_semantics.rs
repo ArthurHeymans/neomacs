@@ -1899,3 +1899,135 @@ fn oracle_side_window_deep_display_buffer_no_window_side_window() {
 "#;
     assert_oracle_parity(form);
 }
+
+// ===========================================================================
+// Window-tree structure probes
+// ===========================================================================
+
+#[test]
+fn oracle_side_window_deep_window_tree_parent_child_sibling() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-tree*"))
+       (sw (display-buffer-in-side-window buf '((side . left))))
+       (parent (window-parent sw))
+       (root (frame-root-window))
+       (is-child-of-root (eq parent root))
+       (has-sibling (and (window-next-sibling sw)
+                         (window-prev-sibling sw)))
+       ;; The side window should have siblings
+       (next (window-next-sibling sw))
+       (prev (window-prev-sibling sw))
+       (next-live (and next (window-live-p next)))
+       (prev-live (and prev (window-live-p prev)))
+       (next-side (and next (window-parameter next 'window-side)))
+       (prev-side (and prev (window-parameter prev 'window-side))))
+  (list is-child-of-root
+        (not (null next))
+        (null prev)
+        next-live prev-live
+        next-side prev-side))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_window_tree_after_multi_side() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((bl (get-buffer-create "*sw-tree-l*"))
+       (br (get-buffer-create "*sw-tree-r*"))
+       (wl (display-buffer-in-side-window bl '((side . left))))
+       (wr (display-buffer-in-side-window br '((side . right))))
+       (l-parent (window-parent wl))
+       (r-parent (window-parent wr))
+       (same-parent (eq l-parent r-parent))
+       (root (frame-root-window))
+       (both-children-of-root (and (eq l-parent root) (eq r-parent root)))
+       ;; walk children of root
+       (children (let ((kids nil)
+                       (child (window-child root)))
+                   (while child
+                     (push (list (window-parameter child 'window-side)
+                                 (window-live-p child))
+                           kids)
+                     (setq child (window-next-sibling child)))
+                   (nreverse kids))))
+  (list same-parent both-children-of-root children))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_window_resizable_side_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-resizable*"))
+       (sw (display-buffer-in-side-window buf '((side . left) (window-width . 20))))
+       (resizable-h (window-resizable sw 5 t))
+       (resizable-v (window-resizable sw 2 nil))
+       (resizable-h-neg (window-resizable sw -5 t)))
+  (list resizable-h resizable-v resizable-h-neg))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_set_window_configuration_round_trip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-config*"))
+       (sw (display-buffer-in-side-window buf '((side . left) (slot . 1))))
+       ;; save configuration
+       (config (current-window-configuration))
+       (side-before (window-parameter sw 'window-side))
+       (slot-before (window-parameter sw 'window-slot))
+       ;; delete all windows
+       (_ (delete-other-windows (window-main-window)))
+       ;; restore configuration
+       (_ (set-window-configuration config))
+       ;; find side window again
+       (sw-after (window-with-parameter 'window-side 'left))
+       (slot-after (and sw-after (window-parameter sw-after 'window-slot))))
+  (list side-before slot-before
+        (and sw-after t)
+        slot-after))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_window_minimum_size_enforcement() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-minsize*"))
+       (sw (display-buffer-in-side-window
+            buf
+            '((side . left) (window-width . 2))))
+       (width (window-total-width sw))
+       (min-width (window-min-size sw t))
+       (min-height (window-min-size sw nil)))
+  (list width min-width min-height))
+"#;
+    assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_side_window_deep_window_combination_limit_side() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((buf (get-buffer-create "*sw-comb-limit*"))
+       (sw (display-buffer-in-side-window buf '((side . bottom))))
+       (parent (window-parent sw))
+       (combination-limit (window-combination-limit parent)))
+  (list (windowp parent)
+        combination-limit))
+"#;
+    assert_oracle_parity(form);
+}
