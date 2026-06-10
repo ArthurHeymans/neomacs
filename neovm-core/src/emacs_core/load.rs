@@ -4067,6 +4067,40 @@ fn restore_cached_runtime_window_system_surface(eval: &mut super::eval::Context)
     eval.set_variable("initial-window-system", window_system);
 }
 
+/// Build the `exec-path` directory list from the runtime `PATH` environment
+/// variable, mirroring GNU `decode_env_path ("PATH", NULL, false)` (emacs.c).
+///
+///  - Split on the platform path separator (`SEPCHAR`): `;` on Windows, `:`
+///    on Unix. Splitting on a hardcoded `:` corrupts Windows `PATH` entries,
+///    whose directories carry a `:` drive letter (e.g.
+///    `C:\Program Files\Git\cmd`) and are joined with `;` — so `exec-path`
+///    fills with bogus fragments and `executable-find` can never locate git
+///    (GitHub issue #126).
+///  - Empty elements default to "." (the current directory), as GNU does
+///    when its EMPTY argument is false.
+///  - Present each directory in GNU's Lisp file-name syntax (`/` separators
+///    on Windows), matching its `dostounix_filename` normalization.
+pub(crate) fn exec_path_dirs_from_env() -> Vec<String> {
+    exec_path_dirs_from_os(std::env::var_os("PATH"))
+}
+
+/// Core of [`exec_path_dirs_from_env`], split out so it can be unit-tested
+/// with an explicit `PATH` value instead of mutating the process environment.
+pub(crate) fn exec_path_dirs_from_os(path: Option<std::ffi::OsString>) -> Vec<String> {
+    let Some(path) = path else {
+        return Vec::new();
+    };
+    std::env::split_paths(&path)
+        .map(|dir| {
+            if dir.as_os_str().is_empty() {
+                ".".to_string()
+            } else {
+                super::fileio::host_path_to_lisp_file_name_string(&dir)
+            }
+        })
+        .collect()
+}
+
 fn clear_runtime_loader_state(eval: &mut super::eval::Context) {
     // These stacks only describe in-flight bootstrap loads/requires.
     // Letting them leak into the runtime surface makes later `require`
@@ -4187,11 +4221,9 @@ fn finalize_cached_bootstrap_eval(
     // exec-path: list of dirs from runtime $PATH
     // (GNU callproc.c: init_callproc_1 / init_callproc)
     {
-        let path_dirs: Vec<Value> = std::env::var("PATH")
-            .unwrap_or_default()
-            .split(':')
-            .filter(|s| !s.is_empty())
-            .map(|s| Value::unibyte_string(s.to_string()))
+        let path_dirs: Vec<Value> = exec_path_dirs_from_env()
+            .into_iter()
+            .map(Value::unibyte_string)
             .collect();
         eval.set_variable("exec-path", Value::list(path_dirs));
     }
@@ -4535,11 +4567,9 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         );
 
         // exec-path: list of dirs from PATH env var (C: callproc.c init_callproc_1)
-        let path_dirs: Vec<Value> = std::env::var("PATH")
-            .unwrap_or_default()
-            .split(':')
-            .filter(|s| !s.is_empty())
-            .map(|s| Value::unibyte_string(s.to_string()))
+        let path_dirs: Vec<Value> = exec_path_dirs_from_env()
+            .into_iter()
+            .map(Value::unibyte_string)
             .collect();
         eval.set_variable("exec-path", Value::list(path_dirs));
         eval.set_variable("exec-suffixes", Value::NIL);

@@ -1473,11 +1473,9 @@ fn partial_bootstrap_eval_until(stop_before: &str, prefer_compiled: bool) -> Con
         Value::unibyte_string(format!("{}/", project_root.to_string_lossy())),
     );
 
-    let path_dirs: Vec<Value> = std::env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|s| !s.is_empty())
-        .map(|s| Value::unibyte_string(s.to_string()))
+    let path_dirs: Vec<Value> = super::exec_path_dirs_from_env()
+        .into_iter()
+        .map(Value::unibyte_string)
         .collect();
     eval.set_variable("exec-path", Value::list(path_dirs));
     eval.set_variable("exec-suffixes", Value::NIL);
@@ -13011,4 +13009,51 @@ fn bootstrap_macroexpand1_vs_all_pcase() {
         rendered.starts_with("OK"),
         "macroexpand comparison failed: {rendered}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// exec-path is built from PATH using the platform path separator.
+//
+// Regression for GitHub issue #126: splitting PATH on a hardcoded ':' shredded
+// Windows PATH entries (whose directories carry a ':' drive letter and are
+// joined with ';'), leaving `exec-path` full of bogus fragments so
+// `executable-find "git"` always failed. The helper now mirrors GNU
+// `decode_env_path ("PATH", NULL, false)` (emacs.c).
+// ---------------------------------------------------------------------------
+
+#[cfg(unix)]
+#[test]
+fn exec_path_dirs_split_on_colon_and_map_empty_to_dot() {
+    use std::ffi::OsString;
+    let dirs = super::exec_path_dirs_from_os(Some(OsString::from("/usr/bin:/bin:")));
+    // Trailing ':' yields an empty element, which GNU defaults to "." when its
+    // EMPTY argument is false.
+    assert_eq!(
+        dirs,
+        vec!["/usr/bin".to_string(), "/bin".to_string(), ".".to_string()]
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn exec_path_dirs_split_on_semicolon_and_normalize_separators() {
+    use std::ffi::OsString;
+    let dirs = super::exec_path_dirs_from_os(Some(OsString::from(
+        r"C:\Windows\system32;C:\Program Files\Git\cmd;",
+    )));
+    // Split on ';' (not ':' — drive letters must survive), backslashes
+    // normalized to '/' (dostounix_filename), trailing empty -> ".".
+    assert_eq!(
+        dirs,
+        vec![
+            "C:/Windows/system32".to_string(),
+            "C:/Program Files/Git/cmd".to_string(),
+            ".".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn exec_path_dirs_empty_when_path_unset() {
+    assert!(super::exec_path_dirs_from_os(None).is_empty());
 }

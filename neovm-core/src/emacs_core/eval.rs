@@ -3637,10 +3637,9 @@ impl Context {
         obarray.set_symbol_value("init-file-debug", Value::NIL);
         // GNU callproc.c: exec-path is built from PATH env var.
         // exec-directory is the directory containing helper programs.
-        let exec_path: Vec<Value> = std::env::var("PATH")
-            .unwrap_or_default()
-            .split(':')
-            .map(|s| Value::unibyte_string(s.to_string()))
+        let exec_path: Vec<Value> = super::load::exec_path_dirs_from_env()
+            .into_iter()
+            .map(Value::unibyte_string)
             .collect();
         obarray.set_symbol_value("exec-path", Value::list(exec_path));
         obarray.make_special("exec-path");
