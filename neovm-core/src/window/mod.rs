@@ -3418,8 +3418,181 @@ fn split_window_in_tree(
     }
 
     // Recurse into children.
-    if let Window::Internal { children, .. } = tree {
-        for child in children {
+    // Mirror GNU: if the target is a leaf child of an Internal node
+    // whose direction matches the split direction AND combination_limit
+    // is false, insert the new window as a sibling in that parent
+    // instead of creating a new Internal node.
+    if let Window::Internal {
+        children,
+        direction: parent_dir,
+        combination_limit,
+        bounds,
+        ..
+    } = tree
+    {
+        let parent_bounds = *bounds;
+        let combination_limit = *combination_limit;
+        let parent_dir = *parent_dir;
+        let child_count = children.len();
+        for i in 0..child_count {
+            let child_is_target = children[i].is_leaf() && children[i].id() == target;
+            if child_is_target {
+                let same_direction = matches!(
+                    (parent_dir, direction),
+                    (SplitDirection::Horizontal, SplitDirection::Horizontal,)
+                        | (SplitDirection::Vertical, SplitDirection::Vertical,)
+                );
+                if !combination_limit && same_direction {
+                    // Reuse parent: insert new sibling into children.
+                    let old_bounds = *children[i].bounds();
+
+                    let (old_size_px, new_size_px) = split_sizes(
+                        match direction {
+                            SplitDirection::Horizontal => old_bounds.width,
+                            SplitDirection::Vertical => old_bounds.height,
+                        },
+                        size,
+                    );
+
+                    let new_before_target = placement.is_before_target();
+                    let (first_bounds, second_bounds) = match direction {
+                        SplitDirection::Horizontal => {
+                            let first_w = if new_before_target {
+                                new_size_px
+                            } else {
+                                old_size_px
+                            };
+                            let second_w = if new_before_target {
+                                old_size_px
+                            } else {
+                                new_size_px
+                            };
+                            (
+                                Rect::new(old_bounds.x, old_bounds.y, first_w, old_bounds.height),
+                                Rect::new(
+                                    old_bounds.x + first_w,
+                                    old_bounds.y,
+                                    second_w,
+                                    old_bounds.height,
+                                ),
+                            )
+                        }
+                        SplitDirection::Vertical => {
+                            let first_h = if new_before_target {
+                                new_size_px
+                            } else {
+                                old_size_px
+                            };
+                            let second_h = if new_before_target {
+                                old_size_px
+                            } else {
+                                new_size_px
+                            };
+                            (
+                                Rect::new(old_bounds.x, old_bounds.y, old_bounds.width, first_h),
+                                Rect::new(
+                                    old_bounds.x,
+                                    old_bounds.y + first_h,
+                                    old_bounds.width,
+                                    second_h,
+                                ),
+                            )
+                        }
+                    };
+
+                    let (old_leaf_bounds, new_leaf_bounds) = if new_before_target {
+                        (second_bounds, first_bounds)
+                    } else {
+                        (first_bounds, second_bounds)
+                    };
+
+                    // Resize the target child in-place.
+                    children[i].set_bounds(old_leaf_bounds);
+
+                    // Build the new sibling leaf cloned from the target.
+                    let mut new_leaf = children[i].clone();
+                    if let Window::Leaf {
+                        id,
+                        buffer_id,
+                        bounds,
+                        parameters,
+                        window_start,
+                        start_marker_id,
+                        window_end_pos,
+                        window_end_bytepos,
+                        window_end_vpos,
+                        window_end_valid,
+                        ..
+                    } = &mut new_leaf
+                    {
+                        *id = new_id;
+                        *buffer_id = new_buffer_id;
+                        *bounds = new_leaf_bounds;
+                        parameters.clear();
+                        *window_start = LispCharPos1::ONE;
+                        *start_marker_id = None;
+                        *window_end_pos = 0;
+                        *window_end_bytepos = 0;
+                        *window_end_vpos = 0;
+                        *window_end_valid = false;
+                    }
+
+                    // Compute normal fractions for all children in parent.
+                    let parent_size = match direction {
+                        SplitDirection::Horizontal => parent_bounds.width,
+                        SplitDirection::Vertical => parent_bounds.height,
+                    };
+                    if parent_size > 0.0 {
+                        for child_w in children.iter_mut() {
+                            let frac = match direction {
+                                SplitDirection::Horizontal => child_w.bounds().width / parent_size,
+                                SplitDirection::Vertical => child_w.bounds().height / parent_size,
+                            } as f64;
+                            match direction {
+                                SplitDirection::Horizontal => {
+                                    child_w.set_normal_cols(Value::make_float(frac));
+                                    child_w.set_normal_lines(Value::make_float(1.0));
+                                }
+                                SplitDirection::Vertical => {
+                                    child_w.set_normal_lines(Value::make_float(frac));
+                                    child_w.set_normal_cols(Value::make_float(1.0));
+                                }
+                            }
+                        }
+                        let new_frac = match direction {
+                            SplitDirection::Horizontal => new_leaf_bounds.width / parent_size,
+                            SplitDirection::Vertical => new_leaf_bounds.height / parent_size,
+                        } as f64;
+                        match direction {
+                            SplitDirection::Horizontal => {
+                                new_leaf.set_normal_cols(Value::make_float(new_frac));
+                                new_leaf.set_normal_lines(Value::make_float(1.0));
+                            }
+                            SplitDirection::Vertical => {
+                                new_leaf.set_normal_lines(Value::make_float(new_frac));
+                                new_leaf.set_normal_cols(Value::make_float(1.0));
+                            }
+                        }
+                    }
+
+                    // Insert new leaf at correct position.
+                    if new_before_target {
+                        children.insert(i, new_leaf);
+                    } else {
+                        children.insert(i + 1, new_leaf);
+                    }
+
+                    return Some(());
+                }
+            }
+
+            // Need to get child mutably for recursive call.
+            // Use a two-phase approach: check if target is in this subtree,
+            // then do the recursive call.
+        }
+
+        // Recursive calls: iterate again for &mut access.
+        for child in children.iter_mut() {
             if split_window_in_tree(
                 child,
                 target,
