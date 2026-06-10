@@ -534,9 +534,29 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
     if eval
         .visible_variable_value_or_nil("kill-buffer-quit-windows")
         .is_truthy()
-        && delete_quit_restore_popup_windows_showing_buffer(&mut eval.frames, id)
     {
-        sync_current_buffer_to_selected_window(eval);
+        if delete_quit_restore_popup_windows_showing_buffer(&mut eval.frames, id) {
+            sync_current_buffer_to_selected_window(eval);
+        }
+    } else {
+        // GNU `Fkill_buffer` (buffer.c:2030) calls `replace-buffer-in-windows`
+        // (window.el) while the buffer is still live.  For the default
+        // `kill-buffer-quit-windows` = nil path that function deletes a
+        // dedicated window showing the buffer when no previous buffer is
+        // available (and deletes side windows likewise), rather than leaving
+        // it live showing `*scratch*`.  Delegate to the Lisp function instead
+        // of reimplementing it; the `*scratch*` swap below remains as the
+        // safety fallback (GNU `replace_buffer_in_windows_safely`).
+        let _ = eval.funcall_general(
+            Value::symbol("replace-buffer-in-windows"),
+            vec![Value::make_buffer(id)],
+        );
+        if let Some(buffer_id) = saved_current {
+            eval.restore_current_buffer_if_live(buffer_id);
+        }
+        if eval.buffers.get(id).is_none() {
+            return Ok(Value::T);
+        }
     }
 
     let current_before = eval.buffers.current_buffer().map(|buf| buf.id);
