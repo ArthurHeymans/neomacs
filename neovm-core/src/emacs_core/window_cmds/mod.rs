@@ -881,7 +881,7 @@ fn ensure_selected_frame_id_in_state_with_policy(
                 crate::window::window_markers::create_window_markers(buffers, w, buf_id);
             }
         }
-        if let Some(minibuffer_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_mut() {
             minibuffer_leaf.set_buffer(minibuffer_buf_id);
             minibuffer_leaf.set_bounds(Rect::new(0.0, 24.0, 80.0, 1.0));
             crate::window::window_markers::create_window_markers(
@@ -3749,7 +3749,7 @@ pub(crate) fn builtin_window_at(eval: &mut super::eval::Context, args: Vec<Value
     }
 
     if let (Some(minibuffer_wid), Some(minibuffer_leaf)) =
-        (frame.minibuffer_window, frame.minibuffer_leaf())
+        (frame.minibuffer_window, frame.minibuffer_leaf.as_ref())
     {
         if minibuffer_leaf.bounds().contains(px, py) {
             return Ok(window_value(minibuffer_wid));
@@ -5074,7 +5074,7 @@ fn set_frame_text_size(frame: &mut crate::window::Frame, cols: i64, text_lines: 
     };
     let cols = clamp_frame_dimension(cols, min_cols);
     let text_lines = clamp_frame_dimension(text_lines, min_text_lines);
-    let minibuffer_lines = i64::from(frame.minibuffer_window.is_some());
+    let minibuffer_lines = i64::from(frame.minibuffer_leaf.is_some());
     let total_lines = text_lines
         .saturating_add(minibuffer_lines)
         .min(u32::MAX as i64);
@@ -6786,7 +6786,7 @@ fn make_frame_plain(
             frame.no_accept_focus = no_accept_focus;
             frame.no_split = no_split;
             if let Some(shared_minibuffer) = shared_minibuffer {
-                frame.minibuffer_window = None;
+                frame.minibuffer_leaf = None;
                 frame.minibuffer_window = Some(shared_minibuffer);
             }
             for (key, value) in all_params {
@@ -6994,7 +6994,8 @@ fn current_gui_frame_metrics_in_state(frames: &FrameManager) -> GuiFrameMetrics 
         // with a permanently two-line echo area, since grow-only never
         // shrinks an over-allocated mini-window back down.
         let minibuffer_height = frame
-            .minibuffer_leaf()
+            .minibuffer_leaf
+            .as_ref()
             .map(|leaf| leaf.bounds().height.max(frame.char_height).max(1.0))
             .unwrap_or_else(|| frame.char_height.max(1.0));
         return GuiFrameMetrics {
@@ -7083,7 +7084,8 @@ pub(crate) fn x_create_frame_impl(
             char_height: parent.char_height.max(1.0),
             font_pixel_size: parent.font_pixel_size.max(1.0),
             minibuffer_height: parent
-                .minibuffer_leaf()
+                .minibuffer_leaf
+                .as_ref()
                 .map(|leaf| leaf.bounds().height.max(parent.char_height).max(1.0))
                 // A frame's minibuffer defaults to one text line (GNU
                 // `make-frame`); see current_gui_frame_metrics_in_state.
@@ -7192,7 +7194,7 @@ pub(crate) fn x_create_frame_impl(
         frame.set_parameter(Value::symbol("left"), Value::fixnum(frame.left_pos));
         frame.set_parameter(Value::symbol("top"), Value::fixnum(frame.top_pos));
         if let Some(shared_minibuffer) = shared_minibuffer {
-            frame.minibuffer_window = None;
+            frame.minibuffer_leaf = None;
             frame.minibuffer_window = Some(shared_minibuffer);
             frame.set_parameter(
                 Value::symbol("minibuffer"),
@@ -7202,7 +7204,7 @@ pub(crate) fn x_create_frame_impl(
         if let Window::Leaf { buffer_id, .. } = &mut frame.root_window {
             *buffer_id = current_buffer_id;
         }
-        if let Some(minibuffer_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_mut() {
             if let Some(minibuffer_buffer_id) = minibuffer_buffer_id {
                 minibuffer_leaf.set_buffer(minibuffer_buffer_id);
             }
@@ -7983,7 +7985,7 @@ pub(crate) fn builtin_modify_frame_parameters(
                 .get_mut(fid)
                 .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
             let text_lines = total_lines
-                .saturating_sub(i64::from(frame.minibuffer_window.is_some()))
+                .saturating_sub(i64::from(frame.minibuffer_leaf.is_some()))
                 .max(if frame.parent_frame.as_frame_id().is_some() {
                     1
                 } else {
@@ -8248,9 +8250,9 @@ pub(crate) fn builtin_window_resize_apply_total(
     // minibuffer leaf itself now.
     if !horflag {
         if frame.minibuffer_window.is_some() {
-            let root_bounds = *frame.root_window.bounds();
-            if let Some(mb) = frame.minibuffer_leaf_mut() {
+            if let Some(mb) = frame.minibuffer_leaf.as_mut() {
                 if let Some(new_total) = mb.new_total() {
+                    let root_bounds = *frame.root_window.bounds();
                     let mb_top = root_bounds.y + root_bounds.height;
                     let mb_bounds = *mb.bounds();
                     let new_h = new_total.max(0) as f32 * ch;
@@ -8610,7 +8612,7 @@ fn resize_window_by_delta_px(
     let resized = resize_in_tree(&mut frame.root_window, target, delta_px, horizontal);
     if resized {
         frame.root_window.invalidate_display_state();
-        if let Some(mini) = frame.minibuffer_leaf_mut() {
+        if let Some(mini) = frame.minibuffer_leaf.as_mut() {
             mini.invalidate_display_state();
         }
     }

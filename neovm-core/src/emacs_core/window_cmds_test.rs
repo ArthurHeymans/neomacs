@@ -3581,7 +3581,7 @@ fn make_terminal_frame_creates_tty_child_frame_with_gnu_geometry_semantics() {
         .expect("root minibuffer");
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.minibuffer_window, Some(root_minibuffer));
-    assert!(child_frame.minibuffer_window.is_none());
+    assert!(child_frame.minibuffer_leaf.is_none());
     assert_eq!(
         child_frame.parameter("minibuffer"),
         Some(Value::make_window(root_minibuffer.0))
@@ -3656,7 +3656,7 @@ fn make_terminal_frame_accepts_tty_minibuffer_window_parameter() {
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.minibuffer_window, Some(root_minibuffer));
-    assert!(child_frame.minibuffer_window.is_none());
+    assert!(child_frame.minibuffer_leaf.is_none());
     assert_eq!(
         child_frame.parameter("minibuffer"),
         Some(root_minibuffer_value)
@@ -3851,7 +3851,7 @@ fn shared_tty_child_minibuffer_window_apis_use_owner_frame() {
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.minibuffer_window, Some(root_minibuffer));
-    assert!(child_frame.minibuffer_window.is_none());
+    assert!(child_frame.minibuffer_leaf.is_none());
 
     assert_eq!(
         ev.frames.find_window_frame_id(root_minibuffer),
@@ -3920,7 +3920,7 @@ fn x_create_frame_creates_opening_frame_and_notifies_host() {
     {
         let frame = ev.frames.get_mut(fid).expect("bootstrap frame");
         frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
-        if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
             mini_leaf.set_bounds(crate::window::Rect::new(0.0, 608.0, 960.0, 32.0));
         }
     }
@@ -3972,7 +3972,7 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
         parent.char_width = 10.0;
         parent.char_height = 20.0;
         parent.font_pixel_size = 20.0;
-        if let Some(mini_leaf) = parent.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = parent.minibuffer_leaf.as_mut() {
             mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
         }
     }
@@ -4024,7 +4024,7 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
     assert!(child.undecorated);
     assert!(child.no_accept_focus);
     assert_eq!(child.minibuffer_window, Some(parent_minibuffer));
-    assert!(child.minibuffer_window.is_none());
+    assert!(child.minibuffer_leaf.is_none());
 }
 
 #[test]
@@ -4295,7 +4295,7 @@ fn x_create_frame_reserves_tab_bar_space_above_root_window() {
         crate::window::Rect::new(0.0, 16.0, 640.0, 368.0)
     );
     assert_eq!(
-        *frame.minibuffer_leaf().expect("minibuffer").bounds(),
+        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
         crate::window::Rect::new(0.0, 384.0, 640.0, 16.0)
     );
 }
@@ -4311,7 +4311,7 @@ fn make_frame_uses_gui_creation_path_when_display_host_is_active() {
         frame.set_window_system(Some(Value::symbol("x")));
         frame.char_width = 10.0;
         frame.char_height = 20.0;
-        if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
             mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
         }
     }
@@ -4360,7 +4360,7 @@ fn x_create_frame_syncs_pending_resize_before_adopting_opening_gui_frame() {
         frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
         frame.char_width = 10.0;
         frame.char_height = 20.0;
-        if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
             mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
         }
     }
@@ -4417,7 +4417,7 @@ fn x_create_frame_prefers_display_host_primary_window_size_without_explicit_geom
         frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
         frame.char_width = 10.0;
         frame.char_height = 20.0;
-        if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
             mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
         }
     }
@@ -5066,7 +5066,7 @@ fn gui_frame_metrics_default_minibuffer_is_one_line() {
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
         frame.char_height = 20.0;
-        frame.minibuffer_window = None;
+        frame.minibuffer_leaf = None;
     }
     ev.frames.select_frame(fid);
 
@@ -5294,7 +5294,7 @@ fn modify_frame_parameters_tab_bar_lines_reflows_root_window_tree() {
         crate::window::Rect::new(0.0, 20.0, 800.0, 564.0)
     );
     assert_eq!(
-        *frame.minibuffer_leaf().expect("minibuffer").bounds(),
+        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
         crate::window::Rect::new(0.0, 584.0, 800.0, 16.0)
     );
 }
@@ -5326,7 +5326,7 @@ fn modify_frame_parameters_tool_bar_lines_reflows_root_window_tree() {
         crate::window::Rect::new(0.0, 40.0, 800.0, 544.0)
     );
     assert_eq!(
-        *frame.minibuffer_leaf().expect("minibuffer").bounds(),
+        *frame.minibuffer_leaf.as_ref().expect("minibuffer").bounds(),
         crate::window::Rect::new(0.0, 584.0, 800.0, 16.0)
     );
 }

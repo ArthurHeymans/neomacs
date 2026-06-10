@@ -2886,7 +2886,7 @@ fn bootstrap_buffers(
             frame.char_height = 1.0;
             // The minibuffer was created with a pixel height (16.0) in Frame::new.
             // For TTY, resize it to 1 row (char_height=1.0) before sync.
-            if let Some(mini) = frame.minibuffer_leaf_mut() {
+            if let Some(mini) = frame.minibuffer_leaf.as_mut() {
                 let b = *mini.bounds();
                 mini.set_bounds(neovm_core::window::Rect::new(b.x, b.y, b.width, 1.0));
             }
@@ -2952,7 +2952,7 @@ fn bootstrap_buffers(
         if let Window::Leaf { bounds, .. } = &mut frame.root_window {
             bounds.height = mini_y;
         }
-        if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+        if let Some(mini_leaf) = &mut frame.minibuffer_leaf {
             if let Window::Leaf {
                 buffer_id,
                 window_start,

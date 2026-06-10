@@ -4530,7 +4530,7 @@ impl crate::emacs_core::eval::Context {
         x: f32,
         y: f32,
     ) -> Option<crate::window::WindowId> {
-        if let Some(minibuffer) = frame.minibuffer_leaf()
+        if let Some(minibuffer) = frame.minibuffer_leaf.as_ref()
             && minibuffer.bounds().contains(x, y)
         {
             return Some(minibuffer.id());
