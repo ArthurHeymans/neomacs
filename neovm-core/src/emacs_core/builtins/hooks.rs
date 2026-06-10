@@ -528,11 +528,15 @@ struct WindowConfigurationSnapshot {
     selected_window: crate::window::WindowId,
     current_buffer: Option<crate::buffer::BufferId>,
     minibuffer_window: Option<crate::window::WindowId>,
+    minibuffer_leaf: Option<crate::window::Window>,
 }
 
 impl WindowConfigurationSnapshot {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         self.root_window.trace_roots(roots);
+        if let Some(minibuffer) = &self.minibuffer_leaf {
+            minibuffer.trace_roots(roots);
+        }
     }
 }
 
@@ -549,6 +553,12 @@ fn normalize_selected_window_point_in_snapshot(
     let selected_buffer_id = snapshot
         .root_window
         .find(snapshot.selected_window)
+        .or_else(|| {
+            snapshot
+                .minibuffer_leaf
+                .as_ref()
+                .filter(|window| window.id() == snapshot.selected_window)
+        })
         .and_then(|window| window.buffer_id());
     let Some(buffer_id) = selected_buffer_id else {
         return;
@@ -569,11 +579,13 @@ fn normalize_selected_window_point_in_snapshot(
         return;
     }
 
-    // Minibuffer is now a child of root_window, so root_window.find_mut covers it.
     if let Some(crate::window::Window::Leaf {
         point: window_point,
         ..
-    }) = snapshot.root_window.find_mut(snapshot.selected_window)
+    }) = snapshot
+        .minibuffer_leaf
+        .as_mut()
+        .filter(|window| window.id() == snapshot.selected_window)
     {
         *window_point = LispCharPos1::from_one_based_usize(point);
     }
@@ -702,6 +714,7 @@ pub(crate) fn builtin_current_window_configuration(
             selected_window: frame_state.selected_window,
             current_buffer: eval.buffers.current_buffer_id(),
             minibuffer_window: frame_state.minibuffer_window,
+            minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
         };
         normalize_selected_window_point_in_snapshot(&mut snapshot, &mut eval.buffers);
         let roots = window_configuration_snapshot_roots(&snapshot);
@@ -749,7 +762,7 @@ pub(crate) fn builtin_set_window_configuration(
             // analog is `frame_window_hook_record_from_live_state`.
             frame.selected_window = snapshot.selected_window;
             frame.minibuffer_window = snapshot.minibuffer_window;
-            frame.minibuffer_window = snapshot.minibuffer_window;
+            frame.minibuffer_leaf = snapshot.minibuffer_leaf;
             frame
                 .find_window(frame.selected_window)
                 .and_then(|window| match window {

@@ -1920,7 +1920,7 @@ fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
         .expect("bootstrap GUI frame should seed a font frame parameter");
     assert!(font_param.is_string());
     let minibuffer_height = frame
-        .minibuffer_leaf()
+        .minibuffer_leaf
         .as_ref()
         .expect("minibuffer leaf")
         .bounds()
@@ -2027,7 +2027,7 @@ fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
     assert_eq!(selected.char_width, metrics.char_width);
     assert_eq!(selected.char_height, metrics.char_height);
     let minibuffer_height = selected
-        .minibuffer_leaf()
+        .minibuffer_leaf
         .as_ref()
         .expect("minibuffer leaf")
         .bounds()

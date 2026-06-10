@@ -2702,7 +2702,7 @@ fn vm_x_create_frame_syncs_pending_resize_before_adopting_opening_gui_frame() {
                 frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
                 frame.char_width = 10.0;
                 frame.char_height = 20.0;
-                if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+                if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
                     mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
                 }
             }
@@ -2750,7 +2750,7 @@ fn vm_make_frame_uses_gui_creation_path_when_display_host_is_active() {
                 frame.set_window_system(Some(Value::symbol("x")));
                 frame.char_width = 10.0;
                 frame.char_height = 20.0;
-                if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+                if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
                     mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
                 }
             }
@@ -2785,7 +2785,7 @@ fn vm_x_create_frame_prefers_display_host_primary_window_size_when_available() {
                 frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
                 frame.char_width = 10.0;
                 frame.char_height = 20.0;
-                if let Some(mini_leaf) = frame.minibuffer_leaf_mut() {
+                if let Some(mini_leaf) = frame.minibuffer_leaf.as_mut() {
                     mini_leaf.set_bounds(crate::window::Rect::new(0.0, 600.0, 960.0, 40.0));
                 }
             }

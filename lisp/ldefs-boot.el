@@ -8607,16 +8607,6 @@ Switch to *doctor* buffer and start giving psychotherapy." t)
 (register-definition-prefixes "dom" '("dom-"))
 
 
-;;; Generated autoloads from dos-fns.el
-
-(register-definition-prefixes "dos-fns" '("dos"))
-
-
-;;; Generated autoloads from dos-vars.el
-
-(register-definition-prefixes "dos-vars" '("dos-codepage-setup-hook" "msdos-shells"))
-
-
 ;;; Generated autoloads from dos-w32.el
 
 (register-definition-prefixes "dos-w32" '("file-name-buffer-file-type-alist" "find-" "w32-"))
@@ -16493,9 +16483,13 @@ buffer after following a reference.  INTERACTIVE-P is non-nil if the
 calling command was invoked interactively.  In this case the stack of
 items for help buffer \"back\" buttons is cleared.
 
-This should be called very early, before the output buffer is cleared,
-because we want to record the \"previous\" position of point so we can
-restore it properly when going back.
+This function also re-enables the major mode of the buffer, thus
+resetting local variables to the values set by the mode and running the
+mode hooks.
+
+So this should be called very early, before the output buffer is
+cleared, also because we want to record the \"previous\" position of
+point so we can restore it properly when going back.
 
 (fn ITEM INTERACTIVE-P)")
 (autoload 'help-buffer "help-mode" "\
@@ -25702,11 +25696,6 @@ Turning on Perl mode runs the normal hook `perl-mode-hook'." t)
 (register-definition-prefixes "perl-mode" '("perl-"))
 
 
-;;; Generated autoloads from pgtk-dnd.el
-
-(register-definition-prefixes "pgtk-dnd" '("pgtk-dnd-"))
-
-
 ;;; Generated autoloads from progmodes/php-ts-mode.el
 
 (autoload 'php-ts-mode "php-ts-mode" "\
@@ -32077,6 +32066,26 @@ substring that does not include newlines.
 
 (fn STRING &optional BUFFER)")
 (function-put 'string-pixel-width 'important-return-value 't)
+(autoload 'truncate-string-pixelwise "subr-x" "\
+Return STRING truncated to fit within MAX-PIXELS.
+If BUFFER is non-nil, use the face remappings, alternative and default
+properties from that buffer when determining the width.
+If you call this function to measure pixel width of a string
+with embedded newlines, it returns the width of the widest
+substring that does not include newlines.
+
+If ELLIPSIS is non-nil, it should be a string which will replace the end
+of STRING if it extends beyond MAX-PIXELS, unless the pixel width of
+STRING is equal to or less than the pixel width of ELLIPSIS.  If it is
+non-nil and not a string, then ELLIPSIS defaults to
+`truncate-string-ellipsis', or to three dots when it's nil.
+
+If ELLIPSIS-PIXELS is non-nil, it is the pixel width of ELLIPSIS, and
+can be used to avoid the cost of recomputing this for multiple calls to
+this function using the same ELLIPSIS.
+
+(fn STRING MAX-PIXELS &optional BUFFER ELLIPSIS ELLIPSIS-PIXELS)")
+(function-put 'truncate-string-pixelwise 'important-return-value 't)
 (autoload 'string-glyph-split "subr-x" "\
 Split STRING into a list of strings representing separate glyphs.
 This takes into account combining characters and grapheme clusters:

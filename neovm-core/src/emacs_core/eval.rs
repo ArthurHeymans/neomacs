@@ -7331,7 +7331,7 @@ impl Context {
 
         if let Some(window) = frame.root_window.find_mut(window_id) {
             update_window(window);
-        } else if let Some(mini) = frame.minibuffer_leaf_mut()
+        } else if let Some(ref mut mini) = frame.minibuffer_leaf
             && mini.id() == window_id
         {
             update_window(mini);
@@ -7355,7 +7355,9 @@ impl Context {
         let mini = self
             .frames
             .get_mut(frame_id)
-            .and_then(|f| f.minibuffer_leaf_mut());
+            .unwrap()
+            .minibuffer_leaf
+            .as_mut();
         if let Some(mini) = mini {
             crate::window::window_markers::create_window_markers(
                 &mut self.buffers,

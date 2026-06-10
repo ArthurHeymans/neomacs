@@ -1506,11 +1506,10 @@ pub struct Frame {
     /// `set-frame-selected-window`, and `set-window-configuration`
     /// transition.
     pub old_selected_window: Option<WindowId>,
-    /// Minibuffer window ID, or None for minibuffer-less frames.
-    /// The minibuffer leaf lives inside `root_window` as a child
-    /// (matching GNU where `FRAME_MINIBUF_WINDOW(f)` points to a
-    /// sibling leaf of `FRAME_ROOT_WINDOW(f)`, both at frame level).
+    /// Minibuffer window (always a leaf).
     pub minibuffer_window: Option<WindowId>,
+    /// Storage for the minibuffer leaf, which is not part of the split tree.
+    pub minibuffer_leaf: Option<Window>,
     /// Frame pixel dimensions.
     pub width: u32,
     pub height: u32,
@@ -1600,36 +1599,6 @@ pub struct Frame {
     pub buried_buffer_list: Vec<BufferId>,
 }
 
-/// Search the window tree (including internal nodes) for a window by ID.
-fn find_window_in_tree(tree: &Window, id: WindowId) -> Option<&Window> {
-    if tree.id() == id {
-        return Some(tree);
-    }
-    if let Window::Internal { children, .. } = tree {
-        for child in children.iter() {
-            if let found @ Some(_) = find_window_in_tree(child, id) {
-                return found;
-            }
-        }
-    }
-    None
-}
-
-/// Mutable variant of [`find_window_in_tree`].
-fn find_window_in_tree_mut(tree: &mut Window, id: WindowId) -> Option<&mut Window> {
-    if tree.id() == id {
-        return Some(tree);
-    }
-    if let Window::Internal { children, .. } = tree {
-        for child in children.iter_mut() {
-            if let found @ Some(_) = find_window_in_tree_mut(child, id) {
-                return found;
-            }
-        }
-    }
-    None
-}
-
 impl Frame {
     pub fn new(
         id: FrameId,
@@ -1637,63 +1606,37 @@ impl Frame {
         terminal_id: u64,
         width: u32,
         height: u32,
-        content_leaf: Window,
+        mut root_window: Window,
     ) -> Self {
-        let minibuffer_window_id = WindowId(MINIBUFFER_WINDOW_ID_BASE + id.0);
-        let minibuffer_buffer_id = content_leaf.buffer_id().unwrap_or(BufferId(0));
-        let frame_h = height as f32;
-        let frame_w = width as f32;
-        let minibuffer_height = 16.0_f32.min(frame_h);
-
-        // Root covers the full content area (including minibuffer space).
-        // Content leaf occupies the upper portion, minibuffer the bottom.
-        let chrome_top = 0.0_f32; // chrome synced later via sync_menu_bar_height
-        let root_bounds = Rect::new(0.0, chrome_top, frame_w, frame_h);
-
-        // Content leaf: the portion above the minibuffer.
-        let content_height = (frame_h - minibuffer_height).max(0.0);
-        let mut main_leaf = content_leaf;
-        main_leaf.set_bounds(Rect::new(0.0, chrome_top, frame_w, content_height));
-        if let Window::Leaf {
-            point,
-            window_start,
-            ..
-        } = &mut main_leaf
-        {
-            *point = LispCharPos1::ONE;
-            *window_start = LispCharPos1::ONE;
-        }
-
-        // Minibuffer leaf: at the bottom of the root area.
-        let mut mini_leaf = Window::new_leaf(
-            minibuffer_window_id,
+        let minibuffer_window = WindowId(MINIBUFFER_WINDOW_ID_BASE + id.0);
+        let minibuffer_buffer_id = root_window.buffer_id().unwrap_or(BufferId(0));
+        let minibuffer_height = 16.0_f32.min(height as f32);
+        let root_bounds = Rect::new(
+            root_window.bounds().x,
+            root_window.bounds().y,
+            width as f32,
+            (height as f32 - minibuffer_height).max(0.0),
+        );
+        resize_window_subtree(&mut root_window, root_bounds);
+        let mut minibuffer_leaf = Window::new_leaf(
+            minibuffer_window,
             minibuffer_buffer_id,
-            Rect::new(0.0, chrome_top + content_height, frame_w, minibuffer_height),
+            Rect::new(
+                root_bounds.x,
+                root_bounds.y + root_bounds.height,
+                width as f32,
+                minibuffer_height,
+            ),
         );
         if let Window::Leaf {
             window_start,
             point,
             ..
-        } = &mut mini_leaf
+        } = &mut minibuffer_leaf
         {
             *window_start = LispCharPos1::ONE;
             *point = LispCharPos1::ONE;
         }
-
-        let root_window = Window::Internal {
-            id: WindowId(0), // root gets id 0
-            direction: SplitDirection::Vertical,
-            children: vec![main_leaf, mini_leaf],
-            bounds: root_bounds,
-            parameters: Vec::new(),
-            combination_limit: false,
-            new_pixel: None,
-            new_total: None,
-            new_normal: Value::NIL,
-            normal_lines: Value::make_float(1.0),
-            normal_cols: Value::make_float(1.0),
-        };
-
         let selected = root_window
             .leaf_ids()
             .first()
@@ -1714,7 +1657,8 @@ impl Frame {
             // `old_selected_window` as Qnil. The first
             // `select-window` records the outgoing selection.
             old_selected_window: None,
-            minibuffer_window: Some(minibuffer_window_id),
+            minibuffer_window: Some(minibuffer_window),
+            minibuffer_leaf: Some(minibuffer_leaf),
             width,
             height,
             left_pos: 0,
@@ -1883,7 +1827,7 @@ impl Frame {
     /// Replace all leaf window buffer bindings for `old_id` with `new_id`.
     pub fn replace_buffer_bindings(&mut self, old_id: BufferId, new_id: BufferId) {
         self.root_window.replace_buffer_id(old_id, new_id);
-        if let Some(minibuffer_leaf) = self.minibuffer_leaf_mut() {
+        if let Some(minibuffer_leaf) = self.minibuffer_leaf.as_mut() {
             minibuffer_leaf.replace_buffer_id(old_id, new_id);
         }
     }
@@ -2150,28 +2094,19 @@ impl Frame {
         let available_height = (frame_h - chrome_top).max(0.0);
         let vertical_border = border.min(available_height / 2.0);
         let content_height = (available_height - 2.0 * vertical_border).max(0.0);
-        // GNU: root covers the full content area including the minibuffer
-        // portion at the bottom. Minibuffer sizing is handled by
-        // recalculate_minibuffer_bounds → resize the minibuffer child within root.
+        let minibuffer_height = self
+            .minibuffer_leaf
+            .as_ref()
+            .map(|mini| mini.bounds().height.max(0.0))
+            .unwrap_or(0.0)
+            .min(content_height);
+        let root_height = (content_height - minibuffer_height).max(0.0);
         Rect::new(
             horizontal_border,
             chrome_top + vertical_border,
             (frame_w - 2.0 * horizontal_border).max(0.0),
-            content_height,
+            root_height,
         )
-    }
-
-    /// Access the minibuffer leaf window by searching the root tree.
-    /// O(depth) but the tree is shallow (depth ≤ 3 for normal frames).
-    pub fn minibuffer_leaf(&self) -> Option<&Window> {
-        self.minibuffer_window
-            .and_then(|wid| find_window_in_tree(&self.root_window, wid))
-    }
-
-    /// Mutable access to the minibuffer leaf.
-    pub fn minibuffer_leaf_mut(&mut self) -> Option<&mut Window> {
-        let wid = self.minibuffer_window?;
-        find_window_in_tree_mut(&mut self.root_window, wid)
     }
 
     pub fn sync_window_area_bounds(&mut self) {
@@ -2183,13 +2118,12 @@ impl Frame {
 
     pub fn reposition_minibuffer_below_root(&mut self) {
         let root_bounds = *self.root_window.bounds();
-        let frame_h = self.height as f32;
-        if let Some(mini) = self.minibuffer_leaf_mut() {
+        if let Some(mini) = self.minibuffer_leaf.as_mut() {
             let mini_h = mini
                 .bounds()
                 .height
                 .max(0.0)
-                .min((frame_h - (root_bounds.y + root_bounds.height)).max(0.0));
+                .min((self.height as f32 - (root_bounds.y + root_bounds.height)).max(0.0));
             mini.set_bounds(Rect::new(
                 root_bounds.x,
                 root_bounds.y + root_bounds.height,
@@ -2294,7 +2228,7 @@ impl Frame {
         if let Some(window) = self.root_window.find(id) {
             return Some(window);
         }
-        self.minibuffer_leaf().and_then(|window| {
+        self.minibuffer_leaf.as_ref().and_then(|window| {
             if window.id() == id {
                 Some(window)
             } else {
@@ -2305,16 +2239,29 @@ impl Frame {
 
     /// Find a mutable window by ID.
     pub fn find_window_mut(&mut self, id: WindowId) -> Option<&mut Window> {
-        self.root_window.find_mut(id)
+        if let Some(window) = self.root_window.find_mut(id) {
+            return Some(window);
+        }
+        self.minibuffer_leaf.as_mut().and_then(|window| {
+            if window.id() == id {
+                Some(window)
+            } else {
+                None
+            }
+        })
     }
 
-    /// All leaf window IDs (minibuffer is a child of root_window now).
+    /// All leaf window IDs.
     pub fn window_list(&self) -> Vec<WindowId> {
         self.root_window.leaf_ids()
     }
 
     fn live_window_ids_with_minibuffer(&self) -> Vec<WindowId> {
-        self.window_list() // minibuffer is now a child of root_window
+        let mut ids = self.window_list();
+        if let Some(minibuffer_leaf) = self.minibuffer_leaf.as_ref() {
+            ids.push(minibuffer_leaf.id());
+        }
+        ids
     }
 
     /// Number of visible windows (leaves).
@@ -2470,7 +2417,7 @@ impl Frame {
         }
 
         sync_window(&mut self.root_window, buffers, char_width, char_height);
-        if let Some(minibuffer) = self.minibuffer_leaf_mut() {
+        if let Some(minibuffer) = self.minibuffer_leaf.as_mut() {
             sync_window(minibuffer, buffers, char_width, char_height);
         }
     }
@@ -2516,7 +2463,7 @@ impl Frame {
         };
         let max_h = requested_max_h.min(frame_inner_h).max(unit);
 
-        let Some(mini) = self.minibuffer_leaf_mut() else {
+        let Some(mini) = self.minibuffer_leaf.as_mut() else {
             return;
         };
         let current_h = mini.bounds().height;
@@ -2536,10 +2483,10 @@ impl Frame {
     /// The freed space is returned to the root window via
     /// `sync_window_area_bounds`.
     pub fn shrink_mini_window(&mut self) {
-        let unit = self.char_height.max(1.0);
-        let Some(mini) = self.minibuffer_leaf_mut() else {
+        let Some(mini) = self.minibuffer_leaf.as_mut() else {
             return;
         };
+        let unit = self.char_height.max(1.0);
         let mut bounds = *mini.bounds();
         if (bounds.height - unit).abs() < 0.5 {
             return;
@@ -2710,7 +2657,7 @@ impl FrameManager {
                         .insert(wid, window.parameters().clone());
                 }
             }
-            if let Some(minibuffer_leaf) = frame.minibuffer_leaf() {
+            if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_ref() {
                 let minibuffer_wid = minibuffer_leaf.id();
                 self.deleted_windows.insert(minibuffer_wid);
                 self.deleted_window_parameters
@@ -2976,15 +2923,8 @@ impl FrameManager {
         let Some(frame) = self.frames.get_mut(&frame_id) else {
             return false;
         };
-        // Cannot delete the minibuffer window itself.
-        if frame.minibuffer_window == Some(window_id) {
-            return false;
-        }
-        let total_leaves = frame.root_window.leaf_count();
-        let has_minibuffer = frame.minibuffer_window.is_some();
-        let non_mini_leaves = total_leaves - (has_minibuffer as usize);
-        if non_mini_leaves <= 1 {
-            return false; // Can't delete sole ordinary window
+        if frame.root_window.leaf_count() <= 1 {
+            return false; // Can't delete last window
         }
 
         let deleted_parameters = frame
@@ -3786,7 +3726,7 @@ pub fn window_next_sibling_id(frame: &Frame, window_id: WindowId) -> Option<Wind
     if frame.minibuffer_window == Some(window_id) {
         return None;
     }
-    if frame.root_window.id() == window_id && frame.minibuffer_window.is_some() {
+    if frame.root_window.id() == window_id && frame.minibuffer_leaf.is_some() {
         return frame.minibuffer_window;
     }
     find_sibling_in_tree(&frame.root_window, window_id, true)
@@ -3795,7 +3735,10 @@ pub fn window_next_sibling_id(frame: &Frame, window_id: WindowId) -> Option<Wind
 /// Return the previous sibling of WINDOW-ID, if any.
 pub fn window_prev_sibling_id(frame: &Frame, window_id: WindowId) -> Option<WindowId> {
     if frame.minibuffer_window == Some(window_id) {
-        return frame.minibuffer_leaf().map(|_| frame.root_window.id());
+        return frame
+            .minibuffer_leaf
+            .as_ref()
+            .map(|_| frame.root_window.id());
     }
     find_sibling_in_tree(&frame.root_window, window_id, false)
 }
@@ -4178,7 +4121,7 @@ impl GcTrace for FrameManager {
             roots.push(frame.face_hash_table);
             roots.extend(frame.realized_faces.keys().copied());
             frame.root_window.trace_roots(roots);
-            if let Some(mb) = frame.minibuffer_leaf() {
+            if let Some(mb) = &frame.minibuffer_leaf {
                 mb.trace_roots(roots);
             }
         }
