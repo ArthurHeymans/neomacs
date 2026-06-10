@@ -3459,6 +3459,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
+        "frame-initial-p",
+        super::window_cmds::builtin_frame_initial_p,
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
         "frame-first-window",
         super::window_cmds::builtin_frame_first_window,
         0,

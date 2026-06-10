@@ -4332,6 +4332,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("redisplay--inhibit-bidi", Value::T);
     obarray.set_symbol_value("inhibit-redisplay", Value::NIL);
     obarray.make_special("inhibit-redisplay");
+    // GNU xdisp.c `DEFVAR_LISP ("special-mirror-table", Vspecial_mirror_table)`:
+    // a char-table of characters bidi display mirrors specially (paired
+    // punctuation such as ¶<->‹). GNU inits it to an empty char-table
+    // (`Vspecial_mirror_table = Fmake_char_table (Qnil, Qnil)`);
+    // international/characters.el populates it and the redisplay bidi path reads
+    // it via CHAR_TABLE_REF. New in 31.0.90 (absent from the 705c0e3 base), so
+    // it must be defined for characters.el to load.
+    obarray.set_symbol_value(
+        "special-mirror-table",
+        Value::make_char_table(Value::NIL, Value::NIL, 0),
+    );
+    obarray.make_special("special-mirror-table");
     obarray.set_symbol_value("blink-matching-delay", Value::fixnum(1));
     obarray.set_symbol_value("blink-matching-paren", Value::T);
     obarray.set_symbol_value("mouse-autoselect-window", Value::NIL);

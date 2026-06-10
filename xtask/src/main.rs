@@ -3598,9 +3598,13 @@ fn write_ldefs_boot(loaddefs_el: &Path, ldefs_boot: &Path) -> Result<()> {
 }
 
 const LOADDEFS_END_BOUNDARY: &str = "\n\x0c\n;;; End of scraped data";
+// GNU Emacs 31.0.90's `loaddefs-generate` prints the autoload docstring on its
+// own line (verified against the system emacs-31.0.90 binary), not the older
+// `"\<newline>...` continuation style. neomacs's synced 31.0.90 loaddefs-gen
+// matches GNU exactly; the previous expected layout was the pre-31.0.90 format.
 const GNU_EBROWSE_DECLARATION_AUTOLOAD: &str = concat!(
-    "(autoload 'ebrowse-tags-find-declaration \"ebrowse\" \"\\",
-    "\nFind declaration of member at point.\" t)"
+    "(autoload 'ebrowse-tags-find-declaration \"ebrowse\"\n",
+    "\"Find declaration of member at point.\" t)"
 );
 const MISPLACED_EBROWSE_DECLARATION_DOCSTRING: &str =
     "Find declaration of member at point.\"\x0c\n;;; End of scraped data";
