@@ -101,8 +101,28 @@ Approach for growable structures (to implement when the GC thread lands):
 Recommended: start with (3) — fixed-size arrays + fields read concurrently
 (mechanical atomic conversion), growable structures captured at the snapshot
 handshake. Move to (2) only if the snapshot handshake proves too long.
+- Phase 2 status: READS done (cons `f116d798b`, veclike `9725bad38`). The
+  trace path (`trace_veclike`, cons `load_car/load_cdr`) reads every mutable
+  slot atomically; immutable types (bytecode/symbol-with-pos/module-function)
+  stay plain; `collect_veclike_children` stays plain (STW verify/scan only).
+  WRITES fold into Phase 3 (the barrier is the natural chokepoint).
 - Phase 3 — SATB barrier + per-mutator log buffers, drained on the mark path.
-  Still single-threaded (the buffer just replaces/augments dirty-owner re-trace).
+  Still single-threaded (the buffer augments/replaces dirty-owner re-trace).
+  WHY SATB over the current incremental-update (Steele) barrier: the
+  incremental-update barrier RE-READS a dirty owner's slots (to shade its
+  current children). On a concurrent thread, re-reading a growable structure
+  that the mutator just REALLOCATED is a UAF. SATB instead logs the OVERWRITTEN
+  (old) value at write time, so the GC thread NEVER re-reads a mutated owner —
+  it only drains the logged values. This sidesteps the growable-realloc hazard
+  for the barrier (the GC's primary trace still needs retired-buffer retention
+  for growth, per "Resizable structures").
+  Implementation: a thread-local SATB buffer + `satb_active` flag; each
+  mutation site (or the centralized barrier, via `kind` dispatch) reads the old
+  slot value before the store and, if marking, appends it (when heap) to the
+  buffer; bulk writes snapshot all the owner's old slots. The marker drains the
+  buffer in slices + at the termination handshake. New objects allocate-black.
+  Single-threaded, SATB marking must produce the same live set as the current
+  collector (verifiable).
 - Phase 4 — GC thread + handshake protocol + shareable heap (the `Send`/sharing
   model). GC thread initially idle except handshake validation — proves the
   threading/sharing model with no marking moved yet.
