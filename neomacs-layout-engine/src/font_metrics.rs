@@ -34,6 +34,157 @@ pub struct FontMetrics {
     pub char_width: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct FontVerticalMetrics {
+    ascent: f32,
+    descent: f32,
+    line_height: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MetricConfidence {
+    Validated,
+    Degraded,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FontAdvanceMetrics {
+    space_width: f32,
+    average_width: f32,
+    max_width: f32,
+    fixed_pitch: bool,
+}
+
+impl FontAdvanceMetrics {
+    fn from_ascii_widths(measured_space_width: f32, ascii_widths: &[f32; 128]) -> Self {
+        let mut total = 0.0;
+        let mut count = 0;
+        let mut min_width = f32::INFINITY;
+        let mut max_width = 0.0f32;
+
+        for width in ascii_widths[32..127].iter().copied() {
+            if width.is_finite() && width > 0.0 {
+                total += width;
+                count += 1;
+                min_width = min_width.min(width);
+                max_width = max_width.max(width);
+            }
+        }
+
+        let space_width = if measured_space_width.is_finite() && measured_space_width > 0.0 {
+            measured_space_width
+        } else {
+            ascii_widths[32]
+        };
+        let average_width = if count > 0 { total / count as f32 } else { 0.0 };
+        let min_width = if count > 0 { min_width } else { 0.0 };
+
+        let tolerance = max_width.max(1.0) * 0.02;
+        let fixed_pitch = count > 0 && (max_width - min_width).abs() <= tolerance.max(0.25);
+
+        Self {
+            space_width,
+            average_width,
+            max_width,
+            fixed_pitch,
+        }
+    }
+
+    fn monospace_column_width(self, minimum_width: f32) -> Option<FrameColumnWidth> {
+        if valid_advance(self.max_width) && self.max_width >= minimum_width {
+            return Some(if self.fixed_pitch {
+                FrameColumnWidth::validated(self.max_width)
+            } else {
+                FrameColumnWidth::degraded(self.max_width)
+            });
+        }
+        if valid_advance(self.average_width) && self.average_width >= minimum_width {
+            return Some(FrameColumnWidth::validated(self.average_width));
+        }
+        if valid_advance(self.space_width) && self.space_width >= minimum_width {
+            return Some(FrameColumnWidth::validated(self.space_width));
+        }
+        None
+    }
+
+    fn proportional_column_width(self) -> Option<FrameColumnWidth> {
+        if valid_advance(self.average_width) {
+            return Some(FrameColumnWidth::validated(self.average_width));
+        }
+        if valid_advance(self.space_width) {
+            return Some(FrameColumnWidth::validated(self.space_width));
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FrameColumnWidth {
+    pixels: f32,
+    confidence: MetricConfidence,
+}
+
+impl FrameColumnWidth {
+    fn from_advances(family: &str, font_size: f32, advances: FontAdvanceMetrics) -> Self {
+        let fallback = Self::degraded((font_size * 0.6).max(1.0));
+        let selected = if crate::fontconfig::family_prefers_monospace(family) {
+            advances.monospace_column_width(font_size * 0.5)
+        } else {
+            advances.proportional_column_width()
+        };
+
+        selected
+            .filter(|width| valid_advance(width.pixels))
+            .unwrap_or(fallback)
+    }
+
+    fn validated(pixels: f32) -> Self {
+        Self {
+            pixels,
+            confidence: MetricConfidence::Validated,
+        }
+    }
+
+    fn degraded(pixels: f32) -> Self {
+        Self {
+            pixels,
+            confidence: MetricConfidence::Degraded,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FrameCellMetrics {
+    column_width: f32,
+    line_height: f32,
+    ascent: f32,
+    descent: f32,
+    confidence: MetricConfidence,
+}
+
+impl FrameCellMetrics {
+    fn derive(
+        family: &str,
+        font_size: f32,
+        vertical: FontVerticalMetrics,
+        advances: FontAdvanceMetrics,
+    ) -> Self {
+        let column = FrameColumnWidth::from_advances(family, font_size, advances);
+
+        Self {
+            column_width: column.pixels,
+            line_height: vertical.line_height,
+            ascent: vertical.ascent,
+            descent: vertical.descent,
+            confidence: column.confidence,
+        }
+    }
+}
+
+fn valid_advance(width: f32) -> bool {
+    width.is_finite() && width > 0.0
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectedFontInfo {
     pub family: String,
@@ -317,7 +468,7 @@ impl FontMetricsService {
         &mut self,
         font_id: fontdb::ID,
         font_size: f32,
-    ) -> Option<FontMetrics> {
+    ) -> Option<FontVerticalMetrics> {
         self.font_system
             .db()
             .with_face_data(font_id, |font_data, face_index| {
@@ -347,11 +498,10 @@ impl FontMetricsService {
                     return None;
                 }
 
-                Some(FontMetrics {
+                Some(FontVerticalMetrics {
                     ascent,
                     descent,
                     line_height,
-                    char_width: 0.0,
                 })
             })
             .flatten()
@@ -659,32 +809,43 @@ impl FontMetricsService {
             return *m;
         }
 
-        let (selected_font_id, char_width) =
+        let (selected_font_id, measured_space_width) =
             self.selected_font_id_and_space_width(family, weight, italic, font_size);
+        let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
+        let advances = FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths);
 
-        let fm = if let Some(font_id) = selected_font_id {
-            if let Some(mut metrics) = self.font_metrics_from_selected_face(font_id, font_size) {
-                metrics.char_width = char_width.max(0.0);
-                metrics
-            } else {
-                self.glyph_box_fallback_metrics(family, weight, italic, font_size, char_width)
-            }
+        let vertical = if let Some(font_id) = selected_font_id {
+            self.font_metrics_from_selected_face(font_id, font_size)
+                .unwrap_or_else(|| {
+                    self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+                })
         } else {
-            self.glyph_box_fallback_metrics(family, weight, italic, font_size, char_width)
+            self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+        };
+        let frame_cell = FrameCellMetrics::derive(family, font_size, vertical, advances);
+        if frame_cell.confidence == MetricConfidence::Degraded {
+            tracing::debug!(
+                "font_metrics: degraded frame cell width fallback for family={family:?} size={font_size}"
+            );
+        }
+        let fm = FontMetrics {
+            ascent: frame_cell.ascent,
+            descent: frame_cell.descent,
+            line_height: frame_cell.line_height,
+            char_width: frame_cell.column_width,
         };
 
         self.metrics_cache.insert(key, fm);
         fm
     }
 
-    fn glyph_box_fallback_metrics(
+    fn glyph_box_fallback_vertical_metrics(
         &mut self,
         family: &str,
         weight: u16,
         italic: bool,
         font_size: f32,
-        default_char_width: f32,
-    ) -> FontMetrics {
+    ) -> FontVerticalMetrics {
         let attrs = self.build_attrs(
             family,
             weight,
@@ -715,7 +876,6 @@ impl FontMetricsService {
         );
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        let mut char_width = default_char_width.max(font_size * 0.6);
         let mut ascent = font_size.ceil().max(1.0);
         let mut descent = (line_height.ceil() - ascent).max(0.0);
         let mut actual_line_height = (ascent + descent).max(1.0);
@@ -725,17 +885,13 @@ impl FontMetricsService {
                 ascent = line.max_ascent.ceil().max(1.0);
                 descent = line.max_descent.ceil().max(0.0);
                 actual_line_height = (ascent + descent).max(1.0);
-                if let Some(space_glyph) = line.glyphs.iter().find(|glyph| glyph.start == 0) {
-                    char_width = space_glyph.w;
-                }
             }
         }
 
-        FontMetrics {
+        FontVerticalMetrics {
             ascent,
             descent,
             line_height: actual_line_height,
-            char_width,
         }
     }
 
