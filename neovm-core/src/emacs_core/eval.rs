@@ -6729,6 +6729,8 @@ impl Context {
     ///
     /// Safety: as `seed_all_context_roots`.
     unsafe fn terminate_incremental_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        let term_t0 = std::time::Instant::now();
+        let (roots_us, drain_us);
         unsafe {
             // Re-snapshot the COMPLETE root set: collector-internal registries +
             // dump remembered set, then the evaluator/context roots. Anything
@@ -6736,10 +6738,18 @@ impl Context {
             // window is marked here, before the sweep.
             (*heap_ptr).reseed_runtime_and_remembered_roots();
             self.seed_all_context_roots(heap_ptr);
+            roots_us = term_t0.elapsed().as_micros();
             let bytes_before = (*heap_ptr).live_bytes();
             let pause_t0 = std::time::Instant::now();
             (*heap_ptr).incremental_drain_all();
+            drain_us = pause_t0.elapsed().as_micros();
             (*heap_ptr).incremental_finish(bytes_before, pause_t0);
+        }
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC mark_termination {}us [roots={roots_us}us drain={drain_us}us]",
+                term_t0.elapsed().as_micros()
+            );
         }
     }
 
