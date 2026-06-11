@@ -3695,6 +3695,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
+        "completion--flex-cost-gotoh",
+        super::minibuffer::builtin_flex_cost_gotoh,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
         "input-pending-p",
         super::reader::builtin_input_pending_p,
         0,

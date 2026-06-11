@@ -7,6 +7,58 @@ fn ls(text: &str) -> LispString {
     LispString::from_utf8(text)
 }
 
+// -- completion--flex-cost-gotoh (GNU 31.0.90 parity) ---------------------
+
+/// Flatten `(COST . MATCHES)` (or nil) into a `Vec<i64>` for comparison.
+fn gotoh_flatten(v: Value) -> Option<Vec<i64>> {
+    if v.is_nil() {
+        return None;
+    }
+    let mut out = vec![v.cons_car().as_fixnum().expect("cost fixnum")];
+    let mut rest = v.cons_cdr();
+    while rest.is_cons() {
+        out.push(rest.cons_car().as_fixnum().expect("match fixnum"));
+        rest = rest.cons_cdr();
+    }
+    Some(out)
+}
+
+fn gotoh(eval: &mut crate::emacs_core::eval::Context, pat: &str, str: &str) -> Option<Vec<i64>> {
+    let r = builtin_flex_cost_gotoh(eval, vec![Value::string(pat), Value::string(str)])
+        .expect("flex-cost-gotoh");
+    gotoh_flatten(r)
+}
+
+#[test]
+fn flex_cost_gotoh_matches_gnu_31() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // Reference values captured from GNU Emacs 31.0.90 batch.
+    assert_eq!(gotoh(&mut eval, "foo", "foobar"), Some(vec![0, 0, 1, 2]));
+    assert_eq!(gotoh(&mut eval, "foo", "barfoo"), Some(vec![5, 3, 4, 5]));
+    assert_eq!(gotoh(&mut eval, "abc", "axbxc"), Some(vec![20, 0, 2, 4]));
+    assert_eq!(
+        gotoh(&mut eval, "find-f", "find-file"),
+        Some(vec![0, 0, 1, 2, 3, 4, 5])
+    );
+    assert_eq!(gotoh(&mut eval, "aa", "aXaXa"), Some(vec![10, 0, 2]));
+    // No match / degenerate cases.
+    assert_eq!(gotoh(&mut eval, "xyz", "find-file"), None);
+    assert_eq!(gotoh(&mut eval, "", "abc"), None);
+    assert_eq!(gotoh(&mut eval, "abc", ""), None);
+}
+
+#[test]
+fn flex_cost_gotoh_honors_completion_ignore_case() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // Case-sensitive: "FOO" is not a subsequence of "foobar" -> nil.
+    assert_eq!(gotoh(&mut eval, "FOO", "foobar"), None);
+    // With completion-ignore-case, it matches like the lowercase form.
+    eval.assign("completion-ignore-case", Value::T);
+    assert_eq!(gotoh(&mut eval, "FOO", "foobar"), Some(vec![0, 0, 1, 2]));
+}
+
 // -- Completion matching --------------------------------------------------
 
 #[test]

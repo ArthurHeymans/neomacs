@@ -2174,6 +2174,173 @@ pub(crate) fn builtin_test_completion(
     )
 }
 
+/// `(completion--flex-cost-gotoh PAT STR)`
+///
+/// Compute the cost of PAT matching STR using a modified Gotoh affine-gap
+/// algorithm.  Returns nil when there is no match, else `(COST . MATCHES)`
+/// where COST is a fixnum (lower is better) and MATCHES is a list, the same
+/// length as PAT, whose i-th element is the position in STR where PAT's i-th
+/// character matched.
+///
+/// Faithful port of GNU Emacs 31.0.90 `Fcompletion__flex_cost_gotoh`
+/// (src/minibuf.c:2334).
+pub(crate) fn builtin_flex_cost_gotoh(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    // Pre-allocated matrix size limits, mirroring the C macros.
+    const FLEX_MAX_STR_SIZE: usize = 512;
+    const FLEX_MAX_PAT_SIZE: usize = 128;
+    const FLEX_MAX_MATRIX_SIZE: usize = FLEX_MAX_PAT_SIZE * FLEX_MAX_STR_SIZE;
+
+    let pat = expect_lisp_string(&args[0])?;
+    let str = expect_lisp_string(&args[1])?;
+
+    // Operate on character vectors (GNU uses SCHARS / fetch_string_char).
+    // Completion text is UTF-8; fall back to a lossy decode for raw bytes so
+    // we never panic, matching GNU's "process anyway" intent.
+    let pat_chars: Vec<char> = match pat.as_utf8_str() {
+        Some(s) => s.chars().collect(),
+        None => crate::emacs_core::emacs_char::to_utf8_lossy(pat.as_bytes())
+            .chars()
+            .collect(),
+    };
+    let str_chars: Vec<char> = match str.as_utf8_str() {
+        Some(s) => s.chars().collect(),
+        None => crate::emacs_core::emacs_char::to_utf8_lossy(str.as_bytes())
+            .chars()
+            .collect(),
+    };
+
+    let patlen = pat_chars.len();
+    let strlen = str_chars.len();
+    let width = strlen + 1;
+    let size = (patlen + 1) * width;
+
+    const GAP_OPEN_COST: i32 = 10;
+    const GAP_EXTEND_COST: i32 = 1;
+    const POS_INF: i32 = i32::MAX / 2;
+
+    // Bail if strings are empty or matrix too large.
+    if patlen == 0 || strlen == 0 || size > FLEX_MAX_MATRIX_SIZE {
+        return Ok(Value::NIL);
+    }
+
+    let ignore_case = completion_ignore_case(&eval.obarray);
+
+    // Cheap subsequence pre-filter for the common case-sensitive case: if PAT
+    // is not a subsequence of STR there can be no match, so bail before the
+    // O(N*M) DP below.
+    if !ignore_case {
+        let mut pi = 0;
+        for &sc in &str_chars {
+            if pi >= patlen {
+                break;
+            }
+            if sc == pat_chars[pi] {
+                pi += 1;
+            }
+        }
+        if pi < patlen {
+            return Ok(Value::NIL);
+        }
+    }
+
+    // Flat (patlen+1) x width matrices, indexed via MAT(i, j) for i in
+    // -1..patlen-1 and j in -1..strlen-1.  Initialize to +inf...
+    let mut m = vec![POS_INF; size];
+    let mut d = vec![POS_INF; size];
+    // ...except the first row of D, which gets gap_open_cost/2 for cheaper
+    // leading gaps, and D[-1,-1] = 0 to promote matches at the beginning.
+    for j in 0..width {
+        d[j] = GAP_OPEN_COST / 2;
+    }
+    d[0] = 0;
+
+    let idx = |i: isize, j: isize| -> usize { ((i + 1) as usize) * width + (j + 1) as usize };
+
+    let downcased =
+        |c: char| -> i64 { crate::emacs_core::builtins::downcase_char_code_emacs_compat(c as i64) };
+
+    // Position (column index) of the first match found in the previous row, to
+    // save iterations.
+    let mut prev_match: usize = 0;
+
+    // Forward pass.
+    for i in 0..patlen {
+        let pat_char = pat_chars[i];
+        let mut match_seen = false;
+        let start = prev_match;
+        for j in start..strlen {
+            let str_char = str_chars[j];
+
+            let cmatch = if ignore_case {
+                downcased(pat_char) == downcased(str_char)
+            } else {
+                pat_char == str_char
+            };
+
+            let ii = i as isize;
+            let jj = j as isize;
+
+            if cmatch {
+                if !match_seen {
+                    match_seen = true;
+                    prev_match = j;
+                }
+                // Best of "previous char also matched" (M[i-1,j-1]) and
+                // "arrive at this match from a gap" (D[i-1,j-1]).
+                m[idx(ii, jj)] = m[idx(ii - 1, jj - 1)].min(d[idx(ii - 1, jj - 1)]);
+            }
+            // Best accumulated gapping cost: open a gap from a match on this
+            // row, or extend a gap started earlier.
+            d[idx(ii, jj)] =
+                (m[idx(ii, jj - 1)] + GAP_OPEN_COST).min(d[idx(ii, jj - 1)] + GAP_EXTEND_COST);
+        }
+    }
+
+    // Find lowest cost in last row.
+    let mut best_cost = POS_INF;
+    let mut lastcol: isize = -1;
+    for j in 0..strlen {
+        let cost = m[idx(patlen as isize - 1, j as isize)];
+        if cost < best_cost {
+            best_cost = cost;
+            lastcol = j as isize;
+        }
+    }
+
+    // Return early if no match.
+    if lastcol < 0 || best_cost >= POS_INF {
+        return Ok(Value::NIL);
+    }
+
+    // Go backwards to build the match-positions list.
+    let mut positions: Vec<i64> = Vec::with_capacity(patlen);
+    positions.push(lastcol as i64);
+    let mut l: isize = lastcol;
+    let mut i: isize = patlen as isize - 2;
+    while i >= 0 {
+        // do { --l } while (l >= 0 && M[i,l] >= D[i,l]);
+        loop {
+            l -= 1;
+            if !(l >= 0 && m[idx(i, l)] >= d[idx(i, l)]) {
+                break;
+            }
+        }
+        positions.push(l as i64);
+        i -= 1;
+    }
+    // positions was built last-to-first; reverse to PAT order.
+    positions.reverse();
+
+    let mut matches = Value::NIL;
+    for &pos in positions.iter().rev() {
+        matches = Value::cons(Value::fixnum(pos), matches);
+    }
+    Ok(Value::cons(Value::fixnum(best_cost as i64), matches))
+}
+
 fn end_of_file_stdin_error() -> Flow {
     signal(
         "end-of-file",
