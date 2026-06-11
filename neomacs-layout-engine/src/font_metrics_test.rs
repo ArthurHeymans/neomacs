@@ -234,6 +234,72 @@ fn fill_ascii_widths_control_chars_have_fallback() {
 }
 
 #[test]
+fn frame_cell_metrics_for_monospace_use_ascii_max_not_space() {
+    let mut widths = [3.56f32; 128];
+    widths[b'M' as usize] = 9.0;
+    widths[b'W' as usize] = 10.0;
+
+    let advances = FontAdvanceMetrics::from_ascii_widths(3.56, &widths);
+    let cell = FrameCellMetrics::derive(
+        "monospace",
+        13.0,
+        FontVerticalMetrics {
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 16.0,
+        },
+        advances,
+    );
+
+    assert_eq!(cell.column_width, 10.0);
+    assert_eq!(cell.confidence, MetricConfidence::Degraded);
+}
+
+#[test]
+fn frame_cell_metrics_for_proportional_use_ascii_average_not_space() {
+    let mut widths = [5.0f32; 128];
+    widths[b' ' as usize] = 3.0;
+    widths[b'i' as usize] = 2.0;
+    widths[b'W' as usize] = 11.0;
+
+    let advances = FontAdvanceMetrics::from_ascii_widths(3.0, &widths);
+    let cell = FrameCellMetrics::derive(
+        "DejaVu Sans",
+        13.0,
+        FontVerticalMetrics {
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 16.0,
+        },
+        advances,
+    );
+
+    assert_eq!(cell.column_width, advances.average_width);
+    assert_ne!(cell.column_width, advances.space_width);
+    assert_ne!(cell.column_width, advances.max_width);
+}
+
+#[test]
+fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
+    let widths = [0.0f32; 128];
+
+    let advances = FontAdvanceMetrics::from_ascii_widths(0.0, &widths);
+    let cell = FrameCellMetrics::derive(
+        "monospace",
+        13.0,
+        FontVerticalMetrics {
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 16.0,
+        },
+        advances,
+    );
+
+    assert_eq!(cell.column_width, 13.0 * 0.6);
+    assert_eq!(cell.confidence, MetricConfidence::Degraded);
+}
+
+#[test]
 fn fill_ascii_widths_cached() {
     let mut svc = make_svc();
     let w1 = svc.fill_ascii_widths("monospace", 400, false, 14.0);
