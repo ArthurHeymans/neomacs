@@ -126,8 +126,39 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
 - Phase 4 — GC thread + handshake protocol + shareable heap (the `Send`/sharing
   model). GC thread initially idle except handshake validation — proves the
   threading/sharing model with no marking moved yet.
-- Phase 5 — Move marking onto the GC thread: it drains the gray queue + SATB
-  buffers concurrently; mutator only does the two handshakes. Allocate-black.
+- Phase 4 DONE (`fe1748c0c`): background GC thread + `HeapPtr` Send wrapper +
+  blocking handshake (mutator blocks during mark = exclusive access, no pause
+  win yet). Proves heap-sharing/threading/handshake. Gated NEOVM_GC_CONCURRENT.
+- Phase 5 — Move marking onto the GC thread NON-BLOCKING: it drains the gray
+  queue + a shared SATB buffer concurrently; mutator only does the two
+  handshakes. Allocate-black. This is the final, race-prone phase — needs
+  ThreadSanitizer + heavy stress; gc_stress passing is necessary not sufficient.
+  Concrete design worked out:
+  * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes
+    overwritten values to a shared `Mutex<Vec<TaggedValue>>` (or condvar-backed)
+    that the GC thread drains into gray. Mark bits + slots are already atomic
+    (Phases 1-2), so only this buffer + done/stop flags are shared.
+  * Start handshake (STW, brief): begin_collection + seed roots + enable SATB +
+    allocate-black, signal GC thread, RETURN (don't block).
+  * GC loop: mark_all (drain gray) -> drain shared SATB into gray -> repeat;
+    when gray+SATB empty set `done`; on `stop` exit and signal `exited`.
+  * Driver polls `done` at safe points; on done -> termination handshake (STW):
+    set stop, wait `exited`, drain residual SATB + re-scan roots + final
+    mark_all (mutator-side, GC stopped) + sweep.
+  * THE BLOCKER — growable structures. The GC thread tracing a gray hash-table
+    or obarray reads its backing buffer; if the mutator grows it (Vec/HashMap
+    REALLOC) concurrently the GC reads freed memory (UAF). gc_stress grows these
+    during cl-lib load, so this WILL crash unless solved. Options:
+      (a) snapshot growable structures' elements into gray + mark them black at
+          the START handshake so the GC never traces them concurrently (growth
+          after = SATB/allocate-black). Needs to find/iterate the growables
+          (they're reached via the graph — easiest: special-case HashTable +
+          Obarray when popped from gray during the START's STW trace).
+      (b) replace their backing with a segmented/chunked store that never moves
+          existing elements on growth (then concurrent reads of old chunks are
+          safe). A data-structure change.
+    (a) is the lighter first cut. Until one is done, Phase 5 cannot pass
+    gc_stress, so it is an atomic chunk — do not ship partially.
 - Phase 6 — Concurrent / handed-off sweep; tighten the handshakes.
 
 ## Risks / invariants
