@@ -6,11 +6,12 @@ use super::tty_layout::{
 };
 use super::{
     BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FontSizing,
-    FrontendKind, PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
-    adopt_existing_primary_gui_frame, bootstrap_buffers, bootstrap_default_font_name,
-    bootstrap_display_config, bootstrap_frame_metrics, bootstrap_frame_metrics_for_font_sizing,
-    bootstrap_frame_metrics_for_frontend, classify_early_cli_action, configure_gnu_startup_state,
-    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
+    FrontendKind, Interactivity, PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode,
+    StartupOptions, adopt_existing_primary_gui_frame, bootstrap_buffers,
+    bootstrap_default_font_name, bootstrap_display_config, bootstrap_frame_metrics,
+    bootstrap_frame_metrics_for_font_sizing, bootstrap_frame_metrics_for_frontend,
+    classify_early_cli_action, configure_gnu_startup_state, parse_startup_options,
+    publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
@@ -46,7 +47,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 fn gui_display() -> BootstrapDisplayConfig {
-    bootstrap_display_config(FrontendKind::Gui)
+    bootstrap_display_config(FrontendKind::Gui, Interactivity::Interactive)
 }
 
 fn shared_primary_window_size(width: u32, height: u32) -> Arc<Mutex<PrimaryWindowSize>> {
@@ -2892,7 +2893,7 @@ fn bootstrap_batch_eval_exits_outer_command_loop_like_gnu() {
         &mut eval,
         80,
         24,
-        bootstrap_display_config(FrontendKind::Tty),
+        bootstrap_display_config(FrontendKind::Tty, Interactivity::Batch),
     );
     let frame_id = eval
         .frame_manager()
@@ -2940,7 +2941,7 @@ fn bootstrap_batch_kill_emacs_is_silent_shutdown() {
         &mut eval,
         80,
         24,
-        bootstrap_display_config(FrontendKind::Tty),
+        bootstrap_display_config(FrontendKind::Tty, Interactivity::Batch),
     );
     let frame_id = eval
         .frame_manager()
@@ -2981,7 +2982,7 @@ fn bootstrap_batch_startup_error_exits_nonzero_like_gnu() {
         &mut eval,
         80,
         24,
-        bootstrap_display_config(FrontendKind::Tty),
+        bootstrap_display_config(FrontendKind::Tty, Interactivity::Batch),
     );
     let frame_id = eval
         .frame_manager()

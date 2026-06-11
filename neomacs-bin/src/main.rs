@@ -161,12 +161,38 @@ pub(crate) struct StartupOptions {
     no_build_details: bool,
 }
 
+/// Whether a run is interactive (a real terminal/GUI session) or batch
+/// (`--batch`).  Carried in `BootstrapDisplayConfig` because `bootstrap_buffers`
+/// runs before the obarray `noninteractive` value is seeded, so the obarray
+/// slot still holds the stale pdump value at that point and cannot be trusted
+/// to mark the initial frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Interactivity {
+    Interactive,
+    Batch,
+}
+
+impl Interactivity {
+    fn from_noninteractive(noninteractive: bool) -> Self {
+        if noninteractive {
+            Interactivity::Batch
+        } else {
+            Interactivity::Interactive
+        }
+    }
+
+    fn is_batch(self) -> bool {
+        matches!(self, Interactivity::Batch)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct BootstrapDisplayConfig {
     frontend: FrontendKind,
     font_sizing: FontSizing,
     color_cells: i64,
     background_mode: &'static str,
+    interactivity: Interactivity,
 }
 
 const EARLY_HELP_BODY: &str = concat!(
@@ -667,7 +693,10 @@ fn parse_temacs_mode(value: &str) -> Result<LoadupDumpMode, String> {
     }
 }
 
-fn bootstrap_display_config(frontend: FrontendKind) -> BootstrapDisplayConfig {
+fn bootstrap_display_config(
+    frontend: FrontendKind,
+    interactivity: Interactivity,
+) -> BootstrapDisplayConfig {
     match frontend {
         FrontendKind::Gui => BootstrapDisplayConfig {
             frontend,
@@ -677,12 +706,14 @@ fn bootstrap_display_config(frontend: FrontendKind) -> BootstrapDisplayConfig {
             // `light` unless a real background color or terminal default says
             // otherwise.  Live frame-parameter updates recompute this later.
             background_mode: "light",
+            interactivity,
         },
         FrontendKind::Tty => BootstrapDisplayConfig {
             frontend,
             font_sizing: FontSizing::xft(),
             color_cells: tty_init::detect_tty_color_cells(),
             background_mode: tty_init::detect_tty_background_mode(),
+            interactivity,
         },
     }
 }
@@ -2376,7 +2407,10 @@ pub fn run(mode: RuntimeMode) {
         );
     }
 
-    let bootstrap_display = bootstrap_display_config(startup.frontend);
+    let bootstrap_display = bootstrap_display_config(
+        startup.frontend,
+        Interactivity::from_noninteractive(startup.noninteractive),
+    );
     // For TTY, frame dimensions are in character cells (1x1), so we
     // don't need to scan the system font database for font metrics.
     // This avoids ~500ms of FontMetricsService initialization at
@@ -2846,11 +2880,16 @@ fn bootstrap_buffers(
     let _ = eval.frame_manager_mut().select_frame(frame_id);
 
     // Seed frame parameters so GNU Lisp startup sees the correct host surface.
-    let initial_tty_frame = display.frontend == FrontendKind::Tty
-        && eval
-            .obarray()
-            .symbol_value("noninteractive")
-            .is_some_and(|value| value.is_truthy());
+    //
+    // Use the authoritative `startup.noninteractive` flag, NOT the obarray
+    // `noninteractive` value: the latter is only seeded later (see below, where
+    // we `set_variable("noninteractive", ...)`), so at this point it still
+    // holds the stale value baked into the batch-built pdump (t). Reading it
+    // here marked the interactive TTY frame as the initial frame, which made
+    // `frame-initial-p' return t and `debug' (debug.el) take its
+    // non-interactive `message'-only branch instead of displaying *Backtrace*.
+    let initial_tty_frame =
+        display.frontend == FrontendKind::Tty && display.interactivity.is_batch();
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         // Font parameter resolution creates a FontMetricsService which
         // scans the system font database (~500ms). Skip for TTY where
