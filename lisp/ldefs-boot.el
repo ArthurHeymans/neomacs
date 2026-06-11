@@ -5274,8 +5274,6 @@ evaluate the variable `compilation-shell-minor-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{compilation-shell-minor-mode-map}
-
 (fn &optional ARG)" t)
 (autoload 'compilation-minor-mode "compile"
 "Toggle Compilation minor mode.
@@ -5297,8 +5295,6 @@ evaluate the variable `compilation-minor-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{compilation-minor-mode-map}
 
 (fn &optional ARG)" t)
 (autoload 'compilation-next-error-function "compile"
@@ -7666,7 +7662,7 @@ article buffer.
 
 ;;; Generated autoloads from calendar/diary-icalendar.el
 
-(autoload 'diary-icalendar-import-buffer "diary-icalendar"
+(autoload 'di:import-buffer "diary-icalendar"
 "Import iCalendar events from current buffer into diary.
 
 This function parses the first iCalendar VCALENDAR in the current buffer
@@ -7694,7 +7690,7 @@ time, you may especially wish to check the values of:
 as well as variables in the customization group `diary-icalendar-import'.
 
 (fn &optional DIARY-FILENAME QUIETLY ALL-NONMARKING)" t)
-(autoload 'diary-icalendar-import-file "diary-icalendar"
+(autoload 'di:import-file "diary-icalendar"
 "Import iCalendar diary entries from FILENAME into DIARY-FILENAME.
 
 This function parses the first iCalendar VCALENDAR in FILENAME and
@@ -7722,7 +7718,7 @@ time, you may especially wish to check the values of:
 as well as variables in the customization group `diary-icalendar-import'.
 
 (fn FILENAME &optional DIARY-FILENAME QUIETLY NONMARKING)" t)
-(autoload 'diary-icalendar-export-region "diary-icalendar"
+(autoload 'di:export-region "diary-icalendar"
 "Export diary entries between BEGIN and END to iCalendar format in FILENAME.
 
 If FILENAME exists and is not empty, this function asks whether to erase
@@ -7739,7 +7735,7 @@ check the values of:
 as well as variables in the customization group `diary-icalendar-export'.
 
 (fn BEGIN END FILENAME &optional ERASE)" t)
-(autoload 'diary-icalendar-export-file "diary-icalendar"
+(autoload 'di:export-file "diary-icalendar"
 "Export DIARY-FILENAME to iCalendar format in FILENAME.
 
 The diary entries in DIARY-FILENAME will be exported to iCalendar format
@@ -7759,7 +7755,7 @@ check the values of:
 as well as variables in the customization group `diary-icalendar-export'.
 
 (fn DIARY-FILENAME FILENAME &optional ERASE)" t)
-(register-definition-prefixes "diary-icalendar" '("diary-icalendar-" "icalendar-diary-"))
+(register-definition-prefixes "diary-icalendar" '("di:" "ical:diary-"))
 
 
 ;;; Generated autoloads from calendar/diary-lib.el
@@ -13930,8 +13926,6 @@ evaluate the variable `flymake-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{flymake-mode-map}
-
 (fn &optional ARG)" t)
 (autoload 'flymake-mode-on "flymake"
 "Turn Flymake mode on.")
@@ -15109,6 +15103,11 @@ supported.
 ;;; Generated autoloads from gnus/gnus-cus.el
 
 (register-definition-prefixes "gnus-cus" '("category-fields" "gnus-"))
+
+
+;;; Generated autoloads from gnus/gnus-dbus.el
+
+(register-definition-prefixes "gnus-dbus" '("gnus-dbus-"))
 
 
 ;;; Generated autoloads from gnus/gnus-delay.el
@@ -17866,17 +17865,17 @@ buffer `*icalendar-errors*'.
 
 (fn &optional DIARY-FILENAME DO-NOT-ASK NON-MARKING)" t)
 (make-obsolete 'icalendar-import-buffer 'diary-icalendar-import-buffer "31.1")
-(register-definition-prefixes "icalendar" '("icalendar-"))
+(register-definition-prefixes "icalendar" '("ical"))
 
 
 ;;; Generated autoloads from calendar/icalendar-ast.el
 
-(register-definition-prefixes "icalendar-ast" '("icalendar-"))
+(register-definition-prefixes "icalendar-ast" '("ical:"))
 
 
 ;;; Generated autoloads from calendar/icalendar-macs.el
 
-(register-definition-prefixes "icalendar-macs" '("icalendar-"))
+(register-definition-prefixes "icalendar-macs" '("ical:"))
 
 
 ;;; Generated autoloads from calendar/icalendar-mode.el
@@ -17908,22 +17907,22 @@ this mode runs the hook `icalendar-mode-hook', as the final or
 penultimate step during initialization.
 
 \\{icalendar-mode-map}" t)
-(register-definition-prefixes "icalendar-mode" '("icalendar-"))
+(register-definition-prefixes "icalendar-mode" '("ical:"))
 
 
 ;;; Generated autoloads from calendar/icalendar-parser.el
 
-(register-definition-prefixes "icalendar-parser" '("icalendar-"))
+(register-definition-prefixes "icalendar-parser" '("ical:"))
 
 
 ;;; Generated autoloads from calendar/icalendar-recur.el
 
-(register-definition-prefixes "icalendar-recur" '("icalendar-"))
+(register-definition-prefixes "icalendar-recur" '("ical:tz-" "icr:"))
 
 
 ;;; Generated autoloads from calendar/icalendar-utils.el
 
-(register-definition-prefixes "icalendar-utils" '("icalendar-"))
+(register-definition-prefixes "icalendar-utils" '("ical:"))
 
 
 ;;; Generated autoloads from icomplete.el
@@ -22974,6 +22973,43 @@ disabled.
 ;;; Generated autoloads from emacs-lisp/nadvice.el
 
 (push '(nadvice 1 0) package--builtin-versions)
+
+
+;;; Generated autoloads from neo-term.el
+
+(autoload 'neo-term "neo-term"
+"Open a new GPU-accelerated terminal in the current window." t)
+(autoload 'neo-term-floating "neo-term"
+"Open a floating GPU terminal overlay.
+Optional X, Y set the floating position.
+Optional COLS, ROWS set the terminal size.
+
+(fn &optional X Y COLS ROWS)" t)
+(register-definition-prefixes "neo-term" '("neo-term-"))
+
+
+;;; Generated autoloads from neomacs-gradients.el
+
+(register-definition-prefixes "neomacs-gradients" '("neomacs-"))
+
+
+;;; Generated autoloads from neomacs-image.el
+
+(register-definition-prefixes "neomacs-image" '("neomacs-image-"))
+
+
+;;; Generated autoloads from neomacs-video.el
+
+(register-definition-prefixes "neomacs-video" '("neomacs-video-"))
+
+
+;;; Generated autoloads from neomacs-webkit.el
+
+(autoload 'neomacs-webkit-open-url "neomacs-webkit"
+"Open URL in a new WebKit browser buffer.
+
+(fn URL)" t)
+(register-definition-prefixes "neomacs-webkit" '("neomacs-webkit-"))
 
 
 ;;; Generated autoloads from net/net-utils.el
@@ -28143,8 +28179,6 @@ evaluate the variable `rectangle-mark-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{rectangle-mark-mode-map}
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "rect" '("apply-on-rectangle" "clear-rectangle-line" "delete-" "extract-rectangle-" "killed-rectangle" "ope" "rectangle-" "spaces-string" "string-rectangle-"))
