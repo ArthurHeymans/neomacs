@@ -367,12 +367,21 @@ impl ConsBlock {
         Self::block_base_for_ptr(ptr) == self.base_addr() && Self::ptr_is_cell_aligned(ptr)
     }
 
+    /// View a mark-bitmap word as an atomic. The cons mark bits are accessed
+    /// atomically (relaxed) so a future concurrent GC thread can set them while
+    /// the mutator allocate-blacks / reads them without a data race; on x86 a
+    /// relaxed atomic load/store is a plain mov, so this is free single-threaded.
+    #[inline]
+    fn mark_word(&self, word_index: usize) -> &AtomicUsize {
+        unsafe { &*(self.mark_words_ptr().add(word_index) as *const AtomicUsize) }
+    }
+
     #[inline]
     fn is_marked_ptr(&self, ptr: *const ConsCell) -> bool {
         let index = Self::index_of_ptr(ptr);
         let mark = Self::mark_bit(index);
         debug_assert!(mark.word_index < CONS_MARK_WORDS);
-        unsafe { (*self.mark_words_ptr().add(mark.word_index) & mark.mask) != 0 }
+        (self.mark_word(mark.word_index).load(Ordering::Relaxed) & mark.mask) != 0
     }
 
     #[inline]
@@ -380,9 +389,8 @@ impl ConsBlock {
         let index = Self::index_of_ptr(ptr);
         let mark = Self::mark_bit(index);
         debug_assert!(mark.word_index < CONS_MARK_WORDS);
-        unsafe {
-            *self.mark_words_ptr().add(mark.word_index) |= mark.mask;
-        }
+        self.mark_word(mark.word_index)
+            .fetch_or(mark.mask, Ordering::Relaxed);
     }
 
     /// Allocate a fresh cons cell from this block's bump cursor.
@@ -401,14 +409,13 @@ impl ConsBlock {
         Some(cell)
     }
 
-    /// Clear all mark bits used by this block.
+    /// Clear all mark bits used by this block. Runs stop-the-world (at
+    /// `begin_collection`), but stores atomically so the representation stays
+    /// consistent with the concurrent reads/writes elsewhere.
     fn clear_marks(&mut self) {
         let used_words = cons_mark_words(self.next_index as usize);
-        if used_words == 0 {
-            return;
-        }
-        unsafe {
-            std::ptr::write_bytes(self.mark_words_ptr(), 0, used_words);
+        for w in 0..used_words {
+            self.mark_word(w).store(0, Ordering::Relaxed);
         }
     }
 
@@ -420,7 +427,7 @@ impl ConsBlock {
         let used_words = cons_mark_words(self.next_index as usize);
         let mut live = 0usize;
         for w in 0..used_words {
-            live += unsafe { (*self.mark_words_ptr().add(w)).count_ones() as usize };
+            live += self.mark_word(w).load(Ordering::Relaxed).count_ones() as usize;
         }
         live
     }
@@ -435,7 +442,7 @@ impl ConsBlock {
         for i in (0..self.next_index as usize).rev() {
             let cell = unsafe { self.cells_ptr().add(i) };
             let mark = Self::mark_bit(i);
-            let marked = unsafe { (*self.mark_words_ptr().add(mark.word_index) & mark.mask) != 0 };
+            let marked = (self.mark_word(mark.word_index).load(Ordering::Relaxed) & mark.mask) != 0;
             if marked {
                 live += 1;
             } else {
