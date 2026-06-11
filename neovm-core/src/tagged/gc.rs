@@ -804,6 +804,14 @@ pub struct TaggedHeap {
     /// Accumulated marking time (slices + final drain) for the in-flight
     /// incremental cycle, reported as `mark_us` at termination. Reset at start.
     incremental_mark_us: u64,
+    /// Concurrent-GC SATB (snapshot-at-the-beginning) barrier (Phase 3). When
+    /// set, every barriered write DURING marking snapshots the owner's
+    /// pre-overwrite children to gray (the barrier runs before the store), so
+    /// the start-of-cycle snapshot stays live without the GC re-reading a
+    /// possibly-reallocated owner. Env `NEOVM_GC_SATB`, default off — the
+    /// default incremental collector uses the dirty-owner re-trace and is
+    /// unaffected. (The concurrent path in Phase 5 will rely on SATB instead.)
+    satb_active: bool,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
     // is deferred and drained in bounded slices at later safe points, so the
@@ -868,6 +876,7 @@ impl TaggedHeap {
             mapped_remembered: FxHashSet::default(),
             mark_in_progress: false,
             incremental_mark_us: 0,
+            satb_active: std::env::var("NEOVM_GC_SATB").as_deref() == Ok("1"),
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
@@ -1118,6 +1127,14 @@ impl TaggedHeap {
             && (self.owner_is_mapped(record.owner) || self.value_is_tenured(record.owner))
         {
             self.mapped_remembered.insert(record.owner.bits());
+        }
+        // SATB (snapshot-at-the-beginning) barrier for the concurrent collector.
+        // This runs BEFORE the store, so the owner's current children are its
+        // PRE-overwrite values; pushing them to gray keeps the start-of-cycle
+        // snapshot live. Unlike the dirty-owner re-trace, nothing is re-read
+        // later, so a concurrent GC thread never touches a reallocated owner.
+        if self.satb_active && self.mark_in_progress {
+            self.push_value_children_to_gray(record.owner, "satb-snapshot");
         }
         if self.write_tracking_mode == WriteTrackingMode::Disabled {
             return;
