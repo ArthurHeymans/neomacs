@@ -772,15 +772,12 @@ pub struct TaggedHeap {
     dump_addr_lo: usize,
     dump_addr_hi: usize,
 
-    // --- Incremental marking state (step 7). Gated by `incremental`; default
-    // off => identical to the stop-the-world collector. Applies only to
-    // partitioned cycles (after the first promotion); the first cycle stays
-    // STW so promotion/blackening is unaffected.
-    /// When true, marking is sliced across evaluator safe points using an
-    /// incremental-update (Steele) write barrier: dirty owners (written during
-    /// marking) are re-traced so no black->white edge survives, and roots are
-    /// re-snapshotted at mark termination.
-    incremental: bool,
+    // --- Incremental marking state (step 7). Active on every partitioned cycle
+    // (after the first-cycle promotion); the first cycle and no-dump heaps stay
+    // stop-the-world. Marking is sliced across evaluator safe points using an
+    // incremental-update (Steele) write barrier: dirty owners (written during
+    // marking) are re-traced so no black->white edge survives, and the COMPLETE
+    // root set is re-snapshotted at mark termination.
     /// True between the start of an incremental mark and its termination/sweep.
     /// While set, every safe point advances marking by one bounded slice.
     mark_in_progress: bool,
@@ -826,10 +823,11 @@ impl TaggedHeap {
             gc_collections: 0,
             gc_total_elapsed_us: 0,
             last_clear_us: 0,
-            partition_dump: std::env::var("NEOVM_GC_PARTITION_DUMP").as_deref() == Ok("1"),
+            // Activated automatically when a pdump is registered
+            // (`extend_dump_span`); a bare/no-dump heap stays on full mark-sweep.
+            partition_dump: false,
             dump_blackened: false,
             mapped_remembered: FxHashSet::default(),
-            incremental: std::env::var("NEOVM_GC_INCREMENTAL").as_deref() == Ok("1"),
             mark_in_progress: false,
             incremental_mark_us: 0,
             dump_addr_lo: usize::MAX,
@@ -1114,12 +1112,24 @@ impl TaggedHeap {
     }
 
     /// Extend the mapped-object address span to cover `[start, start+len)`.
+    ///
+    /// The first registered mapped object activates the dump partition (and its
+    /// generational/incremental collector): a heap with a loaded pdump runs the
+    /// low-pause collector, while a bare heap with no dump (unit tests, the
+    /// pre-dump bootstrap loader) stays on the simple full mark-sweep path. This
+    /// is intrinsic to whether there is anything to partition — not a tunable.
     fn extend_dump_span(&mut self, start: usize, len_bytes: usize) {
         if len_bytes == 0 {
             return;
         }
         self.dump_addr_lo = self.dump_addr_lo.min(start);
         self.dump_addr_hi = self.dump_addr_hi.max(start.saturating_add(len_bytes));
+        if !self.partition_dump {
+            self.partition_dump = true;
+            // Keep the write-barrier hot-path mirror in sync so the dump
+            // remembered set starts being maintained immediately.
+            TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(true));
+        }
     }
 
     fn note_allocation_bytes(&mut self, bytes: usize) {
@@ -2603,9 +2613,7 @@ impl TaggedHeap {
             self.verify_dump_partition();
             // Incremental marking adds young-black->young-white as a possible
             // failure mode (a missed write-barrier owner). Check it too.
-            if self.incremental {
-                self.verify_incremental_tricolor();
-            }
+            self.verify_incremental_tricolor();
         }
 
         let sweep_t0 = std::time::Instant::now();
@@ -2706,7 +2714,7 @@ impl TaggedHeap {
     /// partitioned cycles (after the first-cycle promotion), so promotion and
     /// blackening stay on the simple stop-the-world path.
     pub fn should_run_incremental(&self) -> bool {
-        self.incremental && self.partition_dump && self.dump_blackened
+        self.partition_dump && self.dump_blackened
     }
 
     /// True while an incremental mark is underway (between start and sweep).
@@ -2725,6 +2733,19 @@ impl TaggedHeap {
         self.set_write_tracking_mode(WriteTrackingMode::OwnersOnly);
         self.mark_in_progress = true;
         self.incremental_mark_us = 0;
+    }
+
+    /// Re-seed the collector-internal roots at mark termination: the runtime
+    /// object registries and the dump remembered set (the non-clearing seeds
+    /// that `begin_collection` runs at the start). Mark termination must
+    /// re-snapshot the COMPLETE root set, not just the evaluator/context roots —
+    /// otherwise an object that became reachable only through one of these roots
+    /// during the marking window is left unmarked and swept while live.
+    pub(crate) fn reseed_runtime_and_remembered_roots(&mut self) {
+        self.seed_internal_runtime_roots();
+        if self.partition_dump && self.dump_blackened {
+            self.seed_mapped_remembered();
+        }
     }
 
     /// Re-trace every owner the barrier has recorded dirty since the last drain,

@@ -6582,8 +6582,8 @@ impl Context {
     }
 
     /// Safe-point GC entry. Uses incremental marking on partitioned cycles
-    /// (one bounded slice per call) when `NEOVM_GC_INCREMENTAL=1`; otherwise a
-    /// stop-the-world collection.
+    /// (one bounded slice per call, once a pdump is loaded and blackened);
+    /// otherwise a stop-the-world collection (no-dump heaps, first cycle).
     fn gc_collect_from_current_roots(&mut self) {
         self.gc_collect_from_current_roots_impl(false);
     }
@@ -6697,6 +6697,11 @@ impl Context {
     /// Safety: as `seed_all_context_roots`.
     unsafe fn terminate_incremental_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
         unsafe {
+            // Re-snapshot the COMPLETE root set: collector-internal registries +
+            // dump remembered set, then the evaluator/context roots. Anything
+            // that became reachable only through a root during the marking
+            // window is marked here, before the sweep.
+            (*heap_ptr).reseed_runtime_and_remembered_roots();
             self.seed_all_context_roots(heap_ptr);
             let bytes_before = (*heap_ptr).live_bytes();
             let pause_t0 = std::time::Instant::now();
