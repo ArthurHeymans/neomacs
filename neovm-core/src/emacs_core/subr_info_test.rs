@@ -1684,7 +1684,7 @@ fn subr_arity_time_user_runtime_helpers_match_oracle() {
 fn subr_arity_command_edit_runtime_helpers_match_oracle() {
     crate::test_utils::init_test_tracing();
     assert_subr_arity("self-insert-command", 1, Some(2));
-    assert_subr_arity("signal", 2, Some(2));
+    assert_subr_arity("signal", 1, Some(2));
     assert_subr_arity("single-key-description", 1, Some(2));
     assert_subr_arity("skip-chars-backward", 1, Some(2));
     assert_subr_arity("skip-chars-forward", 1, Some(2));
