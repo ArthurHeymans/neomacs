@@ -156,7 +156,7 @@ pub fn read_one_with_locate_syms(
 /// it does not copy the accessible region into a temporary string on each
 /// `(read (current-buffer))`.  Keep the same model here so repeated buffer
 /// reads, such as `unidata-gen.el`, advance through the original buffer.
-pub fn read_one_from_buffer_with_locate_syms(
+pub(crate) fn read_one_from_buffer_with_locate_syms(
     buffer: &Buffer,
     range: EmacsByteRange,
     locate_syms: bool,
@@ -254,7 +254,7 @@ impl<'a> LispReadSource<'a> {
         self.read_one_range_with_locate_syms(start, self.logical_len(), locate_syms, obarray, None)
     }
 
-    pub fn read_one_range_with_locate_syms(
+    pub(crate) fn read_one_range_with_locate_syms(
         &self,
         start: usize,
         end: usize,
