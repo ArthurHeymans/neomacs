@@ -732,7 +732,16 @@ pub enum InputEvent {
     TabBarClick { index: i32, emacs_frame_id: u64 },
     /// Menu-bar item click.  The display layer reports the zero-based
     /// index in the current rendered menu-bar item vector.
-    MenuBarClick { index: i32, emacs_frame_id: u64 },
+    MenuBarClick {
+        index: i32,
+        menu_x: f32,
+        menu_y: f32,
+        anchor_x: f32,
+        anchor_y: f32,
+        anchor_width: f32,
+        anchor_height: f32,
+        emacs_frame_id: u64,
+    },
     /// Window resize.
     Resize {
         width: u32,
@@ -2132,6 +2141,8 @@ struct MousePosnMetrics {
     row: Option<i64>,
     width: Option<i64>,
     height: Option<i64>,
+    anchor_x: Option<i64>,
+    anchor_y: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -3717,8 +3728,16 @@ impl crate::emacs_core::eval::Context {
                 index,
                 emacs_frame_id,
             } => {
-                let Some(event) = self.chrome_mouse_click_event("tab-bar", index, emacs_frame_id)
-                else {
+                let Some(event) = self.chrome_mouse_click_event(
+                    "tab-bar",
+                    index,
+                    index as f32,
+                    0.0,
+                    None,
+                    0.0,
+                    0.0,
+                    emacs_frame_id,
+                ) else {
                     return Ok(None);
                 };
                 self.command_loop.store_kbd_macro_event(event);
@@ -3726,10 +3745,41 @@ impl crate::emacs_core::eval::Context {
             }
             InputEvent::MenuBarClick {
                 index,
+                menu_x,
+                menu_y,
+                anchor_x,
+                anchor_y,
+                anchor_width,
+                anchor_height,
                 emacs_frame_id,
             } => {
-                let Some(event) = self.chrome_mouse_click_event("menu-bar", index, emacs_frame_id)
-                else {
+                if index < 0 {
+                    return Ok(None);
+                }
+                let Some(frame_id) = self.event_frame_id(emacs_frame_id) else {
+                    return Ok(None);
+                };
+                if self.frames.get(frame_id).is_none() {
+                    return Ok(None);
+                }
+                self.pending_menu_bar_popup_anchor = Some(crate::emacs_core::MenuBarPopupAnchor {
+                    frame_id,
+                    menu_x: menu_x.round() as i64,
+                    x: anchor_x.round() as i64,
+                    y: anchor_y.round() as i64,
+                    width: anchor_width.round() as i64,
+                    height: anchor_height.round() as i64,
+                });
+                let Some(event) = self.chrome_mouse_click_event(
+                    "menu-bar",
+                    index,
+                    menu_x,
+                    menu_y,
+                    Some((anchor_x, anchor_y)),
+                    anchor_width,
+                    anchor_height,
+                    emacs_frame_id,
+                ) else {
                     return Ok(None);
                 };
                 self.command_loop.store_kbd_macro_event(event);
@@ -4520,7 +4570,10 @@ impl crate::emacs_core::eval::Context {
             pos,
             col_row,
             Value::NIL,
-            Value::cons(Value::fixnum(0), Value::fixnum(0)),
+            Value::cons(
+                Value::fixnum(desc.metrics.anchor_x.unwrap_or(0)),
+                Value::fixnum(desc.metrics.anchor_y.unwrap_or(0)),
+            ),
             width_height,
         ])
     }
@@ -4556,6 +4609,11 @@ impl crate::emacs_core::eval::Context {
         &self,
         area: &'static str,
         index: i32,
+        x: f32,
+        y: f32,
+        anchor: Option<(f32, f32)>,
+        width: f32,
+        height: f32,
         emacs_frame_id: u64,
     ) -> Option<Value> {
         if index < 0 {
@@ -4563,18 +4621,24 @@ impl crate::emacs_core::eval::Context {
         }
         let frame_id = self.event_frame_id(emacs_frame_id)?;
         self.frames.get(frame_id)?;
-        let frame_value = Value::make_frame(frame_id.0);
+        let window_or_frame = if area == "menu-bar" {
+            Value::NIL
+        } else {
+            Value::make_frame(frame_id.0)
+        };
         let position = Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-            window_or_frame: frame_value,
+            window_or_frame,
             area: Some(area),
-            x: index as i64,
-            y: 0,
+            x: x.round() as i64,
+            y: y.round() as i64,
             metrics: MousePosnMetrics {
                 point: None,
                 col: None,
                 row: None,
-                width: None,
-                height: None,
+                width: Some(width.round() as i64),
+                height: Some(height.round() as i64),
+                anchor_x: anchor.map(|(x, _)| x.round() as i64),
+                anchor_y: anchor.map(|(_, y)| y.round() as i64),
             },
         });
         Some(Value::list(vec![Value::symbol("mouse-1"), position]))
@@ -4681,6 +4745,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         };
@@ -4705,6 +4771,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         }
@@ -4720,6 +4788,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         }
@@ -4735,6 +4805,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         }
@@ -4751,6 +4823,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         };
@@ -4766,6 +4840,8 @@ impl crate::emacs_core::eval::Context {
                     row: None,
                     width: None,
                     height: None,
+                    anchor_x: None,
+                    anchor_y: None,
                 },
             });
         };
@@ -4779,6 +4855,8 @@ impl crate::emacs_core::eval::Context {
             row: None,
             width: None,
             height: None,
+            anchor_x: None,
+            anchor_y: None,
         };
 
         if let Some(snapshot) = frame.window_display_snapshot(window_id) {
@@ -4829,6 +4907,8 @@ impl crate::emacs_core::eval::Context {
                         row: Some(point.row),
                         width: Some(point.width.max(1)),
                         height: Some(point.height.max(1)),
+                        anchor_x: None,
+                        anchor_y: None,
                     },
                 });
             }

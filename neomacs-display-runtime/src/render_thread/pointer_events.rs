@@ -3,7 +3,8 @@
 use super::RenderApp;
 use super::frame_windows::{ChromePress, GuiFrameWindowState};
 use super::input::{
-    compact_bar_menu_width, menu_bar_hit_test_items, tab_bar_hit_test_items, toolbar_hit_test_items,
+    MenuBarHit, compact_bar_menu_width, menu_bar_hit_test_item, tab_bar_hit_test_items,
+    toolbar_hit_test_items,
 };
 use super::state::GuiChromeInteractionState;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
@@ -122,9 +123,9 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-    ) -> Option<u32> {
+    ) -> Option<MenuBarHit> {
         let menu_bar = window_state.render.chrome.menu_bar.as_ref()?;
-        menu_bar_hit_test_items(
+        menu_bar_hit_test_item(
             &menu_bar.items,
             menu_bar.height,
             Self::frame_window_char_width(window_state),
@@ -137,15 +138,55 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-    ) -> Option<u32> {
+    ) -> Option<MenuBarHit> {
         let compact_bar = window_state.render.chrome.compact_bar.as_ref()?;
-        menu_bar_hit_test_items(
+        menu_bar_hit_test_item(
             &compact_bar.menu_items,
             compact_bar.height,
             Self::frame_window_char_width(window_state),
             x,
             y,
         )
+    }
+
+    fn menu_bar_click_event(hit: MenuBarHit, emacs_frame_id: u64) -> InputEvent {
+        InputEvent::MenuBarClick {
+            index: hit.index as i32,
+            menu_x: hit.menu_x,
+            anchor: hit.anchor,
+            emacs_frame_id,
+        }
+    }
+
+    pub(super) fn consume_active_menu_bar_release(&mut self) -> bool {
+        let has_active_menu = self
+            .frame_windows
+            .primary_window()
+            .map_or(GuiChromeInteractionState::default(), |ws| {
+                ws.render.chrome.interaction
+            })
+            .menu_bar_active
+            .is_some()
+            || self
+                .frame_windows
+                .primary_window()
+                .map_or(GuiChromeInteractionState::default(), |ws| {
+                    ws.render.chrome.interaction
+                })
+                .compact_bar_menu_active
+                .is_some();
+
+        if !has_active_menu {
+            return false;
+        }
+
+        if let Some(ws) = self.frame_windows.primary_window_mut() {
+            ws.render.with_chrome_interaction_mut(|chrome| {
+                chrome.menu_bar_active = None;
+                chrome.compact_bar_menu_active = None;
+            });
+        }
+        true
     }
 
     fn frame_window_compact_bar_tool_hit_test(
@@ -375,7 +416,7 @@ impl RenderApp {
                             && compact_bar.height > 0.0
                             && y < compact_bar.height
                         {
-                            if let Some(idx) =
+                            if let Some(hit) =
                                 Self::frame_window_compact_bar_menu_hit_test(window_state, x, y)
                             {
                                 self.comms
@@ -385,11 +426,11 @@ impl RenderApp {
                                     .render
                                     .chrome
                                     .interaction
-                                    .compact_bar_menu_active = Some(idx);
-                                event = Some(InputEvent::MenuBarClick {
-                                    index: idx as i32,
-                                    emacs_frame_id: window_state.render.emacs_frame_id,
-                                });
+                                    .compact_bar_menu_active = Some(hit.index);
+                                event = Some(Self::menu_bar_click_event(
+                                    hit,
+                                    window_state.render.emacs_frame_id,
+                                ));
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
@@ -405,7 +446,7 @@ impl RenderApp {
                             && menu_bar.height > 0.0
                             && y < menu_bar.height
                         {
-                            if let Some(idx) =
+                            if let Some(hit) =
                                 Self::frame_window_menu_bar_hit_test(window_state, x, y)
                             {
                                 self.comms
@@ -414,11 +455,11 @@ impl RenderApp {
                                 window_state
                                     .render
                                     .chrome
-                                    .press_with_popup(&ChromePress::MenuBar(idx));
-                                event = Some(InputEvent::MenuBarClick {
-                                    index: idx as i32,
-                                    emacs_frame_id: window_state.render.emacs_frame_id,
-                                });
+                                    .press_with_popup(&ChromePress::MenuBar(hit.index));
+                                event = Some(Self::menu_bar_click_event(
+                                    hit,
+                                    window_state.render.emacs_frame_id,
+                                ));
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
@@ -563,7 +604,7 @@ impl RenderApp {
                         && compact_bar.height > 0.0
                         && y < compact_bar.height
                     {
-                        if let Some(idx) =
+                        if let Some(hit) =
                             Self::frame_window_compact_bar_menu_hit_test(window_state, x, y)
                         {
                             if window_state
@@ -571,7 +612,7 @@ impl RenderApp {
                                 .chrome
                                 .interaction
                                 .compact_bar_menu_active
-                                == Some(idx)
+                                == Some(hit.index)
                             {
                                 window_state
                                     .render
@@ -583,11 +624,11 @@ impl RenderApp {
                                     .render
                                     .chrome
                                     .interaction
-                                    .compact_bar_menu_active = Some(idx);
-                                event = Some(InputEvent::MenuBarClick {
-                                    index: idx as i32,
-                                    emacs_frame_id: window_state.render.emacs_frame_id,
-                                });
+                                    .compact_bar_menu_active = Some(hit.index);
+                                event = Some(Self::menu_bar_click_event(
+                                    hit,
+                                    window_state.render.emacs_frame_id,
+                                ));
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
@@ -618,16 +659,16 @@ impl RenderApp {
                         && menu_bar.height > 0.0
                         && y < menu_bar.height
                     {
-                        if let Some(idx) = Self::frame_window_menu_bar_hit_test(window_state, x, y)
+                        if let Some(hit) = Self::frame_window_menu_bar_hit_test(window_state, x, y)
                         {
                             window_state
                                 .render
                                 .chrome
-                                .press_with_popup(&ChromePress::MenuBar(idx));
-                            event = Some(InputEvent::MenuBarClick {
-                                index: idx as i32,
-                                emacs_frame_id: window_state.render.emacs_frame_id,
-                            });
+                                .press_with_popup(&ChromePress::MenuBar(hit.index));
+                            event = Some(Self::menu_bar_click_event(
+                                hit,
+                                window_state.render.emacs_frame_id,
+                            ));
                             window_state.render.mark_dirty();
                             handled_chrome = true;
                         }
@@ -834,7 +875,7 @@ impl RenderApp {
                         .1
                         < compact_bar_height
                 {
-                    if let Some(idx) = self.compact_bar_menu_hit_test(
+                    if let Some(hit) = self.compact_bar_menu_hit_test(
                         self.frame_windows
                             .primary_window()
                             .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
@@ -851,15 +892,13 @@ impl RenderApp {
                         };
                         if let Some(ws) = self.frame_windows.primary_window_mut() {
                             ws.render.with_chrome_interaction_mut(|chrome| {
-                                chrome.compact_bar_menu_active = Some(idx);
+                                chrome.compact_bar_menu_active = Some(hit.index);
                             })
                         } else {
                             false
                         };
-                        self.comms.send_input(InputEvent::MenuBarClick {
-                            index: idx as i32,
-                            emacs_frame_id: primary_event_frame_id,
-                        });
+                        self.comms
+                            .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -882,7 +921,7 @@ impl RenderApp {
                         .1
                         < menu_bar_height
                 {
-                    if let Some(idx) = self.menu_bar_hit_test(
+                    if let Some(hit) = self.menu_bar_hit_test(
                         self.frame_windows
                             .primary_window()
                             .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
@@ -899,15 +938,13 @@ impl RenderApp {
                         };
                         if let Some(ws) = self.frame_windows.primary_window_mut() {
                             ws.render.with_chrome_interaction_mut(|chrome| {
-                                chrome.menu_bar_active = Some(idx);
+                                chrome.menu_bar_active = Some(hit.index);
                             })
                         } else {
                             false
                         };
-                        self.comms.send_input(InputEvent::MenuBarClick {
-                            index: idx as i32,
-                            emacs_frame_id: primary_event_frame_id,
-                        });
+                        self.comms
+                            .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -1212,7 +1249,7 @@ impl RenderApp {
                 .1
                 < compact_bar_height
         {
-            if let Some(idx) = self.compact_bar_menu_hit_test(
+            if let Some(hit) = self.compact_bar_menu_hit_test(
                 self.frame_windows
                     .primary_window()
                     .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
@@ -1229,7 +1266,7 @@ impl RenderApp {
                         ws.render.chrome.interaction
                     })
                     .compact_bar_menu_active
-                    == Some(idx)
+                    == Some(hit.index)
                 {
                     if let Some(ws) = self.frame_windows.primary_window_mut() {
                         ws.render.with_chrome_interaction_mut(|chrome| {
@@ -1241,15 +1278,13 @@ impl RenderApp {
                 } else {
                     if let Some(ws) = self.frame_windows.primary_window_mut() {
                         ws.render.with_chrome_interaction_mut(|chrome| {
-                            chrome.compact_bar_menu_active = Some(idx);
+                            chrome.compact_bar_menu_active = Some(hit.index);
                         })
                     } else {
                         false
                     };
-                    self.comms.send_input(InputEvent::MenuBarClick {
-                        index: idx as i32,
-                        emacs_frame_id: primary_event_frame_id,
-                    });
+                    self.comms
+                        .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
                 }
                 return;
             }
@@ -1300,7 +1335,7 @@ impl RenderApp {
                     .1,
                 menu_bar_height
             );
-            if let Some(idx) = self.menu_bar_hit_test(
+            if let Some(hit) = self.menu_bar_hit_test(
                 self.frame_windows
                     .primary_window()
                     .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
@@ -1312,15 +1347,13 @@ impl RenderApp {
             ) {
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
-                        chrome.menu_bar_active = Some(idx);
+                        chrome.menu_bar_active = Some(hit.index);
                     })
                 } else {
                     false
                 };
-                self.comms.send_input(InputEvent::MenuBarClick {
-                    index: idx as i32,
-                    emacs_frame_id: primary_event_frame_id,
-                });
+                self.comms
+                    .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
                 return;
             }
         }
@@ -1453,6 +1486,13 @@ impl RenderApp {
                     false
                 };
             }
+            return;
+        }
+
+        if state == ElementState::Released
+            && button == MouseButton::Left
+            && self.consume_active_menu_bar_release()
+        {
             return;
         }
 
@@ -1696,17 +1736,18 @@ impl RenderApp {
                 let old_hover = window_state.render.chrome.interaction.menu_bar_hovered;
                 if ly < menu_bar.height {
                     let new_hover = Self::frame_window_menu_bar_hit_test(window_state, lx, ly);
-                    window_state.render.chrome.interaction.menu_bar_hovered = new_hover;
-                    if let (Some(active), Some(hov)) = (
+                    window_state.render.chrome.interaction.menu_bar_hovered =
+                        new_hover.map(|hit| hit.index);
+                    if let (Some(active), Some(hit)) = (
                         window_state.render.chrome.interaction.menu_bar_active,
                         new_hover,
-                    ) && hov != active
+                    ) && hit.index != active
                     {
-                        window_state.render.chrome.interaction.menu_bar_active = Some(hov);
-                        event = Some(InputEvent::MenuBarClick {
-                            index: hov as i32,
-                            emacs_frame_id: window_state.render.emacs_frame_id,
-                        });
+                        window_state.render.chrome.interaction.menu_bar_active = Some(hit.index);
+                        event = Some(Self::menu_bar_click_event(
+                            hit,
+                            window_state.render.emacs_frame_id,
+                        ));
                     }
                 } else {
                     window_state.render.chrome.interaction.menu_bar_hovered = None;
@@ -1734,7 +1775,7 @@ impl RenderApp {
                         .render
                         .chrome
                         .interaction
-                        .compact_bar_menu_hovered = new_menu_hover;
+                        .compact_bar_menu_hovered = new_menu_hover.map(|hit| hit.index);
                     window_state
                         .render
                         .chrome
@@ -1750,24 +1791,24 @@ impl RenderApp {
                     } else {
                         None
                     };
-                    if let (Some(active), Some(hov)) = (
+                    if let (Some(active), Some(hit)) = (
                         window_state
                             .render
                             .chrome
                             .interaction
                             .compact_bar_menu_active,
                         new_menu_hover,
-                    ) && hov != active
+                    ) && hit.index != active
                     {
                         window_state
                             .render
                             .chrome
                             .interaction
-                            .compact_bar_menu_active = Some(hov);
-                        event = Some(InputEvent::MenuBarClick {
-                            index: hov as i32,
-                            emacs_frame_id: window_state.render.emacs_frame_id,
-                        });
+                            .compact_bar_menu_active = Some(hit.index);
+                        event = Some(Self::menu_bar_click_event(
+                            hit,
+                            window_state.render.emacs_frame_id,
+                        ));
                     }
                 } else {
                     window_state
@@ -1940,12 +1981,12 @@ impl RenderApp {
                 let new_hover = self.menu_bar_hit_test(lx, ly);
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
-                        chrome.menu_bar_hovered = new_hover;
-                        if let (Some(active), Some(hov)) = (chrome.menu_bar_active, new_hover)
-                            && hov != active
+                        chrome.menu_bar_hovered = new_hover.map(|hit| hit.index);
+                        if let (Some(active), Some(hit)) = (chrome.menu_bar_active, new_hover)
+                            && hit.index != active
                         {
-                            chrome.menu_bar_active = Some(hov);
-                            send_menu_bar_click = Some(hov);
+                            chrome.menu_bar_active = Some(hit.index);
+                            send_menu_bar_click = Some(hit);
                         }
                     })
                 } else {
@@ -1960,11 +2001,9 @@ impl RenderApp {
                     false
                 };
             }
-            if let Some(index) = send_menu_bar_click {
-                self.comms.send_input(InputEvent::MenuBarClick {
-                    index: index as i32,
-                    emacs_frame_id: primary_event_frame_id,
-                });
+            if let Some(hit) = send_menu_bar_click {
+                self.comms
+                    .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
             }
         }
 
@@ -1979,14 +2018,14 @@ impl RenderApp {
                 };
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
-                        chrome.compact_bar_menu_hovered = new_menu_hover;
+                        chrome.compact_bar_menu_hovered = new_menu_hover.map(|hit| hit.index);
                         chrome.compact_bar_tool_hovered = new_tool_hover;
-                        if let (Some(active), Some(hov)) =
+                        if let (Some(active), Some(hit)) =
                             (chrome.compact_bar_menu_active, new_menu_hover)
-                            && hov != active
+                            && hit.index != active
                         {
-                            chrome.compact_bar_menu_active = Some(hov);
-                            send_menu_bar_click = Some(hov);
+                            chrome.compact_bar_menu_active = Some(hit.index);
+                            send_menu_bar_click = Some(hit);
                         }
                     })
                 } else {
@@ -2002,11 +2041,9 @@ impl RenderApp {
                     false
                 };
             }
-            if let Some(index) = send_menu_bar_click {
-                self.comms.send_input(InputEvent::MenuBarClick {
-                    index: index as i32,
-                    emacs_frame_id: primary_event_frame_id,
-                });
+            if let Some(hit) = send_menu_bar_click {
+                self.comms
+                    .send_input(Self::menu_bar_click_event(hit, primary_event_frame_id));
             }
         }
 

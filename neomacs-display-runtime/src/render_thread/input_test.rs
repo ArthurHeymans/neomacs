@@ -187,18 +187,57 @@ fn menu_bar_hit_test_uses_shared_item_geometry() {
         return;
     };
     primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
-        items: vec![MenuBarItem {
-            index: 11,
-            label: "File".to_string(),
-            key: "file".to_string(),
-        }],
+        items: vec![
+            MenuBarItem {
+                index: 11,
+                label: "File".to_string(),
+                key: "file".to_string(),
+            },
+            MenuBarItem {
+                index: 12,
+                label: "Tools".to_string(),
+                key: "tools".to_string(),
+            },
+        ],
         height: 24.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
 
-    assert_eq!(app.menu_bar_hit_test(12.0, 12.0), Some(11));
+    let hit = app.menu_bar_hit_test(12.0, 12.0).expect("menu hit");
+    assert_eq!(hit.index, 11);
+    assert_eq!(hit.menu_x, 0.0);
+    assert_eq!(hit.anchor.x, 8.0);
+    assert_eq!(hit.anchor.y, 0.0);
+    assert_eq!(hit.anchor.height, 24.0);
+    assert!(hit.anchor.width > 0.0);
+
+    let tools = app.menu_bar_hit_test(58.0, 12.0).expect("tools menu hit");
+    assert_eq!(tools.index, 12);
+    assert_eq!(tools.menu_x, 5.0);
+    assert!(tools.anchor.x > hit.anchor.x);
     assert_eq!(app.menu_bar_hit_test(12.0, 30.0), None);
+}
+
+#[test]
+fn menu_bar_release_is_consumed_before_generic_mouse_event() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.chrome.interaction.menu_bar_active = Some(12);
+
+    assert!(app.consume_active_menu_bar_release());
+    let interaction = app
+        .frame_windows
+        .primary_window()
+        .expect("primary window")
+        .render
+        .chrome
+        .interaction;
+    assert_eq!(interaction.menu_bar_active, None);
+    assert_eq!(interaction.compact_bar_menu_active, None);
+    assert!(!app.consume_active_menu_bar_release());
 }
 
 #[test]

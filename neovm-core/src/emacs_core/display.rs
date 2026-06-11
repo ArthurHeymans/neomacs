@@ -1196,31 +1196,128 @@ fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value
     Some((entries, events))
 }
 
-fn popup_menu_position_xy(position: Value) -> (f32, f32) {
-    let Some(items) = list_to_vec(&position) else {
-        return (0.0, 0.0);
-    };
-    if let Some(first) = items.first()
-        && let Some(xy) = list_to_vec(first)
+#[derive(Clone, Copy)]
+struct PopupMenuPosition {
+    x: f32,
+    y: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PopupMenuPositionDebug {
+    top_level_xy: Option<(f32, f32)>,
+    posn_len: Option<usize>,
+    area: Option<&'static str>,
+    posn_xy: Option<(f32, f32)>,
+    anchor_xy: Option<(f32, f32)>,
+    width_height: Option<(f32, f32)>,
+    frame_id: Option<FrameId>,
+    frame_menu_bar_height: Option<u32>,
+    used_anchor: bool,
+    used_pending_anchor: bool,
+}
+
+fn popup_menu_xy(value: Value) -> Option<(f32, f32)> {
+    if let Some(xy) = list_to_vec(&value)
         && xy.len() >= 2
     {
-        return (
+        return Some((
             xy[0].as_fixnum().unwrap_or(0) as f32,
             xy[1].as_fixnum().unwrap_or(0) as f32,
-        );
+        ));
+    }
+    if value.is_cons() {
+        return Some((
+            value.cons_car().as_fixnum().unwrap_or(0) as f32,
+            value.cons_cdr().as_fixnum().unwrap_or(0) as f32,
+        ));
+    }
+    None
+}
+
+fn popup_menu_position(ctx: &mut Context, position: Value) -> PopupMenuPosition {
+    let Some(items) = list_to_vec(&position) else {
+        tracing::debug!("x-popup-menu position: non-list position, fallback=(0, 0)");
+        return PopupMenuPosition { x: 0.0, y: 0.0 };
+    };
+    if let Some(first) = items.first()
+        && let Some((x, y)) = popup_menu_xy(*first)
+    {
+        tracing::debug!(?x, ?y, "x-popup-menu position: using top-level xy position");
+        return PopupMenuPosition { x, y };
     }
     if let Some(second) = items.get(1)
         && let Some(posn) = list_to_vec(second)
         && posn.len() >= 3
-        && let Some(xy) = list_to_vec(&posn[2])
-        && xy.len() >= 2
+        && let Some((mut x, mut y)) = popup_menu_xy(posn[2])
     {
-        return (
-            xy[0].as_fixnum().unwrap_or(0) as f32,
-            xy[1].as_fixnum().unwrap_or(0) as f32,
+        let area = posn.get(1).and_then(|area| {
+            list_to_vec(area)
+                .and_then(|items| items.first().copied())
+                .and_then(|value| value.as_symbol_name())
+        });
+        let menu_bar = area.is_some_and(|name| name == "menu-bar");
+        let anchor_xy = posn.get(8).and_then(|anchor| popup_menu_xy(*anchor));
+        let width_height = posn
+            .get(9)
+            .and_then(|width_height| popup_menu_xy(*width_height));
+        let posn_frame_id = posn
+            .first()
+            .and_then(|value| value.as_frame_id().map(crate::window::FrameId));
+        let frame_id = posn
+            .first()
+            .and_then(|value| value.as_frame_id().map(crate::window::FrameId))
+            .or_else(|| ctx.frame_manager().selected_frame().map(|frame| frame.id));
+        let frame_menu_bar_height = frame_id
+            .and_then(|frame_id| ctx.frame_manager().get(frame_id))
+            .map(|frame| frame.menu_bar_height);
+        let mut position_debug = PopupMenuPositionDebug {
+            top_level_xy: None,
+            posn_len: Some(posn.len()),
+            area,
+            posn_xy: Some((x, y)),
+            anchor_xy,
+            width_height,
+            frame_id,
+            frame_menu_bar_height,
+            used_anchor: false,
+            used_pending_anchor: false,
+        };
+        if menu_bar {
+            if let Some((anchor_x, anchor_y)) = anchor_xy
+                && (anchor_x != 0.0 || anchor_y != 0.0)
+            {
+                x = anchor_x;
+                y = anchor_y;
+                position_debug.used_anchor = true;
+            } else if let Some(anchor) = ctx.pending_menu_bar_popup_anchor
+                && posn_frame_id.map_or(true, |id| id == anchor.frame_id)
+            {
+                x = anchor.x as f32;
+                y = anchor.y as f32;
+                ctx.pending_menu_bar_popup_anchor = None;
+                position_debug.used_pending_anchor = true;
+            }
+            if let Some(height) = frame_menu_bar_height
+                && height > 0
+            {
+                y = height as f32;
+            } else if let Some((_, height)) = width_height {
+                y += height;
+            }
+        }
+        tracing::debug!(
+            position = ?position_debug,
+            final_x = x,
+            final_y = y,
+            "x-popup-menu position: resolved from event position"
         );
+        return PopupMenuPosition { x, y };
     }
-    (0.0, 0.0)
+    tracing::debug!(
+        list_len = items.len(),
+        "x-popup-menu position: unsupported position shape, fallback=(0, 0)"
+    );
+    PopupMenuPosition { x: 0.0, y: 0.0 }
 }
 
 fn menu_bar_navigation_position(
@@ -1277,19 +1374,24 @@ impl TtyMenuNavigationCommand {
 
 fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
     let Some((entries, events)) = popup_menu_from_keymap(menu) else {
+        tracing::info!("x-popup-menu interactive: menu is not a keymap");
         return Ok(Value::NIL);
     };
     if entries.is_empty() {
+        tracing::info!("x-popup-menu interactive: menu has no entries");
         return Ok(Value::NIL);
     }
     if ctx.input_rx.is_none() {
+        tracing::info!("x-popup-menu interactive: no input receiver");
         return Ok(Value::NIL);
     }
     if ctx.display_host.is_none() {
+        tracing::info!("x-popup-menu interactive: no display host");
         return Ok(Value::NIL);
     }
 
-    let (x, y) = popup_menu_position_xy(position);
+    let popup_position = popup_menu_position(ctx, position);
+    let (x, y) = (popup_position.x, popup_position.y);
     let visible_rows = ctx
         .display_host
         .as_ref()
@@ -1297,8 +1399,21 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
         .unwrap_or(entries.len())
         .min(entries.len());
     if visible_rows == 0 {
+        tracing::info!(
+            x,
+            y,
+            entries = entries.len(),
+            "x-popup-menu interactive: host reported zero visible rows"
+        );
         return Ok(Value::NIL);
     }
+    tracing::info!(
+        x,
+        y,
+        entries = entries.len(),
+        visible_rows,
+        "x-popup-menu interactive: showing popup"
+    );
     let mut selected = 0;
 
     let specpdl_count = ctx.specpdl.len();

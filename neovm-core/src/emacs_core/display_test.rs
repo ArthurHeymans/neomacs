@@ -3523,6 +3523,106 @@ fn x_popup_menu_interactive_cancel_returns_nil() {
 }
 
 #[test]
+fn x_popup_menu_interactive_menu_bar_position_anchors_below_menu_bar() {
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval.frames.create_frame("popup-owner", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .menu_bar_height = 24;
+    eval.frames.select_frame(frame_id);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    eval.set_display_host(Box::new(host));
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("open"),
+        Value::cons(Value::string("Open"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: -1 })
+        .unwrap();
+
+    let position = Value::list(vec![
+        Value::symbol("file"),
+        Value::list(vec![
+            Value::make_frame(frame_id.0),
+            Value::list(vec![Value::symbol("menu-bar")]),
+            Value::list(vec![Value::fixnum(5), Value::fixnum(0)]),
+            Value::fixnum(0),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::list(vec![Value::fixnum(96), Value::fixnum(4)]),
+            Value::cons(Value::fixnum(64), Value::fixnum(24)),
+        ]),
+    ]);
+    let result = super::builtin_x_popup_menu(&mut eval, vec![position, menu]).unwrap();
+
+    assert!(result.is_nil());
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].x, 96.0);
+    assert_eq!(shown[0].y, 24.0);
+}
+
+#[test]
+fn x_popup_menu_interactive_menu_bar_position_uses_pending_native_anchor() {
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval.frames.create_frame("popup-owner", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .menu_bar_height = 24;
+    eval.frames.select_frame(frame_id);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    eval.set_display_host(Box::new(host));
+    eval.pending_menu_bar_popup_anchor = Some(crate::emacs_core::MenuBarPopupAnchor {
+        frame_id,
+        menu_x: 26,
+        x: 244,
+        y: 0,
+        width: 55,
+        height: 18,
+    });
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("open"),
+        Value::cons(Value::string("Open"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: -1 })
+        .unwrap();
+
+    let position = Value::list(vec![
+        Value::symbol("tools"),
+        Value::list(vec![
+            Value::make_frame(frame_id.0),
+            Value::list(vec![Value::symbol("menu-bar")]),
+            Value::list(vec![Value::fixnum(16), Value::fixnum(0)]),
+            Value::fixnum(0),
+        ]),
+    ]);
+    let result = super::builtin_x_popup_menu(&mut eval, vec![position, menu]).unwrap();
+
+    assert!(result.is_nil());
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].x, 244.0);
+    assert_eq!(shown[0].y, 24.0);
+}
+
+#[test]
 fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
     let mut eval = crate::emacs_core::Context::new();
     let (tx, rx) = crossbeam_channel::unbounded();

@@ -135,9 +135,17 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         }),
         DisplayEvent::MenuBarClick {
             index,
+            menu_x,
+            anchor,
             emacs_frame_id,
         } => Some(KbInputEvent::MenuBarClick {
             index: *index,
+            menu_x: *menu_x,
+            menu_y: 0.0,
+            anchor_x: anchor.x,
+            anchor_y: anchor.y,
+            anchor_width: anchor.width,
+            anchor_height: anchor.height,
             emacs_frame_id: *emacs_frame_id,
         }),
         DisplayEvent::WindowResize {

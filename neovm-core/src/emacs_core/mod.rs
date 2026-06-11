@@ -133,6 +133,16 @@ pub mod xwidget;
 mod xwidget_test;
 pub(crate) mod zlib;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MenuBarPopupAnchor {
+    pub(crate) frame_id: crate::window::FrameId,
+    pub(crate) menu_x: i64,
+    pub(crate) x: i64,
+    pub(crate) y: i64,
+    pub(crate) width: i64,
+    pub(crate) height: i64,
+}
+
 // Re-export the main public API
 pub use bytecode::{ByteCodeFunction, Vm as ByteVm};
 pub use error::{

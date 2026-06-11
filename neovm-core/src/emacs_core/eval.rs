@@ -1846,6 +1846,8 @@ pub struct Context {
     pub redisplay_fn: Option<Box<dyn FnMut(&mut Self)>>,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
+    /// Native anchor for the next Lisp-driven menu-bar popup.
+    pub(crate) pending_menu_bar_popup_anchor: Option<super::MenuBarPopupAnchor>,
     /// Coding system manager — encoding/decoding registry.
     pub(crate) coding_systems: CodingSystemManager,
     /// Face table — global registry of named face definitions.
@@ -4715,6 +4717,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             display_host: None,
+            pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
             face_table: FaceTable::new(),
             face_change_count: 0,
@@ -4894,6 +4897,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             display_host: None,
+            pending_menu_bar_popup_anchor: None,
             coding_systems,
             face_table,
             face_change_count: 0,

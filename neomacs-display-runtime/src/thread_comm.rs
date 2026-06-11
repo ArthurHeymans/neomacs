@@ -159,11 +159,23 @@ pub enum InputEvent {
         index: i32,
         emacs_frame_id: u64,
     },
-    /// Menu bar item clicked (index into menu bar items)
+    /// Menu bar item clicked. `menu_x` is the Emacs menu-bar column used by
+    /// Lisp to resolve the menu item; `anchor` is the frame-local logical-pixel
+    /// rectangle used by the native popup renderer.
     MenuBarClick {
         index: i32,
+        menu_x: f32,
+        anchor: PopupAnchorRect,
         emacs_frame_id: u64,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PopupAnchorRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 /// Wrapper for effect update closures that implements Debug.

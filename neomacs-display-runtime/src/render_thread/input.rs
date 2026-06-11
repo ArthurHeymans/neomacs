@@ -6,7 +6,14 @@ use winit::keyboard::{Key, NamedKey};
 use super::RenderApp;
 use super::frame_windows::GuiFrameWindowState;
 use super::state::WindowChrome;
-use crate::thread_comm::{MenuBarItem, TabBarItem, ToolBarItem};
+use crate::thread_comm::{MenuBarItem, PopupAnchorRect, TabBarItem, ToolBarItem};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct MenuBarHit {
+    pub(super) index: u32,
+    pub(super) menu_x: f32,
+    pub(super) anchor: PopupAnchorRect,
+}
 
 pub(super) fn menu_bar_hit_test_items(
     items: &[MenuBarItem],
@@ -15,17 +22,39 @@ pub(super) fn menu_bar_hit_test_items(
     x: f32,
     y: f32,
 ) -> Option<u32> {
+    menu_bar_hit_test_item(items, height, char_width, x, y).map(|hit| hit.index)
+}
+
+pub(super) fn menu_bar_hit_test_item(
+    items: &[MenuBarItem],
+    height: f32,
+    char_width: f32,
+    x: f32,
+    y: f32,
+) -> Option<MenuBarHit> {
     if height <= 0.0 || y >= height || items.is_empty() {
         return None;
     }
     let padding_x = 8.0_f32;
     let mut item_x = padding_x;
+    let mut menu_x = 0.0_f32;
     for item in items {
         let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
+        let menu_width = item.label.chars().count() as f32 + 1.0;
         if x >= item_x && x < item_x + label_width {
-            return Some(item.index);
+            return Some(MenuBarHit {
+                index: item.index,
+                menu_x,
+                anchor: PopupAnchorRect {
+                    x: item_x,
+                    y: 0.0,
+                    width: label_width,
+                    height,
+                },
+            });
         }
         item_x += label_width;
+        menu_x += menu_width;
     }
     None
 }
@@ -289,7 +318,7 @@ impl RenderApp {
         compact_bar_menu_width(items, char_width)
     }
 
-    pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
+    pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<MenuBarHit> {
         let compact_bar = self
             .frame_windows
             .primary_window()
@@ -299,7 +328,7 @@ impl RenderApp {
             .primary_window()
             .and_then(|ws| ws.render.compositor.glyph_atlas.as_ref())
             .map_or(8.0, |atlas| atlas.default_char_width());
-        menu_bar_hit_test_items(
+        menu_bar_hit_test_item(
             &compact_bar.menu_items,
             compact_bar.height,
             char_width,
@@ -345,8 +374,8 @@ impl RenderApp {
         tab_bar_hit_test_items(&tab_bar.items, tab_bar.height, char_width, x, y - tab_bar.y)
     }
 
-    /// Hit-test menu bar items. Returns the index of the item under (x, y), or None.
-    pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<u32> {
+    /// Hit-test menu bar items. Returns the item under (x, y), or None.
+    pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<MenuBarHit> {
         let menu_bar = self
             .frame_windows
             .primary_window()
@@ -356,7 +385,7 @@ impl RenderApp {
             .primary_window()
             .and_then(|ws| ws.render.compositor.glyph_atlas.as_ref())
             .map_or(8.0, |atlas| atlas.default_char_width());
-        menu_bar_hit_test_items(&menu_bar.items, menu_bar.height, char_width, x, _y)
+        menu_bar_hit_test_item(&menu_bar.items, menu_bar.height, char_width, x, _y)
     }
 
     /// Detect if the mouse is on a resize edge of a borderless window.

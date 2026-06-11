@@ -135,6 +135,13 @@ fn tab_bar_click_reaches_keyboard_owner() {
 fn menu_bar_click_reaches_keyboard_owner() {
     let display_event = DisplayEvent::MenuBarClick {
         index: 1,
+        menu_x: 5.0,
+        anchor: neomacs_display_runtime::thread_comm::PopupAnchorRect {
+            x: 80.0,
+            y: 0.0,
+            width: 56.0,
+            height: 24.0,
+        },
         emacs_frame_id: 42,
     };
     let event = convert_display_event(&display_event);
@@ -142,6 +149,12 @@ fn menu_bar_click_reaches_keyboard_owner() {
     match event {
         Some(KbInputEvent::MenuBarClick {
             index: 1,
+            menu_x: 5.0,
+            menu_y: 0.0,
+            anchor_x: 80.0,
+            anchor_y: 0.0,
+            anchor_width: 56.0,
+            anchor_height: 24.0,
             emacs_frame_id: 42,
         }) => {}
         other => panic!("unexpected event: {other:?}"),

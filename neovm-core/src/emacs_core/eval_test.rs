@@ -3516,7 +3516,7 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_from_owning_frame() {
         Value::symbol("neomacs-secondary-tool-bar-click-command")
     );
     assert_eq!(event[0], Value::symbol("secondary-action"));
-    assert_eq!(position[0], Value::make_frame(secondary.0));
+    assert_eq!(position[0], Value::NIL);
     assert_eq!(position[1], Value::symbol("tool-bar"));
 }
 
@@ -3623,6 +3623,12 @@ fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
     ev.command_loop.keyboard.pending_input_events.push_back(
         crate::keyboard::InputEvent::MenuBarClick {
             index: 2,
+            menu_x: 11.0,
+            menu_y: 0.0,
+            anchor_x: 128.0,
+            anchor_y: 4.0,
+            anchor_width: 64.0,
+            anchor_height: 24.0,
             emacs_frame_id: secondary.0,
         },
     );
@@ -3636,9 +3642,22 @@ fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
     assert_eq!(binding, Value::symbol("neomacs-menu-bar-click-command"));
     assert_eq!(keys[0], Value::symbol("menu-bar"));
     assert_eq!(event[0], Value::symbol("mouse-1"));
-    assert_eq!(position[0], Value::make_frame(secondary.0));
+    assert_eq!(position[0], Value::NIL);
     assert_eq!(position[1], Value::symbol("menu-bar"));
-    assert_eq!(position[2], Value::cons(Value::fixnum(2), Value::fixnum(0)));
+    assert_eq!(
+        position[2],
+        Value::cons(Value::fixnum(11), Value::fixnum(0))
+    );
+    assert_eq!(
+        position[8],
+        Value::cons(Value::fixnum(128), Value::fixnum(4))
+    );
+    assert_eq!(
+        ev.pending_menu_bar_popup_anchor
+            .expect("pending anchor")
+            .frame_id,
+        secondary
+    );
 }
 
 #[test]
