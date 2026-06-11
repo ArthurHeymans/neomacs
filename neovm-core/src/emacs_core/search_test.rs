@@ -181,6 +181,38 @@ fn replace_match_after_change_uses_restored_integer_match_positions() {
 }
 
 #[test]
+fn set_match_data_without_buffer_restores_string_match_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (set-match-data '(3 4))
+  (replace-match "X" t t "ab红阵营cd"))"#,
+        )
+        .expect("replace-match should use restored string character positions");
+    assert_str(result, "ab红X营cd");
+}
+
+#[test]
+fn save_match_data_preserves_string_match_positions_for_replace_match() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (string-match "阵" "ab红阵营cd")
+  (let ((saved-match-data (match-data)))
+    (unwind-protect
+        (string-match "x" "x")
+      (set-match-data saved-match-data t)))
+  (replace-match "X" t t "ab红阵营cd"))"#,
+        )
+        .expect("replace-match should use saved string character positions");
+    assert_str(result, "ab红X营cd");
+}
+
+#[test]
 fn replace_match_after_change_reports_multibyte_char_positions() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::emacs_core::eval::Context::new();

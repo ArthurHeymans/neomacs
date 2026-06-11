@@ -5119,7 +5119,7 @@ impl Context {
         self.frames.trace_roots_with(visit);
         self.coding_systems.trace_roots_with(visit);
         if let Some(ref md) = self.match_data
-            && let Some(crate::emacs_core::regex::SearchedString::Heap(val)) = &md.searched_string
+            && let Some(crate::emacs_core::regex::SearchedString::Heap(val)) = md.searched_string()
         {
             visit(*val);
         }

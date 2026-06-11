@@ -1226,14 +1226,14 @@ pub(crate) fn builtin_match_string(
     // If an optional second arg is a string, use that first.
     if args.len() > 1 {
         if let Some(string) = args[1].as_lisp_string() {
-            if let Some(slice) = slice_lisp_string(string, md.searched_string.is_some()) {
+            if let Some(slice) = slice_lisp_string(string, md.is_string_match()) {
                 return Ok(slice);
             }
             return Ok(Value::NIL);
         }
 
         if let Some(s) = args[1].as_utf8_str() {
-            let (byte_start, byte_end) = if md.searched_string.is_some() {
+            let (byte_start, byte_end) = if md.is_string_match() {
                 (char_pos_to_byte(s, start), char_pos_to_byte(s, end))
             } else {
                 (
@@ -1251,7 +1251,7 @@ pub(crate) fn builtin_match_string(
     }
 
     // Otherwise, if the match was against a string, use that string.
-    if let Some(ref searched) = md.searched_string {
+    if let Some(searched) = md.searched_string() {
         if let super::regex::SearchedString::Heap(val) = searched {
             if let Some(string) = val.as_lisp_string() {
                 if let Some(slice) = slice_lisp_string(string, true) {
@@ -1318,11 +1318,11 @@ pub(crate) fn builtin_match_beginning_with_state(
             match md.groups.get(group) {
                 Some(Some(group)) => {
                     let start = group.start();
-                    if md.searched_string.is_some() {
+                    if md.is_string_match() {
                         Ok(Value::fixnum(start as i64))
                     } else if md.uses_buffer_byte_positions()
                         && let Some(buf) = md
-                            .searched_buffer
+                            .searched_buffer_id()
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if start <= buf.total_emacs_byte_len().get() {
@@ -1375,11 +1375,11 @@ pub(crate) fn builtin_match_end_with_state(
             match md.groups.get(group) {
                 Some(Some(group)) => {
                     let end = group.end();
-                    if md.searched_string.is_some() {
+                    if md.is_string_match() {
                         Ok(Value::fixnum(end as i64))
                     } else if md.uses_buffer_byte_positions()
                         && let Some(buf) = md
-                            .searched_buffer
+                            .searched_buffer_id()
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if end <= buf.total_emacs_byte_len().get() {
@@ -1429,11 +1429,7 @@ pub(crate) fn builtin_match_data_with_state(
         return Ok(Value::NIL);
     };
     let integers = args.first().is_some_and(|arg| arg.is_truthy());
-    let searched_buffer_id = if md.searched_string.is_none() {
-        md.searched_buffer
-    } else {
-        None
-    };
+    let searched_buffer_id = md.searched_buffer_id();
 
     // Emacs trims trailing unmatched groups from match-data output.
     let mut trailing = md.groups.len();
@@ -1447,7 +1443,7 @@ pub(crate) fn builtin_match_data_with_state(
             Some(group) => {
                 let start = group.start();
                 let end = group.end();
-                if md.searched_string.is_some() {
+                if md.is_string_match() {
                     flat.push(Value::fixnum(start as i64));
                     flat.push(Value::fixnum(end as i64));
                     continue;
@@ -1513,7 +1509,7 @@ pub(crate) fn builtin_match_data_with_state(
         }
     }
 
-    if integers && md.searched_string.is_none() {
+    if integers && !md.is_string_match() {
         if let Some(buffer_id) = searched_buffer_id {
             flat.push(Value::make_buffer(buffer_id));
         }
@@ -1641,13 +1637,13 @@ pub(crate) fn builtin_set_match_data_with_state(
 
     if groups.is_empty() {
         *match_data = None;
-    } else {
-        *match_data = Some(super::regex::MatchData {
+    } else if searched_buffer.is_some() {
+        *match_data = Some(super::regex::MatchData::buffer_lisp_chars(
             groups,
-            searched_string: None,
             searched_buffer,
-            buffer_positions_are_bytes: false,
-        });
+        ));
+    } else {
+        *match_data = Some(super::regex::MatchData::string(groups, None));
     }
 
     if args.get(1).is_some_and(|arg| arg.is_truthy()) {
@@ -1848,10 +1844,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         };
     }
 
-    if md_snapshot
-        .as_ref()
-        .is_some_and(|m| m.searched_string.is_some())
-    {
+    if md_snapshot.as_ref().is_some_and(|m| m.is_string_match()) {
         return Err(signal("args-out-of-range", vec![Value::fixnum(0)]));
     }
     if let Some(md) = md_snapshot.as_ref()
@@ -1997,7 +1990,7 @@ pub(crate) fn builtin_replace_match(
             0usize
         };
         if let Some(ref md) = eval.match_data {
-            if md.searched_string.is_none() {
+            if !md.is_string_match() {
                 if md.groups.get(subexp).is_some_and(|group| group.is_some()) {
                     let newtext_lisp = expect_lisp_string(&args[0])?;
                     let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());

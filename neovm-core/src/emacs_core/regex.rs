@@ -100,9 +100,7 @@ fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData 
     extend_to_gnu_search_regs_capacity(&mut groups);
     MatchData {
         groups,
-        searched_string: None,
-        searched_buffer: None,
-        buffer_positions_are_bytes: false,
+        source: MatchSource::None,
     }
 }
 
@@ -127,9 +125,10 @@ fn buffer_match_data_from_registers(regs: &MatchRegisters, base_emacs_byte: usiz
     extend_to_gnu_search_regs_capacity(&mut groups);
     MatchData {
         groups,
-        searched_string: None,
-        searched_buffer: None,
-        buffer_positions_are_bytes: true,
+        source: MatchSource::Buffer {
+            id: None,
+            positions: BufferMatchPositions::EmacsBytes,
+        },
     }
 }
 
@@ -227,16 +226,31 @@ pub struct MatchData {
     /// interpreting the raw pair directly.
     /// Index 0 = full match, 1+ = capture groups.
     pub groups: Vec<Option<MatchGroup>>,
-    /// The string that was searched (for `string-match`).
-    /// `None` when the search was performed on a buffer.
-    pub searched_string: Option<SearchedString>,
-    /// The buffer that was searched, when match data came from a buffer search.
-    pub searched_buffer: Option<BufferId>,
-    /// GNU `set-match-data` restores buffer positions as character positions,
-    /// while the regex engine naturally reports byte positions. Keep the
-    /// distinction explicit so byte-based searches and GNU-style restores can
-    /// coexist.
-    pub buffer_positions_are_bytes: bool,
+    /// Provenance and coordinate system for `groups`.
+    pub source: MatchSource,
+}
+
+#[derive(Clone, Debug)]
+pub enum MatchSource {
+    None,
+    /// GNU uses `last_thing_searched = Qt` for string match data.  A searched
+    /// string object is available after `string-match`, but not after
+    /// `set-match-data` restores an integer list saved by `match-data`.
+    String {
+        searched: Option<SearchedString>,
+    },
+    /// Buffer matches can be engine-produced byte positions or GNU-restored
+    /// Lisp character positions. Keep that distinction explicit.
+    Buffer {
+        id: Option<BufferId>,
+        positions: BufferMatchPositions,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BufferMatchPositions {
+    EmacsBytes,
+    LispChars,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -341,12 +355,99 @@ pub fn char_pos_to_byte_lisp_string(s: &crate::heap_types::LispString, char_pos:
 }
 
 impl MatchData {
+    pub(crate) fn none(groups: Vec<Option<MatchGroup>>) -> Self {
+        Self {
+            groups,
+            source: MatchSource::None,
+        }
+    }
+
+    pub(crate) fn string(
+        groups: Vec<Option<MatchGroup>>,
+        searched: Option<SearchedString>,
+    ) -> Self {
+        Self {
+            groups,
+            source: MatchSource::String { searched },
+        }
+    }
+
+    pub(crate) fn buffer_bytes(
+        groups: Vec<Option<MatchGroup>>,
+        buffer_id: Option<BufferId>,
+    ) -> Self {
+        Self {
+            groups,
+            source: MatchSource::Buffer {
+                id: buffer_id,
+                positions: BufferMatchPositions::EmacsBytes,
+            },
+        }
+    }
+
+    pub(crate) fn buffer_lisp_chars(
+        groups: Vec<Option<MatchGroup>>,
+        buffer_id: Option<BufferId>,
+    ) -> Self {
+        Self {
+            groups,
+            source: MatchSource::Buffer {
+                id: buffer_id,
+                positions: BufferMatchPositions::LispChars,
+            },
+        }
+    }
+
+    pub(crate) fn is_string_match(&self) -> bool {
+        matches!(self.source, MatchSource::String { .. })
+    }
+
+    pub(crate) fn searched_string(&self) -> Option<&SearchedString> {
+        match &self.source {
+            MatchSource::String { searched } => searched.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn searched_buffer_id(&self) -> Option<BufferId> {
+        match self.source {
+            MatchSource::Buffer { id, .. } => id,
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set_buffer_id(&mut self, buffer_id: BufferId) {
+        if let MatchSource::Buffer { id, .. } = &mut self.source {
+            *id = Some(buffer_id);
+        }
+    }
+
+    pub(crate) fn set_string_source(&mut self, searched: Option<SearchedString>) {
+        self.source = MatchSource::String { searched };
+    }
+
     pub(crate) fn uses_buffer_byte_positions(&self) -> bool {
-        self.searched_buffer.is_some() && self.buffer_positions_are_bytes
+        matches!(
+            self.source,
+            MatchSource::Buffer {
+                positions: BufferMatchPositions::EmacsBytes,
+                ..
+            }
+        )
+    }
+
+    pub(crate) fn uses_buffer_lisp_char_positions(&self) -> bool {
+        matches!(
+            self.source,
+            MatchSource::Buffer {
+                positions: BufferMatchPositions::LispChars,
+                ..
+            }
+        )
     }
 
     pub(crate) fn searched_string_text(&self) -> Option<String> {
-        self.searched_string.as_ref().map(SearchedString::to_owned)
+        self.searched_string().map(SearchedString::to_owned)
     }
 }
 
@@ -1047,12 +1148,7 @@ fn find_forward_match_data_compiled(
         CompiledSearchPattern::Literal(literal) => {
             let matched = literal_find(&text[start..limit], literal, case_fold)?;
             let matched = matched.shift(offset + start);
-            Some(MatchData {
-                groups: gnu_single_group_vec(Some(matched)),
-                searched_string: None,
-                searched_buffer: None,
-                buffer_positions_are_bytes: false,
-            })
+            Some(MatchData::none(gnu_single_group_vec(Some(matched))))
         }
         CompiledSearchPattern::Emacs(cp) => {
             let syn = DefaultSyntaxLookup;
@@ -1140,21 +1236,16 @@ fn string_char_match_data(searched_string: SearchedString, byte_md: MatchData) -
 
             MatchData {
                 groups: char_groups,
-                searched_string: Some(searched_string),
-                searched_buffer: None,
-                buffer_positions_are_bytes: false,
+                source: MatchSource::String {
+                    searched: Some(searched_string),
+                },
             }
         },
     )
 }
 
 fn single_group_match_data(start: usize, end: usize) -> MatchData {
-    MatchData {
-        groups: gnu_single_group_vec(Some(MatchGroup::new(start, end))),
-        searched_string: None,
-        searched_buffer: None,
-        buffer_positions_are_bytes: false,
-    }
+    MatchData::none(gnu_single_group_vec(Some(MatchGroup::new(start, end))))
 }
 
 fn ascii_case_fold_find(haystack: &str, needle: &str) -> Option<usize> {
@@ -1523,12 +1614,10 @@ pub fn search_forward(
     if let Some(found) = found {
         let matched = found.shift(start.get());
         let match_end = matched.end();
-        *match_data = Some(MatchData {
-            groups: gnu_single_group_vec(Some(matched)),
-            searched_string: None,
-            searched_buffer: Some(buf.id),
-            buffer_positions_are_bytes: true,
-        });
+        *match_data = Some(MatchData::buffer_bytes(
+            gnu_single_group_vec(Some(matched)),
+            Some(buf.id),
+        ));
         Ok(Some(match_end))
     } else if noerror {
         // When noerror is t, don't move point.
@@ -1574,12 +1663,10 @@ pub fn search_backward(
 
     if let Some(found) = found {
         let matched = found.shift(limit.get());
-        *match_data = Some(MatchData {
-            groups: gnu_single_group_vec(Some(matched)),
-            searched_string: None,
-            searched_buffer: Some(buf.id),
-            buffer_positions_are_bytes: true,
-        });
+        *match_data = Some(MatchData::buffer_bytes(
+            gnu_single_group_vec(Some(matched)),
+            Some(buf.id),
+        ));
         Ok(Some(matched.start()))
     } else if noerror {
         Ok(None)
@@ -1648,11 +1735,11 @@ pub fn re_search_forward_with_posix(
                 multibyte,
                 case_fold,
             )
-            .map(|matched| MatchData {
-                groups: gnu_single_group_vec(Some(matched.shift(start.get()))),
-                searched_string: None,
-                searched_buffer: Some(buffer_id),
-                buffer_positions_are_bytes: true,
+            .map(|matched| {
+                MatchData::buffer_bytes(
+                    gnu_single_group_vec(Some(matched.shift(start.get()))),
+                    Some(buffer_id),
+                )
             })
         }
         CompiledSearchPattern::Emacs(cp) => {
@@ -1660,7 +1747,7 @@ pub fn re_search_forward_with_posix(
             regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
                 |(_pos, regs)| {
                     let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-                    md.searched_buffer = Some(buffer_id);
+                    md.set_buffer_id(buffer_id);
                     md
                 },
             )
@@ -1738,11 +1825,11 @@ pub fn re_search_backward_with_posix(
                 multibyte,
                 case_fold,
             )
-            .map(|matched| MatchData {
-                groups: gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
-                searched_string: None,
-                searched_buffer: Some(buffer_id),
-                buffer_positions_are_bytes: true,
+            .map(|matched| {
+                MatchData::buffer_bytes(
+                    gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
+                    Some(buffer_id),
+                )
             })
         }
         CompiledSearchPattern::Emacs(cp) => {
@@ -1751,7 +1838,7 @@ pub fn re_search_backward_with_posix(
             regex_emacs::re_search(cp.as_ref(), &text, start_rel, range, &syn, start_rel).map(
                 |(_pos, regs)| {
                     let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-                    md.searched_buffer = Some(buffer_id);
+                    md.set_buffer_id(buffer_id);
                     md
                 },
             )
@@ -1813,7 +1900,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
         )
     }) {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-        md.searched_buffer = Some(buffer_id);
+        md.set_buffer_id(buffer_id);
         let full_match = md.groups[0].unwrap();
         *match_data = Some(md);
         Ok(Some(full_match.end()))
@@ -1867,7 +1954,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         )
     }) {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-        md.searched_buffer = Some(buffer_id);
+        md.set_buffer_id(buffer_id);
         let full_match = md.groups[0].unwrap();
         *match_data = Some(md);
         Ok(Some(full_match.start()))
@@ -1925,12 +2012,10 @@ pub fn looking_at_with_posix(
                 return Ok(false);
             }
             let full_match = MatchGroup::new(start.get(), start.get() + literal_bytes.len());
-            *match_data = Some(MatchData {
-                groups: gnu_single_group_vec(Some(full_match)),
-                searched_string: None,
-                searched_buffer: Some(buffer_id),
-                buffer_positions_are_bytes: true,
-            });
+            *match_data = Some(MatchData::buffer_bytes(
+                gnu_single_group_vec(Some(full_match)),
+                Some(buffer_id),
+            ));
             Ok(true)
         }
         CompiledSearchPattern::Emacs(cp) => {
@@ -1938,7 +2023,7 @@ pub fn looking_at_with_posix(
                 regex_emacs::re_match(cp.as_ref(), &text, start_rel, text.len(), &syn, start_rel)
             {
                 let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-                md.searched_buffer = Some(buffer_id);
+                md.set_buffer_id(buffer_id);
                 *match_data = Some(md);
                 Ok(true)
             } else {
@@ -1989,7 +2074,7 @@ pub(crate) fn looking_at_lisp_with_posix(
         )
     }) {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-        md.searched_buffer = Some(buffer_id);
+        md.set_buffer_id(buffer_id);
         *match_data = Some(md);
         Ok(true)
     } else {
@@ -2352,14 +2437,14 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
     let Some(match_group) = md.groups.get(subexp).and_then(|group| *group) else {
         return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
-    let (buffer_start, buffer_end) = if md.searched_string.is_some() {
+    let (buffer_start, buffer_end) = if md.is_string_match() {
         (
             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_group.start()))
                 .get(),
             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_group.end()))
                 .get(),
         )
-    } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
+    } else if md.uses_buffer_lisp_char_positions() {
         (
             buffer_lisp_match_char_pos_to_byte_pos(buf, match_group.start()).get(),
             buffer_lisp_match_char_pos_to_byte_pos(buf, match_group.end()).get(),
@@ -2504,9 +2589,8 @@ fn compute_replacement_with_syntax(
     // String searches, and GNU-style `set-match-data` restores on buffers,
     // expose character positions. Engine-produced buffer match data stays on
     // Emacs byte positions until the Lisp boundary.
-    let string_positions_are_chars = md.searched_string.is_some();
-    let buffer_positions_are_lisp_chars =
-        md.searched_buffer.is_some() && !md.buffer_positions_are_bytes;
+    let string_positions_are_chars = md.is_string_match();
+    let buffer_positions_are_lisp_chars = md.uses_buffer_lisp_char_positions();
     let uses_buffer_byte_positions = md.uses_buffer_byte_positions();
     let (byte_start, byte_end) = if string_positions_are_chars {
         (

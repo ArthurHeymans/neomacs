@@ -7931,8 +7931,8 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
         restored.groups.first().copied().flatten(),
         Some(crate::emacs_core::regex::MatchGroup::new(1, 6))
     );
-    assert!(restored.searched_buffer.is_some());
-    assert!(!restored.buffer_positions_are_bytes);
+    assert!(restored.searched_buffer_id().is_some());
+    assert!(restored.uses_buffer_lisp_char_positions());
     let (start, end, replacement) =
         crate::emacs_core::regex::compute_buffer_replacement_with_syntax(
             eval.buffers.current_buffer().expect("current buffer"),

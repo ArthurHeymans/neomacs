@@ -12,7 +12,7 @@ fn match_group_byte_range(group: MatchGroup) -> EmacsByteRange {
 }
 
 fn extract_heap_match_string(md: &MatchData, group: usize) -> Option<String> {
-    let searched = match md.searched_string.as_ref()? {
+    let searched = match md.searched_string()? {
         SearchedString::Heap(val) => SearchedString::Heap(*val),
         SearchedString::Owned(text) => SearchedString::Owned(text.clone()),
     };
@@ -1110,7 +1110,7 @@ fn owned_raw_unibyte_match_data_preserves_bytes() {
     );
     assert_eq!(result, Ok(Some(1)));
     let md = md.expect("match data");
-    let searched = md.searched_string.expect("searched string");
+    let searched = md.searched_string().expect("searched string");
     let string = searched.as_lisp_string().expect("lisp string");
     let group = md.groups[0].expect("full match");
     let byte_start = char_pos_to_byte_lisp_string(string, group.start());
@@ -1597,9 +1597,9 @@ struct BufferSearchSnapshot<T> {
 fn match_data_snapshot(match_data: &Option<MatchData>) -> Option<MatchDataSnapshot> {
     match_data.as_ref().map(|data| MatchDataSnapshot {
         groups: data.groups.clone(),
-        searched_buffer: data.searched_buffer,
-        searched_string_is_some: data.searched_string.is_some(),
-        buffer_positions_are_bytes: data.buffer_positions_are_bytes,
+        searched_buffer: data.searched_buffer_id(),
+        searched_string_is_some: data.is_string_match(),
+        buffer_positions_are_bytes: data.uses_buffer_byte_positions(),
     })
 }
 
