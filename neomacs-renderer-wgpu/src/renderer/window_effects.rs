@@ -2,6 +2,60 @@
 //!
 //! Contains all window-related visual effects extracted from the main
 //! render_frame_glyphs function.
+//!
+//! KNOWN BUG (latent, low priority) — top chrome ignored in content geometry.
+//! ---------------------------------------------------------------------------
+//! Throughout this file (and `ui_overlays.rs`) effects compute a window's
+//! "content area" as `content_h = bounds.height - mode_line_height`, drawn
+//! starting at `bounds.y` (the window's TOP edge). That subtracts the BOTTOM
+//! chrome (mode-line) but NOT the TOP chrome (tab-line + header-line). So when
+//! a window has a tab-line and/or header-line, the rect these effects fill
+//! starts too high and bleeds up over that chrome band.
+//!
+//! Symptom: with an opt-in effect enabled (file-type tint, non-selected dim,
+//! accent strip, modified-indicator strip, focus ring, shadows, ...) AND a
+//! tab-line/header-line present, the effect tints/dims/covers the
+//! tab-line/header-line instead of staying inside the buffer text area. Purely
+//! cosmetic; text still renders. It is LATENT because every such effect is
+//! off by default, so nothing triggers it in a `-Q` session.
+//!
+//! Why it exists: the renderer threads a single scalar `mode_line_height`
+//! through ~46 call sites and the top-chrome heights (`tab_line_height`,
+//! `header_line_height`, already present on `WindowInfo`) are used 0 times.
+//! There is no single place that knows "where the buffer text actually lives",
+//! so each effect re-derives it ad hoc and only the bottom case was handled.
+//!
+//! IDEAL ABSTRACTION (when this is fixed): make chrome geometry typed RECTS,
+//! computed once on `WindowInfo`, instead of a scalar subtracted everywhere:
+//!
+//! ```ignore
+//! impl WindowInfo {
+//!     fn top_chrome_height(&self) -> f32 {            // tab-line + header-line
+//!         self.tab_line_height.max(0.0) + self.header_line_height.max(0.0)
+//!     }
+//!     fn content_rect(&self) -> Rect {                // where buffer text lives
+//!         let top = self.top_chrome_height();
+//!         let bottom = self.mode_line_height.max(0.0);
+//!         Rect { x: self.bounds.x, y: self.bounds.y + top,
+//!                width: self.bounds.width,
+//!                height: (self.bounds.height - top - bottom).max(0.0) }
+//!     }
+//!     fn tab_line_rect(&self)    -> Option<Rect> { /* top band            */ }
+//!     fn header_line_rect(&self) -> Option<Rect> { /* below the tab-line  */ }
+//!     fn mode_line_rect(&self)   -> Option<Rect> { /* bottom band         */ }
+//! }
+//! ```
+//!
+//! Then every `bounds.height - mode_line_height` (from `bounds.y`) site below
+//! collapses to `info.content_rect()`, and chrome backgrounds/separators use
+//! the named band rects. Text drawing stays role-agnostic (it already is);
+//! only this background/clip/effect layer needs the typed rects. That fixes
+//! the header-line case for free and removes the scalar-threaded-everywhere
+//! foot-gun. The fix is mechanical but must be verified visually with each
+//! effect toggled ON and a tab-line/header-line present, so it is deferred to
+//! a deliberate renderer chrome-geometry cleanup pass rather than done blind.
+//!
+//! Offending sites are tagged `FIXME(chrome-insets)` below.
 
 use super::super::vertex::RectVertex;
 use super::effect_common::{EffectCtx, push_rect};
@@ -77,6 +131,8 @@ pub(super) fn emit_modified_indicator(ctx: &EffectCtx) -> Vec<RectVertex> {
         if win_info.modified && !win_info.is_minibuffer {
             let wb = &win_info.bounds;
             let mode_line_h = win_info.mode_line_height;
+            // FIXME(chrome-insets): ignores top chrome (tab/header line); strip
+            // starts at wb.y and bleeds over it. Use win_info.content_rect(). See module note.
             let content_h = wb.height - mode_line_h;
             if content_h > 0.0 {
                 push_rect(&mut verts, wb.x, wb.y, mw, content_h, &mc);
@@ -154,6 +210,8 @@ pub(super) fn emit_stained_glass(ctx: &EffectCtx) -> Vec<RectVertex> {
         if !win_info.selected && !win_info.is_minibuffer {
             let wb = &win_info.bounds;
             let mode_h = win_info.mode_line_height;
+            // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+            // starts at wb.y and bleeds over it. Use win_info.content_rect(). See module note.
             let content_h = wb.height - mode_h;
             if content_h > 0.0 {
                 let hash = (win_info.buffer_id as u64).wrapping_mul(2654435761) >> 16;
@@ -716,6 +774,8 @@ pub(super) fn emit_accent_strip(ctx: &EffectCtx) -> Vec<RectVertex> {
         let b = &info.bounds;
         let ext = info.buffer_file_name.rsplit('.').next().unwrap_or("");
         let (r, g, b_col) = extension_to_color(ext);
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let strip_h = b.height - info.mode_line_height;
         if strip_h <= 0.0 {
             continue;
@@ -739,6 +799,8 @@ pub(super) fn emit_window_mode_tint(ctx: &EffectCtx) -> Vec<RectVertex> {
             continue;
         }
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h <= 0.0 {
             continue;
@@ -780,6 +842,8 @@ pub(super) fn emit_focus_ring(
             continue;
         }
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h <= 0.0 {
             continue;
@@ -863,6 +927,8 @@ pub(super) fn emit_window_padding_gradient(ctx: &EffectCtx) -> Vec<RectVertex> {
             continue;
         }
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h <= 0.0 {
             continue;
@@ -940,6 +1006,8 @@ pub(super) fn emit_border_transition(
             continue;
         }
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h <= 0.0 {
             continue;
@@ -1327,6 +1395,8 @@ pub(super) fn emit_zen_mode(ctx: &EffectCtx) -> Vec<RectVertex> {
             continue;
         }
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h < 10.0 {
             continue;
@@ -1585,6 +1655,8 @@ pub(super) fn emit_minimap(ctx: &EffectCtx) -> Vec<RectVertex> {
         }
 
         let b = &info.bounds;
+        // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+        // starts at b.y and bleeds over it. Use info.content_rect(). See module note.
         let content_h = b.height - info.mode_line_height;
         if content_h < 10.0 {
             continue;

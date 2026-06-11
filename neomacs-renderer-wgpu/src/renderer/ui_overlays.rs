@@ -518,6 +518,9 @@ impl WgpuRenderer {
             }
 
             let b = &info.bounds;
+            // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+            // starts at b.y and bleeds over it. Use info.content_rect(). See the
+            // chrome-insets module note in window_effects.rs.
             let content_h = b.height - info.mode_line_height;
             if content_h < char_height * 1.5 {
                 continue;
@@ -1214,6 +1217,9 @@ impl WgpuRenderer {
 
             let b = &info.bounds;
             // Content area height (exclude mode-line)
+            // FIXME(chrome-insets): ignores top chrome (tab/header line); region
+            // starts at b.y and bleeds over it. Use info.content_rect(). See the
+            // chrome-insets module note in window_effects.rs.
             let content_h = b.height - info.mode_line_height;
             if content_h < 20.0 {
                 continue;
