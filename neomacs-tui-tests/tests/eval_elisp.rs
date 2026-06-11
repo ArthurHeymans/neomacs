@@ -1443,6 +1443,10 @@ fn nconc_circular_nonfinal_list_error_matches_gnu_semantics() {
 fn equal_circular_list_behavior_matches_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
+    // GNU 31.0.90 refactored `equal` (internal_equal_1 / internal_equal_cycle): a
+    // cycle is no longer an error.  Two separate self-circular lists with equal
+    // cars are `equal' (t); structurally different circular lists are nil — so the
+    // three cases yield (t t nil), not the pre-31 (t (circular-list) nil).
     let expr = r#"(message "equalcycle:%S" (list (let ((x (list 1))) (setcdr x x) (equal x x)) (condition-case e (let ((x (list 1)) (y (list 1))) (setcdr x x) (setcdr y y) (equal x y)) (error (list (car e)))) (condition-case e (let ((x (list 1 2)) (y (list 1 2))) (setcdr (cdr x) x) (setcdr (cdr y) (cdr y)) (equal x y)) (error (list (car e))))))"#;
     support::eval_expression(&mut gnu, &mut neo, expr);
 
@@ -1450,7 +1454,7 @@ fn equal_circular_list_behavior_matches_gnu_semantics() {
         grid.iter()
             .rev()
             .take(4)
-            .any(|row| row.contains("equalcycle:(t (circular-list) nil)"))
+            .any(|row| row.contains("equalcycle:(t t nil)"))
     };
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);

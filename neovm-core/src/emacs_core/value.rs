@@ -2654,6 +2654,55 @@ impl EqualTailGuard {
     }
 }
 
+/// Port of GNU `internal_equal_cycle` (fns.c): the slow path taken once the left
+/// list has been found circular.  `o1` is the right list, `o2` the left.  Returns
+/// `true` iff the right list is also circular with matching elements (cars equal
+/// up to its own cycle); `false` if the right list terminates first.  This mirrors
+/// GNU's rule that two circular lists with no element differences are `equal`,
+/// regardless of differing cycle structure — a cycle is not an error.
+fn equal_value_cycle(
+    o1: Value,
+    o2: Value,
+    depth: usize,
+    seen: &mut Option<HashSet<EqualSeenPair>>,
+    symbols_with_pos_enabled: bool,
+    kind: EqualKind,
+) -> Result<bool, Flow> {
+    let mut o1_tail = o1;
+    let mut o2_tail = o2;
+    let mut guard = EqualTailGuard::new(o1_tail);
+    while o1_tail.is_cons() {
+        if !o2_tail.is_cons() {
+            return Ok(false);
+        }
+        let o1_car = o1_tail.cons_car();
+        let o2_car = o2_tail.cons_car();
+        if !try_equal_value_inner(
+            &o1_car,
+            &o2_car,
+            depth + 1,
+            seen,
+            symbols_with_pos_enabled,
+            kind,
+        )? {
+            return Ok(false);
+        }
+        let o1_cdr = o1_tail.cons_cdr();
+        o2_tail = o2_tail.cons_cdr();
+        if o1_cdr.bits() == o2_tail.bits() {
+            return Ok(true);
+        }
+        o1_tail = o1_cdr;
+        if guard.found_cycle_after_advance(o1_tail) {
+            // Cycle in o1 (right) detected.  Since o2 (left) is circular too and
+            // no differences were found, the lists are `equal'.
+            return Ok(true);
+        }
+    }
+    // o1 (right) terminated but o2 (left) is circular: not equal.
+    Ok(false)
+}
+
 fn try_equal_value_inner(
     left: &Value,
     right: &Value,
@@ -2741,7 +2790,22 @@ fn try_equal_value_inner(
             }
             left_tail = left_cdr;
             if tail_guard.found_cycle_after_advance(left_tail) {
-                return Err(signal("circular-list", vec![left_tail]));
+                // GNU internal_equal_1: a cycle in the left list is not an error.
+                // The lists are `equal' iff the right list is also circular with
+                // matching elements; a finite right list terminates first → not
+                // equal.  (internal_equal_cycle, called with the right list.)
+                return if right_tail.is_cons() {
+                    equal_value_cycle(
+                        right_tail,
+                        left_tail,
+                        depth,
+                        seen,
+                        symbols_with_pos_enabled,
+                        kind,
+                    )
+                } else {
+                    Ok(false)
+                };
             }
         }
         return try_equal_value_inner(

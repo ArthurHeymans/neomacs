@@ -325,6 +325,52 @@ fn equal_structural() {
 }
 
 #[test]
+fn equal_on_circular_structures_matches_gnu_cycle_semantics() {
+    // GNU 31.0.90 `equal` (internal_equal_1 / internal_equal_cycle) detects cycles
+    // and returns t/nil instead of signaling `circular-list`.  Regression for the
+    // cons-loop tortoise-hare that used to error on circular structures; goes
+    // through the lisp `equal` (try_equal_value_inner), not the bool equal_value.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    // (form, expected truthy)
+    let cases: [(&str, bool); 5] = [
+        // two separate self-circular lists, equal cars -> t
+        (
+            "(let ((a (list 'x)) (b (list 'x))) (setcdr a a) (setcdr b b) (equal a b))",
+            true,
+        ),
+        // self-circular lists, differing cars -> nil
+        (
+            "(let ((a (list 'x)) (c (list 'y))) (setcdr a a) (setcdr c c) (equal a c))",
+            false,
+        ),
+        // two separate self-circular vectors, equal -> t
+        (
+            "(let ((v1 (vector 'x nil)) (v2 (vector 'x nil))) (aset v1 1 v1) (aset v2 1 v2) (equal v1 v2))",
+            true,
+        ),
+        // self-circular vectors, differing -> nil
+        (
+            "(let ((v1 (vector 'x nil)) (v2 (vector 'y nil))) (aset v1 1 v1) (aset v2 1 v2) (equal v1 v2))",
+            false,
+        ),
+        // circular left vs finite right -> nil (right terminates first)
+        (
+            "(let ((a (list 'x))) (setcdr a a) (equal a (list 'x 'x 'x)))",
+            false,
+        ),
+    ];
+    for (src, truthy) in cases {
+        let got = ev
+            .eval_str(src)
+            .ok()
+            .unwrap_or_else(|| panic!("`equal` signaled instead of returning for: {src}"));
+        let is_truthy = got.bits() != Value::NIL.bits();
+        assert_eq!(is_truthy, truthy, "wrong `equal` result for: {src}");
+    }
+}
+
+#[test]
 fn string_equality() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {

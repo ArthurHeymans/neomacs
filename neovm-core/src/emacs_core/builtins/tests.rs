@@ -8792,16 +8792,14 @@ fn equal_circular_list_behavior_matches_gnu() {
     same.set_cdr(same);
     assert_eq!(builtin_equal(vec![same, same]).unwrap(), Value::T);
 
+    // GNU 31.0.90 (internal_equal_1 / internal_equal_cycle): two separate
+    // self-circular lists with equal cars are `equal' (t), not a circular-list
+    // error.  (Pre-31 GNU and old neomacs signaled circular-list here.)
     let left = Value::list(vec![Value::fixnum(1)]);
     left.set_cdr(left);
     let right = Value::list(vec![Value::fixnum(1)]);
     right.set_cdr(right);
-    match builtin_equal(vec![left, right]) {
-        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
-            assert_eq!(sig.symbol_name(), "circular-list");
-        }
-        other => panic!("expected circular-list signal, got {other:?}"),
-    }
+    assert_eq!(builtin_equal(vec![left, right]).unwrap(), Value::T);
 
     let left = Value::list(vec![Value::fixnum(1), Value::fixnum(2)]);
     left.cons_cdr().set_cdr(left);
