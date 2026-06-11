@@ -7662,7 +7662,7 @@ article buffer.
 
 ;;; Generated autoloads from calendar/diary-icalendar.el
 
-(autoload 'di:import-buffer "diary-icalendar"
+(autoload 'diary-icalendar-import-buffer "diary-icalendar"
 "Import iCalendar events from current buffer into diary.
 
 This function parses the first iCalendar VCALENDAR in the current buffer
@@ -7690,7 +7690,7 @@ time, you may especially wish to check the values of:
 as well as variables in the customization group `diary-icalendar-import'.
 
 (fn &optional DIARY-FILENAME QUIETLY ALL-NONMARKING)" t)
-(autoload 'di:import-file "diary-icalendar"
+(autoload 'diary-icalendar-import-file "diary-icalendar"
 "Import iCalendar diary entries from FILENAME into DIARY-FILENAME.
 
 This function parses the first iCalendar VCALENDAR in FILENAME and
@@ -7718,7 +7718,7 @@ time, you may especially wish to check the values of:
 as well as variables in the customization group `diary-icalendar-import'.
 
 (fn FILENAME &optional DIARY-FILENAME QUIETLY NONMARKING)" t)
-(autoload 'di:export-region "diary-icalendar"
+(autoload 'diary-icalendar-export-region "diary-icalendar"
 "Export diary entries between BEGIN and END to iCalendar format in FILENAME.
 
 If FILENAME exists and is not empty, this function asks whether to erase
@@ -7735,7 +7735,7 @@ check the values of:
 as well as variables in the customization group `diary-icalendar-export'.
 
 (fn BEGIN END FILENAME &optional ERASE)" t)
-(autoload 'di:export-file "diary-icalendar"
+(autoload 'diary-icalendar-export-file "diary-icalendar"
 "Export DIARY-FILENAME to iCalendar format in FILENAME.
 
 The diary entries in DIARY-FILENAME will be exported to iCalendar format
@@ -7755,7 +7755,7 @@ check the values of:
 as well as variables in the customization group `diary-icalendar-export'.
 
 (fn DIARY-FILENAME FILENAME &optional ERASE)" t)
-(register-definition-prefixes "diary-icalendar" '("di:" "ical:diary-"))
+(register-definition-prefixes "diary-icalendar" '("diary-icalendar-" "icalendar-diary-"))
 
 
 ;;; Generated autoloads from calendar/diary-lib.el
@@ -17865,17 +17865,17 @@ buffer `*icalendar-errors*'.
 
 (fn &optional DIARY-FILENAME DO-NOT-ASK NON-MARKING)" t)
 (make-obsolete 'icalendar-import-buffer 'diary-icalendar-import-buffer "31.1")
-(register-definition-prefixes "icalendar" '("ical"))
+(register-definition-prefixes "icalendar" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-ast.el
 
-(register-definition-prefixes "icalendar-ast" '("ical:"))
+(register-definition-prefixes "icalendar-ast" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-macs.el
 
-(register-definition-prefixes "icalendar-macs" '("ical:"))
+(register-definition-prefixes "icalendar-macs" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-mode.el
@@ -17907,22 +17907,22 @@ this mode runs the hook `icalendar-mode-hook', as the final or
 penultimate step during initialization.
 
 \\{icalendar-mode-map}" t)
-(register-definition-prefixes "icalendar-mode" '("ical:"))
+(register-definition-prefixes "icalendar-mode" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-parser.el
 
-(register-definition-prefixes "icalendar-parser" '("ical:"))
+(register-definition-prefixes "icalendar-parser" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-recur.el
 
-(register-definition-prefixes "icalendar-recur" '("ical:tz-" "icr:"))
+(register-definition-prefixes "icalendar-recur" '("icalendar-"))
 
 
 ;;; Generated autoloads from calendar/icalendar-utils.el
 
-(register-definition-prefixes "icalendar-utils" '("ical:"))
+(register-definition-prefixes "icalendar-utils" '("icalendar-"))
 
 
 ;;; Generated autoloads from icomplete.el
