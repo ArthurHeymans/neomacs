@@ -2349,7 +2349,51 @@ impl TaggedHeap {
                     out.extend(ht.data.values().copied());
                     out.extend(ht.key_snapshots.values().copied());
                 }
-                _ => {}
+                VecLikeType::ByteCode => {
+                    let data = &(*(ptr as *const ByteCodeObj)).data;
+                    out.push(data.arglist);
+                    out.extend(data.constants.iter().copied());
+                    if let Some(env) = data.env {
+                        out.push(env);
+                    }
+                    if let Some(doc_form) = data.doc_form {
+                        out.push(doc_form);
+                    }
+                    if let Some(interactive) = data.interactive {
+                        out.push(interactive);
+                    }
+                    out.extend(data.extra_slots.iter().copied());
+                }
+                VecLikeType::Overlay => {
+                    out.push((*(ptr as *const OverlayObj)).data.plist);
+                }
+                VecLikeType::SymbolWithPos => {
+                    let o = &*(ptr as *const SymbolWithPosObj);
+                    out.extend([o.sym, o.pos]);
+                }
+                VecLikeType::ModuleFunction => {
+                    let o = &*(ptr as *const ModuleFunctionObj);
+                    out.extend([o.documentation, o.interactive_form]);
+                }
+                VecLikeType::Xwidget => {
+                    let o = &*(ptr as *const XwidgetObj);
+                    out.extend([o.plist, o.type_, o.buffer, o.title, o.script_callbacks]);
+                }
+                VecLikeType::XwidgetView => {
+                    let o = &*(ptr as *const XwidgetViewObj);
+                    out.extend([o.model, o.window]);
+                }
+                // Buffer/Window/Frame/Timer/Marker/Subr/Bignum/Sqlite/UserPtr
+                // have no Value children to trace (mirrors trace_veclike).
+                VecLikeType::Buffer
+                | VecLikeType::Window
+                | VecLikeType::Frame
+                | VecLikeType::Timer
+                | VecLikeType::Marker
+                | VecLikeType::Subr
+                | VecLikeType::Bignum
+                | VecLikeType::Sqlite
+                | VecLikeType::UserPtr => {}
             }
         }
         out
