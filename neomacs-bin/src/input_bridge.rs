@@ -135,11 +135,13 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         }),
         DisplayEvent::MenuBarClick {
             index,
+            key,
             menu_x,
             anchor,
             emacs_frame_id,
         } => Some(KbInputEvent::MenuBarClick {
             index: *index,
+            key: key.clone(),
             menu_x: *menu_x,
             menu_y: 0.0,
             anchor_x: anchor.x,

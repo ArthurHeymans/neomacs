@@ -133,9 +133,10 @@ pub mod xwidget;
 mod xwidget_test;
 pub(crate) mod zlib;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct MenuBarPopupAnchor {
     pub(crate) frame_id: crate::window::FrameId,
+    pub(crate) menu_key: Option<String>,
     pub(crate) menu_x: i64,
     pub(crate) x: i64,
     pub(crate) y: i64,

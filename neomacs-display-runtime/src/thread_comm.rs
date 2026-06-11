@@ -160,10 +160,12 @@ pub enum InputEvent {
         emacs_frame_id: u64,
     },
     /// Menu bar item clicked. `menu_x` is the Emacs menu-bar column used by
-    /// Lisp to resolve the menu item; `anchor` is the frame-local logical-pixel
-    /// rectangle used by the native popup renderer.
+    /// legacy Lisp paths; `key` is the exact rendered top-level menu key; and
+    /// `anchor` is the frame-local logical-pixel rectangle used by the native
+    /// popup renderer.
     MenuBarClick {
         index: i32,
+        key: String,
         menu_x: f32,
         anchor: PopupAnchorRect,
         emacs_frame_id: u64,

@@ -152,6 +152,7 @@ impl RenderApp {
     fn menu_bar_click_event(hit: MenuBarHit, emacs_frame_id: u64) -> InputEvent {
         InputEvent::MenuBarClick {
             index: hit.index as i32,
+            key: hit.key,
             menu_x: hit.menu_x,
             anchor: hit.anchor,
             emacs_frame_id,
@@ -1737,7 +1738,7 @@ impl RenderApp {
                 if ly < menu_bar.height {
                     let new_hover = Self::frame_window_menu_bar_hit_test(window_state, lx, ly);
                     window_state.render.chrome.interaction.menu_bar_hovered =
-                        new_hover.map(|hit| hit.index);
+                        new_hover.as_ref().map(|hit| hit.index);
                     if let (Some(active), Some(hit)) = (
                         window_state.render.chrome.interaction.menu_bar_active,
                         new_hover,
@@ -1775,7 +1776,7 @@ impl RenderApp {
                         .render
                         .chrome
                         .interaction
-                        .compact_bar_menu_hovered = new_menu_hover.map(|hit| hit.index);
+                        .compact_bar_menu_hovered = new_menu_hover.as_ref().map(|hit| hit.index);
                     window_state
                         .render
                         .chrome
@@ -1981,7 +1982,7 @@ impl RenderApp {
                 let new_hover = self.menu_bar_hit_test(lx, ly);
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
-                        chrome.menu_bar_hovered = new_hover.map(|hit| hit.index);
+                        chrome.menu_bar_hovered = new_hover.as_ref().map(|hit| hit.index);
                         if let (Some(active), Some(hit)) = (chrome.menu_bar_active, new_hover)
                             && hit.index != active
                         {
@@ -2018,7 +2019,8 @@ impl RenderApp {
                 };
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
-                        chrome.compact_bar_menu_hovered = new_menu_hover.map(|hit| hit.index);
+                        chrome.compact_bar_menu_hovered =
+                            new_menu_hover.as_ref().map(|hit| hit.index);
                         chrome.compact_bar_tool_hovered = new_tool_hover;
                         if let (Some(active), Some(hit)) =
                             (chrome.compact_bar_menu_active, new_menu_hover)

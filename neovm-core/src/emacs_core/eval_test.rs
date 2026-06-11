@@ -3623,6 +3623,7 @@ fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
     ev.command_loop.keyboard.pending_input_events.push_back(
         crate::keyboard::InputEvent::MenuBarClick {
             index: 2,
+            key: "tools".to_string(),
             menu_x: 11.0,
             menu_y: 0.0,
             anchor_x: 128.0,
@@ -3654,9 +3655,18 @@ fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
     );
     assert_eq!(
         ev.pending_menu_bar_popup_anchor
+            .as_ref()
             .expect("pending anchor")
             .frame_id,
         secondary
+    );
+    assert_eq!(
+        ev.pending_menu_bar_popup_anchor
+            .as_ref()
+            .expect("pending anchor")
+            .menu_key
+            .as_deref(),
+        Some("tools")
     );
 }
 

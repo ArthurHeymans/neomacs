@@ -3588,6 +3588,7 @@ fn x_popup_menu_interactive_menu_bar_position_uses_pending_native_anchor() {
     eval.set_display_host(Box::new(host));
     eval.pending_menu_bar_popup_anchor = Some(crate::emacs_core::MenuBarPopupAnchor {
         frame_id,
+        menu_key: Some("tools".to_string()),
         menu_x: 26,
         x: 244,
         y: 0,

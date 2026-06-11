@@ -1289,7 +1289,7 @@ fn popup_menu_position(ctx: &mut Context, position: Value) -> PopupMenuPosition 
                 x = anchor_x;
                 y = anchor_y;
                 position_debug.used_anchor = true;
-            } else if let Some(anchor) = ctx.pending_menu_bar_popup_anchor
+            } else if let Some(anchor) = ctx.pending_menu_bar_popup_anchor.as_ref()
                 && posn_frame_id.map_or(true, |id| id == anchor.frame_id)
             {
                 x = anchor.x as f32;

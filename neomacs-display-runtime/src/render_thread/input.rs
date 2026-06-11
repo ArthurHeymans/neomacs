@@ -8,9 +8,10 @@ use super::frame_windows::GuiFrameWindowState;
 use super::state::WindowChrome;
 use crate::thread_comm::{MenuBarItem, PopupAnchorRect, TabBarItem, ToolBarItem};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct MenuBarHit {
     pub(super) index: u32,
+    pub(super) key: String,
     pub(super) menu_x: f32,
     pub(super) anchor: PopupAnchorRect,
 }
@@ -44,6 +45,7 @@ pub(super) fn menu_bar_hit_test_item(
         if x >= item_x && x < item_x + label_width {
             return Some(MenuBarHit {
                 index: item.index,
+                key: item.key.clone(),
                 menu_x,
                 anchor: PopupAnchorRect {
                     x: item_x,

@@ -135,6 +135,7 @@ fn tab_bar_click_reaches_keyboard_owner() {
 fn menu_bar_click_reaches_keyboard_owner() {
     let display_event = DisplayEvent::MenuBarClick {
         index: 1,
+        key: "tools".to_string(),
         menu_x: 5.0,
         anchor: neomacs_display_runtime::thread_comm::PopupAnchorRect {
             x: 80.0,
@@ -149,6 +150,7 @@ fn menu_bar_click_reaches_keyboard_owner() {
     match event {
         Some(KbInputEvent::MenuBarClick {
             index: 1,
+            key,
             menu_x: 5.0,
             menu_y: 0.0,
             anchor_x: 80.0,
@@ -156,7 +158,7 @@ fn menu_bar_click_reaches_keyboard_owner() {
             anchor_width: 56.0,
             anchor_height: 24.0,
             emacs_frame_id: 42,
-        }) => {}
+        }) => assert_eq!(key, "tools"),
         other => panic!("unexpected event: {other:?}"),
     }
 }

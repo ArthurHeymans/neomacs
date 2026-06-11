@@ -2128,6 +2128,62 @@ fn lookup_key_accepts_legacy_menu_symbol_case_and_spaces() {
 }
 
 #[test]
+fn menu_bar_menu_at_x_y_uses_recursive_display_order_for_final_items() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let* ((g (make-sparse-keymap))
+                      (embedded (make-sparse-keymap))
+                      (file-menu (make-sparse-keymap))
+                      (edit-menu (make-sparse-keymap))
+                      (help-menu (make-sparse-keymap)))
+                 (define-key embedded [file] (cons "File" file-menu))
+                 (define-key embedded [edit] (cons "Edit" edit-menu))
+                 (define-key embedded [help-menu] (cons "Help" help-menu))
+                 (define-key g [menu-bar] (list 'keymap embedded))
+                 (setq global-map g)
+                 (setq menu-bar-final-items '(help-menu))
+                 (list (menu-bar-menu-at-x-y 0 0)
+                       (menu-bar-menu-at-x-y 5 0)
+                       (menu-bar-menu-at-x-y 10 0)))"#
+        ),
+        "OK (edit file help-menu)"
+    );
+}
+
+#[test]
+fn menu_bar_menu_at_x_y_prefers_pending_native_click_key() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = eval_with_interactive_shims();
+    let frame_id = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    ev.frames.select_frame(frame_id);
+    ev.pending_menu_bar_popup_anchor = Some(crate::emacs_core::MenuBarPopupAnchor {
+        frame_id,
+        menu_key: Some("help-menu".to_string()),
+        menu_x: 49,
+        x: 439,
+        y: 0,
+        width: 47,
+        height: 18,
+    });
+
+    assert_eq!(
+        format_eval_result(&ev.eval_str(
+            r#"(let* ((g (make-sparse-keymap))
+                          (file-menu (make-sparse-keymap))
+                          (help-menu (make-sparse-keymap)))
+                     (define-key g [menu-bar file] (cons "File" file-menu))
+                     (define-key g [menu-bar help-menu] (cons "Help" help-menu))
+                     (setq global-map g)
+                     (menu-bar-menu-at-x-y 0 0))"#
+        )),
+        "OK help-menu"
+    );
+}
+
+#[test]
 fn lookup_key_matches_parameterized_mouse_event_on_event_type() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

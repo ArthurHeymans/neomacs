@@ -2340,7 +2340,17 @@ pub(crate) fn builtin_menu_bar_menu_at_x_y(
     expect_range_args("menu-bar-menu-at-x-y", &args, 2, 3)?;
     let x = args[0].as_fixnum().unwrap_or(0);
     let mut hpos = 0i64;
-    for (key, label) in menu_bar_top_level_items(eval) {
+    let frame_id = args
+        .get(2)
+        .and_then(|frame| frame.as_frame_id().map(crate::window::FrameId))
+        .or_else(|| eval.frames.selected_frame().map(|frame| frame.id));
+    if let Some(anchor) = &eval.pending_menu_bar_popup_anchor
+        && frame_id.map_or(true, |id| id == anchor.frame_id)
+        && let Some(menu_key) = &anchor.menu_key
+    {
+        return Ok(Value::symbol(menu_key));
+    }
+    for (key, label) in menu_bar_top_level_items_for_frame(eval, frame_id) {
         let width = label.chars().count() as i64 + 1;
         if x >= hpos && x < hpos + width {
             return Ok(key);
@@ -2356,13 +2366,33 @@ pub(crate) fn builtin_menu_or_popup_active_p(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn menu_bar_top_level_items(eval: &super::eval::Context) -> Vec<(Value, String)> {
+    menu_bar_top_level_items_for_frame(eval, eval.frames.selected_frame().map(|frame| frame.id))
+}
+
+pub(crate) fn menu_bar_top_level_items_for_frame(
+    eval: &super::eval::Context,
+    frame_id: Option<crate::window::FrameId>,
+) -> Vec<(Value, String)> {
     let mut items = Vec::new();
-    if let Some(global_map) = eval.obarray().symbol_value("global-map").copied() {
-        collect_menu_bar_items_from_map(eval, global_map, &mut items);
-    }
-    let local_map = eval.buffer_manager().current_local_map();
-    if !local_map.is_nil() {
-        collect_menu_bar_items_from_map(eval, local_map, &mut items);
+    let active_maps = if let Some(frame_id) = frame_id {
+        crate::emacs_core::keymap::menu_bar_active_keymaps_for_frame_read_only(eval, frame_id)
+    } else {
+        let obey_overriding_local_maps = eval
+            .obarray
+            .symbol_value("overriding-local-map-menu-flag")
+            .copied()
+            .is_some_and(|value| value.is_truthy());
+        let mut maps = crate::emacs_core::keymap::current_active_maps_for_position_read_only(
+            eval,
+            obey_overriding_local_maps,
+            None,
+        )
+        .unwrap_or_default();
+        maps.reverse();
+        maps
+    };
+    for keymap in active_maps {
+        collect_menu_bar_items_from_map(eval, keymap, &mut items);
     }
     move_menu_bar_final_items(eval, &mut items);
     items
@@ -2392,21 +2422,11 @@ fn collect_menu_bar_items_from_map(
 ) {
     let menu_bar = Value::symbol("menu-bar");
     let raw = crate::emacs_core::keymap::list_keymap_lookup_one(&keymap, &menu_bar);
-    let menu_map = if crate::emacs_core::keymap::is_list_keymap(&raw) {
-        raw
-    } else if let Some(name) = raw.as_symbol_name() {
-        eval.obarray()
-            .symbol_value(name)
-            .copied()
-            .filter(|value| crate::emacs_core::keymap::is_list_keymap(value))
-            .unwrap_or(Value::NIL)
-    } else {
-        Value::NIL
-    };
-    if menu_map.is_nil() {
+    let Some(menu_map) = crate::emacs_core::keymap::maybe_keymap_in_obarray(eval.obarray(), &raw)
+    else {
         return;
-    }
-    crate::emacs_core::keymap::list_keymap_for_each_binding(&menu_map, |key, def| {
+    };
+    crate::emacs_core::keymap::list_keymap_for_each_binding_recursive(&menu_map, |key, def| {
         if items.iter().any(|(seen, _)| seen.bits() == key.bits()) {
             return;
         }

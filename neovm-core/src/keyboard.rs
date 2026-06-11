@@ -730,10 +730,12 @@ pub enum InputEvent {
     /// Tab-bar item click.  The display layer reports the zero-based
     /// index in the current rendered tab-bar item vector.
     TabBarClick { index: i32, emacs_frame_id: u64 },
-    /// Menu-bar item click.  The display layer reports the zero-based
-    /// index in the current rendered menu-bar item vector.
+    /// Menu-bar item click.  `key` is the exact rendered top-level menu key;
+    /// x/y and anchor fields are geometry for legacy Lisp and native popup
+    /// placement.
     MenuBarClick {
         index: i32,
+        key: String,
         menu_x: f32,
         menu_y: f32,
         anchor_x: f32,
@@ -3745,6 +3747,7 @@ impl crate::emacs_core::eval::Context {
             }
             InputEvent::MenuBarClick {
                 index,
+                key,
                 menu_x,
                 menu_y,
                 anchor_x,
@@ -3764,6 +3767,7 @@ impl crate::emacs_core::eval::Context {
                 }
                 self.pending_menu_bar_popup_anchor = Some(crate::emacs_core::MenuBarPopupAnchor {
                     frame_id,
+                    menu_key: Some(key.clone()),
                     menu_x: menu_x.round() as i64,
                     x: anchor_x.round() as i64,
                     y: anchor_y.round() as i64,
