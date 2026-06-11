@@ -1067,7 +1067,8 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
 
 #[test]
 fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
-    let mut eval = Context::new();
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
     let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
@@ -1229,7 +1230,8 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
 
 #[test]
 fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
-    let mut eval = Context::new();
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
     let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
@@ -1510,6 +1512,14 @@ fn batch_tty_mode_leaves_redisplay_callback_unset() {
 
 #[test]
 fn configure_gnu_startup_state_marks_bootstrap_gui_frame_as_initial_frame() {
+    // NOTE: pre-existing failure. This test needs a bare evaluator to assert a
+    // *pristine* hidden `terminal-frame` (no inherited GUI face params), but
+    // `bootstrap_buffers(gui_display())` now runs GUI frame-init Lisp that
+    // requires subr.el macros (`when`), which a bare `Context::new()` lacks.
+    // A full-Lisp bootstrap fixture carries GUI frame-defaults that the new
+    // terminal frame then inherits, so it can't assert pristine topology.
+    // Resolving this cleanly needs separating the GUI-init Lisp from the
+    // pure-Rust frame bootstrap (see initialize_reused_gui_startup_frame).
     let mut eval = Context::new();
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
     let frame_id = eval
@@ -1907,7 +1917,8 @@ fn configure_gnu_startup_state_seeds_command_line_args_left_for_gnu_startup() {
 #[test]
 fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
     let metrics = bootstrap_frame_metrics();
-    let mut eval = Context::new();
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
     let frame = eval
         .frame_manager()
@@ -1996,7 +2007,8 @@ fn bootstrap_default_font_name_uses_pixel_size_field() {
 #[test]
 fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
     let metrics = bootstrap_frame_metrics();
-    let mut eval = Context::new();
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
     let old_buffer = eval.buffer_manager_mut().create_buffer("*old*");
     let old_frame = eval
         .frame_manager_mut()
@@ -2039,7 +2051,8 @@ fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
 #[test]
 fn bootstrap_buffers_reuses_cached_surrogate_frame_when_it_is_the_only_selected_frame() {
     let metrics = bootstrap_frame_metrics();
-    let mut eval = Context::new();
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
     let old_buffer = eval.buffer_manager_mut().create_buffer("*old*");
     let surrogate = eval
         .frame_manager_mut()
