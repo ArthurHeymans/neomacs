@@ -136,6 +136,9 @@ thread_local! {
     static TAGGED_HEAP: Cell<*mut TaggedHeap> = const { Cell::new(std::ptr::null_mut()) };
     static TAGGED_HEAP_WRITE_TRACKING_MODE: Cell<WriteTrackingMode> =
         const { Cell::new(WriteTrackingMode::Disabled) };
+    /// Mirrors `TaggedHeap::partition_dump` so the write-barrier hot path can
+    /// decide whether to run without dereferencing the heap.
+    static TAGGED_HEAP_PARTITION_ACTIVE: Cell<bool> = const { Cell::new(false) };
     /// Auto-allocated heap for tests that construct Values without a Context.
     #[cfg(test)]
     static TEST_FALLBACK_TAGGED_HEAP: std::cell::RefCell<Option<Box<TaggedHeap>>> =
@@ -152,6 +155,7 @@ fn next_tagged_heap_identity() -> usize {
 pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP.with(|h| h.set(heap as *mut TaggedHeap));
     TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(heap.write_tracking_mode()));
+    TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(heap.partition_dump));
 }
 
 /// Return the current thread's tagged heap identity, if one is installed.
@@ -220,7 +224,12 @@ fn note_heap_write_record(record: HeapWriteRecord) {
     if !record.owner.is_heap_object() {
         return;
     }
-    if TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.get()) == WriteTrackingMode::Disabled {
+    let disabled =
+        TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.get()) == WriteTrackingMode::Disabled;
+    // The dump partition needs the barrier even when owner-tracking is off, to
+    // record mutations of dumped objects into the remembered set.
+    let partition = TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.get());
+    if disabled && !partition {
         return;
     }
     with_tagged_heap(|heap| heap.record_heap_write(record));
@@ -483,6 +492,18 @@ impl MappedConsRange {
         self.mark_bits.fill(0);
     }
 
+    /// Mark every cell in the range live (dump-partition: born black). Sets
+    /// exactly `len` bits so `live_count` stays exact.
+    fn mark_all(&mut self) {
+        self.mark_bits.fill(!0);
+        let rem = self.len % CONS_MARK_BITS_PER_WORD;
+        if rem != 0
+            && let Some(last) = self.mark_bits.last_mut()
+        {
+            *last = (1usize << rem) - 1;
+        }
+    }
+
     fn live_count(&self) -> usize {
         self.mark_bits
             .iter()
@@ -548,6 +569,18 @@ impl MappedFloatRange {
 
     fn clear_marks(&mut self) {
         self.mark_bits.fill(0);
+    }
+
+    /// Mark every cell in the range live (dump-partition: born black). Sets
+    /// exactly `len` bits so `live_count` stays exact.
+    fn mark_all(&mut self) {
+        self.mark_bits.fill(!0);
+        let rem = self.len % CONS_MARK_BITS_PER_WORD;
+        if rem != 0
+            && let Some(last) = self.mark_bits.last_mut()
+        {
+            *last = (1usize << rem) - 1;
+        }
     }
 
     fn live_count(&self) -> usize {
@@ -712,6 +745,25 @@ pub struct TaggedHeap {
     dirty_owners: Vec<TaggedValue>,
     dirty_owner_bits: FxHashSet<usize>,
     dirty_writes: Vec<HeapWriteRecord>,
+
+    // --- Dump-partition state (treat the immutable pdump image as a permanent
+    // black/tenured region: never clear, re-trace, or sweep it). Gated by
+    // `partition_dump`; default off => identical to the full-trace collector.
+    /// When true, mapped (pdump) objects are born black and never re-traced;
+    /// only mutated dumped objects (`mapped_remembered`) are re-scanned.
+    partition_dump: bool,
+    /// One-time flag: the mapped image has been blackened (all marks set).
+    dump_blackened: bool,
+    /// Persistent remembered set: bits of dumped objects that have been
+    /// mutated and may now hold heap children. Seeded as roots every cycle so
+    /// those heap children stay live. Fed by the write barrier
+    /// (`record_heap_write`). Tiny in practice (few dumped objects are ever
+    /// mutated). Never cleared (conservative retention).
+    mapped_remembered: FxHashSet<usize>,
+    /// Address span `[lo, hi)` covering every mapped object, for an O(1) "is
+    /// this owner a dumped object?" test in the write-barrier hot path.
+    dump_addr_lo: usize,
+    dump_addr_hi: usize,
 }
 
 impl TaggedHeap {
@@ -750,6 +802,11 @@ impl TaggedHeap {
             gc_collections: 0,
             gc_total_elapsed_us: 0,
             last_clear_us: 0,
+            partition_dump: std::env::var("NEOVM_GC_PARTITION_DUMP").as_deref() == Ok("1"),
+            dump_blackened: false,
+            mapped_remembered: FxHashSet::default(),
+            dump_addr_lo: usize::MAX,
+            dump_addr_hi: 0,
         }
     }
 
@@ -870,6 +927,7 @@ impl TaggedHeap {
             return;
         }
         debug_assert_eq!(start as usize % std::mem::align_of::<ConsCell>(), 0);
+        self.extend_dump_span(start as usize, len.saturating_mul(size_of::<ConsCell>()));
         self.mapped_cons_ranges
             .push(MappedConsRange::new(start, len));
         self.allocated_count = self.allocated_count.saturating_add(len);
@@ -888,6 +946,7 @@ impl TaggedHeap {
             return;
         }
         debug_assert_eq!(start as usize % std::mem::align_of::<FloatObj>(), 0);
+        self.extend_dump_span(start as usize, len.saturating_mul(size_of::<FloatObj>()));
         self.mapped_float_ranges
             .push(MappedFloatRange::new(start, len));
         self.allocated_count = self.allocated_count.saturating_add(len);
@@ -910,6 +969,7 @@ impl TaggedHeap {
             return;
         }
         debug_assert_eq!(header as usize % std::mem::align_of::<VecLikeHeader>(), 0);
+        self.extend_dump_span(header as usize, byte_len);
         let index = self.mapped_veclike_objects.len();
         let prev = self
             .mapped_veclike_index_by_addr
@@ -935,6 +995,7 @@ impl TaggedHeap {
             return;
         }
         debug_assert_eq!(ptr as usize % std::mem::align_of::<StringObj>(), 0);
+        self.extend_dump_span(ptr as usize, byte_len);
         let index = self.mapped_string_objects.len();
         let prev = self.mapped_string_index_by_addr.insert(ptr as usize, index);
         debug_assert!(prev.is_none(), "mapped string object registered twice");
@@ -979,6 +1040,14 @@ impl TaggedHeap {
     }
 
     fn record_heap_write(&mut self, record: HeapWriteRecord) {
+        // Dump partition: a mutated dumped object may now hold heap children,
+        // so remember it as a permanent root. Conservative — a false positive
+        // (a heap owner inside the dump address span) just adds a redundant
+        // root; a false negative would be a use-after-free, so the span test
+        // must cover every mapped object (see `register_mapped_*`).
+        if self.partition_dump && self.owner_is_mapped(record.owner) {
+            self.mapped_remembered.insert(record.owner.bits());
+        }
         if self.write_tracking_mode == WriteTrackingMode::Disabled {
             return;
         }
@@ -988,6 +1057,40 @@ impl TaggedHeap {
         if self.write_tracking_mode == WriteTrackingMode::OwnersAndRecords {
             self.dirty_writes.push(record);
         }
+    }
+
+    /// Raw object address for a heap-tagged value (cons/veclike/string/float),
+    /// used for the dump-partition address-span test.
+    fn value_heap_addr(value: TaggedValue) -> Option<usize> {
+        if value.is_cons() {
+            Some(value.xcons_ptr() as usize)
+        } else if value.is_veclike() {
+            value.as_veclike_ptr().map(|ptr| ptr as usize)
+        } else if value.is_string() {
+            value.as_string_ptr().map(|ptr| ptr as usize)
+        } else if value.is_float() {
+            value.as_float_ptr().map(|ptr| ptr as usize)
+        } else {
+            None
+        }
+    }
+
+    /// True if `value` is a mapped (pdump) object, via the address span that
+    /// `register_mapped_*` keeps over every mapped object.
+    fn owner_is_mapped(&self, value: TaggedValue) -> bool {
+        match Self::value_heap_addr(value) {
+            Some(addr) => addr >= self.dump_addr_lo && addr < self.dump_addr_hi,
+            None => false,
+        }
+    }
+
+    /// Extend the mapped-object address span to cover `[start, start+len)`.
+    fn extend_dump_span(&mut self, start: usize, len_bytes: usize) {
+        if len_bytes == 0 {
+            return;
+        }
+        self.dump_addr_lo = self.dump_addr_lo.min(start);
+        self.dump_addr_hi = self.dump_addr_hi.max(start.saturating_add(len_bytes));
     }
 
     fn note_allocation_bytes(&mut self, bytes: usize) {
@@ -1710,23 +1813,35 @@ impl TaggedHeap {
 
         let clear_t0 = std::time::Instant::now();
 
-        // -- Clear marks --
+        // -- Clear marks (heap) --
         for block in &mut self.cons_blocks {
             block.clear_marks();
         }
-        for range in &mut self.mapped_cons_ranges {
-            range.clear_marks();
+        // -- Mapped (pdump) marks --
+        if self.partition_dump {
+            // Dump as permanent tenured region: blacken the whole image once,
+            // then never clear it. Mapped objects are never freed, and mark
+            // skips already-marked objects, so the dump is never re-traced.
+            // Mutated dumped objects are re-scanned via `mapped_remembered`.
+            if !self.dump_blackened {
+                self.blacken_dump();
+                self.dump_blackened = true;
+            }
+        } else {
+            for range in &mut self.mapped_cons_ranges {
+                range.clear_marks();
+            }
+            for range in &mut self.mapped_float_ranges {
+                range.clear_marks();
+            }
+            for object in &mut self.mapped_veclike_objects {
+                object.marked = false;
+            }
+            for object in &mut self.mapped_string_objects {
+                object.marked = false;
+            }
         }
-        for range in &mut self.mapped_float_ranges {
-            range.clear_marks();
-        }
-        for object in &mut self.mapped_veclike_objects {
-            object.marked = false;
-        }
-        for object in &mut self.mapped_string_objects {
-            object.marked = false;
-        }
-        // Clear marks on non-cons objects
+        // Clear marks on non-cons (heap) objects
         let mut obj = self.all_objects;
         while !obj.is_null() {
             unsafe {
@@ -1741,6 +1856,312 @@ impl TaggedHeap {
         self.gray_queue.clear();
         self.mark_cons_block_cache = None;
         self.seed_internal_runtime_roots();
+        if self.partition_dump {
+            // Re-scan dumped objects that were mutated since load: their heap
+            // children must be kept live even though the dump itself is black.
+            self.seed_mapped_remembered();
+        }
+    }
+
+    /// One-time dump preparation when the partition is enabled.
+    ///
+    /// 1. Build the initial remembered set: the pdump image is NOT a closed
+    ///    subgraph — some child types (bytecode, hash-tables, some char-tables)
+    ///    are reconstructed on the heap during load, so dumped objects can hold
+    ///    heap children created at *load* time, not just by runtime mutation.
+    ///    Scan every mapped object and remember any that already points at a
+    ///    heap (non-dump) object, so those children stay live.
+    /// 2. Mark the whole image black; thereafter mapped marks are never cleared
+    ///    and the dump is never re-traced (only `mapped_remembered` is).
+    fn blacken_dump(&mut self) {
+        // -- scan for load-time dump -> heap edges --
+        let veclike: Vec<*mut VecLikeHeader> = self
+            .mapped_veclike_objects
+            .iter()
+            .map(|o| o.header)
+            .collect();
+        for ptr in veclike {
+            if self
+                .collect_veclike_children(ptr)
+                .iter()
+                .any(|c| self.is_heap_non_dump(*c))
+            {
+                let value = unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) };
+                self.mapped_remembered.insert(value.bits());
+            }
+        }
+        let cons_ranges: Vec<(*mut ConsCell, usize)> = self
+            .mapped_cons_ranges
+            .iter()
+            .map(|range| (range.start, range.len))
+            .collect();
+        for (start, len) in cons_ranges {
+            for i in 0..len {
+                let cell = unsafe { start.add(i) };
+                let car = unsafe { (*cell).car };
+                let cdr = unsafe { (*cell).cdr() };
+                if self.is_heap_non_dump(car) || self.is_heap_non_dump(cdr) {
+                    let value = unsafe { TaggedValue::from_cons_ptr(cell) };
+                    self.mapped_remembered.insert(value.bits());
+                }
+            }
+        }
+        let strings: Vec<*mut StringObj> =
+            self.mapped_string_objects.iter().map(|o| o.ptr).collect();
+        for ptr in strings {
+            let mut roots: Vec<TaggedValue> = Vec::new();
+            let intervals = unsafe { (*ptr).data.intervals() };
+            if !intervals.is_empty() {
+                intervals.for_each_root(|root| roots.push(root));
+            }
+            if roots.iter().any(|r| self.is_heap_non_dump(*r)) {
+                let value = unsafe { TaggedValue::from_string_ptr(ptr) };
+                self.mapped_remembered.insert(value.bits());
+            }
+        }
+
+        // -- blacken the whole image --
+        for range in &mut self.mapped_cons_ranges {
+            range.mark_all();
+        }
+        for range in &mut self.mapped_float_ranges {
+            range.mark_all();
+        }
+        for object in &mut self.mapped_veclike_objects {
+            object.marked = true;
+        }
+        for object in &mut self.mapped_string_objects {
+            object.marked = true;
+        }
+    }
+
+    /// True if `value` is a heap object that lives OUTSIDE the pdump image
+    /// (i.e. a real heap allocation, not a mapped/dumped object).
+    fn is_heap_non_dump(&self, value: TaggedValue) -> bool {
+        value.is_heap_object() && !self.owner_is_mapped(value)
+    }
+
+    /// Seed the gray queue with the heap children of every dumped object that
+    /// has been mutated since load (the dump remembered set). Because the dump
+    /// is black, `mark_value` would otherwise never re-trace these, so we
+    /// enqueue their children directly. Mapped children are already black and
+    /// are skipped when popped; only heap children get marked.
+    fn seed_mapped_remembered(&mut self) {
+        if self.mapped_remembered.is_empty() {
+            return;
+        }
+        let owners: Vec<TaggedValue> = self
+            .mapped_remembered
+            .iter()
+            .map(|&bits| TaggedValue(bits))
+            .collect();
+        for owner in owners {
+            if owner.is_cons() {
+                let ptr = owner.xcons_ptr();
+                let car = unsafe { (*ptr).car };
+                let cdr = unsafe { (*ptr).cdr() };
+                if car.is_heap_object() {
+                    self.push_gray(car, "remembered-dump-cons-car");
+                }
+                if cdr.is_heap_object() {
+                    self.push_gray(cdr, "remembered-dump-cons-cdr");
+                }
+            } else if owner.is_veclike() {
+                let ptr = owner.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
+                unsafe { self.trace_veclike(ptr) };
+            } else if owner.is_string() {
+                let ptr = owner.as_string_ptr().unwrap() as *const StringObj;
+                let intervals = unsafe { (*ptr).data.intervals() };
+                if !intervals.is_empty() {
+                    intervals.for_each_root(|root| {
+                        if root.is_heap_object() {
+                            self.push_gray(root, "remembered-dump-string-interval");
+                        }
+                    });
+                }
+            }
+            // Floats have no heap children.
+        }
+    }
+
+    /// Is `value` currently marked? Covers heap and mapped objects of every
+    /// category. Used only by the dump-partition verifier.
+    fn is_value_marked(&self, value: TaggedValue) -> bool {
+        if value.is_cons() {
+            let ptr = value.xcons_ptr();
+            if ConsBlock::ptr_is_cell_aligned(ptr) {
+                let base = ConsBlock::block_base_for_ptr(ptr);
+                if let Some(&idx) = self.cons_block_index_by_base.get(&base) {
+                    return self.cons_blocks[idx].is_marked_ptr(ptr);
+                }
+            }
+            return self
+                .mapped_cons_ranges
+                .iter()
+                .find(|range| range.contains_ptr(ptr))
+                .map(|range| range.is_marked_ptr(ptr))
+                .unwrap_or(false);
+        }
+        let Some(addr) = Self::value_heap_addr(value) else {
+            return true;
+        };
+        let owned = self.owns_non_cons_object(addr as *const u8);
+        if value.is_string() {
+            if owned {
+                return unsafe { (*(addr as *const StringObj)).header.marked };
+            }
+            return self
+                .mapped_string_index_by_addr
+                .get(&addr)
+                .map(|&i| self.mapped_string_objects[i].marked)
+                .unwrap_or(false);
+        }
+        if value.is_float() {
+            if owned {
+                return unsafe { (*(addr as *const FloatObj)).header.marked };
+            }
+            let ptr = addr as *const FloatObj;
+            return self
+                .mapped_float_ranges
+                .iter()
+                .find(|range| range.contains_ptr(ptr))
+                .map(|range| range.is_marked_ptr(ptr))
+                .unwrap_or(false);
+        }
+        if value.is_veclike() {
+            if owned {
+                return unsafe { (*(addr as *const VecLikeHeader)).gc.marked };
+            }
+            return self
+                .mapped_veclike_index_by_addr
+                .get(&addr)
+                .map(|&i| self.mapped_veclike_objects[i].marked)
+                .unwrap_or(false);
+        }
+        true
+    }
+
+    /// Verification gate for the dump partition (env `NEOVM_GC_VERIFY_PARTITION`).
+    /// After the partitioned mark, every direct heap child of every dumped
+    /// object MUST already be marked — otherwise the write barrier missed a
+    /// dumped→heap mutation and the partition is about to free a live object.
+    /// Panics on the first violation. Expensive (full dump scan); verification
+    /// runs only.
+    fn verify_dump_partition(&mut self) {
+        let mut violations: std::collections::BTreeMap<String, usize> =
+            std::collections::BTreeMap::new();
+        let mut sample: Option<usize> = None;
+        let mut record = |owner: &str, child: TaggedValue| {
+            let child_kind = if child.is_cons() {
+                "cons".to_string()
+            } else if child.is_string() {
+                "string".to_string()
+            } else if child.is_float() {
+                "float".to_string()
+            } else if child.is_veclike() {
+                format!("{:?}", child.veclike_type())
+            } else {
+                "other".to_string()
+            };
+            *violations
+                .entry(format!("{owner} -> {child_kind}"))
+                .or_insert(0) += 1;
+            sample.get_or_insert(child.0);
+        };
+
+        // Mapped veclike objects (char-tables etc.), grouped by owner type.
+        let veclike: Vec<(*mut VecLikeHeader, VecLikeType)> = self
+            .mapped_veclike_objects
+            .iter()
+            .map(|o| (o.header, unsafe { (*o.header).type_tag }))
+            .collect();
+        for (ptr, ty) in veclike {
+            let owner = format!("{ty:?}");
+            for child in self.collect_veclike_children(ptr) {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    record(&owner, child);
+                }
+            }
+        }
+        // Mapped conses.
+        let cons_ranges: Vec<(*mut ConsCell, usize)> = self
+            .mapped_cons_ranges
+            .iter()
+            .map(|range| (range.start, range.len))
+            .collect();
+        for (start, len) in cons_ranges {
+            for i in 0..len {
+                let cell = unsafe { start.add(i) };
+                for child in [unsafe { (*cell).car }, unsafe { (*cell).cdr() }] {
+                    if child.is_heap_object() && !self.is_value_marked(child) {
+                        record("Cons", child);
+                    }
+                }
+            }
+        }
+        // Mapped strings (text-property intervals).
+        let strings: Vec<*mut StringObj> =
+            self.mapped_string_objects.iter().map(|o| o.ptr).collect();
+        for ptr in strings {
+            let mut roots: Vec<TaggedValue> = Vec::new();
+            let intervals = unsafe { (*ptr).data.intervals() };
+            if !intervals.is_empty() {
+                intervals.for_each_root(|root| roots.push(root));
+            }
+            for child in roots {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    record("String", child);
+                }
+            }
+        }
+
+        if !violations.is_empty() {
+            let total: usize = violations.values().sum();
+            eprintln!("DUMP_PARTITION_VIOLATIONS total={total}");
+            for (k, n) in &violations {
+                eprintln!("  {n:>6}  {k}");
+            }
+            panic!(
+                "dump-partition verification: {total} unmarked heap children of mapped objects \
+                 (sample value={:#x}) — write barrier missed dumped->heap mutations (UAF risk). \
+                 See DUMP_PARTITION_VIOLATIONS above.",
+                sample.unwrap_or(0)
+            );
+        }
+    }
+
+    /// Direct children of a mapped vectorlike object (read-only) for the verifier.
+    fn collect_veclike_children(&self, ptr: *mut VecLikeHeader) -> Vec<TaggedValue> {
+        let mut out = Vec::new();
+        unsafe {
+            match (*ptr).type_tag {
+                VecLikeType::Vector | VecLikeType::Record => {
+                    out.extend((*(ptr as *const VectorObj)).data.iter().copied());
+                }
+                VecLikeType::CharTable => {
+                    let o = &*(ptr as *const CharTableObj);
+                    out.extend([o.defalt, o.parent, o.purpose, o.ascii]);
+                    out.extend(o.contents.iter().copied());
+                    out.extend(o.extras.iter().copied());
+                }
+                VecLikeType::SubCharTable => {
+                    out.extend((*(ptr as *const SubCharTableObj)).contents.iter().copied());
+                }
+                VecLikeType::Obarray => {
+                    out.extend((*(ptr as *const ObarrayObj)).buckets.iter().copied());
+                }
+                VecLikeType::Lambda | VecLikeType::Macro => {
+                    out.extend((*(ptr as *const LambdaObj)).data.iter().copied());
+                }
+                VecLikeType::HashTable => {
+                    let ht = &(*(ptr as *const HashTableObj)).table;
+                    out.extend(ht.data.values().copied());
+                    out.extend(ht.key_snapshots.values().copied());
+                }
+                _ => {}
+            }
+        }
+        out
     }
 
     pub(crate) fn seed_root(&mut self, root: TaggedValue) {
@@ -1792,6 +2213,14 @@ impl TaggedHeap {
         let mark_t0 = std::time::Instant::now();
         self.mark_all();
         let mark_us = mark_t0.elapsed().as_micros() as u64;
+
+        // Dump-partition safety gate: prove no live heap object reachable only
+        // through a dumped object was left unmarked (i.e. the write barrier's
+        // remembered set is complete). Off unless explicitly verifying.
+        if self.partition_dump && std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1") {
+            self.verify_dump_partition();
+        }
+
         let sweep_t0 = std::time::Instant::now();
 
         // Unchain dead markers BEFORE `sweep_objects` frees them; the
