@@ -100,12 +100,17 @@ fn assert_fido_prompt_matches_stable_behavior(label: &str, gnu: &TuiSession, neo
         "{label} should agree on the top find-file candidate"
     );
 
+    // With `max-mini-window-height 8` only the top ~7 flex-sorted candidates
+    // for "find-f" are visible; assert against the commands GNU actually
+    // renders in that vertical view (lower-ranked matches like `ido-find-file`
+    // never appear, in GNU either).
     for stable in [
         "find-file",
-        "ido-find-file",
         "find-function",
-        "hexl-find-file",
-        "woman-find-file",
+        "find-file-existing",
+        "find-file-at-point",
+        "find-file-other-tab",
+        "find-file-read-only",
     ] {
         assert!(
             gnu_rows.iter().any(|row| row.contains(stable)),
