@@ -87,6 +87,13 @@ pub struct GcHeader {
     pub marked: bool,
     /// Exact object category for typed sweep/deallocation.
     pub kind: HeapObjectKind,
+    /// Tenured (old generation): a permanently-live heap object — the
+    /// heap-reconstructed dump permanents (bytecode/hash-tables/closures) and,
+    /// later, survival-promoted long-lived objects. When the dump partition is
+    /// active, tenured objects are born black, never cleared/re-traced, and
+    /// never swept; mutations of them are caught by the write barrier. Occupies
+    /// padding between `kind` and `next`, so the header does not grow.
+    pub tenured: bool,
     /// Intrusive linked list of all GC-managed objects (for sweep).
     pub next: *mut GcHeader,
 }
@@ -96,6 +103,7 @@ impl GcHeader {
         Self {
             marked: false,
             kind,
+            tenured: false,
             next: std::ptr::null_mut(),
         }
     }

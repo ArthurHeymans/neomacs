@@ -1045,7 +1045,9 @@ impl TaggedHeap {
         // (a heap owner inside the dump address span) just adds a redundant
         // root; a false negative would be a use-after-free, so the span test
         // must cover every mapped object (see `register_mapped_*`).
-        if self.partition_dump && self.owner_is_mapped(record.owner) {
+        if self.partition_dump
+            && (self.owner_is_mapped(record.owner) || self.value_is_tenured(record.owner))
+        {
             self.mapped_remembered.insert(record.owner.bits());
         }
         if self.write_tracking_mode == WriteTrackingMode::Disabled {
@@ -1812,22 +1814,18 @@ impl TaggedHeap {
         //  that will be swept. Only post-mark verification is meaningful.)
 
         let clear_t0 = std::time::Instant::now();
+        // The first partition cycle runs a NORMAL full collection (so it traces
+        // everything and frees load transients); promotion + blackening happen
+        // at the end of that cycle (`complete_collection`). Only once
+        // `dump_blackened` is set do the partitioned skips apply.
+        let partitioned = self.partition_dump && self.dump_blackened;
 
-        // -- Clear marks (heap) --
+        // -- Clear marks (heap cons) --
         for block in &mut self.cons_blocks {
             block.clear_marks();
         }
-        // -- Mapped (pdump) marks --
-        if self.partition_dump {
-            // Dump as permanent tenured region: blacken the whole image once,
-            // then never clear it. Mapped objects are never freed, and mark
-            // skips already-marked objects, so the dump is never re-traced.
-            // Mutated dumped objects are re-scanned via `mapped_remembered`.
-            if !self.dump_blackened {
-                self.blacken_dump();
-                self.dump_blackened = true;
-            }
-        } else {
+        // -- Mapped (pdump) marks: permanent black region when partitioned --
+        if !partitioned {
             for range in &mut self.mapped_cons_ranges {
                 range.clear_marks();
             }
@@ -1841,11 +1839,13 @@ impl TaggedHeap {
                 object.marked = false;
             }
         }
-        // Clear marks on non-cons (heap) objects
+        // -- Clear marks on non-cons (heap) objects; tenured stay black --
         let mut obj = self.all_objects;
         while !obj.is_null() {
             unsafe {
-                (*obj).marked = false;
+                if !(partitioned && (*obj).tenured) {
+                    (*obj).marked = false;
+                }
                 obj = (*obj).next;
             }
         }
@@ -1856,71 +1856,38 @@ impl TaggedHeap {
         self.gray_queue.clear();
         self.mark_cons_block_cache = None;
         self.seed_internal_runtime_roots();
-        if self.partition_dump {
-            // Re-scan dumped objects that were mutated since load: their heap
-            // children must be kept live even though the dump itself is black.
+        if partitioned {
+            // Re-scan dumped/tenured objects mutated to point at young heap
+            // objects: those children must be kept live even though the dump and
+            // the tenured old generation are black.
             self.seed_mapped_remembered();
+        } else if self.partition_dump {
+            // First partition cycle (full trace): keep every dump-referenced
+            // heap object alive so none is swept and left dangling when the
+            // image is blackened at the end of this cycle.
+            self.seed_all_mapped_children();
         }
     }
 
-    /// One-time dump preparation when the partition is enabled.
-    ///
-    /// 1. Build the initial remembered set: the pdump image is NOT a closed
-    ///    subgraph — some child types (bytecode, hash-tables, some char-tables)
-    ///    are reconstructed on the heap during load, so dumped objects can hold
-    ///    heap children created at *load* time, not just by runtime mutation.
-    ///    Scan every mapped object and remember any that already points at a
-    ///    heap (non-dump) object, so those children stay live.
-    /// 2. Mark the whole image black; thereafter mapped marks are never cleared
-    ///    and the dump is never re-traced (only `mapped_remembered` is).
-    fn blacken_dump(&mut self) {
-        // -- scan for load-time dump -> heap edges --
-        let veclike: Vec<*mut VecLikeHeader> = self
-            .mapped_veclike_objects
-            .iter()
-            .map(|o| o.header)
-            .collect();
-        for ptr in veclike {
-            if self
-                .collect_veclike_children(ptr)
-                .iter()
-                .any(|c| self.is_heap_non_dump(*c))
-            {
-                let value = unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) };
-                self.mapped_remembered.insert(value.bits());
-            }
-        }
-        let cons_ranges: Vec<(*mut ConsCell, usize)> = self
-            .mapped_cons_ranges
-            .iter()
-            .map(|range| (range.start, range.len))
-            .collect();
-        for (start, len) in cons_ranges {
-            for i in 0..len {
-                let cell = unsafe { start.add(i) };
-                let car = unsafe { (*cell).car };
-                let cdr = unsafe { (*cell).cdr() };
-                if self.is_heap_non_dump(car) || self.is_heap_non_dump(cdr) {
-                    let value = unsafe { TaggedValue::from_cons_ptr(cell) };
-                    self.mapped_remembered.insert(value.bits());
+    /// Run once at the END of the first partition cycle (after a full
+    /// trace+sweep): promote every survivor to the tenured old generation,
+    /// blacken the mapped dump image, and build the initial remembered set.
+    /// Thereafter both regions are permanently black and skipped each cycle.
+    fn promote_and_blacken(&mut self) {
+        // 1. Promote every surviving heap object to tenured (old generation).
+        //    The first partition cycle ran a full trace+sweep, so everything
+        //    still in `all_objects` is alive = a permanent (the preloaded world
+        //    plus whatever the session has retained). They are already marked.
+        let mut obj = self.all_objects;
+        while !obj.is_null() {
+            unsafe {
+                if (*obj).marked {
+                    (*obj).tenured = true;
                 }
+                obj = (*obj).next;
             }
         }
-        let strings: Vec<*mut StringObj> =
-            self.mapped_string_objects.iter().map(|o| o.ptr).collect();
-        for ptr in strings {
-            let mut roots: Vec<TaggedValue> = Vec::new();
-            let intervals = unsafe { (*ptr).data.intervals() };
-            if !intervals.is_empty() {
-                intervals.for_each_root(|root| roots.push(root));
-            }
-            if roots.iter().any(|r| self.is_heap_non_dump(*r)) {
-                let value = unsafe { TaggedValue::from_string_ptr(ptr) };
-                self.mapped_remembered.insert(value.bits());
-            }
-        }
-
-        // -- blacken the whole image --
+        // 2. Blacken the mapped image.
         for range in &mut self.mapped_cons_ranges {
             range.mark_all();
         }
@@ -1933,12 +1900,192 @@ impl TaggedHeap {
         for object in &mut self.mapped_string_objects {
             object.marked = true;
         }
+        // 3. Remember permanents (mapped or tenured) that point at a YOUNG heap
+        //    object so its children stay live. After promotion the only young
+        //    objects are heap conses (cons cells are header-less and cannot be
+        //    tenured), so this is the surviving-heap-cons reference set.
+        self.scan_permanents_for_young_children();
     }
 
-    /// True if `value` is a heap object that lives OUTSIDE the pdump image
-    /// (i.e. a real heap allocation, not a mapped/dumped object).
-    fn is_heap_non_dump(&self, value: TaggedValue) -> bool {
-        value.is_heap_object() && !self.owner_is_mapped(value)
+    /// Scan every permanent object (mapped dump + tenured old gen) for edges to
+    /// young heap objects and add such permanents to the remembered set. Used
+    /// at promotion and re-buildable on demand; the result is seeded each cycle.
+    fn scan_permanents_for_young_children(&mut self) {
+        // -- mapped vectorlike --
+        let veclike: Vec<*mut VecLikeHeader> = self
+            .mapped_veclike_objects
+            .iter()
+            .map(|o| o.header)
+            .collect();
+        for ptr in veclike {
+            if self
+                .collect_veclike_children(ptr)
+                .iter()
+                .any(|c| self.is_heap_young(*c))
+            {
+                let value = unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) };
+                self.mapped_remembered.insert(value.bits());
+            }
+        }
+        // -- mapped conses --
+        let cons_ranges: Vec<(*mut ConsCell, usize)> = self
+            .mapped_cons_ranges
+            .iter()
+            .map(|range| (range.start, range.len))
+            .collect();
+        for (start, len) in cons_ranges {
+            for i in 0..len {
+                let cell = unsafe { start.add(i) };
+                let car = unsafe { (*cell).car };
+                let cdr = unsafe { (*cell).cdr() };
+                if self.is_heap_young(car) || self.is_heap_young(cdr) {
+                    let value = unsafe { TaggedValue::from_cons_ptr(cell) };
+                    self.mapped_remembered.insert(value.bits());
+                }
+            }
+        }
+        // -- mapped strings (text-prop intervals) --
+        let strings: Vec<*mut StringObj> =
+            self.mapped_string_objects.iter().map(|o| o.ptr).collect();
+        for ptr in strings {
+            let mut roots: Vec<TaggedValue> = Vec::new();
+            let intervals = unsafe { (*ptr).data.intervals() };
+            if !intervals.is_empty() {
+                intervals.for_each_root(|root| roots.push(root));
+            }
+            if roots.iter().any(|r| self.is_heap_young(*r)) {
+                let value = unsafe { TaggedValue::from_string_ptr(ptr) };
+                self.mapped_remembered.insert(value.bits());
+            }
+        }
+        // -- tenured heap objects (old generation) --
+        let tenured: Vec<*mut GcHeader> = {
+            let mut out = Vec::new();
+            let mut obj = self.all_objects;
+            while !obj.is_null() {
+                unsafe {
+                    if (*obj).tenured {
+                        out.push(obj);
+                    }
+                    obj = (*obj).next;
+                }
+            }
+            out
+        };
+        for header in tenured {
+            let kind = unsafe { (*header).kind };
+            let has_young = match kind {
+                HeapObjectKind::VecLike => self
+                    .collect_veclike_children(header as *mut VecLikeHeader)
+                    .iter()
+                    .any(|c| self.is_heap_young(*c)),
+                HeapObjectKind::String => {
+                    let mut roots: Vec<TaggedValue> = Vec::new();
+                    let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
+                    if !intervals.is_empty() {
+                        intervals.for_each_root(|root| roots.push(root));
+                    }
+                    roots.iter().any(|r| self.is_heap_young(*r))
+                }
+                HeapObjectKind::Float => false,
+            };
+            if has_young {
+                let value = match kind {
+                    HeapObjectKind::VecLike => unsafe {
+                        TaggedValue::from_veclike_ptr(header as *const VecLikeHeader)
+                    },
+                    HeapObjectKind::String => unsafe {
+                        TaggedValue::from_string_ptr(header as *mut StringObj)
+                    },
+                    HeapObjectKind::Float => continue,
+                };
+                self.mapped_remembered.insert(value.bits());
+            }
+        }
+    }
+
+    /// True if `value` is a YOUNG heap object: a real heap allocation that is
+    /// neither mapped (dump) nor tenured (old gen) — i.e. it participates in the
+    /// normal clear/mark/sweep each cycle. Heap cons cells are always young
+    /// (header-less, cannot be tenured).
+    fn is_heap_young(&self, value: TaggedValue) -> bool {
+        if !value.is_heap_object() || self.owner_is_mapped(value) {
+            return false;
+        }
+        if value.is_cons() {
+            return true; // heap cons: header-less, cannot be tenured
+        }
+        // Non-cons: young iff heap-OWNED and not tenured. Static/untracked
+        // objects (e.g. Subrs) are permanently live, never young.
+        match Self::value_heap_addr(value) {
+            Some(addr) => {
+                self.owns_non_cons_object(addr as *const u8)
+                    && !unsafe { (*(addr as *const GcHeader)).tenured }
+            }
+            None => false,
+        }
+    }
+
+    /// True if `value` is a tenured (old-gen) heap non-cons object.
+    fn value_is_tenured(&self, value: TaggedValue) -> bool {
+        if value.is_cons() {
+            return false;
+        }
+        let Some(addr) = Self::value_heap_addr(value) else {
+            return false;
+        };
+        if !self.owns_non_cons_object(addr as *const u8) {
+            return false; // mapped, not a tenured heap object
+        }
+        unsafe { (*(addr as *const GcHeader)).tenured }
+    }
+
+    /// First-cycle only: seed the heap children of EVERY mapped object so they
+    /// survive the cycle's sweep. Dumped objects are never freed, so a heap
+    /// object referenced only by an (otherwise unreachable) dumped object must
+    /// still be kept — otherwise it would be swept and the dumped object would
+    /// be left holding a dangling pointer once the image is blackened.
+    fn seed_all_mapped_children(&mut self) {
+        let veclike: Vec<*mut VecLikeHeader> = self
+            .mapped_veclike_objects
+            .iter()
+            .map(|o| o.header)
+            .collect();
+        for ptr in veclike {
+            unsafe { self.trace_veclike(ptr) };
+        }
+        let cons_ranges: Vec<(*mut ConsCell, usize)> = self
+            .mapped_cons_ranges
+            .iter()
+            .map(|range| (range.start, range.len))
+            .collect();
+        for (start, len) in cons_ranges {
+            for i in 0..len {
+                let cell = unsafe { start.add(i) };
+                let car = unsafe { (*cell).car };
+                let cdr = unsafe { (*cell).cdr() };
+                if car.is_heap_object() {
+                    self.push_gray(car, "first-cycle-mapped-cons-car");
+                }
+                if cdr.is_heap_object() {
+                    self.push_gray(cdr, "first-cycle-mapped-cons-cdr");
+                }
+            }
+        }
+        let strings: Vec<*mut StringObj> =
+            self.mapped_string_objects.iter().map(|o| o.ptr).collect();
+        for ptr in strings {
+            let mut roots: Vec<TaggedValue> = Vec::new();
+            let intervals = unsafe { (*ptr).data.intervals() };
+            if !intervals.is_empty() {
+                intervals.for_each_root(|root| roots.push(root));
+            }
+            for root in roots {
+                if root.is_heap_object() {
+                    self.push_gray(root, "first-cycle-mapped-string-interval");
+                }
+            }
+        }
     }
 
     /// Seed the gray queue with the heap children of every dumped object that
@@ -2006,6 +2153,11 @@ impl TaggedHeap {
             return true;
         };
         let owned = self.owns_non_cons_object(addr as *const u8);
+        // A non-cons object that is neither heap-owned nor mapped is a static,
+        // never-swept runtime object (e.g. a `Subr`) — permanently live, so
+        // treat it as marked (`unwrap_or(true)`). This relies on the dump
+        // partition keeping every dump-referenced heap object live, so a
+        // not-owned/not-mapped pointer is never a dangling reference.
         if value.is_string() {
             if owned {
                 return unsafe { (*(addr as *const StringObj)).header.marked };
@@ -2014,7 +2166,7 @@ impl TaggedHeap {
                 .mapped_string_index_by_addr
                 .get(&addr)
                 .map(|&i| self.mapped_string_objects[i].marked)
-                .unwrap_or(false);
+                .unwrap_or(true);
         }
         if value.is_float() {
             if owned {
@@ -2026,7 +2178,7 @@ impl TaggedHeap {
                 .iter()
                 .find(|range| range.contains_ptr(ptr))
                 .map(|range| range.is_marked_ptr(ptr))
-                .unwrap_or(false);
+                .unwrap_or(true);
         }
         if value.is_veclike() {
             if owned {
@@ -2036,7 +2188,7 @@ impl TaggedHeap {
                 .mapped_veclike_index_by_addr
                 .get(&addr)
                 .map(|&i| self.mapped_veclike_objects[i].marked)
-                .unwrap_or(false);
+                .unwrap_or(true);
         }
         true
     }
@@ -2111,6 +2263,45 @@ impl TaggedHeap {
             for child in roots {
                 if child.is_heap_object() && !self.is_value_marked(child) {
                     record("String", child);
+                }
+            }
+        }
+        // Tenured heap objects (old generation): their direct heap children
+        // must also be marked, or a survival-promoted permanent mutated to
+        // point at a young object would free it.
+        let tenured: Vec<*mut GcHeader> = {
+            let mut out = Vec::new();
+            let mut obj = self.all_objects;
+            while !obj.is_null() {
+                unsafe {
+                    if (*obj).tenured {
+                        out.push(obj);
+                    }
+                    obj = (*obj).next;
+                }
+            }
+            out
+        };
+        for header in tenured {
+            let kind = unsafe { (*header).kind };
+            let owner = format!("tenured:{kind:?}");
+            let children: Vec<TaggedValue> = match kind {
+                HeapObjectKind::VecLike => {
+                    self.collect_veclike_children(header as *mut VecLikeHeader)
+                }
+                HeapObjectKind::String => {
+                    let mut roots = Vec::new();
+                    let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
+                    if !intervals.is_empty() {
+                        intervals.for_each_root(|root| roots.push(root));
+                    }
+                    roots
+                }
+                HeapObjectKind::Float => Vec::new(),
+            };
+            for child in children {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    record(&owner, child);
                 }
             }
         }
@@ -2217,7 +2408,10 @@ impl TaggedHeap {
         // Dump-partition safety gate: prove no live heap object reachable only
         // through a dumped object was left unmarked (i.e. the write barrier's
         // remembered set is complete). Off unless explicitly verifying.
-        if self.partition_dump && std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1") {
+        if self.partition_dump
+            && self.dump_blackened
+            && std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1")
+        {
             self.verify_dump_partition();
         }
 
@@ -2238,6 +2432,14 @@ impl TaggedHeap {
             .saturating_add(object_live_bytes)
             .saturating_add(mapped_object_live_bytes);
         self.bytes_since_gc = 0;
+
+        // End of the first partition cycle: every survivor is a permanent.
+        // Promote them to the tenured old generation and blacken the dump so
+        // all later cycles skip both regions.
+        if self.partition_dump && !self.dump_blackened {
+            self.promote_and_blacken();
+            self.dump_blackened = true;
+        }
 
         let sweep_us = sweep_t0.elapsed().as_micros() as u64;
         let elapsed = t0.elapsed();
