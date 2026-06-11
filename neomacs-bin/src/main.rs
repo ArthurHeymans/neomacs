@@ -1864,6 +1864,15 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
         if frame.effective_window_system().is_none() {
             return;
         }
+        // A shown GUI frame realizes its menu/tab/tool bars into the frame's
+        // top margin (GNU's FRAME_TOP_MARGIN), so the window text area — and
+        // the windows' tab/header lines — must sit below them.  The reused
+        // initial GUI frame is created after `run()`'s interactive
+        // `displays_chrome` pass, so it would otherwise keep the default
+        // `false` and lay the root window at y=0, hidden behind the bars.
+        // Mark it here (the GUI-only chrome sync) before the height-driven
+        // `sync_window_area_bounds`, so the reflow reserves the chrome rows.
+        frame.displays_chrome = true;
         frame.set_parameter(
             FrameParam::MenuBarLines.symbol(),
             Value::fixnum(if menu_items.is_empty() || compact_bar_enabled {

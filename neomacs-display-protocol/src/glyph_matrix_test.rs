@@ -278,6 +278,88 @@ fn materialize_produces_correct_glyph_count_from_grid() {
 }
 
 #[test]
+fn materialize_emits_tab_line_row_at_window_top() {
+    // Regression guard for the GUI "empty tab-line" bug: a window with a
+    // tab-line (row 0, role TabLine) above its text (row 1, role Text) must
+    // materialize the tab-line glyphs at the window's TOP edge, tagged with
+    // GlyphRowRole::TabLine so the renderer treats them as top chrome.
+    let char_w = 8.0f32;
+    let char_h = 16.0f32;
+    let cols = 4;
+    let win = Rect::new(10.0, 20.0, cols as f32 * char_w, 2.0 * char_h);
+    let text_area = Rect::new(10.0, 20.0 + char_h, cols as f32 * char_w, char_h);
+
+    let mut state = FrameDisplayState::new(cols, 2, char_w, char_h);
+    state.faces.insert(0, Face::new(0));
+
+    let mut matrix = GlyphMatrix::new(2, cols);
+    matrix.rows[0].role = GlyphRowRole::TabLine;
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].height_px = char_h;
+    matrix.rows[0].pixel_y = 0.0;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('T', 0, 0));
+    matrix.rows[1].role = GlyphRowRole::Text;
+    matrix.rows[1].enabled = true;
+    matrix.rows[1].height_px = char_h;
+    matrix.rows[1].pixel_y = 0.0;
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 0));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: win,
+        text_pixel_bounds: text_area,
+        selected: true,
+    });
+
+    let buf = state.materialize();
+
+    let tab_glyphs: Vec<_> = buf
+        .glyphs
+        .iter()
+        .filter_map(|g| match g {
+            FrameGlyph::Char {
+                row_role,
+                char: c,
+                y,
+                ..
+            } if *row_role == GlyphRowRole::TabLine => Some((*c, *y)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tab_glyphs.len(), 1, "tab-line glyph must be materialized");
+    assert_eq!(tab_glyphs[0].0, 'T');
+    assert!(
+        (tab_glyphs[0].1 - win.y).abs() < 0.5,
+        "tab-line glyph y={} must sit at window top {}",
+        tab_glyphs[0].1,
+        win.y
+    );
+
+    let body: Vec<_> = buf
+        .glyphs
+        .iter()
+        .filter_map(|g| match g {
+            FrameGlyph::Char {
+                row_role,
+                char: c,
+                y,
+                ..
+            } if *row_role == GlyphRowRole::Text => Some((*c, *y)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(body[0].0, 'B');
+    assert!(
+        (body[0].1 - text_area.y).abs() < 0.5,
+        "body glyph y={} must sit in the text area at {}",
+        body[0].1,
+        text_area.y
+    );
+}
+
+#[test]
 fn materialize_right_aligns_reversed_row() {
     // A reversed_p (right-to-left) row is flush to the right margin: its glyphs
     // start where the content ends at the right edge, not at column 0.

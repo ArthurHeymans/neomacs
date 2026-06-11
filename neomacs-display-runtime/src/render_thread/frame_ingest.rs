@@ -298,6 +298,45 @@ impl RenderApp {
                         _ => other_count += 1,
                     }
                 }
+                // Role-aware breakdown: reconstruct chrome-row text + Y so we
+                // can tell whether tab-line/header-line glyphs are emitted at
+                // all (and where) vs. silently dropped.
+                {
+                    use crate::core::frame_glyphs::{FrameGlyph, GlyphRowRole};
+                    let mut per_role: std::collections::HashMap<String, (usize, f32, String)> =
+                        std::collections::HashMap::new();
+                    for g in &frame.glyphs {
+                        if let FrameGlyph::Char {
+                            row_role,
+                            char: ch,
+                            y,
+                            window_id,
+                            ..
+                        } = g
+                        {
+                            let key = format!("{:?}/win{}", row_role, window_id);
+                            let e = per_role.entry(key).or_insert((0, *y, String::new()));
+                            e.0 += 1;
+                            e.1 = *y;
+                            if e.2.len() < 60 {
+                                e.2.push(*ch);
+                            }
+                        }
+                    }
+                    let mut tabline_total = 0usize;
+                    for (role, (n, _, _)) in &per_role {
+                        if role.starts_with("TabLine") {
+                            tabline_total += n;
+                        }
+                    }
+                    let mut keys: Vec<_> = per_role.keys().cloned().collect();
+                    keys.sort();
+                    for k in keys {
+                        let (n, y, text) = &per_role[&k];
+                        tracing::info!("DUMP_ROLE {k}: {n} chars y={y:.1} text=[{text}]");
+                    }
+                    tracing::info!("DUMP_ROLE tabline_char_total={tabline_total}");
+                }
                 let cursor_count = frame.window_cursors.len();
                 let active_cursor_count = frame.window_cursors.iter().filter(|c| c.active).count();
                 tracing::info!(
