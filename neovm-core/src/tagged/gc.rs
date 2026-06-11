@@ -1845,7 +1845,7 @@ impl TaggedHeap {
                 let mut prev_slot: *mut *mut MarkerObj = slot;
                 while !(*prev_slot).is_null() {
                     let curr = *prev_slot;
-                    if (*curr).header.gc.marked {
+                    if (*curr).header.gc.is_marked() {
                         // Live — advance prev
                         prev_slot = &mut (*curr).data.next_marker;
                     } else {
@@ -1949,7 +1949,7 @@ impl TaggedHeap {
         let mut obj = self.all_objects;
         while !obj.is_null() {
             unsafe {
-                (*obj).marked = false;
+                (*obj).set_marked(false);
                 obj = (*obj).next;
             }
         }
@@ -2284,7 +2284,7 @@ impl TaggedHeap {
         // not-owned/not-mapped pointer is never a dangling reference.
         if value.is_string() {
             if owned {
-                return unsafe { (*(addr as *const StringObj)).header.marked };
+                return unsafe { (*(addr as *const StringObj)).header.is_marked() };
             }
             return self
                 .mapped_string_index_by_addr
@@ -2294,7 +2294,7 @@ impl TaggedHeap {
         }
         if value.is_float() {
             if owned {
-                return unsafe { (*(addr as *const FloatObj)).header.marked };
+                return unsafe { (*(addr as *const FloatObj)).header.is_marked() };
             }
             let ptr = addr as *const FloatObj;
             return self
@@ -2306,7 +2306,7 @@ impl TaggedHeap {
         }
         if value.is_veclike() {
             if owned {
-                return unsafe { (*(addr as *const VecLikeHeader)).gc.marked };
+                return unsafe { (*(addr as *const VecLikeHeader)).gc.is_marked() };
             }
             return self
                 .mapped_veclike_index_by_addr
@@ -2462,7 +2462,7 @@ impl TaggedHeap {
             let mut obj = self.all_objects;
             while !obj.is_null() {
                 unsafe {
-                    if (*obj).marked {
+                    if (*obj).is_marked() {
                         out.push(obj);
                     }
                     obj = (*obj).next;
@@ -2952,7 +2952,7 @@ impl TaggedHeap {
             let current = self.sweep_noncons_pending;
             unsafe {
                 self.sweep_noncons_pending = (*current).next;
-                if (*current).marked {
+                if (*current).is_marked() {
                     // Survivor: relink onto the (fresh) young list.
                     (*current).next = self.all_objects;
                     self.all_objects = current;
@@ -3132,10 +3132,10 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).header.marked {
+                if (*ptr).header.is_marked() {
                     return;
                 }
-                (*ptr).header.marked = true;
+                (*ptr).header.set_marked(true);
                 let intervals = (*ptr).data.intervals();
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
@@ -3152,10 +3152,10 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).header.marked {
+                if (*ptr).header.is_marked() {
                     return;
                 }
-                (*ptr).header.marked = true;
+                (*ptr).header.set_marked(true);
             };
         } else if val.is_veclike() {
             let ptr = val.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
@@ -3168,10 +3168,10 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).gc.marked {
+                if (*ptr).gc.is_marked() {
                     return;
                 }
-                (*ptr).gc.marked = true;
+                (*ptr).gc.set_marked(true);
                 self.trace_veclike(ptr);
             }
         }
@@ -3495,7 +3495,7 @@ impl TaggedHeap {
         while !current.is_null() {
             unsafe {
                 let next = (*current).next;
-                if (*current).marked {
+                if (*current).is_marked() {
                     // Keep it — advance prev
                     live_bytes = live_bytes.saturating_add(Self::object_bytes_from_header(current));
                     prev = &mut (*current).next;
@@ -3672,7 +3672,7 @@ impl TaggedHeap {
             let mut current = head;
             while !current.is_null() {
                 unsafe {
-                    if (*current).marked {
+                    if (*current).is_marked() {
                         total_marked += 1;
                         // Verify the object's internal data is sane
                         match (*current).kind {

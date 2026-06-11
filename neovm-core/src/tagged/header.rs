@@ -14,6 +14,7 @@
 use super::value::TaggedValue;
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // ---------------------------------------------------------------------------
 // ConsCell — no header, minimal size
@@ -83,8 +84,11 @@ pub enum HeapObjectKind {
 
 #[repr(C)]
 pub struct GcHeader {
-    /// Mark bit: set during mark phase, cleared before each GC cycle.
-    pub marked: bool,
+    /// Mark bit: set during mark phase, cleared before each GC cycle. Accessed
+    /// via relaxed atomics (`is_marked`/`set_marked`) so a future concurrent GC
+    /// thread can set it while the mutator allocate-blacks / reads it without a
+    /// data race; `AtomicBool` has the same size/layout as `bool`.
+    pub marked: AtomicBool,
     /// Exact object category for typed sweep/deallocation.
     pub kind: HeapObjectKind,
     /// Tenured (old generation): a permanently-live heap object — the
@@ -101,11 +105,23 @@ pub struct GcHeader {
 impl GcHeader {
     pub fn new(kind: HeapObjectKind) -> Self {
         Self {
-            marked: false,
+            marked: AtomicBool::new(false),
             kind,
             tenured: false,
             next: std::ptr::null_mut(),
         }
+    }
+
+    /// Read the mark bit (relaxed).
+    #[inline]
+    pub fn is_marked(&self) -> bool {
+        self.marked.load(Ordering::Relaxed)
+    }
+
+    /// Set the mark bit (relaxed).
+    #[inline]
+    pub fn set_marked(&self, value: bool) {
+        self.marked.store(value, Ordering::Relaxed);
     }
 }
 
