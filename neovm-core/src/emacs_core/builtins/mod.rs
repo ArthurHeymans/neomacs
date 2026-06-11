@@ -1321,7 +1321,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr("symbol-plist", builtin_symbol_plist_fn, 1, Some(1));
     ctx.defsubr("indirect-function", builtin_indirect_function, 1, Some(2));
-    ctx.defsubr("signal", super::errors::builtin_signal, 2, Some(2));
+    ctx.defsubr("signal", super::errors::builtin_signal, 1, Some(2));
     ctx.defsubr(
         "getenv-internal",
         super::process::builtin_getenv_internal,

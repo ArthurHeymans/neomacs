@@ -532,18 +532,20 @@ fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) 
 /// Eval-aware `signal`, including GNU's "peculiar error" handling for
 /// `nil` as the public error symbol.
 pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if args.len() != 2 {
+    if args.is_empty() || args.len() > 2 {
         return Err(signal(
             "wrong-number-of-arguments",
             vec![Value::symbol("signal"), Value::fixnum(args.len() as i64)],
         ));
     }
+    // GNU 31.0.90: `signal` is DEFUN(1, 2) — DATA is optional, defaulting to nil.
+    let data = args.get(1).copied().unwrap_or(Value::NIL);
 
     if args[0].is_nil() {
-        let flow = if args[1].is_cons() {
-            build_peculiar_signal_flow(eval, args[1])
+        let flow = if data.is_cons() {
+            build_peculiar_signal_flow(eval, data)
         } else {
-            build_signal_flow("error", args[1])
+            build_signal_flow("error", data)
         };
         return dispatch_signal_flow(eval, flow);
     }
@@ -558,7 +560,7 @@ pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) 
         }
     };
 
-    let flow = build_signal_flow(&sym_name, args[1]);
+    let flow = build_signal_flow(&sym_name, data);
 
     dispatch_signal_flow(eval, flow)
 }
