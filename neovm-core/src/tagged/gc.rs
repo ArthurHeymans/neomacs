@@ -3261,48 +3261,49 @@ impl TaggedHeap {
         match unsafe { (*ptr).type_tag } {
             VecLikeType::Vector => {
                 let obj = ptr as *const VectorObj;
-                for val in unsafe { &(*obj).data } {
+                for val in unsafe { (*obj).data.iter_atomic() } {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "vector-slot");
+                        self.push_gray(val, "vector-slot");
                     }
                 }
             }
             VecLikeType::CharTable => {
                 let obj = unsafe { &*(ptr as *const CharTableObj) };
                 for (value, origin) in [
-                    (obj.defalt, "char-table-default"),
-                    (obj.parent, "char-table-parent"),
-                    (obj.purpose, "char-table-purpose"),
-                    (obj.ascii, "char-table-ascii"),
+                    (load_value_atomic(&obj.defalt), "char-table-default"),
+                    (load_value_atomic(&obj.parent), "char-table-parent"),
+                    (load_value_atomic(&obj.purpose), "char-table-purpose"),
+                    (load_value_atomic(&obj.ascii), "char-table-ascii"),
                 ] {
                     if value.is_heap_object() {
                         self.push_gray(value, origin);
                     }
                 }
-                for val in &obj.contents {
+                for slot in &obj.contents {
+                    let val = load_value_atomic(slot);
                     if val.is_heap_object() {
-                        self.push_gray(*val, "char-table-content");
+                        self.push_gray(val, "char-table-content");
                     }
                 }
-                for val in &obj.extras {
+                for val in obj.extras.iter_atomic() {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "char-table-extra");
+                        self.push_gray(val, "char-table-extra");
                     }
                 }
             }
             VecLikeType::SubCharTable => {
                 let obj = unsafe { &*(ptr as *const SubCharTableObj) };
-                for val in &obj.contents {
+                for val in obj.contents.iter_atomic() {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "sub-char-table-content");
+                        self.push_gray(val, "sub-char-table-content");
                     }
                 }
             }
             VecLikeType::Record => {
                 let obj = ptr as *const RecordObj;
-                for val in unsafe { &(*obj).data } {
+                for val in unsafe { (*obj).data.iter_atomic() } {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "record-slot");
+                        self.push_gray(val, "record-slot");
                     }
                 }
             }
@@ -3310,23 +3311,25 @@ impl TaggedHeap {
                 let obj = ptr as *const HashTableObj;
                 let ht = unsafe { &(*obj).table };
                 // Trace all values in the hash table
-                for val in ht.data.values() {
+                for slot in ht.data.values() {
+                    let val = load_value_atomic(slot);
                     if val.is_heap_object() {
-                        self.push_gray(*val, "hash-table-value");
+                        self.push_gray(val, "hash-table-value");
                     }
                 }
                 // Trace key snapshots (original key objects)
-                for val in ht.key_snapshots.values() {
+                for slot in ht.key_snapshots.values() {
+                    let val = load_value_atomic(slot);
                     if val.is_heap_object() {
-                        self.push_gray(*val, "hash-table-key-snapshot");
+                        self.push_gray(val, "hash-table-key-snapshot");
                     }
                 }
             }
             VecLikeType::Obarray => {
                 let obj = unsafe { &*(ptr as *const ObarrayObj) };
-                for val in &obj.buckets {
+                for val in obj.buckets.iter_atomic() {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "obarray-bucket");
+                        self.push_gray(val, "obarray-bucket");
                     }
                 }
             }
@@ -3334,9 +3337,9 @@ impl TaggedHeap {
                 // Closures are plain Value vectors (GNU PVEC_CLOSURE compat).
                 // Trace ALL slots uniformly — no type-specific logic needed.
                 let obj = ptr as *const LambdaObj;
-                for val in unsafe { &(*obj).data } {
+                for val in unsafe { (*obj).data.iter_atomic() } {
                     if val.is_heap_object() {
-                        self.push_gray(*val, "closure-slot");
+                        self.push_gray(val, "closure-slot");
                     }
                 }
             }
@@ -3380,8 +3383,9 @@ impl TaggedHeap {
                 let obj = ptr as *const OverlayObj;
                 let data = unsafe { &(*obj).data };
                 // Trace the property list
-                if data.plist.is_heap_object() {
-                    self.push_gray(data.plist, "overlay-plist");
+                let plist = load_value_atomic(&data.plist);
+                if plist.is_heap_object() {
+                    self.push_gray(plist, "overlay-plist");
                 }
             }
             VecLikeType::SymbolWithPos => {
@@ -3411,11 +3415,14 @@ impl TaggedHeap {
                 let obj = ptr as *const XwidgetObj;
                 let fields = unsafe {
                     [
-                        ((*obj).plist, "xwidget-plist"),
-                        ((*obj).type_, "xwidget-type"),
-                        ((*obj).buffer, "xwidget-buffer"),
-                        ((*obj).title, "xwidget-title"),
-                        ((*obj).script_callbacks, "xwidget-script-callbacks"),
+                        (load_value_atomic(&(*obj).plist), "xwidget-plist"),
+                        (load_value_atomic(&(*obj).type_), "xwidget-type"),
+                        (load_value_atomic(&(*obj).buffer), "xwidget-buffer"),
+                        (load_value_atomic(&(*obj).title), "xwidget-title"),
+                        (
+                            load_value_atomic(&(*obj).script_callbacks),
+                            "xwidget-script-callbacks",
+                        ),
                     ]
                 };
                 for (value, label) in fields {

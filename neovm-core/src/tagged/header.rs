@@ -433,6 +433,50 @@ impl LispValueVec {
             LispValueVecStorage::Mapped { .. } => 0,
         }
     }
+
+    /// Atomic (relaxed) load of element `i`, for GC tracing that may run on a
+    /// concurrent collector thread while the mutator stores via `store_atomic`.
+    /// Panics on out-of-bounds, like slice indexing.
+    #[inline]
+    pub fn load_atomic(&self, i: usize) -> TaggedValue {
+        let p = &self.as_slice()[i] as *const TaggedValue as *const AtomicUsize;
+        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+    }
+
+    /// Atomic (relaxed) store to element `i` of owned storage. The element must
+    /// exist; this is for in-place slot writes (e.g. `aset`), not growth.
+    #[inline]
+    pub fn store_atomic(&mut self, i: usize, value: TaggedValue) {
+        let data = self.ensure_owned();
+        let p = &data[i] as *const TaggedValue as *const AtomicUsize;
+        unsafe { (*p).store(value.0, Ordering::Relaxed) };
+    }
+
+    /// Iterate every element via atomic (relaxed) loads — the GC tracing read
+    /// path. Yields owned `TaggedValue`s (snapshots of each slot word).
+    #[inline]
+    pub fn iter_atomic(&self) -> impl Iterator<Item = TaggedValue> + '_ {
+        self.as_slice().iter().map(|slot| {
+            let p = slot as *const TaggedValue as *const AtomicUsize;
+            TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+        })
+    }
+}
+
+/// Atomic (relaxed) load of a single `TaggedValue` slot in place — for GC reads
+/// of individual object fields (char-table default/parent/..., symbol-with-pos,
+/// xwidget, overlay plist, module-function docs).
+#[inline]
+pub fn load_value_atomic(slot: &TaggedValue) -> TaggedValue {
+    let p = slot as *const TaggedValue as *const AtomicUsize;
+    TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+}
+
+/// Atomic (relaxed) store to a single `TaggedValue` slot in place.
+#[inline]
+pub fn store_value_atomic(slot: &mut TaggedValue, value: TaggedValue) {
+    let p = slot as *const TaggedValue as *const AtomicUsize;
+    unsafe { (*p).store(value.0, Ordering::Relaxed) };
 }
 
 impl From<Vec<TaggedValue>> for LispValueVec {

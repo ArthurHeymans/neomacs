@@ -64,12 +64,12 @@ pub fn set_vector_slot(value: TaggedValue, index: usize, item: TaggedValue) -> b
     }
     let ptr = value.as_veclike_ptr().unwrap() as *mut VectorObj;
     let data = unsafe { (*ptr).data.ensure_owned() };
-    let slot = match data.get_mut(index) {
-        Some(slot) => slot,
-        None => return false,
-    };
+    if index >= data.len() {
+        return false;
+    }
     note_heap_slot_write(value, HeapWriteKind::VectorSlot, index, item);
-    *slot = item;
+    // Atomic store so a concurrent GC read of this slot sees a whole value.
+    unsafe { (*ptr).data.store_atomic(index, item) };
     true
 }
 
