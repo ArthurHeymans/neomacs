@@ -6573,49 +6573,65 @@ impl Context {
         self.gc_collect_exact();
     }
 
-    /// Perform a full mark-and-sweep garbage collection using only explicit roots.
+    /// Perform a full mark-and-sweep garbage collection using only explicit
+    /// roots. Always runs to completion synchronously (force-completes any
+    /// in-flight incremental mark), matching GNU `garbage-collect` semantics.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn gc_collect_exact(&mut self) {
-        self.gc_collect_from_current_roots();
+        self.gc_collect_from_current_roots_impl(true);
     }
 
+    /// Safe-point GC entry. Uses incremental marking on partitioned cycles
+    /// (one bounded slice per call) when `NEOVM_GC_INCREMENTAL=1`; otherwise a
+    /// stop-the-world collection.
     fn gc_collect_from_current_roots(&mut self) {
+        self.gc_collect_from_current_roots_impl(false);
+    }
+
+    /// Drive a collection from the current roots.
+    ///
+    /// `force_complete` (explicit `garbage-collect`) runs synchronously to a
+    /// full sweep. Otherwise, on partitioned cycles with incremental marking
+    /// enabled, marking is sliced across safe points: each call advances one
+    /// bounded slice and only the slice that drains the gray queue runs mark
+    /// termination + sweep. The first cycle and non-incremental builds take the
+    /// stop-the-world path.
+    fn gc_collect_from_current_roots_impl(&mut self, force_complete: bool) {
+        // Per-slice mark budget (objects traced before yielding to the mutator).
+        const INCREMENTAL_MARK_BUDGET: usize = 4096;
         let start = std::time::Instant::now();
         self.lexenv_assq_cache.clear();
         self.lexenv_special_cache.clear();
         let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
         // Safety: GC is stop-the-world with exclusive `&mut self`. Root
         // enumeration only reads Context state while seeding the collector via
-        // the raw heap pointer.
+        // the raw heap pointer, which aliases `self.tagged_heap`.
         unsafe {
-            (*heap_ptr).begin_collection();
-            #[cfg(debug_assertions)]
-            let mut root_index = 0usize;
-            self.trace_roots(&mut |root| {
-                #[cfg(debug_assertions)]
-                {
-                    let origin = format!("context-root#{root_index}");
-                    root_index += 1;
-                    (*heap_ptr).seed_root_with_origin(root, &origin);
+            if (*heap_ptr).mark_in_progress() {
+                // An incremental mark is underway. Advance one slice, unless we
+                // must finish now (explicit GC, or allocation has outrun marking
+                // past a hard cap so the heap would grow unbounded otherwise).
+                let cap = (*heap_ptr).gc_threshold().saturating_mul(4);
+                let must_finish = force_complete || (*heap_ptr).bytes_since_gc() > cap;
+                if !must_finish && !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
+                    return; // still marking; defer completion bookkeeping
                 }
-                #[cfg(not(debug_assertions))]
-                {
-                    (*heap_ptr).seed_root(root);
+                self.terminate_incremental_mark(heap_ptr);
+            } else if !force_complete && (*heap_ptr).should_run_incremental() {
+                // Start a fresh incremental mark with the initial root snapshot.
+                (*heap_ptr).incremental_begin();
+                self.seed_all_context_roots(heap_ptr);
+                if !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
+                    return; // still marking; defer completion bookkeeping
                 }
-            });
-            let heap_identity = (*heap_ptr).identity();
-            let mut thread_local_roots = Vec::new();
-            collect_thread_local_gc_roots(&mut thread_local_roots, heap_identity);
-            for (root, origin) in thread_local_roots {
-                (*heap_ptr).seed_root_with_origin(root, origin);
+                self.terminate_incremental_mark(heap_ptr);
+            } else {
+                // Stop-the-world full collection (first cycle / non-incremental
+                // build / forced).
+                (*heap_ptr).begin_collection();
+                self.seed_all_context_roots(heap_ptr);
+                (*heap_ptr).complete_collection();
             }
-            // Install per-buffer marker-chain head slots so
-            // `unchain_dead_markers` can splice unmarked markers out of
-            // every live chain before sweep. Mirrors GNU
-            // `sweep_buffer → unchain_dead_markers` (alloc.c).
-            let chain_heads = self.buffers.collect_marker_chain_head_slots();
-            (*heap_ptr).set_marker_chain_head_slots(chain_heads);
-            (*heap_ptr).complete_collection();
         }
         self.gc_pending = false;
         self.gc_count += 1;
@@ -6628,6 +6644,64 @@ impl Context {
             // mode from treating hook bookkeeping allocation as a fresh
             // allocation-bearing safe point.
             self.tagged_heap.reset_bytes_since_gc();
+        }
+    }
+
+    /// Seed every evaluator/context root into the collector's gray queue and
+    /// install the per-buffer marker-chain head slots used by sweep. Does NOT
+    /// clear marks, so it is safe to call both at incremental start and again
+    /// at mark termination (re-snapshotting roots).
+    ///
+    /// Safety: caller holds exclusive `&mut self`; `heap_ptr` aliases
+    /// `self.tagged_heap`. Root enumeration only reads Context state.
+    unsafe fn seed_all_context_roots(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        #[cfg(debug_assertions)]
+        let mut root_index = 0usize;
+        self.trace_roots(&mut |root| {
+            #[cfg(debug_assertions)]
+            {
+                let origin = format!("context-root#{root_index}");
+                root_index += 1;
+                unsafe {
+                    (*heap_ptr).seed_root_with_origin(root, &origin);
+                }
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                unsafe {
+                    (*heap_ptr).seed_root(root);
+                }
+            }
+        });
+        let heap_identity = unsafe { (*heap_ptr).identity() };
+        let mut thread_local_roots = Vec::new();
+        collect_thread_local_gc_roots(&mut thread_local_roots, heap_identity);
+        for (root, origin) in thread_local_roots {
+            unsafe {
+                (*heap_ptr).seed_root_with_origin(root, origin);
+            }
+        }
+        // Install per-buffer marker-chain head slots so `unchain_dead_markers`
+        // can splice unmarked markers out of every live chain before sweep.
+        // Mirrors GNU `sweep_buffer → unchain_dead_markers` (alloc.c).
+        let chain_heads = self.buffers.collect_marker_chain_head_slots();
+        unsafe {
+            (*heap_ptr).set_marker_chain_head_slots(chain_heads);
+        }
+    }
+
+    /// Finish an in-flight incremental mark: re-snapshot the roots (covering
+    /// root->white edges the heap write barrier cannot observe), drain marking
+    /// to a fixpoint, then verify+sweep. Runs stop-the-world.
+    ///
+    /// Safety: as `seed_all_context_roots`.
+    unsafe fn terminate_incremental_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        unsafe {
+            self.seed_all_context_roots(heap_ptr);
+            let bytes_before = (*heap_ptr).live_bytes();
+            let pause_t0 = std::time::Instant::now();
+            (*heap_ptr).incremental_drain_all();
+            (*heap_ptr).incremental_finish(bytes_before, pause_t0);
         }
     }
 
@@ -6660,6 +6734,11 @@ impl Context {
     fn gc_safe_point_exact_should_collect(&mut self) -> bool {
         if self.gc_inhibit_depth > 0 {
             return false;
+        }
+        // An in-flight incremental mark must keep getting slices at every safe
+        // point until it terminates, regardless of the allocation threshold.
+        if self.tagged_heap.mark_in_progress() {
+            return true;
         }
         if self.gc_pending {
             return true;

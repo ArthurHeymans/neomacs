@@ -771,6 +771,22 @@ pub struct TaggedHeap {
     /// this owner a dumped object?" test in the write-barrier hot path.
     dump_addr_lo: usize,
     dump_addr_hi: usize,
+
+    // --- Incremental marking state (step 7). Gated by `incremental`; default
+    // off => identical to the stop-the-world collector. Applies only to
+    // partitioned cycles (after the first promotion); the first cycle stays
+    // STW so promotion/blackening is unaffected.
+    /// When true, marking is sliced across evaluator safe points using an
+    /// incremental-update (Steele) write barrier: dirty owners (written during
+    /// marking) are re-traced so no black->white edge survives, and roots are
+    /// re-snapshotted at mark termination.
+    incremental: bool,
+    /// True between the start of an incremental mark and its termination/sweep.
+    /// While set, every safe point advances marking by one bounded slice.
+    mark_in_progress: bool,
+    /// Accumulated marking time (slices + final drain) for the in-flight
+    /// incremental cycle, reported as `mark_us` at termination. Reset at start.
+    incremental_mark_us: u64,
 }
 
 impl TaggedHeap {
@@ -813,6 +829,9 @@ impl TaggedHeap {
             partition_dump: std::env::var("NEOVM_GC_PARTITION_DUMP").as_deref() == Ok("1"),
             dump_blackened: false,
             mapped_remembered: FxHashSet::default(),
+            incremental: std::env::var("NEOVM_GC_INCREMENTAL").as_deref() == Ok("1"),
+            mark_in_progress: false,
+            incremental_mark_us: 0,
             dump_addr_lo: usize::MAX,
             dump_addr_hi: 0,
         }
@@ -2122,32 +2141,43 @@ impl TaggedHeap {
             .map(|&bits| TaggedValue(bits))
             .collect();
         for owner in owners {
-            if owner.is_cons() {
-                let ptr = owner.xcons_ptr();
-                let car = unsafe { (*ptr).car };
-                let cdr = unsafe { (*ptr).cdr() };
-                if car.is_heap_object() {
-                    self.push_gray(car, "remembered-dump-cons-car");
-                }
-                if cdr.is_heap_object() {
-                    self.push_gray(cdr, "remembered-dump-cons-cdr");
-                }
-            } else if owner.is_veclike() {
-                let ptr = owner.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
-                unsafe { self.trace_veclike(ptr) };
-            } else if owner.is_string() {
-                let ptr = owner.as_string_ptr().unwrap() as *const StringObj;
-                let intervals = unsafe { (*ptr).data.intervals() };
+            self.push_value_children_to_gray(owner, "remembered-dump-child");
+        }
+    }
+
+    /// Push every heap child of `owner` onto the gray queue (re-trace its
+    /// outgoing references). Unlike `mark_value`, this does NOT consult the
+    /// owner's own mark bit, so it re-examines an already-black owner's slots —
+    /// exactly what the incremental-update barrier and the dump remembered set
+    /// both need. Mirrors `trace_veclike`/cons/string child enumeration.
+    fn push_value_children_to_gray(&mut self, owner: TaggedValue, origin: &'static str) {
+        if owner.is_cons() {
+            let ptr = owner.xcons_ptr();
+            let car = unsafe { (*ptr).car };
+            let cdr = unsafe { (*ptr).cdr() };
+            if car.is_heap_object() {
+                self.push_gray(car, origin);
+            }
+            if cdr.is_heap_object() {
+                self.push_gray(cdr, origin);
+            }
+        } else if owner.is_veclike() {
+            if let Some(ptr) = owner.as_veclike_ptr() {
+                unsafe { self.trace_veclike(ptr as *mut VecLikeHeader) };
+            }
+        } else if owner.is_string() {
+            if let Some(ptr) = owner.as_string_ptr() {
+                let intervals = unsafe { (*(ptr as *const StringObj)).data.intervals() };
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
                         if root.is_heap_object() {
-                            self.push_gray(root, "remembered-dump-string-interval");
+                            self.push_gray(root, origin);
                         }
                     });
                 }
             }
-            // Floats have no heap children.
         }
+        // Floats have no heap children.
     }
 
     /// Is `value` currently marked? Covers heap and mapped objects of every
@@ -2338,6 +2368,94 @@ impl TaggedHeap {
         }
     }
 
+    /// Verification gate for incremental marking (env `NEOVM_GC_VERIFY_PARTITION`,
+    /// incremental builds). Complements `verify_dump_partition`, which covers
+    /// mapped + tenured owners: this checks the remaining black objects —
+    /// YOUNG non-cons (`all_objects`) and every marked heap CONS — for the
+    /// strong tri-color invariant (no black object points to a white object).
+    /// A violation means the incremental-update barrier missed a black->white
+    /// edge created by the mutator during marking (a UAF about to happen).
+    /// Panics on the first batch of violations. Expensive; verification only.
+    fn verify_incremental_tricolor(&mut self) {
+        let mut violations: std::collections::BTreeMap<String, usize> =
+            std::collections::BTreeMap::new();
+        let mut sample: Option<usize> = None;
+
+        // -- Young non-cons objects that are marked (black). --
+        let young: Vec<*mut GcHeader> = {
+            let mut out = Vec::new();
+            let mut obj = self.all_objects;
+            while !obj.is_null() {
+                unsafe {
+                    if (*obj).marked {
+                        out.push(obj);
+                    }
+                    obj = (*obj).next;
+                }
+            }
+            out
+        };
+        for header in young {
+            let kind = unsafe { (*header).kind };
+            let children: Vec<TaggedValue> = match kind {
+                HeapObjectKind::VecLike => {
+                    self.collect_veclike_children(header as *mut VecLikeHeader)
+                }
+                HeapObjectKind::String => {
+                    let mut roots = Vec::new();
+                    let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
+                    if !intervals.is_empty() {
+                        intervals.for_each_root(|root| roots.push(root));
+                    }
+                    roots
+                }
+                HeapObjectKind::Float => Vec::new(),
+            };
+            let owner = format!("young:{kind:?}");
+            for child in children {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    *violations.entry(owner.clone()).or_insert(0) += 1;
+                    sample.get_or_insert(child.0);
+                }
+            }
+        }
+
+        // -- Every marked heap cons cell: car/cdr must be marked. --
+        let blocks: Vec<(*mut ConsCell, usize)> = self
+            .cons_blocks
+            .iter()
+            .map(|b| (b.cells_ptr(), b.next_index as usize))
+            .collect();
+        for (cells, count) in blocks {
+            for i in 0..count {
+                let cell = unsafe { cells.add(i) };
+                if !self.is_value_marked(unsafe { TaggedValue::from_cons_ptr(cell) }) {
+                    continue;
+                }
+                for child in [unsafe { (*cell).car }, unsafe { (*cell).cdr() }] {
+                    if child.is_heap_object() && !self.is_value_marked(child) {
+                        *violations.entry("young:Cons".to_string()).or_insert(0) += 1;
+                        sample.get_or_insert(child.0);
+                    }
+                }
+            }
+        }
+
+        if !violations.is_empty() {
+            let total: usize = violations.values().sum();
+            eprintln!("INCREMENTAL_TRICOLOR_VIOLATIONS total={total}");
+            for (k, n) in &violations {
+                eprintln!("  {n:>6}  {k}");
+            }
+            panic!(
+                "incremental tri-color verification: {total} black->white edges \
+                 (sample value={:#x}) — the incremental-update barrier missed a mutation \
+                 (UAF risk). See INCREMENTAL_TRICOLOR_VIOLATIONS above.",
+                sample.unwrap_or(0)
+            );
+        }
+    }
+
     /// Direct children of a mapped vectorlike object (read-only) for the verifier.
     fn collect_veclike_children(&self, ptr: *mut VecLikeHeader) -> Vec<TaggedValue> {
         let mut out = Vec::new();
@@ -2466,6 +2584,15 @@ impl TaggedHeap {
         self.mark_all();
         let mark_us = mark_t0.elapsed().as_micros() as u64;
 
+        self.finalize_collection(mark_us, bytes_before, t0);
+    }
+
+    /// Post-mark portion of a collection: verify, sweep, promote, account, and
+    /// clear the remembered/dirty bookkeeping. Shared by the stop-the-world
+    /// `complete_collection` and the incremental mark-termination path. By the
+    /// time this runs the gray queue is fully drained (marking is complete) and
+    /// the marker chain heads are installed.
+    fn finalize_collection(&mut self, mark_us: u64, bytes_before: usize, t0: std::time::Instant) {
         // Dump-partition safety gate: prove no live heap object reachable only
         // through a dumped object was left unmarked (i.e. the write barrier's
         // remembered set is complete). Off unless explicitly verifying.
@@ -2474,6 +2601,11 @@ impl TaggedHeap {
             && std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1")
         {
             self.verify_dump_partition();
+            // Incremental marking adds young-black->young-white as a possible
+            // failure mode (a missed write-barrier owner). Check it too.
+            if self.incremental {
+                self.verify_incremental_tricolor();
+            }
         }
 
         let sweep_t0 = std::time::Instant::now();
@@ -2564,6 +2696,110 @@ impl TaggedHeap {
         while let Some(val) = self.gray_queue.pop() {
             self.mark_value(val);
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Incremental marking (step 7)
+    // ---------------------------------------------------------------------
+
+    /// True if incremental marking should drive THIS collection. Only on
+    /// partitioned cycles (after the first-cycle promotion), so promotion and
+    /// blackening stay on the simple stop-the-world path.
+    pub fn should_run_incremental(&self) -> bool {
+        self.incremental && self.partition_dump && self.dump_blackened
+    }
+
+    /// True while an incremental mark is underway (between start and sweep).
+    pub fn mark_in_progress(&self) -> bool {
+        self.mark_in_progress
+    }
+
+    /// Begin an incremental mark: clear young marks + seed the internal and
+    /// remembered roots (`begin_collection`), then turn on the incremental
+    /// write barrier so every subsequent heap mutation records its owner as
+    /// dirty. The caller seeds the context/thread-local roots afterwards.
+    pub(crate) fn incremental_begin(&mut self) {
+        self.begin_collection();
+        // Owner tracking feeds `dirty_owners`, which each slice re-traces so no
+        // black->white edge created by the mutator survives (Steele barrier).
+        self.set_write_tracking_mode(WriteTrackingMode::OwnersOnly);
+        self.mark_in_progress = true;
+        self.incremental_mark_us = 0;
+    }
+
+    /// Re-trace every owner the barrier has recorded dirty since the last drain,
+    /// pushing their current children onto the gray queue. Clears the dirty set.
+    fn drain_dirty_owners_to_gray(&mut self) {
+        if self.dirty_owners.is_empty() {
+            return;
+        }
+        let owners = std::mem::take(&mut self.dirty_owners);
+        self.dirty_owner_bits.clear();
+        for owner in owners {
+            self.push_value_children_to_gray(owner, "incremental-dirty-owner");
+        }
+    }
+
+    /// Advance marking by one bounded slice. Drains the barrier's dirty owners,
+    /// then marks up to `budget` gray objects. Returns true when marking has
+    /// reached a fixpoint (gray queue empty AND no dirty owners pending) — the
+    /// signal to run mark termination. Each call is a short, bounded pause.
+    pub(crate) fn incremental_mark_slice(&mut self, budget: usize) -> bool {
+        let t0 = std::time::Instant::now();
+        self.drain_dirty_owners_to_gray();
+        let mut marked = 0usize;
+        while marked < budget {
+            match self.gray_queue.pop() {
+                Some(val) => {
+                    self.mark_value(val);
+                    marked += 1;
+                }
+                None => break,
+            }
+        }
+        let slice_us = t0.elapsed().as_micros() as u64;
+        self.incremental_mark_us += slice_us;
+        // Marking (mark_value) is GC-internal and never trips the barrier, so
+        // no new dirty owners appear during this loop; the queue state is the
+        // complete picture.
+        let drained = self.gray_queue.is_empty() && self.dirty_owners.is_empty();
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC slice {slice_us}us marked={marked} gray_left={} drained={drained}",
+                self.gray_queue.len(),
+            );
+        }
+        drained
+    }
+
+    /// Drain ALL remaining marking work to a fixpoint (no budget). Used at mark
+    /// termination, after the roots have been re-snapshotted, while the world is
+    /// stopped. Loops because draining dirty owners can enqueue more gray work.
+    pub(crate) fn incremental_drain_all(&mut self) {
+        let t0 = std::time::Instant::now();
+        loop {
+            self.drain_dirty_owners_to_gray();
+            if self.gray_queue.is_empty() {
+                break;
+            }
+            self.mark_all();
+            if self.dirty_owners.is_empty() {
+                break;
+            }
+        }
+        self.incremental_mark_us += t0.elapsed().as_micros() as u64;
+    }
+
+    /// Run mark termination's sweep + accounting, then leave the incremental
+    /// state. Marking must already be drained to a fixpoint and the marker
+    /// chain heads installed. `pause_t0` stamps the termination (sweep) pause.
+    pub(crate) fn incremental_finish(&mut self, bytes_before: usize, pause_t0: std::time::Instant) {
+        let mark_us = self.incremental_mark_us;
+        self.finalize_collection(mark_us, bytes_before, pause_t0);
+        // Leave the marking barrier off between cycles; the dump remembered set
+        // is still maintained unconditionally in `record_heap_write`.
+        self.set_write_tracking_mode(WriteTrackingMode::Disabled);
+        self.mark_in_progress = false;
     }
 
     fn push_gray(&mut self, val: TaggedValue, origin: &str) {
