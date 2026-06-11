@@ -564,7 +564,7 @@ mod gnutls;
 pub(crate) mod higher_order;
 mod hooks;
 pub(crate) mod keymaps;
-mod misc_eval;
+pub(crate) mod misc_eval;
 pub(crate) mod search;
 mod stubs;
 pub(crate) mod symbols;

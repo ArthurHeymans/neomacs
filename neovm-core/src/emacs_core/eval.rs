@@ -4143,6 +4143,14 @@ impl Context {
         obarray.set_symbol_value("deactivate-mark", Value::NIL);
         obarray.make_special("deactivate-mark");
         obarray.make_buffer_local("deactivate-mark", true);
+        // GNU `keyboard.c` DEFVARs.  `command_loop_1` resets
+        // `disable-point-adjustment` to nil before each command; commands may
+        // set it non-nil to suppress the post-command `adjust_point_for_property`
+        // step.  `global-disable-point-adjustment` is the permanent override.
+        obarray.set_symbol_value("disable-point-adjustment", Value::NIL);
+        obarray.make_special("disable-point-adjustment");
+        obarray.set_symbol_value("global-disable-point-adjustment", Value::NIL);
+        obarray.make_special("global-disable-point-adjustment");
         obarray.set_symbol_value("mark-active", Value::NIL);
         obarray.set_symbol_value("mark-even-if-inactive", Value::T);
         obarray.make_special("mark-even-if-inactive");
@@ -5836,6 +5844,18 @@ impl Context {
                 let _ = self.buffers.record_undo_point_before_command(current_id);
             }
 
+            // GNU `keyboard.c:1477-1486` snapshots prev-buffer/modiff and
+            // `last_point_position = PT` here, then resets
+            // `disable-point-adjustment` to nil so a command must opt back in
+            // to suppress the post-command point adjustment.
+            let apfp_prev_buffer = self.buffers.current_buffer_id();
+            let apfp_last_pt = apfp_prev_buffer.map(|id| self.apfp_point(id)).unwrap_or(0);
+            let apfp_prev_modiff = apfp_prev_buffer
+                .and_then(|id| self.buffers.get(id))
+                .map(|b| b.modified_tick())
+                .unwrap_or(0);
+            self.assign("disable-point-adjustment", Value::NIL);
+
             // Execute the remapped command, matching GNU's
             // `calln (Qcommand_execute, Vthis_command)`.
             let exec_result = self.dispatch_command_in_loop(remapped);
@@ -5871,6 +5891,43 @@ impl Context {
 
             // Run post-command-hook via safe-run-hooks (Finding 7).
             self.safe_run_hook_if_bound("post-command-hook")?;
+
+            // GNU `keyboard.c:1650-1671` finalize block: adjust point out of
+            // invisible/intangible text after the command.  Gated like GNU on
+            // same-buffer, the selected window showing that buffer, point
+            // having actually moved, and neither disable var being set.
+            {
+                let cur_buffer = self.buffers.current_buffer_id();
+                let win_buffer = self
+                    .frames
+                    .selected_frame()
+                    .and_then(|f| f.selected_window())
+                    .and_then(|w| w.buffer_id());
+                let cur_pt = cur_buffer.map(|id| self.apfp_point(id)).unwrap_or(0);
+                let disabled = self
+                    .eval_symbol("disable-point-adjustment")
+                    .unwrap_or(Value::NIL)
+                    .is_truthy()
+                    || self
+                        .eval_symbol("global-disable-point-adjustment")
+                        .unwrap_or(Value::NIL)
+                        .is_truthy();
+                if cur_buffer.is_some()
+                    && cur_buffer == apfp_prev_buffer
+                    && cur_buffer == win_buffer
+                    && apfp_last_pt != cur_pt
+                    && !disabled
+                {
+                    let modified = cur_buffer
+                        .and_then(|id| self.buffers.get(id))
+                        .map(|b| b.modified_tick())
+                        .unwrap_or(apfp_prev_modiff)
+                        != apfp_prev_modiff;
+                    self.adjust_point_for_property(apfp_last_pt, modified)?;
+                    // Re-align the selected window with the adjusted point.
+                    self.sync_current_buffer_to_selected_window();
+                }
+            }
 
             // GNU updates the command-history variables after
             // post-command-hook (`keyboard.c`: kset_last_command and
@@ -13154,6 +13211,175 @@ impl Context {
 
     pub(crate) fn interactive_minibuffer_read_count(&self) -> u64 {
         self.interactive_minibuffer_read_count
+    }
+
+    // --- Post-command point adjustment (GNU `keyboard.c`) -------------------
+
+    /// Current buffer point as a 1-based Lisp char position.
+    fn apfp_point(&self, id: crate::buffer::BufferId) -> i64 {
+        self.buffers
+            .get(id)
+            .map(|b| b.point_char_pos().to_lisp().as_i64())
+            .unwrap_or(1)
+    }
+
+    /// Raw `SET_PT` equivalent: move point without running point-motion or
+    /// intangibility hooks (GNU's `adjust_point_for_property` uses `SET_PT`).
+    fn apfp_set_point(&mut self, id: crate::buffer::BufferId, lisp_pos: i64) {
+        let byte = match self.buffers.get(id) {
+            Some(b) => b.lisp_pos_to_accessible_emacs_byte_pos(
+                crate::buffer::position::LispCharPos1::new(lisp_pos.max(1)),
+            ),
+            None => return,
+        };
+        let _ = self.buffers.goto_buffer_emacs_byte_pos(id, byte);
+    }
+
+    fn apfp_char_property(&mut self, pos: i64, prop: Value) -> Result<Value, Flow> {
+        super::textprop::builtin_get_char_property(self, vec![Value::fixnum(pos), prop, Value::NIL])
+    }
+
+    fn apfp_pos_property(&mut self, pos: i64, prop: Value) -> Result<Value, Flow> {
+        super::builtins::misc_eval::builtin_get_pos_property(
+            self,
+            vec![Value::fixnum(pos), prop, Value::NIL],
+        )
+    }
+
+    fn apfp_next_change(&mut self, pos: i64, prop: Value, zv: i64) -> Result<i64, Flow> {
+        let v = super::builtins::misc_eval::builtin_next_single_char_property_change(
+            self,
+            vec![Value::fixnum(pos), prop, Value::NIL, Value::NIL],
+        )?;
+        Ok(v.as_fixnum().unwrap_or(zv))
+    }
+
+    fn apfp_prev_change(&mut self, pos: i64, prop: Value, begv: i64) -> Result<i64, Flow> {
+        let v = super::builtins::misc_eval::builtin_previous_single_char_property_change(
+            self,
+            vec![Value::fixnum(pos), prop, Value::NIL, Value::NIL],
+        )?;
+        Ok(v.as_fixnum().unwrap_or(begv))
+    }
+
+    /// Port of GNU `keyboard.c:adjust_point_for_property`, invisible-text
+    /// branch.  After a command moves point, GNU never leaves point resting
+    /// inside an `invisible` region — it relocates point to a region boundary
+    /// so the cursor is visible.  Without this, motion commands (e.g. evil
+    /// `e`) that land inside org's invisible link-target text leave the cursor
+    /// parked where the display collapses the hidden run to a single column,
+    /// so it appears frozen.
+    ///
+    /// GNU also adjusts for `display`-intangible and composition here; those
+    /// branches are not yet ported (they only add further adjustments that
+    /// neomacs does not otherwise perform).  The invisible branch is iterated
+    /// to a fixpoint, mirroring GNU's `check_*` re-entry loop.
+    pub(crate) fn adjust_point_for_property(
+        &mut self,
+        last_pt: i64,
+        modified: bool,
+    ) -> Result<(), Flow> {
+        let Some(id) = self.buffers.current_buffer_id() else {
+            return Ok(());
+        };
+        let inv = Value::symbol("invisible");
+        let spec = self
+            .eval_symbol_by_id(intern("buffer-invisibility-spec"))
+            .unwrap_or(Value::NIL);
+
+        // `orig_pt` mirrors GNU: point on entry, used to detect "we have not
+        // moved yet" so the boundary-choice heuristic stays free.
+        let mut orig_pt: i64 = self.apfp_point(id);
+
+        for _ in 0..50 {
+            let pt = self.apfp_point(id);
+            let (begv, zv) = match self.buffers.get(id) {
+                Some(b) => (
+                    b.point_min_lisp_char_pos().as_i64(),
+                    b.point_max_lisp_char_pos().as_i64(),
+                ),
+                None => return Ok(()),
+            };
+            if !(pt > begv && pt < zv) {
+                break;
+            }
+
+            let pt_before_invis = pt;
+            let mut ellipsis = false;
+            let mut beg = pt;
+            let mut end = pt;
+
+            // Find boundaries `beg`..`end` of the invisible run around PT.
+            while end < zv {
+                let prop = self.apfp_char_property(end, inv)?;
+                let i = super::xdisp::text_prop_means_invisible(prop, spec);
+                if i == 0 {
+                    break;
+                }
+                ellipsis = ellipsis || i > 1;
+                end = self.apfp_next_change(end, inv, zv)?;
+            }
+            while beg > begv {
+                let prop = self.apfp_char_property(beg - 1, inv)?;
+                let i = super::xdisp::text_prop_means_invisible(prop, spec);
+                if i == 0 {
+                    break;
+                }
+                ellipsis = ellipsis || i > 1;
+                beg = self.apfp_prev_change(beg, inv, begv)?;
+            }
+
+            let mut moved = false;
+
+            // Move away from the inside of the region.
+            if beg < pt && end > pt {
+                let target = if orig_pt == pt && (last_pt < beg || last_pt > end) {
+                    orig_pt = -1;
+                    if pt < last_pt { end } else { beg }
+                } else if pt < last_pt {
+                    beg
+                } else {
+                    end
+                };
+                self.apfp_set_point(id, target);
+                moved = true;
+            }
+
+            // `shown`: if the invisible text is shown via a replacing `display`
+            // property, the display engine positions the cursor and we must not
+            // move point.  The `display`-intangible predicate is not yet ported;
+            // org descriptive links carry no such property, so `shown` is false.
+            let shown = false;
+
+            if !modified && !shown && !ellipsis && beg < end {
+                let pt2 = self.apfp_point(id);
+                if last_pt == beg && pt2 == end && end < zv {
+                    self.apfp_set_point(id, end + 1);
+                    moved = true;
+                } else if last_pt == end && pt2 == beg && beg > begv {
+                    self.apfp_set_point(id, beg - 1);
+                    moved = true;
+                } else if pt2 == (if pt2 < last_pt { beg } else { end }) {
+                    // Already as far as we can go; avoid an infinite loop.
+                } else {
+                    let here = self.apfp_pos_property(pt2, inv)?;
+                    if super::xdisp::text_prop_means_invisible(here, spec) != 0 {
+                        let other = if pt2 == beg { end } else { beg };
+                        let other_val = self.apfp_pos_property(other, inv)?;
+                        if super::xdisp::text_prop_means_invisible(other_val, spec) == 0 {
+                            self.apfp_set_point(id, other);
+                            moved = true;
+                        }
+                    }
+                }
+            }
+
+            let _ = pt_before_invis;
+            if !moved {
+                break;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn note_interactive_minibuffer_read(&mut self) {

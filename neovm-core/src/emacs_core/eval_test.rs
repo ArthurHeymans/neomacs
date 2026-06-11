@@ -13075,3 +13075,60 @@ fn bootstrap_window_system_modes_match_gnu_defaults() {
         "GNU initializes tool-bar-mode to t for window-system builds"
     );
 }
+
+/// GNU `keyboard.c:adjust_point_for_property` — after a command moves point
+/// into an `invisible' text run, the command loop relocates point to a
+/// boundary so the cursor never rests inside hidden text.  Without this,
+/// motion commands (evil `e`) that land inside org's invisible link-target
+/// text leave the cursor parked where the display collapses the run to a
+/// single column, so it appears frozen.
+///
+/// Verified against GNU Emacs 31.0.50: in buffer "abcXXXXdef" with chars 4..7
+/// invisible, `(goto-char 6)` followed by the command loop leaves point at 4.
+#[test]
+fn adjust_point_for_property_relocates_out_of_invisible_run() {
+    let mut ev = Context::new();
+    {
+        let buf = ev.buffers.current_buffer_mut().unwrap();
+        buf.insert("abcXXXXdef");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    ev.eval_str("(put-text-property 4 8 'invisible t)").unwrap();
+    ev.eval_str("(setq buffer-invisibility-spec t)").unwrap();
+    ev.eval_str("(goto-char 6)").unwrap();
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(6),
+        "precondition: point is inside the invisible run"
+    );
+
+    ev.adjust_point_for_property(1, false).unwrap();
+
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(4),
+        "point relocated to the invisible run boundary (matches GNU 31.0.50)"
+    );
+}
+
+/// The adjustment must be a no-op when point is not inside invisible text.
+#[test]
+fn adjust_point_for_property_noop_in_visible_text() {
+    let mut ev = Context::new();
+    {
+        let buf = ev.buffers.current_buffer_mut().unwrap();
+        buf.insert("abcXXXXdef");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    ev.eval_str("(put-text-property 4 8 'invisible t)").unwrap();
+    ev.eval_str("(setq buffer-invisibility-spec t)").unwrap();
+    ev.eval_str("(goto-char 2)").unwrap();
+
+    ev.adjust_point_for_property(1, false).unwrap();
+
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(2),
+        "point in visible text is left untouched"
+    );
+}

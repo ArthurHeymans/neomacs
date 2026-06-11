@@ -2543,7 +2543,7 @@ fn invisible_prop(propval: Value, list: Value) -> i64 {
     0
 }
 
-fn text_prop_means_invisible(prop: Value, invisibility_spec: Value) -> i64 {
+pub(crate) fn text_prop_means_invisible(prop: Value, invisibility_spec: Value) -> i64 {
     if invisibility_spec == Value::T {
         i64::from(prop.is_truthy())
     } else {
