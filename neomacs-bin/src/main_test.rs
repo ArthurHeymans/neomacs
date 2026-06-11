@@ -3423,7 +3423,7 @@ fn gnu_startup_seeds_light_gui_chrome_faces_from_faces_el() {
     );
     assert_eq!(
         rendered[9],
-        "((((class color grayscale) (min-colors 88)) :box (:line-width -1 :style released-button) :background \"grey75\" :foreground \"black\") (t :inverse-video t))",
+        "((((class color grayscale) (min-colors 88) (background light)) :box (:line-width -1 :style released-button) :background \"grey75\" :foreground \"black\") (((class color grayscale) (min-colors 88) (background dark)) :box (:line-width -1 :style released-button) :background \"grey20\" :foreground \"white\") (t :inverse-video t))",
         "mode-line defface spec should be present: {rendered:?}"
     );
     assert_eq!(
