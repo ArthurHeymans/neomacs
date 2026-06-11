@@ -412,6 +412,19 @@ impl ConsBlock {
         }
     }
 
+    /// Count currently-marked (live) cells via mark-bitmap popcount. Bits at or
+    /// above `next_index` are never set, so popcounting the used words is exact.
+    /// Cheap O(cells/64); used to recompute the live count after an incremental
+    /// sweep without a second cell walk.
+    fn count_marked(&self) -> usize {
+        let used_words = cons_mark_words(self.next_index as usize);
+        let mut live = 0usize;
+        for w in 0..used_words {
+            live += unsafe { (*self.mark_words_ptr().add(w)).count_ones() as usize };
+        }
+        live
+    }
+
     /// Sweep: thread reclaimed cells into the global intrusive free list and
     /// return the number of live cells in this block.
     fn sweep(&mut self, free_list: &mut *mut ConsCell) -> usize {
@@ -784,6 +797,24 @@ pub struct TaggedHeap {
     /// Accumulated marking time (slices + final drain) for the in-flight
     /// incremental cycle, reported as `mark_us` at termination. Reset at start.
     incremental_mark_us: u64,
+
+    // --- Incremental sweep state (step 8). After a mark terminates, the sweep
+    // is deferred and drained in bounded slices at later safe points, so the
+    // reclaim is no longer part of the stop-the-world pause. The next mark and
+    // any forced GC finish the sweep first (marks must stay intact until then).
+    /// True while the deferred sweep is draining.
+    sweep_in_progress: bool,
+    /// Next heap cons-block index the deferred sweep will reclaim.
+    sweep_cons_cursor: usize,
+    /// Non-cons objects detached from `all_objects` at sweep start, reclaimed
+    /// incrementally. New non-cons allocations link onto a fresh `all_objects`
+    /// and are not swept this cycle.
+    sweep_noncons_pending: *mut GcHeader,
+    /// Live bytes accumulated from the non-cons objects swept so far this cycle.
+    sweep_noncons_live_bytes: usize,
+    /// Carried from mark termination for the completion trace/accounting.
+    sweep_mark_us: u64,
+    sweep_bytes_before: usize,
 }
 
 impl TaggedHeap {
@@ -830,6 +861,12 @@ impl TaggedHeap {
             mapped_remembered: FxHashSet::default(),
             mark_in_progress: false,
             incremental_mark_us: 0,
+            sweep_in_progress: false,
+            sweep_cons_cursor: 0,
+            sweep_noncons_pending: std::ptr::null_mut(),
+            sweep_noncons_live_bytes: 0,
+            sweep_mark_us: 0,
+            sweep_bytes_before: 0,
             dump_addr_lo: usize::MAX,
             dump_addr_hi: 0,
         }
@@ -1278,6 +1315,10 @@ impl TaggedHeap {
     /// Allocate a cons cell. Returns a tagged Value.
     pub fn alloc_cons(&mut self, car: TaggedValue, cdr: TaggedValue) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::ConsCells, 1);
+        // Allocate-black during the deferred sweep: a cons born while a block is
+        // still unswept must survive that block's reclaim. New conses are always
+        // live, so marking them is exact (cleared at the next mark's begin).
+        let sweeping = self.sweep_in_progress;
         if !self.cons_free_list.is_null() {
             let cell = self.cons_free_list;
             unsafe {
@@ -1288,12 +1329,18 @@ impl TaggedHeap {
             self.allocated_count += 1;
             self.cons_live_count += 1;
             self.note_allocation_bytes(size_of::<ConsCell>());
+            if sweeping {
+                self.mark_cons(cell);
+            }
             return unsafe { TaggedValue::from_cons_ptr(cell) };
         }
 
         if let Some(block) = self.cons_blocks.last_mut()
             && let Some(cell) = block.alloc_bump(car, cdr)
         {
+            if sweeping {
+                block.mark_ptr(cell);
+            }
             self.allocated_count += 1;
             self.cons_live_count += 1;
             self.note_allocation_bytes(size_of::<ConsCell>());
@@ -1315,6 +1362,9 @@ impl TaggedHeap {
         self.allocated_count += 1;
         self.cons_live_count += 1;
         self.note_allocation_bytes(size_of::<ConsCell>());
+        if sweeping {
+            self.mark_cons(cell);
+        }
         unsafe { TaggedValue::from_cons_ptr(cell) }
     }
 
@@ -1849,6 +1899,14 @@ impl TaggedHeap {
     pub(crate) fn begin_collection(&mut self) {
         // (Pre-mark verification removed — unmarked objects may have stale data
         //  that will be swept. Only post-mark verification is meaningful.)
+
+        // A mark must never start while a deferred sweep is still draining: the
+        // sweep reads the mark bits this would clear. The driver finishes any
+        // in-flight sweep before getting here.
+        debug_assert!(
+            !self.sweep_in_progress,
+            "begin_collection while a deferred sweep is in progress"
+        );
 
         let clear_t0 = std::time::Instant::now();
         // The first partition cycle runs a NORMAL full collection (so it traces
@@ -2814,13 +2872,173 @@ impl TaggedHeap {
     /// Run mark termination's sweep + accounting, then leave the incremental
     /// state. Marking must already be drained to a fixpoint and the marker
     /// chain heads installed. `pause_t0` stamps the termination (sweep) pause.
-    pub(crate) fn incremental_finish(&mut self, bytes_before: usize, pause_t0: std::time::Instant) {
-        let mark_us = self.incremental_mark_us;
-        self.finalize_collection(mark_us, bytes_before, pause_t0);
-        // Leave the marking barrier off between cycles; the dump remembered set
-        // is still maintained unconditionally in `record_heap_write`.
+    /// Mark termination: verify, unchain dead markers, then DEFER the sweep.
+    /// The reclaim drains in bounded slices at later safe points
+    /// (`incremental_sweep_slice`), so it is no longer part of the STW pause.
+    /// Marking is complete here; the barrier is dropped.
+    pub(crate) fn incremental_finish(
+        &mut self,
+        bytes_before: usize,
+        _pause_t0: std::time::Instant,
+    ) {
+        // Dump-partition safety gate (marks still intact). Same as
+        // `finalize_collection`'s, run before any object is freed.
+        if self.partition_dump
+            && self.dump_blackened
+            && std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1")
+        {
+            self.verify_dump_partition();
+            self.verify_incremental_tricolor();
+        }
+        // Unchain dead markers before the sweep frees them (mirrors GNU
+        // sweep_buffer -> unchain_dead_markers). Reads marks, which are intact.
+        self.unchain_dead_markers();
+
+        // Begin the deferred sweep. Detach the young non-cons list (new non-cons
+        // allocations link onto a fresh `all_objects` and are not swept this
+        // cycle) and reset the cons free list (rebuilt as blocks are swept).
+        self.sweep_noncons_pending = self.all_objects;
+        self.all_objects = std::ptr::null_mut();
+        self.cons_free_list = std::ptr::null_mut();
+        self.sweep_cons_cursor = 0;
+        self.sweep_noncons_live_bytes = 0;
+        self.sweep_mark_us = self.incremental_mark_us;
+        self.sweep_bytes_before = bytes_before;
+        self.sweep_in_progress = true;
+        // The triggering allocation budget is spent; the next mark fires once a
+        // fresh threshold's worth has been allocated.
+        self.bytes_since_gc = 0;
+
+        // Marking is done; drop the marking barrier. The dump remembered set is
+        // still maintained unconditionally in `record_heap_write`.
         self.set_write_tracking_mode(WriteTrackingMode::Disabled);
         self.mark_in_progress = false;
+    }
+
+    /// True while the deferred sweep is draining.
+    pub fn sweep_in_progress(&self) -> bool {
+        self.sweep_in_progress
+    }
+
+    /// Advance the deferred sweep by one bounded slice: reclaim up to `budget`
+    /// cons blocks and up to `budget` pending non-cons objects. Returns true
+    /// (and finalizes accounting) once the whole sweep is done. New conses
+    /// allocated meanwhile are born black (see `alloc_cons`), so an unswept
+    /// block never reclaims a live new cell.
+    pub(crate) fn incremental_sweep_slice(&mut self, budget: usize) -> bool {
+        let t0 = std::time::Instant::now();
+        // -- cons: reclaim up to `budget` blocks (each ~64KB of cells) --
+        let mut swept_blocks = 0usize;
+        while swept_blocks < budget && self.sweep_cons_cursor < self.cons_blocks.len() {
+            let idx = self.sweep_cons_cursor;
+            let free_list: *mut *mut ConsCell = &mut self.cons_free_list;
+            self.cons_blocks[idx].sweep(unsafe { &mut *free_list });
+            self.sweep_cons_cursor += 1;
+            swept_blocks += 1;
+        }
+        // -- non-cons: reclaim more objects per slice than cons blocks, since a
+        //    cons block holds thousands of cells while a non-cons node is one
+        //    object (with a heavier per-object free). --
+        let noncons_budget = budget.saturating_mul(256);
+        let mut processed = 0usize;
+        while processed < noncons_budget && !self.sweep_noncons_pending.is_null() {
+            let current = self.sweep_noncons_pending;
+            unsafe {
+                self.sweep_noncons_pending = (*current).next;
+                if (*current).marked {
+                    // Survivor: relink onto the (fresh) young list.
+                    (*current).next = self.all_objects;
+                    self.all_objects = current;
+                    self.sweep_noncons_live_bytes = self
+                        .sweep_noncons_live_bytes
+                        .saturating_add(Self::object_bytes_from_header(current));
+                } else {
+                    self.non_cons_object_addrs.remove(&(current as usize));
+                    self.free_gc_object(current);
+                    self.allocated_count = self.allocated_count.saturating_sub(1);
+                }
+            }
+            processed += 1;
+        }
+
+        let done = self.sweep_cons_cursor >= self.cons_blocks.len()
+            && self.sweep_noncons_pending.is_null();
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC sweep_slice {}us cons={}/{} noncons_left={} done={done}",
+                t0.elapsed().as_micros(),
+                self.sweep_cons_cursor,
+                self.cons_blocks.len(),
+                if self.sweep_noncons_pending.is_null() {
+                    0
+                } else {
+                    1
+                },
+            );
+        }
+        if done {
+            self.finish_incremental_sweep();
+        }
+        done
+    }
+
+    /// Drive the deferred sweep to completion in one shot (forced GC, or before
+    /// the next mark / a stop-the-world collection can begin).
+    pub(crate) fn finish_incremental_sweep_now(&mut self) {
+        while self.sweep_in_progress {
+            self.incremental_sweep_slice(usize::MAX);
+        }
+    }
+
+    /// Finalize the deferred sweep: recompute the cons live count from the mark
+    /// bitmaps (cheap popcount; counts allocate-black new conses, excludes
+    /// reclaimed ones), fix the allocation accounting, and emit the cycle trace.
+    fn finish_incremental_sweep(&mut self) {
+        let recount: usize = self.cons_blocks.iter().map(ConsBlock::count_marked).sum();
+        // allocated_count carries the tracked cons live count; replace it with
+        // the true recount (delta may be negative -> use checked sub).
+        if recount >= self.cons_live_count {
+            self.allocated_count = self
+                .allocated_count
+                .saturating_add(recount - self.cons_live_count);
+        } else {
+            self.allocated_count = self
+                .allocated_count
+                .saturating_sub(self.cons_live_count - recount);
+        }
+        self.cons_live_count = recount;
+
+        let mapped_cons_live: usize = self
+            .mapped_cons_ranges
+            .iter()
+            .map(MappedConsRange::live_count)
+            .sum();
+        let cons_live_bytes = recount
+            .saturating_add(mapped_cons_live)
+            .saturating_mul(size_of::<ConsCell>());
+        let mapped_object_live_bytes = self.mapped_non_cons_live_bytes();
+        self.live_bytes = cons_live_bytes
+            .saturating_add(self.sweep_noncons_live_bytes)
+            .saturating_add(mapped_object_live_bytes);
+
+        self.gc_collections += 1;
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            let (mapped_total, mapped_marked) = self.mapped_object_stats();
+            eprintln!(
+                "NEOVM_GC gc#{} [incremental mark={}us sweep=deferred] \
+                 cons_live={} heap_noncons={} dump_marked={}/{} live={}B",
+                self.gc_collections,
+                self.sweep_mark_us,
+                self.cons_live_count,
+                self.non_cons_object_addrs.len(),
+                mapped_marked,
+                mapped_total,
+                self.live_bytes,
+            );
+        }
+        self.clear_dirty_owners();
+        self.clear_dirty_writes();
+        self.sweep_in_progress = false;
     }
 
     fn push_gray(&mut self, val: TaggedValue, origin: &str) {
@@ -3481,8 +3699,13 @@ impl TaggedHeap {
 
 impl Drop for TaggedHeap {
     fn drop(&mut self) {
-        // Free all non-cons objects via both intrusive lists (young + tenured)
-        for mut current in [self.all_objects, self.tenured_objects] {
+        // Free all non-cons objects via every intrusive list: young, tenured,
+        // and any objects detached for an in-flight deferred sweep.
+        for mut current in [
+            self.all_objects,
+            self.tenured_objects,
+            self.sweep_noncons_pending,
+        ] {
             while !current.is_null() {
                 unsafe {
                     let next = (*current).next;

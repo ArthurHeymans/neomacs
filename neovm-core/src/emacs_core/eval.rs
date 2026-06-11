@@ -6602,36 +6602,69 @@ impl Context {
         let start = std::time::Instant::now();
         self.lexenv_assq_cache.clear();
         self.lexenv_special_cache.clear();
+        // Per-slice sweep budget in cons blocks (each ~4096 cells); the slice
+        // reclaims proportionally more non-cons objects internally.
+        const INCREMENTAL_SWEEP_BUDGET: usize = 8;
         let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
+        // True only when a whole mark+sweep cycle finishes in this call, gating
+        // the once-per-collection bookkeeping below.
+        let mut cycle_completed = false;
         // Safety: GC is stop-the-world with exclusive `&mut self`. Root
         // enumeration only reads Context state while seeding the collector via
         // the raw heap pointer, which aliases `self.tagged_heap`.
         unsafe {
-            if (*heap_ptr).mark_in_progress() {
-                // An incremental mark is underway. Advance one slice, unless we
-                // must finish now (explicit GC, or allocation has outrun marking
-                // past a hard cap so the heap would grow unbounded otherwise).
+            if force_complete {
+                // Explicit GC: drive any in-flight incremental cycle to
+                // completion, then run a fresh full stop-the-world collection of
+                // the current state (GNU `garbage-collect` semantics).
+                if (*heap_ptr).mark_in_progress() {
+                    self.terminate_incremental_mark(heap_ptr);
+                }
+                if (*heap_ptr).sweep_in_progress() {
+                    (*heap_ptr).finish_incremental_sweep_now();
+                }
+                (*heap_ptr).begin_collection();
+                self.seed_all_context_roots(heap_ptr);
+                (*heap_ptr).complete_collection();
+                cycle_completed = true;
+            } else if (*heap_ptr).sweep_in_progress() {
+                // Phase 3: drain the deferred sweep started at mark termination.
+                if (*heap_ptr).incremental_sweep_slice(INCREMENTAL_SWEEP_BUDGET) {
+                    cycle_completed = true; // sweep drained -> cycle done
+                } else {
+                    return; // more sweep to do; defer bookkeeping
+                }
+            } else if (*heap_ptr).mark_in_progress() {
+                // Phase 2: advance the in-flight mark, unless allocation has
+                // outrun marking past a hard cap (then finish it now so the heap
+                // does not grow unbounded).
                 let cap = (*heap_ptr).gc_threshold().saturating_mul(4);
-                let must_finish = force_complete || (*heap_ptr).bytes_since_gc() > cap;
+                let must_finish = (*heap_ptr).bytes_since_gc() > cap;
                 if !must_finish && !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
                     return; // still marking; defer completion bookkeeping
                 }
+                // Terminate the mark; this defers the sweep to later safe points.
                 self.terminate_incremental_mark(heap_ptr);
-            } else if !force_complete && (*heap_ptr).should_run_incremental() {
-                // Start a fresh incremental mark with the initial root snapshot.
+                return; // sweep deferred; cycle not done yet
+            } else if (*heap_ptr).should_run_incremental() {
+                // Phase 1: start a fresh incremental mark (initial root snapshot).
                 (*heap_ptr).incremental_begin();
                 self.seed_all_context_roots(heap_ptr);
                 if !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
                     return; // still marking; defer completion bookkeeping
                 }
                 self.terminate_incremental_mark(heap_ptr);
+                return; // sweep deferred; cycle not done yet
             } else {
-                // Stop-the-world full collection (first cycle / non-incremental
-                // build / forced).
+                // Stop-the-world full collection (first cycle / no-dump heap).
                 (*heap_ptr).begin_collection();
                 self.seed_all_context_roots(heap_ptr);
                 (*heap_ptr).complete_collection();
+                cycle_completed = true;
             }
+        }
+        if !cycle_completed {
+            return;
         }
         self.gc_pending = false;
         self.gc_count += 1;
@@ -6740,9 +6773,10 @@ impl Context {
         if self.gc_inhibit_depth > 0 {
             return false;
         }
-        // An in-flight incremental mark must keep getting slices at every safe
-        // point until it terminates, regardless of the allocation threshold.
-        if self.tagged_heap.mark_in_progress() {
+        // An in-flight incremental mark or deferred sweep must keep getting
+        // slices at every safe point until it finishes, regardless of the
+        // allocation threshold.
+        if self.tagged_heap.mark_in_progress() || self.tagged_heap.sweep_in_progress() {
             return true;
         }
         if self.gc_pending {
