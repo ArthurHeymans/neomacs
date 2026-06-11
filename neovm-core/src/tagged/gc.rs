@@ -61,6 +61,17 @@ pub enum HeapWriteKind {
     OverlayData,
     XwidgetData,
     XwidgetViewData,
+    /// Mutation of a char-table object (default/parent/ascii/contents/extras).
+    /// Char-tables are dumped (syntax/category/case tables) and mutated in
+    /// place post-load, so this barrier is required for the dump partition's
+    /// remembered set to catch dumped char-table → heap edges.
+    CharTableData,
+    /// Mutation of a sub-char-table object's contents.
+    SubCharTableData,
+    /// Mutation of an obarray object (buckets/count). Obarrays are dumped and
+    /// mutated post-load by `intern`, so the remembered set must observe
+    /// dumped-obarray → heap edges through this chokepoint.
+    ObarrayData,
 }
 
 /// A single heap mutation event.

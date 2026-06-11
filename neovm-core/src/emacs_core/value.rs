@@ -29,7 +29,9 @@ use crate::buffer::text_props::{PropertyInterval, TextPropertyPlistRun, TextProp
 use crate::buffer::{CharPos0, CharRange, EmacsBytePos};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
-use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
+use crate::tagged::gc::{
+    HeapWriteKind, MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, note_heap_write, with_tagged_heap,
+};
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
     HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
@@ -1929,6 +1931,12 @@ impl TaggedValue {
         if !self.is_char_table() {
             return None;
         }
+        // Write barrier: char-tables are dumped (syntax/category/case tables)
+        // and mutated in place, so the GC remembered set must learn about
+        // dumped char-table → heap edges through this single mutation
+        // chokepoint. Fired before `f` (conservative: any `_mut` borrow may
+        // store a heap pointer). No-op unless write tracking is enabled.
+        note_heap_write(self, HeapWriteKind::CharTableData);
         let ptr = self.as_veclike_ptr().unwrap() as *mut CharTableObj;
         Some(f(unsafe { &mut *ptr }))
     }
@@ -1951,6 +1959,9 @@ impl TaggedValue {
         if !self.is_sub_char_table() {
             return None;
         }
+        // Write barrier — see `with_char_table_mut`. Sub-char-tables are the
+        // dumped char-table interior nodes and are mutated the same way.
+        note_heap_write(self, HeapWriteKind::SubCharTableData);
         let ptr = self.as_veclike_ptr().unwrap() as *mut SubCharTableObj;
         Some(f(unsafe { &mut *ptr }))
     }
@@ -2039,6 +2050,9 @@ impl TaggedValue {
         if !self.is_obarray() {
             return None;
         }
+        // Write barrier — see `with_char_table_mut`. Obarrays are dumped and
+        // mutated by `intern`; this chokepoint feeds the GC remembered set.
+        note_heap_write(self, HeapWriteKind::ObarrayData);
         let ptr = self.as_veclike_ptr().unwrap() as *mut ObarrayObj;
         Some(f(unsafe { &mut *ptr }))
     }
