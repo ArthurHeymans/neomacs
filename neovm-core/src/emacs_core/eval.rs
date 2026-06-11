@@ -7678,7 +7678,13 @@ impl Context {
         // Also unwrap symbol-with-pos when symbols-with-pos-enabled is true.
         let form_unwrapped = self.unwrap_symbol(form);
         if let Some(sym_id) = form_unwrapped.as_symbol_id() {
-            return self.eval_symbol_by_id(sym_id);
+            // Route the variable-lookup result through the signal dispatcher so a
+            // void-variable enters the debugger (debug-on-error) at signal time,
+            // while dynamic bindings are still active — symmetric with the cons
+            // path (eval_sub_cons) and GNU's Fsignal. `search_complete` keeps this
+            // idempotent, so an already-dispatched signal is not re-dispatched.
+            let result = self.eval_symbol_by_id(sym_id);
+            return self.dispatch_signal_result_if_needed(result);
         }
 
         // 2. Non-cons → self-evaluating (GNU eval.c:2564-2565)
