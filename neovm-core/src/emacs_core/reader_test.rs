@@ -109,6 +109,54 @@ fn read_from_string_symbol() {
     }
 }
 
+/// `(("ical:" . "icalendar-"))`
+fn ical_shorthands_alist() -> Value {
+    Value::cons(
+        Value::cons(Value::string("ical:"), Value::string("icalendar-")),
+        Value::NIL,
+    )
+}
+
+#[test]
+fn read_from_string_applies_read_symbol_shorthands() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    ev.obarray
+        .set_symbol_value("read-symbol-shorthands", ical_shorthands_alist());
+    let result =
+        builtin_read_from_string(&mut ev, vec![Value::string("ical:error-regexp")]).unwrap();
+    assert_eq!(
+        result.cons_car().as_symbol_name(),
+        Some("icalendar-error-regexp"),
+        "read-from-string must rewrite ical: prefix via read-symbol-shorthands"
+    );
+}
+
+#[test]
+fn read_from_buffer_applies_read_symbol_shorthands() {
+    // This is the path used by `byte-compile-file`, which reads forms from a
+    // buffer whose `read-symbol-shorthands` was set buffer-local by
+    // `hack-local-variables`.  Regression test for icalendar (GNU 31.0.90)
+    // failing to byte-compile because `ical:` prefixes were not rewritten.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    ev.obarray
+        .set_symbol_value("read-symbol-shorthands", ical_shorthands_alist());
+    let buf_id = ev.buffers.create_buffer("shorthand-read");
+    {
+        let buf = ev.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("ical:foo");
+    }
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buf_id, crate::buffer::EmacsBytePos::new(0));
+    let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).unwrap();
+    assert_eq!(
+        result.as_symbol_name(),
+        Some("icalendar-foo"),
+        "read from buffer must rewrite ical: prefix via read-symbol-shorthands"
+    );
+}
+
 #[test]
 fn read_from_string_string_value() {
     crate::test_utils::init_test_tracing();

@@ -161,9 +161,11 @@ pub fn read_one_from_buffer_with_locate_syms(
     range: EmacsByteRange,
     locate_syms: bool,
     obarray: &super::symbol::Obarray,
+    shorthands: Option<&ReadSymbolShorthands>,
 ) -> Result<(Option<Value>, EmacsBytePos), ReadError> {
     let mut reader = Reader::new_buffer(buffer, range, obarray);
     reader.locate_syms = locate_syms;
+    reader.shorthands = shorthands;
     if !reader.skip_ws_and_comments() {
         return Ok((None, EmacsBytePos::new(reader.pos)));
     }
@@ -249,7 +251,7 @@ impl<'a> LispReadSource<'a> {
         locate_syms: bool,
         obarray: &super::symbol::Obarray,
     ) -> Result<Option<(Value, usize)>, ReadError> {
-        self.read_one_range_with_locate_syms(start, self.logical_len(), locate_syms, obarray)
+        self.read_one_range_with_locate_syms(start, self.logical_len(), locate_syms, obarray, None)
     }
 
     pub fn read_one_range_with_locate_syms(
@@ -258,9 +260,11 @@ impl<'a> LispReadSource<'a> {
         end: usize,
         locate_syms: bool,
         obarray: &super::symbol::Obarray,
+        shorthands: Option<&ReadSymbolShorthands>,
     ) -> Result<Option<(Value, usize)>, ReadError> {
         let mut reader = Reader::new_lisp_string(self.input, start, end, obarray);
         reader.locate_syms = locate_syms;
+        reader.shorthands = shorthands;
         if !reader.skip_ws_and_comments() {
             return Ok(None);
         }

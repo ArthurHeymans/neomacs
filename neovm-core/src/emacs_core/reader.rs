@@ -626,11 +626,35 @@ fn stdin_end_of_file_error() -> Flow {
 /// Parse a single Lisp object from STRING starting at position START (default 0).
 /// Returns `(OBJECT . END-POSITION)` where END-POSITION is the character index
 /// after the parsed object.
+/// Fetch the active `read-symbol-shorthands` value and build the reader's
+/// shorthand table.  GNU's `read`/`read-from-string` consult this variable
+/// (set **buffer-local** by `hack-local-variables` during
+/// `byte-compile-file`), so reading source that declares
+/// `read-symbol-shorthands` in its local variables rewrites `prefix:name`
+/// symbols.  The value must be resolved with buffer-local visibility — the
+/// global binding is normally nil — hence we go through
+/// `visible_runtime_variable_value_by_id` rather than the raw obarray slot.
+/// Returns `None` when unset/nil.
+fn current_read_symbol_shorthands(
+    eval: &super::eval::Context,
+) -> Option<super::value_reader::ReadSymbolShorthands> {
+    let sym = crate::emacs_core::intern::intern("read-symbol-shorthands");
+    let value = eval
+        .visible_runtime_variable_value_by_id(sym)
+        .ok()
+        .flatten()?;
+    if value.is_nil() {
+        return None;
+    }
+    super::value_reader::ReadSymbolShorthands::from_lisp_value(value)
+}
+
 pub(crate) fn builtin_read_from_string(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let result = read_from_string_impl(&ctx.obarray, args)?;
+    let shorthands = current_read_symbol_shorthands(ctx);
+    let result = read_from_string_impl_inner(&ctx.obarray, args, false, shorthands.as_ref())?;
     if result.is_cons() {
         ctx.obarray_mut()
             .materialize_read_symbols(result.cons_car());
@@ -642,13 +666,14 @@ pub(crate) fn read_from_string_impl(
     obarray: &crate::emacs_core::symbol::Obarray,
     args: Vec<Value>,
 ) -> EvalResult {
-    read_from_string_impl_inner(obarray, args, false)
+    read_from_string_impl_inner(obarray, args, false, None)
 }
 
 fn read_from_string_impl_inner(
     obarray: &crate::emacs_core::symbol::Obarray,
     args: Vec<Value>,
     locate_syms: bool,
+    shorthands: Option<&super::value_reader::ReadSymbolShorthands>,
 ) -> EvalResult {
     expect_min_args("read-from-string", &args, 1)?;
     if args.len() > 3 {
@@ -725,8 +750,13 @@ fn read_from_string_impl_inner(
         end_char
     };
 
-    let read_result =
-        read_source.read_one_range_with_locate_syms(start_byte, end_byte, locate_syms, obarray);
+    let read_result = read_source.read_one_range_with_locate_syms(
+        start_byte,
+        end_byte,
+        locate_syms,
+        obarray,
+        shorthands,
+    );
 
     let (value, absolute_end_byte) = read_result
         .map_err(signal_reader_error_from_string)?
@@ -782,10 +812,16 @@ pub fn builtin_read_impl(
         ));
     }
 
+    let shorthands = current_read_symbol_shorthands(ctx);
     match stream.kind() {
         ValueKind::String => {
             // Read from string
-            let result = read_from_string_impl_inner(&ctx.obarray, vec![stream], locate_syms)?;
+            let result = read_from_string_impl_inner(
+                &ctx.obarray,
+                vec![stream],
+                locate_syms,
+                shorthands.as_ref(),
+            )?;
             // Return just the car (the parsed object)
             match result.kind() {
                 ValueKind::Cons => {
@@ -815,6 +851,7 @@ pub fn builtin_read_impl(
                     EmacsByteRange::new(start, end),
                     locate_syms,
                     &ctx.obarray,
+                    shorthands.as_ref(),
                 ) {
                     Ok(result) => result,
                     Err(e) => return Err(signal_reader_error_from_buffer(buf, e)),
