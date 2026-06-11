@@ -1,5 +1,5 @@
 use super::RenderApp;
-use super::frame_windows::FrameLifecycle;
+use super::frame_windows::{FrameLifecycle, NativeTextInputPolicy};
 use super::state::{
     RenderGpuContext, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
@@ -133,6 +133,7 @@ impl RenderApp {
             match event_loop.create_window(attrs) {
                 Ok(window) => {
                     let window = Arc::new(window);
+                    NativeTextInputPolicy::for_gui_frame().apply_to_window(&window);
 
                     let raw_scale_factor = window.scale_factor();
                     let effective_scale = effective_window_scale_factor(raw_scale_factor);

@@ -53,6 +53,40 @@ pub(crate) struct GuiFrameNativeWindowState {
     pub(super) chrome: WindowChrome,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct NativeTextInputPolicy {
+    pub(super) ime_allowed_on_create: bool,
+    pub(super) initial_cursor_area: ImeCursorArea,
+}
+
+impl NativeTextInputPolicy {
+    pub(super) fn for_gui_frame() -> Self {
+        Self {
+            ime_allowed_on_create: true,
+            initial_cursor_area: ImeCursorArea {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+        }
+    }
+
+    pub(super) fn apply_to_window(self, window: &Window) {
+        window.set_ime_allowed(self.ime_allowed_on_create);
+        window.set_ime_cursor_area(
+            PhysicalPosition::new(
+                self.initial_cursor_area.x as f64,
+                self.initial_cursor_area.y as f64,
+            ),
+            PhysicalSize::new(
+                self.initial_cursor_area.width as f64,
+                self.initial_cursor_area.height as f64,
+            ),
+        );
+    }
+}
+
 /// Frame-owned render, input, overlay, and transient visual state.
 pub(crate) struct GuiFrameRenderState {
     /// The Emacs frame_id that owns this window (used for routing).
@@ -1602,8 +1636,7 @@ impl GuiFrameWindowManager {
                     };
                     surface.configure(device, &config);
 
-                    // Enable IME
-                    window.set_ime_allowed(true);
+                    NativeTextInputPolicy::for_gui_frame().apply_to_window(&window);
                     apply_window_geometry_hints(&window, req.geometry_hints);
 
                     let winit_id = window.id();

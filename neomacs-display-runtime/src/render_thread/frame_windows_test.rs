@@ -23,6 +23,22 @@ fn default_geometry_hints() -> GuiFrameGeometryHints {
     }
 }
 
+#[test]
+fn gui_text_input_policy_enables_native_ime_on_window_creation() {
+    let policy = NativeTextInputPolicy::for_gui_frame();
+
+    assert!(policy.ime_allowed_on_create);
+    assert_eq!(
+        policy.initial_cursor_area,
+        ImeCursorArea {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        }
+    );
+}
+
 fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(800.0, 600.0);
     buf.frame_id = frame_id;
