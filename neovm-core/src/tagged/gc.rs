@@ -151,6 +151,55 @@ fn next_tagged_heap_identity() -> usize {
     NEXT_TAGGED_HEAP_ID.fetch_add(1, Ordering::Relaxed)
 }
 
+// ---------------------------------------------------------------------------
+// Background GC thread (concurrent collector, Phase 4)
+// ---------------------------------------------------------------------------
+
+/// A raw `*mut TaggedHeap` that can cross to the GC thread. The heap is `!Send`
+/// (raw pointers), but during a handshake the mutator is BLOCKED waiting for the
+/// GC thread, so the two threads never touch the heap at the same time — the GC
+/// thread has exclusive access for the duration. (Phase 5 makes access genuinely
+/// concurrent via the atomic slots + SATB built in Phases 1-3.)
+struct HeapPtr(*mut TaggedHeap);
+unsafe impl Send for HeapPtr {}
+
+/// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
+/// thread signals when finished so the mutator can resume.
+enum GcRequest {
+    /// Drain the gray queue (mark to a fixpoint) on the GC thread.
+    MarkAll(HeapPtr, std::sync::mpsc::Sender<()>),
+}
+
+static GC_THREAD: std::sync::OnceLock<std::sync::Mutex<std::sync::mpsc::Sender<GcRequest>>> =
+    std::sync::OnceLock::new();
+
+/// Lazily spawn the process-global GC thread and return its request channel.
+/// The thread lives for the process; it loops draining requests.
+fn gc_thread() -> std::sync::MutexGuard<'static, std::sync::mpsc::Sender<GcRequest>> {
+    GC_THREAD
+        .get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel::<GcRequest>();
+            std::thread::Builder::new()
+                .name("neovm-gc".to_string())
+                .spawn(move || {
+                    while let Ok(req) = rx.recv() {
+                        match req {
+                            GcRequest::MarkAll(HeapPtr(p), done) => {
+                                // Exclusive access: the mutator is blocked on
+                                // `done` until we signal.
+                                unsafe { (*p).mark_all() };
+                                let _ = done.send(());
+                            }
+                        }
+                    }
+                })
+                .expect("spawn neovm-gc thread");
+            std::sync::Mutex::new(tx)
+        })
+        .lock()
+        .expect("gc thread channel poisoned")
+}
+
 /// Set the thread-local tagged heap pointer.
 pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP.with(|h| h.set(heap as *mut TaggedHeap));
@@ -812,6 +861,11 @@ pub struct TaggedHeap {
     /// default incremental collector uses the dirty-owner re-trace and is
     /// unaffected. (The concurrent path in Phase 5 will rely on SATB instead.)
     satb_active: bool,
+    /// Run the mark phase on the background GC thread (Phase 4). Env
+    /// `NEOVM_GC_CONCURRENT`, default off. For now the mutator BLOCKS while the
+    /// GC thread marks (exclusive access, no pause win yet) — this proves the
+    /// thread + heap-sharing + handshake. Phase 5 makes it genuinely concurrent.
+    concurrent: bool,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
     // is deferred and drained in bounded slices at later safe points, so the
@@ -877,6 +931,7 @@ impl TaggedHeap {
             mark_in_progress: false,
             incremental_mark_us: 0,
             satb_active: std::env::var("NEOVM_GC_SATB").as_deref() == Ok("1"),
+            concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() == Ok("1"),
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
@@ -2671,9 +2726,13 @@ impl TaggedHeap {
         let bytes_before = self.live_bytes;
         let t0 = std::time::Instant::now();
 
-        // -- Mark phase: drain gray queue --
+        // -- Mark phase: drain gray queue (optionally on the GC thread) --
         let mark_t0 = std::time::Instant::now();
-        self.mark_all();
+        if self.concurrent {
+            self.mark_all_on_gc_thread();
+        } else {
+            self.mark_all();
+        }
         let mark_us = mark_t0.elapsed().as_micros() as u64;
 
         self.finalize_collection(mark_us, bytes_before, t0);
@@ -2788,6 +2847,21 @@ impl TaggedHeap {
         }
     }
 
+    /// Drain the gray queue on the background GC thread (Phase 4). The mutator
+    /// blocks on the done-channel until the GC thread finishes, so heap access
+    /// is exclusive (no concurrency hazard yet). This proves the thread +
+    /// heap-sharing + handshake; the pause is not yet reduced. Phase 5 removes
+    /// the block so marking actually overlaps mutator execution.
+    fn mark_all_on_gc_thread(&mut self) {
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let ptr = self as *mut TaggedHeap;
+        gc_thread()
+            .send(GcRequest::MarkAll(HeapPtr(ptr), done_tx))
+            .expect("neovm-gc thread is gone");
+        // Block until the GC thread has finished marking on the shared heap.
+        done_rx.recv().expect("neovm-gc thread did not respond");
+    }
+
     // ---------------------------------------------------------------------
     // Incremental marking (step 7)
     // ---------------------------------------------------------------------
@@ -2796,7 +2870,10 @@ impl TaggedHeap {
     /// partitioned cycles (after the first-cycle promotion), so promotion and
     /// blackening stay on the simple stop-the-world path.
     pub fn should_run_incremental(&self) -> bool {
-        self.partition_dump && self.dump_blackened
+        // In concurrent mode (Phase 4) every collection goes through the
+        // stop-the-world path, which offloads the mark to the GC thread; the
+        // incremental slicer is bypassed until Phase 5 reconciles the two.
+        self.partition_dump && self.dump_blackened && !self.concurrent
     }
 
     /// True while an incremental mark is underway (between start and sweep).
