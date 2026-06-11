@@ -657,9 +657,16 @@ pub struct TaggedHeap {
     /// walking cells from the same block.
     mark_cons_block_cache: Option<ConsBlockCacheEntry>,
 
-    /// Intrusive linked list of all non-cons heap objects.
+    /// Intrusive linked list of YOUNG non-cons heap objects (the nursery).
     /// Points to the GcHeader of the first object; follow `next` to traverse.
+    /// Every cycle clears+sweeps only this list, so its length bounds the
+    /// per-GC clear/sweep cost.
     all_objects: *mut GcHeader,
+    /// Intrusive linked list of TENURED non-cons heap objects (the old
+    /// generation). Filled at first-cycle promotion (`promote_and_blacken`);
+    /// these are permanently black and are NEVER cleared or swept, so the
+    /// minor-GC walk skips them entirely. Freed only at heap teardown.
+    tenured_objects: *mut GcHeader,
     /// Exact address set for ordinary non-cons object headers.
     ///
     /// GNU's GC reaches ordinary heap ownership through allocator metadata and
@@ -774,6 +781,7 @@ impl TaggedHeap {
             cons_block_index_by_base: FxHashMap::default(),
             mark_cons_block_cache: None,
             all_objects: std::ptr::null_mut(),
+            tenured_objects: std::ptr::null_mut(),
             non_cons_object_addrs: FxHashSet::default(),
             allocated_count: 0,
             memory_use_counts: [0; MEMORY_USE_COUNT_LEN],
@@ -1839,13 +1847,15 @@ impl TaggedHeap {
                 object.marked = false;
             }
         }
-        // -- Clear marks on non-cons (heap) objects; tenured stay black --
+        // -- Clear marks on YOUNG non-cons (heap) objects. The tenured old
+        //    generation lives on a separate list (`tenured_objects`) that is
+        //    never walked here, so it stays permanently black. Before the
+        //    first-cycle promotion every object is still on `all_objects`, so
+        //    the full preloaded world is cleared and traced that one cycle. --
         let mut obj = self.all_objects;
         while !obj.is_null() {
             unsafe {
-                if !(partitioned && (*obj).tenured) {
-                    (*obj).marked = false;
-                }
+                (*obj).marked = false;
                 obj = (*obj).next;
             }
         }
@@ -1878,14 +1888,25 @@ impl TaggedHeap {
         //    The first partition cycle ran a full trace+sweep, so everything
         //    still in `all_objects` is alive = a permanent (the preloaded world
         //    plus whatever the session has retained). They are already marked.
+        //    Move the whole young list onto the tenured list and flag each
+        //    node so the nursery (`all_objects`) starts empty; from now on only
+        //    post-loadup allocations land there and get cleared/swept.
+        let mut tail: *mut GcHeader = std::ptr::null_mut();
         let mut obj = self.all_objects;
         while !obj.is_null() {
             unsafe {
-                if (*obj).marked {
-                    (*obj).tenured = true;
-                }
+                (*obj).tenured = true;
+                tail = obj;
                 obj = (*obj).next;
             }
+        }
+        if !tail.is_null() {
+            // Splice: [all_objects .. tail] -> front of tenured_objects.
+            unsafe {
+                (*tail).next = self.tenured_objects;
+            }
+            self.tenured_objects = self.all_objects;
+            self.all_objects = std::ptr::null_mut();
         }
         // 2. Blacken the mapped image.
         for range in &mut self.mapped_cons_ranges {
@@ -1961,12 +1982,10 @@ impl TaggedHeap {
         // -- tenured heap objects (old generation) --
         let tenured: Vec<*mut GcHeader> = {
             let mut out = Vec::new();
-            let mut obj = self.all_objects;
+            let mut obj = self.tenured_objects;
             while !obj.is_null() {
                 unsafe {
-                    if (*obj).tenured {
-                        out.push(obj);
-                    }
+                    out.push(obj);
                     obj = (*obj).next;
                 }
             }
@@ -2271,12 +2290,10 @@ impl TaggedHeap {
         // point at a young object would free it.
         let tenured: Vec<*mut GcHeader> = {
             let mut out = Vec::new();
-            let mut obj = self.all_objects;
+            let mut obj = self.tenured_objects;
             while !obj.is_null() {
                 unsafe {
-                    if (*obj).tenured {
-                        out.push(obj);
-                    }
+                    out.push(obj);
                     obj = (*obj).next;
                 }
             }
@@ -3149,48 +3166,53 @@ impl TaggedHeap {
     }
 
     /// Debug verification: after marking, check that every marked non-cons
-    /// object is actually in our `all_objects` intrusive list. If a marked
-    /// object is NOT in the list, it means a root pointed to freed memory
-    /// that happened to look like a valid tagged pointer.
+    /// object is actually in one of our intrusive lists (young `all_objects`
+    /// or tenured `tenured_objects`). If a marked object is NOT in a list, it
+    /// means a root pointed to freed memory that happened to look like a valid
+    /// tagged pointer.
     #[cfg(debug_assertions)]
     fn verify_marked_objects_owned(&self) {
         // Build a set of all owned non-cons object addresses
         let mut owned_addrs: std::collections::HashSet<usize> = std::collections::HashSet::new();
-        let mut obj = self.all_objects;
-        while !obj.is_null() {
-            owned_addrs.insert(obj as usize);
-            unsafe {
-                obj = (*obj).next;
+        for head in [self.all_objects, self.tenured_objects] {
+            let mut obj = head;
+            while !obj.is_null() {
+                owned_addrs.insert(obj as usize);
+                unsafe {
+                    obj = (*obj).next;
+                }
             }
         }
 
-        // Now walk the all_objects list again and check marked objects
-        let mut current = self.all_objects;
+        // Now walk both lists again and check marked objects
         let mut total_marked = 0usize;
-        while !current.is_null() {
-            unsafe {
-                if (*current).marked {
-                    total_marked += 1;
-                    // Verify the object's internal data is sane
-                    match (*current).kind {
-                        HeapObjectKind::String => {
-                            let ptr = current as *const StringObj;
-                            let s = &(*ptr).data;
-                            // Check string data pointer is reasonable
-                            let str_ptr = s.as_bytes().as_ptr() as usize;
-                            if str_ptr != 0 && str_ptr < 0x1000 {
-                                tracing::error!(
-                                    "GC VERIFY: marked StringObj at {:p} has \
-                                     corrupt data pointer {:#x}",
-                                    current,
-                                    str_ptr
-                                );
+        for head in [self.all_objects, self.tenured_objects] {
+            let mut current = head;
+            while !current.is_null() {
+                unsafe {
+                    if (*current).marked {
+                        total_marked += 1;
+                        // Verify the object's internal data is sane
+                        match (*current).kind {
+                            HeapObjectKind::String => {
+                                let ptr = current as *const StringObj;
+                                let s = &(*ptr).data;
+                                // Check string data pointer is reasonable
+                                let str_ptr = s.as_bytes().as_ptr() as usize;
+                                if str_ptr != 0 && str_ptr < 0x1000 {
+                                    tracing::error!(
+                                        "GC VERIFY: marked StringObj at {:p} has \
+                                         corrupt data pointer {:#x}",
+                                        current,
+                                        str_ptr
+                                    );
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
                     }
+                    current = (*current).next;
                 }
-                current = (*current).next;
             }
         }
         tracing::trace!(
@@ -3202,13 +3224,14 @@ impl TaggedHeap {
 
 impl Drop for TaggedHeap {
     fn drop(&mut self) {
-        // Free all non-cons objects via the intrusive list
-        let mut current = self.all_objects;
-        while !current.is_null() {
-            unsafe {
-                let next = (*current).next;
-                self.free_gc_object(current);
-                current = next;
+        // Free all non-cons objects via both intrusive lists (young + tenured)
+        for mut current in [self.all_objects, self.tenured_objects] {
+            while !current.is_null() {
+                unsafe {
+                    let next = (*current).next;
+                    self.free_gc_object(current);
+                    current = next;
+                }
             }
         }
         // ConsBlocks are dropped automatically (they implement Drop)
