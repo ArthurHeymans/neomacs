@@ -14,7 +14,7 @@
 use super::value::TaggedValue;
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // ConsCell — no header, minimal size
@@ -44,14 +44,33 @@ impl ConsCell {
         unsafe { self.cdr_or_next.cdr }
     }
 
+    /// Atomic (relaxed) read of `car` — used by GC tracing, which may run on a
+    /// concurrent collector thread while the mutator stores via `set_car`.
+    #[inline]
+    pub unsafe fn load_car(&self) -> TaggedValue {
+        let p = &self.car as *const TaggedValue as *const AtomicUsize;
+        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+    }
+
+    /// Atomic (relaxed) read of `cdr` (the cdr/next-free union word).
+    #[inline]
+    pub unsafe fn load_cdr(&self) -> TaggedValue {
+        let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
+        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+    }
+
+    /// Store `car` atomically (relaxed) so a concurrent GC read sees a whole
+    /// value, never a torn word. On x86 this is a plain `mov`.
     #[inline]
     pub unsafe fn set_car(&mut self, value: TaggedValue) {
-        self.car = value;
+        let p = &self.car as *const TaggedValue as *const AtomicUsize;
+        unsafe { (*p).store(value.0, Ordering::Relaxed) };
     }
 
     #[inline]
     pub unsafe fn set_cdr(&mut self, value: TaggedValue) {
-        self.cdr_or_next.cdr = value;
+        let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
+        unsafe { (*p).store(value.0, Ordering::Relaxed) };
     }
 
     #[inline]

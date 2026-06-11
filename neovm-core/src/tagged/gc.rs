@@ -2051,8 +2051,8 @@ impl TaggedHeap {
         for (start, len) in cons_ranges {
             for i in 0..len {
                 let cell = unsafe { start.add(i) };
-                let car = unsafe { (*cell).car };
-                let cdr = unsafe { (*cell).cdr() };
+                let car = unsafe { (*cell).load_car() };
+                let cdr = unsafe { (*cell).load_cdr() };
                 if self.is_heap_young(car) || self.is_heap_young(cdr) {
                     let value = unsafe { TaggedValue::from_cons_ptr(cell) };
                     self.mapped_remembered.insert(value.bits());
@@ -2175,8 +2175,8 @@ impl TaggedHeap {
         for (start, len) in cons_ranges {
             for i in 0..len {
                 let cell = unsafe { start.add(i) };
-                let car = unsafe { (*cell).car };
-                let cdr = unsafe { (*cell).cdr() };
+                let car = unsafe { (*cell).load_car() };
+                let cdr = unsafe { (*cell).load_cdr() };
                 if car.is_heap_object() {
                     self.push_gray(car, "first-cycle-mapped-cons-car");
                 }
@@ -2228,8 +2228,8 @@ impl TaggedHeap {
     fn push_value_children_to_gray(&mut self, owner: TaggedValue, origin: &'static str) {
         if owner.is_cons() {
             let ptr = owner.xcons_ptr();
-            let car = unsafe { (*ptr).car };
-            let cdr = unsafe { (*ptr).cdr() };
+            let car = unsafe { (*ptr).load_car() };
+            let cdr = unsafe { (*ptr).load_cdr() };
             if car.is_heap_object() {
                 self.push_gray(car, origin);
             }
@@ -2368,7 +2368,7 @@ impl TaggedHeap {
         for (start, len) in cons_ranges {
             for i in 0..len {
                 let cell = unsafe { start.add(i) };
-                for child in [unsafe { (*cell).car }, unsafe { (*cell).cdr() }] {
+                for child in [unsafe { (*cell).load_car() }, unsafe { (*cell).load_cdr() }] {
                     if child.is_heap_object() && !self.is_value_marked(child) {
                         record("Cons", child);
                     }
@@ -2507,7 +2507,7 @@ impl TaggedHeap {
                 if !self.is_value_marked(unsafe { TaggedValue::from_cons_ptr(cell) }) {
                     continue;
                 }
-                for child in [unsafe { (*cell).car }, unsafe { (*cell).cdr() }] {
+                for child in [unsafe { (*cell).load_car() }, unsafe { (*cell).load_cdr() }] {
                     if child.is_heap_object() && !self.is_value_marked(child) {
                         *violations.entry("young:Cons".to_string()).or_insert(0) += 1;
                         sample.get_or_insert(child.0);
@@ -3105,8 +3105,8 @@ impl TaggedHeap {
         if val.is_cons() {
             let ptr = val.xcons_ptr();
             if self.mark_cons(ptr) {
-                let car = unsafe { (*ptr).car };
-                let cdr = unsafe { (*ptr).cdr() };
+                let car = unsafe { (*ptr).load_car() };
+                let cdr = unsafe { (*ptr).load_cdr() };
                 if car.is_heap_object() {
                     self.push_gray(car, "cons-car");
                 }
