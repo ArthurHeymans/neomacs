@@ -66,9 +66,41 @@ Both are bounded root scans, sub-ms. Everything between runs concurrently.
 - Phase 1 — Atomic mark state. Convert cons bitmaps / `GcHeader.marked` / mapped
   mark vectors to atomic access. No concurrency yet (single-threaded, behavior
   identical) — de-risks the representation change in isolation.
-- Phase 2 — Atomic object slots. Convert the slots the GC reads (cons car/cdr,
-  vector/record/closure/bytecode/char-table data, etc.) to atomic access. Still
-  single-threaded. Verify no regression.
+- Phase 2 — Atomic object slots. Convert the slots the GC reads to atomic
+  access. Still single-threaded. Verify no regression.
+  - 2a DONE (`f116d798b`): cons car/cdr (a single set_car/set_cdr chokepoint).
+  - 2b/2c the hard part — see "Resizable structures" below. Fixed-size arrays
+    (Emacs vector / record / closure: set via `aset`, never resized) and the
+    individual TaggedValue fields are mechanical (atomic element store at the
+    write + atomic load in `trace_veclike`). GROWABLE structures need real care.
+
+### Resizable structures (the Phase 2b/2c design decision)
+
+Unlike cons, veclike slot writes are NOT a single chokepoint: `with_*_data_mut`
+hand a `&mut Vec<TaggedValue>` to arbitrary closures (push/extend/index/sort),
+and hash tables + obarray buckets GROW — a `Vec::push` can REALLOCATE, moving
+the backing buffer. A concurrent GC thread holding a pointer into the old
+buffer would then read freed memory (UAF). So plain "atomic element store"
+only suffices for fixed-size arrays.
+
+Approach for growable structures (to implement when the GC thread lands):
+1. Element writes go through the atomic-store path + the SATB barrier (records
+   the overwritten value) — keeps the start-of-cycle snapshot live.
+2. The backing-buffer POINTER is published atomically (Release) on realloc and
+   loaded atomically (Acquire) by the GC; the OLD buffer is RETIRED onto a
+   "retired buffers" list kept alive until mark termination, so the GC thread's
+   in-flight read of either buffer is always valid (no UAF). Freed at the
+   termination handshake.
+3. Alternatively (simpler first cut): snapshot growable structures' slot
+   pointers into the gray queue at the STW root-snapshot handshake, so the GC
+   thread never reads a growable backing buffer concurrently — only fixed-size
+   arrays and individual fields are read concurrently. Element mutations are
+   still covered by SATB. This trades a slightly larger snapshot handshake for
+   not needing retired-buffer bookkeeping; do this first, optimize later.
+
+Recommended: start with (3) — fixed-size arrays + fields read concurrently
+(mechanical atomic conversion), growable structures captured at the snapshot
+handshake. Move to (2) only if the snapshot handshake proves too long.
 - Phase 3 — SATB barrier + per-mutator log buffers, drained on the mark path.
   Still single-threaded (the buffer just replaces/augments dirty-owner re-trace).
 - Phase 4 — GC thread + handshake protocol + shareable heap (the `Send`/sharing
