@@ -686,6 +686,12 @@ pub struct TaggedHeap {
     gc_collections: usize,
     gc_total_elapsed_us: u64,
 
+    /// Time (µs) spent in the `begin_collection` mark-clear pass of the most
+    /// recent collection. Part of the clear/mark/sweep split used to size the
+    /// dump-partition opportunity (the clear pass and the dump re-mark are the
+    /// non-fundamental costs a "dump as permanent tenured region" would remove).
+    last_clear_us: u64,
+
     /// Owners mutated since the last full collection.
     ///
     /// This is the minimal remembered-set precursor for future generational
@@ -732,6 +738,7 @@ impl TaggedHeap {
             dirty_writes: Vec::new(),
             gc_collections: 0,
             gc_total_elapsed_us: 0,
+            last_clear_us: 0,
         }
     }
 
@@ -1690,6 +1697,8 @@ impl TaggedHeap {
         // (Pre-mark verification removed — unmarked objects may have stale data
         //  that will be swept. Only post-mark verification is meaningful.)
 
+        let clear_t0 = std::time::Instant::now();
+
         // -- Clear marks --
         for block in &mut self.cons_blocks {
             block.clear_marks();
@@ -1714,6 +1723,8 @@ impl TaggedHeap {
                 obj = (*obj).next;
             }
         }
+
+        self.last_clear_us = clear_t0.elapsed().as_micros() as u64;
 
         // -- Seed gray queue from roots --
         self.gray_queue.clear();
@@ -1767,7 +1778,10 @@ impl TaggedHeap {
         let t0 = std::time::Instant::now();
 
         // -- Mark phase: drain gray queue --
+        let mark_t0 = std::time::Instant::now();
         self.mark_all();
+        let mark_us = mark_t0.elapsed().as_micros() as u64;
+        let sweep_t0 = std::time::Instant::now();
 
         // Unchain dead markers BEFORE `sweep_objects` frees them; the
         // chain would otherwise hold dangling pointers after the sweep.
@@ -1785,14 +1799,43 @@ impl TaggedHeap {
             .saturating_add(mapped_object_live_bytes);
         self.bytes_since_gc = 0;
 
+        let sweep_us = sweep_t0.elapsed().as_micros() as u64;
         let elapsed = t0.elapsed();
         self.gc_collections += 1;
         self.gc_total_elapsed_us += elapsed.as_micros() as u64;
 
+        // Phase split + dump-partition opportunity sizing. `mapped_marked` is
+        // the immutable pdump (mapped) objects re-traced this cycle — the work
+        // a "dump as permanent tenured region" partition would eliminate —
+        // versus the mutable heap (`cons_live` + `heap_noncons`).
+        let (mapped_total, mapped_marked) = self.mapped_object_stats();
+        // Batch/headless runs don't install the tracing subscriber, so mirror
+        // the phase split to stderr when `NEOVM_GC_TRACE=1` for profiling.
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC gc#{} {:.2}ms [clear={}us mark={}us sweep={}us] \
+                 cons_live={} heap_noncons={} dump_marked={}/{} dirty_owners={} live={}B",
+                self.gc_collections,
+                elapsed.as_micros() as f64 / 1000.0,
+                self.last_clear_us,
+                mark_us,
+                sweep_us,
+                self.cons_live_count,
+                self.non_cons_object_addrs.len(),
+                mapped_marked,
+                mapped_total,
+                self.dirty_owners.len(),
+                self.live_bytes,
+            );
+        }
         tracing::debug!(
-            "gc#{} {:.1}ms, {} → {} bytes ({:+.1}%), cons_live={}, threshold={}",
+            "gc#{} {:.2}ms [clear={}us mark={}us sweep={}us] {} → {} bytes ({:+.1}%), \
+             cons_live={}, heap_noncons={}, dump_marked={}/{}, dirty_owners={}, threshold={}",
             self.gc_collections,
-            self.gc_total_elapsed_us as f64 / self.gc_collections as f64 / 1000.0,
+            elapsed.as_micros() as f64 / 1000.0,
+            self.last_clear_us,
+            mark_us,
+            sweep_us,
             bytes_before,
             self.live_bytes,
             if bytes_before > 0 {
@@ -1801,6 +1844,10 @@ impl TaggedHeap {
                 0.0
             },
             self.cons_live_count,
+            self.non_cons_object_addrs.len(),
+            mapped_marked,
+            mapped_total,
+            self.dirty_owners.len(),
             self.gc_threshold,
         );
 
@@ -2280,6 +2327,43 @@ impl TaggedHeap {
         }
 
         live_bytes
+    }
+
+    /// `(total mapped objects, mapped objects currently marked)`.
+    ///
+    /// The marked count is how many immutable pdump (mapped) objects the mark
+    /// phase re-traced this cycle — pure overhead that a "dump as permanent
+    /// tenured region" partition would eliminate, since mapped objects are
+    /// never freed. Used only for GC phase instrumentation.
+    fn mapped_object_stats(&self) -> (usize, usize) {
+        let veclike_total = self.mapped_veclike_objects.len();
+        let veclike_marked = self
+            .mapped_veclike_objects
+            .iter()
+            .filter(|object| object.marked)
+            .count();
+        let string_total = self.mapped_string_objects.len();
+        let string_marked = self
+            .mapped_string_objects
+            .iter()
+            .filter(|object| object.marked)
+            .count();
+        let cons_total: usize = self.mapped_cons_ranges.iter().map(|range| range.len).sum();
+        let cons_marked: usize = self
+            .mapped_cons_ranges
+            .iter()
+            .map(MappedConsRange::live_count)
+            .sum();
+        let float_total: usize = self.mapped_float_ranges.iter().map(|range| range.len).sum();
+        let float_marked: usize = self
+            .mapped_float_ranges
+            .iter()
+            .map(MappedFloatRange::live_count)
+            .sum();
+        (
+            veclike_total + string_total + cons_total + float_total,
+            veclike_marked + string_marked + cons_marked + float_marked,
+        )
     }
 
     fn mapped_non_cons_live_bytes(&self) -> usize {
