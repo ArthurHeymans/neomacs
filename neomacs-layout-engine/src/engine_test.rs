@@ -125,6 +125,61 @@ fn captured_cursor_info_builds_from_active_face_state() {
     assert!(!cursor.stretch_like);
 }
 
+#[test]
+fn captured_cursor_info_builds_display_box_from_active_face_state() {
+    let eval = Context::new();
+    let resolver = crate::neovm_bridge::FaceResolver::new(
+        eval.face_table(),
+        0x00FFFFFF,
+        0x00000000,
+        14.0,
+        None,
+    );
+    let mut face = resolver.default_face().clone();
+    face.bg = 0x00445566;
+    let mut font_metrics = None;
+    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        9,
+        &face,
+        None,
+        7.5,
+        crate::display_row::DisplayRowFallbackMetrics {
+            char_width: 7.5,
+            row_height: 18.0,
+            ascent: 13.0,
+        },
+        &mut font_metrics,
+    );
+    let active_face = DisplayRowActiveFaceState::new(face, measured);
+
+    let cursor = CapturedCursorInfo::display_box_from_active_face_state(
+        &active_face,
+        CapturedCursorPlacement {
+            x: 21.0,
+            y: 34.0,
+            byte_idx: 5,
+            col: 3,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(42.0),
+            stretch_like: true,
+        },
+        31.0,
+        29.0,
+    );
+
+    assert_eq!(cursor.x, 21.0);
+    assert_eq!(cursor.y, 34.0);
+    assert_eq!(cursor.face_w, 7.5);
+    assert_eq!(cursor.face_h, 31.0);
+    assert_eq!(cursor.face_ascent, 29.0);
+    assert_eq!(cursor.bg, Color::from_pixel(0x00445566));
+    assert_eq!(cursor.byte_idx, 5);
+    assert_eq!(cursor.col, 3);
+    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.slot_width, Some(42.0));
+    assert!(cursor.stretch_like);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

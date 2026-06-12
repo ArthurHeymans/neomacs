@@ -196,6 +196,28 @@ impl CapturedCursorInfo {
             stretch_like: placement.stretch_like,
         }
     }
+
+    fn display_box_from_active_face_state(
+        active_face_state: &DisplayRowActiveFaceState,
+        placement: CapturedCursorPlacement,
+        face_height: f32,
+        face_ascent: f32,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        Self {
+            x: placement.x,
+            y: placement.y,
+            face_w: metrics.char_width,
+            face_h: face_height,
+            face_ascent,
+            bg: active_face_state.background(),
+            byte_idx: placement.byte_idx,
+            col: placement.col,
+            matrix_row: placement.matrix_row,
+            slot_width: Some(placement.slot_width.resolve(metrics.char_width)),
+            stretch_like: placement.stretch_like,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -4270,19 +4292,22 @@ impl LayoutEngine {
                             if point_in_display_replacement {
                                 capture_cursor_info(
                                     &mut cursor_info,
-                                    CapturedCursorInfo {
-                                        x,
-                                        y,
-                                        face_w: face_metrics.char_width,
-                                        face_h: cursor_face_h,
-                                        face_ascent: cursor_face_ascent,
-                                        bg: active_face_state.background(),
-                                        byte_idx,
-                                        col,
-                                        matrix_row: row,
-                                        slot_width: Some(display_width.max(1.0)),
-                                        stretch_like: false,
-                                    },
+                                    CapturedCursorInfo::display_box_from_active_face_state(
+                                        &active_face_state,
+                                        CapturedCursorPlacement {
+                                            x,
+                                            y,
+                                            byte_idx,
+                                            col,
+                                            matrix_row: row,
+                                            slot_width: CapturedCursorSlotWidth::Explicit(
+                                                display_width,
+                                            ),
+                                            stretch_like: false,
+                                        },
+                                        cursor_face_h,
+                                        cursor_face_ascent,
+                                    ),
                                 );
                             }
 
