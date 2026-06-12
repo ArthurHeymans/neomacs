@@ -487,6 +487,18 @@ fn fixed_glyph_advances_return_inserted_widths() {
 }
 
 #[test]
+fn display_text_run_measurement_exposes_measured_advances() {
+    let advances = vec![
+        DisplayTextRunAdvance::new(0, 0, 8.0),
+        DisplayTextRunAdvance::new(1, 1, 9.0),
+    ];
+    let measured = DisplayTextRunMeasurement::Measured(advances.clone());
+
+    assert_eq!(measured.measured_advances(), Some(advances.as_slice()));
+    assert_eq!(DisplayTextRunMeasurement::PerChar.measured_advances(), None);
+}
+
+#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));

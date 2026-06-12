@@ -5138,23 +5138,22 @@ impl LayoutEngine {
                         frame_params.window_system,
                         face_char_w,
                     );
-                    let shaped_advances =
-                        measurement_face.shaped_run_advances(&mut self.font_metrics, &run_text);
+                    let measurement =
+                        measurement_face.text_run_measurement(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its
                     // isolated width rather than collapsing to zero.
-                    if !shaped_advances.is_empty() {
-                        for (rel, c) in run_text.char_indices() {
+                    if let Some(advances) = measurement.measured_advances() {
+                        for advance in advances {
+                            let rel = advance.byte_offset;
+                            let Some(c) = run_text[rel..].chars().next() else {
+                                continue;
+                            };
                             if is_cluster_extender(c) {
                                 continue;
                             }
-                            let a: f32 = shaped_advances
-                                .iter()
-                                .filter(|(cluster_start, _)| *cluster_start == rel)
-                                .map(|(_, advance)| *advance)
-                                .sum();
-                            complex_run_adv.push((ch_start_byte_idx + rel, a));
+                            complex_run_adv.push((ch_start_byte_idx + rel, advance.advance_px));
                         }
                     }
                     complex_run_start = ch_start_byte_idx;

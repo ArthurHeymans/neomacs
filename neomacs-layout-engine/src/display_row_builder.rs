@@ -154,6 +154,13 @@ pub(crate) enum DisplayTextRunMeasurement {
 }
 
 impl DisplayTextRunMeasurement {
+    pub(crate) fn measured_advances(&self) -> Option<&[DisplayTextRunAdvance]> {
+        match self {
+            Self::PerChar => None,
+            Self::Measured(advances) => Some(advances),
+        }
+    }
+
     fn advance_for(&self, char_offset: usize, byte_offset: usize) -> Option<f32> {
         match self {
             Self::PerChar => None,

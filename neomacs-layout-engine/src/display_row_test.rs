@@ -1380,7 +1380,7 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
 }
 
 #[test]
-fn display_row_glyph_measurement_face_shapes_text_runs_with_face_attributes() {
+fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
@@ -1388,14 +1388,18 @@ fn display_row_glyph_measurement_face_shapes_text_runs_with_face_attributes() {
     let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
-    let advances = measurement_face.shaped_run_advances(&mut font_metrics, "سلام");
+    let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
 
+    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    else {
+        panic!("complex script run should produce a measured text-run plan");
+    };
     assert!(
         !advances.is_empty(),
         "complex script run should produce cluster advances"
     );
     assert!(
-        advances.iter().all(|(_, advance)| *advance >= 0.0),
+        advances.iter().all(|advance| advance.advance_px >= 0.0),
         "cluster advances should never be negative: {advances:?}"
     );
 }
