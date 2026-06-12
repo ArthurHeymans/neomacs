@@ -4999,9 +4999,8 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let measurement = current_face
-                        .measurement_face()
-                        .text_run_measurement(&mut self.font_metrics, &run_text);
+                    let measurement =
+                        current_face.text_run_measurement(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its

@@ -1579,6 +1579,20 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
         7.0
     );
     assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
+
+    let text_run_measurement = active.text_run_measurement(&mut font_metrics, "a中");
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        text_run_measurement
+    else {
+        panic!("active face should produce text-run measurement plans");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 7.0), (1, 1, 14.0)]
+    );
 }
 
 #[test]
