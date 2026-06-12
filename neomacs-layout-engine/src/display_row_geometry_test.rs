@@ -435,6 +435,40 @@ fn display_row_geometry_binding_can_run_display_row_geometry_state_scope() {
 }
 
 #[test]
+fn display_row_geometry_state_exposes_binding_to_owned_state() {
+    let mut geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    };
+
+    let result = geometry
+        .binding()
+        .with_display_row_geometry_state(|geometry| {
+            geometry.row += 1;
+            geometry.y += 16.0;
+            geometry.row_extra_y += 5.0;
+            geometry.include_row_extents(32.0, 20.0);
+            geometry.text_row_output(16.0)
+        });
+
+    assert_eq!(
+        geometry,
+        DisplayRowGeometryState {
+            row: 3,
+            y: 58.0,
+            row_extra_y: 8.0,
+            height: 32.0,
+            ascent: 20.0,
+        }
+    );
+    assert_eq!(result.row, 3);
+    assert_eq!(result.row_y, 58.0);
+}
+
+#[test]
 fn display_row_geometry_binding_include_glyph_vertical_metrics_by_name() {
     let mut row = 4;
     let mut y = 80.0;

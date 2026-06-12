@@ -475,6 +475,16 @@ impl DisplayRowGeometryState {
         )
     }
 
+    pub(crate) fn binding(&mut self) -> DisplayRowGeometryBinding<'_> {
+        DisplayRowGeometryBinding::new(
+            &mut self.row,
+            &mut self.y,
+            &mut self.row_extra_y,
+            &mut self.height,
+            &mut self.ascent,
+        )
+    }
+
     pub(crate) fn with_row_y(mut self, y: f32) -> Self {
         self.y = y;
         self

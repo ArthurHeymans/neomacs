@@ -38,10 +38,10 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryBinding, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
-    DisplayRowStartMarker, DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYFallback,
-    DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
+    DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker, DisplayRowStartMarker,
+    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions,
+    DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3417,8 +3417,6 @@ impl LayoutEngine {
 
         // Simple monospace text layout
         let mut x = content_x;
-        let mut y = text_y;
-        let mut row = 0usize;
         let mut col = 0usize;
         let mut byte_idx = 0usize;
         let mut charpos = window_start;
@@ -3496,25 +3494,18 @@ impl LayoutEngine {
         );
 
         // Variable-height row tracking
-        let mut row_max_height: f32 = char_h; // max glyph height on current row
-        let mut row_max_ascent: f32 = default_face_ascent; // max ascent on current row
-        let mut row_extra_y: f32 = 0.0; // cumulative extra height from previous rows
+        let mut row_geometry =
+            DisplayRowGeometryState::new(0, text_y, 0.0, char_h, default_face_ascent);
         let mut row_y_positions =
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
         macro_rules! current_row_geometry {
             () => {
-                DisplayRowGeometryState::new(row, y, row_extra_y, row_max_height, row_max_ascent)
+                row_geometry
             };
         }
         macro_rules! current_row_geometry_vars {
             () => {
-                DisplayRowGeometryBinding::new(
-                    &mut row,
-                    &mut y,
-                    &mut row_extra_y,
-                    &mut row_max_height,
-                    &mut row_max_ascent,
-                )
+                row_geometry.binding()
             };
         }
         // Trailing whitespace tracking
@@ -4736,9 +4727,10 @@ impl LayoutEngine {
                         }
                         if indent > selective_display {
                             // Show ... ellipsis once for the hidden block
-                            if !shown_ellipsis && row > 0 {
+                            let current_row = current_row_geometry!().row;
+                            if !shown_ellipsis && current_row > 0 {
                                 let _prev_row_y = row_y_positions.y_for_row(
-                                    row - 1,
+                                    current_row - 1,
                                     DisplayRowYFallback {
                                         text_y,
                                         default_height: char_h,
