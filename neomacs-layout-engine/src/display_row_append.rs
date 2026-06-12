@@ -35,7 +35,7 @@ use crate::unicode::decode_utf8;
 use crate::window_output::DisplayProgressSink;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
+use neovm_core::buffer::{BufferId, CharLen, EmacsByteRange};
 use neovm_core::emacs_core::Context;
 #[cfg(test)]
 use neovm_core::emacs_core::Value;
@@ -500,43 +500,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
         return None;
     }
 
-    append_buffer_text_char_to_text_row(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        face_resolver,
-        base_face,
-        buffer_id,
-        buffer,
-        start,
-        face_id,
-        ch,
-        advance,
-        frame,
-        position,
-    )
-}
-
-pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    char_pos: CharPos0,
-    face_id: u32,
-    ch: char,
-    advance: f32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(char_pos);
-    let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(char_pos.add_len(CharLen::new(1)));
-    let item = BufferTextItemSource::single_char(buffer_id, char_pos, byte_start, byte_end).item(
+    let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
     );
@@ -595,48 +559,6 @@ pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_text_item_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    source: BufferTextItemSource,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    face_id: u32,
-    kind: DisplayItemKind,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let max_x_px = if matches!(kind, DisplayItemKind::ControlChar { .. }) {
-        frame.content_x + (frame.text_width - frame.line_number_width)
-    } else {
-        frame.content_x + frame.geometry.width
-    };
-    let output_height = if matches!(
-        kind,
-        DisplayItemKind::ControlChar { .. } | DisplayItemKind::SourceMappedText(_)
-    ) {
-        frame.default_row_height
-    } else {
-        frame.geometry.height
-    };
-    let item = source.item(RenderFaceRef::FaceId(face_id), kind);
-    let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face)
-        .with_max_x_px(max_x_px)
-        .with_output_height(output_height);
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    append_single_display_item_fragment_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        item,
-        face_resolver,
-        request,
-        &mut render_policy,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     B: LayoutBufferView + ?Sized,
 >(
@@ -671,17 +593,32 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
         buffer.layout_char_pos_to_emacs_byte_pos(end),
     );
 
-    append_buffer_text_item_to_text_row_and_emit(
+    let max_x_px = if matches!(kind, DisplayItemKind::ControlChar { .. }) {
+        frame.content_x + (frame.text_width - frame.line_number_width)
+    } else {
+        frame.content_x + frame.geometry.width
+    };
+    let output_height = if matches!(
+        kind,
+        DisplayItemKind::ControlChar { .. } | DisplayItemKind::SourceMappedText(_)
+    ) {
+        frame.default_row_height
+    } else {
+        frame.geometry.height
+    };
+    let item = source.item(RenderFaceRef::FaceId(face_id), kind);
+    let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face)
+        .with_max_x_px(max_x_px)
+        .with_output_height(output_height);
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    append_single_display_item_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
-        source,
+        item,
         face_resolver,
-        base_face,
-        face_id,
-        kind,
-        frame,
-        position,
+        request,
+        &mut render_policy,
     )
 }
 
