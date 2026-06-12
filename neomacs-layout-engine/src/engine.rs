@@ -3498,16 +3498,6 @@ impl LayoutEngine {
             DisplayRowGeometryState::new(0, text_y, 0.0, char_h, default_face_ascent);
         let mut row_y_positions =
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
-        macro_rules! current_row_geometry {
-            () => {
-                row_geometry
-            };
-        }
-        macro_rules! current_row_geometry_vars {
-            () => {
-                row_geometry.binding()
-            };
-        }
         // Trailing whitespace tracking
         let trailing_ws_bg = if params.show_trailing_whitespace {
             Some(Color::from_pixel(params.trailing_ws_bg))
@@ -3625,7 +3615,8 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
-                    current_row_geometry_vars!()
+                    row_geometry
+                        .binding()
                         .include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
                     current_face_id += 1;
@@ -3633,7 +3624,7 @@ impl LayoutEngine {
                     if resolved.extend {
                         let ext_bg = Color::from_pixel(resolved.bg);
                         row_extend_bg = Some((ext_bg, face_id));
-                        row_extend_row = current_row_geometry!().current_row_marker();
+                        row_extend_row = row_geometry.current_row_marker();
                     }
 
                     if box_active && resolved.box_type == 0 {
@@ -3642,7 +3633,7 @@ impl LayoutEngine {
                     if resolved.box_type > 0 {
                         box_active = true;
                         box_start_x = x;
-                        box_row = current_row_geometry!().current_row_marker();
+                        box_row = row_geometry.current_row_marker();
                     }
                 }
             };
@@ -3677,7 +3668,7 @@ impl LayoutEngine {
             params.selected,
         );
         TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
-            .begin(current_row_geometry!().text_matrix_row_begin(text_matrix_row_base, col, x));
+            .begin(row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x));
 
         let row_visibility_limit = DisplayRowVisibilityLimit {
             max_rows,
@@ -3687,9 +3678,7 @@ impl LayoutEngine {
         let row_geometry_defaults =
             DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
 
-        while byte_idx < text.len()
-            && current_row_geometry!().current_row_is_visible(row_visibility_limit)
-        {
+        while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
             // Render line number at start of each visual line
             if need_line_number && lnum_enabled {
                 let display_num = match lnum_mode {
@@ -3733,7 +3722,7 @@ impl LayoutEngine {
                 let num_chars = num_str.len() as i32;
                 let padding = (lnum_cols - 1) - num_chars; // -1 for trailing space
 
-                let _gy = current_row_geometry!().glyph_y(0.0);
+                let _gy = row_geometry.glyph_y(0.0);
 
                 // Leading padding (stretch)
                 if padding > 0 {
@@ -3799,7 +3788,7 @@ impl LayoutEngine {
                     );
 
                     let append_frame = text_append_surface.frame_for_active_face(
-                        current_row_geometry!().append_placement(raise_y_offset),
+                        row_geometry.append_placement(raise_y_offset),
                         &active_face_state,
                         char_h,
                     );
@@ -3839,7 +3828,7 @@ impl LayoutEngine {
                             CapturedCursorInfo::from_active_face_state(
                                 &active_face_state,
                                 CapturedCursorPlacement::from_row_text_position(
-                                    current_row_geometry!().text_position(x, byte_idx, col),
+                                    row_geometry.text_position(x, byte_idx, col),
                                     CapturedCursorSlotWidth::FaceChar,
                                     false,
                                 ),
@@ -3857,7 +3846,7 @@ impl LayoutEngine {
                         self.run_buf.clear();
 
                         let ellipsis_frame = text_append_surface.frame_for_active_face(
-                            current_row_geometry!().append_placement(raise_y_offset),
+                            row_geometry.append_placement(raise_y_offset),
                             &active_face_state,
                             char_h,
                         );
@@ -3897,7 +3886,7 @@ impl LayoutEngine {
                             self.run_buf.clear();
                             let right_limit = content_x + avail_width;
                             for overlay_string in &after_strings {
-                                current_row_geometry_vars!().with_display_row_geometry_state(
+                                row_geometry.binding().with_display_row_geometry_state(
                                     |geometry| {
                                         render_overlay_string(
                                             evaluator,
@@ -3960,8 +3949,8 @@ impl LayoutEngine {
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
 
-                    let geometry_transition = current_row_geometry_vars!()
-                        .finish_boundary_and_record_hit(
+                    let geometry_transition =
+                        row_geometry.binding().finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::line_break(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -4001,11 +3990,7 @@ impl LayoutEngine {
                             CapturedCursorInfo::line_break_from_active_face_state(
                                 &active_face_state,
                                 CapturedCursorPlacement::from_row_text_position(
-                                    current_row_geometry!().text_position(
-                                        x,
-                                        ch_start_byte_idx,
-                                        col,
-                                    ),
+                                    row_geometry.text_position(x, ch_start_byte_idx, col),
                                     CapturedCursorSlotWidth::FaceChar,
                                     false,
                                 ),
@@ -4029,7 +4014,7 @@ impl LayoutEngine {
                     if hscroll_remaining <= 0 && show_left_trunc {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
                         let trunc_frame = text_append_surface.frame(
-                            current_row_geometry!().append_placement(0.0),
+                            row_geometry.append_placement(0.0),
                             DisplayRowAppendMetrics {
                                 height: char_h,
                                 ascent: default_face_ascent,
@@ -4069,11 +4054,7 @@ impl LayoutEngine {
                             CapturedCursorInfo::from_active_face_state(
                                 &active_face_state,
                                 CapturedCursorPlacement::from_row_text_position(
-                                    current_row_geometry!().text_position(
-                                        x,
-                                        ch_start_byte_idx,
-                                        col,
-                                    ),
+                                    row_geometry.text_position(x, ch_start_byte_idx, col),
                                     CapturedCursorSlotWidth::FaceChar,
                                     false,
                                 ),
@@ -4131,7 +4112,7 @@ impl LayoutEngine {
                                 CapturedCursorInfo::from_active_face_state(
                                     &active_face_state,
                                     CapturedCursorPlacement::from_row_text_position(
-                                        current_row_geometry!().text_position(x, byte_idx, col),
+                                        row_geometry.text_position(x, byte_idx, col),
                                         CapturedCursorSlotWidth::Explicit(slot_width),
                                         false,
                                     ),
@@ -4207,7 +4188,7 @@ impl LayoutEngine {
                                 );
                                 let append_frame = replacement_string_surface
                                     .frame_for_active_face(
-                                        current_row_geometry!().append_placement(raise_y_offset),
+                                        row_geometry.append_placement(raise_y_offset),
                                         &active_face_state,
                                         char_h,
                                     );
@@ -4267,7 +4248,7 @@ impl LayoutEngine {
                                 CapturedCursorInfo::from_active_face_state(
                                     &active_face_state,
                                     CapturedCursorPlacement::from_row_text_position(
-                                        current_row_geometry!().text_position(x, byte_idx, col),
+                                        row_geometry.text_position(x, byte_idx, col),
                                         CapturedCursorSlotWidth::Explicit(
                                             space_width.max(face_metrics.char_width),
                                         ),
@@ -4278,7 +4259,7 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
-                            current_row_geometry_vars!().include_glyph_vertical_metrics(
+                            row_geometry.binding().include_glyph_vertical_metrics(
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
@@ -4296,7 +4277,7 @@ impl LayoutEngine {
                                 ),
                             );
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                current_row_geometry!().append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_y_offset),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4369,7 +4350,7 @@ impl LayoutEngine {
                                     CapturedCursorInfo::display_box_from_active_face_state(
                                         &active_face_state,
                                         CapturedCursorPlacement::from_row_text_position(
-                                            current_row_geometry!().text_position(x, byte_idx, col),
+                                            row_geometry.text_position(x, byte_idx, col),
                                             CapturedCursorSlotWidth::Explicit(display_width),
                                             false,
                                         ),
@@ -4380,7 +4361,7 @@ impl LayoutEngine {
                             }
 
                             let replacement_frame = text_append_surface.frame(
-                                current_row_geometry!().append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_y_offset),
                                 DisplayRowAppendMetrics::display_box_from_active_face_state(
                                     &active_face_state,
                                     display_height,
@@ -4406,7 +4387,8 @@ impl LayoutEngine {
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                 && progress.metrics.width_px > 0.0
                             {
-                                current_row_geometry_vars!()
+                                row_geometry
+                                    .binding()
                                     .include_row_extents(display_height, display_height);
                                 x = position.x_px;
                                 col = position.col;
@@ -4418,7 +4400,7 @@ impl LayoutEngine {
                                     CapturedCursorInfo::from_active_face_state(
                                         &active_face_state,
                                         CapturedCursorPlacement::from_row_text_position(
-                                            current_row_geometry!().text_position(x, byte_idx, col),
+                                            row_geometry.text_position(x, byte_idx, col),
                                             CapturedCursorSlotWidth::FaceChar,
                                             false,
                                         ),
@@ -4426,7 +4408,7 @@ impl LayoutEngine {
                                 );
                             }
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                current_row_geometry!().append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_y_offset),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4510,7 +4492,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let ellipsis_frame = text_append_surface.frame_for_active_face(
-                    current_row_geometry!().append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -4545,10 +4527,10 @@ impl LayoutEngine {
                         row_extend_row = DisplayRowMarker::Inactive;
                         if box_active {
                             box_start_x = content_x;
-                            box_row = current_row_geometry!().next_row_marker();
+                            box_row = row_geometry.next_row_marker();
                         }
-                        let geometry_transition = current_row_geometry_vars!()
-                            .finish_boundary_and_record_hit(
+                        let geometry_transition =
+                            row_geometry.binding().finish_boundary_and_record_hit(
                                 DisplayRowBoundaryTarget::line_break(
                                     DisplayRowHitRange {
                                         charpos_start: hit_row_charpos_start,
@@ -4606,7 +4588,7 @@ impl LayoutEngine {
                         CapturedCursorInfo::from_active_face_state(
                             &active_face_state,
                             CapturedCursorPlacement::from_row_text_position(
-                                current_row_geometry!().text_position(x, ch_start_byte_idx, col),
+                                row_geometry.text_position(x, ch_start_byte_idx, col),
                                 CapturedCursorSlotWidth::FaceChar,
                                 false,
                             ),
@@ -4615,7 +4597,7 @@ impl LayoutEngine {
                 }
                 // Highlight trailing whitespace before advancing to next row
                 if let Some(_tw_bg) = trailing_ws_bg {
-                    if let Some(tw_x) = trailing_ws_start.x_on(&current_row_geometry!()) {
+                    if let Some(tw_x) = trailing_ws_start.x_on(&row_geometry) {
                         let tw_w = x - tw_x;
                         if tw_w > 0.0 {}
                     }
@@ -4624,7 +4606,7 @@ impl LayoutEngine {
 
                 // Face :extend: fill rest of row with extending face background
                 if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
-                    if row_extend_row.is_active_on(&current_row_geometry!()) {
+                    if row_extend_row.is_active_on(&row_geometry) {
                         let right_edge = content_x + avail_width;
                         if x < right_edge {}
                     }
@@ -4663,22 +4645,21 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let geometry_transition = current_row_geometry_vars!()
-                    .finish_boundary_and_record_hit(
-                        DisplayRowBoundaryTarget::line_break(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            line_spacing,
-                            row_y_positions.recording(),
-                        ),
-                        &mut hit_rows,
-                    );
+                let geometry_transition = row_geometry.binding().finish_boundary_and_record_hit(
+                    DisplayRowBoundaryTarget::line_break(
+                        DisplayRowHitRange {
+                            charpos_start: hit_row_charpos_start,
+                            charpos_end: charpos,
+                        },
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        line_spacing,
+                        row_y_positions.recording(),
+                    ),
+                    &mut hit_rows,
+                );
                 let row_transition = TextMatrixRowOutput::new(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4691,7 +4672,7 @@ impl LayoutEngine {
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_charpos_start = charpos;
                 if box_active {
-                    box_row = current_row_geometry!().current_row_marker();
+                    box_row = row_geometry.current_row_marker();
                 }
                 col = 0;
                 current_line += 1;
@@ -4727,7 +4708,7 @@ impl LayoutEngine {
                         }
                         if indent > selective_display {
                             // Show ... ellipsis once for the hidden block
-                            let current_row = current_row_geometry!().row;
+                            let current_row = row_geometry.row;
                             if !shown_ellipsis && current_row > 0 {
                                 let _prev_row_y = row_y_positions.y_for_row(
                                     current_row - 1,
@@ -4771,8 +4752,7 @@ impl LayoutEngine {
                 if x + needed_width > content_x + (text_width - lnum_pixel_width) {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
-                        current_row_geometry!()
-                            .mark_current_row_flag(&mut row_truncated, row_limit);
+                        row_geometry.mark_current_row_flag(&mut row_truncated, row_limit);
                         // Same byte_idx/charpos desync as the main-char
                         // truncation path: byte_idx is past the overflowing
                         // control char, but charpos hasn't been incremented
@@ -4785,8 +4765,8 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = DisplayRowMarker::Inactive;
-                        let geometry_transition = current_row_geometry_vars!()
-                            .finish_boundary_and_record_hit(
+                        let geometry_transition =
+                            row_geometry.binding().finish_boundary_and_record_hit(
                                 DisplayRowBoundaryTarget::truncation(
                                     DisplayRowHitRange {
                                         charpos_start: hit_row_charpos_start,
@@ -4820,13 +4800,12 @@ impl LayoutEngine {
                         }
                         continue;
                     } else {
-                        current_row_geometry!()
-                            .mark_current_row_flag(&mut row_continued, row_limit);
+                        row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = DisplayRowMarker::Inactive;
-                        let geometry_transition = current_row_geometry_vars!()
-                            .finish_boundary_and_record_hit(
+                        let geometry_transition =
+                            row_geometry.binding().finish_boundary_and_record_hit(
                                 DisplayRowBoundaryTarget::visual_wrap(
                                     DisplayRowHitRange {
                                         charpos_start: hit_row_charpos_start,
@@ -4853,12 +4832,11 @@ impl LayoutEngine {
                         }
                         col = 0;
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
-                        current_row_geometry!()
-                            .mark_current_row_flag(&mut row_continuation, row_limit);
+                        row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
                         if has_prefix {
                             need_prefix = 2;
                         }
-                        if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
+                        if !row_geometry.current_row_is_visible(row_visibility_limit) {
                             break;
                         }
                     }
@@ -4873,7 +4851,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    current_row_geometry!().append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -4921,7 +4899,7 @@ impl LayoutEngine {
                         CharPos0::new((charpos + 1) as usize),
                     );
                     let text_item_frame = text_append_surface.frame_for_active_face(
-                        current_row_geometry!().append_placement(raise_y_offset),
+                        row_geometry.append_placement(raise_y_offset),
                         &active_face_state,
                         char_h,
                     );
@@ -4984,7 +4962,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    current_row_geometry!().append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -5095,7 +5073,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
-                    current_row_geometry!().mark_current_row_flag(&mut row_truncated, row_limit);
+                    row_geometry.mark_current_row_flag(&mut row_truncated, row_limit);
                     // The current char has been decoded and `byte_idx` is
                     // already past it, but `charpos` is not yet incremented
                     // (that happens after the would-be push below). Account
@@ -5110,8 +5088,8 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition = current_row_geometry_vars!()
-                        .finish_boundary_and_record_hit(
+                    let geometry_transition =
+                        row_geometry.binding().finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::truncation(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -5154,12 +5132,12 @@ impl LayoutEngine {
                     charpos = wrap_break_charpos;
                     col = 0;
 
-                    current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
+                    row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition = current_row_geometry_vars!()
-                        .finish_boundary_and_record_hit(
+                    let geometry_transition =
+                        row_geometry.binding().finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -5185,7 +5163,7 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
-                    current_row_geometry!().mark_current_row_flag(&mut row_continuation, row_limit);
+                    row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
                     word_wrap_may_wrap = false;
                     wrap_has_break = false;
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
@@ -5196,18 +5174,18 @@ impl LayoutEngine {
                     // Force face re-check since we rewound
                     face_next_check = 0;
 
-                    if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
+                    if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;
                 } else {
                     // Character wrap (no break point available)
-                    current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
+                    row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition = current_row_geometry_vars!()
-                        .finish_boundary_and_record_hit(
+                    let geometry_transition =
+                        row_geometry.binding().finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -5233,7 +5211,7 @@ impl LayoutEngine {
                     }
                     col = 0;
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
-                    current_row_geometry!().mark_current_row_flag(&mut row_continuation, row_limit);
+                    row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
@@ -5242,7 +5220,7 @@ impl LayoutEngine {
                     if has_prefix {
                         need_prefix = 2;
                     }
-                    if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
+                    if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;
@@ -5263,7 +5241,7 @@ impl LayoutEngine {
                     CapturedCursorInfo::from_active_face_state(
                         &active_face_state,
                         CapturedCursorPlacement::from_row_text_position(
-                            current_row_geometry!().text_position(x, ch_start_byte_idx, col),
+                            row_geometry.text_position(x, ch_start_byte_idx, col),
                             CapturedCursorSlotWidth::Explicit(advance),
                             ch == '\t',
                         ),
@@ -5284,40 +5262,42 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &before_strings {
-                        current_row_geometry_vars!().with_display_row_geometry_state(|geometry| {
-                            render_overlay_string(
-                                evaluator,
-                                &mut output_emitter,
-                                buffer,
-                                DisplayTextFragment::overlay_string(
-                                    overlay_string.string,
-                                    overlay_string.overlay_id,
-                                    CharPos0::new(charpos as usize),
-                                    OverlayStringKind::Before,
-                                ),
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &mut x,
-                                &mut col,
-                                geometry,
-                                &mut cursor_info,
-                                &mut hit_rows,
-                                &mut hit_row_charpos_start,
-                                charpos,
-                                &mut row_y_positions,
-                                face_metrics.char_width,
-                                char_h,
-                                default_face_ascent,
-                                right_limit,
-                                content_x,
-                                text_y,
-                                text_matrix_row_base,
-                                max_rows,
-                                &mut current_face_id,
-                                &mut self.matrix_builder,
-                                params,
-                            );
-                        });
+                        row_geometry
+                            .binding()
+                            .with_display_row_geometry_state(|geometry| {
+                                render_overlay_string(
+                                    evaluator,
+                                    &mut output_emitter,
+                                    buffer,
+                                    DisplayTextFragment::overlay_string(
+                                        overlay_string.string,
+                                        overlay_string.overlay_id,
+                                        CharPos0::new(charpos as usize),
+                                        OverlayStringKind::Before,
+                                    ),
+                                    &mut self.font_metrics,
+                                    face_resolver,
+                                    &mut x,
+                                    &mut col,
+                                    geometry,
+                                    &mut cursor_info,
+                                    &mut hit_rows,
+                                    &mut hit_row_charpos_start,
+                                    charpos,
+                                    &mut row_y_positions,
+                                    face_metrics.char_width,
+                                    char_h,
+                                    default_face_ascent,
+                                    right_limit,
+                                    content_x,
+                                    text_y,
+                                    text_matrix_row_base,
+                                    max_rows,
+                                    &mut current_face_id,
+                                    &mut self.matrix_builder,
+                                    params,
+                                );
+                            });
                     }
                 }
             }
@@ -5328,7 +5308,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
             } else if self.run_buf.is_empty() {
-                let gy = current_row_geometry!().glyph_y(raise_y_offset);
+                let gy = row_geometry.glyph_y(raise_y_offset);
                 self.run_buf.start(
                     x,
                     gy,
@@ -5342,7 +5322,7 @@ impl LayoutEngine {
                 self.run_buf.push(ch, advance);
             }
             let frame = text_append_surface.frame_for_active_face(
-                current_row_geometry!().append_placement(raise_y_offset),
+                row_geometry.append_placement(raise_y_offset),
                 &active_face_state,
                 char_h,
             );
@@ -5395,40 +5375,42 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &after_strings {
-                        current_row_geometry_vars!().with_display_row_geometry_state(|geometry| {
-                            render_overlay_string(
-                                evaluator,
-                                &mut output_emitter,
-                                buffer,
-                                DisplayTextFragment::overlay_string(
-                                    overlay_string.string,
-                                    overlay_string.overlay_id,
-                                    CharPos0::new(charpos as usize),
-                                    OverlayStringKind::After,
-                                ),
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &mut x,
-                                &mut col,
-                                geometry,
-                                &mut cursor_info,
-                                &mut hit_rows,
-                                &mut hit_row_charpos_start,
-                                charpos,
-                                &mut row_y_positions,
-                                face_metrics.char_width,
-                                char_h,
-                                default_face_ascent,
-                                right_limit,
-                                content_x,
-                                text_y,
-                                text_matrix_row_base,
-                                max_rows,
-                                &mut current_face_id,
-                                &mut self.matrix_builder,
-                                params,
-                            );
-                        });
+                        row_geometry
+                            .binding()
+                            .with_display_row_geometry_state(|geometry| {
+                                render_overlay_string(
+                                    evaluator,
+                                    &mut output_emitter,
+                                    buffer,
+                                    DisplayTextFragment::overlay_string(
+                                        overlay_string.string,
+                                        overlay_string.overlay_id,
+                                        CharPos0::new(charpos as usize),
+                                        OverlayStringKind::After,
+                                    ),
+                                    &mut self.font_metrics,
+                                    face_resolver,
+                                    &mut x,
+                                    &mut col,
+                                    geometry,
+                                    &mut cursor_info,
+                                    &mut hit_rows,
+                                    &mut hit_row_charpos_start,
+                                    charpos,
+                                    &mut row_y_positions,
+                                    face_metrics.char_width,
+                                    char_h,
+                                    default_face_ascent,
+                                    right_limit,
+                                    content_x,
+                                    text_y,
+                                    text_matrix_row_base,
+                                    max_rows,
+                                    &mut current_face_id,
+                                    &mut self.matrix_builder,
+                                    params,
+                                );
+                            });
                     }
                 }
             }
@@ -5437,7 +5419,7 @@ impl LayoutEngine {
             if trailing_ws_bg.is_some() {
                 if ch == ' ' || ch == '\t' {
                     if !trailing_ws_start.is_active() {
-                        trailing_ws_start = current_row_geometry!().start_marker_at_x(x - advance);
+                        trailing_ws_start = row_geometry.start_marker_at_x(x - advance);
                     }
                 } else {
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
@@ -5458,7 +5440,7 @@ impl LayoutEngine {
                 tracing::debug!(
                     "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
                     x,
-                    current_row_geometry!().glyph_y(0.0),
+                    row_geometry.glyph_y(0.0),
                     point_charpos,
                     accessible_end
                 );
@@ -5468,7 +5450,7 @@ impl LayoutEngine {
                 CapturedCursorInfo::from_active_face_state(
                     &active_face_state,
                     CapturedCursorPlacement::from_row_text_position(
-                        current_row_geometry!().text_position(x, byte_idx, col),
+                        row_geometry.text_position(x, byte_idx, col),
                         CapturedCursorSlotWidth::FaceChar,
                         false,
                     ),
@@ -5482,7 +5464,7 @@ impl LayoutEngine {
         }
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
-        if has_overlays && current_row_geometry!().is_within_row_limit(row_limit) {
+        if has_overlays && row_geometry.is_within_row_limit(row_limit) {
             let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
                 buffer,
                 params.window_id as u64,
@@ -5490,76 +5472,80 @@ impl LayoutEngine {
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
             let right_limit = content_x + avail_width;
             for overlay_string in &before_strings {
-                current_row_geometry_vars!().with_display_row_geometry_state(|geometry| {
-                    render_overlay_string(
-                        evaluator,
-                        &mut output_emitter,
-                        buffer,
-                        DisplayTextFragment::overlay_string(
-                            overlay_string.string,
-                            overlay_string.overlay_id,
-                            CharPos0::new(charpos as usize),
-                            OverlayStringKind::Before,
-                        ),
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut x,
-                        &mut col,
-                        geometry,
-                        &mut cursor_info,
-                        &mut hit_rows,
-                        &mut hit_row_charpos_start,
-                        charpos,
-                        &mut row_y_positions,
-                        face_metrics.char_width,
-                        char_h,
-                        default_face_ascent,
-                        right_limit,
-                        content_x,
-                        text_y,
-                        text_matrix_row_base,
-                        max_rows,
-                        &mut current_face_id,
-                        &mut self.matrix_builder,
-                        params,
-                    );
-                });
+                row_geometry
+                    .binding()
+                    .with_display_row_geometry_state(|geometry| {
+                        render_overlay_string(
+                            evaluator,
+                            &mut output_emitter,
+                            buffer,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::Before,
+                            ),
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &mut x,
+                            &mut col,
+                            geometry,
+                            &mut cursor_info,
+                            &mut hit_rows,
+                            &mut hit_row_charpos_start,
+                            charpos,
+                            &mut row_y_positions,
+                            face_metrics.char_width,
+                            char_h,
+                            default_face_ascent,
+                            right_limit,
+                            content_x,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                            &mut current_face_id,
+                            &mut self.matrix_builder,
+                            params,
+                        );
+                    });
             }
             for overlay_string in &after_strings {
-                current_row_geometry_vars!().with_display_row_geometry_state(|geometry| {
-                    render_overlay_string(
-                        evaluator,
-                        &mut output_emitter,
-                        buffer,
-                        DisplayTextFragment::overlay_string(
-                            overlay_string.string,
-                            overlay_string.overlay_id,
-                            CharPos0::new(charpos as usize),
-                            OverlayStringKind::After,
-                        ),
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut x,
-                        &mut col,
-                        geometry,
-                        &mut cursor_info,
-                        &mut hit_rows,
-                        &mut hit_row_charpos_start,
-                        charpos,
-                        &mut row_y_positions,
-                        face_metrics.char_width,
-                        char_h,
-                        default_face_ascent,
-                        right_limit,
-                        content_x,
-                        text_y,
-                        text_matrix_row_base,
-                        max_rows,
-                        &mut current_face_id,
-                        &mut self.matrix_builder,
-                        params,
-                    );
-                });
+                row_geometry
+                    .binding()
+                    .with_display_row_geometry_state(|geometry| {
+                        render_overlay_string(
+                            evaluator,
+                            &mut output_emitter,
+                            buffer,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::After,
+                            ),
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &mut x,
+                            &mut col,
+                            geometry,
+                            &mut cursor_info,
+                            &mut hit_rows,
+                            &mut hit_row_charpos_start,
+                            charpos,
+                            &mut row_y_positions,
+                            face_metrics.char_width,
+                            char_h,
+                            default_face_ascent,
+                            right_limit,
+                            content_x,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                            &mut current_face_id,
+                            &mut self.matrix_builder,
+                            params,
+                        );
+                    });
             }
         }
 
@@ -5568,13 +5554,13 @@ impl LayoutEngine {
         if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
-            if x < right_edge && current_row_geometry!().is_within_row_limit(row_limit) {
-                let _ry = current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
+            if x < right_edge && row_geometry.is_within_row_limit(row_limit) {
+                let _ry = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
             }
             // Then fill completely empty rows below
-            let start_row = current_row_geometry!().first_row_below_current(row_limit);
+            let start_row = row_geometry.first_row_below_current(row_limit);
             for r in start_row..max_rows {
-                let ry = current_row_geometry!().row_y(r, &row_y_positions, text_y, char_h);
+                let ry = row_geometry.row_y(r, &row_y_positions, text_y, char_h);
                 if ry + char_h > text_y + text_height {
                     break;
                 } // Don't extend past text area
@@ -5585,7 +5571,7 @@ impl LayoutEngine {
         if params.left_fringe_width > 0.0 || params.right_fringe_width > 0.0 {
             let _fringe_char_w = params.left_fringe_width.min(char_w).max(char_w * 0.5);
 
-            for r in 0..current_row_geometry!().rendered_row_count(row_limit) {
+            for r in 0..row_geometry.rendered_row_count(row_limit) {
                 let _gy = row_y_positions.y_for_row(
                     r,
                     DisplayRowYFallback {
@@ -5613,9 +5599,9 @@ impl LayoutEngine {
 
             // Empty line indicators (after buffer text ends)
             if params.indicate_empty_lines > 0 {
-                let eob_start = current_row_geometry!().rendered_row_count(row_limit);
+                let eob_start = row_geometry.rendered_row_count(row_limit);
                 for r in eob_start..max_rows {
-                    let _gy = current_row_geometry!().row_y(r, &row_y_positions, text_y, char_h);
+                    let _gy = row_geometry.row_y(r, &row_y_positions, text_y, char_h);
                     let _fringe_x = if params.indicate_empty_lines == 2 {
                         right_fringe_x
                     } else {
@@ -5644,7 +5630,7 @@ impl LayoutEngine {
             // Draw indicator character at the fill column on each row
             if (fci_col as usize) < cols {
                 let indicator_x = content_x + fci_col as f32 * char_w;
-                let total_rows = current_row_geometry!().rendered_row_count(row_limit);
+                let total_rows = row_geometry.rendered_row_count(row_limit);
                 for r in 0..total_rows {
                     let _gy = row_y_positions.y_for_row(
                         r,
@@ -5664,7 +5650,7 @@ impl LayoutEngine {
                 let row_metric = row_metrics_for_cursor(
                     output_emitter.row_metrics(),
                     text_matrix_row_base + cursor.matrix_row,
-                    current_row_geometry!().row_metrics_snapshot(text_matrix_row_base),
+                    row_geometry.row_metrics_snapshot(text_matrix_row_base),
                 );
                 output_emitter.set_logical_cursor(cursor.logical_cursor_position(
                     row_metric,
@@ -5766,12 +5752,11 @@ impl LayoutEngine {
         }
 
         let has_pending_row_output = output_emitter.current_row_has_output();
-        if current_row_geometry!().is_within_row_limit(row_limit)
+        if row_geometry.is_within_row_limit(row_limit)
             && (charpos > hit_row_charpos_start || has_pending_row_output)
         {
-            let row_y_start =
-                current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
-            let row_cursor = current_row_geometry!().with_row_y(row_y_start).cursor();
+            let row_y_start = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
+            let row_cursor = row_geometry.with_row_y(row_y_start).cursor();
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
                 .finish(row_cursor.finish_current_row());
