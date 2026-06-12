@@ -1063,6 +1063,30 @@ fn display_row_geometry_defaults_constructor_groups_row_baseline_metrics() {
 }
 
 #[test]
+fn display_row_geometry_defaults_build_initial_row_state() {
+    let defaults = DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0);
+
+    assert_eq!(
+        defaults.initial_state(),
+        DisplayRowGeometryState::new(0, 10.0, 0.0, 16.0, 12.0)
+    );
+}
+
+#[test]
+fn display_row_geometry_defaults_build_row_y_fallback() {
+    let defaults = DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0);
+
+    assert_eq!(
+        defaults.row_y_fallback(9.0),
+        DisplayRowYFallback {
+            text_y: 10.0,
+            default_height: 16.0,
+            row_extra_y: 9.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range() {
     let defaults = DisplayRowGeometryDefaults {
         text_y: 10.0,

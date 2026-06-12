@@ -40,8 +40,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker, DisplayRowStartMarker,
-    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions,
-    DisplayRowYRecording,
+    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3494,8 +3493,9 @@ impl LayoutEngine {
         );
 
         // Variable-height row tracking
-        let mut row_geometry =
-            DisplayRowGeometryState::new(0, text_y, 0.0, char_h, default_face_ascent);
+        let row_geometry_defaults =
+            DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
+        let mut row_geometry = row_geometry_defaults.initial_state();
         let mut row_y_positions =
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
         // Trailing whitespace tracking
@@ -3673,8 +3673,6 @@ impl LayoutEngine {
             bottom_y: text_y + text_height,
         };
         let row_limit = DisplayRowLimit { max_rows };
-        let row_geometry_defaults =
-            DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
             // Render line number at start of each visual line
@@ -4702,11 +4700,7 @@ impl LayoutEngine {
                             if !shown_ellipsis && current_row > 0 {
                                 let _prev_row_y = row_y_positions.y_for_row(
                                     current_row - 1,
-                                    DisplayRowYFallback {
-                                        text_y,
-                                        default_height: char_h,
-                                        row_extra_y: 0.0,
-                                    },
+                                    row_geometry_defaults.row_y_fallback(0.0),
                                 );
                                 for dot_i in 0..3 {
                                     let dot_x = content_x + dot_i as f32 * face_metrics.char_width;
@@ -5541,14 +5535,7 @@ impl LayoutEngine {
             let _fringe_char_w = params.left_fringe_width.min(char_w).max(char_w * 0.5);
 
             for r in 0..row_geometry.rendered_row_count(row_limit) {
-                let _gy = row_y_positions.y_for_row(
-                    r,
-                    DisplayRowYFallback {
-                        text_y,
-                        default_height: char_h,
-                        row_extra_y: 0.0,
-                    },
-                );
+                let _gy = row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
 
                 // Right fringe: continuation arrow for wrapped lines
                 if params.right_fringe_width > 0.0 && row_continued.get(r).copied().unwrap_or(false)
@@ -5601,14 +5588,8 @@ impl LayoutEngine {
                 let indicator_x = content_x + fci_col as f32 * char_w;
                 let total_rows = row_geometry.rendered_row_count(row_limit);
                 for r in 0..total_rows {
-                    let _gy = row_y_positions.y_for_row(
-                        r,
-                        DisplayRowYFallback {
-                            text_y,
-                            default_height: char_h,
-                            row_extra_y: 0.0,
-                        },
-                    );
+                    let _gy =
+                        row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
                     if indicator_x < content_x + avail_width {}
                 }
             }

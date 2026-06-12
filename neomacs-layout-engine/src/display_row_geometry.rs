@@ -64,6 +64,18 @@ impl DisplayRowGeometryDefaults {
             ascent,
         }
     }
+
+    pub(crate) fn initial_state(self) -> DisplayRowGeometryState {
+        DisplayRowGeometryState::new(0, self.text_y, 0.0, self.height, self.ascent)
+    }
+
+    pub(crate) fn row_y_fallback(self, row_extra_y: f32) -> DisplayRowYFallback {
+        DisplayRowYFallback {
+            text_y: self.text_y,
+            default_height: self.height,
+            row_extra_y,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
