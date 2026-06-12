@@ -29,11 +29,16 @@ impl WaitBackendInterest {
         Self::ProcessesOnly
     }
 
-    pub(crate) fn for_wait_request(input_wakeup: bool, processes: bool) -> Self {
+    pub(crate) fn input_wakeup_only() -> Self {
+        Self::InputWakeupOnly
+    }
+
+    fn from_wait_flags(input_wakeup: bool, processes: bool) -> Option<Self> {
         match (input_wakeup, processes) {
-            (true, true) => Self::InputWakeupAndProcesses,
-            (true, false) => Self::InputWakeupOnly,
-            (false, true) | (false, false) => Self::ProcessesOnly,
+            (true, true) => Some(Self::InputWakeupAndProcesses),
+            (true, false) => Some(Self::InputWakeupOnly),
+            (false, true) => Some(Self::ProcessesOnly),
+            (false, false) => None,
         }
     }
 
@@ -226,8 +231,8 @@ impl WaitRequest {
         }
     }
 
-    fn backend_interest(self) -> WaitBackendInterest {
-        WaitBackendInterest::for_wait_request(
+    fn backend_interest(self) -> Option<WaitBackendInterest> {
+        WaitBackendInterest::from_wait_flags(
             self.keyboard.waits_for_host_input(),
             self.processes.services_processes(),
         )
@@ -471,10 +476,10 @@ impl super::eval::Context {
             return None;
         }
         if request.processes.services_processes() {
-            return Some(request.backend_interest());
+            return request.backend_interest();
         }
         if request.keyboard.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
-            return Some(request.backend_interest());
+            return request.backend_interest();
         }
         None
     }

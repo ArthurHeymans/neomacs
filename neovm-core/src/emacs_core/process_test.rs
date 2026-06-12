@@ -2328,7 +2328,7 @@ fn wait_backend_wakes_on_registered_input_wakeup_fd() {
     let events = processes
         .wait_for_backend_events(
             Duration::from_secs(1),
-            WaitBackendInterest::for_wait_request(true, false),
+            WaitBackendInterest::input_wakeup_only(),
         )
         .expect("poller should be available");
 
