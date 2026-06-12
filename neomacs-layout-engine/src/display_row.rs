@@ -7,7 +7,7 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
-    DisplayTextRunAdvance, DisplayTextRunMeasurement,
+    DisplayTextRunMeasurement,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -17,8 +17,9 @@ use crate::display_source_resolver::{
     resolve_next_display_source_item,
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
+use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
 use crate::engine::LayoutEngine;
-use crate::font_metrics::{FontMetrics, FontMetricsService, ShapedGlyph};
+use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
@@ -328,85 +329,6 @@ pub(crate) struct DisplayRowGlyphMeasurer<'a> {
     quantization: GlyphAdvanceQuantization,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct DisplayTextRunClusterAdvance {
-    byte_offset: usize,
-    advance_px: f32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct DisplayTextRunClusterAdvances {
-    advances: Vec<DisplayTextRunClusterAdvance>,
-}
-
-impl DisplayTextRunClusterAdvances {
-    fn from_shaped_glyphs(text_len: usize, glyphs: impl IntoIterator<Item = ShapedGlyph>) -> Self {
-        let mut advances: Vec<DisplayTextRunClusterAdvance> = Vec::new();
-        for glyph in glyphs {
-            if glyph.cluster_start > text_len {
-                continue;
-            }
-            if let Some(advance) = advances
-                .iter_mut()
-                .find(|advance| advance.byte_offset == glyph.cluster_start)
-            {
-                advance.advance_px += glyph.x_advance;
-            } else {
-                advances.push(DisplayTextRunClusterAdvance {
-                    byte_offset: glyph.cluster_start,
-                    advance_px: glyph.x_advance,
-                });
-            }
-        }
-        Self { advances }
-    }
-
-    fn advance_at(&self, byte_offset: usize) -> Option<f32> {
-        self.advances
-            .iter()
-            .find(|advance| advance.byte_offset == byte_offset)
-            .map(|advance| advance.advance_px)
-    }
-}
-
-struct DisplayTextRunMeasurementPlan;
-
-impl DisplayTextRunMeasurementPlan {
-    fn from_shaped_glyphs(
-        text: &str,
-        glyphs: impl IntoIterator<Item = ShapedGlyph>,
-        face_char_width_px: f32,
-        fallback_char_width_px: f32,
-        quantization: GlyphAdvanceQuantization,
-    ) -> DisplayTextRunMeasurement {
-        let cluster_advances =
-            DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), glyphs);
-        let face_char_width_px = face_char_width_px.max(fallback_char_width_px).max(1.0);
-        let fallback_char_width_px = fallback_char_width_px.max(face_char_width_px).max(1.0);
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .filter_map(|(char_offset, (byte_offset, ch))| {
-                let measured = cluster_advances.advance_at(byte_offset)?;
-                let columns = crate::composition::base_width_cols(ch);
-                let minimum = f32::from(columns.max(1)) * face_char_width_px;
-                let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
-                Some(DisplayTextRunAdvance::new(
-                    char_offset,
-                    byte_offset,
-                    quantization.resolve(Some(measured), fallback, minimum),
-                ))
-            })
-            .collect::<Vec<_>>();
-
-        if advances.is_empty() {
-            DisplayTextRunMeasurement::PerChar
-        } else {
-            DisplayTextRunMeasurement::Measured(advances)
-        }
-    }
-}
-
 impl<'a> DisplayRowGlyphMeasurer<'a> {
     pub(crate) fn new(
         faces: &'a [DisplayRowFace],
@@ -620,20 +542,11 @@ impl DisplayRowGlyphMeasurementFace {
         if measurement.measured_advances().is_some() {
             return measurement;
         }
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .map(|(char_offset, (byte_offset, ch))| {
-                let columns = crate::composition::base_width_cols(ch).max(1);
-                let fallback_advance_px = self.fallback_char_width * f32::from(columns);
-                DisplayTextRunAdvance::new(
-                    char_offset,
-                    byte_offset,
-                    self.advance_for_char(font_metrics, ch, fallback_advance_px),
-                )
-            })
-            .collect();
-        DisplayTextRunMeasurement::Measured(advances)
+        DisplayTextRunMeasurementPlan::from_char_advances(
+            text,
+            self.fallback_char_width,
+            |ch, fallback_advance_px| self.advance_for_char(font_metrics, ch, fallback_advance_px),
+        )
     }
 }
 
