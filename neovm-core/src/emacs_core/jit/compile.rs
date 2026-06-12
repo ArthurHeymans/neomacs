@@ -366,6 +366,24 @@ extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     }
 }
 
+/// Back-edge service poll: GC safepoint + `maybe_quit`, via the same shared
+/// Context helper the interpreter's `branch_to!` wrap path uses
+/// (`bytecode_branch_maybe_gc_and_quit`). Generated code calls this every 255
+/// backward jumps (the interpreter's u8 `quitcounter` cadence), with its live
+/// operand-stack values rooted by the caller — the poll may collect.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_backedge(ctx: *mut u8) -> i64 {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    match ctx.bytecode_branch_maybe_gc_and_quit() {
+        Ok(()) => STATUS_OK,
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    }
+}
+
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
 /// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
@@ -947,6 +965,7 @@ struct RtRefs {
     varset: FuncRef,
     varbind: FuncRef,
     unbind: FuncRef,
+    backedge: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1026,6 +1045,11 @@ fn declare_rt_refs(
     sig_unbind.params.push(AbiParam::new(i64t));
     let varbind_id = declare(module, "neovm_jit_varbind", &sig_varbind)?;
     let unbind_id = declare(module, "neovm_jit_unbind", &sig_unbind)?;
+    // (vmctx) -> status
+    let mut sig_backedge = Signature::new(call_conv);
+    sig_backedge.params.push(AbiParam::new(ptr_ty));
+    sig_backedge.returns.push(AbiParam::new(i64t));
+    let backedge_id = declare(module, "neovm_jit_backedge", &sig_backedge)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1040,6 +1064,7 @@ fn declare_rt_refs(
         varset: module.declare_func_in_func(varset_id, func),
         varbind: module.declare_func_in_func(varbind_id, func),
         unbind: module.declare_func_in_func(unbind_id, func),
+        backedge: module.declare_func_in_func(backedge_id, func),
     })
 }
 
@@ -1736,6 +1761,57 @@ fn write_stack_to_vars(fb: &mut FunctionBuilder, vars: &[Variable], stack: &[Cli
     }
 }
 
+/// Emit a backward jump with the interpreter's `branch_to!` parity: bump the
+/// u8 quit counter; on every wrap (each 255th backward jump — counter resets to
+/// 1, exactly like the interpreter) root the live operand stack and call the
+/// back-edge service poll (GC safepoint + `maybe_quit`), propagating a signaled
+/// `Flow` via the shared signal-exit block. The caller has already written the
+/// operand stack to `vars` (the target's entry state).
+#[allow(clippy::too_many_arguments)]
+fn emit_backedge_jump(
+    fb: &mut FunctionBuilder,
+    rt: &RtCtx,
+    counter_slot: StackSlot,
+    signal_exit: &mut Option<Block>,
+    vars: &[Variable],
+    target_depth: usize,
+    target_block: Block,
+) {
+    let c = fb.ins().stack_load(types::I64, counter_slot, 0);
+    let c1 = fb.ins().iadd_imm(c, 1);
+    let c1m = fb.ins().band_imm(c1, 0xFF);
+    fb.ins().stack_store(c1m, counter_slot, 0);
+    let wrapped = fb.ins().icmp_imm(IntCC::Equal, c1m, 0);
+    let poll = fb.create_block();
+    fb.ins().brif(wrapped, poll, &[], target_block, &[]);
+
+    fb.switch_to_block(poll);
+    fb.seal_block(poll);
+    let one = fb.ins().iconst(types::I64, 1);
+    fb.ins().stack_store(one, counter_slot, 0);
+    // Root the live operand stack across the poll — it may collect.
+    let saved = if target_depth == 0 {
+        None
+    } else {
+        let call = fb.ins().call(rt.refs.gc_save, &[]);
+        let s = fb.inst_results(call)[0];
+        for var in vars.iter().take(target_depth) {
+            let v = fb.use_var(*var);
+            fb.ins().call(rt.refs.gc_push, &[v]);
+        }
+        Some(s)
+    };
+    let vmctx = fb.use_var(rt.vmctx_var);
+    let call = fb.ins().call(rt.refs.backedge, &[vmctx]);
+    let status = fb.inst_results(call)[0];
+    if let Some(s) = saved {
+        fb.ins().call(rt.refs.gc_restore, &[s]);
+    }
+    let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+    let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+    fb.ins().brif(ok, target_block, &[], se, &[]);
+}
+
 /// Lower a leaf bytecode body taking `arity` fixed arguments to native code.
 ///
 /// Handles arbitrary intra-function control flow (`Goto`/`GotoIf*`) by building a
@@ -1768,25 +1844,38 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_varset", neovm_jit_varset as *const u8);
     builder.symbol("neovm_jit_varbind", neovm_jit_varbind as *const u8);
     builder.symbol("neovm_jit_unbind", neovm_jit_unbind as *const u8);
+    builder.symbol("neovm_jit_backedge", neovm_jit_backedge as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
-    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
-    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery.
-    let needs_rt = ops.iter().any(|o| {
-        matches!(
-            o,
-            Op::Cons
-                | Op::Call(_)
-                | Op::Apply(_)
-                | Op::Eq
-                | Op::Symbolp
-                | Op::VarRef(_)
-                | Op::VarSet(_)
-                | Op::VarBind(_)
-                | Op::Unbind(_)
-        )
+    // Backward jumps need the back-edge service poll (GC safepoint + quit),
+    // mirroring the interpreter's branch_to! wrap path.
+    let has_backedge = ops.iter().enumerate().any(|(i, o)| match o {
+        Op::Goto(t)
+        | Op::GotoIfNil(t)
+        | Op::GotoIfNotNil(t)
+        | Op::GotoIfNilElsePop(t)
+        | Op::GotoIfNotNilElsePop(t) => (*t as usize) <= i,
+        _ => false,
     });
+    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
+    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery;
+    // back-edges poll through vmctx.
+    let needs_rt = has_backedge
+        || ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::Cons
+                    | Op::Call(_)
+                    | Op::Apply(_)
+                    | Op::Eq
+                    | Op::Symbolp
+                    | Op::VarRef(_)
+                    | Op::VarSet(_)
+                    | Op::VarBind(_)
+                    | Op::Unbind(_)
+            )
+        });
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
@@ -1854,6 +1943,11 @@ pub fn lower_leaf(
         // Shared signal-propagation block (returns STATUS_SIGNAL), created
         // lazily by the first `Call` lowering.
         let mut signal_exit: Option<Block> = None;
+        // Backward-jump quit counter (the interpreter's u8 `quitcounter`), kept
+        // in a stack slot so every block can bump it.
+        let backedge_counter: Option<StackSlot> = has_backedge.then(|| {
+            fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3))
+        });
 
         // Function-entry block: stash vmctx + the out pointer, load args into
         // the slot variables, then jump into bytecode block 0.
@@ -1867,6 +1961,11 @@ pub fn lower_leaf(
             fb.def_var(rt.vmctx_var, vmctx_param);
         }
         fb.def_var(out_var, out_ptr);
+        if let Some(slot) = backedge_counter {
+            // The interpreter starts quitcounter at 1.
+            let one = fb.ins().iconst(types::I64, 1);
+            fb.ins().stack_store(one, slot, 0);
+        }
         for i in 0..arity {
             let v = fb
                 .ins()
@@ -1900,7 +1999,26 @@ pub fn lower_leaf(
                     }
                     Op::Goto(t) => {
                         write_stack_to_vars(&mut fb, &vars, &stack);
-                        fb.ins().jump(block_for[&(*t as usize)], &[]);
+                        let tu = *t as usize;
+                        if tu <= i {
+                            // Backward jump: bump the quit counter and poll on
+                            // wrap, exactly like the interpreter's branch_to!.
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                            );
+                        } else {
+                            fb.ins().jump(block_for[&tu], &[]);
+                        }
                         terminated = true;
                         break;
                     }
@@ -1910,13 +2028,36 @@ pub fn lower_leaf(
                         let is_nil =
                             fb.ins()
                                 .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
-                        let target = block_for[&(*t as usize)];
+                        let tu = *t as usize;
+                        let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
+                        let backedge = (tu <= i).then(|| fb.create_block());
+                        if let Some(tramp) = backedge {
+                            target = tramp;
+                        }
                         // brif takes the `then` block when the condition is true.
                         if matches!(op, Op::GotoIfNil(_)) {
                             fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
                         } else {
                             fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
+                        }
+                        if let Some(tramp) = backedge {
+                            // Taken-edge trampoline carrying the back-edge poll.
+                            fb.switch_to_block(tramp);
+                            fb.seal_block(tramp);
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                            );
                         }
                         terminated = true;
                         break;
@@ -1931,12 +2072,34 @@ pub fn lower_leaf(
                         let is_nil =
                             fb.ins()
                                 .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
-                        let target = block_for[&(*t as usize)];
+                        let tu = *t as usize;
+                        let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
+                        let backedge = (tu <= i).then(|| fb.create_block());
+                        if let Some(tramp) = backedge {
+                            target = tramp;
+                        }
                         if matches!(op, Op::GotoIfNilElsePop(_)) {
                             fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
                         } else {
                             fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
+                        }
+                        if let Some(tramp) = backedge {
+                            fb.switch_to_block(tramp);
+                            fb.seal_block(tramp);
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                            );
                         }
                         terminated = true;
                         break;
@@ -2524,6 +2687,69 @@ mod tests {
                 "countdown should reach 0 (n={n})"
             );
         }
+    }
+
+    #[test]
+    fn backedge_polls_quit_like_the_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        // Countdown loop with enough iterations (> 255 backward jumps) for the
+        // u8 quit counter to wrap and trigger the back-edge service poll.
+        let ops = [
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Gtr,
+            Op::GotoIfNil(8),
+            Op::StackRef(0),
+            Op::Sub1,
+            Op::StackSet(1),
+            Op::Goto(0),
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        let constants = [Value::make_int(0)];
+        let mut ev = Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        let leaf = lower_leaf(&ops, &constants, 1).unwrap();
+
+        // Flag clear: the loop runs to completion natively (polls return OK).
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Ok(Value::make_int(0).bits())
+        );
+
+        // Flag set: the wrap poll must signal quit out of native code...
+        ev.set_quit_flag_value(Value::T);
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Signal,
+            "C-g must interrupt a compiled loop"
+        );
+        assert!(take_pending_flow().is_some(), "quit Flow stashed");
+
+        // ...exactly like the interpreter on the same body (the poll clears the
+        // flag, so re-set it for the oracle run).
+        ev.set_quit_flag_value(Value::T);
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+        let interp = {
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&f, vec![Value::make_int(1000)])
+        };
+        assert!(interp.is_err(), "interpreter quits on the same loop");
+
+        // Flag cleared by the quit: the loop completes again.
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Ok(Value::make_int(0).bits())
+        );
     }
 
     #[test]
