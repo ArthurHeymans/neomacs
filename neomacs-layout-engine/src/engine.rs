@@ -22,12 +22,12 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
-    DisplayRowGlyphMeasurementFace, DisplayRowMeasurementPolicy, DisplayRowOutputProgress,
-    DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
-    install_rendered_display_row,
+    DisplayRowActiveFace, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
+    DisplayRowGeometry, DisplayRowGlyphMeasurementFace, DisplayRowMeasurementPolicy,
+    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
+    install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -3122,12 +3122,14 @@ impl LayoutEngine {
             },
             &mut self.font_metrics,
         );
-        face_char_w = default_measured_face.char_width();
-        face_h = default_measured_face.row_height();
-        face_ascent_val = default_measured_face.ascent();
-        face_space_w = default_measured_face.space_width();
-        let default_measurement_face = default_measured_face.measurement_face().clone();
-        let mut current_measurement_face = default_measured_face.into_measurement_face();
+        let mut current_face =
+            DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face);
+        let default_metrics = current_face.metrics();
+        face_char_w = default_metrics.char_width;
+        face_h = default_metrics.row_height;
+        face_ascent_val = default_metrics.ascent;
+        face_space_w = default_metrics.space_width;
+        let default_measurement_face = current_face.measurement_face().clone();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -3421,10 +3423,6 @@ impl LayoutEngine {
                     } else {
                         None
                     };
-                    let fg = Color::from_pixel(resolved.fg);
-                    _current_fg = fg;
-                    let bg = Color::from_pixel(resolved.bg);
-                    current_bg = bg;
                     let resolved_measured_face = measurement_policy.resolved_measured_face(
                         face_id,
                         resolved.clone(),
@@ -3437,12 +3435,16 @@ impl LayoutEngine {
                         },
                         &mut self.font_metrics,
                     );
-                    current_resolved_face = resolved_measured_face.resolved_face().clone();
-                    let measured_face = resolved_measured_face.measured_face();
-                    face_char_w = measured_face.char_width();
-                    face_h = measured_face.row_height();
-                    face_ascent_val = measured_face.ascent();
-                    face_space_w = measured_face.space_width();
+                    resolved_measured_face.install_into(&mut self.matrix_builder);
+                    current_face = resolved_measured_face.into_active_face();
+                    _current_fg = current_face.foreground();
+                    current_bg = current_face.background();
+                    current_resolved_face = current_face.resolved_face().clone();
+                    let measured_metrics = current_face.metrics();
+                    face_char_w = measured_metrics.char_width;
+                    face_h = measured_metrics.row_height;
+                    face_ascent_val = measured_metrics.ascent;
+                    face_space_w = measured_metrics.space_width;
 
                     if face_h > row_max_height {
                         row_max_height = face_h;
@@ -3451,8 +3453,6 @@ impl LayoutEngine {
                         row_max_ascent = face_ascent_val;
                     }
 
-                    resolved_measured_face.install_into(&mut self.matrix_builder);
-                    current_measurement_face = resolved_measured_face.into_measurement_face();
                     current_face_id += 1;
 
                     if resolved.extend {
@@ -3710,7 +3710,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement = current_measurement_face
+                        let measurement = current_face
+                            .measurement_face()
                             .text_run_measurement(&mut self.font_metrics, "...");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
@@ -3722,7 +3723,7 @@ impl LayoutEngine {
                             DisplayRowPosition { x_px: x, col },
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
-                            current_measurement_face.face_id(),
+                            current_face.face_id(),
                             Some(measurement),
                         ) {
                             x = position.x_px;
@@ -3981,7 +3982,7 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    current_measurement_face.advance_for_char(
+                                    current_face.measurement_face().advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
                                         face_char_w,
@@ -4039,7 +4040,7 @@ impl LayoutEngine {
                                     &replacement_base_face,
                                     &current_resolved_face,
                                 ) {
-                                    current_measurement_face.face_id()
+                                    current_face.face_id()
                                 } else if crate::display_source_resolver::same_resolved_face(
                                     &replacement_base_face,
                                     face_resolver.default_face(),
@@ -4088,7 +4089,7 @@ impl LayoutEngine {
                                 );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
-                                    measurement_face: current_measurement_face.clone(),
+                                    measurement_face: current_face.measurement_face().clone(),
                                 };
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,
@@ -4119,7 +4120,7 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_char_width = current_measurement_face.advance_for_char(
+                        let display_char_width = current_face.measurement_face().advance_for_char(
                             &mut self.font_metrics,
                             display_ch,
                             face_char_w,
@@ -4167,7 +4168,7 @@ impl LayoutEngine {
                                 text_start_byte + byte_idx,
                             );
                             let item = replacement_source.stretch_item(
-                                current_measurement_face.face_id(),
+                                current_face.face_id(),
                                 DisplayReplacementBox::new(
                                     space_width,
                                     space_geometry.height,
@@ -4196,7 +4197,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     &current_resolved_face,
-                                    current_measurement_face.face_id(),
+                                    current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4284,8 +4285,7 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source
-                                .item(current_measurement_face.face_id(), media_item);
+                            let item = replacement_source.item(current_face.face_id(), media_item);
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4294,7 +4294,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     &current_resolved_face,
-                                    current_measurement_face.face_id(),
+                                    current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4340,10 +4340,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.source_mapped_text_item(
-                                current_measurement_face.face_id(),
-                                placeholder,
-                            );
+                            let item = replacement_source
+                                .source_mapped_text_item(current_face.face_id(), placeholder);
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4352,7 +4350,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     &current_resolved_face,
-                                    current_measurement_face.face_id(),
+                                    current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4435,8 +4433,9 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                let measurement =
-                    current_measurement_face.text_run_measurement(&mut self.font_metrics, "...");
+                let measurement = current_face
+                    .measurement_face()
+                    .text_run_measurement(&mut self.font_metrics, "...");
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4447,7 +4446,7 @@ impl LayoutEngine {
                     DisplayRowPosition { x_px: x, col },
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
-                    current_measurement_face.face_id(),
+                    current_face.face_id(),
                     Some(measurement),
                 ) {
                     x = position.x_px;
@@ -4868,7 +4867,7 @@ impl LayoutEngine {
                         buf_id,
                         face_resolver,
                         &current_resolved_face,
-                        current_measurement_face.face_id(),
+                        current_face.face_id(),
                         crate::display_item::DisplayItemKind::ControlChar { ch },
                         text_item_frame,
                         DisplayRowPosition { x_px: x, col },
@@ -4925,7 +4924,7 @@ impl LayoutEngine {
                             buf_id,
                             face_resolver,
                             &current_resolved_face,
-                            current_measurement_face.face_id(),
+                            current_face.face_id(),
                             crate::display_item::DisplayItemKind::SourceMappedText(
                                 crate::display_item::DisplaySourceMappedText::new(mapped_text),
                             ),
@@ -4997,7 +4996,7 @@ impl LayoutEngine {
                         buf_id,
                         face_resolver,
                         &current_resolved_face,
-                        current_measurement_face.face_id(),
+                        current_face.face_id(),
                         crate::display_item::DisplayItemKind::Glyphless(
                             crate::display_item::DisplayGlyphless { ch, method },
                         ),
@@ -5061,7 +5060,8 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let measurement = current_measurement_face
+                    let measurement = current_face
+                        .measurement_face()
                         .text_run_measurement(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
@@ -5082,14 +5082,14 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => current_measurement_face.advance_for_char(
+                    None => current_face.measurement_face().advance_for_char(
                         &mut self.font_metrics,
                         ch,
                         face_char_w * char_cols as f32,
                     ),
                 }
             } else {
-                current_measurement_face.advance_for_char(
+                current_face.measurement_face().advance_for_char(
                     &mut self.font_metrics,
                     ch,
                     face_char_w * char_cols as f32,
@@ -5392,7 +5392,7 @@ impl LayoutEngine {
                     gy,
                     face_h,
                     face_ascent_val,
-                    current_measurement_face.face_id(),
+                    current_face.face_id(),
                     false,
                 );
             }
@@ -5418,7 +5418,8 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement = current_measurement_face
+            let measurement = current_face
+                .measurement_face()
                 .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
@@ -5430,7 +5431,7 @@ impl LayoutEngine {
                 &current_resolved_face,
                 buf_id,
                 buffer,
-                current_measurement_face.face_id(),
+                current_face.face_id(),
                 measurement,
                 frame,
                 DisplayRowPosition { x_px: x, col },

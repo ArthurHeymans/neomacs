@@ -518,10 +518,12 @@ impl DisplayRowMeasurementPolicy {
             ));
         DisplayRowMeasuredFace {
             measurement_face,
-            char_width,
-            row_height,
-            ascent,
-            space_width,
+            metrics: DisplayRowMeasuredFaceMetrics {
+                char_width,
+                row_height,
+                ascent,
+                space_width,
+            },
         }
     }
 
@@ -660,10 +662,15 @@ impl DisplayRowGlyphMeasurementFace {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowMeasuredFace {
     measurement_face: DisplayRowGlyphMeasurementFace,
-    char_width: f32,
-    row_height: f32,
-    ascent: f32,
-    space_width: f32,
+    metrics: DisplayRowMeasuredFaceMetrics,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowMeasuredFaceMetrics {
+    pub(crate) char_width: f32,
+    pub(crate) row_height: f32,
+    pub(crate) ascent: f32,
+    pub(crate) space_width: f32,
 }
 
 impl DisplayRowMeasuredFace {
@@ -671,28 +678,12 @@ impl DisplayRowMeasuredFace {
         self.measurement_face.face_id()
     }
 
-    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
-        &self.measurement_face
-    }
-
     pub(crate) fn into_measurement_face(self) -> DisplayRowGlyphMeasurementFace {
         self.measurement_face
     }
 
-    pub(crate) fn space_width(&self) -> f32 {
-        self.space_width
-    }
-
-    pub(crate) fn char_width(&self) -> f32 {
-        self.char_width
-    }
-
-    pub(crate) fn row_height(&self) -> f32 {
-        self.row_height
-    }
-
-    pub(crate) fn ascent(&self) -> f32 {
-        self.ascent
+    pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
     }
 }
 
@@ -708,20 +699,60 @@ impl DisplayRowResolvedMeasuredFace {
         self.measured_face.face_id()
     }
 
-    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
-        &self.face
-    }
-
-    pub(crate) fn measured_face(&self) -> &DisplayRowMeasuredFace {
-        &self.measured_face
-    }
-
-    pub(crate) fn into_measurement_face(self) -> DisplayRowGlyphMeasurementFace {
-        self.measured_face.into_measurement_face()
+    pub(crate) fn into_active_face(self) -> DisplayRowActiveFace {
+        DisplayRowActiveFace::new(self.face, self.measured_face)
     }
 
     pub(crate) fn install_into(&self, builder: &mut GlyphMatrixBuilder) {
         insert_resolved_display_row_face(builder, self.face_id(), &self.face, self.metrics);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowActiveFace {
+    resolved_face: ResolvedFace,
+    measurement_face: DisplayRowGlyphMeasurementFace,
+    metrics: DisplayRowMeasuredFaceMetrics,
+    foreground: Color,
+    background: Color,
+}
+
+impl DisplayRowActiveFace {
+    pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
+        let foreground = Color::from_pixel(resolved_face.fg);
+        let background = Color::from_pixel(resolved_face.bg);
+        let metrics = measured_face.metrics();
+        Self {
+            resolved_face,
+            measurement_face: measured_face.into_measurement_face(),
+            metrics,
+            foreground,
+            background,
+        }
+    }
+
+    pub(crate) fn face_id(&self) -> u32 {
+        self.measurement_face.face_id()
+    }
+
+    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
+        &self.resolved_face
+    }
+
+    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
+        &self.measurement_face
+    }
+
+    pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
+    }
+
+    pub(crate) fn foreground(&self) -> Color {
+        self.foreground
+    }
+
+    pub(crate) fn background(&self) -> Color {
+        self.background
     }
 }
 
