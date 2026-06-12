@@ -115,62 +115,27 @@ impl LegacyDisplayRowGeometryVars<'_> {
     }
 
     pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
-        self.snapshot().current_row_is_visible(limit)
+        DisplayRowGeometryState::from_legacy(self.snapshot()).current_row_is_visible(limit)
     }
 
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
-        let mut metrics = CurrentDisplayRowMetrics::new(*self.row_max_height, *self.row_max_ascent);
-        metrics.include_glyph(glyph_height, glyph_ascent);
-        *self.row_max_height = metrics.height();
-        *self.row_max_ascent = metrics.ascent();
+        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        state.include_glyph_vertical_metrics(glyph_height, glyph_ascent);
+        self.apply(state);
     }
 
     pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
-        *self.row_max_height = self.row_max_height.max(height);
-        *self.row_max_ascent = self.row_max_ascent.max(ascent);
+        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        state.include_row_extents(height, ascent);
+        self.apply(state);
     }
 
     pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
-        row_y_positions.push(*self.y);
+        DisplayRowGeometryState::from_legacy(self.snapshot()).record_current_row_y(row_y_positions);
     }
 
     pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
-        TextRowOutput {
-            row: *self.row,
-            row_y: *self.y,
-            glyph_y: *self.y,
-            height,
-        }
-    }
-
-    pub(crate) fn finish_boundary_in_place(
-        &mut self,
-        target: DisplayRowBoundaryTarget<'_>,
-    ) -> DisplayRowBoundaryTransition {
-        let mut row_cursor = DisplayRowGeometryCursor::from_state(
-            DisplayRowGeometryState::from_legacy(self.snapshot()),
-        );
-        let hit_row =
-            row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
-        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
-            target.transition.defaults,
-            target.transition.kind,
-            target.transition.row_base,
-            target.transition.col,
-            target.transition.x,
-        );
-        let state = row_cursor.state();
-        self.apply(state);
-        match target.transition.row_y_recording {
-            DisplayRowYRecording::None => {}
-            DisplayRowYRecording::RowYPositions(row_y_positions) => {
-                row_y_positions.push(state.y);
-            }
-        }
-        DisplayRowBoundaryTransition {
-            hit_row,
-            transition,
-        }
+        DisplayRowGeometryState::from_legacy(self.snapshot()).text_row_output(height)
     }
 
     pub(crate) fn finish_boundary_and_record_hit(
@@ -178,8 +143,10 @@ impl LegacyDisplayRowGeometryVars<'_> {
         target: DisplayRowBoundaryTarget<'_>,
         hit_rows: &mut Vec<HitRow>,
     ) -> TextMatrixRowGeometryTransition {
-        self.finish_boundary_in_place(target)
-            .record_hit_row(hit_rows)
+        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let transition = state.finish_boundary_and_record_hit(target, hit_rows);
+        self.apply(state);
+        transition
     }
 }
 
@@ -429,12 +396,6 @@ impl<'a> DisplayRowBoundaryTarget<'a> {
     }
 }
 
-impl LegacyDisplayRowGeometry {
-    pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
-        self.row < limit.max_rows && self.y + self.row_max_height <= limit.bottom_y
-    }
-}
-
 impl DisplayRowGeometryState {
     pub(crate) fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
         Self {
@@ -444,6 +405,71 @@ impl DisplayRowGeometryState {
             height: legacy.row_max_height,
             ascent: legacy.row_max_ascent,
         }
+    }
+
+    pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
+        self.row < limit.max_rows && self.y + self.height <= limit.bottom_y
+    }
+
+    pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
+        let mut metrics = CurrentDisplayRowMetrics::new(self.height, self.ascent);
+        metrics.include_glyph(glyph_height, glyph_ascent);
+        self.height = metrics.height();
+        self.ascent = metrics.ascent();
+    }
+
+    pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
+        self.height = self.height.max(height);
+        self.ascent = self.ascent.max(ascent);
+    }
+
+    pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
+        row_y_positions.push(self.y);
+    }
+
+    pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
+        TextRowOutput {
+            row: self.row,
+            row_y: self.y,
+            glyph_y: self.y,
+            height,
+        }
+    }
+
+    pub(crate) fn finish_boundary_in_place(
+        &mut self,
+        target: DisplayRowBoundaryTarget<'_>,
+    ) -> DisplayRowBoundaryTransition {
+        let mut row_cursor = DisplayRowGeometryCursor::from_state(*self);
+        let hit_row =
+            row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
+        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
+            target.transition.defaults,
+            target.transition.kind,
+            target.transition.row_base,
+            target.transition.col,
+            target.transition.x,
+        );
+        *self = row_cursor.state();
+        match target.transition.row_y_recording {
+            DisplayRowYRecording::None => {}
+            DisplayRowYRecording::RowYPositions(row_y_positions) => {
+                row_y_positions.push(self.y);
+            }
+        }
+        DisplayRowBoundaryTransition {
+            hit_row,
+            transition,
+        }
+    }
+
+    pub(crate) fn finish_boundary_and_record_hit(
+        &mut self,
+        target: DisplayRowBoundaryTarget<'_>,
+        hit_rows: &mut Vec<HitRow>,
+    ) -> TextMatrixRowGeometryTransition {
+        self.finish_boundary_in_place(target)
+            .record_hit_row(hit_rows)
     }
 }
 
