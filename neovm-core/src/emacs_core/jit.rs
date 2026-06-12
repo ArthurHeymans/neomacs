@@ -326,14 +326,28 @@ mod tests {
 
     #[test]
     fn dispatch_counts_and_plans_interpret() {
+        // Threshold-aware so the test also holds under a NEOVM_JIT_THRESHOLD
+        // override (e.g. the =1 every-function soak).
+        let threshold = hot_threshold();
         let rt = Runtime::new();
         assert_eq!(rt.heat(), 0);
         assert!(!rt.is_hot());
-        for i in 1..=5 {
-            assert!(matches!(rt.dispatch(), Plan::Interpret));
+        for i in 1..=5u32 {
+            let plan = rt.dispatch();
+            if i >= threshold {
+                assert!(
+                    matches!(plan, Plan::Compiled),
+                    "hot at {i} (>= {threshold})"
+                );
+            } else {
+                assert!(
+                    matches!(plan, Plan::Interpret),
+                    "cold at {i} (< {threshold})"
+                );
+            }
             assert_eq!(rt.heat(), i);
         }
-        assert!(!rt.is_hot());
+        assert_eq!(rt.is_hot(), 5 >= threshold);
     }
 
     #[test]
