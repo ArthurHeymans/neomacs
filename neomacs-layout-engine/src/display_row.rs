@@ -320,7 +320,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
     }
 }
 
-struct DisplayRowGlyphMeasurer<'a> {
+pub(crate) struct DisplayRowGlyphMeasurer<'a> {
     faces: &'a [DisplayRowFace],
     font_metrics: Option<&'a mut FontMetricsService>,
     fallback_char_width: f32,
@@ -328,7 +328,7 @@ struct DisplayRowGlyphMeasurer<'a> {
 }
 
 impl<'a> DisplayRowGlyphMeasurer<'a> {
-    fn new(
+    pub(crate) fn new(
         faces: &'a [DisplayRowFace],
         font_metrics: Option<&'a mut FontMetricsService>,
         fallback_char_width: f32,

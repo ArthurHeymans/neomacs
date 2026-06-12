@@ -1,5 +1,7 @@
 use super::*;
 use crate::display_item::RenderFaceRef;
+use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurer};
+use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
@@ -6515,6 +6517,25 @@ fn char_advance_preserves_fractional_gui_cell_width_without_font_metrics() {
     );
 
     assert_eq!(width, 7.2);
+}
+
+#[test]
+fn display_row_glyph_measurer_is_reusable_for_engine_measurements() {
+    let resolved = crate::neovm_bridge::ResolvedFace {
+        font_family: "monospace".to_string(),
+        font_size: 14.0,
+        font_char_width: 8.0,
+        ..Default::default()
+    };
+    let faces = [DisplayRowFace::from_resolved(42, &resolved)];
+    let mut font_metrics_svc = None;
+    let mut measurer = DisplayRowGlyphMeasurer::new(&faces, font_metrics_svc.as_mut(), 7.2);
+
+    let width = measurer
+        .glyph_advance_px('x', 42, 1, 7.2)
+        .expect("measure known face");
+
+    assert_eq!(width, 8.0);
 }
 
 #[test]

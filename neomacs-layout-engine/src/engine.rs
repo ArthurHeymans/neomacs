@@ -5,7 +5,6 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
-use super::display_status_line::*;
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
@@ -23,11 +22,11 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowOwner,
-    DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    insert_resolved_display_row_face, install_measured_frame_chrome_row,
-    install_rendered_display_row,
+    DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
+    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
+    install_measured_frame_chrome_row, install_rendered_display_row, resolved_display_row_face,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -39,8 +38,8 @@ use crate::display_row_append::{
     render_natural_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
-    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
-    FixedGlyphAdvance, FixedGlyphAdvances,
+    DisplayGlyphMeasurer, DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition,
+    DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3531,19 +3530,31 @@ impl LayoutEngine {
                     current_text_face_id = face_id;
                     self.current_resolved_family = current_font_family.clone();
                     self.resolved_family_face_id = face_id;
-                    face_space_w = char_advance(
-                        &mut self.ascii_width_cache,
-                        frame_params.window_system,
-                        &mut self.font_metrics,
-                        ' ',
-                        1,
-                        char_w,
-                        current_font_size_px,
-                        face_char_w,
-                        &self.current_resolved_family,
-                        current_font_weight,
-                        current_font_italic,
-                    );
+                    let display_row_face = resolved_display_row_face(face_id, &resolved, metrics);
+                    face_space_w = if frame_params.window_system {
+                        display_row_face_glyph_advance(
+                            &mut self.font_metrics,
+                            &display_row_face,
+                            ' ',
+                            1,
+                            char_w,
+                            face_char_w,
+                        )
+                    } else {
+                        char_advance(
+                            &mut self.ascii_width_cache,
+                            false,
+                            &mut self.font_metrics,
+                            ' ',
+                            1,
+                            char_w,
+                            current_font_size_px,
+                            face_char_w,
+                            &self.current_resolved_family,
+                            current_font_weight,
+                            current_font_italic,
+                        )
+                    };
 
                     insert_resolved_display_row_face(
                         &mut self.matrix_builder,
@@ -7168,6 +7179,22 @@ fn char_pixel_advance(
         font_weight,
         font_italic,
     )
+}
+
+fn display_row_face_glyph_advance(
+    font_metrics_svc: &mut Option<FontMetricsService>,
+    face: &DisplayRowFace,
+    ch: char,
+    columns: u8,
+    fallback_char_width: f32,
+    fallback_advance_px: f32,
+) -> f32 {
+    let faces = [face.clone()];
+    let mut measurer =
+        DisplayRowGlyphMeasurer::new(&faces, font_metrics_svc.as_mut(), fallback_char_width);
+    measurer
+        .glyph_advance_px(ch, face.face_id, columns, fallback_advance_px)
+        .unwrap_or(fallback_advance_px)
 }
 
 /// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
