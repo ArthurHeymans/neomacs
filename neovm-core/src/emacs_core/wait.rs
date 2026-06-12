@@ -13,8 +13,34 @@ use super::process::ProcessId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitBackendEvents {
-    pub(crate) input_wakeup: bool,
-    pub(crate) ready_processes: Vec<ProcessId>,
+    input_wakeup: bool,
+    ready_processes: Vec<ProcessId>,
+}
+
+impl WaitBackendEvents {
+    pub(crate) fn record_input_wakeup(&mut self) {
+        self.input_wakeup = true;
+    }
+
+    pub(crate) fn has_input_wakeup(&self) -> bool {
+        self.input_wakeup
+    }
+
+    pub(crate) fn record_ready_process(&mut self, process: ProcessId) {
+        self.ready_processes.push(process);
+    }
+
+    pub(crate) fn has_ready_processes(&self) -> bool {
+        !self.ready_processes.is_empty()
+    }
+
+    pub(crate) fn ready_processes(&self) -> &[ProcessId] {
+        &self.ready_processes
+    }
+
+    pub(crate) fn into_ready_processes(self) -> Vec<ProcessId> {
+        self.ready_processes
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -496,12 +522,14 @@ impl super::eval::Context {
                         .processes
                         .wait_for_backend_events(wait_time, interest)
                         .unwrap_or_default();
-                    if backend.input_wakeup {
+                    if backend.has_input_wakeup() {
                         self.clear_input_wakeup_fd();
                         let _ = self.stage_next_host_input_event_if_available()?;
                     }
-                    outcome = self
-                        .service_wait_request_ready_processes(&request, backend.ready_processes)?;
+                    outcome = self.service_wait_request_ready_processes(
+                        &request,
+                        backend.into_ready_processes(),
+                    )?;
                 }
                 WaitBlockStrategy::HostInput => {
                     let _ = self.wait_for_next_host_input_event(
@@ -627,5 +655,25 @@ mod tests {
         outcome.record_timer_activity(true);
 
         assert!(outcome.has_timer_activity());
+    }
+
+    #[test]
+    fn backend_events_record_input_wakeup_explicitly() {
+        let mut events = WaitBackendEvents::default();
+
+        events.record_input_wakeup();
+
+        assert!(events.has_input_wakeup());
+        assert!(events.ready_processes().is_empty());
+    }
+
+    #[test]
+    fn backend_events_record_ready_processes_explicitly() {
+        let mut events = WaitBackendEvents::default();
+
+        events.record_ready_process(7);
+
+        assert!(!events.has_input_wakeup());
+        assert_eq!(events.ready_processes(), &[7]);
     }
 }

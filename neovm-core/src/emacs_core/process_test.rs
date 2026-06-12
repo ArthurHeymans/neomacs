@@ -2332,8 +2332,8 @@ fn wait_backend_wakes_on_registered_input_wakeup_fd() {
         )
         .expect("poller should be available");
 
-    assert!(events.input_wakeup);
-    assert!(events.ready_processes.is_empty());
+    assert!(events.has_input_wakeup());
+    assert!(events.ready_processes().is_empty());
 }
 
 #[test]
@@ -2352,8 +2352,8 @@ fn wait_backend_process_interest_ignores_input_wakeup_fd() {
         .wait_for_backend_events(Duration::ZERO, WaitBackendInterest::processes_only())
         .expect("poller should be available");
 
-    assert!(!events.input_wakeup);
-    assert!(events.ready_processes.is_empty());
+    assert!(!events.has_input_wakeup());
+    assert!(events.ready_processes().is_empty());
 }
 
 #[test]

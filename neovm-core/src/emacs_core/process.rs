@@ -506,7 +506,7 @@ impl ProcessWaitBackend {
                         for event in events.iter() {
                             if event.key == INPUT_WAKEUP_EVENT_KEY {
                                 if interest.wants_input_wakeup() {
-                                    backend.input_wakeup = true;
+                                    backend.record_input_wakeup();
                                 }
                                 continue;
                             }
@@ -515,12 +515,12 @@ impl ProcessWaitBackend {
                                 if processes.get(&id).is_some_and(|process| {
                                     process_status_has_readable_process_io(&process.status)
                                 }) {
-                                    backend.ready_processes.push(id);
+                                    backend.record_ready_process(id);
                                 }
                             }
                         }
-                        if backend.input_wakeup
-                            || !backend.ready_processes.is_empty()
+                        if backend.has_input_wakeup()
+                            || backend.has_ready_processes()
                             || timeout.is_zero()
                             || Instant::now() >= deadline
                         {
@@ -1757,7 +1757,7 @@ impl ProcessManager {
         if let Some(events) =
             self.wait_for_backend_events(timeout, WaitBackendInterest::processes_only())
         {
-            return events.ready_processes;
+            return events.into_ready_processes();
         }
 
         // No poller available — sleep fallback
