@@ -174,15 +174,46 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
         .into_active_face()
         .into_state();
 
-    assert_eq!(active.render.face_id, 14);
-    let measurement_state = &active.measurement;
+    assert_eq!(active.face_id(), 14);
+    let measurement_state = active.measurement_state();
     assert_eq!(measurement_state.measurement_face().face_id(), 14);
     assert_eq!(measurement_state.metrics().char_width, 7.0);
     assert_eq!(measurement_state.metrics().row_height, 15.0);
     assert_eq!(measurement_state.metrics().ascent, 10.0);
     assert_eq!(measurement_state.metrics().space_width, 7.0);
-    assert_eq!(active.render.background, Color::from_pixel(face.bg));
-    assert_eq!(active.render.resolved_face().fg, face.fg);
+    assert_eq!(active.background(), Color::from_pixel(face.bg));
+    assert_eq!(active.resolved_face().fg, face.fg);
+}
+
+#[test]
+fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
+    let mut font_metrics = None;
+    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let mut face = base_face();
+    face.fg = 0x00112233;
+    face.bg = 0x00445566;
+
+    let active = policy
+        .resolved_measured_face(
+            14,
+            face.clone(),
+            None,
+            7.0,
+            DisplayRowFallbackMetrics {
+                char_width: 7.0,
+                row_height: 15.0,
+                ascent: 10.0,
+            },
+            &mut font_metrics,
+        )
+        .into_active_face()
+        .into_state();
+
+    assert_eq!(active.face_id(), 14);
+    assert_eq!(active.background(), Color::from_pixel(face.bg));
+    assert_eq!(active.resolved_face().fg, face.fg);
+    assert_eq!(active.metrics().char_width, 7.0);
+    assert_eq!(active.measurement_state().measurement_face().face_id(), 14);
 }
 
 #[test]
@@ -1574,7 +1605,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     )
     .into_state();
 
-    let measurement_state = &active.measurement;
+    let measurement_state = active.measurement_state();
     assert_eq!(measurement_state.metrics().space_width, 7.0);
     assert_eq!(
         measurement_state
@@ -1654,8 +1685,8 @@ fn display_row_measured_face_exposes_face_identity() {
     );
 
     let active = DisplayRowActiveFace::new(base, measured).into_state();
-    assert_eq!(active.render.face_id, 42);
-    assert_eq!(active.measurement.measurement_face().face_id(), 42);
+    assert_eq!(active.face_id(), 42);
+    assert_eq!(active.measurement_state().measurement_face().face_id(), 42);
 }
 
 #[test]

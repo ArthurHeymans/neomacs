@@ -85,41 +85,6 @@ fn display_row_append_metrics_builds_from_measured_face_metrics() {
 }
 
 #[test]
-fn display_row_append_metrics_builds_from_active_measurement_state_helper() {
-    let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base = resolver.default_face().clone();
-    let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        7,
-        &base,
-        None,
-        7.5,
-        DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
-    let active_face = DisplayRowActiveFace::new(base, measured).into_state();
-
-    let metrics =
-        DisplayRowAppendMetrics::from_active_measurement_state(&active_face.measurement, 16.0);
-
-    assert_eq!(
-        metrics,
-        DisplayRowAppendMetrics {
-            height: 18.0,
-            ascent: 13.0,
-            char_width: 7.5,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        }
-    );
-}
-
-#[test]
 fn display_row_append_metrics_builds_from_active_face_state() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);

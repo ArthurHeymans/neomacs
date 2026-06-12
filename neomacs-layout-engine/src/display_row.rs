@@ -775,8 +775,57 @@ impl DisplayRowActiveFaceMeasurementState {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowActiveFaceState {
-    pub(crate) render: DisplayRowActiveFaceRenderState,
-    pub(crate) measurement: DisplayRowActiveFaceMeasurementState,
+    render: DisplayRowActiveFaceRenderState,
+    measurement: DisplayRowActiveFaceMeasurementState,
+}
+
+impl DisplayRowActiveFaceState {
+    pub(crate) fn face_id(&self) -> u32 {
+        self.render.face_id
+    }
+
+    pub(crate) fn background(&self) -> Color {
+        self.render.background
+    }
+
+    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
+        self.render.resolved_face()
+    }
+
+    pub(crate) fn measurement_state(&self) -> &DisplayRowActiveFaceMeasurementState {
+        &self.measurement
+    }
+
+    pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
+        self.measurement.metrics()
+    }
+
+    pub(crate) fn advance_for_char(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        self.measurement
+            .advance_for_char(font_metrics, ch, fallback_advance_px)
+    }
+
+    pub(crate) fn text_run_measurement(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+    ) -> DisplayTextRunMeasurement {
+        self.measurement.text_run_measurement(font_metrics, text)
+    }
+
+    pub(crate) fn resolved_fragment_measurement(
+        &self,
+        text: &str,
+        advance_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        self.measurement
+            .resolved_fragment_measurement(text, advance_px)
+    }
 }
 
 impl DisplayRowActiveFace {
