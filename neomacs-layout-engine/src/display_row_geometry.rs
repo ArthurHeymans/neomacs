@@ -75,15 +75,6 @@ pub(crate) struct DisplayRowGeometryCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayRowGeometrySnapshot {
-    pub(crate) row: usize,
-    pub(crate) y: f32,
-    pub(crate) row_extra_y: f32,
-    pub(crate) row_max_height: f32,
-    pub(crate) row_max_ascent: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowVisibilityLimit {
     pub(crate) max_rows: usize,
     pub(crate) bottom_y: f32,
@@ -125,87 +116,6 @@ pub(crate) struct DisplayRowTextPosition {
     pub(crate) byte_idx: usize,
     pub(crate) col: usize,
     pub(crate) row: usize,
-}
-
-pub(crate) struct DisplayRowGeometryBinding<'a> {
-    pub(crate) row: &'a mut usize,
-    pub(crate) y: &'a mut f32,
-    pub(crate) row_extra_y: &'a mut f32,
-    pub(crate) row_max_height: &'a mut f32,
-    pub(crate) row_max_ascent: &'a mut f32,
-}
-
-impl DisplayRowGeometryBinding<'_> {
-    pub(crate) fn new<'a>(
-        row: &'a mut usize,
-        y: &'a mut f32,
-        row_extra_y: &'a mut f32,
-        row_max_height: &'a mut f32,
-        row_max_ascent: &'a mut f32,
-    ) -> DisplayRowGeometryBinding<'a> {
-        DisplayRowGeometryBinding {
-            row,
-            y,
-            row_extra_y,
-            row_max_height,
-            row_max_ascent,
-        }
-    }
-
-    pub(crate) fn snapshot(&self) -> DisplayRowGeometrySnapshot {
-        DisplayRowGeometrySnapshot {
-            row: *self.row,
-            y: *self.y,
-            row_extra_y: *self.row_extra_y,
-            row_max_height: *self.row_max_height,
-            row_max_ascent: *self.row_max_ascent,
-        }
-    }
-
-    pub(crate) fn apply(&mut self, state: DisplayRowGeometryState) {
-        *self.row = state.row;
-        *self.y = state.y;
-        *self.row_extra_y = state.row_extra_y;
-        *self.row_max_height = state.height;
-        *self.row_max_ascent = state.ascent;
-    }
-
-    pub(crate) fn with_state<R>(&mut self, f: impl FnOnce(&mut DisplayRowGeometryState) -> R) -> R {
-        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
-        let result = f(&mut state);
-        self.apply(state);
-        result
-    }
-
-    pub(crate) fn with_display_row_geometry_state<R>(
-        &mut self,
-        f: impl FnOnce(&mut DisplayRowGeometryState) -> R,
-    ) -> R {
-        self.with_state(f)
-    }
-
-    pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
-        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
-        state.include_glyph_vertical_metrics(glyph_height, glyph_ascent);
-        self.apply(state);
-    }
-
-    pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
-        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
-        state.include_row_extents(height, ascent);
-        self.apply(state);
-    }
-
-    pub(crate) fn finish_boundary_and_record_hit(
-        &mut self,
-        target: DisplayRowBoundaryTarget<'_>,
-        hit_rows: &mut Vec<HitRow>,
-    ) -> TextMatrixRowGeometryTransition {
-        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
-        let transition = state.finish_boundary_and_record_hit(target, hit_rows);
-        self.apply(state);
-        transition
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -463,26 +373,6 @@ impl DisplayRowGeometryState {
             height,
             ascent,
         }
-    }
-
-    pub(crate) fn from_snapshot(snapshot: DisplayRowGeometrySnapshot) -> Self {
-        Self::new(
-            snapshot.row,
-            snapshot.y,
-            snapshot.row_extra_y,
-            snapshot.row_max_height,
-            snapshot.row_max_ascent,
-        )
-    }
-
-    pub(crate) fn binding(&mut self) -> DisplayRowGeometryBinding<'_> {
-        DisplayRowGeometryBinding::new(
-            &mut self.row,
-            &mut self.y,
-            &mut self.row_extra_y,
-            &mut self.height,
-            &mut self.ascent,
-        )
     }
 
     pub(crate) fn with_row_y(mut self, y: f32) -> Self {

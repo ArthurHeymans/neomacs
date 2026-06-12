@@ -249,26 +249,6 @@ fn display_row_geometry_state_builds_cursor_after_row_y_adjustment() {
 }
 
 #[test]
-fn display_row_geometry_state_builds_from_snapshot_row_variables_by_name() {
-    assert_eq!(
-        DisplayRowGeometryState::from_snapshot(DisplayRowGeometrySnapshot {
-            row: 4,
-            y: 80.0,
-            row_extra_y: 9.0,
-            row_max_height: 20.0,
-            row_max_ascent: 14.0,
-        }),
-        DisplayRowGeometryState {
-            row: 4,
-            y: 80.0,
-            row_extra_y: 9.0,
-            height: 20.0,
-            ascent: 14.0,
-        }
-    );
-}
-
-#[test]
 fn display_row_geometry_state_constructor_groups_current_row_fields() {
     assert_eq!(
         DisplayRowGeometryState::new(3, 40.0, 7.0, 18.0, 13.0),
@@ -283,159 +263,7 @@ fn display_row_geometry_state_constructor_groups_current_row_fields() {
 }
 
 #[test]
-fn display_row_geometry_binding_constructor_binds_row_geometry_by_name() {
-    let mut row = 4;
-    let mut y = 80.0;
-    let mut row_extra_y = 9.0;
-    let mut row_max_height = 20.0;
-    let mut row_max_ascent = 14.0;
-
-    {
-        let mut vars = DisplayRowGeometryBinding::new(
-            &mut row,
-            &mut y,
-            &mut row_extra_y,
-            &mut row_max_height,
-            &mut row_max_ascent,
-        );
-
-        assert_eq!(
-            vars.snapshot(),
-            DisplayRowGeometrySnapshot {
-                row: 4,
-                y: 80.0,
-                row_extra_y: 9.0,
-                row_max_height: 20.0,
-                row_max_ascent: 14.0,
-            }
-        );
-
-        vars.apply(DisplayRowGeometryState {
-            row: 5,
-            y: 120.0,
-            row_extra_y: 13.0,
-            height: 24.0,
-            ascent: 18.0,
-        });
-    }
-
-    assert_eq!(row, 5);
-    assert_eq!(y, 120.0);
-    assert_eq!(row_extra_y, 13.0);
-    assert_eq!(row_max_height, 24.0);
-    assert_eq!(row_max_ascent, 18.0);
-}
-
-#[test]
-fn display_row_geometry_binding_snapshots_and_applies_by_name() {
-    let mut row = 4;
-    let mut y = 80.0;
-    let mut row_extra_y = 9.0;
-    let mut row_max_height = 20.0;
-    let mut row_max_ascent = 14.0;
-
-    {
-        let mut vars = DisplayRowGeometryBinding {
-            row: &mut row,
-            y: &mut y,
-            row_extra_y: &mut row_extra_y,
-            row_max_height: &mut row_max_height,
-            row_max_ascent: &mut row_max_ascent,
-        };
-
-        assert_eq!(
-            vars.snapshot(),
-            DisplayRowGeometrySnapshot {
-                row: 4,
-                y: 80.0,
-                row_extra_y: 9.0,
-                row_max_height: 20.0,
-                row_max_ascent: 14.0,
-            }
-        );
-
-        vars.apply(DisplayRowGeometryState {
-            row: 5,
-            y: 120.0,
-            row_extra_y: 13.0,
-            height: 24.0,
-            ascent: 18.0,
-        });
-    }
-
-    assert_eq!(row, 5);
-    assert_eq!(y, 120.0);
-    assert_eq!(row_extra_y, 13.0);
-    assert_eq!(row_max_height, 24.0);
-    assert_eq!(row_max_ascent, 18.0);
-}
-
-#[test]
-fn display_row_geometry_binding_can_run_owned_state_scope_and_apply_result() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-
-    let result = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .with_state(|geometry| {
-        geometry.row += 1;
-        geometry.y += 16.0;
-        geometry.row_extra_y += 5.0;
-        geometry.include_row_extents(32.0, 20.0);
-        geometry.text_row_output(16.0)
-    });
-
-    assert_eq!(row, 3);
-    assert_eq!(y, 58.0);
-    assert_eq!(row_extra_y, 8.0);
-    assert_eq!(row_max_height, 32.0);
-    assert_eq!(row_max_ascent, 20.0);
-    assert_eq!(result.row, 3);
-    assert_eq!(result.row_y, 58.0);
-}
-
-#[test]
-fn display_row_geometry_binding_can_run_display_row_geometry_state_scope() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-
-    let result = DisplayRowGeometryBinding::new(
-        &mut row,
-        &mut y,
-        &mut row_extra_y,
-        &mut row_max_height,
-        &mut row_max_ascent,
-    )
-    .with_display_row_geometry_state(|geometry| {
-        geometry.row += 1;
-        geometry.y += 16.0;
-        geometry.row_extra_y += 5.0;
-        geometry.include_row_extents(32.0, 20.0);
-        geometry.text_row_output(16.0)
-    });
-
-    assert_eq!(row, 3);
-    assert_eq!(y, 58.0);
-    assert_eq!(row_extra_y, 8.0);
-    assert_eq!(row_max_height, 32.0);
-    assert_eq!(row_max_ascent, 20.0);
-    assert_eq!(result.row, 3);
-    assert_eq!(result.row_y, 58.0);
-}
-
-#[test]
-fn display_row_geometry_state_exposes_binding_to_owned_state() {
+fn display_row_geometry_state_can_be_mutated_directly() {
     let mut geometry = DisplayRowGeometryState {
         row: 2,
         y: 42.0,
@@ -444,15 +272,11 @@ fn display_row_geometry_state_exposes_binding_to_owned_state() {
         ascent: 18.0,
     };
 
-    let result = geometry
-        .binding()
-        .with_display_row_geometry_state(|geometry| {
-            geometry.row += 1;
-            geometry.y += 16.0;
-            geometry.row_extra_y += 5.0;
-            geometry.include_row_extents(32.0, 20.0);
-            geometry.text_row_output(16.0)
-        });
+    geometry.row += 1;
+    geometry.y += 16.0;
+    geometry.row_extra_y += 5.0;
+    geometry.include_row_extents(32.0, 20.0);
+    let result = geometry.text_row_output(16.0);
 
     assert_eq!(
         geometry,
@@ -469,51 +293,41 @@ fn display_row_geometry_state_exposes_binding_to_owned_state() {
 }
 
 #[test]
-fn display_row_geometry_binding_include_glyph_vertical_metrics_by_name() {
-    let mut row = 4;
-    let mut y = 80.0;
-    let mut row_extra_y = 9.0;
-    let mut row_max_height = 16.0;
-    let mut row_max_ascent = 12.0;
+fn display_row_geometry_state_include_glyph_vertical_metrics_by_name() {
+    let mut geometry = DisplayRowGeometryState {
+        row: 4,
+        y: 80.0,
+        row_extra_y: 9.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
 
-    DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .include_glyph_vertical_metrics(24.0, 18.0);
+    geometry.include_glyph_vertical_metrics(24.0, 18.0);
 
-    assert_eq!(row, 4);
-    assert_eq!(y, 80.0);
-    assert_eq!(row_extra_y, 9.0);
-    assert_eq!(row_max_height, 24.0);
-    assert_eq!(row_max_ascent, 18.0);
+    assert_eq!(geometry.row, 4);
+    assert_eq!(geometry.y, 80.0);
+    assert_eq!(geometry.row_extra_y, 9.0);
+    assert_eq!(geometry.height, 24.0);
+    assert_eq!(geometry.ascent, 18.0);
 }
 
 #[test]
-fn display_row_geometry_binding_include_row_extents_by_name() {
-    let mut row = 4;
-    let mut y = 80.0;
-    let mut row_extra_y = 9.0;
-    let mut row_max_height = 16.0;
-    let mut row_max_ascent = 12.0;
+fn display_row_geometry_state_include_row_extents_by_name() {
+    let mut geometry = DisplayRowGeometryState {
+        row: 4,
+        y: 80.0,
+        row_extra_y: 9.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
 
-    DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .include_row_extents(24.0, 24.0);
+    geometry.include_row_extents(24.0, 24.0);
 
-    assert_eq!(row, 4);
-    assert_eq!(y, 80.0);
-    assert_eq!(row_extra_y, 9.0);
-    assert_eq!(row_max_height, 24.0);
-    assert_eq!(row_max_ascent, 24.0);
+    assert_eq!(geometry.row, 4);
+    assert_eq!(geometry.y, 80.0);
+    assert_eq!(geometry.row_extra_y, 9.0);
+    assert_eq!(geometry.height, 24.0);
+    assert_eq!(geometry.ascent, 24.0);
 }
 
 #[test]
@@ -1036,22 +850,17 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
 
 #[test]
 fn display_row_geometry_transition_target_groups_truncation_transition_and_commit_inputs() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
+    let mut geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .finish_boundary_and_record_hit(
+    let transition = geometry.finish_boundary_and_record_hit(
         DisplayRowBoundaryTarget::new(
             DisplayRowHitRange {
                 charpos_start: 0,
@@ -1089,32 +898,27 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
             },
         }
     );
-    assert_eq!(row, 3);
-    assert_eq!(y, 10.0 + 3.0 * 16.0 + 11.0);
-    assert_eq!(row_extra_y, 11.0);
-    assert_eq!(row_max_height, 16.0);
-    assert_eq!(row_max_ascent, 12.0);
+    assert_eq!(geometry.row, 3);
+    assert_eq!(geometry.y, 10.0 + 3.0 * 16.0 + 11.0);
+    assert_eq!(geometry.row_extra_y, 11.0);
+    assert_eq!(geometry.height, 16.0);
+    assert_eq!(geometry.ascent, 12.0);
     assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
 
 #[test]
 fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
+    let mut geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .finish_boundary_and_record_hit(
+    let transition = geometry.finish_boundary_and_record_hit(
         DisplayRowBoundaryTarget::new(
             DisplayRowHitRange {
                 charpos_start: 0,
@@ -1146,187 +950,8 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
             x: 13.0,
         }
     );
-    assert_eq!(row_extra_y, 15.0);
+    assert_eq!(geometry.row_extra_y, 15.0);
     assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 15.0]);
-}
-
-#[test]
-fn display_row_geometry_binding_can_advance_and_record_row_y_in_one_request() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
-    let mut hit_rows = Vec::new();
-
-    let transition = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .finish_boundary_and_record_hit(
-        DisplayRowBoundaryTarget::new(
-            DisplayRowHitRange {
-                charpos_start: 0,
-                charpos_end: 0,
-            },
-            DisplayRowGeometryTransitionTarget::line_break(
-                DisplayRowGeometryDefaults {
-                    text_y: 10.0,
-                    height: 16.0,
-                    ascent: 12.0,
-                },
-                5,
-                7,
-                13.0,
-                4.0,
-                row_y_positions.recording(),
-            ),
-        ),
-        &mut hit_rows,
-    );
-
-    assert_eq!(
-        transition,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
-                y: 42.0,
-                height: 24.0,
-                ascent: 18.0,
-            },
-            begin_row: TextMatrixRowBegin {
-                matrix_row: 8,
-                row: 3,
-                col: 7,
-                y: 10.0 + 3.0 * 16.0 + 15.0,
-                x: 13.0,
-            },
-        }
-    );
-    assert_eq!(row, 3);
-    assert_eq!(y, 10.0 + 3.0 * 16.0 + 15.0);
-    assert_eq!(row_extra_y, 15.0);
-    assert_eq!(row_max_height, 16.0);
-    assert_eq!(row_max_ascent, 12.0);
-    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 15.0]);
-}
-
-#[test]
-fn display_row_geometry_binding_can_finish_row_boundary_in_one_request() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
-    let mut hit_rows = Vec::new();
-
-    let transition = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .finish_boundary_and_record_hit(
-        DisplayRowBoundaryTarget::new(
-            DisplayRowHitRange {
-                charpos_start: 11,
-                charpos_end: 22,
-            },
-            DisplayRowGeometryTransitionTarget::visual_wrap(
-                DisplayRowGeometryDefaults {
-                    text_y: 10.0,
-                    height: 16.0,
-                    ascent: 12.0,
-                },
-                5,
-                7,
-                13.0,
-                row_y_positions.recording(),
-            ),
-        ),
-        &mut hit_rows,
-    );
-
-    assert_eq!(hit_rows[0].y_start, 42.0);
-    assert_eq!(hit_rows[0].y_end, 66.0);
-    assert_eq!(hit_rows[0].charpos_start, 11);
-    assert_eq!(hit_rows[0].charpos_end, 22);
-    assert_eq!(
-        transition,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
-                y: 42.0,
-                height: 24.0,
-                ascent: 18.0,
-            },
-            begin_row: TextMatrixRowBegin {
-                matrix_row: 8,
-                row: 3,
-                col: 7,
-                y: 10.0 + 3.0 * 16.0 + 11.0,
-                x: 13.0,
-            },
-        }
-    );
-    assert_eq!(row, 3);
-    assert_eq!(y, 10.0 + 3.0 * 16.0 + 11.0);
-    assert_eq!(row_extra_y, 11.0);
-    assert_eq!(row_max_height, 16.0);
-    assert_eq!(row_max_ascent, 12.0);
-    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
-}
-
-#[test]
-fn display_row_geometry_binding_can_finish_row_boundary_by_mut_ref() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
-    let mut vars = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    };
-
-    let mut hit_rows = Vec::new();
-    let transition = vars.finish_boundary_and_record_hit(
-        DisplayRowBoundaryTarget::visual_wrap(
-            DisplayRowHitRange {
-                charpos_start: 11,
-                charpos_end: 22,
-            },
-            DisplayRowGeometryDefaults {
-                text_y: 10.0,
-                height: 16.0,
-                ascent: 12.0,
-            },
-            5,
-            7,
-            13.0,
-            row_y_positions.recording(),
-        ),
-        &mut hit_rows,
-    );
-
-    let output = DisplayRowGeometryState::from_snapshot(vars.snapshot()).text_row_output(16.0);
-
-    assert_eq!(hit_rows[0].y_start, 42.0);
-    assert_eq!(hit_rows[0].y_end, 66.0);
-    assert_eq!(vars.snapshot().row, 3);
-    assert_eq!(vars.snapshot().y, 10.0 + 3.0 * 16.0 + 11.0);
-    assert_eq!(transition.begin_row.row, 3);
-    assert_eq!(output.row, 3);
-    assert_eq!(output.row_y, 10.0 + 3.0 * 16.0 + 11.0);
-    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
 
 #[test]
@@ -1363,61 +988,6 @@ fn display_row_geometry_state_can_finish_boundary_without_row_y_recording() {
     assert_eq!(geometry.row_extra_y, 13.0);
     assert_eq!(geometry.height, 16.0);
     assert_eq!(geometry.ascent, 12.0);
-}
-
-#[test]
-fn display_row_geometry_binding_can_finish_boundary_and_record_hit_row() {
-    let mut row = 2;
-    let mut y = 42.0;
-    let mut row_extra_y = 3.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
-    let mut hit_rows = Vec::new();
-    let mut vars = DisplayRowGeometryBinding {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    };
-
-    let transition = vars.finish_boundary_and_record_hit(
-        DisplayRowBoundaryTarget::visual_wrap(
-            DisplayRowHitRange {
-                charpos_start: 11,
-                charpos_end: 22,
-            },
-            DisplayRowGeometryDefaults {
-                text_y: 10.0,
-                height: 16.0,
-                ascent: 12.0,
-            },
-            5,
-            7,
-            13.0,
-            row_y_positions.recording(),
-        ),
-        &mut hit_rows,
-    );
-
-    assert_eq!(hit_rows.len(), 1);
-    assert_eq!(hit_rows[0].y_start, 42.0);
-    assert_eq!(hit_rows[0].y_end, 66.0);
-    assert_eq!(hit_rows[0].charpos_start, 11);
-    assert_eq!(hit_rows[0].charpos_end, 22);
-    assert_eq!(
-        transition.begin_row,
-        TextMatrixRowBegin {
-            matrix_row: 8,
-            row: 3,
-            col: 7,
-            y: 10.0 + 3.0 * 16.0 + 11.0,
-            x: 13.0,
-        }
-    );
-    assert_eq!(vars.snapshot().row, 3);
-    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
 
 #[test]

@@ -3615,9 +3615,7 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
-                    row_geometry
-                        .binding()
-                        .include_row_extents(face_metrics.row_height, face_metrics.ascent);
+                    row_geometry.include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
                     current_face_id += 1;
 
@@ -3886,41 +3884,37 @@ impl LayoutEngine {
                             self.run_buf.clear();
                             let right_limit = content_x + avail_width;
                             for overlay_string in &after_strings {
-                                row_geometry.binding().with_display_row_geometry_state(
-                                    |geometry| {
-                                        render_overlay_string(
-                                            evaluator,
-                                            &mut output_emitter,
-                                            buffer,
-                                            DisplayTextFragment::overlay_string(
-                                                overlay_string.string,
-                                                overlay_string.overlay_id,
-                                                CharPos0::new(charpos as usize),
-                                                OverlayStringKind::After,
-                                            ),
-                                            &mut self.font_metrics,
-                                            face_resolver,
-                                            &mut x,
-                                            &mut col,
-                                            geometry,
-                                            &mut cursor_info,
-                                            &mut hit_rows,
-                                            &mut hit_row_charpos_start,
-                                            charpos,
-                                            &mut row_y_positions,
-                                            face_metrics.char_width,
-                                            char_h,
-                                            default_face_ascent,
-                                            right_limit,
-                                            content_x,
-                                            text_y,
-                                            text_matrix_row_base,
-                                            max_rows,
-                                            &mut current_face_id,
-                                            &mut self.matrix_builder,
-                                            params,
-                                        );
-                                    },
+                                render_overlay_string(
+                                    evaluator,
+                                    &mut output_emitter,
+                                    buffer,
+                                    DisplayTextFragment::overlay_string(
+                                        overlay_string.string,
+                                        overlay_string.overlay_id,
+                                        CharPos0::new(charpos as usize),
+                                        OverlayStringKind::After,
+                                    ),
+                                    &mut self.font_metrics,
+                                    face_resolver,
+                                    &mut x,
+                                    &mut col,
+                                    &mut row_geometry,
+                                    &mut cursor_info,
+                                    &mut hit_rows,
+                                    &mut hit_row_charpos_start,
+                                    charpos,
+                                    &mut row_y_positions,
+                                    face_metrics.char_width,
+                                    char_h,
+                                    default_face_ascent,
+                                    right_limit,
+                                    content_x,
+                                    text_y,
+                                    text_matrix_row_base,
+                                    max_rows,
+                                    &mut current_face_id,
+                                    &mut self.matrix_builder,
+                                    params,
                                 );
                             }
                         }
@@ -3949,22 +3943,21 @@ impl LayoutEngine {
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
 
-                    let geometry_transition =
-                        row_geometry.binding().finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::line_break(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                0.0,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        DisplayRowBoundaryTarget::line_break(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            0.0,
+                            row_y_positions.recording(),
+                        ),
+                        &mut hit_rows,
+                    );
                     // Record hit-test row (hscroll newline)
                     hit_row_charpos_start = charpos;
                     let row_transition = TextMatrixRowOutput::new(
@@ -4259,7 +4252,7 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
-                            row_geometry.binding().include_glyph_vertical_metrics(
+                            row_geometry.include_glyph_vertical_metrics(
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
@@ -4387,9 +4380,7 @@ impl LayoutEngine {
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                 && progress.metrics.width_px > 0.0
                             {
-                                row_geometry
-                                    .binding()
-                                    .include_row_extents(display_height, display_height);
+                                row_geometry.include_row_extents(display_height, display_height);
                                 x = position.x_px;
                                 col = position.col;
                             }
@@ -4529,22 +4520,21 @@ impl LayoutEngine {
                             box_start_x = content_x;
                             box_row = row_geometry.next_row_marker();
                         }
-                        let geometry_transition =
-                            row_geometry.binding().finish_boundary_and_record_hit(
-                                DisplayRowBoundaryTarget::line_break(
-                                    DisplayRowHitRange {
-                                        charpos_start: hit_row_charpos_start,
-                                        charpos_end: charpos,
-                                    },
-                                    row_geometry_defaults,
-                                    text_matrix_row_base,
-                                    col,
-                                    x,
-                                    0.0,
-                                    row_y_positions.recording(),
-                                ),
-                                &mut hit_rows,
-                            );
+                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::line_break(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                0.0,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4645,7 +4635,7 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let geometry_transition = row_geometry.binding().finish_boundary_and_record_hit(
+                let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                     DisplayRowBoundaryTarget::line_break(
                         DisplayRowHitRange {
                             charpos_start: hit_row_charpos_start,
@@ -4765,21 +4755,20 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = DisplayRowMarker::Inactive;
-                        let geometry_transition =
-                            row_geometry.binding().finish_boundary_and_record_hit(
-                                DisplayRowBoundaryTarget::truncation(
-                                    DisplayRowHitRange {
-                                        charpos_start: hit_row_charpos_start,
-                                        charpos_end: charpos,
-                                    },
-                                    row_geometry_defaults,
-                                    text_matrix_row_base,
-                                    col,
-                                    x,
-                                    row_y_positions.recording(),
-                                ),
-                                &mut hit_rows,
-                            );
+                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::truncation(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                         // Record hit-test row (wrap/truncation break)
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
@@ -4804,21 +4793,20 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = DisplayRowMarker::Inactive;
-                        let geometry_transition =
-                            row_geometry.binding().finish_boundary_and_record_hit(
-                                DisplayRowBoundaryTarget::visual_wrap(
-                                    DisplayRowHitRange {
-                                        charpos_start: hit_row_charpos_start,
-                                        charpos_end: charpos,
-                                    },
-                                    row_geometry_defaults,
-                                    text_matrix_row_base,
-                                    col,
-                                    x,
-                                    row_y_positions.recording(),
-                                ),
-                                &mut hit_rows,
-                            );
+                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::visual_wrap(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                         // Record hit-test row (wrap/truncation break)
                         hit_row_charpos_start = charpos;
                         let row_transition = TextMatrixRowOutput::new(
@@ -5088,21 +5076,20 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition =
-                        row_geometry.binding().finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::truncation(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        DisplayRowBoundaryTarget::truncation(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                        &mut hit_rows,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5136,21 +5123,20 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition =
-                        row_geometry.binding().finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::visual_wrap(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        DisplayRowBoundaryTarget::visual_wrap(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                        &mut hit_rows,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5184,21 +5170,20 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
-                    let geometry_transition =
-                        row_geometry.binding().finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::visual_wrap(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        DisplayRowBoundaryTarget::visual_wrap(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                        &mut hit_rows,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5262,42 +5247,38 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &before_strings {
-                        row_geometry
-                            .binding()
-                            .with_display_row_geometry_state(|geometry| {
-                                render_overlay_string(
-                                    evaluator,
-                                    &mut output_emitter,
-                                    buffer,
-                                    DisplayTextFragment::overlay_string(
-                                        overlay_string.string,
-                                        overlay_string.overlay_id,
-                                        CharPos0::new(charpos as usize),
-                                        OverlayStringKind::Before,
-                                    ),
-                                    &mut self.font_metrics,
-                                    face_resolver,
-                                    &mut x,
-                                    &mut col,
-                                    geometry,
-                                    &mut cursor_info,
-                                    &mut hit_rows,
-                                    &mut hit_row_charpos_start,
-                                    charpos,
-                                    &mut row_y_positions,
-                                    face_metrics.char_width,
-                                    char_h,
-                                    default_face_ascent,
-                                    right_limit,
-                                    content_x,
-                                    text_y,
-                                    text_matrix_row_base,
-                                    max_rows,
-                                    &mut current_face_id,
-                                    &mut self.matrix_builder,
-                                    params,
-                                );
-                            });
+                        render_overlay_string(
+                            evaluator,
+                            &mut output_emitter,
+                            buffer,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::Before,
+                            ),
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &mut x,
+                            &mut col,
+                            &mut row_geometry,
+                            &mut cursor_info,
+                            &mut hit_rows,
+                            &mut hit_row_charpos_start,
+                            charpos,
+                            &mut row_y_positions,
+                            face_metrics.char_width,
+                            char_h,
+                            default_face_ascent,
+                            right_limit,
+                            content_x,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                            &mut current_face_id,
+                            &mut self.matrix_builder,
+                            params,
+                        );
                     }
                 }
             }
@@ -5375,42 +5356,38 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &after_strings {
-                        row_geometry
-                            .binding()
-                            .with_display_row_geometry_state(|geometry| {
-                                render_overlay_string(
-                                    evaluator,
-                                    &mut output_emitter,
-                                    buffer,
-                                    DisplayTextFragment::overlay_string(
-                                        overlay_string.string,
-                                        overlay_string.overlay_id,
-                                        CharPos0::new(charpos as usize),
-                                        OverlayStringKind::After,
-                                    ),
-                                    &mut self.font_metrics,
-                                    face_resolver,
-                                    &mut x,
-                                    &mut col,
-                                    geometry,
-                                    &mut cursor_info,
-                                    &mut hit_rows,
-                                    &mut hit_row_charpos_start,
-                                    charpos,
-                                    &mut row_y_positions,
-                                    face_metrics.char_width,
-                                    char_h,
-                                    default_face_ascent,
-                                    right_limit,
-                                    content_x,
-                                    text_y,
-                                    text_matrix_row_base,
-                                    max_rows,
-                                    &mut current_face_id,
-                                    &mut self.matrix_builder,
-                                    params,
-                                );
-                            });
+                        render_overlay_string(
+                            evaluator,
+                            &mut output_emitter,
+                            buffer,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::After,
+                            ),
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &mut x,
+                            &mut col,
+                            &mut row_geometry,
+                            &mut cursor_info,
+                            &mut hit_rows,
+                            &mut hit_row_charpos_start,
+                            charpos,
+                            &mut row_y_positions,
+                            face_metrics.char_width,
+                            char_h,
+                            default_face_ascent,
+                            right_limit,
+                            content_x,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                            &mut current_face_id,
+                            &mut self.matrix_builder,
+                            params,
+                        );
                     }
                 }
             }
@@ -5472,80 +5449,72 @@ impl LayoutEngine {
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
             let right_limit = content_x + avail_width;
             for overlay_string in &before_strings {
-                row_geometry
-                    .binding()
-                    .with_display_row_geometry_state(|geometry| {
-                        render_overlay_string(
-                            evaluator,
-                            &mut output_emitter,
-                            buffer,
-                            DisplayTextFragment::overlay_string(
-                                overlay_string.string,
-                                overlay_string.overlay_id,
-                                CharPos0::new(charpos as usize),
-                                OverlayStringKind::Before,
-                            ),
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut x,
-                            &mut col,
-                            geometry,
-                            &mut cursor_info,
-                            &mut hit_rows,
-                            &mut hit_row_charpos_start,
-                            charpos,
-                            &mut row_y_positions,
-                            face_metrics.char_width,
-                            char_h,
-                            default_face_ascent,
-                            right_limit,
-                            content_x,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
-                            &mut current_face_id,
-                            &mut self.matrix_builder,
-                            params,
-                        );
-                    });
+                render_overlay_string(
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    DisplayTextFragment::overlay_string(
+                        overlay_string.string,
+                        overlay_string.overlay_id,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::Before,
+                    ),
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                    &mut row_geometry,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_charpos_start,
+                    charpos,
+                    &mut row_y_positions,
+                    face_metrics.char_width,
+                    char_h,
+                    default_face_ascent,
+                    right_limit,
+                    content_x,
+                    text_y,
+                    text_matrix_row_base,
+                    max_rows,
+                    &mut current_face_id,
+                    &mut self.matrix_builder,
+                    params,
+                );
             }
             for overlay_string in &after_strings {
-                row_geometry
-                    .binding()
-                    .with_display_row_geometry_state(|geometry| {
-                        render_overlay_string(
-                            evaluator,
-                            &mut output_emitter,
-                            buffer,
-                            DisplayTextFragment::overlay_string(
-                                overlay_string.string,
-                                overlay_string.overlay_id,
-                                CharPos0::new(charpos as usize),
-                                OverlayStringKind::After,
-                            ),
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut x,
-                            &mut col,
-                            geometry,
-                            &mut cursor_info,
-                            &mut hit_rows,
-                            &mut hit_row_charpos_start,
-                            charpos,
-                            &mut row_y_positions,
-                            face_metrics.char_width,
-                            char_h,
-                            default_face_ascent,
-                            right_limit,
-                            content_x,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
-                            &mut current_face_id,
-                            &mut self.matrix_builder,
-                            params,
-                        );
-                    });
+                render_overlay_string(
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    DisplayTextFragment::overlay_string(
+                        overlay_string.string,
+                        overlay_string.overlay_id,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::After,
+                    ),
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                    &mut row_geometry,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_charpos_start,
+                    charpos,
+                    &mut row_y_positions,
+                    face_metrics.char_width,
+                    char_h,
+                    default_face_ascent,
+                    right_limit,
+                    content_x,
+                    text_y,
+                    text_matrix_row_base,
+                    max_rows,
+                    &mut current_face_id,
+                    &mut self.matrix_builder,
+                    params,
+                );
             }
         }
 
