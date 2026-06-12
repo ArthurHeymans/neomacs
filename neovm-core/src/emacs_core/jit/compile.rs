@@ -366,6 +366,161 @@ extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Direct-builtin tables: the SAME typed `builtins::builtin_*` functions the
+// interpreter opcode arms call, exposed to generated code through three
+// arity-shaped generic shims. Single source of truth — the JIT cannot drift
+// from the interpreter's semantics for these ops.
+// ---------------------------------------------------------------------------
+
+type JitBuiltin1 = fn(&mut Context, Value) -> Result<Value, Flow>;
+type JitBuiltin2 = fn(&mut Context, Value, Value) -> Result<Value, Flow>;
+type JitBuiltin3 = fn(&mut Context, Value, Value, Value) -> Result<Value, Flow>;
+
+use crate::emacs_core::builtins as b;
+
+static JIT_BUILTIN1: [JitBuiltin1; 4] = [
+    b::builtin_length_1,          // 0
+    b::builtin_symbol_value_1,    // 1
+    b::builtin_symbol_function_1, // 2
+    b::builtin_nreverse_1,        // 3
+];
+
+static JIT_BUILTIN2: [JitBuiltin2; 15] = [
+    b::builtin_nth_2,          // 0
+    b::builtin_nthcdr_2,       // 1
+    b::builtin_elt_2,          // 2
+    b::builtin_member_2,       // 3
+    b::builtin_memq_2,         // 4
+    b::builtin_assq_2,         // 5
+    b::builtin_equal_2,        // 6
+    b::builtin_setcar_2,       // 7
+    b::builtin_setcdr_2,       // 8
+    b::builtin_aref_2,         // 9
+    b::builtin_set_2,          // 10
+    b::builtin_fset_2,         // 11
+    b::builtin_get_2,          // 12
+    b::builtin_string_equal_2, // 13
+    b::builtin_string_lessp_2, // 14
+];
+
+static JIT_BUILTIN3: [JitBuiltin3; 1] = [
+    b::builtin_put_3, // 0
+];
+
+/// `(table_arity, table_index, mutates)` for ops lowered through the generic
+/// direct-builtin shims. `mutates` ops poison later guards (a deopt-rerun would
+/// replay the mutation); pure ones are rerun-safe.
+fn direct_builtin_spec(op: &Op) -> Option<(u8, usize, bool)> {
+    Some(match op {
+        Op::Length => (1, 0, false),
+        Op::SymbolValue => (1, 1, false),
+        Op::SymbolFunction => (1, 2, false),
+        Op::Nreverse => (1, 3, true),
+        Op::Nth => (2, 0, false),
+        Op::Nthcdr => (2, 1, false),
+        Op::Elt => (2, 2, false),
+        Op::Member => (2, 3, false),
+        Op::Memq => (2, 4, false),
+        Op::Assq => (2, 5, false),
+        Op::Equal => (2, 6, false),
+        Op::Setcar => (2, 7, true),
+        Op::Setcdr => (2, 8, true),
+        Op::Aref => (2, 9, false),
+        Op::Set => (2, 10, true),
+        Op::Fset => (2, 11, true),
+        Op::Get => (2, 12, false),
+        Op::StringEqual => (2, 13, false),
+        Op::StringLessp => (2, 14, false),
+        Op::Put => (3, 0, true),
+        _ => return None,
+    })
+}
+
+/// Call a unary direct builtin (`JIT_BUILTIN1[idx]`) — the identical function
+/// the interpreter arm calls. Roots the argument across the call (builtins may
+/// GC); the generated code rooted the rest of its frame.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN1[idx as usize](ctx, a) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Binary variant of [`neovm_jit_builtin1`].
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *mut i64) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let b = Value::from_bits(b as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    push_scratch_gc_root(b);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN2[idx as usize](ctx, a, b) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Ternary variant of [`neovm_jit_builtin1`].
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin3(
+    ctx: *mut u8,
+    idx: i64,
+    a: i64,
+    b: i64,
+    c: i64,
+    out: *mut i64,
+) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let b = Value::from_bits(b as usize);
+    let c = Value::from_bits(c as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    push_scratch_gc_root(b);
+    push_scratch_gc_root(c);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN3[idx as usize](ctx, a, b, c) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
 /// Compiled bodies have no local handlers (handler opcodes bail), so a throw
 /// always propagates out — exactly the interpreter's `resume_nonlocal` once no
@@ -1057,6 +1212,9 @@ struct RtRefs {
     throw_flow: FuncRef,
     integerp_slow: FuncRef,
     numberp_slow: FuncRef,
+    builtin1: FuncRef,
+    builtin2: FuncRef,
+    builtin3: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1158,6 +1316,20 @@ fn declare_rt_refs(
     sig_pred1.returns.push(AbiParam::new(i64t));
     let intp_id = declare(module, "neovm_jit_integerp_slow", &sig_pred1)?;
     let nump_id = declare(module, "neovm_jit_numberp_slow", &sig_pred1)?;
+    // (vmctx, idx, a[, b[, c]], out_ptr) -> status — generic direct builtins.
+    let mut sig_b1 = Signature::new(call_conv);
+    sig_b1.params.push(AbiParam::new(ptr_ty));
+    sig_b1.params.push(AbiParam::new(i64t));
+    sig_b1.params.push(AbiParam::new(i64t));
+    sig_b1.params.push(AbiParam::new(ptr_ty));
+    sig_b1.returns.push(AbiParam::new(i64t));
+    let mut sig_b2 = sig_b1.clone();
+    sig_b2.params.insert(3, AbiParam::new(i64t));
+    let mut sig_b3 = sig_b2.clone();
+    sig_b3.params.insert(4, AbiParam::new(i64t));
+    let b1_id = declare(module, "neovm_jit_builtin1", &sig_b1)?;
+    let b2_id = declare(module, "neovm_jit_builtin2", &sig_b2)?;
+    let b3_id = declare(module, "neovm_jit_builtin3", &sig_b3)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1179,6 +1351,9 @@ fn declare_rt_refs(
         throw_flow: module.declare_func_in_func(throw_id, func),
         integerp_slow: module.declare_func_in_func(intp_id, func),
         numberp_slow: module.declare_func_in_func(nump_id, func),
+        builtin1: module.declare_func_in_func(b1_id, func),
+        builtin2: module.declare_func_in_func(b2_id, func),
+        builtin3: module.declare_func_in_func(b3_id, func),
     })
 }
 
@@ -1605,7 +1780,59 @@ fn lower_simple_op(
             let vmctx = fb.use_var(rt.vmctx_var);
             fb.ins().call(shim, &[vmctx]);
         }
-        other => return Err(CompileError::UnsupportedOp(op_category(other))),
+        other => {
+            // Direct-builtin ops: pop the operands, root the rest of the live
+            // frame, and call the arity-shaped generic shim with the table
+            // index baked in — the shim invokes the SAME builtins::* function
+            // the interpreter arm calls.
+            let Some((arity, idx, _mutates)) = direct_builtin_spec(other) else {
+                return Err(CompileError::UnsupportedOp(op_category(other)));
+            };
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let arity = arity as usize;
+            if stack.len() < arity {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - arity;
+            let operands: Vec<ClifValue> = stack[at..].to_vec();
+            stack.truncate(at);
+            // Root remaining live values (the builtin may allocate/GC; the
+            // shim roots the operands themselves).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let idx_v = fb.ins().iconst(types::I64, idx as i64);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let shim = match arity {
+                1 => rt.refs.builtin1,
+                2 => rt.refs.builtin2,
+                _ => rt.refs.builtin3,
+            };
+            let mut call_args = vec![vmctx, idx_v];
+            call_args.extend(operands);
+            call_args.push(out_addr);
+            let call = fb.ins().call(shim, &call_args);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
     }
     Ok(())
 }
@@ -1613,6 +1840,10 @@ fn lower_simple_op(
 /// Minimum operand-stack depth a simple op requires, and its net depth change.
 /// `Err` for anything outside the supported simple subset.
 fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
+    if let Some((arity, _, _)) = direct_builtin_spec(op) {
+        // N operands -> one result.
+        return Ok((arity as usize, 1 - arity as i64));
+    }
     Ok(match op {
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
@@ -1918,19 +2149,21 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         }
                         _ => {}
                     }
-                    if matches!(
-                        other,
-                        Op::Call(_)
-                            | Op::Apply(_)
-                            | Op::VarSet(_)
-                            | Op::VarBind(_)
-                            | Op::Unbind(_)
-                            | Op::SaveCurrentBuffer
-                            | Op::SaveExcursion
-                            | Op::SaveRestriction
-                    ) {
-                        // Side effects (calls, assignment, specpdl push/pop):
-                        // a later deopt-rerun would replay them.
+                    if direct_builtin_spec(other).is_some_and(|(_, _, mutates)| mutates)
+                        || matches!(
+                            other,
+                            Op::Call(_)
+                                | Op::Apply(_)
+                                | Op::VarSet(_)
+                                | Op::VarBind(_)
+                                | Op::Unbind(_)
+                                | Op::SaveCurrentBuffer
+                                | Op::SaveExcursion
+                                | Op::SaveRestriction
+                        )
+                    {
+                        // Side effects (calls, assignment, mutation, specpdl
+                        // push/pop): a later deopt-rerun would replay them.
                         poisoned = true;
                     }
                 }
@@ -2078,6 +2311,9 @@ pub fn lower_leaf(
         "neovm_jit_numberp_slow",
         neovm_jit_numberp_slow as *const u8,
     );
+    builder.symbol("neovm_jit_builtin1", neovm_jit_builtin1 as *const u8);
+    builder.symbol("neovm_jit_builtin2", neovm_jit_builtin2 as *const u8);
+    builder.symbol("neovm_jit_builtin3", neovm_jit_builtin3 as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -2096,24 +2332,25 @@ pub fn lower_leaf(
     // back-edges poll through vmctx.
     let needs_rt = has_backedge
         || ops.iter().any(|o| {
-            matches!(
-                o,
-                Op::Cons
-                    | Op::Call(_)
-                    | Op::Apply(_)
-                    | Op::Eq
-                    | Op::Symbolp
-                    | Op::VarRef(_)
-                    | Op::VarSet(_)
-                    | Op::VarBind(_)
-                    | Op::Unbind(_)
-                    | Op::SaveCurrentBuffer
-                    | Op::SaveExcursion
-                    | Op::SaveRestriction
-                    | Op::Throw
-                    | Op::Integerp
-                    | Op::Numberp
-            )
+            direct_builtin_spec(o).is_some()
+                || matches!(
+                    o,
+                    Op::Cons
+                        | Op::Call(_)
+                        | Op::Apply(_)
+                        | Op::Eq
+                        | Op::Symbolp
+                        | Op::VarRef(_)
+                        | Op::VarSet(_)
+                        | Op::VarBind(_)
+                        | Op::Unbind(_)
+                        | Op::SaveCurrentBuffer
+                        | Op::SaveExcursion
+                        | Op::SaveRestriction
+                        | Op::Throw
+                        | Op::Integerp
+                        | Op::Numberp
+                )
         });
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
@@ -3167,6 +3404,178 @@ mod tests {
             }
             other => panic!("expected Flow::Throw, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn compiles_direct_builtin_ops() {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let ok_int = |n: i64| NativeRun::Ok(Value::make_int(n).bits());
+        let run = |ops: &[Op], consts: &[Value], ctx: *mut u8| {
+            lower_nullary_leaf(ops, consts).unwrap().call(ctx, &[])
+        };
+
+        // length
+        let list = Value::cons(
+            Value::make_int(1),
+            Value::cons(
+                Value::make_int(2),
+                Value::cons(Value::make_int(3), Value::NIL),
+            ),
+        );
+        assert_eq!(
+            run(&[Op::Constant(0), Op::Length, Op::Return], &[list], ctx_ptr),
+            ok_int(3)
+        );
+
+        // nth: (nth 1 '(1 2 3)) = 2 — operand order matches the arm (n, list).
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Nth, Op::Return],
+                &[Value::make_int(1), list],
+                ctx_ptr
+            ),
+            ok_int(2)
+        );
+
+        // memq: (memq 'b '(a b c)) -> the tail whose car is 'b.
+        let (a, bsym, c) = (
+            Value::symbol("jit-memq-a"),
+            Value::symbol("jit-memq-b"),
+            Value::symbol("jit-memq-c"),
+        );
+        let abc = Value::cons(a, Value::cons(bsym, Value::cons(c, Value::NIL)));
+        let NativeRun::Ok(tail) = run(
+            &[Op::Constant(0), Op::Constant(1), Op::Memq, Op::Return],
+            &[bsym, abc],
+            ctx_ptr,
+        ) else {
+            panic!("memq must succeed");
+        };
+        assert_eq!(Value::from_bits(tail).cons_car(), bsym);
+
+        // equal on structurally-equal fresh lists -> t.
+        let l1 = Value::cons(
+            Value::make_int(1),
+            Value::cons(Value::make_int(2), Value::NIL),
+        );
+        let l2 = Value::cons(
+            Value::make_int(1),
+            Value::cons(Value::make_int(2), Value::NIL),
+        );
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Equal, Op::Return],
+                &[l1, l2],
+                ctx_ptr
+            ),
+            NativeRun::Ok(Value::T.bits())
+        );
+
+        // setcar mutates through the SATB-barriered builtin; result = new car.
+        let cell = Value::cons(Value::make_int(10), Value::make_int(20));
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Setcar, Op::Return],
+                &[cell, Value::make_int(99)],
+                ctx_ptr
+            ),
+            ok_int(99)
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(99), "mutation visible");
+
+        // setcar poisons later guards.
+        let err = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Setcar,
+                Op::Add1,
+                Op::Return,
+            ],
+            &[cell, Value::make_int(1)],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("guard-after-call")
+        ));
+
+        // symbol-value: live read + void-variable signal.
+        let var = Value::symbol("jit-bw-var");
+        let crate::emacs_core::value::ValueKind::Symbol(var_id) = var.kind() else {
+            panic!("symbol expected");
+        };
+        ev.obarray.set_symbol_value_id(var_id, Value::make_int(5));
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::SymbolValue, Op::Return],
+                &[var],
+                ctx_ptr
+            ),
+            ok_int(5)
+        );
+        let unbound = Value::symbol("jit-bw-unbound");
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::SymbolValue, Op::Return],
+                &[unbound],
+                ctx_ptr
+            ),
+            NativeRun::Signal
+        );
+        assert!(take_pending_flow().is_some());
+
+        // put / get round-trip on a plist.
+        let psym = Value::symbol("jit-bw-plist");
+        let prop = Value::symbol("jit-bw-prop");
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Constant(2),
+                    Op::Put,
+                    Op::Return,
+                ],
+                &[psym, prop, Value::make_int(7)],
+                ctx_ptr
+            ),
+            ok_int(7)
+        );
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Get, Op::Return],
+                &[psym, prop],
+                ctx_ptr
+            ),
+            ok_int(7)
+        );
+
+        // aref on a string; string-equal.
+        let s = Value::string("abc");
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Aref, Op::Return],
+                &[s, Value::make_int(1)],
+                ctx_ptr
+            ),
+            ok_int('b' as i64)
+        );
+        let s2 = Value::string("abc");
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::StringEqual,
+                    Op::Return
+                ],
+                &[s, s2],
+                ctx_ptr
+            ),
+            NativeRun::Ok(Value::T.bits())
+        );
     }
 
     #[test]
