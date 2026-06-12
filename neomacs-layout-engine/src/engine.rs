@@ -38,10 +38,9 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryCursor, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback,
-    DisplayRowYPositions, DisplayRowYRecording, LegacyDisplayRowGeometry,
-    LegacyDisplayRowGeometryVars,
+    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
+    DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions,
+    DisplayRowYRecording, LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -5882,15 +5881,7 @@ impl LayoutEngine {
         if row < max_rows && (charpos > hit_row_charpos_start || has_pending_row_output) {
             let row_y_start = row_y_positions
                 .y_for_row(row, current_row_geometry!().row_y_fallback(text_y, char_h));
-            let row_cursor = DisplayRowGeometryCursor::from_state(
-                DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
-                    row,
-                    y: row_y_start,
-                    row_extra_y,
-                    row_max_height,
-                    row_max_ascent,
-                }),
-            );
+            let row_cursor = current_row_geometry!().with_row_y(row_y_start).cursor();
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
                 .finish(row_cursor.finish_current_row());

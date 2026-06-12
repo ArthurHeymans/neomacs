@@ -433,6 +433,15 @@ impl DisplayRowGeometryState {
         }
     }
 
+    pub(crate) fn with_row_y(mut self, y: f32) -> Self {
+        self.y = y;
+        self
+    }
+
+    pub(crate) fn cursor(&self) -> DisplayRowGeometryCursor {
+        DisplayRowGeometryCursor::from_state(*self)
+    }
+
     pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
         self.row < limit.max_rows && self.y + self.height <= limit.bottom_y
     }

@@ -220,6 +220,33 @@ fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_cursor_after_row_y_adjustment() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    };
+
+    let cursor = geometry.with_row_y(48.0).cursor();
+    let hit_row = cursor.hit_row(11, 22);
+
+    assert_eq!(hit_row.y_start, 48.0);
+    assert_eq!(hit_row.y_end, 72.0);
+    assert_eq!(hit_row.charpos_start, 11);
+    assert_eq!(hit_row.charpos_end, 22);
+    assert_eq!(
+        cursor.finish_current_row(),
+        TextMatrixRowMetrics {
+            y: 48.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
     assert_eq!(
         DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
