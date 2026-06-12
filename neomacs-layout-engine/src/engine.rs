@@ -3477,11 +3477,11 @@ impl LayoutEngine {
                         resolved.clone(),
                         metrics,
                         char_w,
-                        DisplayRowFallbackMetrics {
-                            char_width: char_w,
-                            row_height: char_h,
-                            ascent: font_ascent,
-                        },
+                        DisplayRowFallbackMetrics::from_default_face_extents(
+                            char_w,
+                            char_h,
+                            font_ascent,
+                        ),
                         &mut self.font_metrics,
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
