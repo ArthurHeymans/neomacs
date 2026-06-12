@@ -2302,6 +2302,18 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
     assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
 }
 
+#[test]
+fn process_service_accepts_wait_request_boundary() {
+    let mut ev = Context::new();
+    let request = WaitRequest::timer_service(false);
+
+    let poll = ev.poll_process_output_for_wait_request(&request);
+    let ready = ev.poll_ready_process_output_for_wait_request(Vec::new(), &request);
+
+    assert!(!poll.has_any_process_activity());
+    assert!(!ready.has_any_process_activity());
+}
+
 #[cfg(unix)]
 fn test_pipe_files() -> (std::fs::File, std::fs::File) {
     use std::os::fd::FromRawFd;

@@ -297,6 +297,10 @@ impl WaitRequest {
         self.processes.just_this_one()
     }
 
+    pub(crate) fn services_process_output(self) -> bool {
+        self.processes.services_processes()
+    }
+
     fn services_special_input(self) -> bool {
         self.special_input.services_input()
     }
@@ -597,11 +601,9 @@ impl super::eval::Context {
             outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
         }
         let process_outcome = match process_service {
-            WaitProcessService::Poll => {
-                self.poll_process_output_with_wait_policy(request.processes)
-            }
+            WaitProcessService::Poll => self.poll_process_output_for_wait_request(request),
             WaitProcessService::Ready(ready_processes) => {
-                self.poll_ready_process_output_with_wait_policy(ready_processes, request.processes)
+                self.poll_ready_process_output_for_wait_request(ready_processes, request)
             }
         };
         outcome.absorb_process_activity(process_outcome);
@@ -732,7 +734,7 @@ impl super::eval::Context {
             return WaitBlockStrategy::HostInput;
         }
 
-        if request.processes.services_processes() {
+        if request.services_process_output() {
             return WaitBlockStrategy::ProcessOutput;
         }
 
@@ -746,7 +748,7 @@ impl super::eval::Context {
         if !self.processes.has_wait_input_wakeup_backend() {
             return None;
         }
-        if request.processes.services_processes() {
+        if request.services_process_output() {
             return if request.keyboard.waits_for_host_input() {
                 Some(WaitBlockStrategy::BackendInputWakeupAndProcesses)
             } else {

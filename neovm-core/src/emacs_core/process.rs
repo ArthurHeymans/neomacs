@@ -2480,14 +2480,14 @@ impl super::eval::Context {
         );
     }
 
-    pub(crate) fn poll_process_output_with_wait_policy(
+    pub(crate) fn poll_process_output_for_wait_request(
         &mut self,
-        processes: ProcessWaitPolicy,
+        request: &WaitRequest,
     ) -> WaitServiceOutcome {
-        let target_process = processes.target_process();
-        let proc_ids = if !processes.services_processes() {
+        let target_process = request.target_process();
+        let proc_ids = if !request.services_process_output() {
             Vec::new()
-        } else if processes.just_this_one() {
+        } else if request.restricts_process_service_to_target() {
             target_process.into_iter().collect::<Vec<_>>()
         } else {
             self.processes.live_process_ids()
@@ -2495,15 +2495,15 @@ impl super::eval::Context {
         self.poll_process_output_for_ids(proc_ids, target_process)
     }
 
-    pub(crate) fn poll_ready_process_output_with_wait_policy(
+    pub(crate) fn poll_ready_process_output_for_wait_request(
         &mut self,
         ready_processes: Vec<ProcessId>,
-        processes: ProcessWaitPolicy,
+        request: &WaitRequest,
     ) -> WaitServiceOutcome {
-        let target_process = processes.target_process();
-        let proc_ids = if !processes.services_processes() {
+        let target_process = request.target_process();
+        let proc_ids = if !request.services_process_output() {
             Vec::new()
-        } else if processes.just_this_one() {
+        } else if request.restricts_process_service_to_target() {
             target_process
                 .filter(|target| ready_processes.contains(target))
                 .into_iter()
