@@ -234,6 +234,39 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
     assert!(!cursor.stretch_like);
 }
 
+#[test]
+fn captured_cursor_info_builds_from_visual_state() {
+    let cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 9.0,
+            face_height: 22.0,
+            face_ascent: 17.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 21.0,
+            y: 34.0,
+            byte_idx: 5,
+            col: 3,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(18.0),
+            stretch_like: true,
+        },
+    );
+
+    assert_eq!(cursor.x, 21.0);
+    assert_eq!(cursor.y, 34.0);
+    assert_eq!(cursor.face_w, 9.0);
+    assert_eq!(cursor.face_h, 22.0);
+    assert_eq!(cursor.face_ascent, 17.0);
+    assert_eq!(cursor.bg, Color::from_pixel(0x00112233));
+    assert_eq!(cursor.byte_idx, 5);
+    assert_eq!(cursor.col, 3);
+    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.slot_width, Some(18.0));
+    assert!(cursor.stretch_like);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

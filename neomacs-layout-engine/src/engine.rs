@@ -176,25 +176,76 @@ struct CapturedCursorPlacement {
     stretch_like: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CapturedCursorVisualState {
+    face_width: f32,
+    face_height: f32,
+    face_ascent: f32,
+    background: Color,
+}
+
+impl CapturedCursorVisualState {
+    fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
+        let metrics = active_face_state.metrics();
+        Self {
+            face_width: metrics.char_width,
+            face_height: metrics.row_height,
+            face_ascent: metrics.ascent,
+            background: active_face_state.background(),
+        }
+    }
+
+    fn display_box_from_active_face_state(
+        active_face_state: &DisplayRowActiveFaceState,
+        face_height: f32,
+        face_ascent: f32,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        Self {
+            face_width: metrics.char_width,
+            face_height,
+            face_ascent,
+            background: active_face_state.background(),
+        }
+    }
+
+    fn line_break_from_active_face_state(
+        active_face_state: &DisplayRowActiveFaceState,
+        line_height: f32,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        Self::display_box_from_active_face_state(active_face_state, line_height, metrics.ascent)
+    }
+}
+
 impl CapturedCursorInfo {
+    fn from_visual_state(
+        visual_state: CapturedCursorVisualState,
+        placement: CapturedCursorPlacement,
+    ) -> Self {
+        Self {
+            x: placement.x,
+            y: placement.y,
+            face_w: visual_state.face_width,
+            face_h: visual_state.face_height,
+            face_ascent: visual_state.face_ascent,
+            bg: visual_state.background,
+            byte_idx: placement.byte_idx,
+            col: placement.col,
+            matrix_row: placement.matrix_row,
+            slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
+            stretch_like: placement.stretch_like,
+        }
+    }
+
     fn from_active_face_state(
         active_face_state: &DisplayRowActiveFaceState,
         placement: CapturedCursorPlacement,
     ) -> Self {
-        let metrics = active_face_state.metrics();
-        Self {
-            x: placement.x,
-            y: placement.y,
-            face_w: metrics.char_width,
-            face_h: metrics.row_height,
-            face_ascent: metrics.ascent,
-            bg: active_face_state.background(),
-            byte_idx: placement.byte_idx,
-            col: placement.col,
-            matrix_row: placement.matrix_row,
-            slot_width: Some(placement.slot_width.resolve(metrics.char_width)),
-            stretch_like: placement.stretch_like,
-        }
+        Self::from_visual_state(
+            CapturedCursorVisualState::from_active_face_state(active_face_state),
+            placement,
+        )
     }
 
     fn display_box_from_active_face_state(
@@ -203,20 +254,14 @@ impl CapturedCursorInfo {
         face_height: f32,
         face_ascent: f32,
     ) -> Self {
-        let metrics = active_face_state.metrics();
-        Self {
-            x: placement.x,
-            y: placement.y,
-            face_w: metrics.char_width,
-            face_h: face_height,
-            face_ascent,
-            bg: active_face_state.background(),
-            byte_idx: placement.byte_idx,
-            col: placement.col,
-            matrix_row: placement.matrix_row,
-            slot_width: Some(placement.slot_width.resolve(metrics.char_width)),
-            stretch_like: placement.stretch_like,
-        }
+        Self::from_visual_state(
+            CapturedCursorVisualState::display_box_from_active_face_state(
+                active_face_state,
+                face_height,
+                face_ascent,
+            ),
+            placement,
+        )
     }
 
     fn line_break_from_active_face_state(
@@ -224,12 +269,12 @@ impl CapturedCursorInfo {
         placement: CapturedCursorPlacement,
         line_height: f32,
     ) -> Self {
-        let metrics = active_face_state.metrics();
-        Self::display_box_from_active_face_state(
-            active_face_state,
+        Self::from_visual_state(
+            CapturedCursorVisualState::line_break_from_active_face_state(
+                active_face_state,
+                line_height,
+            ),
             placement,
-            line_height,
-            metrics.ascent,
         )
     }
 }
@@ -1471,17 +1516,20 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             outcome.row_height_px,
             outcome.row_ascent_px,
         );
+        let overlay_cursor_visual_state = CapturedCursorVisualState {
+            face_width: face_char_w,
+            face_height: char_h,
+            face_ascent: default_row_ascent,
+            background: Color::from_pixel(base_face.face.bg),
+        };
         for slot in &outcome.source_slots {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
                 slot,
                 cursor_info,
                 *y,
-                face_char_w,
-                char_h,
-                default_row_ascent,
                 *row,
-                Color::from_pixel(base_face.face.bg),
+                overlay_cursor_visual_state,
             );
         }
         *x = outcome.end.x_px;
@@ -1522,17 +1570,13 @@ fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) 
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn capture_overlay_string_cursor_at_slot(
     text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
     slot: &crate::display_row_builder::DisplayRowGlyphSlot,
     cursor_info: &mut Option<CapturedCursorInfo>,
     y: f32,
-    face_w: f32,
-    face_h: f32,
-    face_ascent: f32,
     matrix_row: usize,
-    bg: Color,
+    visual_state: CapturedCursorVisualState,
 ) {
     let Some(char_idx) = root_lisp_position_char(&slot.source) else {
         return;
@@ -1543,13 +1587,10 @@ fn capture_overlay_string_cursor_at_slot(
         cursor_info,
         slot.x_px,
         y,
-        face_w,
-        face_h,
-        face_ascent,
-        bg,
         slot.col,
         matrix_row,
-        Some(slot.width_px.max(1.0)),
+        visual_state,
+        CapturedCursorSlotWidth::Explicit(slot.width_px),
     );
 }
 
@@ -1559,13 +1600,10 @@ fn capture_overlay_string_cursor(
     cursor_info: &mut Option<CapturedCursorInfo>,
     x: f32,
     y: f32,
-    face_w: f32,
-    face_h: f32,
-    face_ascent: f32,
-    bg: Color,
     col: usize,
     matrix_row: usize,
-    slot_width: Option<f32>,
+    visual_state: CapturedCursorVisualState,
+    slot_width: CapturedCursorSlotWidth,
 ) {
     if cursor_info.is_some() {
         return;
@@ -1584,19 +1622,18 @@ fn capture_overlay_string_cursor(
 
     capture_cursor_info(
         cursor_info,
-        CapturedCursorInfo {
-            x,
-            y,
-            face_w,
-            face_h,
-            face_ascent,
-            bg,
-            byte_idx: 0,
-            col,
-            matrix_row,
-            slot_width,
-            stretch_like: false,
-        },
+        CapturedCursorInfo::from_visual_state(
+            visual_state,
+            CapturedCursorPlacement {
+                x,
+                y,
+                byte_idx: 0,
+                col,
+                matrix_row,
+                slot_width,
+                stretch_like: false,
+            },
+        ),
     );
 }
 
