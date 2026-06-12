@@ -5661,7 +5661,7 @@ impl crate::emacs_core::builtins::higher_order::SortRuntime for Vm<'_> {
 
 // -- Arithmetic helpers --
 
-fn condition_frame_resume(frame: ConditionFrame) -> ResumeTarget {
+pub(crate) fn condition_frame_resume(frame: ConditionFrame) -> ResumeTarget {
     match frame {
         ConditionFrame::Catch { resume, .. } | ConditionFrame::ConditionCase { resume, .. } => {
             resume

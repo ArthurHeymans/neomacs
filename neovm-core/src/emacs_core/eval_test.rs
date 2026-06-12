@@ -12236,6 +12236,313 @@ fn jit_call_through_funcall_seam() {
     );
 }
 
+/// End-to-end: handler opcodes (PushCatch/PushConditionCase/PopHandler +
+/// in-frame Throw) compile and run natively through the funcall seam — catch,
+/// rethrow, normal-path PopHandler, deopt inside a protected extent, and
+/// specpdl unwinding on a caught throw all mirror the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_handlers_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk = |required: usize, ops: Vec<Op>, consts: Vec<Value>, hot: bool| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (1..=required)
+                .map(|i| crate::emacs_core::intern::SymId(i as u32))
+                .collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = consts;
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // 1. Same-function catch + conditional throw:
+    //    (lambda (x) (catch 'tag (when x (throw 'tag 42)) 7)).
+    //    The handler target (9) is also the normal join — both enter depth 2.
+    let catch_fn = |hot: bool| {
+        mk(
+            1,
+            vec![
+                Op::Constant(0),  // 0: 'tag            [x 'tag]
+                Op::PushCatch(9), // 1: frame, tgt=9    [x]
+                Op::StackRef(0),  // 2: x               [x x]
+                Op::GotoIfNil(7), // 3:                 [x]
+                Op::Constant(0),  // 4: 'tag            [x 'tag]
+                Op::Constant(1),  // 5: 42              [x 'tag 42]
+                Op::Throw,        // 6: -> handler 9 with [x 42]
+                Op::PopHandler,   // 7: normal path     [x]
+                Op::Constant(2),  // 8: 7               [x 7]
+                Op::Return,       // 9: join + handler: returns TOS
+            ],
+            vec![
+                Value::symbol("jit-h-tag"),
+                Value::make_int(42),
+                Value::make_int(7),
+            ],
+            hot,
+        )
+    };
+    let hot_catch = catch_fn(true);
+    let cold_catch = catch_fn(false);
+    for (arg, want) in [(Value::T, 42), (Value::NIL, 7)] {
+        let native = ev
+            .funcall_general_untraced(hot_catch, vec![arg])
+            .expect("native catch/throw runs");
+        let interp = ev
+            .funcall_general_untraced(cold_catch, vec![arg])
+            .expect("interpreted catch/throw runs");
+        assert_eq!(native, Value::make_int(want));
+        assert_eq!(native, interp);
+        assert_eq!(ev.condition_stack.len(), 0, "handler frames balanced");
+    }
+
+    // 2. condition-case catching a signal raised by a CALLED function, plus the
+    //    normal path (PopHandler) on the SAME compiled body:
+    //    (lambda () (condition-case nil (jit-h-boom) (error 99))).
+    let boom_sym = Value::symbol("jit-h-boom");
+    let ValueKind::Symbol(boom_id) = boom_sym.kind() else {
+        panic!("symbol expected");
+    };
+    // (car 5) signals wrong-type-argument in the interpreter (the callee is
+    // cold bytecode).
+    let boom_signal = mk(
+        0,
+        vec![Op::Constant(0), Op::Car, Op::Return],
+        vec![Value::make_int(5)],
+        false,
+    );
+    ev.obarray.set_symbol_function_id(boom_id, boom_signal);
+    let cc_fn = |hot: bool| {
+        mk(
+            0,
+            vec![
+                Op::PushConditionCase(5), // 0: implicit 'error  []
+                Op::Constant(0),          // 1: 'jit-h-boom      [f]
+                Op::Call(0),              // 2: signal -> 5      [res]
+                Op::PopHandler,           // 3: normal exit
+                Op::Return,               // 4: callee result
+                Op::Pop,                  // 5: handler: drop the error object
+                Op::Constant(1),          // 6: 99
+                Op::Return,               // 7
+            ],
+            vec![boom_sym, Value::make_int(99)],
+            hot,
+        )
+    };
+    let hot_cc = cc_fn(true);
+    let cold_cc = cc_fn(false);
+    let native = ev
+        .funcall_general_untraced(hot_cc, vec![])
+        .expect("native condition-case catches");
+    let interp = ev
+        .funcall_general_untraced(cold_cc, vec![])
+        .expect("interpreted condition-case catches");
+    assert_eq!(native, Value::make_int(99));
+    assert_eq!(native, interp);
+    assert_eq!(ev.condition_stack.len(), 0);
+    // Redefine the callee to return normally: the same compiled body takes the
+    // PopHandler path.
+    let boom_ok = mk(
+        0,
+        vec![Op::Constant(0), Op::Return],
+        vec![Value::make_int(31)],
+        false,
+    );
+    ev.obarray.set_symbol_function_id(boom_id, boom_ok);
+    assert_eq!(
+        ev.funcall_general_untraced(hot_cc, vec![])
+            .expect("native normal path runs"),
+        Value::make_int(31)
+    );
+    assert_eq!(ev.condition_stack.len(), 0);
+
+    // 3. Unmatched throw propagates out (no-catch), frames balanced:
+    //    (lambda () (catch 'a (throw 'b 1))).
+    let rethrow = mk(
+        0,
+        vec![
+            Op::Constant(0),  // 'a
+            Op::PushCatch(5), // frame, tgt=5
+            Op::Constant(1),  // 'b
+            Op::Constant(2),  // 1
+            Op::Throw,        // no frame matches 'b -> propagate
+            Op::Return,       // 5: handler (reachable only via the frame)
+        ],
+        vec![
+            Value::symbol("jit-h-a"),
+            Value::symbol("jit-h-b"),
+            Value::make_int(1),
+        ],
+        true,
+    );
+    assert!(
+        ev.funcall_general_untraced(rethrow, vec![]).is_err(),
+        "unmatched throw must propagate as no-catch"
+    );
+    assert_eq!(ev.condition_stack.len(), 0, "frames unwound on propagation");
+    assert!(ev.eval_str("(+ 1 2)").is_ok(), "context healthy after");
+
+    // 4. Deopt INSIDE a protected extent (the non-poisoning Push* payoff): a
+    //    guard after PushConditionCase compiles; a non-fixnum deopts, the frame
+    //    unwind truncates the registered handler frame, and the interpreter
+    //    rerun re-registers it and catches its own signal:
+    //    (lambda (x) (condition-case nil (1+ x) (error 99))).
+    let cc_arith = |hot: bool| {
+        mk(
+            1,
+            vec![
+                Op::PushConditionCase(5), // 0:              [x]
+                Op::StackRef(0),          // 1:              [x x]
+                Op::Add1,                 // 2: guard        [x x+1]
+                Op::PopHandler,           // 3:
+                Op::Return,               // 4: x+1
+                Op::Pop,                  // 5: handler      [x]
+                Op::Constant(0),          // 6: 99
+                Op::Return,               // 7
+            ],
+            vec![Value::make_int(99)],
+            hot,
+        )
+    };
+    let hot_arith = cc_arith(true);
+    let cold_arith = cc_arith(false);
+    for arg in [Value::make_int(5), Value::string("boom")] {
+        let native = ev
+            .funcall_general_untraced(hot_arith, vec![arg])
+            .expect("native/deopt path runs");
+        let interp = ev
+            .funcall_general_untraced(cold_arith, vec![arg])
+            .expect("interpreter path runs");
+        assert_eq!(native, interp, "deopt-in-extent must match the interpreter");
+        assert_eq!(ev.condition_stack.len(), 0);
+    }
+    assert_eq!(
+        ev.funcall_general_untraced(hot_arith, vec![Value::make_int(5)])
+            .unwrap(),
+        Value::make_int(6)
+    );
+
+    // 5. A caught throw unwinds dynamic bindings made inside the extent (the
+    //    match shim's unbind_to + bind-stack truncation):
+    //    (lambda () (catch 'tag (let ((jit-h-var 123)) (throw 'tag 55)))).
+    ev.eval_str("(setq jit-h-var 9)").expect("global value set");
+    let unwind = mk(
+        0,
+        vec![
+            Op::Constant(0),  // 0: 'tag
+            Op::PushCatch(7), // 1: frame, tgt=7
+            Op::Constant(1),  // 2: 123
+            Op::VarBind(2),   // 3: bind jit-h-var
+            Op::Constant(0),  // 4: 'tag
+            Op::Constant(3),  // 5: 55
+            Op::Throw,        // 6: caught below; must unbind first
+            Op::Return,       // 7: handler -> 55
+        ],
+        vec![
+            Value::symbol("jit-h-tag"),
+            Value::make_int(123),
+            Value::symbol("jit-h-var"),
+            Value::make_int(55),
+        ],
+        true,
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(unwind, vec![])
+            .expect("native catch with varbind runs"),
+        Value::make_int(55)
+    );
+    assert_eq!(
+        ev.eval_str("jit-h-var").expect("global survives"),
+        Value::make_int(9),
+        "caught throw must unwind the dynamic binding"
+    );
+    assert_eq!(ev.condition_stack.len(), 0);
+}
+
+/// End-to-end: `Op::Switch` (pcase/cl-case jump tables) compiles and runs
+/// natively through the funcall seam — table hits jump to their static
+/// targets, misses fall through, matching the interpreter exactly.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_switch_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::{HashTableTest, LambdaParams};
+
+    let mut ev = Context::new();
+    // Jump table {a -> 5, b -> 7} (raw instruction indices: no GNU byte-offset
+    // map on natively built chunks, same as the interpreter's resolution).
+    let table = Value::hash_table(HashTableTest::Eq);
+    let _ = table.with_hash_table_mut(|ht| {
+        for (name, target) in [("jit-sw-a", 5), ("jit-sw-b", 7)] {
+            let key = Value::symbol(name).to_hash_key(&ht.test);
+            ht.data.insert(key.clone(), Value::fixnum(target));
+            ht.key_snapshots.insert(key.clone(), Value::symbol(name));
+            ht.insertion_order.push(key);
+        }
+    });
+    // (lambda (x) (pcase x ('jit-sw-a 1) ('jit-sw-b 2) (_ 0)))
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0), // 0: [x x]
+            Op::Constant(0), // 1: [x x table]
+            Op::Switch,      // 2: [x]
+            Op::Constant(3), // 3: miss -> 0
+            Op::Return,      // 4
+            Op::Constant(1), // 5: 'jit-sw-a -> 1
+            Op::Return,      // 6
+            Op::Constant(2), // 7: 'jit-sw-b -> 2
+            Op::Return,      // 8
+        ];
+        f.constants = vec![
+            table,
+            Value::make_int(1),
+            Value::make_int(2),
+            Value::make_int(0),
+        ];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let hot = mk(true);
+    let cold = mk(false);
+    for (arg, want) in [
+        (Value::symbol("jit-sw-a"), 1),
+        (Value::symbol("jit-sw-b"), 2),
+        (Value::symbol("jit-sw-other"), 0),
+        (Value::make_int(33), 0),
+    ] {
+        let native = ev
+            .funcall_general_untraced(hot, vec![arg])
+            .expect("native switch runs");
+        let interp = ev
+            .funcall_general_untraced(cold, vec![arg])
+            .expect("interpreted switch runs");
+        assert_eq!(native, Value::make_int(want));
+        assert_eq!(native, interp, "switch must match the interpreter");
+    }
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();
