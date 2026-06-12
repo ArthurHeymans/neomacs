@@ -462,12 +462,56 @@ fn include_glyph_vertical_metrics(
     glyph_height: f32,
     glyph_ascent: f32,
 ) {
-    let glyph_height = glyph_height.max(1.0);
-    let glyph_ascent = glyph_ascent.max(0.0).min(glyph_height);
-    let row_descent = (*row_height - *row_ascent).max(0.0);
-    let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
-    *row_ascent = (*row_ascent).max(glyph_ascent);
-    *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
+    let mut metrics = CurrentDisplayRowMetrics::new(*row_height, *row_ascent);
+    metrics.include_glyph(glyph_height, glyph_ascent);
+    *row_height = metrics.height();
+    *row_ascent = metrics.ascent();
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CurrentDisplayRowMetrics {
+    height: f32,
+    ascent: f32,
+}
+
+impl CurrentDisplayRowMetrics {
+    fn new(height: f32, ascent: f32) -> Self {
+        Self { height, ascent }
+    }
+
+    fn height(&self) -> f32 {
+        self.height
+    }
+
+    fn ascent(&self) -> f32 {
+        self.ascent
+    }
+
+    fn include_glyph(&mut self, glyph_height: f32, glyph_ascent: f32) {
+        let glyph_height = glyph_height.max(1.0);
+        let glyph_ascent = glyph_ascent.max(0.0).min(glyph_height);
+        let row_descent = (self.height - self.ascent).max(0.0);
+        let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
+        self.ascent = self.ascent.max(glyph_ascent);
+        self.height = (self.ascent + row_descent.max(glyph_descent)).max(glyph_height);
+    }
+
+    fn extra_height_over_default(&self, default_height: f32) -> f32 {
+        (self.height - default_height).max(0.0)
+    }
+
+    fn text_matrix_row_metrics(&self, y: f32) -> TextMatrixRowMetrics {
+        TextMatrixRowMetrics {
+            y,
+            height: self.height,
+            ascent: self.ascent,
+        }
+    }
+
+    fn reset(&mut self, height: f32, ascent: f32) {
+        self.height = height;
+        self.ascent = ascent;
+    }
 }
 
 #[cfg(test)]
@@ -3987,33 +4031,30 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
+                    let mut current_row_metrics =
+                        CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
                     // Newline within hscroll region: advance to next row
-                    if row_max_height > char_h {
-                        row_extra_y += row_max_height - char_h;
-                    }
+                    row_extra_y += current_row_metrics.extra_height_over_default(char_h);
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     // Record hit-test row (hscroll newline)
                     hit_rows.push(HitRow {
                         y_start: y,
-                        y_end: y + row_max_height,
+                        y_end: y + current_row_metrics.height(),
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row = TextMatrixRowMetrics {
-                        y,
-                        height: row_max_height,
-                        ascent: row_max_ascent,
-                    };
+                    let finished_row = current_row_metrics.text_matrix_row_metrics(y);
                     hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
 
                     row += 1;
                     y = text_y + row as f32 * char_h + row_extra_y;
-                    row_max_height = char_h;
-                    row_max_ascent = default_face_ascent;
+                    current_row_metrics.reset(char_h, default_face_ascent);
+                    row_max_height = current_row_metrics.height();
+                    row_max_ascent = current_row_metrics.ascent();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,

@@ -456,6 +456,37 @@ fn captured_cursor_info_builds_logical_cursor_position() {
     assert_eq!(logical.col, 3);
 }
 
+#[test]
+fn current_display_row_metrics_tracks_glyph_extents_and_overflow() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+
+    metrics.include_glyph(24.0, 18.0);
+
+    assert_eq!(metrics.height(), 24.0);
+    assert_eq!(metrics.ascent(), 18.0);
+    assert_eq!(metrics.extra_height_over_default(16.0), 8.0);
+    assert_eq!(
+        metrics.text_matrix_row_metrics(7.0),
+        TextMatrixRowMetrics {
+            y: 7.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+}
+
+#[test]
+fn current_display_row_metrics_resets_to_default_extents() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    metrics.reset(14.0, 10.0);
+
+    assert_eq!(metrics.height(), 14.0);
+    assert_eq!(metrics.ascent(), 10.0);
+    assert_eq!(metrics.extra_height_over_default(16.0), 0.0);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
