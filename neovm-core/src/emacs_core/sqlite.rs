@@ -54,12 +54,19 @@ impl Drop for ResultSet {
 
 impl Drop for crate::tagged::header::SqliteObj {
     fn drop(&mut self) {
+        // This Drop can run during thread-local DESTRUCTION (the heap is dropped
+        // when its thread exits, which drops the SqliteObj it owns). At that
+        // point the `RESULT_SETS`/`DB_HANDLES` thread-locals may already be
+        // destroyed, so `with` would panic with `AccessError` ("cannot access a
+        // Thread Local Storage value during or after destruction") and abort the
+        // process. `try_with` tolerates that — if the registry is already gone
+        // there is nothing left to remove.
         if self.is_statement {
-            RESULT_SETS.with(|h| {
+            let _ = RESULT_SETS.try_with(|h| {
                 h.borrow_mut().remove(&self.id);
             });
         } else {
-            DB_HANDLES.with(|h| {
+            let _ = DB_HANDLES.try_with(|h| {
                 h.borrow_mut().remove(&self.id);
             });
         }
