@@ -474,6 +474,26 @@ struct CurrentDisplayRowMetrics {
     ascent: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CurrentDisplayRowAdvance {
+    y: f32,
+    next_row: usize,
+    text_y: f32,
+    row_extra_y: f32,
+    default_height: f32,
+    default_ascent: f32,
+    line_spacing: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowAdvance {
+    finished: TextMatrixRowMetrics,
+    next_y: f32,
+    row_extra_y: f32,
+    next_height: f32,
+    next_ascent: f32,
+}
+
 impl CurrentDisplayRowMetrics {
     fn new(height: f32, ascent: f32) -> Self {
         Self { height, ascent }
@@ -526,6 +546,23 @@ impl CurrentDisplayRowMetrics {
         let finished = self.text_matrix_row_metrics(y);
         self.reset(default_height, default_ascent);
         finished
+    }
+
+    fn finish_and_advance_to_next_row(
+        &mut self,
+        advance: CurrentDisplayRowAdvance,
+    ) -> DisplayRowAdvance {
+        let row_extra_y = advance.row_extra_y
+            + self.next_row_vertical_delta(advance.default_height, advance.line_spacing);
+        let finished =
+            self.finish_and_reset(advance.y, advance.default_height, advance.default_ascent);
+        DisplayRowAdvance {
+            finished,
+            next_y: advance.text_y + advance.next_row as f32 * advance.default_height + row_extra_y,
+            row_extra_y,
+            next_height: self.height(),
+            next_ascent: self.ascent(),
+        }
     }
 }
 
@@ -4048,8 +4085,6 @@ impl LayoutEngine {
                 if ch == '\n' {
                     let mut current_row_metrics =
                         CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
-                    // Newline within hscroll region: advance to next row
-                    row_extra_y += current_row_metrics.extra_height_over_default(char_h);
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
@@ -4060,16 +4095,27 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row =
-                        current_row_metrics.finish_and_reset(y, char_h, default_face_ascent);
                     hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
 
+                    let row_advance = current_row_metrics.finish_and_advance_to_next_row(
+                        CurrentDisplayRowAdvance {
+                            y,
+                            next_row: row + 1,
+                            text_y,
+                            row_extra_y,
+                            default_height: char_h,
+                            default_ascent: default_face_ascent,
+                            line_spacing: 0.0,
+                        },
+                    );
+                    row_extra_y = row_advance.row_extra_y;
+                    let finished_row = row_advance.finished;
                     row += 1;
-                    y = text_y + row as f32 * char_h + row_extra_y;
-                    row_max_height = current_row_metrics.height();
-                    row_max_ascent = current_row_metrics.ascent();
+                    y = row_advance.next_y;
+                    row_max_height = row_advance.next_height;
+                    row_max_ascent = row_advance.next_ascent;
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -4812,8 +4858,6 @@ impl LayoutEngine {
                 } else {
                     0.0
                 };
-                row_extra_y += current_row_metrics.next_row_vertical_delta(char_h, line_spacing);
-
                 x = content_x;
                 // Record the newline position so the row's
                 // end_buffer_pos includes it. GNU's redisplay engine
@@ -4830,12 +4874,22 @@ impl LayoutEngine {
                     charpos_start: hit_row_charpos_start,
                     charpos_end: charpos,
                 });
-                let finished_row =
-                    current_row_metrics.finish_and_reset(y, char_h, default_face_ascent);
+                let row_advance =
+                    current_row_metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+                        y,
+                        next_row: row + 1,
+                        text_y,
+                        row_extra_y,
+                        default_height: char_h,
+                        default_ascent: default_face_ascent,
+                        line_spacing,
+                    });
+                row_extra_y = row_advance.row_extra_y;
+                let finished_row = row_advance.finished;
                 row += 1;
-                y = text_y + row as f32 * char_h + row_extra_y;
-                row_max_height = current_row_metrics.height();
-                row_max_ascent = current_row_metrics.ascent();
+                y = row_advance.next_y;
+                row_max_height = row_advance.next_height;
+                row_max_ascent = row_advance.next_ascent;
                 row_y_positions.push(y);
                 let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,

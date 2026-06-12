@@ -514,6 +514,39 @@ fn current_display_row_metrics_finishes_row_and_resets_to_default_extents() {
     assert_eq!(metrics.ascent(), 10.0);
 }
 
+#[test]
+fn current_display_row_metrics_advances_to_next_row_from_finished_extents() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+        y: 7.0,
+        next_row: 3,
+        text_y: 10.0,
+        row_extra_y: 2.0,
+        default_height: 16.0,
+        default_ascent: 12.0,
+        line_spacing: 3.0,
+    });
+
+    assert_eq!(
+        advance,
+        DisplayRowAdvance {
+            finished: TextMatrixRowMetrics {
+                y: 7.0,
+                height: 24.0,
+                ascent: 18.0,
+            },
+            next_y: 10.0 + 3.0 * 16.0 + 13.0,
+            row_extra_y: 13.0,
+            next_height: 16.0,
+            next_ascent: 12.0,
+        }
+    );
+    assert_eq!(metrics.height(), 16.0);
+    assert_eq!(metrics.ascent(), 12.0);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
@@ -3538,6 +3571,42 @@ fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
     assert!(
         text_row.ascent_px > 0.0,
         "expected ordinary text rows to record authoritative ascent, got {text_row:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_applies_extra_line_spacing_once_to_newline_rows() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("alpha\nbeta\n");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+        buf.set_buffer_local("line-spacing", Value::fixnum(5));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-extra-line-spacing-once", 800, 160, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let selected_window = frame.selected_window;
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let first_row = snapshot.row_metrics(0).expect("first text row");
+    let second_row = snapshot.row_metrics(1).expect("second text row");
+
+    assert_eq!(
+        second_row.y - first_row.y,
+        first_row.height + 5,
+        "newline row advance should include extra line-spacing exactly once"
     );
 }
 
