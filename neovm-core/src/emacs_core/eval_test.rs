@@ -12640,6 +12640,64 @@ fn jit_named_builtins_through_funcall_seam() {
     assert_eq!(print_value(&r1), print_value(&r2));
 }
 
+/// End-to-end: `Op::SaveWindowExcursion` compiles — the body list evaluates
+/// under a window-configuration save/restore, matching the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_save_window_excursion_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // (lambda () (save-window-excursion (+ 20 22))) — body list as a constant.
+    let body = ev.eval_str("'((+ 20 22))").expect("body list parses");
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
+        f.constants = vec![body];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let native = ev
+        .funcall_general_untraced(mk(true), vec![])
+        .expect("native save-window-excursion runs");
+    let interp = ev
+        .funcall_general_untraced(mk(false), vec![])
+        .expect("interpreted save-window-excursion runs");
+    assert_eq!(native, Value::make_int(42));
+    assert_eq!(native, interp);
+
+    // Signal parity: a body that signals propagates identically.
+    let bad_body = ev.eval_str("'((car 5))").expect("body parses");
+    let mk_bad = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
+        f.constants = vec![bad_body];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    assert!(ev.funcall_general_untraced(mk_bad(true), vec![]).is_err());
+    assert!(ev.funcall_general_untraced(mk_bad(false), vec![]).is_err());
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

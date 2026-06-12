@@ -648,6 +648,63 @@ extern "C" fn neovm_jit_named_builtin(
     status
 }
 
+/// `Op::SaveWindowExcursion` (GNU bytecode.c Bsave_window_excursion): pop the
+/// body form list, evaluate `(progn . body)` inside a real
+/// window-configuration save/restore — the interpreter arm 1:1, including
+/// error precedence (a failed restore wins over the body's flow). The body
+/// runs arbitrary lisp: everything live is rooted here, the generated code
+/// rooted the rest of its frame.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
+    use crate::emacs_core::window_cmds;
+    let body = Value::from_bits(body as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let root_scope = save_scratch_gc_roots();
+    push_scratch_gc_root(body);
+    let progn_form = Value::cons(Value::symbol("progn"), body);
+    push_scratch_gc_root(progn_form);
+    let status = (|| {
+        let saved = match window_cmds::builtin_current_window_configuration(ctx, vec![Value::NIL]) {
+            Ok(v) => v,
+            Err(flow) => {
+                stash_pending_flow(flow);
+                return STATUS_SIGNAL;
+            }
+        };
+        push_scratch_gc_root(saved);
+        let body_result = ctx.eval_sub(progn_form);
+        if let Ok(v) = &body_result {
+            push_scratch_gc_root(*v);
+        }
+        let restore_result = window_cmds::builtin_set_window_configuration(ctx, vec![saved]);
+        match body_result {
+            Ok(result) => match restore_result {
+                Ok(_) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = result.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            },
+            Err(flow) => {
+                // Interpreter parity: vm_try!(restore_result) runs first, so a
+                // restore failure takes precedence over the body's flow.
+                match restore_result {
+                    Err(restore_flow) => stash_pending_flow(restore_flow),
+                    Ok(_) => stash_pending_flow(flow),
+                }
+                STATUS_SIGNAL
+            }
+        }
+    })();
+    restore_scratch_gc_roots(root_scope);
+    status
+}
+
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
 /// Compiled bodies have no local handlers (handler opcodes bail), so a throw
 /// always propagates out — exactly the interpreter's `resume_nonlocal` once no
@@ -1682,6 +1739,7 @@ struct RtRefs {
     list: FuncRef,
     builtin_slice: FuncRef,
     named_builtin: FuncRef,
+    save_window_excursion: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1842,6 +1900,8 @@ fn declare_rt_refs(
     sig_named.params.push(AbiParam::new(ptr_ty));
     sig_named.returns.push(AbiParam::new(i64t));
     let named_id = declare(module, "neovm_jit_named_builtin", &sig_named)?;
+    // (vmctx, body, out_ptr) -> status.
+    let swe_id = declare(module, "neovm_jit_save_window_excursion", &sig_varref)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1877,6 +1937,7 @@ fn declare_rt_refs(
         list: module.declare_func_in_func(list_id, func),
         builtin_slice: module.declare_func_in_func(slice_id, func),
         named_builtin: module.declare_func_in_func(named_id, func),
+        save_window_excursion: module.declare_func_in_func(swe_id, func),
     })
 }
 
@@ -2420,6 +2481,40 @@ fn lower_simple_op(
             let vmctx = fb.use_var(rt.vmctx_var);
             fb.ins().call(rt.refs.unwind_protect, &[vmctx, forms]);
         }
+        Op::SaveWindowExcursion => {
+            // Evaluate the popped body under a window-configuration
+            // save/restore via the shim (interpreter arm parity).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let body = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            // Root remaining live values: the body runs arbitrary lisp.
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let call = fb
+                .ins()
+                .call(rt.refs.save_window_excursion, &[vmctx, body, out_addr]);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
         Op::CallBuiltin(..) | Op::CallBuiltinSym(..) | Op::Aset => {
             // Named-builtin escape hatch + aset: route through the
             // Vm::*_for_jit helpers mirroring the interpreter arms
@@ -2626,6 +2721,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::List(n) => (*n as usize, 1 - *n as i64),
         Op::CallBuiltin(_, n) | Op::CallBuiltinSym(_, n) => (*n as usize, 1 - *n as i64),
         Op::Aset => (3, -2),
+        Op::SaveWindowExcursion => (1, 0),
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
         Op::StackSet(n) => (*n as usize + 1, -1),
@@ -3151,6 +3247,7 @@ fn analyze_cfg(
                                 | Op::CallBuiltin(..)
                                 | Op::CallBuiltinSym(..)
                                 | Op::Aset
+                                | Op::SaveWindowExcursion
                                 | Op::VarSet(_)
                                 | Op::VarBind(_)
                                 | Op::Unbind(_)
@@ -3358,6 +3455,10 @@ pub fn lower_leaf_with_map(
         "neovm_jit_named_builtin",
         neovm_jit_named_builtin as *const u8,
     );
+    builder.symbol(
+        "neovm_jit_save_window_excursion",
+        neovm_jit_save_window_excursion as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -3384,7 +3485,11 @@ pub fn lower_leaf_with_map(
                 || slice_builtin_spec(o).is_some()
                 || matches!(
                     o,
-                    Op::List(_) | Op::CallBuiltin(..) | Op::CallBuiltinSym(..) | Op::Aset
+                    Op::List(_)
+                        | Op::CallBuiltin(..)
+                        | Op::CallBuiltinSym(..)
+                        | Op::Aset
+                        | Op::SaveWindowExcursion
                 )
                 || matches!(
                     o,
