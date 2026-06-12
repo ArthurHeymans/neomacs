@@ -4903,6 +4903,40 @@ impl FrameSizeParam {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameResizeRequest {
+    TextPixels { width: u32, height: u32 },
+    Cells { cols: i64, total_lines: i64 },
+}
+
+impl FrameResizeRequest {
+    fn text_pixels(self, frames: &FrameManager, fid: FrameId) -> Result<(u32, u32), Flow> {
+        match self {
+            Self::TextPixels { width, height } => Ok((width.max(1), height.max(1))),
+            Self::Cells { cols, total_lines } => {
+                live_gui_resize_pixels_from_logical_size(frames, fid, cols, total_lines)
+            }
+        }
+    }
+
+    fn logical_size(self, frames: &FrameManager, fid: FrameId) -> Result<(i64, i64), Flow> {
+        let frame = frames
+            .get(fid)
+            .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+        Ok(match self {
+            Self::Cells { cols, total_lines } => (cols.max(1), total_lines.max(1)),
+            Self::TextPixels { width, height } => {
+                let char_width = frame.char_width.max(1.0);
+                let char_height = frame.char_height.max(1.0);
+                (
+                    ((width as f32) / char_width).floor().max(1.0) as i64,
+                    ((height as f32) / char_height).floor().max(1.0) as i64,
+                )
+            }
+        })
+    }
+}
+
 fn sync_live_gui_resize_for_geometry_queries(
     eval: &mut super::eval::Context,
     fid: FrameId,
@@ -5043,6 +5077,41 @@ fn frame_size_param_to_pixels(param: FrameSizeParam, item_size: f32) -> u32 {
             n.saturating_mul(unit).max(1).min(u32::MAX as i64) as u32
         }
         FrameSizeParam::TextPixels(px) => px.max(1),
+    }
+}
+
+fn frame_resize_request_from_params(
+    width: Option<FrameSizeParam>,
+    height: Option<FrameSizeParam>,
+    current_cols: i64,
+    current_total_lines: i64,
+    current_text_width_px: u32,
+    current_text_height_px: u32,
+    char_width: f32,
+    char_height: f32,
+) -> FrameResizeRequest {
+    let has_text_pixels = width.is_some_and(|size| matches!(size, FrameSizeParam::TextPixels(_)))
+        || height.is_some_and(|size| matches!(size, FrameSizeParam::TextPixels(_)));
+    if has_text_pixels {
+        FrameResizeRequest::TextPixels {
+            width: width
+                .map(|size| frame_size_param_to_pixels(size, char_width))
+                .unwrap_or(current_text_width_px),
+            height: height
+                .map(|size| frame_size_param_to_pixels(size, char_height))
+                .unwrap_or(current_text_height_px),
+        }
+    } else {
+        FrameResizeRequest::Cells {
+            cols: width
+                .map(|size| frame_size_param_to_cells(size, char_width))
+                .unwrap_or(current_cols)
+                .max(1),
+            total_lines: height
+                .map(|size| frame_size_param_to_cells(size, char_height))
+                .unwrap_or(current_total_lines)
+                .max(1),
+        }
     }
 }
 
@@ -5293,11 +5362,9 @@ fn request_live_gui_frame_resize_and_keep_pending(
     buffers: &BufferManager,
     display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
     fid: FrameId,
-    desired_cols: i64,
-    desired_total_lines: i64,
+    request: FrameResizeRequest,
 ) -> Result<(), Flow> {
-    let (text_width_px, text_height_px) =
-        live_gui_resize_pixels_from_logical_size(frames, fid, desired_cols, desired_total_lines)?;
+    let (text_width_px, text_height_px) = request.text_pixels(frames, fid)?;
     let (total_width_px, total_height_px, title, geometry_hints) = {
         let frame = frames
             .get(fid)
@@ -5336,6 +5403,7 @@ fn request_live_gui_frame_resize_and_keep_pending(
     })
     .map_err(|message| signal("error", vec![Value::string(message)]))?;
 
+    let (desired_cols, desired_total_lines) = request.logical_size(frames, fid)?;
     let frame = frames
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
@@ -6277,8 +6345,17 @@ pub(crate) fn builtin_set_frame_height(
                 &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
-                desired_cols,
-                desired_total_lines,
+                if pixelwise {
+                    FrameResizeRequest::TextPixels {
+                        width: current_text_width_px,
+                        height: text_height_px,
+                    }
+                } else {
+                    FrameResizeRequest::Cells {
+                        cols: desired_cols,
+                        total_lines: desired_total_lines,
+                    }
+                },
             )?;
         } else {
             request_live_gui_frame_resize(
@@ -6354,8 +6431,17 @@ pub(crate) fn builtin_set_frame_width(
                 &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
-                desired_cols,
-                desired_total_lines,
+                if pixelwise {
+                    FrameResizeRequest::TextPixels {
+                        width: text_width_px,
+                        height: current_text_height_px,
+                    }
+                } else {
+                    FrameResizeRequest::Cells {
+                        cols: desired_cols,
+                        total_lines: desired_total_lines,
+                    }
+                },
             )?;
         } else {
             request_live_gui_frame_resize(
@@ -6437,8 +6523,17 @@ pub(crate) fn builtin_set_frame_size(
                 &ctx.buffers,
                 &mut ctx.display_host,
                 fid,
-                desired_cols,
-                desired_total_lines,
+                if pixelwise {
+                    FrameResizeRequest::TextPixels {
+                        width: text_width_px,
+                        height: text_height_px,
+                    }
+                } else {
+                    FrameResizeRequest::Cells {
+                        cols: desired_cols,
+                        total_lines: desired_total_lines,
+                    }
+                },
             )?;
         } else {
             request_live_gui_frame_resize(
@@ -7935,27 +8030,27 @@ pub(crate) fn builtin_modify_frame_parameters(
                     frame.should_defer_gui_parameter_resize(),
                 )
             };
-            let desired_cols = requested_width
-                .map(|size| frame_size_param_to_cells(size, char_width))
-                .unwrap_or(current_cols)
-                .max(1);
-            let desired_total_lines = requested_height
-                .map(|size| frame_size_param_to_cells(size, char_height))
-                .unwrap_or(current_total_lines)
-                .max(1);
+            let resize_request = frame_resize_request_from_params(
+                requested_width,
+                requested_height,
+                current_cols,
+                current_total_lines,
+                current_text_width_px,
+                current_text_height_px,
+                char_width,
+                char_height,
+            );
             if should_defer_resize {
+                let (desired_cols, desired_total_lines) =
+                    resize_request.logical_size(&eval.frames, fid)?;
                 let frame = eval
                     .frames
                     .get_mut(fid)
                     .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
                 frame.queue_pending_gui_resize(desired_cols, desired_total_lines, false);
             } else {
-                let text_width_px = requested_width
-                    .map(|size| frame_size_param_to_pixels(size, char_width))
-                    .unwrap_or(current_text_width_px);
-                let text_height_px = requested_height
-                    .map(|size| frame_size_param_to_pixels(size, char_height))
-                    .unwrap_or(current_text_height_px);
+                let (text_width_px, text_height_px) =
+                    resize_request.text_pixels(&eval.frames, fid)?;
                 resize_live_gui_frame(
                     &mut eval.frames,
                     &eval.buffers,

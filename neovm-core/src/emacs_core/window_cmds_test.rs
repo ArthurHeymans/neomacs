@@ -5429,6 +5429,72 @@ fn set_frame_size_builtins_resize_live_gui_frames_and_notify_host() {
 }
 
 #[test]
+fn pixelwise_child_frame_resize_preserves_requested_text_pixels() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let root_id = ev.frames.create_frame("F1", 624, 648, buf);
+    {
+        let root = ev.frames.get_mut(root_id).expect("root frame");
+        root.set_window_system(Some(Value::symbol("neo")));
+        root.char_width = 7.2;
+        root.char_height = 17.0;
+        root.font_pixel_size = 12.0;
+    }
+    ev.set_display_host(Box::new(RecordingDisplayHost::new()));
+    let root_minibuffer = ev
+        .frames
+        .get(root_id)
+        .expect("root frame")
+        .minibuffer_window
+        .expect("root minibuffer");
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("parent-frame"), Value::make_frame(root_id.0)),
+        Value::cons(Value::symbol("width"), Value::fixnum(1)),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("child-frame-border-width"), Value::fixnum(1)),
+        Value::cons(Value::symbol("left-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("right-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("vertical-scroll-bars"), Value::NIL),
+        Value::cons(Value::symbol("horizontal-scroll-bars"), Value::NIL),
+        Value::cons(
+            Value::symbol("minibuffer"),
+            Value::make_window(root_minibuffer.0),
+        ),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child = super::x_create_frame_impl(
+        &mut ev.frames,
+        &mut ev.buffers,
+        &mut ev.display_host,
+        vec![params],
+    )
+    .expect("x-create-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+
+    super::builtin_set_frame_size(
+        &mut ev,
+        vec![child, Value::fixnum(525), Value::fixnum(374), Value::T],
+    )
+    .expect("first pixelwise set-frame-size");
+    super::builtin_set_frame_size(
+        &mut ev,
+        vec![child, Value::fixnum(525), Value::fixnum(374), Value::T],
+    )
+    .expect("second pixelwise set-frame-size");
+
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(
+        super::frame_text_width_pixels_in_state(&ev.frames, child_id),
+        525
+    );
+    assert_eq!(super::frame_text_height_pixels(child_frame), 374);
+    assert_eq!(child_frame.width, 527);
+    assert_eq!(child_frame.height, 376);
+}
+
+#[test]
 fn resize_input_preserves_buffer_local_fixed_width_side_window() {
     crate::test_utils::init_test_tracing();
     let mut ev = runtime_startup_context();
