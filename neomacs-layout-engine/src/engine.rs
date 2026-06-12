@@ -397,6 +397,14 @@ struct HorizontalScrollSkipState {
     remaining_columns: i32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LineNumberRenderState {
+    enabled: bool,
+    current_line: i64,
+    point_line: i64,
+    render_pending: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BoxFaceRowState {
     Inactive,
@@ -607,6 +615,60 @@ impl HorizontalScrollSkipState {
 
     fn consume_columns(&mut self, columns: i32) {
         self.remaining_columns -= columns.max(0).min(self.remaining_columns);
+    }
+}
+
+impl LineNumberRenderState {
+    fn new(enabled: bool, current_line: i64, point_line: i64) -> Self {
+        Self {
+            enabled,
+            current_line,
+            point_line,
+            render_pending: enabled,
+        }
+    }
+
+    fn should_render(self) -> bool {
+        self.enabled && self.render_pending
+    }
+
+    fn consume_render_request(&mut self) {
+        self.render_pending = false;
+    }
+
+    fn advance_line(&mut self) {
+        self.current_line += 1;
+        self.render_pending = self.enabled;
+    }
+
+    fn advance_hidden_line(&mut self) {
+        self.current_line += 1;
+    }
+
+    fn current_line(self) -> i64 {
+        self.current_line
+    }
+
+    #[cfg(test)]
+    fn point_line(self) -> i64 {
+        self.point_line
+    }
+
+    fn is_current_line(self) -> bool {
+        self.current_line == self.point_line
+    }
+
+    fn display_number(self, mode: u8, current_absolute: bool, offset: i64) -> i64 {
+        match mode {
+            2 | 3 => {
+                if current_absolute && self.is_current_line() {
+                    (self.current_line + offset).abs()
+                } else {
+                    (self.current_line - self.point_line).abs()
+                }
+            }
+            _ => (self.current_line + offset).abs(),
+        }
     }
 }
 
@@ -3654,7 +3716,7 @@ impl LayoutEngine {
         // Line number state
         let window_start_byte = buf_access.charpos_to_bytepos(window_start);
         let begin_byte = if lnum_widen { 0 } else { buf_access.begv() };
-        let mut current_line: i64 = if lnum_enabled {
+        let current_line: i64 = if lnum_enabled {
             buf_access.count_lines(begin_byte, window_start_byte) + 1
         } else {
             1
@@ -3665,7 +3727,7 @@ impl LayoutEngine {
         } else {
             0
         };
-        let mut need_line_number = lnum_enabled;
+        let mut line_numbers = LineNumberRenderState::new(lnum_enabled, current_line, point_line);
 
         // Simple monospace text layout
         let mut x = content_x;
@@ -3898,27 +3960,17 @@ impl LayoutEngine {
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
             // Render line number at start of each visual line
-            if need_line_number && lnum_enabled {
-                let display_num = match lnum_mode {
-                    2 | 3 => {
-                        // Relative/visual mode
-                        if lnum_current_absolute && current_line == point_line {
-                            (current_line + lnum_offset).abs()
-                        } else {
-                            (current_line - point_line).abs()
-                        }
-                    }
-                    _ => {
-                        // Absolute mode
-                        (current_line + lnum_offset).abs()
-                    }
-                };
+            if line_numbers.should_render() {
+                let display_num =
+                    line_numbers.display_number(lnum_mode, lnum_current_absolute, lnum_offset);
 
                 // Resolve line number face
-                let is_current = current_line == point_line;
+                let is_current = line_numbers.is_current_line();
                 let lnum_face = if is_current {
                     face_resolver.resolve_named_face("line-number-current-line")
-                } else if lnum_major_tick > 0 && current_line % lnum_major_tick as i64 == 0 {
+                } else if lnum_major_tick > 0
+                    && line_numbers.current_line() % lnum_major_tick as i64 == 0
+                {
                     face_resolver.resolve_named_face("line-number-major-tick")
                 } else {
                     face_resolver.resolve_named_face("line-number")
@@ -3962,7 +4014,7 @@ impl LayoutEngine {
                 // Force face resolution to re-apply text face after line number face
                 face_next_check = 0;
 
-                need_line_number = false;
+                line_numbers.consume_render_request();
             }
 
             // --- Line/wrap prefix rendering ---
@@ -4191,8 +4243,7 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    current_line += 1;
-                    need_line_number = lnum_enabled;
+                    line_numbers.advance_line();
                     hscroll_skip.reset_line();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
@@ -4760,8 +4811,7 @@ impl LayoutEngine {
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_charpos_start = charpos;
                         col = 0;
-                        current_line += 1;
-                        need_line_number = lnum_enabled;
+                        line_numbers.advance_line();
                         hscroll_skip.reset_line();
                         word_wrap_may_wrap = false;
                         wrap_break.clear();
@@ -4871,8 +4921,7 @@ impl LayoutEngine {
                 hit_row_charpos_start = charpos;
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
                 col = 0;
-                current_line += 1;
-                need_line_number = lnum_enabled;
+                line_numbers.advance_line();
                 hscroll_skip.reset_line();
                 word_wrap_may_wrap = false;
                 wrap_break.clear();
@@ -4922,7 +4971,7 @@ impl LayoutEngine {
                                 byte_idx += skip_len;
                                 charpos += 1;
                                 if skip_ch == '\n' {
-                                    current_line += 1;
+                                    line_numbers.advance_hidden_line();
                                     break;
                                 }
                             }
@@ -4955,8 +5004,7 @@ impl LayoutEngine {
                         // for it yet. Compensate before skipping.
                         charpos += 1;
                         if skip_to_newline(text, &mut byte_idx, &mut charpos) {
-                            current_line += 1;
-                            need_line_number = lnum_enabled;
+                            line_numbers.advance_line();
                         }
                         x = content_x;
                         row_extend.clear();
@@ -5281,8 +5329,7 @@ impl LayoutEngine {
                     charpos += 1;
                     // Skip remaining chars until newline
                     if skip_to_newline(text, &mut byte_idx, &mut charpos) {
-                        current_line += 1;
-                        need_line_number = lnum_enabled;
+                        line_numbers.advance_line();
                     }
                     x = content_x;
                     row_extend.clear();

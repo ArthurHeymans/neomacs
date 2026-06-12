@@ -218,6 +218,36 @@ fn box_face_row_state_tracks_active_row_and_start_x() {
 }
 
 #[test]
+fn line_number_render_state_tracks_current_point_and_pending_render() {
+    let mut state = LineNumberRenderState::new(true, 7, 9);
+
+    assert!(state.should_render());
+    assert_eq!(state.current_line(), 7);
+    assert_eq!(state.point_line(), 9);
+    assert!(!state.is_current_line());
+    assert_eq!(state.display_number(3, false, 0), 2);
+
+    state.consume_render_request();
+
+    assert!(!state.should_render());
+
+    state.advance_line();
+    state.advance_line();
+
+    assert!(state.should_render());
+    assert_eq!(state.current_line(), 9);
+    assert!(state.is_current_line());
+    assert_eq!(state.display_number(3, true, 10), 19);
+
+    state.consume_render_request();
+    state.advance_hidden_line();
+
+    assert!(!state.should_render());
+    assert_eq!(state.current_line(), 10);
+    assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(
