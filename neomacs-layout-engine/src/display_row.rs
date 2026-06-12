@@ -7,6 +7,7 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
+    FixedGlyphAdvances,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -436,6 +437,33 @@ impl DisplayRowGlyphMeasurementFace {
         measurer
             .glyph_advance_px(ch, self.face.face_id, columns, fallback_advance_px)
             .unwrap_or(fallback_advance_px)
+    }
+
+    pub(crate) fn fixed_advances_for_text(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+        face_id: u32,
+    ) -> FixedGlyphAdvances {
+        let mut advances = FixedGlyphAdvances::new();
+        for ch in text.chars() {
+            if ch == '\t' {
+                continue;
+            }
+            let columns = crate::composition::base_width_cols(ch);
+            let advance = if columns == 0 {
+                0.0
+            } else {
+                self.glyph_advance_px(
+                    font_metrics,
+                    ch,
+                    columns,
+                    f32::from(columns) * self.fallback_char_width.max(1.0),
+                )
+            };
+            advances.insert(ch, face_id, advance);
+        }
+        advances
     }
 }
 

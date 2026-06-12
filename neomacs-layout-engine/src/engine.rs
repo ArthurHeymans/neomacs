@@ -709,15 +709,8 @@ impl AsciiWidthCacheKey {
 }
 
 struct ReplacementStringItemMeasurer<'a> {
-    ascii_width_cache: &'a mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
-    use_font_metrics: bool,
     font_metrics_svc: &'a mut Option<FontMetricsService>,
-    char_w: f32,
-    font_size: i32,
-    face_char_w: f32,
-    font_family: &'a str,
-    font_weight: u16,
-    font_italic: bool,
+    measurement_face: DisplayRowGlyphMeasurementFace,
     scratch: FixedGlyphAdvances,
 }
 
@@ -731,30 +724,11 @@ impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
         let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
         };
-        for ch in text.text.chars() {
-            if ch == '\t' {
-                continue;
-            }
-            let cols = crate::composition::base_width_cols(ch) as i32;
-            let advance = if cols == 0 {
-                0.0
-            } else {
-                char_pixel_advance(
-                    self.ascii_width_cache,
-                    self.use_font_metrics,
-                    self.font_metrics_svc,
-                    ch,
-                    cols,
-                    self.char_w,
-                    self.font_size,
-                    self.face_char_w,
-                    self.font_family,
-                    self.font_weight,
-                    self.font_italic,
-                )
-            };
-            self.scratch.insert(ch, face_id, advance);
-        }
+        self.scratch = self.measurement_face.fixed_advances_for_text(
+            self.font_metrics_svc,
+            &text.text,
+            face_id,
+        );
         DisplayRowItemMeasurement::Measured(&mut self.scratch)
     }
 }
@@ -4219,16 +4193,24 @@ impl LayoutEngine {
                                         default_row_height: char_h,
                                     },
                                 );
-                                let mut item_measurer = ReplacementStringItemMeasurer {
-                                    ascii_width_cache: &mut self.ascii_width_cache,
-                                    use_font_metrics: frame_params.window_system,
-                                    font_metrics_svc: &mut self.font_metrics,
-                                    char_w,
-                                    font_size: current_font_size_px,
+                                let advance_quantization = if frame_params.window_system {
+                                    GlyphAdvanceQuantization::PreserveLogicalPixels
+                                } else {
+                                    GlyphAdvanceQuantization::SnapToIntegerPixels
+                                };
+                                let measurement_face = DisplayRowGlyphMeasurementFace::new(
+                                    resolved_display_row_face(
+                                        current_text_face_id,
+                                        &current_resolved_face,
+                                        None,
+                                    ),
+                                    frame_params.window_system,
                                     face_char_w,
-                                    font_family: &self.current_resolved_family,
-                                    font_weight: current_font_weight,
-                                    font_italic: current_font_italic,
+                                    advance_quantization,
+                                );
+                                let mut item_measurer = ReplacementStringItemMeasurer {
+                                    font_metrics_svc: &mut self.font_metrics,
+                                    measurement_face,
                                     scratch: FixedGlyphAdvances::new(),
                                 };
                                 let position = append_display_replacement_string_source_to_text_row(

@@ -1343,6 +1343,26 @@ fn display_row_glyph_measurer_can_snap_terminal_advances() {
 }
 
 #[test]
+fn display_row_glyph_measurement_face_measures_fixed_text_advances() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let face = DisplayRowFace::from_resolved(8, &base);
+    let measurement_face = DisplayRowGlyphMeasurementFace::new(
+        face,
+        false,
+        7.2,
+        GlyphAdvanceQuantization::SnapToIntegerPixels,
+    );
+    let mut font_metrics = None;
+
+    let mut advances = measurement_face.fixed_advances_for_text(&mut font_metrics, "x中\t", 8);
+
+    assert_eq!(advances.glyph_advance_px('x', 8, 1, 7.2), Some(7.0));
+    assert_eq!(advances.glyph_advance_px('中', 8, 2, 14.4), Some(14.0));
+    assert_eq!(advances.glyph_advance_px('\t', 8, 1, 7.2), None);
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(
