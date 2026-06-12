@@ -443,6 +443,10 @@ impl DisplayRowSourceState {
         self.pending_item = item;
     }
 
+    pub(crate) fn discard_pending_item(&mut self) {
+        self.pending_item = None;
+    }
+
     fn mark_exhausted(&mut self) {
         self.exhausted = true;
     }

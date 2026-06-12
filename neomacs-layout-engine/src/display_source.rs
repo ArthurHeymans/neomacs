@@ -239,6 +239,16 @@ impl LispStringSourceCursor {
             stack: LispStringSourceStack::with_root(source_id, value, base_face)?,
         })
     }
+
+    pub(crate) fn discard_until_row_break(&mut self) -> bool {
+        let mut context = DisplaySourceContext::empty();
+        while let Some(item) = self.next_item(&mut context) {
+            if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl DisplayItemSource for LispStringSourceCursor {

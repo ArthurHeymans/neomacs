@@ -117,15 +117,21 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum EchoMessageSetResult {
+    EchoArea(crate::heap_types::LispString),
+    LispHandled,
+}
+
 fn message_echo_result(
     ctx: &mut super::eval::Context,
     msg: &crate::heap_types::LispString,
-) -> Result<Option<crate::heap_types::LispString>, crate::emacs_core::error::Flow> {
+) -> Result<EchoMessageSetResult, crate::emacs_core::error::Flow> {
     if ctx
         .visible_variable_value_or_nil("inhibit-message")
         .is_truthy()
     {
-        return Ok(None);
+        return Ok(EchoMessageSetResult::LispHandled);
     }
 
     let set_message_function = ctx.visible_variable_value_or_nil("set-message-function");
@@ -133,7 +139,7 @@ fn message_echo_result(
         || ctx.gc_inhibit_depth > 0
         || builtin_functionp_1(ctx, set_message_function)?.is_nil()
     {
-        return Ok(Some(msg.clone()));
+        return Ok(EchoMessageSetResult::EchoArea(msg.clone()));
     }
 
     // GNU xdisp.c `set_message` calls `set-message-function` through
@@ -152,23 +158,23 @@ fn message_echo_result(
                 "set-message-function signaled while setting echo message: {:?}",
                 err
             );
-            return Ok(Some(msg.clone()));
+            return Ok(EchoMessageSetResult::EchoArea(msg.clone()));
         }
     };
     if result.is_nil() {
-        return Ok(Some(msg.clone()));
+        return Ok(EchoMessageSetResult::EchoArea(msg.clone()));
     }
     if let Some(string) = result.as_lisp_string() {
-        return Ok(Some(string.clone()));
+        return Ok(EchoMessageSetResult::EchoArea(string.clone()));
     }
-    Ok(None)
+    Ok(EchoMessageSetResult::LispHandled)
 }
 
 pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("message", &args, 1)?;
     // GNU Emacs: nil or empty string clears the echo area and returns as-is.
     if args[0].is_nil() {
-        ctx.clear_current_message();
+        ctx.clear_echo_area_message();
         return Ok(Value::NIL);
     }
     if args[0].is_string() {
@@ -178,7 +184,7 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
             .as_bytes()
             .is_empty()
         {
-            ctx.clear_current_message();
+            ctx.clear_echo_area_message();
             return Ok(args[0]);
         }
     }
@@ -197,12 +203,14 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
     let side_effects = (|| {
         let displayed_message = message_echo_result(ctx, &msg)?;
         match &displayed_message {
-            Some(displayed) => ctx.set_current_message(Some(displayed.clone())),
-            None => ctx.clear_current_message(),
+            EchoMessageSetResult::EchoArea(displayed) => {
+                ctx.set_current_message(Some(displayed.clone()))
+            }
+            EchoMessageSetResult::LispHandled => ctx.discard_current_message_without_clear_hook(),
         }
         // GNU Emacs message_dolog: log to *Messages* buffer
         message_dolog(ctx, &msg);
-        if displayed_message.is_some() && !ctx.noninteractive() {
+        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) && !ctx.noninteractive() {
             ctx.ensure_echo_area_buffers();
         }
         tracing::info!(msg = %super::runtime_string_from_lisp_string(&msg));

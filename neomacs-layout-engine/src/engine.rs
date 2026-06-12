@@ -1412,7 +1412,17 @@ fn render_overlay_string(
             continue;
         }
         match stop {
-            DisplayRowRenderStop::SourceExhausted | DisplayRowRenderStop::Clipped => break,
+            DisplayRowRenderStop::SourceExhausted => break,
+            DisplayRowRenderStop::Clipped => {
+                source_state.discard_pending_item();
+                if source.discard_until_row_break() {
+                    if !finish_overlay_string_row!() {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
             DisplayRowRenderStop::RowBreak => unreachable!("row break handled above"),
         }
     }

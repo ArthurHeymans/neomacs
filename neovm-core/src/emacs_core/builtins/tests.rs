@@ -12673,6 +12673,59 @@ fn message_uses_set_message_function_string_and_suppression_results() {
 }
 
 #[test]
+fn message_nil_runs_clear_message_function_after_suppressed_minibuffer_message() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.eval_str(
+        r#"
+        (progn
+          (defvar neomacs-clear-message-count)
+          (defvar neomacs-minibuffer-message-overlay)
+          (setq neomacs-clear-message-count 0)
+          (setq neomacs-minibuffer-message-overlay nil)
+          (setq set-message-function
+                (lambda (message)
+                  (setq neomacs-minibuffer-message-overlay
+                        (make-overlay (point-max) (point-max)))
+                  (overlay-put neomacs-minibuffer-message-overlay
+                               'after-string message)
+                  t))
+          (setq clear-message-function
+                (lambda ()
+                  (setq neomacs-clear-message-count
+                        (1+ neomacs-clear-message-count))
+                  (if (overlayp neomacs-minibuffer-message-overlay)
+                      (delete-overlay neomacs-minibuffer-message-overlay))
+                  nil)))"#,
+    )
+    .expect("install message hooks");
+
+    builtin_message(&mut eval, vec![Value::string("Making completion list...")])
+        .expect("set-message-function should handle message");
+    assert_eq!(eval.current_message_text(), None);
+    assert_eq!(
+        eval.eval_str("(overlay-buffer neomacs-minibuffer-message-overlay)")
+            .expect("overlay should exist")
+            .is_nil(),
+        false
+    );
+
+    builtin_message(&mut eval, vec![Value::NIL]).expect("message nil should clear");
+
+    assert_eq!(
+        eval.eval_str("neomacs-clear-message-count")
+            .expect("clear-message count"),
+        Value::fixnum(1)
+    );
+    assert_eq!(
+        eval.eval_str("(overlay-buffer neomacs-minibuffer-message-overlay)")
+            .expect("overlay should be deleted"),
+        Value::NIL
+    );
+}
+
+#[test]
 fn message_ignores_non_function_set_message_function_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

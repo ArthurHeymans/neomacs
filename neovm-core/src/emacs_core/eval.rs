@@ -75,6 +75,12 @@ const GC_PERCENT_SCALE: u64 = 1_000_000;
 pub(crate) const INTERNAL_COMPILER_FUNCTION_OVERRIDES: &str =
     "internal--compiler-function-overrides";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EchoMessageClearResult {
+    ClearEchoArea,
+    PreserveEchoArea,
+}
+
 fn gnu_system_type() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows-nt"
@@ -7585,16 +7591,75 @@ impl Context {
         self.append_current_message_runtime_text(text);
     }
 
-    pub fn clear_current_message(&mut self) {
+    pub(crate) fn discard_current_message_without_clear_hook(&mut self) {
         self.message_buf_print = false;
-        if self.current_message.is_none() {
+        if self.current_message.take().is_some() {
+            self.invalidate_redisplay();
+        }
+    }
+
+    pub(crate) fn clear_echo_area_message(&mut self) -> EchoMessageClearResult {
+        self.message_buf_print = false;
+        if self
+            .visible_variable_value_or_nil("inhibit-message")
+            .is_truthy()
+        {
+            return EchoMessageClearResult::PreserveEchoArea;
+        }
+
+        let had_current_message = self.current_message.is_some();
+        let mut called_clear_function = false;
+        let mut clear_result = EchoMessageClearResult::ClearEchoArea;
+
+        let clear_message_function = self.visible_variable_value_or_nil("clear-message-function");
+        if !clear_message_function.is_nil()
+            && self.gc_inhibit_depth == 0
+            && self.function_value_is_callable(&clear_message_function)
+        {
+            called_clear_function = true;
+            let specpdl_count = self.specpdl.len();
+            self.specbind(intern("inhibit-quit"), Value::T);
+            let result = self.funcall_general(clear_message_function, vec![]);
+            self.unbind_to(specpdl_count);
+
+            match result {
+                Ok(value) if value.is_symbol_named("dont-clear-message") => {
+                    clear_result = EchoMessageClearResult::PreserveEchoArea;
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(
+                        "clear-message-function signaled while clearing echo message: {:?}",
+                        err
+                    );
+                }
+            }
+        }
+
+        if clear_result == EchoMessageClearResult::PreserveEchoArea {
+            if called_clear_function {
+                self.invalidate_redisplay();
+            }
+            return clear_result;
+        }
+
+        if had_current_message {
+            let hook =
+                crate::emacs_core::hook_runtime::hook_symbol_by_name(self, "echo-area-clear-hook");
+            let _ = crate::emacs_core::hook_runtime::safe_run_named_hook(self, hook, &[]);
+        }
+
+        let changed = self.current_message.take().is_some();
+        if changed || called_clear_function {
+            self.invalidate_redisplay();
+        }
+        clear_result
+    }
+
+    pub fn clear_current_message(&mut self) {
+        if self.clear_echo_area_message() == EchoMessageClearResult::PreserveEchoArea {
             return;
         }
-        let hook =
-            crate::emacs_core::hook_runtime::hook_symbol_by_name(self, "echo-area-clear-hook");
-        let _ = crate::emacs_core::hook_runtime::safe_run_named_hook(self, hook, &[]);
-        self.current_message = None;
-        self.invalidate_redisplay();
     }
 
     pub(crate) fn current_message_slot(&mut self) -> &mut Option<crate::heap_types::LispString> {
