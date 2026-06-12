@@ -65,7 +65,7 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::value::Value;
 use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
-    FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING,
+    FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING, TAG_SYMBOL,
 };
 
 // ---------------------------------------------------------------------------
@@ -240,6 +240,41 @@ extern "C" fn neovm_jit_apply(
     };
     restore_scratch_gc_roots(saved);
     status
+}
+
+/// Slow path for `eq` when the raw bits differ: only `symbols-with-pos` can
+/// still make two differing values `eq`. Read-only on the Context; never
+/// allocates, GCs, or signals — a plain value-returning helper.
+///
+/// SAFETY: same vmctx contract as [`neovm_jit_call`], but only a shared read.
+extern "C" fn neovm_jit_eq_slow(ctx: *mut u8, a: i64, b: i64) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let b = Value::from_bits(b as usize);
+    // SAFETY: seam-provided dormant Context; read-only access.
+    let ctx = unsafe { &*(ctx as *const Context) };
+    let eq = ctx.symbols_with_pos_enabled && crate::emacs_core::value::eq_value_swp(&a, &b, true);
+    (if eq {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
+}
+
+/// Slow path for `symbolp` when the value's tag is not Symbol: only a
+/// symbol-with-pos (a veclike) can still count, and only while
+/// `symbols-with-pos-enabled`. Read-only; never allocates, GCs, or signals.
+///
+/// SAFETY: same read-only vmctx contract as [`neovm_jit_eq_slow`].
+extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
+    let v = Value::from_bits(v as usize);
+    // SAFETY: seam-provided dormant Context; read-only access.
+    let ctx = unsafe { &*(ctx as *const Context) };
+    let is_sym = ctx.symbols_with_pos_enabled && v.is_symbol_with_pos();
+    (if is_sym {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
 }
 
 /// Why a bytecode body could not be compiled by this baseline tier.
@@ -595,6 +630,34 @@ fn lower_fixnum_mul(
     retag_fixnum(fb, res)
 }
 
+/// Lower fixnum `/` or `%` with exact interpreter parity (`vm.rs`
+/// `Op::Div`/`Op::Rem`): both operands fixnums and the divisor nonzero, else
+/// deopt (the interpreter's `/` builtin signals arith-error on zero). Rust and
+/// CLIF `sdiv`/`srem` both truncate toward zero, matching the interpreter; the
+/// operands are <= 61-bit so the i64 ops cannot trap, and the interpreter's
+/// `Value::fixnum` retag of `MOST_NEGATIVE_FIXNUM / -1` (a wrap) produces the
+/// same bits as our retag, so no extra range guard is needed for parity.
+fn lower_fixnum_divrem(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    is_rem: bool,
+    a: ClifValue,
+    b: ClifValue,
+) -> ClifValue {
+    guard_fixnum(fb, deopt, a);
+    guard_fixnum(fb, deopt, b);
+    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+    let nonzero = fb.ins().icmp_imm(IntCC::NotEqual, bv, 0);
+    emit_guard(fb, deopt, nonzero);
+    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let res = if is_rem {
+        fb.ins().srem(av, bv)
+    } else {
+        fb.ins().sdiv(av, bv)
+    };
+    retag_fixnum(fb, res)
+}
+
 /// A non-allocating unary type/nil predicate. Inspects only the tagged bits;
 /// never dereferences the value, allocates, or deopts.
 #[derive(Clone, Copy)]
@@ -689,12 +752,7 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
 /// and the scratch stack slots `Call` spills through. Present only when the body
 /// re-enters the runtime (`Cons` / `Call`).
 struct RtCtx {
-    gc_save: FuncRef,
-    gc_push: FuncRef,
-    gc_restore: FuncRef,
-    cons: FuncRef,
-    call: FuncRef,
-    apply: FuncRef,
+    refs: RtRefs,
     /// The `*mut Context` function parameter, carried in an SSA variable so any
     /// block can read it.
     vmctx_var: Variable,
@@ -706,6 +764,18 @@ struct RtCtx {
     call_result_slot: StackSlot,
 }
 
+/// Callable references to every runtime shim, declared into one function.
+struct RtRefs {
+    gc_save: FuncRef,
+    gc_push: FuncRef,
+    gc_restore: FuncRef,
+    cons: FuncRef,
+    call: FuncRef,
+    apply: FuncRef,
+    eq_slow: FuncRef,
+    symbolp_slow: FuncRef,
+}
+
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
 /// refs. The matching addresses are registered on the `JITBuilder` in
 /// [`lower_leaf`] via `builder.symbol(...)`.
@@ -714,7 +784,7 @@ fn declare_rt_refs(
     func: &mut Function,
     call_conv: cranelift_codegen::isa::CallConv,
     ptr_ty: Type,
-) -> Result<(FuncRef, FuncRef, FuncRef, FuncRef, FuncRef, FuncRef), CompileError> {
+) -> Result<RtRefs, CompileError> {
     let i64t = types::I64;
     let mut sig_ret = Signature::new(call_conv); // () -> i64
     sig_ret.returns.push(AbiParam::new(i64t));
@@ -732,6 +802,17 @@ fn declare_rt_refs(
     sig_call.params.push(AbiParam::new(i64t));
     sig_call.params.push(AbiParam::new(ptr_ty));
     sig_call.returns.push(AbiParam::new(i64t));
+    // (vmctx, a, b) -> t/nil bits
+    let mut sig_eq = Signature::new(call_conv);
+    sig_eq.params.push(AbiParam::new(ptr_ty));
+    sig_eq.params.push(AbiParam::new(i64t));
+    sig_eq.params.push(AbiParam::new(i64t));
+    sig_eq.returns.push(AbiParam::new(i64t));
+    // (vmctx, v) -> t/nil bits
+    let mut sig_symp = Signature::new(call_conv);
+    sig_symp.params.push(AbiParam::new(ptr_ty));
+    sig_symp.params.push(AbiParam::new(i64t));
+    sig_symp.returns.push(AbiParam::new(i64t));
 
     let declare = |module: &mut JITModule, name: &str, sig: &Signature| {
         module
@@ -745,15 +826,19 @@ fn declare_rt_refs(
     let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
     let call_id = declare(module, "neovm_jit_call", &sig_call)?;
     let apply_id = declare(module, "neovm_jit_apply", &sig_call)?;
+    let eq_id = declare(module, "neovm_jit_eq_slow", &sig_eq)?;
+    let symp_id = declare(module, "neovm_jit_symbolp_slow", &sig_symp)?;
 
-    Ok((
-        module.declare_func_in_func(save_id, func),
-        module.declare_func_in_func(push_id, func),
-        module.declare_func_in_func(restore_id, func),
-        module.declare_func_in_func(cons_id, func),
-        module.declare_func_in_func(call_id, func),
-        module.declare_func_in_func(apply_id, func),
-    ))
+    Ok(RtRefs {
+        gc_save: module.declare_func_in_func(save_id, func),
+        gc_push: module.declare_func_in_func(push_id, func),
+        gc_restore: module.declare_func_in_func(restore_id, func),
+        cons: module.declare_func_in_func(cons_id, func),
+        call: module.declare_func_in_func(call_id, func),
+        apply: module.declare_func_in_func(apply_id, func),
+        eq_slow: module.declare_func_in_func(eq_id, func),
+        symbolp_slow: module.declare_func_in_func(symp_id, func),
+    })
 }
 
 /// Lower one non-control-flow opcode, updating the compile-time operand `stack`
@@ -832,6 +917,74 @@ fn lower_simple_op(
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             stack.push(lower_fixnum_mul(fb, deopt, a, b));
         }
+        Op::Div | Op::Rem => {
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let is_rem = matches!(op, Op::Rem);
+            stack.push(lower_fixnum_divrem(fb, deopt, is_rem, a, b));
+        }
+        Op::Eq => {
+            // Bit-equal -> t natively; differing bits -> the read-only slow-path
+            // shim (only symbols-with-pos can make differing bits eq).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("eq"))?;
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let res = fb.declare_var(types::I64);
+            let fast = fb.create_block();
+            let slow = fb.create_block();
+            let merge = fb.create_block();
+            let same = fb.ins().icmp(IntCC::Equal, a, b);
+            fb.ins().brif(same, fast, &[], slow, &[]);
+
+            fb.switch_to_block(fast);
+            fb.seal_block(fast);
+            let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+            fb.def_var(res, t);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(slow);
+            fb.seal_block(slow);
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let call = fb.ins().call(rt.refs.eq_slow, &[vmctx, a, b]);
+            let slow_res = fb.inst_results(call)[0];
+            fb.def_var(res, slow_res);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(merge);
+            fb.seal_block(merge);
+            stack.push(fb.use_var(res));
+        }
+        Op::Symbolp => {
+            // Symbol tag -> t natively (nil/t are symbols); otherwise the
+            // read-only slow-path shim (symbol-with-pos while enabled).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("symbolp"))?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let res = fb.declare_var(types::I64);
+            let fast = fb.create_block();
+            let slow = fb.create_block();
+            let merge = fb.create_block();
+            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
+            let is_sym = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_SYMBOL as i64);
+            fb.ins().brif(is_sym, fast, &[], slow, &[]);
+
+            fb.switch_to_block(fast);
+            fb.seal_block(fast);
+            let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+            fb.def_var(res, t);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(slow);
+            fb.seal_block(slow);
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let call = fb.ins().call(rt.refs.symbolp_slow, &[vmctx, a]);
+            let slow_res = fb.inst_results(call)[0];
+            fb.def_var(res, slow_res);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(merge);
+            fb.seal_block(merge);
+            stack.push(fb.use_var(res));
+        }
         Op::Add1 | Op::Sub1 | Op::Negate => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let kind = match op {
@@ -878,9 +1031,9 @@ fn lower_simple_op(
             // (apply spreads its last argument inside the runtime).
             let rt = rt.ok_or(CompileError::UnsupportedOp("call"))?;
             let shim = if matches!(op, Op::Apply(_)) {
-                rt.apply
+                rt.refs.apply
             } else {
-                rt.call
+                rt.refs.call
             };
             let n = *n as usize;
             if stack.len() < n + 1 {
@@ -899,10 +1052,10 @@ fn lower_simple_op(
             let saved = if stack.is_empty() {
                 None
             } else {
-                let c = fb.ins().call(rt.gc_save, &[]);
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
                 for &v in stack.iter() {
-                    fb.ins().call(rt.gc_push, &[v]);
+                    fb.ins().call(rt.refs.gc_push, &[v]);
                 }
                 Some(s)
             };
@@ -915,7 +1068,7 @@ fn lower_simple_op(
                 .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
-                fb.ins().call(rt.gc_restore, &[s]);
+                fb.ins().call(rt.refs.gc_restore, &[s]);
             }
             // STATUS_OK -> continue with the result; anything else from the call
             // shim is STATUS_SIGNAL -> propagate via the shared signal block.
@@ -937,19 +1090,19 @@ fn lower_simple_op(
             // The cons shim roots car+cdr across the allocation; we must root any
             // *other* live operand-stack values too (none in the common case).
             let result = if stack.is_empty() {
-                let call = fb.ins().call(rt.cons, &[car, cdr]);
+                let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
                 fb.inst_results(call)[0]
             } else {
                 let saved = {
-                    let c = fb.ins().call(rt.gc_save, &[]);
+                    let c = fb.ins().call(rt.refs.gc_save, &[]);
                     fb.inst_results(c)[0]
                 };
                 for &v in stack.iter() {
-                    fb.ins().call(rt.gc_push, &[v]);
+                    fb.ins().call(rt.refs.gc_push, &[v]);
                 }
-                let call = fb.ins().call(rt.cons, &[car, cdr]);
+                let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
                 let r = fb.inst_results(call)[0];
-                fb.ins().call(rt.gc_restore, &[saved]);
+                fb.ins().call(rt.refs.gc_restore, &[saved]);
                 r
             };
             stack.push(result);
@@ -977,11 +1130,19 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         }
         Op::Dup => (1, 1),
         Op::Pop => (1, -1),
-        Op::Add | Op::Sub | Op::Mul | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
-            (2, -1)
-        }
+        Op::Add
+        | Op::Sub
+        | Op::Mul
+        | Op::Div
+        | Op::Rem
+        | Op::Eq
+        | Op::Eqlsign
+        | Op::Lss
+        | Op::Gtr
+        | Op::Leq
+        | Op::Geq => (2, -1),
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
-        Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => (1, 0),
+        Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp | Op::Symbolp => (1, 0),
         Op::Car | Op::Cdr => (1, 0),
         Op::Cons => (2, -1),
         // [func a1 .. aN] -> [result]
@@ -1008,6 +1169,8 @@ fn emits_guard(op: &Op) -> bool {
         Op::Add
             | Op::Sub
             | Op::Mul
+            | Op::Div
+            | Op::Rem
             | Op::Add1
             | Op::Sub1
             | Op::Negate
@@ -1263,12 +1426,21 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
     builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
+    builder.symbol("neovm_jit_eq_slow", neovm_jit_eq_slow as *const u8);
+    builder.symbol(
+        "neovm_jit_symbolp_slow",
+        neovm_jit_symbolp_slow as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
-    let needs_rt = ops
-        .iter()
-        .any(|o| matches!(o, Op::Cons | Op::Call(_) | Op::Apply(_)));
+    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims.
+    let needs_rt = ops.iter().any(|o| {
+        matches!(
+            o,
+            Op::Cons | Op::Call(_) | Op::Apply(_) | Op::Eq | Op::Symbolp
+        )
+    });
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
@@ -1289,8 +1461,7 @@ pub fn lower_leaf(
         // Declare the runtime-call machinery into this function if the body
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
-            let (gc_save, gc_push, gc_restore, cons, call, apply) =
-                declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
+            let refs = declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()
@@ -1308,12 +1479,7 @@ pub fn lower_leaf(
             let call_result_slot =
                 fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             Some(RtCtx {
-                gc_save,
-                gc_push,
-                gc_restore,
-                cons,
-                call,
-                apply,
+                refs,
                 vmctx_var,
                 ptr_ty,
                 call_args_slot,
@@ -2008,14 +2174,14 @@ mod tests {
     }
 
     #[test]
-    fn bails_on_unsupported_arithmetic() {
-        // Div is not in the supported subset -> refuse, do not miscompile.
+    fn bails_on_unsupported_op() {
+        // VarRef is not in the supported subset -> refuse, do not miscompile.
         let err = lower_nullary_leaf(
-            &[Op::Constant(0), Op::Constant(0), Op::Div, Op::Return],
-            &[Value::make_int(1)],
+            &[Op::VarRef(0), Op::Return],
+            &[Value::symbol("jit-test-var")],
         )
         .unwrap_err();
-        assert!(matches!(err, CompileError::UnsupportedOp("arithmetic")));
+        assert!(matches!(err, CompileError::UnsupportedOp("variable")));
     }
 
     #[test]
@@ -2296,6 +2462,91 @@ mod tests {
         )
         .unwrap();
         assert_eq!(leaf2.call(ctx_ptr, &[]), NativeRun::Deopt);
+    }
+
+    #[test]
+    fn compiles_fixnum_div_rem() {
+        let run = |op: Op, a: i64, b: i64| {
+            lower_nullary_leaf(
+                &[Op::Constant(0), Op::Constant(1), op, Op::Return],
+                &[Value::make_int(a), Value::make_int(b)],
+            )
+            .unwrap()
+            .call_for_test(&[])
+        };
+        // Truncation toward zero, matching the interpreter / C.
+        assert_eq!(run(Op::Div, 42, 5), Some(Value::make_int(8).bits()));
+        assert_eq!(run(Op::Div, -42, 5), Some(Value::make_int(-8).bits()));
+        assert_eq!(run(Op::Div, 42, -5), Some(Value::make_int(-8).bits()));
+        assert_eq!(run(Op::Rem, 42, 5), Some(Value::make_int(2).bits()));
+        assert_eq!(run(Op::Rem, -42, 5), Some(Value::make_int(-2).bits()));
+        // Zero divisor -> deopt (interpreter signals arith-error).
+        assert_eq!(run(Op::Div, 1, 0), None);
+        assert_eq!(run(Op::Rem, 1, 0), None);
+        // Non-fixnum operand -> deopt.
+        let nf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Nil, Op::Div, Op::Return],
+            &[Value::make_int(4)],
+        )
+        .unwrap();
+        assert_eq!(nf.call_for_test(&[]), None);
+    }
+
+    #[test]
+    fn div_wrap_case_matches_interpreter() {
+        // MOST_NEGATIVE_FIXNUM / -1 wraps through the interpreter's retag; the
+        // JIT's sdiv + retag must produce the identical bits.
+        let ops = [Op::Constant(0), Op::Constant(1), Op::Div, Op::Return];
+        let consts = [
+            Value::make_int(Value::MOST_NEGATIVE_FIXNUM),
+            Value::make_int(-1),
+        ];
+        let want = interp_nullary(&ops, &consts).bits();
+        let got = lower_nullary_leaf(&ops, &consts)
+            .unwrap()
+            .call_for_test(&[]);
+        assert_eq!(got, Some(want));
+    }
+
+    #[test]
+    fn compiles_eq_and_symbolp() {
+        // One live Context for the vmctx-reading slow paths (symbols-with-pos
+        // is disabled by default, so differing bits -> nil).
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let sym_a = Value::symbol("jit-eq-sym-a");
+        let s = Value::string("eq-str");
+
+        let eq2 = |a: Value, b: Value, ctx: *mut u8| {
+            lower_nullary_leaf(
+                &[Op::Constant(0), Op::Constant(1), Op::Eq, Op::Return],
+                &[a, b],
+            )
+            .unwrap()
+            .call(ctx, &[])
+        };
+        let t = NativeRun::Ok(Value::T.bits());
+        let nil = NativeRun::Ok(Value::NIL.bits());
+        // Identical bits -> t (fast path, no shim).
+        assert_eq!(eq2(Value::make_int(7), Value::make_int(7), ctx_ptr), t);
+        assert_eq!(eq2(sym_a, sym_a, ctx_ptr), t);
+        assert_eq!(eq2(Value::NIL, Value::NIL, ctx_ptr), t);
+        // Differing bits -> slow shim -> nil (swp disabled).
+        assert_eq!(eq2(Value::make_int(7), Value::make_int(8), ctx_ptr), nil);
+        assert_eq!(eq2(sym_a, Value::make_int(7), ctx_ptr), nil);
+
+        let symp = |v: Value, ctx: *mut u8| {
+            lower_nullary_leaf(&[Op::Constant(0), Op::Symbolp, Op::Return], &[v])
+                .unwrap()
+                .call(ctx, &[])
+        };
+        // Symbol tag -> t natively (nil and t are symbols).
+        assert_eq!(symp(sym_a, ctx_ptr), t);
+        assert_eq!(symp(Value::NIL, ctx_ptr), t);
+        assert_eq!(symp(Value::T, ctx_ptr), t);
+        // Non-symbol -> slow shim -> nil (swp disabled).
+        assert_eq!(symp(Value::make_int(5), ctx_ptr), nil);
+        assert_eq!(symp(s, ctx_ptr), nil);
     }
 
     #[test]
