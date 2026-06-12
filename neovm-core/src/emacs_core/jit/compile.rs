@@ -311,6 +311,26 @@ fn lower_fixnum_unop(
     retag_fixnum(fb, res)
 }
 
+/// Lower a fixnum numeric comparison (`=`/`<`/`>`/`<=`/`>=`) with exact
+/// interpreter parity (`vm.rs` `Op::Lss` &c.): require both operands be fixnums
+/// else deopt, then select `t`/`nil` from the comparison — no branch needed.
+fn lower_fixnum_compare(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    cc: IntCC,
+    a: ClifValue,
+    b: ClifValue,
+) -> ClifValue {
+    guard_fixnum(fb, deopt, a);
+    guard_fixnum(fb, deopt, b);
+    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+    let cond = fb.ins().icmp(cc, av, bv);
+    let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+    let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+    fb.ins().select(cond, t, nil)
+}
+
 /// Lower a no-argument straight-line leaf body. Thin wrapper over [`lower_leaf`]
 /// kept for the existing call sites/tests.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
@@ -414,6 +434,20 @@ pub fn lower_leaf(
                     };
                     let tagged = lower_fixnum_unop(&mut fb, &mut deopt, kind, a);
                     stack.push(tagged);
+                }
+                Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+                    let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let cc = match op {
+                        Op::Eqlsign => IntCC::Equal,
+                        Op::Lss => IntCC::SignedLessThan,
+                        Op::Gtr => IntCC::SignedGreaterThan,
+                        Op::Leq => IntCC::SignedLessThanOrEqual,
+                        Op::Geq => IntCC::SignedGreaterThanOrEqual,
+                        _ => unreachable!("matched comparison ops above"),
+                    };
+                    let r = lower_fixnum_compare(&mut fb, &mut deopt, cc, a, b);
+                    stack.push(r);
                 }
                 Op::Return => {
                     let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -668,6 +702,84 @@ mod tests {
     }
 
     #[test]
+    fn compiles_fixnum_comparisons() {
+        fn cmp(ops: &[Op], a: i64, b: i64) -> Option<usize> {
+            lower_nullary_leaf(ops, &[Value::make_int(a), Value::make_int(b)])
+                .unwrap()
+                .call(&[])
+        }
+        let t = Some(Value::T.bits());
+        let nil = Some(Value::NIL.bits());
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Lss, Op::Return],
+                3,
+                5
+            ),
+            t
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Lss, Op::Return],
+                5,
+                3
+            ),
+            nil
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Gtr, Op::Return],
+                5,
+                3
+            ),
+            t
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Leq, Op::Return],
+                4,
+                4
+            ),
+            t
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Geq, Op::Return],
+                4,
+                5
+            ),
+            nil
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Eqlsign, Op::Return],
+                7,
+                7
+            ),
+            t
+        );
+        assert_eq!(
+            cmp(
+                &[Op::Constant(0), Op::Constant(1), Op::Eqlsign, Op::Return],
+                7,
+                8
+            ),
+            nil
+        );
+    }
+
+    #[test]
+    fn comparison_on_non_fixnum_deopts() {
+        // (< 1 nil) -> nil isn't a fixnum -> deopt.
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Nil, Op::Lss, Op::Return],
+            &[Value::make_int(1)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(&[]), None);
+    }
+
+    #[test]
     fn bails_on_unsupported_arithmetic() {
         // Mul is not in the supported subset -> refuse, do not miscompile.
         let err = lower_nullary_leaf(
@@ -846,6 +958,18 @@ mod tests {
                     Op::Return,
                 ],
                 &[Value::make_int(1), Value::make_int(2), Value::make_int(4)],
+            ),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Lss, Op::Return],
+                &[Value::make_int(3), Value::make_int(5)],
+            ),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Gtr, Op::Return],
+                &[Value::make_int(3), Value::make_int(5)],
+            ),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Eqlsign, Op::Return],
+                &[Value::make_int(5), Value::make_int(5)],
             ),
         ];
         for (i, (ops, consts)) in cases.iter().enumerate() {
