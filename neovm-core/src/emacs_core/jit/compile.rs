@@ -391,6 +391,22 @@ fn lower_simple_op(
                 stack[idx] = top;
             }
         }
+        Op::DiscardN(raw) => {
+            // Low 7 bits: count to discard. High bit: keep TOS in the last kept
+            // slot before discarding. Pure operand-stack manipulation.
+            let preserve_tos = (*raw & 0x80) != 0;
+            let n = (*raw & 0x7F) as usize;
+            if n != 0 {
+                let len = stack.len();
+                if preserve_tos {
+                    let target = len.checked_sub(1 + n).ok_or(CompileError::StackUnderflow)?;
+                    stack[target] = stack[len - 1];
+                } else if n > len {
+                    return Err(CompileError::StackUnderflow);
+                }
+                stack.truncate(len - n);
+            }
+        }
         Op::Add | Op::Sub => {
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -432,6 +448,15 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
         Op::StackSet(n) => (*n as usize + 1, -1),
+        Op::DiscardN(raw) => {
+            let n = (*raw & 0x7F) as usize;
+            let needs = if (*raw & 0x80) != 0 && n > 0 {
+                n + 1
+            } else {
+                n
+            };
+            (needs, -(n as i64))
+        }
         Op::Dup => (1, 1),
         Op::Pop => (1, -1),
         Op::Add | Op::Sub | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => (2, -1),
@@ -1198,6 +1223,41 @@ mod tests {
     }
 
     #[test]
+    fn compiles_discardn() {
+        let consts = &[
+            Value::make_int(10),
+            Value::make_int(20),
+            Value::make_int(30),
+        ];
+        // Non-preserve: push 10,20,30; discard top 2 -> 10.
+        let np = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::DiscardN(2),
+                Op::Return,
+            ],
+            consts,
+        )
+        .unwrap();
+        assert_eq!(np.call(&[]), Some(Value::make_int(10).bits()));
+        // Preserve TOS: push 10,20,30; discardN(2 | 0x80) keeps 30 -> 30.
+        let pr = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::DiscardN(0x82),
+                Op::Return,
+            ],
+            consts,
+        )
+        .unwrap();
+        assert_eq!(pr.call(&[]), Some(Value::make_int(30).bits()));
+    }
+
+    #[test]
     fn compiles_countdown_loop_matches_interpreter() {
         use crate::emacs_core::bytecode::Vm;
         use crate::emacs_core::eval::Context;
@@ -1438,6 +1498,34 @@ mod tests {
             (
                 &[Op::Constant(0), Op::Constant(1), Op::Eqlsign, Op::Return],
                 &[Value::make_int(5), Value::make_int(5)],
+            ),
+            (
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Constant(2),
+                    Op::DiscardN(2),
+                    Op::Return,
+                ],
+                &[
+                    Value::make_int(10),
+                    Value::make_int(20),
+                    Value::make_int(30),
+                ],
+            ),
+            (
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Constant(2),
+                    Op::DiscardN(0x82),
+                    Op::Return,
+                ],
+                &[
+                    Value::make_int(10),
+                    Value::make_int(20),
+                    Value::make_int(30),
+                ],
             ),
         ];
         for (i, (ops, consts)) in cases.iter().enumerate() {
