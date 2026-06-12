@@ -526,6 +526,15 @@ struct DisplayRowGeometryCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+struct LegacyDisplayRowGeometry {
+    row: usize,
+    y: f32,
+    row_extra_y: f32,
+    row_max_height: f32,
+    row_max_ascent: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct DisplayRowGeometryState {
     row: usize,
     y: f32,
@@ -535,13 +544,13 @@ struct DisplayRowGeometryState {
 }
 
 impl DisplayRowGeometryState {
-    fn from_legacy(row: usize, y: f32, row_extra_y: f32, height: f32, ascent: f32) -> Self {
+    fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
         Self {
-            row,
-            y,
-            row_extra_y,
-            height,
-            ascent,
+            row: legacy.row,
+            y: legacy.y,
+            row_extra_y: legacy.row_extra_y,
+            height: legacy.row_max_height,
+            ascent: legacy.row_max_ascent,
         }
     }
 
@@ -1731,14 +1740,15 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let mut row_cursor =
-                DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
-                    *row,
-                    *y,
-                    *row_extra_y,
-                    *row_max_height,
-                    *row_max_ascent,
-                ));
+            let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
+                    row: *row,
+                    y: *y,
+                    row_extra_y: *row_extra_y,
+                    row_max_height: *row_max_height,
+                    row_max_ascent: *row_max_ascent,
+                }),
+            );
             hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
             let finished_row = row_cursor.finish_and_advance_to_next_row(
@@ -4217,14 +4227,15 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
-                    let mut row_cursor =
-                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+                    let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                             row,
                             y,
                             row_extra_y,
                             row_max_height,
                             row_max_ascent,
-                        ));
+                        }),
+                    );
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
@@ -4857,13 +4868,13 @@ impl LayoutEngine {
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
                         let mut row_cursor = DisplayRowGeometryCursor::from_state(
-                            DisplayRowGeometryState::from_legacy(
+                            DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                                 row,
                                 y,
                                 row_extra_y,
                                 row_max_height,
                                 row_max_ascent,
-                            ),
+                            }),
                         );
                         x = content_x;
                         hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -4973,14 +4984,15 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                let mut row_cursor =
-                    DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+                let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                    DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                         row,
                         y,
                         row_extra_y,
                         row_max_height,
                         row_max_ascent,
-                    ));
+                    }),
+                );
                 charpos += 1;
 
                 // Check line-spacing text property on the newline we just consumed.
@@ -5128,13 +5140,13 @@ impl LayoutEngine {
                             need_line_number = lnum_enabled;
                         }
                         let mut row_cursor = DisplayRowGeometryCursor::from_state(
-                            DisplayRowGeometryState::from_legacy(
+                            DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                                 row,
                                 y,
                                 row_extra_y,
                                 row_max_height,
                                 row_max_ascent,
-                            ),
+                            }),
                         );
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
@@ -5185,13 +5197,13 @@ impl LayoutEngine {
                             row_continued[row] = true;
                         }
                         let mut row_cursor = DisplayRowGeometryCursor::from_state(
-                            DisplayRowGeometryState::from_legacy(
+                            DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                                 row,
                                 y,
                                 row_extra_y,
                                 row_max_height,
                                 row_max_ascent,
-                            ),
+                            }),
                         );
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
@@ -5500,14 +5512,15 @@ impl LayoutEngine {
                         current_line += 1;
                         need_line_number = lnum_enabled;
                     }
-                    let mut row_cursor =
-                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+                    let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                             row,
                             y,
                             row_extra_y,
                             row_max_height,
                             row_max_ascent,
-                        ));
+                        }),
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5564,14 +5577,15 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut row_cursor =
-                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+                    let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                             row,
                             y,
                             row_extra_y,
                             row_max_height,
                             row_max_ascent,
-                        ));
+                        }),
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5630,14 +5644,15 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut row_cursor =
-                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+                    let mut row_cursor = DisplayRowGeometryCursor::from_state(
+                        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                             row,
                             y,
                             row_extra_y,
                             row_max_height,
                             row_max_ascent,
-                        ));
+                        }),
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -6244,14 +6259,15 @@ impl LayoutEngine {
                 .get(row)
                 .copied()
                 .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
-            let row_cursor =
-                DisplayRowGeometryCursor::from_state(DisplayRowGeometryState::from_legacy(
+            let row_cursor = DisplayRowGeometryCursor::from_state(
+                DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                     row,
-                    row_y_start,
+                    y: row_y_start,
                     row_extra_y,
                     row_max_height,
                     row_max_ascent,
-                ));
+                }),
+            );
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             finish_text_matrix_row(
                 &mut self.matrix_builder,

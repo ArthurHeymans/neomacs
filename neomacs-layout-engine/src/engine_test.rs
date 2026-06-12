@@ -705,7 +705,13 @@ fn display_row_geometry_state_applies_to_legacy_row_variables_by_name() {
 #[test]
 fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
     assert_eq!(
-        DisplayRowGeometryState::from_legacy(4, 80.0, 9.0, 20.0, 14.0),
+        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
+            row: 4,
+            y: 80.0,
+            row_extra_y: 9.0,
+            row_max_height: 20.0,
+            row_max_ascent: 14.0,
+        }),
         DisplayRowGeometryState {
             row: 4,
             y: 80.0,
