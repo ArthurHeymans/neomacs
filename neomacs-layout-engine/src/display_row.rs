@@ -472,6 +472,39 @@ impl DisplayRowGlyphMeasurementFace {
         self.glyph_advance_px(font_metrics, ch, columns, fallback_advance_px)
     }
 
+    pub(crate) fn shaped_run_advances(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+    ) -> Vec<(usize, f32)> {
+        if !self.use_font_metrics || text.is_empty() {
+            return Vec::new();
+        }
+        let Some(font_metrics) = font_metrics.as_mut() else {
+            return Vec::new();
+        };
+
+        let shaped = font_metrics.shape_run(
+            text,
+            &self.face.font_family,
+            self.face.font_weight,
+            self.face.italic,
+            self.face.font_size.max(1.0),
+        );
+        let mut advances: Vec<(usize, f32)> = Vec::new();
+        for glyph in shaped {
+            if let Some((_, advance)) = advances
+                .iter_mut()
+                .find(|(cluster_start, _)| *cluster_start == glyph.cluster_start)
+            {
+                *advance += glyph.x_advance;
+            } else {
+                advances.push((glyph.cluster_start, glyph.x_advance));
+            }
+        }
+        advances
+    }
+
     pub(crate) fn fixed_advances_for_text(
         &self,
         font_metrics: &mut Option<FontMetricsService>,

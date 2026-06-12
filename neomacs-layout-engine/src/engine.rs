@@ -3111,14 +3111,6 @@ impl LayoutEngine {
         let mut current_text_face_id: u32 = BasicFaceId::Default.into();
         let mut _current_fg: Color = default_fg; // tracks foreground across face changes
         let mut current_bg: Color = default_bg; // tracks background across face changes
-        let mut current_font_family = if default_resolved.font_family.is_empty() {
-            "monospace".to_string()
-        } else {
-            default_resolved.font_family.clone()
-        };
-        let mut current_font_weight = default_resolved.font_weight;
-        let mut current_font_italic = default_resolved.italic;
-        let mut current_font_size_px = default_resolved.font_size.max(1.0).round() as i32;
         let mut current_resolved_face = default_resolved.clone();
 
         let default_measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
@@ -3447,14 +3439,6 @@ impl LayoutEngine {
                     _current_fg = fg;
                     let bg = Color::from_pixel(resolved.bg);
                     current_bg = bg;
-                    current_font_family = if resolved.font_family.is_empty() {
-                        "monospace".to_string()
-                    } else {
-                        resolved.font_family.clone()
-                    };
-                    current_font_weight = resolved.font_weight;
-                    current_font_italic = resolved.italic;
-                    current_font_size_px = resolved.font_size.max(1.0).round() as i32;
                     current_resolved_face = resolved.clone();
                     current_text_face_id = face_id;
                     let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
@@ -5125,33 +5109,28 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let fam = current_font_family.clone();
-                    let shaped = self
-                        .font_metrics
-                        .as_mut()
-                        .map(|fm| {
-                            fm.shape_run(
-                                &run_text,
-                                &fam,
-                                current_font_weight,
-                                current_font_italic,
-                                current_font_size_px as f32,
-                            )
-                        })
-                        .unwrap_or_default();
+                    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                        current_text_face_id,
+                        &current_resolved_face,
+                        None,
+                        frame_params.window_system,
+                        face_char_w,
+                    );
+                    let shaped_advances =
+                        measurement_face.shaped_run_advances(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its
                     // isolated width rather than collapsing to zero.
-                    if !shaped.is_empty() {
+                    if !shaped_advances.is_empty() {
                         for (rel, c) in run_text.char_indices() {
                             if is_cluster_extender(c) {
                                 continue;
                             }
-                            let a: f32 = shaped
+                            let a: f32 = shaped_advances
                                 .iter()
-                                .filter(|g| g.cluster_start == rel)
-                                .map(|g| g.x_advance)
+                                .filter(|(cluster_start, _)| *cluster_start == rel)
+                                .map(|(_, advance)| *advance)
                                 .sum();
                             complex_run_adv.push((ch_start_byte_idx + rel, a));
                         }

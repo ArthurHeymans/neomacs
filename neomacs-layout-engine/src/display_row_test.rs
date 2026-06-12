@@ -1400,6 +1400,27 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
 }
 
 #[test]
+fn display_row_glyph_measurement_face_shapes_text_runs_with_face_attributes() {
+    let mut base = base_face();
+    base.font_family = "monospace".to_string();
+    base.font_size = 14.0;
+    base.font_char_width = 8.0;
+    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 8.0);
+    let mut font_metrics = Some(FontMetricsService::new());
+
+    let advances = measurement_face.shaped_run_advances(&mut font_metrics, "سلام");
+
+    assert!(
+        !advances.is_empty(),
+        "complex script run should produce cluster advances"
+    );
+    assert!(
+        advances.iter().all(|(_, advance)| *advance >= 0.0),
+        "cluster advances should never be negative: {advances:?}"
+    );
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(
