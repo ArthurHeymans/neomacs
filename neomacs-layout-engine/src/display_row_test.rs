@@ -1421,6 +1421,35 @@ fn display_row_glyph_measurement_face_shapes_text_runs_with_face_attributes() {
 }
 
 #[test]
+fn display_row_glyph_measurer_builds_measured_text_run_plan() {
+    let mut base = base_face();
+    base.font_family = "monospace".to_string();
+    base.font_size = 14.0;
+    base.font_char_width = 8.0;
+    let faces = vec![DisplayRowFace::from_resolved(8, &base)];
+    let mut font_metrics = FontMetricsService::new();
+    let mut measurer = DisplayRowGlyphMeasurer::new(&faces, Some(&mut font_metrics), 8.0);
+
+    let measurement = measurer.text_run_advances_px("abc", 8, 8.0);
+
+    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    else {
+        panic!("font-backed measurer should produce a measured text-run plan");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset))
+            .collect::<Vec<_>>(),
+        vec![(0, 0), (1, 1), (2, 2)]
+    );
+    assert!(
+        advances.iter().all(|advance| advance.advance_px >= 8.0),
+        "measured advances should respect the frame cell minimum: {advances:?}"
+    );
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(

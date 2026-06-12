@@ -668,6 +668,69 @@ fn display_row_progress_writer_reports_source_slots_for_text_run() {
 }
 
 #[test]
+fn display_row_progress_writer_uses_text_run_measurement_plan() {
+    struct RunOnlyMeasurer;
+
+    impl DisplayGlyphMeasurer for RunOnlyMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            _ch: char,
+            _face_id: u32,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            panic!("text run should use the run measurement plan");
+        }
+
+        fn text_run_advances_px(
+            &mut self,
+            text: &str,
+            face_id: u32,
+            _fallback_char_width_px: f32,
+        ) -> DisplayTextRunMeasurement {
+            assert_eq!(text, "abc");
+            assert_eq!(face_id, 2);
+            DisplayTextRunMeasurement::Measured(vec![
+                DisplayTextRunAdvance::new(0, 0, 4.0),
+                DisplayTextRunAdvance::new(1, 1, 20.0),
+                DisplayTextRunAdvance::new(2, 2, 6.0),
+            ])
+        }
+    }
+
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut measurer = RunOnlyMeasurer;
+    let mut writer = DisplayRowProgressWriter::with_glyph_measurer(
+        &row_layout,
+        &mut row,
+        &mut measurer,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let progress = writer.push_item(text_item("abc"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 30.0, col: 3 });
+    assert_eq!(
+        progress
+            .slots
+            .iter()
+            .map(|slot| slot.width_px)
+            .collect::<Vec<_>>(),
+        vec![4.0, 20.0, 6.0]
+    );
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .map(|glyph| glyph.pixel_width)
+            .collect::<Vec<_>>(),
+        vec![4.0, 20.0, 6.0]
+    );
+}
+
+#[test]
 fn display_row_progress_writer_uses_position_for_tabs() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();

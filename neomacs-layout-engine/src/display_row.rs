@@ -7,7 +7,7 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
-    FixedGlyphAdvances,
+    DisplayTextRunAdvance, DisplayTextRunMeasurement, FixedGlyphAdvances,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -389,6 +389,81 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             self.quantization
                 .resolve(measured, fallback_advance_px.max(min_advance), min_advance),
         )
+    }
+
+    fn text_run_advances_px(
+        &mut self,
+        text: &str,
+        face_id: u32,
+        fallback_char_width_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        if text.is_empty() {
+            return DisplayTextRunMeasurement::PerChar;
+        }
+
+        let Some(face) = self.face(face_id).cloned() else {
+            return DisplayTextRunMeasurement::PerChar;
+        };
+        let Some(font_metrics) = self.font_metrics.as_mut() else {
+            return DisplayTextRunMeasurement::PerChar;
+        };
+
+        let shaped = font_metrics.shape_run(
+            text,
+            &face.font_family,
+            face.font_weight,
+            face.italic,
+            face.font_size.max(1.0),
+        );
+        if shaped.is_empty() {
+            return DisplayTextRunMeasurement::PerChar;
+        }
+
+        let mut cluster_advances: Vec<(usize, f32)> = Vec::new();
+        for glyph in shaped {
+            if glyph.cluster_start > text.len() {
+                continue;
+            }
+            if let Some((_, advance)) = cluster_advances
+                .iter_mut()
+                .find(|(byte_offset, _)| *byte_offset == glyph.cluster_start)
+            {
+                *advance += glyph.x_advance;
+            } else {
+                cluster_advances.push((glyph.cluster_start, glyph.x_advance));
+            }
+        }
+
+        let face_char_width = face
+            .font_char_width
+            .max(self.fallback_char_width)
+            .max(fallback_char_width_px)
+            .max(1.0);
+        let fallback_char_width_px = fallback_char_width_px.max(face_char_width).max(1.0);
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .filter_map(|(char_offset, (byte_offset, ch))| {
+                let measured = cluster_advances
+                    .iter()
+                    .find(|(cluster_start, _)| *cluster_start == byte_offset)
+                    .map(|(_, advance)| *advance)?;
+                let columns = crate::composition::base_width_cols(ch);
+                let minimum = f32::from(columns.max(1)) * face_char_width;
+                let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
+                Some(DisplayTextRunAdvance::new(
+                    char_offset,
+                    byte_offset,
+                    self.quantization.resolve(Some(measured), fallback, minimum),
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        if advances.is_empty() {
+            DisplayTextRunMeasurement::PerChar
+        } else {
+            DisplayTextRunMeasurement::Measured(advances)
+        }
     }
 }
 
