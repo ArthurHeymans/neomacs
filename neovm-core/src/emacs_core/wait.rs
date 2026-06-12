@@ -488,6 +488,25 @@ impl WaitProcessActivity {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WaitProcessOutcome {
+    activity: WaitProcessActivity,
+}
+
+impl WaitProcessOutcome {
+    pub(crate) fn record_activity(&mut self, target: bool) {
+        self.activity = self.activity.record(target);
+    }
+
+    pub(crate) fn has_any_process_activity(self) -> bool {
+        self.activity.any()
+    }
+
+    pub(crate) fn has_target_process_activity(self) -> bool {
+        self.activity.target()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum WaitSpecialInputActivity {
     #[default]
     None,
@@ -546,10 +565,6 @@ impl WaitSpecialInputOutcome {
 }
 
 impl WaitServiceOutcome {
-    pub(crate) fn record_process_activity(&mut self, target: bool) {
-        self.process_activity = self.process_activity.record(target);
-    }
-
     pub(crate) fn has_any_process_activity(self) -> bool {
         self.process_activity.any()
     }
@@ -558,8 +573,8 @@ impl WaitServiceOutcome {
         self.process_activity.target()
     }
 
-    fn absorb_process_activity(&mut self, process_outcome: Self) {
-        self.process_activity = process_outcome.process_activity;
+    fn absorb_process_activity(&mut self, process_outcome: WaitProcessOutcome) {
+        self.process_activity = process_outcome.activity;
     }
 
     pub(crate) fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
@@ -878,9 +893,9 @@ mod tests {
 
     #[test]
     fn target_process_activity_implies_any_process_activity() {
-        let mut outcome = WaitServiceOutcome::default();
+        let mut outcome = WaitProcessOutcome::default();
 
-        outcome.record_process_activity(true);
+        outcome.record_activity(true);
 
         assert!(outcome.has_target_process_activity());
         assert!(outcome.has_any_process_activity());

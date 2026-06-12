@@ -42,7 +42,7 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    ProcessOutputWaitTiming, WaitCompletion, WaitRequest, WaitServiceOutcome, WaitSourceEvents,
+    ProcessOutputWaitTiming, WaitCompletion, WaitProcessOutcome, WaitRequest, WaitSourceEvents,
 };
 
 /// OS socket owned by a network process.
@@ -2482,7 +2482,7 @@ impl super::eval::Context {
     pub(crate) fn poll_process_output_for_wait_request(
         &mut self,
         request: &WaitRequest,
-    ) -> WaitServiceOutcome {
+    ) -> WaitProcessOutcome {
         let target_process = request.target_process();
         let proc_ids = if !request.services_process_output() {
             Vec::new()
@@ -2498,7 +2498,7 @@ impl super::eval::Context {
         &mut self,
         ready_processes: Vec<ProcessId>,
         request: &WaitRequest,
-    ) -> WaitServiceOutcome {
+    ) -> WaitProcessOutcome {
         let target_process = request.target_process();
         let proc_ids = if !request.services_process_output() {
             Vec::new()
@@ -2518,14 +2518,14 @@ impl super::eval::Context {
         &mut self,
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
-    ) -> WaitServiceOutcome {
+    ) -> WaitProcessOutcome {
         let proc_ids = dedupe_process_ids(proc_ids);
 
         if proc_ids.is_empty() {
-            return WaitServiceOutcome::default();
+            return WaitProcessOutcome::default();
         }
 
-        let mut outcome = WaitServiceOutcome::default();
+        let mut outcome = WaitProcessOutcome::default();
 
         for pid in proc_ids {
             if self
@@ -2539,7 +2539,7 @@ impl super::eval::Context {
             let is_target = target_process.map_or(true, |target| target == pid);
             let mut exited = self.processes.check_child_exit(pid);
             for event in self.processes.accept_network_server_connections(pid) {
-                outcome.record_process_activity(is_target);
+                outcome.record_activity(is_target);
                 self.run_process_log_callback(
                     event.log,
                     event.server_id,
@@ -2562,7 +2562,7 @@ impl super::eval::Context {
 
             match read_result {
                 ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    outcome.record_process_activity(is_target);
+                    outcome.record_activity(is_target);
 
                     let filter = self
                         .processes
@@ -2572,7 +2572,7 @@ impl super::eval::Context {
                     self.run_process_filter_callback(pid, filter, data);
                 }
                 ProcessOutputRead::Eof if is_network => {
-                    outcome.record_process_activity(is_target);
+                    outcome.record_activity(is_target);
 
                     if let Some(proc) = self.processes.get_mut(pid) {
                         proc.status = process_status_exit_value(0);
@@ -2602,7 +2602,7 @@ impl super::eval::Context {
             }
 
             if exited {
-                outcome.record_process_activity(is_target);
+                outcome.record_activity(is_target);
 
                 let sentinel = self
                     .processes
