@@ -953,6 +953,18 @@ impl DisplayRowAppendSurface {
     ) -> DisplayRowAppendFrame {
         DisplayRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
     }
+
+    pub(crate) fn frame_for_active_face(
+        &self,
+        placement: DisplayRowAppendPlacement,
+        active_face: &DisplayRowActiveFaceState,
+        default_row_height: f32,
+    ) -> DisplayRowAppendFrame {
+        self.frame(
+            placement,
+            DisplayRowAppendMetrics::from_active_face_state(active_face, default_row_height),
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

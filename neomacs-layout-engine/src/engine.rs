@@ -3622,13 +3622,14 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                     );
 
-                    let append_frame = text_append_surface.frame(
+                    let append_frame = text_append_surface.frame_for_active_face(
                         DisplayRowAppendPlacement {
                             row,
                             y,
                             glyph_y: y + raise_y_offset,
                         },
-                        DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                        &active_face_state,
+                        char_h,
                     );
                     let position = append_lisp_string_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -3688,16 +3689,14 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let ellipsis_frame = text_append_surface.frame(
+                        let ellipsis_frame = text_append_surface.frame_for_active_face(
                             DisplayRowAppendPlacement {
                                 row,
                                 y,
                                 glyph_y: y + raise_y_offset,
                             },
-                            DisplayRowAppendMetrics::from_active_face_state(
-                                &active_face_state,
-                                char_h,
-                            ),
+                            &active_face_state,
+                            char_h,
                         );
                         let measurement =
                             active_face_state.text_run_measurement(&mut self.font_metrics, "...");
@@ -4061,17 +4060,16 @@ impl LayoutEngine {
                                     replacement_source,
                                     source,
                                 );
-                                let append_frame = replacement_string_surface.frame(
-                                    DisplayRowAppendPlacement {
-                                        row,
-                                        y,
-                                        glyph_y: y + raise_y_offset,
-                                    },
-                                    DisplayRowAppendMetrics::from_active_face_state(
+                                let append_frame = replacement_string_surface
+                                    .frame_for_active_face(
+                                        DisplayRowAppendPlacement {
+                                            row,
+                                            y,
+                                            glyph_y: y + raise_y_offset,
+                                        },
                                         &active_face_state,
                                         char_h,
-                                    ),
-                                );
+                                    );
                                 let mut item_measurer =
                                     ReplacementStringItemMeasurer::from_active_face_state(
                                         &mut self.font_metrics,
@@ -4163,16 +4161,14 @@ impl LayoutEngine {
                                     space_geometry.ascent,
                                 ),
                             );
-                            let replacement_frame = text_append_surface.frame(
+                            let replacement_frame = text_append_surface.frame_for_active_face(
                                 DisplayRowAppendPlacement {
                                     row,
                                     y,
                                     glyph_y: y + raise_y_offset,
                                 },
-                                DisplayRowAppendMetrics::from_active_face_state(
-                                    &active_face_state,
-                                    char_h,
-                                ),
+                                &active_face_state,
+                                char_h,
                             );
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
@@ -4312,16 +4308,14 @@ impl LayoutEngine {
                                     },
                                 );
                             }
-                            let replacement_frame = text_append_surface.frame(
+                            let replacement_frame = text_append_surface.frame_for_active_face(
                                 DisplayRowAppendPlacement {
                                     row,
                                     y,
                                     glyph_y: y + raise_y_offset,
                                 },
-                                DisplayRowAppendMetrics::from_active_face_state(
-                                    &active_face_state,
-                                    char_h,
-                                ),
+                                &active_face_state,
+                                char_h,
                             );
                             let item = replacement_source
                                 .source_mapped_text_item(active_face_state.face_id(), placeholder);
@@ -4402,13 +4396,14 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let ellipsis_frame = text_append_surface.frame(
+                let ellipsis_frame = text_append_surface.frame_for_active_face(
                     DisplayRowAppendPlacement {
                         row,
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                    &active_face_state,
+                    char_h,
                 );
                 let measurement =
                     active_face_state.text_run_measurement(&mut self.font_metrics, "...");
@@ -4819,13 +4814,14 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface.frame(
+                let text_item_frame = text_append_surface.frame_for_active_face(
                     DisplayRowAppendPlacement {
                         row,
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                    &active_face_state,
+                    char_h,
                 );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -4870,13 +4866,14 @@ impl LayoutEngine {
                         CharPos0::new(charpos as usize),
                         CharPos0::new((charpos + 1) as usize),
                     );
-                    let text_item_frame = text_append_surface.frame(
+                    let text_item_frame = text_append_surface.frame_for_active_face(
                         DisplayRowAppendPlacement {
                             row,
                             y,
                             glyph_y: y + raise_y_offset,
                         },
-                        DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                        &active_face_state,
+                        char_h,
                     );
                     if let Some((_progress, position)) =
                         append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -4936,13 +4933,14 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface.frame(
+                let text_item_frame = text_append_surface.frame_for_active_face(
                     DisplayRowAppendPlacement {
                         row,
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                    &active_face_state,
+                    char_h,
                 );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -5356,13 +5354,14 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let frame = text_append_surface.frame(
+            let frame = text_append_surface.frame_for_active_face(
                 DisplayRowAppendPlacement {
                     row,
                     y,
                     glyph_y: y + raise_y_offset,
                 },
-                DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
+                &active_face_state,
+                char_h,
             );
             let buffer_text_fragment = DisplayTextFragment::buffer_text(
                 CharPos0::new(charpos as usize),

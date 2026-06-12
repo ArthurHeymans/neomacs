@@ -708,6 +708,53 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
 }
 
 #[test]
+fn display_row_append_surface_builds_frame_from_active_face_state() {
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base = resolver.default_face().clone();
+    let mut font_metrics = None;
+    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        7,
+        &base,
+        None,
+        7.5,
+        DisplayRowFallbackMetrics {
+            char_width: 7.5,
+            row_height: 18.0,
+            ascent: 13.0,
+        },
+        &mut font_metrics,
+    );
+    let active_face = DisplayRowActiveFaceState::new(base, measured);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
+
+    let frame = surface.frame_for_active_face(
+        DisplayRowAppendPlacement {
+            row: 3,
+            y: 20.0,
+            glyph_y: 22.0,
+        },
+        &active_face,
+        16.0,
+    );
+
+    assert_eq!(frame.row, 3);
+    assert_eq!(frame.geometry.height, 18.0);
+    assert_eq!(frame.geometry.ascent, 13.0);
+    assert_eq!(frame.geometry.char_width, 7.5);
+    assert_eq!(frame.face_space_width, 8.0);
+    assert_eq!(frame.default_row_height, 16.0);
+}
+
+#[test]
 fn display_row_append_frame_from_parts_preserves_geometry_and_area() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = DisplayRowAppendFrame::from_parts(
