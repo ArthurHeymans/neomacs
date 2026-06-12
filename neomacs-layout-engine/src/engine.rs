@@ -5080,18 +5080,12 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => active_face_state.advance_for_char(
-                        &mut self.font_metrics,
-                        ch,
-                        face_metrics.char_width * char_cols as f32,
-                    ),
+                    None => {
+                        active_face_state.advance_for_columns(&mut self.font_metrics, ch, char_cols)
+                    }
                 }
             } else {
-                active_face_state.advance_for_char(
-                    &mut self.font_metrics,
-                    ch,
-                    face_metrics.char_width * char_cols as f32,
-                )
+                active_face_state.advance_for_columns(&mut self.font_metrics, ch, char_cols)
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > content_x + avail_width {

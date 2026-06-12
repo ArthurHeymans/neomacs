@@ -811,6 +811,19 @@ impl DisplayRowActiveFaceState {
             .advance_for_char(font_metrics, ch, fallback_advance_px)
     }
 
+    pub(crate) fn advance_for_columns(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        columns: usize,
+    ) -> f32 {
+        if columns == 0 {
+            return 0.0;
+        }
+        let fallback_advance_px = self.metrics().char_width * columns as f32;
+        self.advance_for_char(font_metrics, ch, fallback_advance_px)
+    }
+
     pub(crate) fn text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,

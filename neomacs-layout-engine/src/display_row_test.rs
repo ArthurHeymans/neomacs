@@ -1660,6 +1660,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
 
     assert_eq!(active.metrics().space_width, 7.0);
     assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
+    assert_eq!(active.advance_for_columns(&mut font_metrics, 'x', 2), 14.0);
 
     let text_run_measurement = active.text_run_measurement(&mut font_metrics, "a中");
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
