@@ -412,6 +412,11 @@ struct LineNumberRenderState {
     render_pending: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FaceScanCheckpoint {
+    next_check: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BoxFaceRowState {
     Inactive,
@@ -746,6 +751,24 @@ impl LineNumberRenderState {
             }
             _ => (self.current_line + offset).abs(),
         }
+    }
+}
+
+impl FaceScanCheckpoint {
+    fn initial() -> Self {
+        Self { next_check: 0 }
+    }
+
+    fn should_resolve_at(self, charpos: usize) -> bool {
+        charpos >= self.next_check
+    }
+
+    fn invalidate(&mut self) {
+        self.next_check = 0;
+    }
+
+    fn next_check_mut(&mut self) -> &mut usize {
+        &mut self.next_check
     }
 }
 
@@ -3775,7 +3798,7 @@ impl LayoutEngine {
             default_face_ascent,
         );
         // Face resolution state
-        let mut face_next_check: usize = 0;
+        let mut face_scan = FaceScanCheckpoint::initial();
         // Load the frame-wide face-id counter so this window's
         // glyph/mode-line/header-line faces get IDs that do NOT
         // collide with earlier siblings' faces in the frame-scoped
@@ -4023,11 +4046,14 @@ impl LayoutEngine {
 
         macro_rules! resolve_current_face_state {
             () => {
-                if (charpos as usize) >= face_next_check {
+                if face_scan.should_resolve_at(charpos as usize) {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let mut resolved =
-                        face_resolver.face_at_pos(buffer, charpos as usize, &mut face_next_check);
+                    let mut resolved = face_resolver.face_at_pos(
+                        buffer,
+                        charpos as usize,
+                        face_scan.next_check_mut(),
+                    );
                     if let Some(factor) = height_span.value()
                         && let Some(adjusted) = height_adjusted_face(
                             &resolved,
@@ -4181,7 +4207,7 @@ impl LayoutEngine {
                     .push_left_margin_stretch(1, lnum_face_id);
 
                 // Force face resolution to re-apply text face after line number face
-                face_next_check = 0;
+                face_scan.invalidate();
 
                 line_numbers.consume_render_request();
             }
@@ -4499,7 +4525,7 @@ impl LayoutEngine {
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
             if height_span.clear_if_expired(charpos, window_start) {
-                face_next_check = 0;
+                face_scan.invalidate();
             }
             resolve_current_face_state!();
             if text_property_checkpoints.should_check_display(charpos) {
@@ -4874,7 +4900,7 @@ impl LayoutEngine {
                     if let Some(factor) = display_property.modifiers.height {
                         if factor.is_finite() && factor > 0.0 {
                             height_span.set(factor, text_property_checkpoints.display_next());
-                            face_next_check = 0;
+                            face_scan.invalidate();
                             resolve_current_face_state!();
                         }
                     }
@@ -5275,7 +5301,7 @@ impl LayoutEngine {
                 }
                 charpos += 1;
                 word_wrap.disallow_after_current_char();
-                face_next_check = 0; // force face re-check to restore text face
+                face_scan.invalidate(); // force face re-check to restore text face
                 continue;
             }
 
@@ -5325,7 +5351,7 @@ impl LayoutEngine {
                     }
                     charpos += 1;
                     word_wrap.disallow_after_current_char();
-                    face_next_check = 0;
+                    face_scan.invalidate();
                     continue;
                 }
             }
@@ -5568,7 +5594,7 @@ impl LayoutEngine {
                     }
 
                     // Force face re-check since we rewound
-                    face_next_check = 0;
+                    face_scan.invalidate();
 
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
@@ -5615,7 +5641,7 @@ impl LayoutEngine {
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
                     word_wrap.disallow_after_current_char();
-                    face_next_check = 0;
+                    face_scan.invalidate();
                     if has_prefix {
                         prefix_request.request_wrap();
                     }

@@ -241,6 +241,23 @@ fn hit_row_range_tracker_builds_ranges_and_tracks_pending_finish() {
 }
 
 #[test]
+fn face_scan_checkpoint_tracks_resolution_boundaries_and_invalidation() {
+    let mut checkpoint = FaceScanCheckpoint::initial();
+
+    assert!(checkpoint.should_resolve_at(0));
+
+    *checkpoint.next_check_mut() = 12;
+
+    assert!(!checkpoint.should_resolve_at(11));
+    assert!(checkpoint.should_resolve_at(12));
+
+    checkpoint.invalidate();
+
+    assert!(checkpoint.should_resolve_at(0));
+    assert_eq!(*checkpoint.next_check_mut(), 0);
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 
