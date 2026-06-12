@@ -3700,7 +3700,7 @@ impl LayoutEngine {
                             DisplayRowPosition { x_px: x, col },
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
-                            current_face.face_id(),
+                            face_render_state.face_id,
                             Some(measurement),
                         ) {
                             x = position.x_px;
@@ -4017,7 +4017,7 @@ impl LayoutEngine {
                                     &replacement_base_face,
                                     current_face.resolved_face(),
                                 ) {
-                                    current_face.face_id()
+                                    face_render_state.face_id
                                 } else if crate::display_source_resolver::same_resolved_face(
                                     &replacement_base_face,
                                     face_resolver.default_face(),
@@ -4144,7 +4144,7 @@ impl LayoutEngine {
                                 text_start_byte + byte_idx,
                             );
                             let item = replacement_source.stretch_item(
-                                current_face.face_id(),
+                                face_render_state.face_id,
                                 DisplayReplacementBox::new(
                                     space_width,
                                     space_geometry.height,
@@ -4167,7 +4167,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     current_face.resolved_face(),
-                                    current_face.face_id(),
+                                    face_render_state.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4255,7 +4255,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item = replacement_source.item(current_face.face_id(), media_item);
+                            let item =
+                                replacement_source.item(face_render_state.face_id, media_item);
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4264,7 +4265,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     current_face.resolved_face(),
-                                    current_face.face_id(),
+                                    face_render_state.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4305,7 +4306,7 @@ impl LayoutEngine {
                                 DisplayRowAppendMetrics::from_active_face(&current_face, char_h),
                             );
                             let item = replacement_source
-                                .source_mapped_text_item(current_face.face_id(), placeholder);
+                                .source_mapped_text_item(face_render_state.face_id, placeholder);
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4314,7 +4315,7 @@ impl LayoutEngine {
                                     item,
                                     face_resolver,
                                     current_face.resolved_face(),
-                                    current_face.face_id(),
+                                    face_render_state.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4404,7 +4405,7 @@ impl LayoutEngine {
                     DisplayRowPosition { x_px: x, col },
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
-                    current_face.face_id(),
+                    face_render_state.face_id,
                     Some(measurement),
                 ) {
                     x = position.x_px;
@@ -4819,7 +4820,7 @@ impl LayoutEngine {
                         buf_id,
                         face_resolver,
                         current_face.resolved_face(),
-                        current_face.face_id(),
+                        face_render_state.face_id,
                         crate::display_item::DisplayItemKind::ControlChar { ch },
                         text_item_frame,
                         DisplayRowPosition { x_px: x, col },
@@ -4870,7 +4871,7 @@ impl LayoutEngine {
                             buf_id,
                             face_resolver,
                             current_face.resolved_face(),
-                            current_face.face_id(),
+                            face_render_state.face_id,
                             crate::display_item::DisplayItemKind::SourceMappedText(
                                 crate::display_item::DisplaySourceMappedText::new(mapped_text),
                             ),
@@ -4936,7 +4937,7 @@ impl LayoutEngine {
                         buf_id,
                         face_resolver,
                         current_face.resolved_face(),
-                        current_face.face_id(),
+                        face_render_state.face_id,
                         crate::display_item::DisplayItemKind::Glyphless(
                             crate::display_item::DisplayGlyphless { ch, method },
                         ),
@@ -5331,7 +5332,7 @@ impl LayoutEngine {
                     gy,
                     face_metrics.row_height,
                     face_metrics.ascent,
-                    current_face.face_id(),
+                    face_render_state.face_id,
                     false,
                 );
             }
@@ -5364,7 +5365,7 @@ impl LayoutEngine {
                 current_face.resolved_face(),
                 buf_id,
                 buffer,
-                current_face.face_id(),
+                face_render_state.face_id,
                 measurement,
                 frame,
                 DisplayRowPosition { x_px: x, col },
