@@ -12,9 +12,9 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
-    TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput, WindowOutputEmitter,
-    begin_text_matrix_row, finish_and_begin_text_matrix_row,
-    finish_and_maybe_begin_text_matrix_row, finish_text_matrix_row,
+    TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
+    finish_and_begin_text_matrix_row, finish_and_maybe_begin_text_matrix_row,
+    finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -4455,7 +4455,7 @@ impl LayoutEngine {
                         geometry_transition,
                         max_rows,
                     );
-                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                    if row_transition.is_exhausted() {
                         break;
                     }
                     col = 0;
@@ -5099,7 +5099,7 @@ impl LayoutEngine {
                             geometry_transition,
                             max_rows,
                         );
-                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        if row_transition.is_exhausted() {
                             break;
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
@@ -5237,7 +5237,7 @@ impl LayoutEngine {
                     geometry_transition,
                     max_rows,
                 );
-                if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                if row_transition.is_exhausted() {
                     break;
                 }
                 charpos = sync_charpos_from_byte_idx(byte_idx);
@@ -5374,7 +5374,7 @@ impl LayoutEngine {
                             geometry_transition,
                             max_rows,
                         );
-                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        if row_transition.is_exhausted() {
                             break;
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
@@ -5435,7 +5435,7 @@ impl LayoutEngine {
                             geometry_transition,
                             max_rows,
                         );
-                        if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                        if row_transition.is_exhausted() {
                             break;
                         }
                         col = 0;
@@ -5752,7 +5752,7 @@ impl LayoutEngine {
                         geometry_transition,
                         max_rows,
                     );
-                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                    if row_transition.is_exhausted() {
                         break;
                     }
                     col = 0;
@@ -5820,7 +5820,7 @@ impl LayoutEngine {
                         geometry_transition,
                         max_rows,
                     );
-                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                    if row_transition.is_exhausted() {
                         break;
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
@@ -5890,7 +5890,7 @@ impl LayoutEngine {
                         geometry_transition,
                         max_rows,
                     );
-                    if row_transition == TextMatrixRowTransition::ExhaustedRows {
+                    if row_transition.is_exhausted() {
                         break;
                     }
                     col = 0;

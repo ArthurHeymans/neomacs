@@ -129,6 +129,12 @@ pub(crate) enum TextMatrixRowTransition {
     ExhaustedRows,
 }
 
+impl TextMatrixRowTransition {
+    pub(crate) fn is_exhausted(self) -> bool {
+        matches!(self, Self::ExhaustedRows)
+    }
+}
+
 pub(crate) fn finish_text_matrix_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,

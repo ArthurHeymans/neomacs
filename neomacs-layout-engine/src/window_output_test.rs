@@ -453,3 +453,9 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     let state = builder.finish(10, 1, 8.0, 16.0);
     assert_eq!(state.window_matrices[0].matrix.rows.len(), 1);
 }
+
+#[test]
+fn text_matrix_row_transition_reports_exhausted_state() {
+    assert!(TextMatrixRowTransition::ExhaustedRows.is_exhausted());
+    assert!(!TextMatrixRowTransition::BeganNextRow.is_exhausted());
+}
