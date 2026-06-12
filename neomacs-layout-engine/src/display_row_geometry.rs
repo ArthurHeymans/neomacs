@@ -148,6 +148,13 @@ impl LegacyDisplayRowGeometryVars<'_> {
         result
     }
 
+    pub(crate) fn with_display_row_geometry_state<R>(
+        &mut self,
+        f: impl FnOnce(&mut DisplayRowGeometryState) -> R,
+    ) -> R {
+        self.with_state(f)
+    }
+
     pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
         DisplayRowGeometryState::from_legacy(self.snapshot()).current_row_is_visible(limit)
     }

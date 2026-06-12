@@ -387,6 +387,38 @@ fn legacy_display_row_geometry_vars_can_run_owned_state_scope_and_apply_result()
 }
 
 #[test]
+fn legacy_display_row_geometry_vars_can_run_display_row_geometry_state_scope() {
+    let mut row = 2;
+    let mut y = 42.0;
+    let mut row_extra_y = 3.0;
+    let mut row_max_height = 24.0;
+    let mut row_max_ascent = 18.0;
+
+    let result = LegacyDisplayRowGeometryVars::new(
+        &mut row,
+        &mut y,
+        &mut row_extra_y,
+        &mut row_max_height,
+        &mut row_max_ascent,
+    )
+    .with_display_row_geometry_state(|geometry| {
+        geometry.row += 1;
+        geometry.y += 16.0;
+        geometry.row_extra_y += 5.0;
+        geometry.include_row_extents(32.0, 20.0);
+        geometry.text_row_output(16.0)
+    });
+
+    assert_eq!(row, 3);
+    assert_eq!(y, 58.0);
+    assert_eq!(row_extra_y, 8.0);
+    assert_eq!(row_max_height, 32.0);
+    assert_eq!(row_max_ascent, 20.0);
+    assert_eq!(result.row, 3);
+    assert_eq!(result.row_y, 58.0);
+}
+
+#[test]
 fn legacy_display_row_geometry_vars_include_glyph_vertical_metrics_by_name() {
     let mut row = 4;
     let mut y = 80.0;
