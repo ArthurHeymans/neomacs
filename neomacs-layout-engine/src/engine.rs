@@ -816,21 +816,13 @@ fn skip_text_to_charpos(text: &[u8], byte_idx: &mut usize, charpos: &mut i64, ta
 fn row_metrics_for_cursor(
     row_metrics: &[RowMetricsSnapshot],
     cursor_row: usize,
-    current_row: usize,
-    current_row_y: f32,
-    current_row_height: f32,
-    current_row_ascent: f32,
+    current_row_fallback: RowMetricsSnapshot,
 ) -> RowMetricsSnapshot {
     row_metrics
         .iter()
         .find(|metric| metric.row == cursor_row)
         .copied()
-        .unwrap_or(RowMetricsSnapshot {
-            row: current_row,
-            pixel_y: current_row_y,
-            height: current_row_height.max(1.0),
-            ascent: current_row_ascent.max(0.0).min(current_row_height.max(1.0)),
-        })
+        .unwrap_or(current_row_fallback)
 }
 
 fn resolve_cursor_vertical_metrics(
@@ -5725,10 +5717,7 @@ impl LayoutEngine {
                 let row_metric = row_metrics_for_cursor(
                     output_emitter.row_metrics(),
                     text_matrix_row_base + cursor.matrix_row,
-                    text_matrix_row_base + row,
-                    y,
-                    row_max_height,
-                    row_max_ascent,
+                    current_row_geometry!().row_metrics_snapshot(text_matrix_row_base),
                 );
                 output_emitter.set_logical_cursor(cursor.logical_cursor_position(
                     row_metric,

@@ -1,7 +1,8 @@
 use crate::display_row_append::DisplayRowAppendPlacement;
 use crate::hit_test::HitRow;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
+    RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    TextRowOutput,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -479,6 +480,16 @@ impl DisplayRowGeometryState {
             row_y: self.y,
             glyph_y: self.y,
             height,
+        }
+    }
+
+    pub(crate) fn row_metrics_snapshot(&self, row_base: usize) -> RowMetricsSnapshot {
+        let height = self.height.max(1.0);
+        RowMetricsSnapshot {
+            row: row_base + self.row,
+            pixel_y: self.y,
+            height,
+            ascent: self.ascent.max(0.0).min(height),
         }
     }
 

@@ -552,6 +552,40 @@ fn display_row_geometry_state_builds_text_row_output() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_row_metrics_snapshot() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 24.0,
+        ascent: 18.0,
+    };
+
+    let snapshot = geometry.row_metrics_snapshot(5);
+
+    assert_eq!(snapshot.row, 8);
+    assert_eq!(snapshot.pixel_y, 69.0);
+    assert_eq!(snapshot.height, 24.0);
+    assert_eq!(snapshot.ascent, 18.0);
+}
+
+#[test]
+fn display_row_geometry_state_clamps_row_metrics_snapshot_extents() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 0.0,
+        ascent: 7.0,
+    };
+
+    let snapshot = geometry.row_metrics_snapshot(5);
+
+    assert_eq!(snapshot.height, 1.0);
+    assert_eq!(snapshot.ascent, 1.0);
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_matrix_row_begin() {
     let geometry = DisplayRowGeometryState {
         row: 3,
