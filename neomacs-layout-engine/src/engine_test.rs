@@ -495,6 +495,25 @@ fn current_display_row_metrics_resets_to_default_extents() {
     assert_eq!(metrics.extra_height_over_default(16.0), 0.0);
 }
 
+#[test]
+fn current_display_row_metrics_finishes_row_and_resets_to_default_extents() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    let finished = metrics.finish_and_reset(7.0, 14.0, 10.0);
+
+    assert_eq!(
+        finished,
+        TextMatrixRowMetrics {
+            y: 7.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+    assert_eq!(metrics.height(), 14.0);
+    assert_eq!(metrics.ascent(), 10.0);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

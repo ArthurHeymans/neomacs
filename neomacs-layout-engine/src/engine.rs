@@ -516,6 +516,17 @@ impl CurrentDisplayRowMetrics {
         self.height = height;
         self.ascent = ascent;
     }
+
+    fn finish_and_reset(
+        &mut self,
+        y: f32,
+        default_height: f32,
+        default_ascent: f32,
+    ) -> TextMatrixRowMetrics {
+        let finished = self.text_matrix_row_metrics(y);
+        self.reset(default_height, default_ascent);
+        finished
+    }
 }
 
 #[cfg(test)]
@@ -4049,14 +4060,14 @@ impl LayoutEngine {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
                     });
-                    let finished_row = current_row_metrics.text_matrix_row_metrics(y);
+                    let finished_row =
+                        current_row_metrics.finish_and_reset(y, char_h, default_face_ascent);
                     hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
 
                     row += 1;
                     y = text_y + row as f32 * char_h + row_extra_y;
-                    current_row_metrics.reset(char_h, default_face_ascent);
                     row_max_height = current_row_metrics.height();
                     row_max_ascent = current_row_metrics.ascent();
                     row_y_positions.push(y);
@@ -4819,10 +4830,10 @@ impl LayoutEngine {
                     charpos_start: hit_row_charpos_start,
                     charpos_end: charpos,
                 });
-                let finished_row = current_row_metrics.text_matrix_row_metrics(y);
+                let finished_row =
+                    current_row_metrics.finish_and_reset(y, char_h, default_face_ascent);
                 row += 1;
                 y = text_y + row as f32 * char_h + row_extra_y;
-                current_row_metrics.reset(char_h, default_face_ascent);
                 row_max_height = current_row_metrics.height();
                 row_max_ascent = current_row_metrics.ascent();
                 row_y_positions.push(y);
