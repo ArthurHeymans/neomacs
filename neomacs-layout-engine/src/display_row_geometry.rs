@@ -101,6 +101,12 @@ pub(crate) enum DisplayRowMarker {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayRowStartMarker {
+    Inactive,
+    Active { row: DisplayRowMarker, x: f32 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowYFallback {
     pub(crate) text_y: f32,
     pub(crate) default_height: f32,
@@ -510,6 +516,13 @@ impl DisplayRowGeometryState {
         DisplayRowMarker::Row(self.row.saturating_add(1))
     }
 
+    pub(crate) fn start_marker_at_x(&self, x: f32) -> DisplayRowStartMarker {
+        DisplayRowStartMarker::Active {
+            row: self.current_row_marker(),
+            x,
+        }
+    }
+
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
         let mut metrics = CurrentDisplayRowMetrics::new(self.height, self.ascent);
         metrics.include_glyph(glyph_height, glyph_ascent);
@@ -666,6 +679,19 @@ impl DisplayRowGeometryState {
 impl DisplayRowMarker {
     pub(crate) fn is_active_on(&self, geometry: &DisplayRowGeometryState) -> bool {
         matches!(self, Self::Row(row) if *row == geometry.row)
+    }
+}
+
+impl DisplayRowStartMarker {
+    pub(crate) fn is_active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+
+    pub(crate) fn x_on(&self, geometry: &DisplayRowGeometryState) -> Option<f32> {
+        match self {
+            Self::Active { row, x } if row.is_active_on(geometry) => Some(*x),
+            Self::Active { .. } | Self::Inactive => None,
+        }
     }
 }
 

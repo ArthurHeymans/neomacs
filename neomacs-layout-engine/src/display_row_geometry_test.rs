@@ -653,6 +653,38 @@ fn display_row_geometry_state_builds_typed_row_markers() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_row_scoped_start_marker() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let other_row_geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 85.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    let marker = geometry.start_marker_at_x(42.5);
+
+    assert_eq!(
+        marker,
+        DisplayRowStartMarker::Active {
+            row: DisplayRowMarker::Row(2),
+            x: 42.5,
+        }
+    );
+    assert_eq!(marker.x_on(&geometry), Some(42.5));
+    assert_eq!(marker.x_on(&other_row_geometry), None);
+    assert!(marker.is_active());
+    assert!(!DisplayRowStartMarker::Inactive.is_active());
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_row_output() {
     let geometry = DisplayRowGeometryState {
         row: 3,
