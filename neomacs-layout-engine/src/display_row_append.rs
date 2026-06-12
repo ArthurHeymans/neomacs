@@ -19,7 +19,7 @@ use crate::display_row::{
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics,
-    DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvance,
+    DisplayTabPolicy, DisplayTextRunMeasurement,
 };
 #[cfg(test)]
 use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
@@ -516,7 +516,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    advance: f32,
+    measurement: DisplayTextRunMeasurement,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -565,7 +565,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut next_face_id = face_id.saturating_add(1);
-    let mut measurer = FixedGlyphAdvance::new(ch, face_id, advance);
+    let mut measurer = TextRunMeasurementMeasurer::new(face_id, measurement);
     let mut render_policy = MeasuredDisplayRowRenderPolicy {
         glyph_measurer: &mut measurer,
     };

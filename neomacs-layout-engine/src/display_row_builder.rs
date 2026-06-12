@@ -204,12 +204,14 @@ pub(crate) trait DisplayRowItemMeasurer {
     ) -> DisplayRowItemMeasurement<'a>;
 }
 
+#[cfg(test)]
 pub(crate) struct FixedGlyphAdvance {
     ch: char,
     face_id: u32,
     advance_px: f32,
 }
 
+#[cfg(test)]
 impl FixedGlyphAdvance {
     pub(crate) fn new(ch: char, face_id: u32, advance_px: f32) -> Self {
         Self {
@@ -220,6 +222,7 @@ impl FixedGlyphAdvance {
     }
 }
 
+#[cfg(test)]
 impl DisplayGlyphMeasurer for FixedGlyphAdvance {
     fn glyph_advance_px(
         &mut self,

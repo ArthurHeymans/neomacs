@@ -1052,7 +1052,7 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
         buf_id,
         &snapshot,
         7,
-        8.0,
+        DisplayTextRunMeasurement::uniform_for_text("a", 8.0),
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1145,7 +1145,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
         buf_id,
         &snapshot,
         7,
-        0.0,
+        DisplayTextRunMeasurement::uniform_for_text("\u{301}", 0.0),
         frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
     )

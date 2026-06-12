@@ -5514,6 +5514,9 @@ impl LayoutEngine {
                 CharPos0::new(charpos as usize),
                 CharPos0::new((charpos + 1) as usize),
             );
+            let mut ch_text = [0; 4];
+            let measurement =
+                DisplayTextRunMeasurement::uniform_for_text(ch.encode_utf8(&mut ch_text), advance);
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
@@ -5525,7 +5528,7 @@ impl LayoutEngine {
                 buf_id,
                 buffer,
                 current_text_face_id,
-                advance,
+                measurement,
                 frame,
                 DisplayRowPosition { x_px: x, col },
             ) else {
