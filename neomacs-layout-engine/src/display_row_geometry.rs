@@ -171,12 +171,12 @@ pub(crate) struct DisplayRowGeometryState {
 
 enum DisplayRowYRecorder<'a> {
     None,
-    RowYPositions(&'a mut Vec<f32>),
+    RowYPositions(&'a mut DisplayRowYPositions),
 }
 
 pub(crate) enum DisplayRowYRecording<'a> {
     None,
-    RowYPositions(&'a mut Vec<f32>),
+    RowYPositions(&'a mut DisplayRowYPositions),
 }
 
 pub(crate) struct DisplayRowGeometryCommitTarget<'a> {
@@ -270,7 +270,7 @@ impl DisplayRowYPositions {
     }
 
     pub(crate) fn recording(&mut self) -> DisplayRowYRecording<'_> {
-        DisplayRowYRecording::RowYPositions(&mut self.positions)
+        DisplayRowYRecording::RowYPositions(self)
     }
 
     #[cfg(test)]
@@ -289,7 +289,7 @@ impl<'a> DisplayRowGeometryCommitTarget<'a> {
 
     pub(crate) fn recording_row_y(
         vars: LegacyDisplayRowGeometryVars<'a>,
-        row_y_positions: &'a mut Vec<f32>,
+        row_y_positions: &'a mut DisplayRowYPositions,
     ) -> Self {
         Self {
             vars,

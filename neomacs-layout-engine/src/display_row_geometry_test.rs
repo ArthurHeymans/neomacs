@@ -449,7 +449,7 @@ fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     let mut row_extra_y = 0.0;
     let mut row_max_height = 1.0;
     let mut row_max_ascent = 1.0;
-    let mut row_y_positions = vec![8.0];
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
     cursor.commit(DisplayRowGeometryCommitTarget::recording_row_y(
         LegacyDisplayRowGeometryVars {
@@ -467,7 +467,37 @@ fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     assert_eq!(row_extra_y, 13.0);
     assert_eq!(row_max_height, 24.0);
     assert_eq!(row_max_ascent, 18.0);
-    assert_eq!(row_y_positions, vec![8.0, 120.0]);
+    assert_eq!(row_y_positions.recorded(), &[8.0, 120.0]);
+}
+
+#[test]
+fn display_row_geometry_commit_target_records_row_y_through_positions_wrapper() {
+    let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+        row: 5,
+        y: 120.0,
+        row_extra_y: 13.0,
+        height: 24.0,
+        ascent: 18.0,
+    });
+    let mut row = 0;
+    let mut y = 0.0;
+    let mut row_extra_y = 0.0;
+    let mut row_max_height = 1.0;
+    let mut row_max_ascent = 1.0;
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
+
+    cursor.commit(DisplayRowGeometryCommitTarget::recording_row_y(
+        LegacyDisplayRowGeometryVars {
+            row: &mut row,
+            y: &mut y,
+            row_extra_y: &mut row_extra_y,
+            row_max_height: &mut row_max_height,
+            row_max_ascent: &mut row_max_ascent,
+        },
+        &mut row_y_positions,
+    ));
+
+    assert_eq!(row_y_positions.recorded(), &[8.0, 120.0]);
 }
 
 #[test]
@@ -528,7 +558,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
-    let mut row_y_positions = vec![8.0];
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
     let transition = LegacyDisplayRowGeometryVars {
         row: &mut row,
@@ -551,7 +581,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
             5,
             7,
             13.0,
-            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+            row_y_positions.recording(),
         ),
     ))
     .transition;
@@ -578,7 +608,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
     assert_eq!(row_extra_y, 11.0);
     assert_eq!(row_max_height, 16.0);
     assert_eq!(row_max_ascent, 12.0);
-    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 11.0]);
+    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
 
 #[test]
@@ -588,7 +618,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
-    let mut row_y_positions = vec![8.0];
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
     let transition = LegacyDisplayRowGeometryVars {
         row: &mut row,
@@ -612,7 +642,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
             7,
             13.0,
             4.0,
-            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+            row_y_positions.recording(),
         ),
     ))
     .transition;
@@ -628,7 +658,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
         }
     );
     assert_eq!(row_extra_y, 15.0);
-    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 15.0]);
+    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 15.0]);
 }
 
 #[test]
@@ -638,7 +668,7 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
-    let mut row_y_positions = vec![8.0];
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
     let transition = LegacyDisplayRowGeometryVars {
         row: &mut row,
@@ -662,7 +692,7 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
             7,
             13.0,
             4.0,
-            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+            row_y_positions.recording(),
         ),
     ))
     .transition;
@@ -689,7 +719,7 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
     assert_eq!(row_extra_y, 15.0);
     assert_eq!(row_max_height, 16.0);
     assert_eq!(row_max_ascent, 12.0);
-    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 15.0]);
+    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 15.0]);
 }
 
 #[test]
@@ -699,7 +729,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
-    let mut row_y_positions = vec![8.0];
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
     let boundary = LegacyDisplayRowGeometryVars {
         row: &mut row,
@@ -722,7 +752,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
             5,
             7,
             13.0,
-            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+            row_y_positions.recording(),
         ),
     ));
 
@@ -752,7 +782,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
     assert_eq!(row_extra_y, 11.0);
     assert_eq!(row_max_height, 16.0);
     assert_eq!(row_max_ascent, 12.0);
-    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 11.0]);
+    assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
 
 #[test]
@@ -815,7 +845,7 @@ fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range()
         ascent: 12.0,
     };
 
-    let mut line_break_y_positions = vec![8.0];
+    let mut line_break_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let line_break = DisplayRowBoundaryTarget::line_break(
         DisplayRowHitRange {
             charpos_start: 11,
@@ -826,9 +856,9 @@ fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range()
         7,
         13.0,
         4.0,
-        DisplayRowYRecording::RowYPositions(&mut line_break_y_positions),
+        line_break_y_positions.recording(),
     );
-    let mut truncation_y_positions = vec![8.0];
+    let mut truncation_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let truncation = DisplayRowBoundaryTarget::truncation(
         DisplayRowHitRange {
             charpos_start: 11,
@@ -838,9 +868,9 @@ fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range()
         5,
         7,
         13.0,
-        DisplayRowYRecording::RowYPositions(&mut truncation_y_positions),
+        truncation_y_positions.recording(),
     );
-    let mut visual_wrap_y_positions = vec![8.0];
+    let mut visual_wrap_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let visual_wrap = DisplayRowBoundaryTarget::visual_wrap(
         DisplayRowHitRange {
             charpos_start: 11,
@@ -850,7 +880,7 @@ fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range()
         5,
         7,
         13.0,
-        DisplayRowYRecording::RowYPositions(&mut visual_wrap_y_positions),
+        visual_wrap_y_positions.recording(),
     );
 
     assert_eq!(line_break.hit_range.charpos_start, 11);
