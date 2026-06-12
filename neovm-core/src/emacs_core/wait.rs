@@ -205,7 +205,7 @@ pub(crate) struct WaitRequest {
 }
 
 impl WaitRequest {
-    pub(crate) fn accept_process_output(
+    fn accept_process_output(
         deadline: WaitDeadline,
         processes: ProcessWaitPolicy,
         timers: TimerWaitPolicy,
@@ -218,6 +218,20 @@ impl WaitRequest {
             redisplay: false,
             special_input: SpecialInputWaitPolicy::ServiceOnly,
         }
+    }
+
+    pub(crate) fn accept_process_output_with_timers(
+        deadline: WaitDeadline,
+        processes: ProcessWaitPolicy,
+    ) -> Self {
+        Self::accept_process_output(deadline, processes, TimerWaitPolicy::Run)
+    }
+
+    pub(crate) fn accept_process_output_without_timers(
+        deadline: WaitDeadline,
+        processes: ProcessWaitPolicy,
+    ) -> Self {
+        Self::accept_process_output(deadline, processes, TimerWaitPolicy::Suppress)
     }
 
     pub(crate) fn read_command_input(deadline: WaitDeadline) -> Self {
@@ -919,15 +933,29 @@ mod tests {
 
     #[test]
     fn wait_request_exposes_deadline_and_process_policy_queries() {
-        let request = WaitRequest::accept_process_output(
+        let request = WaitRequest::accept_process_output_with_timers(
             WaitDeadline::Poll,
             ProcessWaitPolicy::Target(12),
-            TimerWaitPolicy::Run,
         );
 
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.process_policy(), ProcessWaitPolicy::Target(12));
         assert_eq!(request.target_process(), Some(12));
+    }
+
+    #[test]
+    fn wait_request_accept_process_output_constructors_capture_timer_policy() {
+        let run = WaitRequest::accept_process_output_with_timers(
+            WaitDeadline::Poll,
+            ProcessWaitPolicy::Any,
+        );
+        let suppress = WaitRequest::accept_process_output_without_timers(
+            WaitDeadline::Poll,
+            ProcessWaitPolicy::Any,
+        );
+
+        assert!(run.runs_timers());
+        assert!(!suppress.runs_timers());
     }
 
     #[test]
