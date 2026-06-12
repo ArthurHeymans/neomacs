@@ -453,6 +453,30 @@ fn display_row_geometry_state_builds_text_row_output() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_text_matrix_row_begin() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    let begin = geometry.text_matrix_row_begin(5, 7, 13.0);
+
+    assert_eq!(
+        begin,
+        TextMatrixRowBegin {
+            matrix_row: 8,
+            row: 3,
+            col: 7,
+            y: 69.0,
+            x: 13.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_geometry_state_builds_append_placement_with_glyph_offset() {
     let geometry = DisplayRowGeometryState {
         row: 3,

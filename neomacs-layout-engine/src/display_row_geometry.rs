@@ -436,6 +436,15 @@ impl DisplayRowGeometryState {
         }
     }
 
+    pub(crate) fn text_matrix_row_begin(
+        &self,
+        row_base: usize,
+        col: usize,
+        x: f32,
+    ) -> TextMatrixRowBegin {
+        DisplayRowGeometryCursor::from_state(*self).text_matrix_row_begin(row_base, col, x)
+    }
+
     pub(crate) fn append_placement(&self, glyph_y_offset: f32) -> DisplayRowAppendPlacement {
         DisplayRowAppendPlacement {
             row: self.row,

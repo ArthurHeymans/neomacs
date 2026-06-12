@@ -11,8 +11,7 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowOutput,
-    WindowOutputEmitter,
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -3740,15 +3739,8 @@ impl LayoutEngine {
             params.text_bounds,
             params.selected,
         );
-        TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator).begin(
-            TextMatrixRowBegin {
-                matrix_row: text_matrix_row_base,
-                row,
-                col,
-                y,
-                x,
-            },
-        );
+        TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
+            .begin(current_row_geometry!().text_matrix_row_begin(text_matrix_row_base, col, x));
 
         let row_visibility_limit = DisplayRowVisibilityLimit {
             max_rows,
