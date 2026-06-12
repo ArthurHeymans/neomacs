@@ -69,9 +69,9 @@ pub fn try_run_compiled(
                 Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
                 Err(_) => CacheEntry::NotCompilable,
             }) {
-            // Only run native for a valid call (matching arity); a mismatch is a
-            // wrong-arg-count call the interpreter must signal.
-            CacheEntry::Compiled(leaf) if args.len() == leaf.arity() => Some(Rc::clone(leaf)),
+            // Only run native for a valid call (lambda-list range); a mismatch
+            // is a wrong-arg-count call the interpreter must signal.
+            CacheEntry::Compiled(leaf) if leaf.accepts(args.len()) => Some(Rc::clone(leaf)),
             _ => None,
         }
     });

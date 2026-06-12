@@ -363,9 +363,16 @@ impl std::error::Error for CompileError {}
 /// lifetime of this handle. The raw entry pointer makes this neither `Send` nor
 /// `Sync`, which is correct — the code is tied to its owning module.
 pub struct CompiledLeaf {
-    /// Number of fixed arguments the native code reads from the args pointer at
-    /// entry; the caller must pass exactly this many.
+    /// Number of fixed slots the native code reads from the args pointer at
+    /// entry: `nonrest` parameters (required + optional, nil-padded) plus one
+    /// slot for the `&rest` list when present. [`call`](Self::call) normalizes
+    /// an incoming argument list to exactly this many slots, mirroring the
+    /// interpreter's `run_frame` frame seeding.
     arity: usize,
+    /// Number of required parameters (lower bound of an acceptable call).
+    required: usize,
+    /// Whether the last native slot is a `&rest` list.
+    has_rest: bool,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -397,24 +404,52 @@ pub enum NativeRun {
 }
 
 impl CompiledLeaf {
-    /// The number of fixed arguments this compiled function expects.
+    /// The number of fixed slots the native code reads (see the field doc).
     pub fn arity(&self) -> usize {
         self.arity
     }
 
-    /// Execute the compiled function with `args` (whose length must equal
-    /// [`arity`](Self::arity)).
+    /// Whether a call with `n` arguments is valid for this function's lambda
+    /// list — the same predicate the interpreter's `run_frame` arity check
+    /// applies before signaling `wrong-number-of-arguments`.
+    pub fn accepts(&self, n: usize) -> bool {
+        let nonrest = self.arity - usize::from(self.has_rest);
+        self.required <= n && (self.has_rest || n <= nonrest)
+    }
+
+    /// Execute the compiled function with `args` (which must satisfy
+    /// [`accepts`](Self::accepts)).
+    ///
+    /// The argument list is normalized to the native frame exactly as the
+    /// interpreter's `run_frame` seeds it: missing `&optional` slots are
+    /// nil-padded, and with `&rest` the surplus arguments become a fresh list in
+    /// the final slot (allocated here, before entering native code; the caller's
+    /// rooting of `args` covers the elements, as it does for `run_frame`).
     ///
     /// `vmctx` is the `*mut Context` runtime-call shims re-enter through. It may
     /// be null **only** when the body performs no runtime re-entry (it contains
     /// no `Call`); allocation (`cons`) uses the thread-local heap and tolerates
     /// a null vmctx too.
     pub fn call(&self, vmctx: *mut u8, args: &[Value]) -> NativeRun {
-        debug_assert_eq!(args.len(), self.arity, "compiled call arity mismatch");
+        debug_assert!(self.accepts(args.len()), "compiled call arity mismatch");
         // Copy the argument bits into a contiguous i64 buffer for the native
         // ABI (no heap alloc for the common <= 8 args). A `Value` is an opaque
         // tagged word here; its `usize` bits ride unchanged in an `i64` slot.
-        let arg_bits: SmallVec<[i64; 8]> = args.iter().map(|v| v.bits() as i64).collect();
+        let nonrest = self.arity - usize::from(self.has_rest);
+        let mut arg_bits: SmallVec<[i64; 8]> =
+            args.iter().take(nonrest).map(|v| v.bits() as i64).collect();
+        // Nil-pad missing &optional parameters.
+        while arg_bits.len() < nonrest {
+            arg_bits.push(Value::NIL.bits() as i64);
+        }
+        if self.has_rest {
+            let rest = if args.len() > nonrest {
+                Value::list_from_slice(&args[nonrest..])
+            } else {
+                Value::NIL
+            };
+            arg_bits.push(rest.bits() as i64);
+        }
         let mut out: i64 = 0;
         // SAFETY: `entry` is finalized native code with ABI
         // `extern "C" fn(vmctx: *mut u8, args: *const i64, out: *mut i64) -> i64`
@@ -496,24 +531,29 @@ fn params_on_stack(f: &ByteCodeFunction) -> bool {
         )
 }
 
-/// Compile a [`ByteCodeFunction`] if it is a leaf with only required (stack)
-/// parameters; otherwise bail.
+/// Compile a [`ByteCodeFunction`] whose parameters live on the operand stack
+/// (lexical bytecode); otherwise bail.
 ///
-/// Supports 0+ required args (placed on the operand stack at entry, exactly as
-/// the interpreter does). Optional / `&rest` parameters — which need nil-padding
-/// and rest-list construction — are not handled yet, nor is dynamic-binding
-/// bytecode (whose params are not on the stack).
+/// `&optional` and `&rest` are supported: the native frame has one slot per
+/// non-rest parameter plus one for the rest list, and [`CompiledLeaf::call`]
+/// normalizes each incoming argument list to that frame (nil-padding, rest-list
+/// construction) exactly as the interpreter's `run_frame` seeds it.
+/// Dynamic-binding bytecode (params bound via `varbind`, not on the stack)
+/// still bails.
 pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, CompileError> {
-    if !f.params.optional.is_empty() || f.params.rest.is_some() {
+    let required = f.params.required.len();
+    let nonrest = required + f.params.optional.len();
+    let has_rest = f.params.rest.is_some();
+    let native_arity = nonrest + usize::from(has_rest);
+    if native_arity > 0 && !params_on_stack(f) {
+        // Params are dynamically bound, not on the stack — `StackRef` would not
+        // find them.
         return Err(CompileError::TakesArguments);
     }
-    let arity = f.params.required.len();
-    if arity > 0 && !params_on_stack(f) {
-        // Required params are dynamically bound, not on the stack — `StackRef`
-        // would not find them.
-        return Err(CompileError::TakesArguments);
-    }
-    lower_leaf(&f.ops, &f.constants, arity)
+    let mut leaf = lower_leaf(&f.ops, &f.constants, native_arity)?;
+    leaf.required = required;
+    leaf.has_rest = has_rest;
+    Ok(leaf)
 }
 
 /// Emit a speculation guard.
@@ -1800,6 +1840,10 @@ pub fn lower_leaf(
     let entry = module.get_finalized_function(fid);
     Ok(CompiledLeaf {
         arity,
+        // Plain fixed-arity defaults; compile_bytecode_function overrides for
+        // &optional/&rest lambda lists.
+        required: arity,
+        has_rest: false,
         entry,
         _module: module,
     })
@@ -2903,19 +2947,7 @@ mod tests {
     }
 
     #[test]
-    fn compile_bytecode_function_bails_on_optional_rest_or_dynamic_params() {
-        // &optional -> bail (nil-padding not handled).
-        let mut opt = ByteCodeFunction::new(LambdaParams {
-            required: Vec::new(),
-            optional: vec![crate::emacs_core::intern::SymId(1)],
-            rest: None,
-        });
-        opt.lexical = true;
-        assert!(matches!(
-            compile_bytecode_function(&opt),
-            Err(CompileError::TakesArguments)
-        ));
-
+    fn compile_bytecode_function_bails_on_dynamic_params() {
         // Required params but dynamic binding (not lexical, arglist not a
         // fixnum) -> params are not on the stack -> bail.
         let mut dynp = ByteCodeFunction::new(LambdaParams {
@@ -2930,6 +2962,66 @@ mod tests {
             compile_bytecode_function(&dynp),
             Err(CompileError::TakesArguments)
         ));
+    }
+
+    #[test]
+    fn compiles_optional_params_with_nil_padding() {
+        // (lambda (a &optional b) b): frame = [a, b]; missing b is nil-padded.
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: vec![crate::emacs_core::intern::SymId(2)],
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::StackRef(0), Op::Return]; // top of frame = b
+        f.max_stack = 16;
+        let leaf = compile_bytecode_function(&f).unwrap();
+        assert!(leaf.accepts(1) && leaf.accepts(2));
+        assert!(!leaf.accepts(0) && !leaf.accepts(3));
+        // One arg: b is nil.
+        assert_eq!(
+            leaf.call(core::ptr::null_mut(), &[Value::make_int(5)]),
+            NativeRun::Ok(Value::NIL.bits())
+        );
+        // Two args: b is supplied.
+        assert_eq!(
+            leaf.call(
+                core::ptr::null_mut(),
+                &[Value::make_int(5), Value::make_int(6)]
+            ),
+            NativeRun::Ok(Value::make_int(6).bits())
+        );
+    }
+
+    #[test]
+    fn compiles_rest_param_as_list() {
+        // (lambda (&rest xs) xs): frame = [xs]; surplus args become a list.
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: Some(crate::emacs_core::intern::SymId(1)),
+        });
+        f.lexical = true;
+        f.ops = vec![Op::StackRef(0), Op::Return];
+        f.max_stack = 16;
+        let leaf = compile_bytecode_function(&f).unwrap();
+        assert!(leaf.accepts(0) && leaf.accepts(5));
+        // No args: xs = nil.
+        assert_eq!(
+            leaf.call(core::ptr::null_mut(), &[]),
+            NativeRun::Ok(Value::NIL.bits())
+        );
+        // Two args: xs = (10 20).
+        let NativeRun::Ok(bits) = leaf.call(
+            core::ptr::null_mut(),
+            &[Value::make_int(10), Value::make_int(20)],
+        ) else {
+            panic!("rest call must succeed");
+        };
+        let xs = Value::from_bits(bits);
+        assert_eq!(xs.cons_car(), Value::make_int(10));
+        assert_eq!(xs.cons_cdr().cons_car(), Value::make_int(20));
+        assert!(xs.cons_cdr().cons_cdr().is_nil());
     }
 
     /// Run a nullary body through the Tier-0 interpreter (the correctness
