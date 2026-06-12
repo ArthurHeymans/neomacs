@@ -167,6 +167,57 @@ use crate::window::FrameManager;
 /// Unique identifier for a process.
 pub type ProcessId = u64;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessOutputServiceRequest {
+    None,
+    Any { target: Option<ProcessId> },
+    TargetOnly(ProcessId),
+}
+
+impl ProcessOutputServiceRequest {
+    pub(crate) fn none() -> Self {
+        Self::None
+    }
+
+    pub(crate) fn any(target: Option<ProcessId>) -> Self {
+        Self::Any { target }
+    }
+
+    pub(crate) fn target_only(target: ProcessId) -> Self {
+        Self::TargetOnly(target)
+    }
+
+    fn target_process(self) -> Option<ProcessId> {
+        match self {
+            Self::None | Self::Any { target: None } => None,
+            Self::Any {
+                target: Some(target),
+            }
+            | Self::TargetOnly(target) => Some(target),
+        }
+    }
+
+    fn live_processes(self, live_processes: Vec<ProcessId>) -> Vec<ProcessId> {
+        match self {
+            Self::None => Vec::new(),
+            Self::Any { .. } => live_processes,
+            Self::TargetOnly(target) => vec![target],
+        }
+    }
+
+    fn ready_processes(self, ready_processes: Vec<ProcessId>) -> Vec<ProcessId> {
+        match self {
+            Self::None => Vec::new(),
+            Self::Any { .. } => dedupe_process_ids(ready_processes),
+            Self::TargetOnly(target) => ready_processes
+                .contains(&target)
+                .then_some(target)
+                .into_iter()
+                .collect(),
+        }
+    }
+}
+
 const INPUT_WAKEUP_EVENT_KEY: usize = 0;
 
 /// Process family used by compatibility helpers.
@@ -2481,37 +2532,22 @@ impl super::eval::Context {
         );
     }
 
-    pub(crate) fn poll_process_output_for_wait_request(
+    pub(crate) fn poll_process_output_for_service_request(
         &mut self,
-        request: &WaitRequest,
+        request: &ProcessOutputServiceRequest,
     ) -> WaitProcessOutcome {
         let target_process = request.target_process();
-        let proc_ids = if !request.services_process_output() {
-            Vec::new()
-        } else if request.restricts_process_service_to_target() {
-            target_process.into_iter().collect::<Vec<_>>()
-        } else {
-            self.processes.live_process_ids()
-        };
+        let proc_ids = request.live_processes(self.processes.live_process_ids());
         self.poll_process_output_for_ids(proc_ids, target_process)
     }
 
-    pub(crate) fn poll_ready_process_output_for_wait_request(
+    pub(crate) fn poll_ready_process_output_for_service_request(
         &mut self,
         ready_processes: Vec<ProcessId>,
-        request: &WaitRequest,
+        request: &ProcessOutputServiceRequest,
     ) -> WaitProcessOutcome {
         let target_process = request.target_process();
-        let proc_ids = if !request.services_process_output() {
-            Vec::new()
-        } else if request.restricts_process_service_to_target() {
-            target_process
-                .filter(|target| ready_processes.contains(target))
-                .into_iter()
-                .collect::<Vec<_>>()
-        } else {
-            dedupe_process_ids(ready_processes)
-        };
+        let proc_ids = request.ready_processes(ready_processes);
 
         self.poll_process_output_for_ids(proc_ids, target_process)
     }

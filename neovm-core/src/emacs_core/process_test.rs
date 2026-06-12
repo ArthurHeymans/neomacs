@@ -2305,10 +2305,10 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
 #[test]
 fn process_service_accepts_wait_request_boundary() {
     let mut ev = Context::new();
-    let request = WaitRequest::timer_service(false);
+    let request = ProcessOutputServiceRequest::none();
 
-    let poll = ev.poll_process_output_for_wait_request(&request);
-    let ready = ev.poll_ready_process_output_for_wait_request(Vec::new(), &request);
+    let poll = ev.poll_process_output_for_service_request(&request);
+    let ready = ev.poll_ready_process_output_for_service_request(Vec::new(), &request);
     let _: WaitProcessOutcome = poll;
     let _: WaitProcessOutcome = ready;
 

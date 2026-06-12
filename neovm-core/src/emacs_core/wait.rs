@@ -9,7 +9,7 @@
 use std::time::{Duration, Instant};
 
 use super::error::Flow;
-use super::process::ProcessId;
+use super::process::{ProcessId, ProcessOutputServiceRequest};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitSourceEvents {
@@ -379,6 +379,19 @@ impl WaitRequest {
 
     pub(crate) fn services_process_output(self) -> bool {
         self.processes.services_processes()
+    }
+
+    fn process_output_service_request(self) -> ProcessOutputServiceRequest {
+        match self.processes {
+            ProcessWaitPolicy::None => ProcessOutputServiceRequest::none(),
+            ProcessWaitPolicy::ServiceAny | ProcessWaitPolicy::Any => {
+                ProcessOutputServiceRequest::any(None)
+            }
+            ProcessWaitPolicy::Target(target) => ProcessOutputServiceRequest::any(Some(target)),
+            ProcessWaitPolicy::TargetOnly(target) => {
+                ProcessOutputServiceRequest::target_only(target)
+            }
+        }
     }
 
     fn services_special_input(self) -> bool {
@@ -771,11 +784,13 @@ impl super::eval::Context {
         if request.runs_timers() {
             outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
         }
+        let process_request = request.process_output_service_request();
         let process_outcome = match process_service {
-            WaitProcessService::Poll => self.poll_process_output_for_wait_request(request),
-            WaitProcessService::Ready(ready_processes) => {
-                self.poll_ready_process_output_for_wait_request(ready_processes, request)
+            WaitProcessService::Poll => {
+                self.poll_process_output_for_service_request(&process_request)
             }
+            WaitProcessService::Ready(ready_processes) => self
+                .poll_ready_process_output_for_service_request(ready_processes, &process_request),
         };
         outcome.absorb_process_activity(process_outcome);
         if request.needs_redisplay_after_service(special_input, outcome) {
