@@ -1028,6 +1028,14 @@ impl<'a> Vm<'a> {
                     } else {
                         Value::NIL
                     };
+                    // JIT Phase 1: record the callee for direct-call speculation.
+                    // Only NAMED (symbol) callees carry a SymId; the call-site
+                    // index is `pc_local - 1` (pc was advanced past Call above).
+                    // GC-safe: a SymId is a stable index, never a heap pointer.
+                    #[cfg(feature = "jit")]
+                    if let ValueKind::Symbol(id) = func_val.kind() {
+                        func.runtime.record_call(pc_local - 1, ops_len, id);
+                    }
                     // GNU `bytecode.c:Bcall` polls `maybe_quit` before
                     // entering the callee. This is observable when bytecode
                     // sets `quit-flag` immediately before a call: the callee

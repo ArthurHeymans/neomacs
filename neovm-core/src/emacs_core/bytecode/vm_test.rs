@@ -1104,6 +1104,64 @@ fn vm_arithmetic_bcall_fast_path_observes_live_function_cell() {
     assert_eq!(result, Value::fixnum(99));
 }
 
+/// JIT Phase 1b: executing a call to a NAMED function records the callee in the
+/// function's call-site feedback (monomorphically), at the right instruction
+/// index, without disturbing the result. Feature-gated (the `runtime` field +
+/// the recording exist only under `jit`).
+#[cfg(feature = "jit")]
+#[test]
+fn vm_records_call_feedback_for_named_callee() {
+    use crate::emacs_core::jit::CallFeedback;
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+
+    // Callee `vm-feedback-callee`: a bytecode function returning 99.
+    let callee_sym = intern("vm-feedback-callee");
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("x")],
+        optional: vec![],
+        rest: None,
+    });
+    let v99 = callee.add_constant(Value::fixnum(99));
+    callee.ops = vec![Op::Constant(v99), Op::Return];
+    callee.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(callee_sym, Value::make_bytecode(callee));
+
+    // Caller: push the SYMBOL, push an arg, Call(1). The Call is ops[2].
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_sym));
+    let arg_idx = caller.add_constant(Value::fixnum(1));
+    caller.ops = vec![
+        Op::Constant(callee_idx),
+        Op::Constant(arg_idx),
+        Op::Call(1),
+        Op::Return,
+    ];
+    caller.max_stack = 3;
+
+    // No feedback before execution.
+    assert_eq!(caller.runtime.call_feedback(2), CallFeedback::Uninit);
+
+    for _ in 0..3 {
+        let mut vm = new_vm(&mut eval);
+        let result = vm.execute(&caller, vec![]).expect("caller executes");
+        assert_eq!(result, Value::fixnum(99));
+    }
+
+    // The call site (ops[2]) is now monomorphic on the named callee; the
+    // Constant site (ops[0]) is not a call and stays Uninit.
+    assert_eq!(
+        caller.runtime.call_feedback(2),
+        CallFeedback::Monomorphic(callee_sym)
+    );
+    assert_eq!(caller.runtime.call_feedback(0), CallFeedback::Uninit);
+}
+
 #[test]
 fn vm_compiled_maphash_closure_mutates_captured_accumulator_like_face_list() {
     crate::test_utils::init_test_tracing();
