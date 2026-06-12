@@ -129,11 +129,44 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
 - Phase 4 DONE (`fe1748c0c`): background GC thread + `HeapPtr` Send wrapper +
   blocking handshake (mutator blocks during mark = exclusive access, no pause
   win yet). Proves heap-sharing/threading/handshake. Gated NEOVM_GC_CONCURRENT.
-- Phase 5 — Move marking onto the GC thread NON-BLOCKING: it drains the gray
-  queue + a shared SATB buffer concurrently; mutator only does the two
-  handshakes. Allocate-black. This is the final, race-prone phase — needs
-  ThreadSanitizer + heavy stress; gc_stress passing is necessary not sufficient.
-  Concrete design worked out:
+- Phase 5 DONE (machinery, TSan-verified) — non-blocking concurrent marking.
+  The GC thread marks the CONS SPINE while the mutator runs; every non-cons (and
+  any non-owned cons) is DEFERRED to the stop-the-world termination. This sized
+  the shared surface down to what is provably race-safe:
+  * The GC thread holds NO `&mut TaggedHeap` (two `&mut` to one heap is UB even
+    with atomic fields). It marks conses with a SELF-FREE free function
+    (`atomic_mark_owned_cons_ptr`): the mark bitmap is at `block_base +
+    CONS_MARKS_OFFSET`, derivable from the cons pointer alone; the bit is set
+    with an atomic `fetch_or`. Children are read with atomic `load_car/load_cdr`.
+  * An IMMUTABLE `Arc<HashSet>` of owned cons-block bases (snapshotted at the STW
+    start) tells the thread which conses it may mark vs. defer. Read-only sharing
+    is always race-safe; new blocks during marking are absent (their conses
+    allocate-black and never enter the GC's gray).
+  * The dump address span (two immutable usizes) lets it skip permanent-black
+    dump conses (their young children come from the remembered set).
+  * SATB barrier logs overwritten children to a shared `Mutex<Vec>`; the GC
+    drains it into gray. Allocate-black (cons + non-cons) on every mutation-time
+    allocation. Termination: `join` (stop thread, fold residual SATB+deferred
+    into gray) -> reseed roots -> drain stop-the-world -> deferred sweep.
+  * Driver: `start_concurrent_mark` / poll `concurrent_mark_done` /
+    `terminate_concurrent_mark` slotted into `gc_collect_from_current_roots_impl`
+    before the incremental branches; `should_run_concurrent` gates on
+    NEOVM_GC_CONCURRENT + partitioned post-dump heap.
+  * THE GROWABLE BLOCKER (below) is SIDESTEPPED, not solved: by deferring ALL
+    veclikes/strings to the STW termination, the GC thread never reads a
+    reallocatable backing buffer. The expensive cons-spine traversal is what runs
+    concurrently; veclike tracing stays in the (now smaller) termination pause.
+  * VERIFIED: ThreadSanitizer (`-Zsanitizer=thread -Zbuild-std`) on a focused
+    300k-cons test with GC/mutator overlap reports 0 data races; full default
+    suite 7092/7092. TSan caught nothing, but a correctness bug DID surface in
+    testing: `note_heap_write_record` short-circuited before `record_heap_write`
+    when owner-tracking was Disabled, so the SATB log never fired — fixed with a
+    `TAGGED_HEAP_CONCURRENT_ACTIVE` thread-local in the fast-path gate.
+  * NEXT (Phase 5b, optimization): trace deferred veclikes concurrently too, via
+    the retired-buffer scheme (option (b) below), to shrink the termination pause
+    further. Until then the termination is O(reachable veclikes + cons residue).
+
+  Original design notes (kept for reference):
   * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes
     overwritten values to a shared `Mutex<Vec<TaggedValue>>` (or condvar-backed)
     that the GC thread drains into gray. Mark bits + slots are already atomic

@@ -6614,9 +6614,12 @@ impl Context {
         // the raw heap pointer, which aliases `self.tagged_heap`.
         unsafe {
             if force_complete {
-                // Explicit GC: drive any in-flight incremental cycle to
-                // completion, then run a fresh full stop-the-world collection of
-                // the current state (GNU `garbage-collect` semantics).
+                // Explicit GC: drive any in-flight cycle to completion, then run
+                // a fresh full stop-the-world collection of the current state
+                // (GNU `garbage-collect` semantics).
+                if (*heap_ptr).concurrent_mark_running() {
+                    self.terminate_concurrent_mark(heap_ptr);
+                }
                 if (*heap_ptr).mark_in_progress() {
                     self.terminate_incremental_mark(heap_ptr);
                 }
@@ -6634,6 +6637,18 @@ impl Context {
                 } else {
                     return; // more sweep to do; defer bookkeeping
                 }
+            } else if (*heap_ptr).concurrent_mark_running() {
+                // Phase 5: the background GC thread is marking while we run. If it
+                // has drained, run the (short) stop-the-world termination; else
+                // return immediately and keep mutating — this is the pause win.
+                // A hard cap forces termination if allocation outruns marking.
+                let cap = (*heap_ptr).gc_threshold().saturating_mul(4);
+                let must_finish = (*heap_ptr).bytes_since_gc() > cap;
+                if (*heap_ptr).concurrent_mark_done() || must_finish {
+                    self.terminate_concurrent_mark(heap_ptr);
+                    return; // sweep deferred; cycle not done yet
+                }
+                return; // GC thread still marking; mutator continues
             } else if (*heap_ptr).mark_in_progress() {
                 // Phase 2: advance the in-flight mark, unless allocation has
                 // outrun marking past a hard cap (then finish it now so the heap
@@ -6646,6 +6661,11 @@ impl Context {
                 // Terminate the mark; this defers the sweep to later safe points.
                 self.terminate_incremental_mark(heap_ptr);
                 return; // sweep deferred; cycle not done yet
+            } else if (*heap_ptr).should_run_concurrent() {
+                // Phase 5 start handshake: snapshot roots, hand the gray queue to
+                // the GC thread, and return — marking now overlaps the mutator.
+                self.start_concurrent_mark(heap_ptr);
+                return; // marking concurrent; cycle not done yet
             } else if (*heap_ptr).should_run_incremental() {
                 // Phase 1: start a fresh incremental mark (initial root snapshot).
                 (*heap_ptr).incremental_begin();
@@ -6748,6 +6768,51 @@ impl Context {
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             eprintln!(
                 "NEOVM_GC mark_termination {}us [roots={roots_us}us drain={drain_us}us]",
+                term_t0.elapsed().as_micros()
+            );
+        }
+    }
+
+    /// Start a non-blocking concurrent mark (Phase 5): clear marks + seed the
+    /// complete root snapshot into the gray queue, then hand it to the GC thread.
+    /// Returns immediately — the mutator runs while the GC thread marks conses.
+    ///
+    /// Safety: as `seed_all_context_roots`.
+    unsafe fn start_concurrent_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        unsafe {
+            (*heap_ptr).concurrent_begin();
+            self.seed_all_context_roots(heap_ptr);
+            (*heap_ptr).launch_concurrent_mark();
+        }
+    }
+
+    /// Terminate a concurrent mark stop-the-world: stop the GC thread and reclaim
+    /// the heap, re-snapshot the COMPLETE root set (covering root->white edges the
+    /// barrier cannot observe), drain the residual marking (deferred non-cons +
+    /// SATB + roots) to a fixpoint, then start the deferred sweep. The expensive
+    /// cons-spine traversal already happened concurrently; this pause finishes the
+    /// veclike/string traces and any roots that appeared during the window.
+    ///
+    /// Safety: as `seed_all_context_roots`.
+    unsafe fn terminate_concurrent_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        let term_t0 = std::time::Instant::now();
+        let (roots_us, drain_us);
+        unsafe {
+            // Reclaim exclusive heap ownership: stop the GC thread and fold its
+            // residual SATB + deferred work back into the gray queue.
+            (*heap_ptr).join_concurrent_mark();
+            (*heap_ptr).reseed_runtime_and_remembered_roots();
+            self.seed_all_context_roots(heap_ptr);
+            roots_us = term_t0.elapsed().as_micros();
+            let bytes_before = (*heap_ptr).live_bytes();
+            let pause_t0 = std::time::Instant::now();
+            (*heap_ptr).incremental_drain_all();
+            drain_us = pause_t0.elapsed().as_micros();
+            (*heap_ptr).incremental_finish(bytes_before, pause_t0);
+        }
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us]",
                 term_t0.elapsed().as_micros()
             );
         }

@@ -139,6 +139,10 @@ thread_local! {
     /// Mirrors `TaggedHeap::partition_dump` so the write-barrier hot path can
     /// decide whether to run without dereferencing the heap.
     static TAGGED_HEAP_PARTITION_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    /// Mirrors `TaggedHeap::concurrent_mark_running` so the write-barrier hot
+    /// path keeps reaching `record_heap_write` (for the concurrent SATB log)
+    /// even when owner-tracking is Disabled and the partition is inactive.
+    static TAGGED_HEAP_CONCURRENT_ACTIVE: Cell<bool> = const { Cell::new(false) };
     /// Auto-allocated heap for tests that construct Values without a Context.
     #[cfg(test)]
     static TEST_FALLBACK_TAGGED_HEAP: std::cell::RefCell<Option<Box<TaggedHeap>>> =
@@ -163,11 +167,43 @@ fn next_tagged_heap_identity() -> usize {
 struct HeapPtr(*mut TaggedHeap);
 unsafe impl Send for HeapPtr {}
 
+/// A non-blocking concurrent-mark job (Phase 5). Carries everything the GC
+/// thread needs WITHOUT a `&mut TaggedHeap` — two threads holding `&mut` to the
+/// same heap is UB in Rust's model even with atomic fields. The GC thread marks
+/// only conses (fixed 16B; car/cdr + mark bits are atomic) and DEFERS every
+/// non-cons (and any non-owned cons) to `deferred`, traced at the stop-the-world
+/// termination. So it touches no growable/reallocatable heap structure.
+struct ConcurrentMarkJob {
+    /// Root snapshot, moved out of the heap's gray queue at the start handshake.
+    gray: Vec<TaggedValue>,
+    /// Base addresses of every owned cons block at the snapshot (immutable,
+    /// read-only on the GC thread). A cons whose block base is here is markable
+    /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
+    owned_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// Dump (pdump mmap) address span; conses inside are permanent-black and
+    /// their young children come from the remembered set, so they are skipped.
+    dump_lo: usize,
+    dump_hi: usize,
+    /// Overwritten children appended by the mutator's SATB barrier; drained here.
+    satb: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
+    /// Non-cons / non-owned-cons values to trace at the STW termination.
+    deferred: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
+    /// Set when gray + SATB are drained (tentatively done); polled by the mutator.
+    done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Set by the mutator to ask this loop to exit.
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Signalled when the loop exits, so the mutator can take over the gray queue.
+    exited: std::sync::mpsc::Sender<()>,
+}
+
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
 /// thread signals when finished so the mutator can resume.
 enum GcRequest {
     /// Drain the gray queue (mark to a fixpoint) on the GC thread.
     MarkAll(HeapPtr, std::sync::mpsc::Sender<()>),
+    /// Non-blocking concurrent mark (Phase 5): mark conses while the mutator
+    /// runs; defer everything else to the termination handshake.
+    ConcurrentMark(ConcurrentMarkJob),
 }
 
 static GC_THREAD: std::sync::OnceLock<std::sync::Mutex<std::sync::mpsc::Sender<GcRequest>>> =
@@ -190,6 +226,9 @@ fn gc_thread() -> std::sync::MutexGuard<'static, std::sync::mpsc::Sender<GcReque
                                 unsafe { (*p).mark_all() };
                                 let _ = done.send(());
                             }
+                            GcRequest::ConcurrentMark(job) => {
+                                run_concurrent_mark(job);
+                            }
                         }
                     }
                 })
@@ -200,11 +239,91 @@ fn gc_thread() -> std::sync::MutexGuard<'static, std::sync::mpsc::Sender<GcReque
         .expect("gc thread channel poisoned")
 }
 
+/// Atomically set an OWNED cons cell's mark bit using only its pointer. The mark
+/// bitmap lives at `block_base + CONS_MARKS_OFFSET`, derivable from the pointer
+/// with no `&TaggedHeap`, so the concurrent GC thread marks conses without an
+/// aliasing `&mut`. Returns true if this call set the bit (was unmarked).
+///
+/// # Safety
+/// `ptr` must be a cell-aligned cons in an owned `ConsBlock` (verified by the
+/// caller against the start-of-cycle owned-base set). Passing a dump/mapped cons
+/// would scribble a mark bit into the wrong region.
+#[inline]
+unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
+    let addr = ptr as usize;
+    let base = addr & !(CONS_BLOCK_ALIGN - 1);
+    let index = (addr - base) / size_of::<ConsCell>();
+    let word_index = index / CONS_MARK_BITS_PER_WORD;
+    let mask = 1usize << (index % CONS_MARK_BITS_PER_WORD);
+    let word = unsafe { &*((base + CONS_MARKS_OFFSET) as *const AtomicUsize).add(word_index) };
+    (word.fetch_or(mask, Ordering::Relaxed) & mask) == 0
+}
+
+/// The background concurrent-mark loop (Phase 5). Runs on the "neovm-gc" thread
+/// with no `&mut TaggedHeap`: it marks conses via atomic block-bitmap ops +
+/// atomic car/cdr loads, and defers all non-cons (and non-owned conses) to the
+/// mutator's stop-the-world termination. Loops draining its local gray queue and
+/// the shared SATB buffer until both are empty and the mutator asks it to stop.
+fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
+    use std::sync::atomic::Ordering;
+    loop {
+        // Drain the local gray worklist (GC-thread-owned; no sharing).
+        while let Some(val) = job.gray.pop() {
+            if val.is_cons() {
+                let ptr = val.xcons_ptr();
+                let addr = ptr as usize;
+                if addr >= job.dump_lo && addr < job.dump_hi {
+                    continue; // dump cons: permanent black, children via remembered set
+                }
+                let base = addr & !(CONS_BLOCK_ALIGN - 1);
+                if !job.owned_bases.contains(&base) {
+                    // Mapped (non-dump) or new-block cons — let the mutator's
+                    // termination mark it through the full `mark_value` path.
+                    job.deferred.lock().unwrap().push(val);
+                    continue;
+                }
+                if unsafe { atomic_mark_owned_cons_ptr(ptr) } {
+                    let car = unsafe { (*ptr).load_car() };
+                    let cdr = unsafe { (*ptr).load_cdr() };
+                    if car.is_heap_object() {
+                        job.gray.push(car);
+                    }
+                    if cdr.is_heap_object() {
+                        job.gray.push(cdr);
+                    }
+                }
+            } else if val.is_heap_object() {
+                // Float/string/veclike: backing may be reallocated by the mutator,
+                // so never read it here — defer the trace to the STW termination.
+                job.deferred.lock().unwrap().push(val);
+            }
+        }
+        // Fold the mutator's SATB log (overwritten children) into gray.
+        let batch = { std::mem::take(&mut *job.satb.lock().unwrap()) };
+        if batch.is_empty() {
+            // Tentatively drained. Advertise done; exit if the mutator asked.
+            job.done.store(true, Ordering::Release);
+            if job.stop.load(Ordering::Acquire) {
+                break;
+            }
+            // Idle wait — short enough to react to new SATB / stop quickly,
+            // long enough not to peg a core. (A real thread sleep, not the
+            // harness-blocked foreground sleep.)
+            std::thread::sleep(std::time::Duration::from_micros(100));
+        } else {
+            job.done.store(false, Ordering::Release);
+            job.gray.extend(batch);
+        }
+    }
+    let _ = job.exited.send(());
+}
+
 /// Set the thread-local tagged heap pointer.
 pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP.with(|h| h.set(heap as *mut TaggedHeap));
     TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(heap.write_tracking_mode()));
     TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(heap.partition_dump));
+    TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(heap.concurrent_mark_running));
 }
 
 /// Return the current thread's tagged heap identity, if one is installed.
@@ -278,7 +397,10 @@ fn note_heap_write_record(record: HeapWriteRecord) {
     // The dump partition needs the barrier even when owner-tracking is off, to
     // record mutations of dumped objects into the remembered set.
     let partition = TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.get());
-    if disabled && !partition {
+    // The concurrent collector needs the barrier (its SATB log) regardless of
+    // owner-tracking / partition state.
+    let concurrent = TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get());
+    if disabled && !partition && !concurrent {
         return;
     }
     with_tagged_heap(|heap| heap.record_heap_write(record));
@@ -861,11 +983,29 @@ pub struct TaggedHeap {
     /// default incremental collector uses the dirty-owner re-trace and is
     /// unaffected. (The concurrent path in Phase 5 will rely on SATB instead.)
     satb_active: bool,
-    /// Run the mark phase on the background GC thread (Phase 4). Env
-    /// `NEOVM_GC_CONCURRENT`, default off. For now the mutator BLOCKS while the
-    /// GC thread marks (exclusive access, no pause win yet) — this proves the
-    /// thread + heap-sharing + handshake. Phase 5 makes it genuinely concurrent.
+    /// Run the mark phase on the background GC thread. Env
+    /// `NEOVM_GC_CONCURRENT`, default off. Phase 5 overlaps marking with the
+    /// mutator (verified under ThreadSanitizer).
     concurrent: bool,
+    /// True between a concurrent mark's start and termination handshakes — the
+    /// mutator runs while the GC thread marks.
+    concurrent_mark_running: bool,
+    /// Mutator->GC channel (Phase 5): the SATB barrier appends the overwritten
+    /// children here (locked); the GC thread drains them into its gray worklist.
+    satb_shared: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
+    /// Veclikes/strings the GC thread reached but did NOT trace (their backing
+    /// can be reallocated by the mutator, so reading it concurrently would be a
+    /// UAF). They are marked black and parked here, then traced at the
+    /// termination handshake while the mutator is stopped.
+    deferred_veclikes: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
+    /// GC thread sets this (Release) when gray + SATB are drained; the mutator
+    /// polls it (Acquire) at safe points to decide when to terminate.
+    gc_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Mutator sets this (Release) to ask the GC thread to finish and exit.
+    gc_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Receives when the GC thread has exited its mark loop (so the mutator's
+    /// termination can safely take over the gray queue). Set at start.
+    gc_exited: Option<std::sync::mpsc::Receiver<()>>,
 
     // --- Incremental sweep state (step 8). After a mark terminates, the sweep
     // is deferred and drained in bounded slices at later safe points, so the
@@ -932,6 +1072,12 @@ impl TaggedHeap {
             incremental_mark_us: 0,
             satb_active: std::env::var("NEOVM_GC_SATB").as_deref() == Ok("1"),
             concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() == Ok("1"),
+            concurrent_mark_running: false,
+            satb_shared: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            deferred_veclikes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            gc_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            gc_exited: None,
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
@@ -1183,12 +1329,16 @@ impl TaggedHeap {
         {
             self.mapped_remembered.insert(record.owner.bits());
         }
-        // SATB (snapshot-at-the-beginning) barrier for the concurrent collector.
-        // This runs BEFORE the store, so the owner's current children are its
-        // PRE-overwrite values; pushing them to gray keeps the start-of-cycle
-        // snapshot live. Unlike the dirty-owner re-trace, nothing is re-read
-        // later, so a concurrent GC thread never touches a reallocated owner.
-        if self.satb_active && self.mark_in_progress {
+        // SATB (snapshot-at-the-beginning) barrier. Runs BEFORE the store, so the
+        // owner's current children are its PRE-overwrite values; logging them
+        // keeps the start-of-cycle snapshot live. Nothing is re-read later, so
+        // the concurrent GC thread never touches a reallocated owner.
+        if self.concurrent_mark_running {
+            // Phase 5: the background GC thread is marking — log overwritten
+            // children to the shared buffer it drains (not the local gray queue,
+            // which belongs to the GC thread for the duration).
+            self.push_value_children_to_satb_shared(record.owner);
+        } else if self.satb_active && self.mark_in_progress {
             self.push_value_children_to_gray(record.owner, "satb-snapshot");
         }
         if self.write_tracking_mode == WriteTrackingMode::Disabled {
@@ -1394,10 +1544,13 @@ impl TaggedHeap {
     /// Allocate a cons cell. Returns a tagged Value.
     pub fn alloc_cons(&mut self, car: TaggedValue, cdr: TaggedValue) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::ConsCells, 1);
-        // Allocate-black during the deferred sweep: a cons born while a block is
-        // still unswept must survive that block's reclaim. New conses are always
-        // live, so marking them is exact (cleared at the next mark's begin).
-        let sweeping = self.sweep_in_progress;
+        // Allocate-black during the deferred sweep OR a concurrent mark: a cons
+        // born while a block is unswept must survive that block's reclaim, and a
+        // cons born during concurrent marking must survive this cycle's sweep
+        // (the GC thread won't reach it, and a black owner may point at it before
+        // the next root snapshot). New conses are always live, so this is exact
+        // (cleared at the next mark's begin).
+        let sweeping = self.sweep_in_progress || self.concurrent_mark_running;
         if !self.cons_free_list.is_null() {
             let cell = self.cons_free_list;
             unsafe {
@@ -1938,6 +2091,12 @@ impl TaggedHeap {
     /// Link a non-cons object into the all_objects intrusive list.
     fn link_object(&mut self, header: &mut GcHeader) {
         header.next = self.all_objects;
+        // Allocate-black during a concurrent mark: the GC thread defers non-cons
+        // objects and never reaches one born mid-cycle, so mark it live now to
+        // survive this cycle's sweep (cleared at the next mark's begin).
+        if self.concurrent_mark_running {
+            header.set_marked(true);
+        }
         let ptr = header as *mut GcHeader;
         let inserted = self.non_cons_object_addrs.insert(ptr as usize);
         debug_assert!(inserted, "non-cons object linked twice");
@@ -1948,6 +2107,9 @@ impl TaggedHeap {
     fn link_veclike(&mut self, header: *mut VecLikeHeader) {
         unsafe {
             (*header).gc.next = self.all_objects;
+            if self.concurrent_mark_running {
+                (*header).gc.set_marked(true); // allocate-black (see `link_object`)
+            }
             let gc_header = &mut (*header).gc as *mut GcHeader;
             let inserted = self.non_cons_object_addrs.insert(gc_header as usize);
             debug_assert!(inserted, "veclike object linked twice");
@@ -2863,6 +3025,117 @@ impl TaggedHeap {
     }
 
     // ---------------------------------------------------------------------
+    // Concurrent marking (Phase 5) — background GC thread marks while the
+    // mutator runs; only two short stop-the-world handshakes (start + finish).
+    // ---------------------------------------------------------------------
+
+    /// True if the concurrent collector is enabled (env `NEOVM_GC_CONCURRENT`).
+    pub fn concurrent_enabled(&self) -> bool {
+        self.concurrent
+    }
+
+    /// True if a concurrent mark should drive THIS collection: enabled, and on a
+    /// partitioned post-dump heap (the young/old split bounds what is traced).
+    pub fn should_run_concurrent(&self) -> bool {
+        self.concurrent && self.partition_dump && self.dump_blackened
+    }
+
+    /// True while the background GC thread is marking (between the start and
+    /// termination handshakes) — the mutator is running concurrently.
+    pub fn concurrent_mark_running(&self) -> bool {
+        self.concurrent_mark_running
+    }
+
+    /// The GC thread has tentatively drained gray + SATB (Acquire pairs with the
+    /// thread's Release). The mutator polls this at safe points to terminate.
+    pub fn concurrent_mark_done(&self) -> bool {
+        self.gc_done.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Start-of-cycle setup for a concurrent mark: clear young marks + seed the
+    /// collector-internal and remembered roots (`begin_collection`), arm
+    /// `mark_in_progress`. The caller then seeds context roots and calls
+    /// `launch_concurrent_mark`. No Steele owner-tracking: the concurrent SATB
+    /// barrier (keyed on `concurrent_mark_running`) preserves the snapshot.
+    pub(crate) fn concurrent_begin(&mut self) {
+        self.begin_collection();
+        self.mark_in_progress = true;
+        self.incremental_mark_us = 0;
+    }
+
+    /// Hand the seeded gray queue (the full root snapshot) to the GC thread and
+    /// start non-blocking concurrent marking. Returns immediately; the mutator
+    /// resumes while the GC thread marks. Allocate-black turns on so new objects
+    /// survive this cycle's sweep, and the SATB barrier starts logging.
+    pub(crate) fn launch_concurrent_mark(&mut self) {
+        // Immutable snapshot of owned cons-block bases — read-only on the GC
+        // thread. New blocks allocated during marking are absent, which is fine:
+        // their conses allocate-black and never enter the GC's gray queue.
+        let mut owned = std::collections::HashSet::with_capacity(self.cons_blocks.len());
+        for block in &self.cons_blocks {
+            owned.insert(block.base_addr());
+        }
+        let gray = std::mem::take(&mut self.gray_queue);
+        let (exited_tx, exited_rx) = std::sync::mpsc::channel();
+        self.gc_done
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.gc_stop
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.gc_exited = Some(exited_rx);
+        self.concurrent_mark_running = true;
+        // Keep the write-barrier fast path reaching `record_heap_write` so the
+        // SATB log fires even with owner-tracking Disabled / no partition.
+        TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(true));
+        let job = ConcurrentMarkJob {
+            gray,
+            owned_bases: std::sync::Arc::new(owned),
+            dump_lo: self.dump_addr_lo,
+            dump_hi: self.dump_addr_hi,
+            satb: self.satb_shared.clone(),
+            deferred: self.deferred_veclikes.clone(),
+            done: self.gc_done.clone(),
+            stop: self.gc_stop.clone(),
+            exited: exited_tx,
+        };
+        gc_thread()
+            .send(GcRequest::ConcurrentMark(job))
+            .expect("neovm-gc thread is gone");
+    }
+
+    /// Stop the GC thread and fold its residual work back into the gray queue so
+    /// the caller can finish marking stop-the-world. After this, the heap is
+    /// owned exclusively by the mutator again (the GC thread has exited its loop).
+    pub(crate) fn join_concurrent_mark(&mut self) {
+        self.gc_stop
+            .store(true, std::sync::atomic::Ordering::Release);
+        if let Some(rx) = self.gc_exited.take() {
+            let _ = rx.recv(); // block until the GC thread leaves its mark loop
+        }
+        self.concurrent_mark_running = false;
+        TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(false));
+        // Residual SATB (children overwritten after the GC's last drain) +
+        // deferred (every non-cons + non-owned cons the GC parked) become gray;
+        // the caller reseeds roots, then drains to a fixpoint stop-the-world.
+        let satb = std::mem::take(&mut *self.satb_shared.lock().unwrap());
+        self.gray_queue.extend(satb);
+        let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
+        self.gray_queue.extend(deferred);
+    }
+
+    /// SATB barrier path for concurrent marking: append the owner's current
+    /// (pre-overwrite) children to the shared buffer the GC thread drains. Reuses
+    /// the gray-queue child enumeration with `self.gray_queue` as scratch (it is
+    /// empty during concurrent marking — the snapshot was handed to the thread).
+    fn push_value_children_to_satb_shared(&mut self, owner: TaggedValue) {
+        debug_assert!(self.gray_queue.is_empty());
+        self.push_value_children_to_gray(owner, "satb-concurrent");
+        if !self.gray_queue.is_empty() {
+            let mut shared = self.satb_shared.lock().unwrap();
+            shared.extend(self.gray_queue.drain(..));
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Incremental marking (step 7)
     // ---------------------------------------------------------------------
 
@@ -2870,9 +3143,8 @@ impl TaggedHeap {
     /// partitioned cycles (after the first-cycle promotion), so promotion and
     /// blackening stay on the simple stop-the-world path.
     pub fn should_run_incremental(&self) -> bool {
-        // In concurrent mode (Phase 4) every collection goes through the
-        // stop-the-world path, which offloads the mark to the GC thread; the
-        // incremental slicer is bypassed until Phase 5 reconciles the two.
+        // Concurrent mode owns partitioned cycles when enabled; the incremental
+        // slicer drives them only when the concurrent collector is off.
         self.partition_dump && self.dump_blackened && !self.concurrent
     }
 
@@ -3838,6 +4110,81 @@ mod ownership_tests {
         let second_id = TaggedHeap::new().identity();
 
         assert_ne!(first_id, second_id);
+    }
+
+    /// Phase 5: drive a non-blocking concurrent mark with the GC thread marking
+    /// a large cons spine while THIS thread mutates (firing the SATB barrier) and
+    /// allocates (allocate-black). The graph is large on purpose so marking is
+    /// still in flight during the mutation, creating genuine overlap — run under
+    /// ThreadSanitizer (`-Zsanitizer=thread`) this is the race check. The liveness
+    /// asserts confirm the snapshot + SATB + allocate-black retain the right set.
+    #[test]
+    fn concurrent_mark_overlaps_mutation_and_retains_live_set() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A long reachable list: head -> ... -> tail (cdr-terminated with a
+        // fixnum so traversal stops). Root = head.
+        const N: i64 = 300_000;
+        let mut list = TaggedValue::fixnum(0); // non-heap terminator
+        for i in 0..N {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let head = list;
+        // A second cons whose cdr we will rewire mid-mark (exercises SATB).
+        let pivot = heap.alloc_cons(TaggedValue::fixnum(-1), head);
+        // Unreachable garbage allocated before the mark begins.
+        let _garbage = heap.alloc_cons(TaggedValue::fixnum(-2), TaggedValue::fixnum(0));
+        let allocated_before = heap.cons_live_count;
+
+        // Start the concurrent mark with `pivot` as the sole root (pivot -> head
+        // -> whole list). begin_collection clears marks + seeds internal roots.
+        heap.concurrent_begin();
+        heap.seed_root(pivot);
+        heap.launch_concurrent_mark();
+
+        // While the GC thread marks: rewire pivot.cdr to a fresh cons D (the old
+        // child `head` is logged to SATB and must stay live), and churn-allocate
+        // (each new cons is born black). The list is long enough that the GC is
+        // still traversing it during this.
+        let d = heap.alloc_cons(TaggedValue::fixnum(7), head);
+        assert!(crate::tagged::mutate::set_cons_cdr(pivot, d));
+        for _ in 0..5_000 {
+            let _ = heap.alloc_cons(TaggedValue::fixnum(0), TaggedValue::fixnum(0));
+        }
+
+        // Wait for the GC thread to drain, then terminate stop-the-world.
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(pivot);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // The whole list (N) + pivot + D survive; `head` is retained as floating
+        // garbage via SATB (it left pivot's cdr but was logged); the churn conses
+        // are allocate-black so they survive this cycle too; only `_garbage` is
+        // reclaimed. So exactly one cons (the pre-mark garbage) was swept.
+        assert_eq!(
+            heap.cons_live_count,
+            allocated_before + 1 /* D */ + 5_000 /* churn */ - 1, /* garbage */
+            "concurrent mark must retain the live + SATB + allocate-black set",
+        );
+        // The reachable spine is intact: walk pivot -> D -> head -> ... and check
+        // a few cars (reading a swept cons would be caught by the sanitizer).
+        let after_pivot = unsafe { (*pivot.xcons_ptr()).load_cdr() };
+        assert!(after_pivot.is_cons());
+        let head_again = unsafe { (*after_pivot.xcons_ptr()).load_cdr() };
+        assert!(head_again.is_cons());
+        assert_eq!(
+            unsafe { (*head_again.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(N - 1).0,
+        );
     }
 
     #[test]
