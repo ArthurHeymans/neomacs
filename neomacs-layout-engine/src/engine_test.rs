@@ -73,6 +73,33 @@ fn grow_only_minibuffer_shrinks_only_when_visible_region_is_empty() {
 }
 
 #[test]
+fn word_wrap_break_candidate_records_rewind_position_and_clears() {
+    let mut candidate = WordWrapBreakCandidate::default();
+
+    assert!(!candidate.is_available());
+
+    candidate.record(
+        7,
+        42,
+        3,
+        (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+    );
+
+    assert!(candidate.is_available());
+    assert_eq!(candidate.byte_idx(), 7);
+    assert_eq!(candidate.charpos(), 42);
+    assert_eq!(candidate.display_point_count(), 3);
+    assert_eq!(
+        candidate.row_display_positions(),
+        (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13)))
+    );
+
+    candidate.clear();
+
+    assert!(!candidate.is_available());
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(

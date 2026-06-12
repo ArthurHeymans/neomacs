@@ -374,6 +374,16 @@ struct VisualCursorGeometryContext {
     window_top: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct WordWrapBreakCandidate {
+    byte_idx: usize,
+    charpos: i64,
+    display_point_count: usize,
+    row_first_display_pos: Option<LispCharPos1>,
+    row_last_display_pos: Option<LispCharPos1>,
+    available: bool,
+}
+
 impl CursorGeometrySource {
     fn from_captured_cursor(
         cursor: &CapturedCursorInfo,
@@ -467,6 +477,47 @@ fn update_cursor_info_for_main_char(
         return;
     }
     cursor.slot_width = Some(advance.max(1.0));
+}
+
+impl WordWrapBreakCandidate {
+    fn record(
+        &mut self,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+    ) {
+        self.byte_idx = byte_idx;
+        self.charpos = charpos;
+        self.display_point_count = display_point_count;
+        self.row_first_display_pos = row_display_positions.0;
+        self.row_last_display_pos = row_display_positions.1;
+        self.available = true;
+    }
+
+    fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    fn is_available(&self) -> bool {
+        self.available
+    }
+
+    fn byte_idx(&self) -> usize {
+        self.byte_idx
+    }
+
+    fn charpos(&self) -> i64 {
+        self.charpos
+    }
+
+    fn display_point_count(&self) -> usize {
+        self.display_point_count
+    }
+
+    fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
+        (self.row_first_display_pos, self.row_last_display_pos)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -3447,14 +3498,7 @@ impl LayoutEngine {
         let mut hscroll_remaining = hscroll;
 
         // Word-wrap break tracking
-        let mut wrap_break_byte_idx = 0usize;
-        let mut wrap_break_charpos = window_start;
-        let mut _wrap_break_x: f32 = 0.0;
-        let mut _wrap_break_col = 0usize;
-        let mut wrap_break_display_point_count = 0usize;
-        let mut wrap_break_row_first_display_pos: Option<LispCharPos1> = None;
-        let mut wrap_break_row_last_display_pos: Option<LispCharPos1> = None;
-        let mut wrap_has_break = false;
+        let mut wrap_break = WordWrapBreakCandidate::default();
         let mut word_wrap_may_wrap = false;
 
         // Line/wrap prefix tracking: 0=none, 1=line-prefix, 2=wrap-prefix
@@ -3639,14 +3683,12 @@ impl LayoutEngine {
                 if params.word_wrap && word_wrap_may_wrap && char_can_wrap_before_basic($ch) {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    wrap_break_byte_idx = $break_byte_idx;
-                    wrap_break_charpos = charpos;
-                    wrap_break_display_point_count = output_emitter.display_point_len();
-                    (
-                        wrap_break_row_first_display_pos,
-                        wrap_break_row_last_display_pos,
-                    ) = output_emitter.current_row_display_positions();
-                    wrap_has_break = true;
+                    wrap_break.record(
+                        $break_byte_idx,
+                        charpos,
+                        output_emitter.display_point_len(),
+                        output_emitter.current_row_display_positions(),
+                    );
                 }
             };
         }
@@ -4544,7 +4586,7 @@ impl LayoutEngine {
                         need_line_number = lnum_enabled;
                         hscroll_remaining = hscroll;
                         word_wrap_may_wrap = false;
-                        wrap_has_break = false;
+                        wrap_break.clear();
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
                         if has_prefix {
                             need_prefix = 1;
@@ -4659,7 +4701,7 @@ impl LayoutEngine {
                 need_line_number = lnum_enabled;
                 hscroll_remaining = hscroll;
                 word_wrap_may_wrap = false;
-                wrap_has_break = false;
+                wrap_break.clear();
                 if has_prefix {
                     need_prefix = 1;
                 }
@@ -5101,21 +5143,23 @@ impl LayoutEngine {
                     }
                     col = 0;
                     word_wrap_may_wrap = false;
-                    wrap_has_break = false;
+                    wrap_break.clear();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
                         need_prefix = 1;
                     }
                     continue;
-                } else if params.word_wrap && wrap_has_break {
+                } else if params.word_wrap && wrap_break.is_available() {
                     // Word-wrap: rewind to last break point
-                    output_emitter.truncate_display_points(wrap_break_display_point_count);
+                    output_emitter.truncate_display_points(wrap_break.display_point_count());
+                    let (row_first_display_pos, row_last_display_pos) =
+                        wrap_break.row_display_positions();
                     output_emitter.restore_current_row_display_positions(
-                        wrap_break_row_first_display_pos,
-                        wrap_break_row_last_display_pos,
+                        row_first_display_pos,
+                        row_last_display_pos,
                     );
-                    byte_idx = wrap_break_byte_idx;
-                    charpos = wrap_break_charpos;
+                    byte_idx = wrap_break.byte_idx();
+                    charpos = wrap_break.charpos();
                     col = 0;
 
                     row_geometry.mark_current_row_flag_kind(
@@ -5157,7 +5201,7 @@ impl LayoutEngine {
                         row_limit,
                     );
                     word_wrap_may_wrap = false;
-                    wrap_has_break = false;
+                    wrap_break.clear();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
                         need_prefix = 2;
