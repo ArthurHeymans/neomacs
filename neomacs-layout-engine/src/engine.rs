@@ -525,6 +525,15 @@ struct DisplayRowGeometryCursor {
     metrics: CurrentDisplayRowMetrics,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowGeometryState {
+    row: usize,
+    y: f32,
+    row_extra_y: f32,
+    height: f32,
+    ascent: f32,
+}
+
 impl CurrentDisplayRowMetrics {
     fn new(height: f32, ascent: f32) -> Self {
         Self { height, ascent }
@@ -654,14 +663,14 @@ impl DisplayRowGeometryCursor {
         }
     }
 
-    fn into_parts(self) -> (usize, f32, f32, f32, f32) {
-        (
-            self.row,
-            self.y,
-            self.row_extra_y,
-            self.metrics.height(),
-            self.metrics.ascent(),
-        )
+    fn state(&self) -> DisplayRowGeometryState {
+        DisplayRowGeometryState {
+            row: self.row,
+            y: self.y,
+            row_extra_y: self.row_extra_y,
+            height: self.metrics.height(),
+            ascent: self.metrics.ascent(),
+        }
     }
 }
 
@@ -1713,7 +1722,12 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
             );
             let begin_row = row_cursor.text_matrix_row_begin(row_base, 0, content_x);
-            (*row, *y, *row_extra_y, *row_max_height, *row_max_ascent) = row_cursor.into_parts();
+            let state = row_cursor.state();
+            *row = state.row;
+            *y = state.y;
+            *row_extra_y = state.row_extra_y;
+            *row_max_height = state.height;
+            *row_max_ascent = state.ascent;
             if *row >= max_rows {
                 finish_text_matrix_row(builder, output_emitter, finished_row);
                 builder.end_row();
@@ -4204,7 +4218,12 @@ impl LayoutEngine {
                         DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
+                    let state = row_cursor.state();
+                    row = state.row;
+                    y = state.y;
+                    row_extra_y = state.row_extra_y;
+                    row_max_height = state.height;
+                    row_max_ascent = state.ascent;
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -4835,8 +4854,12 @@ impl LayoutEngine {
                         );
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
-                            row_cursor.into_parts();
+                        let state = row_cursor.state();
+                        row = state.row;
+                        y = state.y;
+                        row_extra_y = state.row_extra_y;
+                        row_max_height = state.height;
+                        row_max_ascent = state.ascent;
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -4962,7 +4985,12 @@ impl LayoutEngine {
                     DisplayRowAdvanceKind::LineBreak { line_spacing },
                 );
                 let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
+                let state = row_cursor.state();
+                row = state.row;
+                y = state.y;
+                row_extra_y = state.row_extra_y;
+                row_max_height = state.height;
+                row_max_ascent = state.ascent;
                 row_y_positions.push(y);
                 let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,
@@ -5087,8 +5115,12 @@ impl LayoutEngine {
                         );
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
-                            row_cursor.into_parts();
+                        let state = row_cursor.state();
+                        row = state.row;
+                        y = state.y;
+                        row_extra_y = state.row_extra_y;
+                        row_max_height = state.height;
+                        row_max_ascent = state.ascent;
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -5137,8 +5169,12 @@ impl LayoutEngine {
                         );
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
-                            row_cursor.into_parts();
+                        let state = row_cursor.state();
+                        row = state.row;
+                        y = state.y;
+                        row_extra_y = state.row_extra_y;
+                        row_max_height = state.height;
+                        row_max_ascent = state.ascent;
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -5443,7 +5479,12 @@ impl LayoutEngine {
                         DisplayRowAdvanceKind::Truncation,
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
+                    let state = row_cursor.state();
+                    row = state.row;
+                    y = state.y;
+                    row_extra_y = state.row_extra_y;
+                    row_max_height = state.height;
+                    row_max_ascent = state.ascent;
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -5499,7 +5540,12 @@ impl LayoutEngine {
                         DisplayRowAdvanceKind::VisualWrap,
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
+                    let state = row_cursor.state();
+                    row = state.row;
+                    y = state.y;
+                    row_extra_y = state.row_extra_y;
+                    row_max_height = state.height;
+                    row_max_ascent = state.ascent;
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -5557,7 +5603,12 @@ impl LayoutEngine {
                         DisplayRowAdvanceKind::VisualWrap,
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
-                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
+                    let state = row_cursor.state();
+                    row = state.row;
+                    y = state.y;
+                    row_extra_y = state.row_extra_y;
+                    row_max_height = state.height;
+                    row_max_ascent = state.ascent;
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
