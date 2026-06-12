@@ -3487,13 +3487,7 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
-
-                    if face_metrics.row_height > row_max_height {
-                        row_max_height = face_metrics.row_height;
-                    }
-                    if face_metrics.ascent > row_max_ascent {
-                        row_max_ascent = face_metrics.ascent;
-                    }
+                    active_face_state.expand_row_extents(&mut row_max_height, &mut row_max_ascent);
 
                     current_face_id += 1;
 
