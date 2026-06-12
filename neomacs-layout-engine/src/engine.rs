@@ -3531,30 +3531,21 @@ impl LayoutEngine {
                     self.current_resolved_family = current_font_family.clone();
                     self.resolved_family_face_id = face_id;
                     let display_row_face = resolved_display_row_face(face_id, &resolved, metrics);
-                    face_space_w = if frame_params.window_system {
-                        display_row_face_glyph_advance(
-                            &mut self.font_metrics,
-                            &display_row_face,
-                            ' ',
-                            1,
-                            char_w,
-                            face_char_w,
-                        )
+                    let advance_quantization = if frame_params.window_system {
+                        GlyphAdvanceQuantization::PreserveLogicalPixels
                     } else {
-                        char_advance(
-                            &mut self.ascii_width_cache,
-                            false,
-                            &mut self.font_metrics,
-                            ' ',
-                            1,
-                            char_w,
-                            current_font_size_px,
-                            face_char_w,
-                            &self.current_resolved_family,
-                            current_font_weight,
-                            current_font_italic,
-                        )
+                        GlyphAdvanceQuantization::SnapToIntegerPixels
                     };
+                    face_space_w = display_row_face_glyph_advance(
+                        &mut self.font_metrics,
+                        frame_params.window_system,
+                        &display_row_face,
+                        ' ',
+                        1,
+                        char_w,
+                        face_char_w,
+                        advance_quantization,
+                    );
 
                     insert_resolved_display_row_face(
                         &mut self.matrix_builder,
@@ -7183,15 +7174,26 @@ fn char_pixel_advance(
 
 fn display_row_face_glyph_advance(
     font_metrics_svc: &mut Option<FontMetricsService>,
+    use_font_metrics: bool,
     face: &DisplayRowFace,
     ch: char,
     columns: u8,
     fallback_char_width: f32,
     fallback_advance_px: f32,
+    quantization: GlyphAdvanceQuantization,
 ) -> f32 {
     let faces = [face.clone()];
-    let mut measurer =
-        DisplayRowGlyphMeasurer::new(&faces, font_metrics_svc.as_mut(), fallback_char_width);
+    let font_metrics = if use_font_metrics {
+        font_metrics_svc.as_mut()
+    } else {
+        None
+    };
+    let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
+        &faces,
+        font_metrics,
+        fallback_char_width,
+        quantization,
+    );
     measurer
         .glyph_advance_px(ch, face.face_id, columns, fallback_advance_px)
         .unwrap_or(fallback_advance_px)

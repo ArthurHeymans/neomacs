@@ -333,11 +333,25 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
         font_metrics: Option<&'a mut FontMetricsService>,
         fallback_char_width: f32,
     ) -> Self {
+        Self::with_quantization(
+            faces,
+            font_metrics,
+            fallback_char_width,
+            GlyphAdvanceQuantization::PreserveLogicalPixels,
+        )
+    }
+
+    pub(crate) fn with_quantization(
+        faces: &'a [DisplayRowFace],
+        font_metrics: Option<&'a mut FontMetricsService>,
+        fallback_char_width: f32,
+        quantization: GlyphAdvanceQuantization,
+    ) -> Self {
         Self {
             faces,
             font_metrics,
             fallback_char_width,
-            quantization: GlyphAdvanceQuantization::PreserveLogicalPixels,
+            quantization,
         }
     }
 

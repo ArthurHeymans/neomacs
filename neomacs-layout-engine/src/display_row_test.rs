@@ -1328,6 +1328,21 @@ fn display_row_glyph_measurer_preserves_fractional_gui_advances() {
 }
 
 #[test]
+fn display_row_glyph_measurer_can_snap_terminal_advances() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let faces = vec![DisplayRowFace::from_resolved(1, &base)];
+    let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
+        &faces,
+        None,
+        7.2,
+        GlyphAdvanceQuantization::SnapToIntegerPixels,
+    );
+
+    assert_eq!(measurer.glyph_advance_px('x', 1, 1, 7.2), Some(7.0));
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(
