@@ -369,6 +369,44 @@ impl DisplayTextRunClusterAdvances {
     }
 }
 
+struct DisplayTextRunMeasurementPlan;
+
+impl DisplayTextRunMeasurementPlan {
+    fn from_shaped_glyphs(
+        text: &str,
+        glyphs: impl IntoIterator<Item = ShapedGlyph>,
+        face_char_width_px: f32,
+        fallback_char_width_px: f32,
+        quantization: GlyphAdvanceQuantization,
+    ) -> DisplayTextRunMeasurement {
+        let cluster_advances =
+            DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), glyphs);
+        let face_char_width_px = face_char_width_px.max(fallback_char_width_px).max(1.0);
+        let fallback_char_width_px = fallback_char_width_px.max(face_char_width_px).max(1.0);
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .filter_map(|(char_offset, (byte_offset, ch))| {
+                let measured = cluster_advances.advance_at(byte_offset)?;
+                let columns = crate::composition::base_width_cols(ch);
+                let minimum = f32::from(columns.max(1)) * face_char_width_px;
+                let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
+                Some(DisplayTextRunAdvance::new(
+                    char_offset,
+                    byte_offset,
+                    quantization.resolve(Some(measured), fallback, minimum),
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        if advances.is_empty() {
+            DisplayTextRunMeasurement::PerChar
+        } else {
+            DisplayTextRunMeasurement::Measured(advances)
+        }
+    }
+}
+
 impl<'a> DisplayRowGlyphMeasurer<'a> {
     pub(crate) fn new(
         faces: &'a [DisplayRowFace],
@@ -460,36 +498,18 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return DisplayTextRunMeasurement::PerChar;
         }
 
-        let cluster_advances =
-            DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), shaped);
-
         let face_char_width = face
             .font_char_width
             .max(self.fallback_char_width)
             .max(fallback_char_width_px)
             .max(1.0);
-        let fallback_char_width_px = fallback_char_width_px.max(face_char_width).max(1.0);
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .filter_map(|(char_offset, (byte_offset, ch))| {
-                let measured = cluster_advances.advance_at(byte_offset)?;
-                let columns = crate::composition::base_width_cols(ch);
-                let minimum = f32::from(columns.max(1)) * face_char_width;
-                let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
-                Some(DisplayTextRunAdvance::new(
-                    char_offset,
-                    byte_offset,
-                    self.quantization.resolve(Some(measured), fallback, minimum),
-                ))
-            })
-            .collect::<Vec<_>>();
-
-        if advances.is_empty() {
-            DisplayTextRunMeasurement::PerChar
-        } else {
-            DisplayTextRunMeasurement::Measured(advances)
-        }
+        DisplayTextRunMeasurementPlan::from_shaped_glyphs(
+            text,
+            shaped,
+            face_char_width,
+            fallback_char_width_px,
+            self.quantization,
+        )
     }
 }
 
