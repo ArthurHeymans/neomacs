@@ -12,12 +12,19 @@ use super::error::Flow;
 use super::process::ProcessId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitBackendEvents {
+pub(crate) struct WaitSourceEvents {
     input_wakeup: bool,
     ready_processes: Vec<ProcessId>,
 }
 
-impl WaitBackendEvents {
+impl WaitSourceEvents {
+    pub(crate) fn from_ready_processes(processes: Vec<ProcessId>) -> Self {
+        Self {
+            input_wakeup: false,
+            ready_processes: processes,
+        }
+    }
+
     pub(crate) fn record_input_wakeup(&mut self) {
         self.input_wakeup = true;
     }
@@ -444,7 +451,7 @@ impl WaitBlockActivity {
         }
     }
 
-    fn from_backend_events(events: WaitBackendEvents) -> Self {
+    fn from_source_events(events: WaitSourceEvents) -> Self {
         Self {
             input_wakeup: events.has_input_wakeup(),
             process_service: WaitProcessService::Ready(events.into_ready_processes()),
@@ -569,7 +576,7 @@ impl super::eval::Context {
                         .processes
                         .wait_for_backend_events(wait_time, interest)
                         .unwrap_or_default();
-                    WaitBlockActivity::from_backend_events(backend)
+                    WaitBlockActivity::from_source_events(backend)
                 }
                 WaitBlockStrategy::HostInput => {
                     let _ = self.wait_for_next_host_input_event(
@@ -579,8 +586,8 @@ impl super::eval::Context {
                     WaitBlockActivity::poll()
                 }
                 WaitBlockStrategy::ProcessOutput => {
-                    let ready_processes = self.processes.wait_for_output(wait_time);
-                    WaitBlockActivity::ready_processes(ready_processes)
+                    let events = self.processes.wait_for_process_events(wait_time);
+                    WaitBlockActivity::from_source_events(events)
                 }
                 WaitBlockStrategy::Sleep => {
                     std::thread::sleep(wait_time);
@@ -698,8 +705,8 @@ mod tests {
     }
 
     #[test]
-    fn backend_events_record_input_wakeup_explicitly() {
-        let mut events = WaitBackendEvents::default();
+    fn source_events_record_input_wakeup_explicitly() {
+        let mut events = WaitSourceEvents::default();
 
         events.record_input_wakeup();
 
@@ -708,8 +715,8 @@ mod tests {
     }
 
     #[test]
-    fn backend_events_record_ready_processes_explicitly() {
-        let mut events = WaitBackendEvents::default();
+    fn source_events_record_ready_processes_explicitly() {
+        let mut events = WaitSourceEvents::default();
 
         events.record_ready_process(7);
 
@@ -718,12 +725,12 @@ mod tests {
     }
 
     #[test]
-    fn block_activity_from_backend_events_preserves_wakeup_and_processes() {
-        let mut events = WaitBackendEvents::default();
+    fn block_activity_from_source_events_preserves_wakeup_and_processes() {
+        let mut events = WaitSourceEvents::default();
         events.record_input_wakeup();
         events.record_ready_process(3);
 
-        let activity = WaitBlockActivity::from_backend_events(events);
+        let activity = WaitBlockActivity::from_source_events(events);
 
         assert!(activity.has_input_wakeup());
         assert_eq!(

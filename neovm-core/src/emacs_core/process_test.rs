@@ -2357,6 +2357,16 @@ fn wait_backend_process_interest_ignores_input_wakeup_fd() {
 }
 
 #[test]
+fn process_wait_events_use_structured_event_shape() {
+    let processes = ProcessManager::new();
+
+    let events = processes.wait_for_process_events(Duration::ZERO);
+
+    assert!(!events.has_input_wakeup());
+    assert!(events.ready_processes().is_empty());
+}
+
+#[test]
 #[cfg(unix)]
 fn wait_scheduler_uses_registered_input_wakeup_backend() {
     use std::io::Write;

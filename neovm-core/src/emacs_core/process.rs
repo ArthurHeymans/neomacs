@@ -42,8 +42,8 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    ProcessWaitPolicy, TimerWaitPolicy, WaitBackendEvents, WaitBackendInterest, WaitCompletion,
-    WaitDeadline, WaitRequest, WaitServiceOutcome,
+    ProcessWaitPolicy, TimerWaitPolicy, WaitBackendInterest, WaitCompletion, WaitDeadline,
+    WaitRequest, WaitServiceOutcome, WaitSourceEvents,
 };
 
 /// OS socket owned by a network process.
@@ -489,7 +489,7 @@ impl ProcessWaitBackend {
         processes: &HashMap<ProcessId, Process>,
         timeout: std::time::Duration,
         interest: WaitBackendInterest,
-    ) -> Option<WaitBackendEvents> {
+    ) -> Option<WaitSourceEvents> {
         if let Some(ref poller) = self.poller {
             let deadline = Instant::now() + timeout;
             loop {
@@ -502,7 +502,7 @@ impl ProcessWaitBackend {
                 let mut events = polling::Events::new();
                 match poller.wait(&mut events, Some(wait_time)) {
                     Ok(_) => {
-                        let mut backend = WaitBackendEvents::default();
+                        let mut backend = WaitSourceEvents::default();
                         for event in events.iter() {
                             if event.key == INPUT_WAKEUP_EVENT_KEY {
                                 if interest.wants_input_wakeup() {
@@ -1746,6 +1746,18 @@ impl ProcessManager {
         ProcessOutputRead::NoSource
     }
 
+    pub(crate) fn wait_for_process_events(&self, timeout: std::time::Duration) -> WaitSourceEvents {
+        if let Some(events) =
+            self.wait_for_backend_events(timeout, WaitBackendInterest::processes_only())
+        {
+            return events;
+        }
+
+        // No poller available — sleep fallback
+        std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
+        WaitSourceEvents::from_ready_processes(self.live_process_ids())
+    }
+
     /// Wait for any child process to have output ready, with timeout.
     ///
     /// Uses `polling::Poller` (epoll/kqueue/wepoll) for efficient blocking
@@ -1754,15 +1766,7 @@ impl ProcessManager {
     ///
     /// Falls back to a brief sleep if the poller is unavailable.
     pub fn wait_for_output(&self, timeout: std::time::Duration) -> Vec<ProcessId> {
-        if let Some(events) =
-            self.wait_for_backend_events(timeout, WaitBackendInterest::processes_only())
-        {
-            return events.into_ready_processes();
-        }
-
-        // No poller available — sleep fallback
-        std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
-        self.live_process_ids()
+        self.wait_for_process_events(timeout).into_ready_processes()
     }
 
     #[cfg(unix)]
@@ -1783,7 +1787,7 @@ impl ProcessManager {
         &self,
         timeout: std::time::Duration,
         interest: WaitBackendInterest,
-    ) -> Option<WaitBackendEvents> {
+    ) -> Option<WaitSourceEvents> {
         self.wait_backend
             .wait_for_events(&self.processes, timeout, interest)
     }
