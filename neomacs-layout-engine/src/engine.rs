@@ -3096,7 +3096,6 @@ impl LayoutEngine {
             ascent: default_face_ascent,
             space_width: char_w,
         };
-
         // Face resolution state
         let mut face_next_check: usize = 0;
         // Load the frame-wide face-id counter so this window's
@@ -3124,6 +3123,7 @@ impl LayoutEngine {
         let mut current_face =
             DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face);
         face_metrics = current_face.layout_metrics();
+        let mut face_render_state = current_face.render_state();
         let default_measurement_face = current_face.measurement_face().clone();
 
         if let Some(echo_message) = echo_message {
@@ -3433,6 +3433,7 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     current_face = resolved_measured_face.into_active_face();
                     face_metrics = current_face.layout_metrics();
+                    face_render_state = current_face.render_state();
 
                     if face_metrics.row_height > row_max_height {
                         row_max_height = face_metrics.row_height;
@@ -3659,7 +3660,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: face_metrics.row_height,
                                 face_ascent: face_metrics.ascent,
-                                bg: current_face.background(),
+                                bg: face_render_state.background,
                                 byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3842,7 +3843,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: char_h,
                                 face_ascent: face_metrics.ascent,
-                                bg: current_face.background(),
+                                bg: face_render_state.background,
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3910,7 +3911,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: face_metrics.row_height,
                                 face_ascent: face_metrics.ascent,
-                                bg: current_face.background(),
+                                bg: face_render_state.background,
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3973,7 +3974,7 @@ impl LayoutEngine {
                                     face_w: face_metrics.char_width,
                                     face_h: face_metrics.row_height,
                                     face_ascent: face_metrics.ascent,
-                                    bg: current_face.background(),
+                                    bg: face_render_state.background,
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4118,7 +4119,7 @@ impl LayoutEngine {
                                     face_w: face_metrics.char_width,
                                     face_h: face_metrics.row_height,
                                     face_ascent: face_metrics.ascent,
-                                    bg: current_face.background(),
+                                    bg: face_render_state.background,
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4230,7 +4231,7 @@ impl LayoutEngine {
                                         face_w: face_metrics.char_width,
                                         face_h: cursor_face_h,
                                         face_ascent: cursor_face_ascent,
-                                        bg: current_face.background(),
+                                        bg: face_render_state.background,
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4286,7 +4287,7 @@ impl LayoutEngine {
                                         face_w: face_metrics.char_width,
                                         face_h: face_metrics.row_height,
                                         face_ascent: face_metrics.ascent,
-                                        bg: current_face.background(),
+                                        bg: face_render_state.background,
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4497,7 +4498,7 @@ impl LayoutEngine {
                             face_w: face_metrics.char_width,
                             face_h: face_metrics.row_height,
                             face_ascent: face_metrics.ascent,
-                            bg: current_face.background(),
+                            bg: face_render_state.background,
                             byte_idx: ch_start_byte_idx,
                             col,
                             matrix_row: row,
@@ -5255,7 +5256,7 @@ impl LayoutEngine {
                         face_w: face_metrics.char_width,
                         face_h: face_metrics.row_height,
                         face_ascent: face_metrics.ascent,
-                        bg: current_face.background(),
+                        bg: face_render_state.background,
                         byte_idx: ch_start_byte_idx,
                         col,
                         matrix_row: row,
@@ -5479,7 +5480,7 @@ impl LayoutEngine {
                     face_w: face_metrics.char_width,
                     face_h: face_metrics.row_height,
                     face_ascent: face_metrics.ascent,
-                    bg: current_face.background(),
+                    bg: face_render_state.background,
                     byte_idx,
                     col,
                     matrix_row: row,

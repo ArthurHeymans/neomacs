@@ -716,6 +716,12 @@ pub(crate) struct DisplayRowActiveFace {
     background: Color,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowActiveFaceRenderState {
+    pub(crate) face_id: u32,
+    pub(crate) background: Color,
+}
+
 impl DisplayRowActiveFace {
     pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
         let background = Color::from_pixel(resolved_face.bg);
@@ -744,6 +750,13 @@ impl DisplayRowActiveFace {
         self.metrics
     }
 
+    pub(crate) fn render_state(&self) -> DisplayRowActiveFaceRenderState {
+        DisplayRowActiveFaceRenderState {
+            face_id: self.face_id(),
+            background: self.background,
+        }
+    }
+
     pub(crate) fn advance_for_char(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
@@ -761,10 +774,6 @@ impl DisplayRowActiveFace {
     ) -> DisplayTextRunMeasurement {
         self.measurement_face
             .text_run_measurement(font_metrics, text)
-    }
-
-    pub(crate) fn background(&self) -> Color {
-        self.background
     }
 }
 
