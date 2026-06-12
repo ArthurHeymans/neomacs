@@ -484,12 +484,15 @@ impl super::eval::Context {
         self.service_wait_request_processes(request, WaitProcessService::Poll)
     }
 
-    pub(crate) fn service_wait_request_ready_processes(
+    pub(crate) fn service_wait_request_source_events(
         &mut self,
         request: &WaitRequest,
-        ready_processes: Vec<ProcessId>,
+        events: WaitSourceEvents,
     ) -> Result<WaitServiceOutcome, Flow> {
-        self.service_wait_request_processes(request, WaitProcessService::Ready(ready_processes))
+        self.service_wait_request_block_activity(
+            request,
+            WaitBlockActivity::from_source_events(events),
+        )
     }
 
     fn service_wait_request_block_activity(
@@ -748,5 +751,18 @@ mod tests {
             activity.into_process_service(),
             WaitProcessService::Ready(vec![4, 9])
         );
+    }
+
+    #[test]
+    fn context_services_source_events_directly() {
+        let mut context = crate::emacs_core::eval::Context::new();
+        let request = WaitRequest::service_once(false);
+
+        let outcome = context
+            .service_wait_request_source_events(&request, WaitSourceEvents::default())
+            .expect("service source events");
+
+        assert!(!outcome.has_command_input_pending());
+        assert!(!outcome.has_any_process_activity());
     }
 }

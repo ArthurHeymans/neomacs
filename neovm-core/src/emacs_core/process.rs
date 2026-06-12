@@ -8292,11 +8292,11 @@ fn accept_process_output_run_target_follow_up(
     // can run its sentinel before we return.
     let mut idle_follow_up_polls = 0usize;
     loop {
-        let ready_processes = eval.processes.wait_for_output(Duration::ZERO);
-        let follow_up = if ready_processes.is_empty() {
-            eval.service_wait_request_once(&request.wait)?
+        let events = eval.processes.wait_for_process_events(Duration::ZERO);
+        let follow_up = if events.has_ready_processes() {
+            eval.service_wait_request_source_events(&request.wait, events)?
         } else {
-            eval.service_wait_request_ready_processes(&request.wait, ready_processes)?
+            eval.service_wait_request_once(&request.wait)?
         };
         if follow_up.has_target_process_activity() {
             idle_follow_up_polls = 0;
