@@ -40,9 +40,9 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    CurrentDisplayRowMetrics, DisplayRowBoundaryTarget, DisplayRowGeometryCursor,
-    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowYRecording,
-    LegacyDisplayRowGeometry, LegacyDisplayRowGeometryVars,
+    DisplayRowBoundaryTarget, DisplayRowGeometryCursor, DisplayRowGeometryDefaults,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowYRecording, LegacyDisplayRowGeometry,
+    LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -457,18 +457,6 @@ struct DisplaySpaceGeometry {
     width: f32,
     height: f32,
     ascent: f32,
-}
-
-fn include_glyph_vertical_metrics(
-    row_height: &mut f32,
-    row_ascent: &mut f32,
-    glyph_height: f32,
-    glyph_ascent: f32,
-) {
-    let mut metrics = CurrentDisplayRowMetrics::new(*row_height, *row_ascent);
-    metrics.include_glyph(glyph_height, glyph_ascent);
-    *row_height = metrics.height();
-    *row_ascent = metrics.ascent();
 }
 
 #[cfg(test)]
@@ -1596,12 +1584,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         };
         let stop = outcome.stop;
-        include_glyph_vertical_metrics(
+        LegacyDisplayRowGeometryVars {
+            row,
+            y,
+            row_extra_y,
             row_max_height,
             row_max_ascent,
-            outcome.row_height_px,
-            outcome.row_ascent_px,
-        );
+        }
+        .include_glyph_vertical_metrics(outcome.row_height_px, outcome.row_ascent_px);
         let overlay_cursor_visual_state = CapturedCursorVisualState {
             face_width: face_char_w,
             face_height: char_h,
@@ -3645,7 +3635,14 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
-                    active_face_state.expand_row_extents(&mut row_max_height, &mut row_max_ascent);
+                    LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    }
+                    .include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
                     current_face_id += 1;
 
@@ -4327,9 +4324,14 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
-                            include_glyph_vertical_metrics(
-                                &mut row_max_height,
-                                &mut row_max_ascent,
+                            LegacyDisplayRowGeometryVars {
+                                row: &mut row,
+                                y: &mut y,
+                                row_extra_y: &mut row_extra_y,
+                                row_max_height: &mut row_max_height,
+                                row_max_ascent: &mut row_max_ascent,
+                            }
+                            .include_glyph_vertical_metrics(
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
@@ -4471,8 +4473,14 @@ impl LayoutEngine {
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                 && progress.metrics.width_px > 0.0
                             {
-                                row_max_height = row_max_height.max(display_height);
-                                row_max_ascent = row_max_ascent.max(display_height);
+                                LegacyDisplayRowGeometryVars {
+                                    row: &mut row,
+                                    y: &mut y,
+                                    row_extra_y: &mut row_extra_y,
+                                    row_max_height: &mut row_max_height,
+                                    row_max_ascent: &mut row_max_ascent,
+                                }
+                                .include_row_extents(display_height, display_height);
                                 x = position.x_px;
                                 col = position.col;
                             }

@@ -284,6 +284,54 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
 }
 
 #[test]
+fn legacy_display_row_geometry_vars_include_glyph_vertical_metrics_by_name() {
+    let mut row = 4;
+    let mut y = 80.0;
+    let mut row_extra_y = 9.0;
+    let mut row_max_height = 16.0;
+    let mut row_max_ascent = 12.0;
+
+    LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .include_glyph_vertical_metrics(24.0, 18.0);
+
+    assert_eq!(row, 4);
+    assert_eq!(y, 80.0);
+    assert_eq!(row_extra_y, 9.0);
+    assert_eq!(row_max_height, 24.0);
+    assert_eq!(row_max_ascent, 18.0);
+}
+
+#[test]
+fn legacy_display_row_geometry_vars_include_row_extents_by_name() {
+    let mut row = 4;
+    let mut y = 80.0;
+    let mut row_extra_y = 9.0;
+    let mut row_max_height = 16.0;
+    let mut row_max_ascent = 12.0;
+
+    LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .include_row_extents(24.0, 24.0);
+
+    assert_eq!(row, 4);
+    assert_eq!(y, 80.0);
+    assert_eq!(row_extra_y, 9.0);
+    assert_eq!(row_max_height, 24.0);
+    assert_eq!(row_max_ascent, 24.0);
+}
+
+#[test]
 fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
         row: 5,

@@ -96,6 +96,18 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_max_ascent = state.ascent;
     }
 
+    pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
+        let mut metrics = CurrentDisplayRowMetrics::new(*self.row_max_height, *self.row_max_ascent);
+        metrics.include_glyph(glyph_height, glyph_ascent);
+        *self.row_max_height = metrics.height();
+        *self.row_max_ascent = metrics.ascent();
+    }
+
+    pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
+        *self.row_max_height = self.row_max_height.max(height);
+        *self.row_max_ascent = self.row_max_ascent.max(ascent);
+    }
+
     pub(crate) fn finish_boundary(
         self,
         target: DisplayRowBoundaryTarget<'_>,

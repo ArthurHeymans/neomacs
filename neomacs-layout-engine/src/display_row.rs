@@ -811,12 +811,6 @@ impl DisplayRowActiveFaceState {
         self.measurement.metrics()
     }
 
-    pub(crate) fn expand_row_extents(&self, row_height: &mut f32, row_ascent: &mut f32) {
-        let metrics = self.metrics();
-        *row_height = row_height.max(metrics.row_height);
-        *row_ascent = row_ascent.max(metrics.ascent);
-    }
-
     pub(crate) fn advance_for_char(
         &self,
         font_metrics: &mut Option<FontMetricsService>,

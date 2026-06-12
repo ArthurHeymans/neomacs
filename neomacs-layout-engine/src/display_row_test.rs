@@ -271,33 +271,6 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
 }
 
 #[test]
-fn display_row_active_face_state_expands_row_extents_from_measured_metrics() {
-    let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let face = base_face();
-    let measured = policy.measured_face(
-        14,
-        &face,
-        None,
-        7.0,
-        DisplayRowFallbackMetrics {
-            char_width: 7.0,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
-    let active = DisplayRowActiveFaceState::new(face, measured);
-    let mut row_height = 16.0;
-    let mut row_ascent = 12.0;
-
-    active.expand_row_extents(&mut row_height, &mut row_ascent);
-
-    assert_eq!(row_height, 18.0);
-    assert_eq!(row_ascent, 13.0);
-}
-
-#[test]
 fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let _eval = Context::new();
     let mut font_metrics = None;
