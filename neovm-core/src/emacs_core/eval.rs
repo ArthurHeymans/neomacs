@@ -5339,7 +5339,7 @@ impl Context {
     ) {
         self.input_rx = Some(input_rx);
         self.wakeup_fd = Some(wakeup_fd);
-        self.processes.register_input_wakeup_fd(wakeup_fd);
+        self.processes.register_wait_input_wakeup_fd(wakeup_fd);
         self.command_loop.running = true;
     }
 

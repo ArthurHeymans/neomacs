@@ -420,9 +420,9 @@ pub struct ProcessManager {
     env_overrides: HashMap<LispString, Option<LispString>>,
     /// I/O multiplexer for child process stdout/stderr pipes.
     poller: Option<polling::Poller>,
-    /// Render-thread input wakeup fd registered in `poller`.
+    /// Render-thread input wakeup fd registered in the shared wait poller.
     #[cfg(unix)]
-    input_wakeup_fd: Option<std::os::unix::io::RawFd>,
+    wait_input_wakeup_fd: Option<std::os::unix::io::RawFd>,
 }
 
 struct AcceptedNetworkConnection {
@@ -1084,7 +1084,7 @@ impl ProcessManager {
             env_overrides: HashMap::new(),
             poller: polling::Poller::new().ok(),
             #[cfg(unix)]
-            input_wakeup_fd: None,
+            wait_input_wakeup_fd: None,
         }
     }
 
@@ -1654,13 +1654,13 @@ impl ProcessManager {
     }
 
     #[cfg(unix)]
-    pub(crate) fn register_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
+    pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
         let Some(ref poller) = self.poller else {
-            self.input_wakeup_fd = None;
+            self.wait_input_wakeup_fd = None;
             return;
         };
 
-        if let Some(old_fd) = self.input_wakeup_fd.take() {
+        if let Some(old_fd) = self.wait_input_wakeup_fd.take() {
             let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(old_fd) };
             let _ = poller.delete(borrowed);
         }
@@ -1677,17 +1677,17 @@ impl ProcessManager {
         .is_ok();
 
         if registered {
-            self.input_wakeup_fd = Some(fd);
+            self.wait_input_wakeup_fd = Some(fd);
         }
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn register_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
+    pub(crate) fn register_wait_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
 
-    pub(crate) fn has_input_wakeup_backend(&self) -> bool {
+    pub(crate) fn has_wait_input_wakeup_backend(&self) -> bool {
         #[cfg(unix)]
         {
-            self.poller.is_some() && self.input_wakeup_fd.is_some()
+            self.poller.is_some() && self.wait_input_wakeup_fd.is_some()
         }
         #[cfg(not(unix))]
         {

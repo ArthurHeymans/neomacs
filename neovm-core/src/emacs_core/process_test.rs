@@ -2315,14 +2315,14 @@ fn test_pipe_files() -> (std::fs::File, std::fs::File) {
 
 #[test]
 #[cfg(unix)]
-fn process_backend_wakes_on_registered_input_wakeup_fd() {
+fn wait_backend_wakes_on_registered_input_wakeup_fd() {
     use std::io::Write;
     use std::os::fd::AsRawFd;
 
     crate::test_utils::init_test_tracing();
     let mut processes = ProcessManager::new();
     let (read, mut write) = test_pipe_files();
-    processes.register_input_wakeup_fd(read.as_raw_fd());
+    processes.register_wait_input_wakeup_fd(read.as_raw_fd());
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
@@ -2338,14 +2338,14 @@ fn process_backend_wakes_on_registered_input_wakeup_fd() {
 
 #[test]
 #[cfg(unix)]
-fn process_backend_process_interest_ignores_input_wakeup_fd() {
+fn wait_backend_process_interest_ignores_input_wakeup_fd() {
     use std::io::Write;
     use std::os::fd::AsRawFd;
 
     crate::test_utils::init_test_tracing();
     let mut processes = ProcessManager::new();
     let (read, mut write) = test_pipe_files();
-    processes.register_input_wakeup_fd(read.as_raw_fd());
+    processes.register_wait_input_wakeup_fd(read.as_raw_fd());
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
@@ -2367,7 +2367,7 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
     let (tx, rx) = crossbeam_channel::unbounded();
     let (read, mut write) = test_pipe_files();
     ev.init_input_system(rx, read.as_raw_fd());
-    assert!(ev.processes.has_input_wakeup_backend());
+    assert!(ev.processes.has_wait_input_wakeup_backend());
 
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));

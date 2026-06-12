@@ -425,7 +425,7 @@ impl super::eval::Context {
     }
 
     fn wait_request_can_use_backend(&self, request: &WaitRequest) -> bool {
-        if !self.processes.has_input_wakeup_backend() {
+        if !self.processes.has_wait_input_wakeup_backend() {
             return false;
         }
         if request.processes.services_processes() {
