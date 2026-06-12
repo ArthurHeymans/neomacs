@@ -380,6 +380,40 @@ fn captured_cursor_info_resolves_missing_slot_width_from_style_width() {
     assert_eq!(width, 56.0);
 }
 
+#[test]
+fn captured_cursor_info_builds_logical_cursor_position() {
+    let cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 9.0,
+            face_height: 22.0,
+            face_ascent: 17.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 21.4,
+            y: 34.0,
+            byte_idx: 5,
+            col: 3,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(18.0),
+            stretch_like: true,
+        },
+    );
+    let row_metric = RowMetricsSnapshot {
+        row: 9,
+        pixel_y: 32.6,
+        height: 25.0,
+        ascent: 19.0,
+    };
+
+    let logical = cursor.logical_cursor_position(row_metric, 7, 10.0, 2.0);
+
+    assert_eq!(logical.x, 11);
+    assert_eq!(logical.y, 31);
+    assert_eq!(logical.row, 9);
+    assert_eq!(logical.col, 3);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

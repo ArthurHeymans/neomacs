@@ -219,6 +219,21 @@ impl CapturedCursorVisualState {
 }
 
 impl CapturedCursorInfo {
+    fn logical_cursor_position(
+        &self,
+        row_metric: RowMetricsSnapshot,
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+    ) -> WindowCursorPos {
+        WindowCursorPos {
+            x: (self.x - text_area_left).round() as i64,
+            y: (row_metric.pixel_y - window_top).round() as i64,
+            row: text_matrix_row_base as i64 + self.matrix_row as i64,
+            col: self.col as i64,
+        }
+    }
+
     fn resolved_slot_width(&self, style: CursorStyle, text: &[u8], params: &WindowParams) -> f32 {
         if let Some(slot_width) = self.slot_width {
             slot_width.max(1.0)
@@ -3130,7 +3145,6 @@ impl LayoutEngine {
         let mode_line_matrix_row = text_matrix_row_base + text_matrix_rows;
         let cols = ((text_width - lnum_pixel_width) / char_w).floor() as usize;
         let content_x = text_x + lnum_pixel_width;
-        let window_text_row = |row: usize| text_matrix_row_base as i64 + row as i64;
 
         let requested_window_start = params.window_start_charpos().get();
         let previous_window_end = params.previous_window_end_charpos().map(|pos| pos.get());
@@ -5854,12 +5868,12 @@ impl LayoutEngine {
                     row_max_height,
                     row_max_ascent,
                 );
-                output_emitter.set_logical_cursor(WindowCursorPos {
-                    x: (cursor.x - text_area_left).round() as i64,
-                    y: (row_metric.pixel_y - window_top).round() as i64,
-                    row: window_text_row(cursor.matrix_row),
-                    col: cursor.col as i64,
-                });
+                output_emitter.set_logical_cursor(cursor.logical_cursor_position(
+                    row_metric,
+                    text_matrix_row_base,
+                    text_area_left,
+                    window_top,
+                ));
                 if let Some(style) = cursor_style_for_window(params) {
                     let source = CursorGeometrySource::from_captured_cursor(
                         &cursor,
