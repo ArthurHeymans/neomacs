@@ -41,6 +41,10 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
+pub(crate) use super::wait::{
+    ProcessWaitPolicy, TimerWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest,
+    WaitServiceOutcome,
+};
 
 /// OS socket owned by a network process.
 ///
@@ -163,6 +167,36 @@ use crate::window::FrameManager;
 
 /// Unique identifier for a process.
 pub type ProcessId = u64;
+
+const INPUT_WAKEUP_EVENT_KEY: usize = 0;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WaitBackendEvents {
+    pub(crate) input_wakeup: bool,
+    pub(crate) ready_processes: Vec<ProcessId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WaitBackendInterest {
+    pub(crate) input_wakeup: bool,
+    pub(crate) processes: bool,
+}
+
+impl WaitBackendInterest {
+    pub(crate) fn processes_only() -> Self {
+        Self {
+            input_wakeup: false,
+            processes: true,
+        }
+    }
+
+    pub(crate) fn for_wait_request(input_wakeup: bool, processes: bool) -> Self {
+        Self {
+            input_wakeup,
+            processes,
+        }
+    }
+}
 
 /// Process family used by compatibility helpers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -414,6 +448,9 @@ pub struct ProcessManager {
     env_overrides: HashMap<LispString, Option<LispString>>,
     /// I/O multiplexer for child process stdout/stderr pipes.
     poller: Option<polling::Poller>,
+    /// Render-thread input wakeup fd registered in `poller`.
+    #[cfg(unix)]
+    input_wakeup_fd: Option<std::os::unix::io::RawFd>,
 }
 
 struct AcceptedNetworkConnection {
@@ -1074,6 +1111,8 @@ impl ProcessManager {
             next_id: 1,
             env_overrides: HashMap::new(),
             poller: polling::Poller::new().ok(),
+            #[cfg(unix)]
+            input_wakeup_fd: None,
         }
     }
 
@@ -1631,32 +1670,110 @@ impl ProcessManager {
     ///
     /// Falls back to a brief sleep if the poller is unavailable.
     pub fn wait_for_output(&self, timeout: std::time::Duration) -> Vec<ProcessId> {
+        if let Some(events) =
+            self.wait_for_backend_events(timeout, WaitBackendInterest::processes_only())
+        {
+            return events.ready_processes;
+        }
+
+        // No poller available — sleep fallback
+        std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
+        self.live_process_ids()
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn register_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
+        let Some(ref poller) = self.poller else {
+            self.input_wakeup_fd = None;
+            return;
+        };
+
+        if let Some(old_fd) = self.input_wakeup_fd.take() {
+            let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(old_fd) };
+            let _ = poller.delete(borrowed);
+        }
+
+        // SAFETY: the fd is owned by the display communication layer and
+        // remains valid for the evaluator lifetime after `init_input_system`.
+        let registered = unsafe {
+            poller.add_with_mode(
+                fd,
+                polling::Event::readable(INPUT_WAKEUP_EVENT_KEY),
+                polling::PollMode::Level,
+            )
+        }
+        .is_ok();
+
+        if registered {
+            self.input_wakeup_fd = Some(fd);
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) fn register_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
+
+    pub(crate) fn has_input_wakeup_backend(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.poller.is_some() && self.input_wakeup_fd.is_some()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+
+    pub(crate) fn wait_for_backend_events(
+        &self,
+        timeout: std::time::Duration,
+        interest: WaitBackendInterest,
+    ) -> Option<WaitBackendEvents> {
         if let Some(ref poller) = self.poller {
-            let mut events = polling::Events::new();
-            match poller.wait(&mut events, Some(timeout)) {
-                Ok(_) => events
-                    .iter()
-                    .filter_map(|e| {
-                        let id = e.key as ProcessId;
-                        self.processes
-                            .get(&id)
-                            .filter(|process| {
-                                process_status_has_readable_process_io(&process.status)
-                            })
-                            .map(|_| id)
-                    })
-                    .collect(),
-                Err(_) => {
-                    // Fallback: brief sleep
-                    std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
-                    self.live_process_ids()
+            let deadline = Instant::now() + timeout;
+            loop {
+                let now = Instant::now();
+                let wait_time = if timeout.is_zero() {
+                    Duration::ZERO
+                } else {
+                    deadline.saturating_duration_since(now)
+                };
+                let mut events = polling::Events::new();
+                match poller.wait(&mut events, Some(wait_time)) {
+                    Ok(_) => {
+                        let mut backend = WaitBackendEvents::default();
+                        for event in events.iter() {
+                            if event.key == INPUT_WAKEUP_EVENT_KEY {
+                                if interest.input_wakeup {
+                                    backend.input_wakeup = true;
+                                }
+                                continue;
+                            }
+                            if interest.processes {
+                                let id = event.key as ProcessId;
+                                if self.processes.get(&id).is_some_and(|process| {
+                                    process_status_has_readable_process_io(&process.status)
+                                }) {
+                                    backend.ready_processes.push(id);
+                                }
+                            }
+                        }
+                        if backend.input_wakeup
+                            || !backend.ready_processes.is_empty()
+                            || timeout.is_zero()
+                            || Instant::now() >= deadline
+                        {
+                            return Some(backend);
+                        }
+                        std::thread::yield_now();
+                    }
+                    Err(_) => {
+                        return None;
+                    }
                 }
             }
-        } else {
-            // No poller available — sleep fallback
-            std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
-            self.live_process_ids()
         }
+
+        None
     }
 
     fn deactivate_network_process_io(&mut self, id: ProcessId) {
@@ -2148,13 +2265,6 @@ impl ProcessManager {
 const DEFAULT_PROCESS_FILTER_SYMBOL: &str = "internal-default-process-filter";
 const DEFAULT_PROCESS_SENTINEL_SYMBOL: &str = "internal-default-process-sentinel";
 
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct WaitServiceOutcome {
-    pub(crate) any_process_activity: bool,
-    pub(crate) target_process_activity: bool,
-    pub(crate) timers_fired: bool,
-}
-
 fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<ProcessId> {
     let mut unique = Vec::new();
     for id in process_ids {
@@ -2221,7 +2331,6 @@ impl super::eval::Context {
         self.specbind(intern("last-nonmenu-event"), Value::T);
 
         let result = self.apply(callback, args);
-
         self.match_data = saved_match_data;
         if let Some(buffer_id) = saved_current_buffer {
             self.restore_current_buffer_if_live(buffer_id);
@@ -2256,7 +2365,6 @@ impl super::eval::Context {
         self.specbind(intern("inhibit-quit"), Value::T);
 
         let result = self.apply(callback, args);
-
         if let Some(buffer_id) = saved_current_buffer {
             self.restore_current_buffer_if_live(buffer_id);
         }
@@ -2331,24 +2439,28 @@ impl super::eval::Context {
 
     pub(crate) fn poll_process_output_with_wait_policy(
         &mut self,
-        target_process: Option<ProcessId>,
-        just_this_one: bool,
+        processes: ProcessWaitPolicy,
     ) -> WaitServiceOutcome {
-        let proc_ids = if just_this_one {
+        let target_process = processes.target_process();
+        let proc_ids = if !processes.services_processes() {
+            Vec::new()
+        } else if processes.just_this_one() {
             target_process.into_iter().collect::<Vec<_>>()
         } else {
             self.processes.live_process_ids()
         };
-        self.poll_process_output_for_ids(proc_ids, target_process, just_this_one)
+        self.poll_process_output_for_ids(proc_ids, target_process)
     }
 
     pub(crate) fn poll_ready_process_output_with_wait_policy(
         &mut self,
         ready_processes: Vec<ProcessId>,
-        target_process: Option<ProcessId>,
-        just_this_one: bool,
+        processes: ProcessWaitPolicy,
     ) -> WaitServiceOutcome {
-        let proc_ids = if just_this_one {
+        let target_process = processes.target_process();
+        let proc_ids = if !processes.services_processes() {
+            Vec::new()
+        } else if processes.just_this_one() {
             target_process
                 .filter(|target| ready_processes.contains(target))
                 .into_iter()
@@ -2357,14 +2469,13 @@ impl super::eval::Context {
             dedupe_process_ids(ready_processes)
         };
 
-        self.poll_process_output_for_ids(proc_ids, target_process, just_this_one)
+        self.poll_process_output_for_ids(proc_ids, target_process)
     }
 
     fn poll_process_output_for_ids(
         &mut self,
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
-        _just_this_one: bool,
     ) -> WaitServiceOutcome {
         let proc_ids = dedupe_process_ids(proc_ids);
 
@@ -2491,68 +2602,6 @@ impl super::eval::Context {
         }
 
         outcome
-    }
-
-    pub(crate) fn service_wait_path_once(
-        &mut self,
-        target_process: Option<ProcessId>,
-        just_this_one: bool,
-        allow_timers: bool,
-        redisplay_timers: bool,
-    ) -> Result<WaitServiceOutcome, Flow> {
-        let mut outcome = WaitServiceOutcome::default();
-        let special_input = self.service_wait_path_special_input_events()?;
-        if allow_timers {
-            outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
-        }
-        let process_outcome =
-            self.poll_process_output_with_wait_policy(target_process, just_this_one);
-        outcome.any_process_activity = process_outcome.any_process_activity;
-        outcome.target_process_activity = process_outcome.target_process_activity;
-        if redisplay_timers && (special_input.redisplay_needed || outcome.timers_fired) {
-            self.redisplay();
-        }
-        Ok(outcome)
-    }
-
-    pub(crate) fn service_wait_path_ready_processes(
-        &mut self,
-        ready_processes: Vec<ProcessId>,
-        target_process: Option<ProcessId>,
-        just_this_one: bool,
-        allow_timers: bool,
-        redisplay_timers: bool,
-    ) -> Result<WaitServiceOutcome, Flow> {
-        let mut outcome = WaitServiceOutcome::default();
-        let special_input = self.service_wait_path_special_input_events()?;
-        if allow_timers {
-            outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
-        }
-        let process_outcome = self.poll_ready_process_output_with_wait_policy(
-            ready_processes,
-            target_process,
-            just_this_one,
-        );
-        outcome.any_process_activity = process_outcome.any_process_activity;
-        outcome.target_process_activity = process_outcome.target_process_activity;
-        if redisplay_timers && (special_input.redisplay_needed || outcome.timers_fired) {
-            self.redisplay();
-        }
-        Ok(outcome)
-    }
-
-    pub(crate) fn next_wait_path_timeout(
-        &self,
-        remaining: Duration,
-        allow_timers: bool,
-    ) -> Duration {
-        let mut timeout = remaining.min(Duration::from_millis(50));
-        if allow_timers {
-            if let Some(next) = self.next_input_wait_timeout() {
-                timeout = timeout.min(next);
-            }
-        }
-        timeout
     }
 }
 
@@ -7333,10 +7382,7 @@ fn builtin_make_process_impl_with_environment(
 
 #[derive(Clone, Copy, Debug)]
 struct AcceptProcessOutputRequest {
-    timeout: Duration,
-    target_id: Option<ProcessId>,
-    just_this_one: bool,
-    allow_timers: bool,
+    wait: WaitRequest,
 }
 
 fn parse_accept_process_output_request(
@@ -7396,26 +7442,6 @@ fn parse_accept_process_output_request(
         }
     }
 
-    let timeout_ms: u64 = {
-        let secs = args.get(1).and_then(|v| {
-            if !v.is_nil() {
-                if let Some(n) = v.as_fixnum() {
-                    return Some(n as f64);
-                }
-            }
-            v.as_float()
-        });
-        let ms = args
-            .get(2)
-            .and_then(|v| if !v.is_nil() { v.as_fixnum() } else { None })
-            .unwrap_or(0);
-        match secs {
-            Some(s) => (s * 1000.0) as u64 + ms as u64,
-            None if ms > 0 => ms as u64,
-            _ => 50,
-        }
-    };
-
     let target_id = if let Some(process) = args.first() {
         if !process.is_nil() {
             resolve_live_process_designator_in_manager(processes, process)
@@ -7432,13 +7458,57 @@ fn parse_accept_process_output_request(
     } else {
         true
     };
+    let milliseconds_supplied = args.get(2).is_some_and(|value| !value.is_nil());
+    let positive_timeout = accept_process_output_positive_timeout(args);
+    let deadline = if let Some(timeout) = positive_timeout {
+        WaitDeadline::Until(Instant::now() + timeout)
+    } else if target_id.is_some()
+        && !milliseconds_supplied
+        && args.get(1).map_or(true, |value| value.is_nil())
+    {
+        WaitDeadline::Forever
+    } else {
+        WaitDeadline::Poll
+    };
+    let processes = match (target_id, just_this_one) {
+        (Some(id), true) => ProcessWaitPolicy::TargetOnly(id),
+        (Some(id), false) => ProcessWaitPolicy::Target(id),
+        (None, _) => ProcessWaitPolicy::Any,
+    };
 
     Ok(Some(AcceptProcessOutputRequest {
-        timeout: Duration::from_millis(timeout_ms),
-        target_id,
-        just_this_one,
-        allow_timers,
+        wait: WaitRequest::accept_process_output(
+            deadline,
+            processes,
+            if allow_timers {
+                TimerWaitPolicy::Run
+            } else {
+                TimerWaitPolicy::Suppress
+            },
+        ),
     }))
+}
+
+fn accept_process_output_positive_timeout(args: &[Value]) -> Option<Duration> {
+    let total_seconds = if let Some(milliseconds) = args.get(2).filter(|value| !value.is_nil()) {
+        let milliseconds = milliseconds.as_fixnum().unwrap_or(0) as f64 / 1000.0;
+        let seconds = args
+            .get(1)
+            .filter(|value| !value.is_nil())
+            .and_then(|value| value.as_fixnum())
+            .unwrap_or(0) as f64;
+        seconds + milliseconds
+    } else if let Some(seconds) = args.get(1).filter(|value| !value.is_nil()) {
+        seconds
+            .as_fixnum()
+            .map(|value| value as f64)
+            .or_else(|| seconds.as_float())
+            .unwrap_or(0.0)
+    } else {
+        return None;
+    };
+
+    (total_seconds > 0.0).then(|| Duration::from_secs_f64(total_seconds))
 }
 
 /// (process-send-string PROCESS STRING) -> nil
@@ -8192,56 +8262,15 @@ pub(crate) fn builtin_accept_process_output(
         return Ok(Value::NIL);
     };
 
-    let start = Instant::now();
-    let deadline = start + request.timeout;
-
-    loop {
-        let outcome = eval.service_wait_path_once(
-            request.target_id,
-            request.just_this_one,
-            request.allow_timers,
-            false,
-        )?;
-
-        if accept_process_output_request_satisfied(&request, outcome) {
+    let outcome = eval.wait_reading_process_output(request.wait)?;
+    match outcome.completion {
+        WaitCompletion::ProcessActivity => {
             accept_process_output_run_target_follow_up(eval, request)?;
-            return Ok(Value::T);
+            Ok(Value::T)
         }
-
-        let now = Instant::now();
-        if now >= deadline {
-            return Ok(Value::NIL);
-        }
-
-        let remaining = deadline.saturating_duration_since(now);
-        let wait_time = eval.next_wait_path_timeout(remaining, request.allow_timers);
-        if wait_time.is_zero() {
-            continue;
-        }
-        let ready_processes = eval.processes.wait_for_output(wait_time);
-        let outcome = eval.service_wait_path_ready_processes(
-            ready_processes,
-            request.target_id,
-            request.just_this_one,
-            request.allow_timers,
-            false,
-        )?;
-
-        if accept_process_output_request_satisfied(&request, outcome) {
-            accept_process_output_run_target_follow_up(eval, request)?;
-            return Ok(Value::T);
-        }
-    }
-}
-
-fn accept_process_output_request_satisfied(
-    request: &AcceptProcessOutputRequest,
-    outcome: WaitServiceOutcome,
-) -> bool {
-    if request.target_id.is_some() {
-        outcome.target_process_activity
-    } else {
-        outcome.any_process_activity
+        WaitCompletion::CommandInputPending
+        | WaitCompletion::SpecialInputActivity
+        | WaitCompletion::DeadlineElapsed => Ok(Value::NIL),
     }
 }
 
@@ -8249,7 +8278,7 @@ fn accept_process_output_run_target_follow_up(
     eval: &mut super::eval::Context,
     request: AcceptProcessOutputRequest,
 ) -> Result<(), Flow> {
-    let Some(target_id) = request.target_id else {
+    let Some(target_id) = request.wait.processes.target_process() else {
         return Ok(());
     };
 
@@ -8261,20 +8290,9 @@ fn accept_process_output_run_target_follow_up(
     loop {
         let ready_processes = eval.processes.wait_for_output(Duration::ZERO);
         let follow_up = if ready_processes.is_empty() {
-            eval.service_wait_path_once(
-                request.target_id,
-                request.just_this_one,
-                request.allow_timers,
-                false,
-            )?
+            eval.service_wait_request_once(&request.wait)?
         } else {
-            eval.service_wait_path_ready_processes(
-                ready_processes,
-                request.target_id,
-                request.just_this_one,
-                request.allow_timers,
-                false,
-            )?
+            eval.service_wait_request_ready_processes(&request.wait, ready_processes)?
         };
         if follow_up.target_process_activity {
             idle_follow_up_polls = 0;

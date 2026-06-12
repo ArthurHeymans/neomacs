@@ -13,6 +13,7 @@
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
+use crate::emacs_core::wait::{ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest};
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
@@ -1920,51 +1921,6 @@ fn sync_pending_resize_events_in_keyboard_runtime(
     applied_resize
 }
 
-fn wait_for_pending_resize_events_in_keyboard_runtime(
-    frames: &mut crate::window::FrameManager,
-    buffers: &crate::buffer::BufferManager,
-    input_rx: &mut Option<crossbeam_channel::Receiver<InputEvent>>,
-    keyboard: &mut KeyboardRuntime,
-    timeout: Duration,
-) -> bool {
-    if sync_pending_resize_events_in_keyboard_runtime(frames, buffers, input_rx, keyboard) {
-        return true;
-    }
-
-    let Some(rx) = input_rx.clone() else {
-        return false;
-    };
-    let deadline = Instant::now() + timeout;
-    let pending_input_events = &mut keyboard.pending_input_events;
-
-    loop {
-        let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
-            break;
-        };
-        match rx.recv_timeout(remaining) {
-            Ok(InputEvent::Resize {
-                width,
-                height,
-                emacs_frame_id,
-            }) => {
-                apply_resize_input_event_in_keyboard_runtime(
-                    frames,
-                    buffers,
-                    width,
-                    height,
-                    emacs_frame_id,
-                );
-                return true;
-            }
-            Ok(event) => pending_input_events.push_back(event),
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => break,
-            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
-        }
-    }
-
-    false
-}
-
 fn input_event_triggers_throw_on_input(event: &InputEvent) -> bool {
     !matches!(
         event,
@@ -1986,8 +1942,10 @@ fn input_event_is_wait_path_special(event: &InputEvent) -> bool {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct WaitPathSpecialInputOutcome {
+pub(crate) struct WaitRequestSpecialInputOutcome {
     pub(crate) redisplay_needed: bool,
+    pub(crate) activity: bool,
+    pub(crate) resize_activity: bool,
 }
 
 fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
@@ -2855,22 +2813,18 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn wait_for_pending_resize_events(&mut self, timeout: Duration) -> bool {
-        let applied_resize = wait_for_pending_resize_events_in_keyboard_runtime(
-            &mut self.frames,
-            &self.buffers,
-            &mut self.input_rx,
-            &mut self.command_loop.keyboard,
-            timeout,
-        );
+        let outcome = self
+            .wait_reading_process_output(WaitRequest::resize_ack(Instant::now() + timeout))
+            .ok();
         sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
             &mut self.frames,
             &self.buffers,
             self.display_host.as_deref(),
         );
-        applied_resize
+        outcome.is_some_and(|outcome| outcome.completion == WaitCompletion::SpecialInputActivity)
     }
 
-    fn take_next_wait_path_special_input_event(
+    fn take_next_wait_request_special_input_event(
         &mut self,
     ) -> Result<Option<InputEvent>, crate::emacs_core::error::Flow> {
         if let Some(event) = self
@@ -2935,16 +2889,114 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
-    pub(crate) fn service_wait_path_special_input_events(
+    pub(crate) fn wait_for_next_host_input_event(
         &mut self,
-    ) -> Result<WaitPathSpecialInputOutcome, crate::emacs_core::error::Flow> {
-        let mut outcome = WaitPathSpecialInputOutcome::default();
+        timeout: Duration,
+        waiting_for_user_input: bool,
+    ) -> Result<bool, crate::emacs_core::error::Flow> {
+        let Some(rx) = self.input_rx.clone() else {
+            if !timeout.is_zero() {
+                std::thread::sleep(timeout);
+            }
+            return Ok(false);
+        };
+
+        let previous_waiting_for_input = self.waiting_for_user_input;
+        self.waiting_for_user_input = waiting_for_user_input;
+        let wait_result = if timeout.is_zero() {
+            rx.try_recv().map_err(|err| match err {
+                crossbeam_channel::TryRecvError::Empty => {
+                    crossbeam_channel::RecvTimeoutError::Timeout
+                }
+                crossbeam_channel::TryRecvError::Disconnected => {
+                    crossbeam_channel::RecvTimeoutError::Disconnected
+                }
+            })
+        } else {
+            rx.recv_timeout(timeout)
+        };
+        self.waiting_for_user_input = previous_waiting_for_input;
+
+        match wait_result {
+            Ok(event) => {
+                self.command_loop
+                    .keyboard
+                    .pending_input_events
+                    .push_back(event);
+                Ok(true)
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => Ok(false),
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                self.handle_display_terminal_disconnect();
+                Err(crate::emacs_core::error::signal("quit", vec![]))
+            }
+        }
+    }
+
+    pub(crate) fn clear_input_wakeup_fd(&self) {
+        #[cfg(unix)]
+        if let Some(fd) = self.wakeup_fd {
+            let mut buf = [0u8; 64];
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                while libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
+                libc::fcntl(fd, libc::F_SETFL, flags);
+            }
+        }
+    }
+
+    pub(crate) fn stage_pending_command_input_for_wait_request(
+        &mut self,
+    ) -> Result<bool, crate::emacs_core::error::Flow> {
+        if self.command_loop.keyboard.has_pending_kboard_input()
+            || self
+                .command_loop
+                .keyboard
+                .pending_input_events
+                .iter()
+                .any(|event| self.input_event_counts_as_pending(event, true))
+        {
+            return Ok(true);
+        }
+
+        while self.stage_next_host_input_event_if_available()? {
+            if self.command_loop.keyboard.has_pending_kboard_input()
+                || self
+                    .command_loop
+                    .keyboard
+                    .pending_input_events
+                    .iter()
+                    .any(|event| self.input_event_counts_as_pending(event, true))
+            {
+                return Ok(true);
+            }
+        }
+
+        if self.command_loop.keyboard.has_pending_kboard_input() {
+            return Ok(true);
+        }
+
+        Ok(self
+            .command_loop
+            .keyboard
+            .pending_input_events
+            .iter()
+            .any(|event| self.input_event_counts_as_pending(event, true)))
+    }
+
+    pub(crate) fn service_wait_request_special_input_events(
+        &mut self,
+    ) -> Result<WaitRequestSpecialInputOutcome, crate::emacs_core::error::Flow> {
+        let mut outcome = WaitRequestSpecialInputOutcome::default();
 
         if self.sync_pending_resize_events() {
+            outcome.activity = true;
+            outcome.resize_activity = true;
             outcome.redisplay_needed = true;
         }
 
-        while let Some(event) = self.take_next_wait_path_special_input_event()? {
+        while let Some(event) = self.take_next_wait_request_special_input_event()? {
             if input_event_triggers_throw_on_input(&event)
                 && self.interrupt_for_input_event_if_requested(event.clone())?
             {
@@ -2957,10 +3009,13 @@ impl crate::emacs_core::eval::Context {
                     height,
                     emacs_frame_id,
                 } => {
+                    outcome.activity = true;
+                    outcome.resize_activity = true;
                     self.apply_resize_input_event(width, height, emacs_frame_id, false);
                     outcome.redisplay_needed = true;
                 }
                 InputEvent::MonitorsChanged { monitors } => {
+                    outcome.activity = true;
                     crate::emacs_core::builtins::set_neomacs_monitor_info(monitors);
                     let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(
                         self,
@@ -2979,10 +3034,12 @@ impl crate::emacs_core::eval::Context {
                     target_frame_id,
                     ..
                 } => {
+                    outcome.activity = true;
                     self.note_mouse_move_input_event(x, y, target_frame_id);
                     self.timer_resume_idle();
                 }
                 InputEvent::WindowClose { emacs_frame_id } => {
+                    outcome.activity = true;
                     self.handle_window_close_input_event(emacs_frame_id)?;
                 }
                 _ => {}
@@ -3856,7 +3913,7 @@ impl crate::emacs_core::eval::Context {
             }
 
             self.redisplay_for_input_wait();
-            let _ = self.service_wait_path_once(None, false, true, true)?;
+            let _ = self.service_wait_request_once(&WaitRequest::service_once(true))?;
 
             // GNU read_char re-checks Vunread_command_events after idle
             // timers/sit-for/read-event can requeue input, before consulting
@@ -3887,58 +3944,43 @@ impl crate::emacs_core::eval::Context {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
             }
 
-            let rx = match self.input_rx {
-                Some(ref rx) => rx.clone(),
-                None => {
-                    if !self.command_loop.running {
-                        return Err(crate::emacs_core::error::signal("quit", vec![]));
-                    }
-                    tracing::debug!("read_char: no input_rx (batch mode), returning Nil");
-                    return Ok(Some(ReadCharEvent::input_method_candidate(Value::NIL)));
+            if self.input_rx.is_none() {
+                if !self.command_loop.running {
+                    return Err(crate::emacs_core::error::signal("quit", vec![]));
                 }
-            };
+                tracing::debug!("read_char: no input_rx (batch mode), returning Nil");
+                return Ok(Some(ReadCharEvent::input_method_candidate(Value::NIL)));
+            }
 
             self.timer_start_idle();
-            let mut timeout = self.next_input_wait_timeout();
-            if let Some(deadline) = deadline {
-                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                if remaining.is_zero() {
+            let wait_deadline = if let Some(deadline) = deadline {
+                if deadline <= std::time::Instant::now() {
                     self.timer_stop_idle();
                     return Ok(None);
                 }
-                timeout = Some(timeout.map_or(remaining, |current| current.min(remaining)));
-            }
-            self.waiting_for_user_input = true;
-            let wait_result = if let Some(timeout) = timeout {
-                rx.recv_timeout(timeout)
+                WaitDeadline::Until(deadline)
             } else {
-                rx.recv()
-                    .map_err(|_| crossbeam_channel::RecvTimeoutError::Disconnected)
+                WaitDeadline::Forever
             };
-            self.waiting_for_user_input = false;
+            let wait_result =
+                self.wait_reading_process_output(WaitRequest::read_command_input(wait_deadline));
+            self.timer_stop_idle();
 
-            match wait_result {
-                Ok(event) => {
-                    let timers_fired = self.service_pending_timers_with_wait_policy(false);
-                    self.timer_stop_idle();
-                    if timers_fired {
-                        self.redisplay();
-                    }
-                    if let Some(value) = self.handle_read_char_input_event(event)? {
-                        return Ok(Some(ReadCharEvent::input_method_candidate(value)));
-                    }
-                }
-                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                    if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
-                        self.timer_stop_idle();
-                        return Ok(None);
-                    }
-                    let _ = self.service_wait_path_once(None, false, true, true)?;
+            match wait_result?.completion {
+                WaitCompletion::CommandInputPending => {
                     continue;
                 }
-                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                    self.handle_display_terminal_disconnect();
-                    return Err(crate::emacs_core::error::signal("quit", vec![]));
+                WaitCompletion::DeadlineElapsed => {
+                    if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                        return Ok(None);
+                    }
+                    continue;
+                }
+                WaitCompletion::ProcessActivity => {
+                    continue;
+                }
+                WaitCompletion::SpecialInputActivity => {
+                    continue;
                 }
             }
         }
@@ -5143,7 +5185,7 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn poll_process_output(&mut self) {
-        let _ = self.poll_process_output_with_wait_policy(None, false);
+        let _ = self.poll_process_output_with_wait_policy(ProcessWaitPolicy::ServiceAny);
     }
 
     pub(crate) fn record_input_event(&mut self, event: Value) {

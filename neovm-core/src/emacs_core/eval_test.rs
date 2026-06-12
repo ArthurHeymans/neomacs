@@ -2099,6 +2099,42 @@ fn frame_native_width_syncs_pending_resize_without_read_char() {
 }
 
 #[test]
+fn wait_for_pending_resize_events_blocks_until_resize_and_preserves_keypress() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fid = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    assert_eq!(ev.frames.selected_frame().map(|frame| frame.id), Some(fid));
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        tx.send(crate::keyboard::InputEvent::Resize {
+            width: 700,
+            height: 800,
+            emacs_frame_id: 0,
+        })
+        .expect("send resize");
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('r'),
+        ))
+        .expect("send following keypress");
+    });
+
+    assert!(ev.wait_for_pending_resize_events(Duration::from_secs(1)));
+    let frame = ev.frames.get(fid).expect("frame should exist");
+    assert_eq!(frame.width, 700);
+    assert_eq!(frame.height, 800);
+
+    let event = ev
+        .read_char()
+        .expect("following keypress should remain queued");
+    assert_eq!(event, Value::fixnum('r' as i64));
+}
+
+#[test]
 fn frame_native_width_syncs_pending_resize_behind_focus_event() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -7231,6 +7267,42 @@ fn condition_case_catches_uncaught_throw_as_no_catch() {
         eval_one("(condition-case err (funcall (lambda () (throw 'exit nil))) (no-catch err))"),
         "OK (no-catch exit nil)"
     );
+}
+
+#[test]
+fn byte_compiled_condition_case_catches_uncaught_throw_as_no_catch() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = runtime_startup_context();
+    let result = ctx.eval_str(
+        r#"(let ((fn (byte-compile
+                     '(lambda ()
+                        (condition-case err
+                            (throw 'tag 42)
+                          (error (car err)))))))
+             (funcall fn))"#,
+    );
+    assert_eq!(format_eval_result(&result), "OK no-catch");
+}
+
+#[test]
+fn real_timer_event_handler_catches_uncaught_throw_as_timer_error() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = runtime_startup_context();
+    let result = ctx.eval_str(
+        r#"(progn
+             (setq timer-list nil
+                   timer-idle-list nil)
+             (let ((timer (vector nil 0 0 0 nil
+                                  (lambda () (throw 'stale-timer-catch nil))
+                                  nil nil 0 nil)))
+               (setq timer-list (list timer))
+               (condition-case err
+                   (progn
+                     (timer-event-handler timer)
+                     'returned)
+                 (error (list 'escaped err)))))"#,
+    );
+    assert_eq!(format_eval_result(&result), "OK returned");
 }
 
 #[test]

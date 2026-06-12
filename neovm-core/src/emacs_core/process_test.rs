@@ -2222,6 +2222,171 @@ fn accept_process_output_and_get_process_runtime_surface() {
 }
 
 #[test]
+fn accept_process_output_yields_to_pending_command_input() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::Focus {
+        focused: true,
+        emacs_frame_id: 0,
+    })
+    .expect("queue focus event");
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::char('j'),
+        emacs_frame_id: 0,
+    })
+    .expect("queue key event");
+
+    let result = builtin_accept_process_output(&mut ev, vec![Value::NIL, Value::make_float(0.1)])
+        .expect("accept-process-output should yield to command input");
+
+    assert_eq!(result, Value::NIL);
+    assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 2);
+}
+
+#[test]
+fn accept_process_output_request_uses_gnu_wait_deadlines() {
+    let mut processes = ProcessManager::new();
+
+    let poll = parse_accept_process_output_request(&mut processes, &[])
+        .expect("parse no-arg accept-process-output")
+        .expect("live request");
+    assert_eq!(poll.wait.deadline, WaitDeadline::Poll);
+    assert_eq!(poll.wait.processes, ProcessWaitPolicy::Any);
+
+    let timeout =
+        parse_accept_process_output_request(&mut processes, &[Value::NIL, Value::make_float(0.25)])
+            .expect("parse timed accept-process-output")
+            .expect("live request");
+    assert!(matches!(timeout.wait.deadline, WaitDeadline::Until(_)));
+    assert_eq!(timeout.wait.processes, ProcessWaitPolicy::Any);
+
+    let id = processes.create_process("target".into(), Value::NIL, "cat".into(), vec![]);
+    let target = parse_accept_process_output_request(
+        &mut processes,
+        &[Value::fixnum(id as i64), Value::NIL],
+    )
+    .expect("parse target accept-process-output")
+    .expect("live request");
+    assert_eq!(target.wait.deadline, WaitDeadline::Forever);
+    assert_eq!(target.wait.processes, ProcessWaitPolicy::Target(id));
+}
+
+#[test]
+fn wait_scheduler_can_block_until_command_input_arrives() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('z'),
+        ))
+        .expect("send delayed keypress");
+    });
+
+    let outcome = ev
+        .wait_reading_process_output(WaitRequest::read_command_input(WaitDeadline::Until(
+            std::time::Instant::now() + Duration::from_secs(1),
+        )))
+        .expect("wait for command input");
+
+    assert_eq!(outcome.completion, WaitCompletion::CommandInputPending);
+    assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
+}
+
+#[cfg(unix)]
+fn test_pipe_files() -> (std::fs::File, std::fs::File) {
+    use std::os::fd::FromRawFd;
+
+    let mut fds = [0; 2];
+    let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    assert_eq!(rc, 0, "create test pipe");
+    let read = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+    let write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+    (read, write)
+}
+
+#[test]
+#[cfg(unix)]
+fn process_backend_wakes_on_registered_input_wakeup_fd() {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+
+    crate::test_utils::init_test_tracing();
+    let mut processes = ProcessManager::new();
+    let (read, mut write) = test_pipe_files();
+    processes.register_input_wakeup_fd(read.as_raw_fd());
+
+    write.write_all(&[1]).expect("write input wakeup");
+    let events = processes
+        .wait_for_backend_events(
+            Duration::from_secs(1),
+            WaitBackendInterest::for_wait_request(true, false),
+        )
+        .expect("poller should be available");
+
+    assert!(events.input_wakeup);
+    assert!(events.ready_processes.is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn process_backend_process_interest_ignores_input_wakeup_fd() {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+
+    crate::test_utils::init_test_tracing();
+    let mut processes = ProcessManager::new();
+    let (read, mut write) = test_pipe_files();
+    processes.register_input_wakeup_fd(read.as_raw_fd());
+
+    write.write_all(&[1]).expect("write input wakeup");
+    let events = processes
+        .wait_for_backend_events(Duration::ZERO, WaitBackendInterest::processes_only())
+        .expect("poller should be available");
+
+    assert!(!events.input_wakeup);
+    assert!(events.ready_processes.is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn wait_scheduler_uses_registered_input_wakeup_backend() {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    let (read, mut write) = test_pipe_files();
+    ev.init_input_system(rx, read.as_raw_fd());
+    assert!(ev.processes.has_input_wakeup_backend());
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('w'),
+        ))
+        .expect("send delayed keypress");
+        write.write_all(&[1]).expect("write input wakeup");
+    });
+
+    let outcome = ev
+        .wait_reading_process_output(WaitRequest::read_command_input(WaitDeadline::Until(
+            std::time::Instant::now() + Duration::from_secs(1),
+        )))
+        .expect("wait for command input through wakeup backend");
+
+    assert_eq!(outcome.completion, WaitCompletion::CommandInputPending);
+    let event = ev.read_char().expect("keypress should remain readable");
+    assert_eq!(event, Value::fixnum('w' as i64));
+}
+
+#[test]
 fn accept_process_output_millis_contract_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

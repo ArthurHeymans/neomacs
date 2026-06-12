@@ -124,6 +124,7 @@ pub mod undo;
 pub mod value;
 pub mod value_reader;
 pub mod var_docs;
+pub(crate) mod wait;
 pub mod window_cmds;
 pub(crate) mod windows;
 pub mod xdisp;

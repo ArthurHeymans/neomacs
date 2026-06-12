@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::{Value, ValueKind, VecLikeType};
+use super::wait::WaitRequest;
 use crate::gc_trace::GcTrace;
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
@@ -680,22 +681,8 @@ pub(crate) fn builtin_sleep_for(eval: &mut super::eval::Context, args: Vec<Value
     let total_secs = secs + millis / 1000.0;
     if total_secs > 0.0 {
         let total = Duration::from_secs_f64(total_secs);
-        let start = Instant::now();
-        let deadline = start + total;
-        loop {
-            let _ = eval.service_wait_path_once(None, false, true, false)?;
-            let now = Instant::now();
-            if now >= deadline {
-                break;
-            }
-            let remaining = deadline.saturating_duration_since(now);
-            let wait_time = eval.next_wait_path_timeout(remaining, true);
-            if wait_time.is_zero() {
-                continue;
-            }
-            let _ = eval.processes.wait_for_output(wait_time);
-            let _ = eval.service_wait_path_special_input_events()?;
-        }
+        let _ =
+            eval.wait_reading_process_output(WaitRequest::sleep_until(Instant::now() + total))?;
     }
 
     Ok(Value::NIL)
