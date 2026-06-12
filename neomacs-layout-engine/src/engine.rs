@@ -39,8 +39,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryBinding, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowTextPosition, DisplayRowVisibilityLimit,
-    DisplayRowYFallback, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowTextPosition,
+    DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -1491,6 +1491,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         builder,
     );
     let row_geometry_defaults = DisplayRowGeometryDefaults::new(text_y, char_h, default_row_ascent);
+    let row_limit = DisplayRowLimit { max_rows };
 
     macro_rules! finish_overlay_string_row {
         () => {{
@@ -1510,7 +1511,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 hit_rows,
             );
             *hit_row_charpos_start = anchor_charpos;
-            if geometry.row >= max_rows {
+            if !geometry.is_within_row_limit(row_limit) {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
                 false
@@ -1534,7 +1535,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     };
     let mut source_state = DisplayRowSourceState::default();
 
-    while geometry.row < max_rows {
+    while geometry.is_within_row_limit(row_limit) {
         if *x >= max_x {
             break;
         }
@@ -3693,6 +3694,7 @@ impl LayoutEngine {
             max_rows,
             bottom_y: text_y + text_height,
         };
+        let row_limit = DisplayRowLimit { max_rows };
         let row_geometry_defaults =
             DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
 
@@ -4780,7 +4782,7 @@ impl LayoutEngine {
                 if x + needed_width > content_x + (text_width - lnum_pixel_width) {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
-                        if row < max_rows {
+                        if current_row_geometry!().is_within_row_limit(row_limit) {
                             row_truncated[row] = true;
                         }
                         // Same byte_idx/charpos desync as the main-char
@@ -4830,7 +4832,7 @@ impl LayoutEngine {
                         }
                         continue;
                     } else {
-                        if row < max_rows {
+                        if current_row_geometry!().is_within_row_limit(row_limit) {
                             row_continued[row] = true;
                         }
                         x = content_x;
@@ -4864,7 +4866,7 @@ impl LayoutEngine {
                         }
                         col = 0;
                         trailing_ws_start_col = -1;
-                        if row < max_rows {
+                        if current_row_geometry!().is_within_row_limit(row_limit) {
                             row_continuation[row] = true;
                         }
                         if has_prefix {
@@ -5107,7 +5109,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
-                    if row < max_rows {
+                    if current_row_geometry!().is_within_row_limit(row_limit) {
                         row_truncated[row] = true;
                     }
                     // The current char has been decoded and `byte_idx` is
@@ -5168,7 +5170,7 @@ impl LayoutEngine {
                     charpos = wrap_break_charpos;
                     col = 0;
 
-                    if row < max_rows {
+                    if current_row_geometry!().is_within_row_limit(row_limit) {
                         row_continued[row] = true;
                     }
                     x = content_x;
@@ -5201,7 +5203,7 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
-                    if row < max_rows {
+                    if current_row_geometry!().is_within_row_limit(row_limit) {
                         row_continuation[row] = true;
                     }
                     word_wrap_may_wrap = false;
@@ -5220,7 +5222,7 @@ impl LayoutEngine {
                     continue;
                 } else {
                     // Character wrap (no break point available)
-                    if row < max_rows {
+                    if current_row_geometry!().is_within_row_limit(row_limit) {
                         row_continued[row] = true;
                     }
                     x = content_x;
@@ -5253,7 +5255,7 @@ impl LayoutEngine {
                     }
                     col = 0;
                     trailing_ws_start_col = -1;
-                    if row < max_rows {
+                    if current_row_geometry!().is_within_row_limit(row_limit) {
                         row_continuation[row] = true;
                     }
                     byte_idx = ch_start_byte_idx;
@@ -5510,7 +5512,7 @@ impl LayoutEngine {
         }
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
-        if has_overlays && row < max_rows {
+        if has_overlays && current_row_geometry!().is_within_row_limit(row_limit) {
             let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
                 buffer,
                 params.window_id as u64,
@@ -5596,11 +5598,11 @@ impl LayoutEngine {
         if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
-            if x < right_edge && row < max_rows {
+            if x < right_edge && current_row_geometry!().is_within_row_limit(row_limit) {
                 let _ry = current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
             }
             // Then fill completely empty rows below
-            let start_row = (row + 1).min(max_rows);
+            let start_row = current_row_geometry!().first_row_below_current(row_limit);
             for r in start_row..max_rows {
                 let ry = row_y_positions
                     .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
@@ -5614,7 +5616,7 @@ impl LayoutEngine {
         if params.left_fringe_width > 0.0 || params.right_fringe_width > 0.0 {
             let _fringe_char_w = params.left_fringe_width.min(char_w).max(char_w * 0.5);
 
-            for r in 0..row.min(max_rows) {
+            for r in 0..current_row_geometry!().rendered_row_count(row_limit) {
                 let _gy = row_y_positions.y_for_row(
                     r,
                     DisplayRowYFallback {
@@ -5642,7 +5644,7 @@ impl LayoutEngine {
 
             // Empty line indicators (after buffer text ends)
             if params.indicate_empty_lines > 0 {
-                let eob_start = row.min(max_rows);
+                let eob_start = current_row_geometry!().rendered_row_count(row_limit);
                 for r in eob_start..max_rows {
                     let _gy = row_y_positions
                         .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
@@ -5674,7 +5676,7 @@ impl LayoutEngine {
             // Draw indicator character at the fill column on each row
             if (fci_col as usize) < cols {
                 let indicator_x = content_x + fci_col as f32 * char_w;
-                let total_rows = row.min(max_rows);
+                let total_rows = current_row_geometry!().rendered_row_count(row_limit);
                 for r in 0..total_rows {
                     let _gy = row_y_positions.y_for_row(
                         r,
@@ -5796,7 +5798,9 @@ impl LayoutEngine {
         }
 
         let has_pending_row_output = output_emitter.current_row_has_output();
-        if row < max_rows && (charpos > hit_row_charpos_start || has_pending_row_output) {
+        if current_row_geometry!().is_within_row_limit(row_limit)
+            && (charpos > hit_row_charpos_start || has_pending_row_output)
+        {
             let row_y_start =
                 current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
             let row_cursor = current_row_geometry!().with_row_y(row_y_start).cursor();

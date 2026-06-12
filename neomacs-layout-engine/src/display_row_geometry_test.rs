@@ -559,6 +559,27 @@ fn display_row_geometry_state_resolves_recorded_current_row_y() {
 }
 
 #[test]
+fn display_row_geometry_state_resolves_row_limit_positions() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let limit = DisplayRowLimit { max_rows: 5 };
+
+    assert!(geometry.is_within_row_limit(limit));
+    assert_eq!(geometry.rendered_row_count(limit), 3);
+    assert_eq!(geometry.first_row_below_current(limit), 4);
+
+    let exhausted = DisplayRowLimit { max_rows: 3 };
+    assert!(!geometry.is_within_row_limit(exhausted));
+    assert_eq!(geometry.rendered_row_count(exhausted), 3);
+    assert_eq!(geometry.first_row_below_current(exhausted), 3);
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_row_output() {
     let geometry = DisplayRowGeometryState {
         row: 3,

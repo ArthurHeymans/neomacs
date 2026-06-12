@@ -88,6 +88,11 @@ pub(crate) struct DisplayRowVisibilityLimit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowLimit {
+    pub(crate) max_rows: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowYFallback {
     pub(crate) text_y: f32,
     pub(crate) default_height: f32,
@@ -467,6 +472,18 @@ impl DisplayRowGeometryState {
 
     pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
         self.row < limit.max_rows && self.y + self.height <= limit.bottom_y
+    }
+
+    pub(crate) fn is_within_row_limit(&self, limit: DisplayRowLimit) -> bool {
+        self.row < limit.max_rows
+    }
+
+    pub(crate) fn rendered_row_count(&self, limit: DisplayRowLimit) -> usize {
+        self.row.min(limit.max_rows)
+    }
+
+    pub(crate) fn first_row_below_current(&self, limit: DisplayRowLimit) -> usize {
+        self.row.saturating_add(1).min(limit.max_rows)
     }
 
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
