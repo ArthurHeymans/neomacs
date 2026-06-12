@@ -78,11 +78,7 @@ impl TextRunDisplayRowRenderPolicy {
 }
 
 impl DisplayRowRenderPolicy for TextRunDisplayRowRenderPolicy {
-    fn measurement_for<'a>(
-        &'a mut self,
-        _item: &DisplayItem,
-        _face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
+    fn measurement_for(&mut self, _item: &DisplayItem, _face_id: u32) -> DisplayRowItemMeasurement {
         DisplayRowItemMeasurement::TextRun(self.measurement.clone())
     }
 }
@@ -691,11 +687,7 @@ impl<M: DisplayRowItemMeasurer> DisplayRowRenderPolicy
         matches!(item.kind, DisplayItemKind::RowBreak(_))
     }
 
-    fn measurement_for<'a>(
-        &'a mut self,
-        item: &DisplayItem,
-        face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
+    fn measurement_for(&mut self, item: &DisplayItem, face_id: u32) -> DisplayRowItemMeasurement {
         self.item_measurer.measurement_for(item, face_id)
     }
 

@@ -125,10 +125,9 @@ pub(crate) trait DisplayGlyphMeasurer {
     }
 }
 
-pub(crate) enum DisplayRowItemMeasurement<'a> {
+pub(crate) enum DisplayRowItemMeasurement {
     Default,
     TextRun(DisplayTextRunMeasurement),
-    Measured(&'a mut dyn DisplayGlyphMeasurer),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -237,11 +236,7 @@ impl DisplayGlyphMeasurer for DisplayTextRunMeasurer {
 }
 
 pub(crate) trait DisplayRowItemMeasurer {
-    fn measurement_for<'a>(
-        &'a mut self,
-        item: &DisplayItem,
-        face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a>;
+    fn measurement_for(&mut self, item: &DisplayItem, face_id: u32) -> DisplayRowItemMeasurement;
 }
 
 #[cfg(test)]

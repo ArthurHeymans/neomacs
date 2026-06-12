@@ -8,7 +8,7 @@ use crate::display_row::{
     DisplayRowSpec,
 };
 use crate::display_row_builder::{
-    DisplayRowPosition, DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvances,
+    DisplayRowPosition, DisplayTabPolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
 };
 use crate::display_text::DisplayTextFragment;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -1481,33 +1481,33 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     assert_eq!(requests[0].bg_color, 0x00445566);
 }
 
-struct SourceMappedTextWidthByFace {
-    scratch: FixedGlyphAdvances,
-}
+struct SourceMappedTextWidthByFace;
 
 impl SourceMappedTextWidthByFace {
     fn new() -> Self {
-        Self {
-            scratch: FixedGlyphAdvances::new(),
-        }
+        Self
     }
 }
 
 impl DisplayRowItemMeasurer for SourceMappedTextWidthByFace {
-    fn measurement_for<'a>(
-        &'a mut self,
+    fn measurement_for(
+        &mut self,
         item: &crate::display_item::DisplayItem,
         face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
-        self.scratch = FixedGlyphAdvances::new();
+    ) -> DisplayRowItemMeasurement {
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
         };
-        for ch in text.text.chars() {
-            self.scratch
-                .insert(ch, face_id, if face_id == 20 { 13.0 } else { 11.0 });
-        }
-        DisplayRowItemMeasurement::Measured(&mut self.scratch)
+        let advance_px = if face_id == 20 { 13.0 } else { 11.0 };
+        let advances = text
+            .text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, _))| {
+                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
+            })
+            .collect();
+        DisplayRowItemMeasurement::TextRun(DisplayTextRunMeasurement::Measured(advances))
     }
 }
 

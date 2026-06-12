@@ -1464,6 +1464,51 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
     assert_eq!(rendered, vec!["A  ".to_string(), "B".to_string()]);
 }
 
+#[test]
+fn replacement_string_item_measurer_returns_direct_text_run_plan() {
+    let eval = Context::new();
+    let resolver = crate::neovm_bridge::FaceResolver::new(
+        eval.face_table(),
+        0x00FFFFFF,
+        0x00000000,
+        14.0,
+        None,
+    );
+    let mut default_face = resolver.default_face().clone();
+    default_face.font_char_width = 8.0;
+    let measurement_face =
+        DisplayRowGlyphMeasurementFace::from_resolved(7, &default_face, None, false, 8.0);
+    let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
+    let mut measurer = ReplacementStringItemMeasurer {
+        font_metrics_svc: &mut font_metrics,
+        measurement_face,
+    };
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(11, 0, 3),
+        RenderFaceRef::FaceId(7),
+        crate::display_item::DisplayItemKind::SourceMappedText(
+            crate::display_item::DisplaySourceMappedText::new("abc"),
+        ),
+    );
+
+    let measurement = measurer.measurement_for(&item, 7);
+
+    let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
+        panic!("replacement string text should use a direct text-run measurement");
+    };
+    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    else {
+        panic!("replacement string run should be measured");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset))
+            .collect::<Vec<_>>(),
+        vec![(0, 0), (1, 1), (2, 2)]
+    );
+}
+
 fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) {
     let mut eval = Context::new();
     let buf_id = eval

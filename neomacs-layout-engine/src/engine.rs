@@ -38,8 +38,8 @@ use crate::display_row_append::{
     render_natural_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition,
-    DisplayTabPolicy, DisplayTextRunMeasurement,
+    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
+    DisplayTextRunMeasurement,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -694,45 +694,18 @@ struct ReplacementStringItemMeasurer<'a> {
 }
 
 impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
-    fn measurement_for<'a>(
-        &'a mut self,
+    fn measurement_for(
+        &mut self,
         item: &crate::display_item::DisplayItem,
         _face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
-        if !matches!(
-            &item.kind,
-            crate::display_item::DisplayItemKind::SourceMappedText(_)
-        ) {
+    ) -> DisplayRowItemMeasurement {
+        let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
-        }
-        DisplayRowItemMeasurement::Measured(self)
-    }
-}
-
-impl DisplayGlyphMeasurer for ReplacementStringItemMeasurer<'_> {
-    fn glyph_advance_px(
-        &mut self,
-        ch: char,
-        _face_id: u32,
-        columns: u8,
-        fallback_advance_px: f32,
-    ) -> Option<f32> {
-        Some(self.measurement_face.glyph_advance_px(
-            self.font_metrics_svc,
-            ch,
-            columns,
-            fallback_advance_px,
-        ))
-    }
-
-    fn text_run_advances_px(
-        &mut self,
-        text: &str,
-        _face_id: u32,
-        _fallback_char_width_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        self.measurement_face
-            .text_run_measurement(self.font_metrics_svc, text)
+        };
+        DisplayRowItemMeasurement::TextRun(
+            self.measurement_face
+                .measured_text_run_or_char_advances(self.font_metrics_svc, text.text.as_ref()),
+        )
     }
 }
 

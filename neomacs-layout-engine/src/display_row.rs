@@ -564,6 +564,31 @@ impl DisplayRowGlyphMeasurementFace {
         );
         measurer.text_run_advances_px(text, self.face.face_id, self.fallback_char_width)
     }
+
+    pub(crate) fn measured_text_run_or_char_advances(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+    ) -> DisplayTextRunMeasurement {
+        let measurement = self.text_run_measurement(font_metrics, text);
+        if measurement.measured_advances().is_some() {
+            return measurement;
+        }
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, ch))| {
+                let columns = crate::composition::base_width_cols(ch).max(1);
+                let fallback_advance_px = self.fallback_char_width * f32::from(columns);
+                DisplayTextRunAdvance::new(
+                    char_offset,
+                    byte_offset,
+                    self.advance_for_char(font_metrics, ch, fallback_advance_px),
+                )
+            })
+            .collect();
+        DisplayTextRunMeasurement::Measured(advances)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -829,11 +854,7 @@ pub(crate) trait DisplayRowRenderPolicy {
         false
     }
 
-    fn measurement_for<'a>(
-        &'a mut self,
-        _item: &DisplayItem,
-        _face_id: u32,
-    ) -> DisplayRowItemMeasurement<'a> {
+    fn measurement_for(&mut self, _item: &DisplayItem, _face_id: u32) -> DisplayRowItemMeasurement {
         DisplayRowItemMeasurement::Default
     }
 
@@ -1781,16 +1802,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         &row_layout,
                         &mut *row,
                         &mut measurer,
-                        position,
-                        render_bounds.max_x_px,
-                    );
-                    row_writer.push_item(item)
-                }
-                DisplayRowItemMeasurement::Measured(measurer) => {
-                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
-                        &row_layout,
-                        &mut *row,
-                        measurer,
                         position,
                         render_bounds.max_x_px,
                     );

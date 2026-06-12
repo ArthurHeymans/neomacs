@@ -481,11 +481,11 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     struct DirectTextRunPolicy;
 
     impl DisplayRowRenderPolicy for DirectTextRunPolicy {
-        fn measurement_for<'a>(
-            &'a mut self,
+        fn measurement_for(
+            &mut self,
             _item: &crate::display_item::DisplayItem,
             _face_id: u32,
-        ) -> DisplayRowItemMeasurement<'a> {
+        ) -> DisplayRowItemMeasurement {
             DisplayRowItemMeasurement::TextRun(
                 crate::display_row_builder::DisplayTextRunMeasurement::uniform_for_text("ABC", 5.0),
             )
