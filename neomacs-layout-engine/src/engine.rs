@@ -218,6 +218,20 @@ impl CapturedCursorInfo {
             stretch_like: placement.stretch_like,
         }
     }
+
+    fn line_break_from_active_face_state(
+        active_face_state: &DisplayRowActiveFaceState,
+        placement: CapturedCursorPlacement,
+        line_height: f32,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        Self::display_box_from_active_face_state(
+            active_face_state,
+            placement,
+            line_height,
+            metrics.ascent,
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -3906,19 +3920,19 @@ impl LayoutEngine {
                     if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
-                            CapturedCursorInfo {
-                                x,
-                                y,
-                                face_w: face_metrics.char_width,
-                                face_h: char_h,
-                                face_ascent: face_metrics.ascent,
-                                bg: active_face_state.background(),
-                                byte_idx: ch_start_byte_idx,
-                                col,
-                                matrix_row: row,
-                                slot_width: Some(face_metrics.char_width.max(1.0)),
-                                stretch_like: false,
-                            },
+                            CapturedCursorInfo::line_break_from_active_face_state(
+                                &active_face_state,
+                                CapturedCursorPlacement {
+                                    x,
+                                    y,
+                                    byte_idx: ch_start_byte_idx,
+                                    col,
+                                    matrix_row: row,
+                                    slot_width: CapturedCursorSlotWidth::FaceChar,
+                                    stretch_like: false,
+                                },
+                                char_h,
+                            ),
                         );
                     }
                 } else {
