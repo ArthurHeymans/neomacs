@@ -5,7 +5,7 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
-use super::font_metrics::FontMetricsService;
+use super::font_metrics::{FontMetrics, FontMetricsService};
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
 use super::types::*;
@@ -687,6 +687,26 @@ fn resolve_cursor_geometry(
         color,
         cursor_fg: source.cursor_fg,
     }
+}
+
+fn display_row_glyph_measurement_face(
+    face_id: u32,
+    face: &crate::neovm_bridge::ResolvedFace,
+    metrics: Option<FontMetrics>,
+    use_font_metrics: bool,
+    fallback_char_width: f32,
+) -> DisplayRowGlyphMeasurementFace {
+    let quantization = if use_font_metrics {
+        GlyphAdvanceQuantization::PreserveLogicalPixels
+    } else {
+        GlyphAdvanceQuantization::SnapToIntegerPixels
+    };
+    DisplayRowGlyphMeasurementFace::new(
+        resolved_display_row_face(face_id, face, metrics),
+        use_font_metrics,
+        fallback_char_width,
+        quantization,
+    )
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -3772,18 +3792,17 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let dot_advance = char_pixel_advance(
-                            &mut self.ascii_width_cache,
+                        let measurement_face = display_row_glyph_measurement_face(
+                            current_text_face_id,
+                            &current_resolved_face,
+                            None,
                             frame_params.window_system,
+                            face_char_w,
+                        );
+                        let dot_advance = measurement_face.advance_for_char(
                             &mut self.font_metrics,
                             '.',
-                            1,
-                            char_w,
-                            current_font_size_px,
                             face_char_w,
-                            &self.current_resolved_family,
-                            current_font_weight,
-                            current_font_italic,
                         );
                         let ellipsis_frame = text_append_surface.frame(
                             DisplayRowAppendPlacement {
@@ -4560,19 +4579,15 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let dot_advance = char_pixel_advance(
-                    &mut self.ascii_width_cache,
+                let measurement_face = display_row_glyph_measurement_face(
+                    current_text_face_id,
+                    &current_resolved_face,
+                    None,
                     frame_params.window_system,
-                    &mut self.font_metrics,
-                    '.',
-                    1,
-                    char_w,
-                    current_font_size_px,
                     face_char_w,
-                    &self.current_resolved_family,
-                    current_font_weight,
-                    current_font_italic,
                 );
+                let dot_advance =
+                    measurement_face.advance_for_char(&mut self.font_metrics, '.', face_char_w);
                 let ellipsis_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
                         row,

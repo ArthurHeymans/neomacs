@@ -439,6 +439,19 @@ impl DisplayRowGlyphMeasurementFace {
             .unwrap_or(fallback_advance_px)
     }
 
+    pub(crate) fn advance_for_char(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        let columns = crate::composition::base_width_cols(ch);
+        if columns == 0 {
+            return 0.0;
+        }
+        self.glyph_advance_px(font_metrics, ch, columns, fallback_advance_px)
+    }
+
     pub(crate) fn fixed_advances_for_text(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
@@ -454,10 +467,9 @@ impl DisplayRowGlyphMeasurementFace {
             let advance = if columns == 0 {
                 0.0
             } else {
-                self.glyph_advance_px(
+                self.advance_for_char(
                     font_metrics,
                     ch,
-                    columns,
                     f32::from(columns) * self.fallback_char_width.max(1.0),
                 )
             };
