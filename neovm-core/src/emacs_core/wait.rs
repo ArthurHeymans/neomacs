@@ -76,6 +76,23 @@ impl WaitDeadline {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessOutputWaitTiming {
+    Poll,
+    For(Duration),
+    Forever,
+}
+
+impl ProcessOutputWaitTiming {
+    fn into_deadline(self) -> WaitDeadline {
+        match self {
+            Self::Poll => WaitDeadline::Poll,
+            Self::For(duration) => WaitDeadline::Until(Instant::now() + duration),
+            Self::Forever => WaitDeadline::Forever,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum KeyboardWaitPolicy {
     ServiceSpecialOnly,
     WaitForSpecialInput,
@@ -208,32 +225,34 @@ impl WaitRequest {
         Self::accept_process_output(deadline, processes, TimerWaitPolicy::Suppress)
     }
 
-    pub(crate) fn accept_any_process_output_with_timers(deadline: WaitDeadline) -> Self {
-        Self::accept_process_output_with_timers(deadline, ProcessWaitPolicy::Any)
+    pub(crate) fn accept_any_process_output_with_timers(timing: ProcessOutputWaitTiming) -> Self {
+        Self::accept_process_output_with_timers(timing.into_deadline(), ProcessWaitPolicy::Any)
     }
 
-    pub(crate) fn accept_any_process_output_without_timers(deadline: WaitDeadline) -> Self {
-        Self::accept_process_output_without_timers(deadline, ProcessWaitPolicy::Any)
+    pub(crate) fn accept_any_process_output_without_timers(
+        timing: ProcessOutputWaitTiming,
+    ) -> Self {
+        Self::accept_process_output_without_timers(timing.into_deadline(), ProcessWaitPolicy::Any)
     }
 
     pub(crate) fn accept_target_process_output_with_timers(
-        deadline: WaitDeadline,
+        timing: ProcessOutputWaitTiming,
         process: ProcessId,
         just_this_one: bool,
     ) -> Self {
         Self::accept_process_output_with_timers(
-            deadline,
+            timing.into_deadline(),
             ProcessWaitPolicy::target(process, just_this_one),
         )
     }
 
     pub(crate) fn accept_target_process_output_without_timers(
-        deadline: WaitDeadline,
+        timing: ProcessOutputWaitTiming,
         process: ProcessId,
         just_this_one: bool,
     ) -> Self {
         Self::accept_process_output_without_timers(
-            deadline,
+            timing.into_deadline(),
             ProcessWaitPolicy::target(process, just_this_one),
         )
     }
@@ -1008,8 +1027,11 @@ mod tests {
 
     #[test]
     fn wait_request_exposes_deadline_and_process_completion_queries() {
-        let request =
-            WaitRequest::accept_target_process_output_with_timers(WaitDeadline::Poll, 12, false);
+        let request = WaitRequest::accept_target_process_output_with_timers(
+            ProcessOutputWaitTiming::Poll,
+            12,
+            false,
+        );
 
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.target_process(), Some(12));
@@ -1020,8 +1042,9 @@ mod tests {
 
     #[test]
     fn wait_request_accept_process_output_constructors_capture_timer_policy() {
-        let run = WaitRequest::accept_any_process_output_with_timers(WaitDeadline::Poll);
-        let suppress = WaitRequest::accept_any_process_output_without_timers(WaitDeadline::Poll);
+        let run = WaitRequest::accept_any_process_output_with_timers(ProcessOutputWaitTiming::Poll);
+        let suppress =
+            WaitRequest::accept_any_process_output_without_timers(ProcessOutputWaitTiming::Poll);
 
         assert!(run.runs_timers());
         assert!(!suppress.runs_timers());
@@ -1029,11 +1052,17 @@ mod tests {
 
     #[test]
     fn wait_request_accept_process_output_named_constructors_capture_process_scope() {
-        let any = WaitRequest::accept_any_process_output_with_timers(WaitDeadline::Poll);
-        let target =
-            WaitRequest::accept_target_process_output_with_timers(WaitDeadline::Poll, 7, false);
-        let target_only =
-            WaitRequest::accept_target_process_output_without_timers(WaitDeadline::Poll, 9, true);
+        let any = WaitRequest::accept_any_process_output_with_timers(ProcessOutputWaitTiming::Poll);
+        let target = WaitRequest::accept_target_process_output_with_timers(
+            ProcessOutputWaitTiming::Poll,
+            7,
+            false,
+        );
+        let target_only = WaitRequest::accept_target_process_output_without_timers(
+            ProcessOutputWaitTiming::Forever,
+            9,
+            true,
+        );
 
         assert!(any.completes_on_any_process_activity());
         assert_eq!(any.target_process(), None);
@@ -1042,6 +1071,16 @@ mod tests {
         assert!(target_only.completes_on_target_process_activity(9));
         assert!(target_only.restricts_process_service_to_target());
         assert!(!target_only.runs_timers());
+        assert!(target_only.deadline_is_forever());
+    }
+
+    #[test]
+    fn wait_request_process_output_timing_converts_duration_to_finite_deadline() {
+        let request = WaitRequest::accept_any_process_output_with_timers(
+            ProcessOutputWaitTiming::For(Duration::from_millis(5)),
+        );
+
+        assert!(request.deadline_is_finite());
     }
 
     #[test]

@@ -42,7 +42,7 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    WaitCompletion, WaitDeadline, WaitRequest, WaitServiceOutcome, WaitSourceEvents,
+    ProcessOutputWaitTiming, WaitCompletion, WaitRequest, WaitServiceOutcome, WaitSourceEvents,
 };
 
 /// OS socket owned by a network process.
@@ -7490,25 +7490,25 @@ fn parse_accept_process_output_request(
     };
     let milliseconds_supplied = args.get(2).is_some_and(|value| !value.is_nil());
     let positive_timeout = accept_process_output_positive_timeout(args);
-    let deadline = if let Some(timeout) = positive_timeout {
-        WaitDeadline::Until(Instant::now() + timeout)
+    let timing = if let Some(timeout) = positive_timeout {
+        ProcessOutputWaitTiming::For(timeout)
     } else if target_id.is_some()
         && !milliseconds_supplied
         && args.get(1).map_or(true, |value| value.is_nil())
     {
-        WaitDeadline::Forever
+        ProcessOutputWaitTiming::Forever
     } else {
-        WaitDeadline::Poll
+        ProcessOutputWaitTiming::Poll
     };
     let wait = match (target_id, allow_timers) {
         (Some(id), true) => {
-            WaitRequest::accept_target_process_output_with_timers(deadline, id, just_this_one)
+            WaitRequest::accept_target_process_output_with_timers(timing, id, just_this_one)
         }
         (Some(id), false) => {
-            WaitRequest::accept_target_process_output_without_timers(deadline, id, just_this_one)
+            WaitRequest::accept_target_process_output_without_timers(timing, id, just_this_one)
         }
-        (None, true) => WaitRequest::accept_any_process_output_with_timers(deadline),
-        (None, false) => WaitRequest::accept_any_process_output_without_timers(deadline),
+        (None, true) => WaitRequest::accept_any_process_output_with_timers(timing),
+        (None, false) => WaitRequest::accept_any_process_output_without_timers(timing),
     };
 
     Ok(Some(AcceptProcessOutputRequest { wait }))
