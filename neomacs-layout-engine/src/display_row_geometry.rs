@@ -145,15 +145,6 @@ pub(crate) struct DisplayRowGeometryCommitTarget<'a> {
     row_y_recorder: DisplayRowYRecorder<'a>,
 }
 
-pub(crate) struct DisplayRowGeometryAdvanceTarget<'a> {
-    defaults: DisplayRowGeometryDefaults,
-    kind: DisplayRowAdvanceKind,
-    row_base: usize,
-    col: usize,
-    x: f32,
-    commit_target: DisplayRowGeometryCommitTarget<'a>,
-}
-
 pub(crate) struct DisplayRowGeometryTransitionTarget<'a> {
     defaults: DisplayRowGeometryDefaults,
     kind: DisplayRowAdvanceKind,
@@ -191,60 +182,6 @@ impl<'a> DisplayRowGeometryCommitTarget<'a> {
     }
 }
 
-impl<'a> DisplayRowGeometryAdvanceTarget<'a> {
-    fn new(
-        defaults: DisplayRowGeometryDefaults,
-        kind: DisplayRowAdvanceKind,
-        row_base: usize,
-        col: usize,
-        x: f32,
-        commit_target: DisplayRowGeometryCommitTarget<'a>,
-    ) -> Self {
-        Self {
-            defaults,
-            kind,
-            row_base,
-            col,
-            x,
-            commit_target,
-        }
-    }
-
-    pub(crate) fn truncation(
-        defaults: DisplayRowGeometryDefaults,
-        row_base: usize,
-        col: usize,
-        x: f32,
-        commit_target: DisplayRowGeometryCommitTarget<'a>,
-    ) -> Self {
-        Self::new(
-            defaults,
-            DisplayRowAdvanceKind::Truncation,
-            row_base,
-            col,
-            x,
-            commit_target,
-        )
-    }
-
-    pub(crate) fn visual_wrap(
-        defaults: DisplayRowGeometryDefaults,
-        row_base: usize,
-        col: usize,
-        x: f32,
-        commit_target: DisplayRowGeometryCommitTarget<'a>,
-    ) -> Self {
-        Self::new(
-            defaults,
-            DisplayRowAdvanceKind::VisualWrap,
-            row_base,
-            col,
-            x,
-            commit_target,
-        )
-    }
-}
-
 impl<'a> DisplayRowGeometryTransitionTarget<'a> {
     fn new(
         defaults: DisplayRowGeometryDefaults,
@@ -275,6 +212,40 @@ impl<'a> DisplayRowGeometryTransitionTarget<'a> {
         Self::new(
             defaults,
             DisplayRowAdvanceKind::LineBreak { line_spacing },
+            row_base,
+            col,
+            x,
+            row_y_recording,
+        )
+    }
+
+    pub(crate) fn truncation(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::Truncation,
+            row_base,
+            col,
+            x,
+            row_y_recording,
+        )
+    }
+
+    pub(crate) fn visual_wrap(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::VisualWrap,
             row_base,
             col,
             x,
@@ -438,21 +409,6 @@ impl DisplayRowGeometryCursor {
             finished_row,
             begin_row,
         }
-    }
-
-    pub(crate) fn finish_begin_and_commit_next_text_matrix_row(
-        &mut self,
-        target: DisplayRowGeometryAdvanceTarget<'_>,
-    ) -> TextMatrixRowGeometryTransition {
-        let transition = self.finish_and_begin_next_text_matrix_row(
-            target.defaults,
-            target.kind,
-            target.row_base,
-            target.col,
-            target.x,
-        );
-        self.commit(target.commit_target);
-        transition
     }
 
     pub(crate) fn text_matrix_row_begin(

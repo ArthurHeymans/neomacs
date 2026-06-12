@@ -370,23 +370,23 @@ fn display_row_geometry_cursor_finishes_and_builds_next_text_matrix_row_begin() 
 }
 
 #[test]
-fn display_row_geometry_advance_target_groups_truncation_transition_and_commit_inputs() {
-    let mut cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
-        row: 2,
-        y: 42.0,
-        row_extra_y: 3.0,
-        height: 24.0,
-        ascent: 18.0,
-    });
-    let mut row = 0;
-    let mut y = 0.0;
-    let mut row_extra_y = 0.0;
-    let mut row_max_height = 1.0;
-    let mut row_max_ascent = 1.0;
+fn display_row_geometry_transition_target_groups_truncation_transition_and_commit_inputs() {
+    let mut row = 2;
+    let mut y = 42.0;
+    let mut row_extra_y = 3.0;
+    let mut row_max_height = 24.0;
+    let mut row_max_ascent = 18.0;
     let mut row_y_positions = vec![8.0];
 
-    let transition = cursor.finish_begin_and_commit_next_text_matrix_row(
-        DisplayRowGeometryAdvanceTarget::truncation(
+    let transition = LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .finish_begin_and_commit_next_text_matrix_row(
+        DisplayRowGeometryTransitionTarget::truncation(
             DisplayRowGeometryDefaults {
                 text_y: 10.0,
                 height: 16.0,
@@ -395,16 +395,7 @@ fn display_row_geometry_advance_target_groups_truncation_transition_and_commit_i
             5,
             7,
             13.0,
-            DisplayRowGeometryCommitTarget::recording_row_y(
-                LegacyDisplayRowGeometryVars {
-                    row: &mut row,
-                    y: &mut y,
-                    row_extra_y: &mut row_extra_y,
-                    row_max_height: &mut row_max_height,
-                    row_max_ascent: &mut row_max_ascent,
-                },
-                &mut row_y_positions,
-            ),
+            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
         ),
     );
 
