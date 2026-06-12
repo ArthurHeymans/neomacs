@@ -29,6 +29,12 @@ use crate::emacs_core::intern::SymId;
 #[cfg(feature = "jit")]
 pub mod backend;
 
+/// Baseline bytecode → native lowering (Phase 3b+). Compiles the leaf,
+/// straight-line opcode subset to machine code and bails to the interpreter on
+/// anything else. Only built with the `jit` feature. See `jit/compile.rs`.
+#[cfg(feature = "jit")]
+pub mod compile;
+
 /// Which execution tier currently backs a compiled function.
 ///
 /// Only [`Tier::Bytecode`] exists today. Later phases add `Baseline`
