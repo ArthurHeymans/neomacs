@@ -2923,6 +2923,12 @@ impl crate::emacs_core::eval::Context {
             }
             Err(crossbeam_channel::TryRecvError::Empty) => Ok(false),
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                if std::env::var_os("NEOVM_DEBUG_QUIT").is_some() {
+                    eprintln!(
+                        "[quit-debug] input channel Disconnected -> quit; backtrace:\n{}",
+                        std::backtrace::Backtrace::force_capture()
+                    );
+                }
                 self.handle_display_terminal_disconnect();
                 Err(crate::emacs_core::error::signal("quit", vec![]))
             }

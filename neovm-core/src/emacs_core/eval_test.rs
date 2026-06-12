@@ -10909,6 +10909,14 @@ fn sit_for_requeues_delayed_input_after_with_selected_window_cleanup() {
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
 
+    // Keep one sender alive for the whole test: dropping the last sender
+    // disconnects the channel, which the input machinery treats as
+    // terminal-gone -> quit. The test models a terminal that stays connected
+    // and delivers one delayed key — without this, any input poll that lands
+    // after the spawned thread exits (timing-dependent; reliably triggered by
+    // JIT compile pauses under NEOVM_JIT_THRESHOLD=1) sees Disconnected and
+    // the whole form signals (quit).
+    let _tx_keepalive = tx.clone();
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(10));
         tx.send(crate::keyboard::InputEvent::key_press(

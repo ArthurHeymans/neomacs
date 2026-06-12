@@ -55,12 +55,52 @@ thread_local! {
 /// `ctx` is the `Context` the dispatch seam is executing in; runtime-call shims
 /// re-enter elisp through it. Compiles on first use (per thread) and caches the
 /// outcome, so a non-compilable body is only attempted once.
+/// Debug aid: when `NEOVM_JIT_MAX_ID` is set, only functions whose
+/// `compiled_id` is <= it run natively — bisecting a misbehaving compiled
+/// function out of a workload (ids are assigned in first-hot order, so this is
+/// a clean prefix bisection).
+fn max_compiled_id() -> u64 {
+    use std::sync::OnceLock;
+    static MAX: OnceLock<u64> = OnceLock::new();
+    *MAX.get_or_init(|| {
+        std::env::var("NEOVM_JIT_MAX_ID")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(u64::MAX)
+    })
+}
+
 pub fn try_run_compiled(
     ctx: *mut Context,
     func: &ByteCodeFunction,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
     let id = func.runtime.compiled_id_or_assign();
+    if id > max_compiled_id() {
+        return Ok(None);
+    }
+    // Debug aid: dump the body of one compiled function by id.
+    {
+        use std::sync::OnceLock;
+        static DEBUG_ID: OnceLock<Option<u64>> = OnceLock::new();
+        let dbg = *DEBUG_ID.get_or_init(|| {
+            std::env::var("NEOVM_JIT_DEBUG_ID")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        });
+        if dbg == Some(id) {
+            let consts: Vec<String> = func
+                .constants
+                .iter()
+                .map(crate::emacs_core::print::print_value)
+                .collect();
+            eprintln!(
+                "[jit-debug] id={id} args={} ops={:?} constants={consts:?}",
+                args.len(),
+                func.ops,
+            );
+        }
+    }
     let leaf: Option<Rc<CompiledLeaf>> = COMPILED.with(|cache| {
         let mut cache = cache.borrow_mut();
         match cache
