@@ -42,8 +42,8 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    ProcessWaitPolicy, WaitBackendInterest, WaitCompletion, WaitDeadline, WaitRequest,
-    WaitServiceOutcome, WaitSourceEvents,
+    ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest, WaitServiceOutcome,
+    WaitSourceEvents,
 };
 
 /// OS socket owned by a network process.
@@ -429,6 +429,23 @@ struct ProcessWaitBackend {
     input_wakeup_fd: Option<std::os::unix::io::RawFd>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessWaitBackendInterest {
+    ProcessesOnly,
+    InputWakeupOnly,
+    InputWakeupAndProcesses,
+}
+
+impl ProcessWaitBackendInterest {
+    fn wants_input_wakeup(self) -> bool {
+        matches!(self, Self::InputWakeupOnly | Self::InputWakeupAndProcesses)
+    }
+
+    fn wants_processes(self) -> bool {
+        matches!(self, Self::ProcessesOnly | Self::InputWakeupAndProcesses)
+    }
+}
+
 impl ProcessWaitBackend {
     fn new() -> Self {
         Self {
@@ -488,7 +505,7 @@ impl ProcessWaitBackend {
         &self,
         processes: &HashMap<ProcessId, Process>,
         timeout: std::time::Duration,
-        interest: WaitBackendInterest,
+        interest: ProcessWaitBackendInterest,
     ) -> Option<WaitSourceEvents> {
         if let Some(ref poller) = self.poller {
             let deadline = Instant::now() + timeout;
@@ -1748,7 +1765,7 @@ impl ProcessManager {
 
     pub(crate) fn wait_for_process_events(&self, timeout: std::time::Duration) -> WaitSourceEvents {
         if let Some(events) =
-            self.wait_for_backend_events(timeout, WaitBackendInterest::processes_only())
+            self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::ProcessesOnly)
         {
             return events;
         }
@@ -1772,10 +1789,31 @@ impl ProcessManager {
         self.wait_backend.has_input_wakeup()
     }
 
-    pub(crate) fn wait_for_backend_events(
+    pub(crate) fn wait_for_input_wakeup_events(
         &self,
         timeout: std::time::Duration,
-        interest: WaitBackendInterest,
+    ) -> Option<WaitSourceEvents> {
+        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupOnly)
+    }
+
+    pub(crate) fn wait_for_process_backend_events(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Option<WaitSourceEvents> {
+        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::ProcessesOnly)
+    }
+
+    pub(crate) fn wait_for_input_wakeup_or_process_events(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Option<WaitSourceEvents> {
+        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupAndProcesses)
+    }
+
+    fn wait_for_backend_events(
+        &self,
+        timeout: std::time::Duration,
+        interest: ProcessWaitBackendInterest,
     ) -> Option<WaitSourceEvents> {
         self.wait_backend
             .wait_for_events(&self.processes, timeout, interest)

@@ -55,40 +55,6 @@ impl WaitSourceEvents {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum WaitBackendInterest {
-    ProcessesOnly,
-    InputWakeupOnly,
-    InputWakeupAndProcesses,
-}
-
-impl WaitBackendInterest {
-    pub(crate) fn processes_only() -> Self {
-        Self::ProcessesOnly
-    }
-
-    pub(crate) fn input_wakeup_only() -> Self {
-        Self::InputWakeupOnly
-    }
-
-    fn from_wait_flags(input_wakeup: bool, processes: bool) -> Option<Self> {
-        match (input_wakeup, processes) {
-            (true, true) => Some(Self::InputWakeupAndProcesses),
-            (true, false) => Some(Self::InputWakeupOnly),
-            (false, true) => Some(Self::ProcessesOnly),
-            (false, false) => None,
-        }
-    }
-
-    pub(crate) fn wants_input_wakeup(self) -> bool {
-        matches!(self, Self::InputWakeupOnly | Self::InputWakeupAndProcesses)
-    }
-
-    pub(crate) fn wants_processes(self) -> bool {
-        matches!(self, Self::ProcessesOnly | Self::InputWakeupAndProcesses)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WaitDeadline {
     Poll,
     Until(Instant),
@@ -328,13 +294,6 @@ impl WaitRequest {
         self.timers.allow()
     }
 
-    fn backend_interest(self) -> Option<WaitBackendInterest> {
-        WaitBackendInterest::from_wait_flags(
-            self.keyboard.waits_for_host_input(),
-            self.processes.services_processes(),
-        )
-    }
-
     fn completion_for(self, outcome: WaitServiceOutcome) -> Option<WaitCompletion> {
         if self.keyboard.completes_on_command_input() && outcome.has_command_input_pending() {
             return Some(WaitCompletion::CommandInputPending);
@@ -563,7 +522,9 @@ impl WaitBlockActivity {
 #[derive(Debug, PartialEq, Eq)]
 enum WaitBlockStrategy {
     ServiceNow,
-    Backend(WaitBackendInterest),
+    BackendInputWakeup,
+    BackendProcesses,
+    BackendInputWakeupAndProcesses,
     HostInput,
     ProcessOutput,
     Sleep,
@@ -688,10 +649,24 @@ impl super::eval::Context {
     ) -> Result<WaitBlockActivity, Flow> {
         match self.wait_block_strategy(request, wait_time) {
             WaitBlockStrategy::ServiceNow => Ok(WaitBlockActivity::poll()),
-            WaitBlockStrategy::Backend(interest) => {
+            WaitBlockStrategy::BackendInputWakeup => {
                 let events = self
                     .processes
-                    .wait_for_backend_events(wait_time, interest)
+                    .wait_for_input_wakeup_events(wait_time)
+                    .unwrap_or_default();
+                Ok(WaitBlockActivity::from_source_events(events))
+            }
+            WaitBlockStrategy::BackendProcesses => {
+                let events = self
+                    .processes
+                    .wait_for_process_backend_events(wait_time)
+                    .unwrap_or_default();
+                Ok(WaitBlockActivity::from_source_events(events))
+            }
+            WaitBlockStrategy::BackendInputWakeupAndProcesses => {
+                let events = self
+                    .processes
+                    .wait_for_input_wakeup_or_process_events(wait_time)
                     .unwrap_or_default();
                 Ok(WaitBlockActivity::from_source_events(events))
             }
@@ -738,8 +713,8 @@ impl super::eval::Context {
             return WaitBlockStrategy::ServiceNow;
         }
 
-        if let Some(interest) = self.wait_backend_interest_for_request(request) {
-            return WaitBlockStrategy::Backend(interest);
+        if let Some(strategy) = self.wait_backend_interest_for_request(request) {
+            return strategy;
         }
 
         if request.keyboard.waits_for_host_input() && self.input_rx.is_some() {
@@ -756,15 +731,19 @@ impl super::eval::Context {
     fn wait_backend_interest_for_request(
         &self,
         request: &WaitRequest,
-    ) -> Option<WaitBackendInterest> {
+    ) -> Option<WaitBlockStrategy> {
         if !self.processes.has_wait_input_wakeup_backend() {
             return None;
         }
         if request.processes.services_processes() {
-            return request.backend_interest();
+            return if request.keyboard.waits_for_host_input() {
+                Some(WaitBlockStrategy::BackendInputWakeupAndProcesses)
+            } else {
+                Some(WaitBlockStrategy::BackendProcesses)
+            };
         }
         if request.keyboard.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
-            return request.backend_interest();
+            return Some(WaitBlockStrategy::BackendInputWakeup);
         }
         None
     }

@@ -1,7 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::{
-    ProcessWaitPolicy, WaitBackendInterest, WaitCompletion, WaitDeadline, WaitRequest,
-};
+use crate::emacs_core::wait::{ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2326,10 +2324,7 @@ fn wait_backend_wakes_on_registered_input_wakeup_fd() {
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
-        .wait_for_backend_events(
-            Duration::from_secs(1),
-            WaitBackendInterest::input_wakeup_only(),
-        )
+        .wait_for_input_wakeup_events(Duration::from_secs(1))
         .expect("poller should be available");
 
     assert!(events.has_input_wakeup());
@@ -2349,7 +2344,7 @@ fn wait_backend_process_interest_ignores_input_wakeup_fd() {
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
-        .wait_for_backend_events(Duration::ZERO, WaitBackendInterest::processes_only())
+        .wait_for_process_backend_events(Duration::ZERO)
         .expect("poller should be available");
 
     assert!(!events.has_input_wakeup());
