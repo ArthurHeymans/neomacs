@@ -1482,6 +1482,24 @@ fn display_row_measurement_policy_builds_faces_from_frame_mode() {
 }
 
 #[test]
+fn display_row_measurement_policy_builds_measured_face_with_space_width() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let mut font_metrics = None;
+
+    let measured = policy.measured_face(8, &base, None, 7.2, 7.2, &mut font_metrics);
+
+    assert_eq!(measured.space_width(), 7.0);
+    assert_eq!(
+        measured
+            .measurement_face()
+            .advance_for_char(&mut font_metrics, 'x', 7.2),
+        7.0
+    );
+}
+
+#[test]
 fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();

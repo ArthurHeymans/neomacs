@@ -489,6 +489,24 @@ impl DisplayRowMeasurementPolicy {
             self.mode.quantization(),
         )
     }
+
+    pub(crate) fn measured_face(
+        self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+        fallback_char_width: f32,
+        space_fallback_width: f32,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowMeasuredFace {
+        let measurement_face = self.measurement_face(face_id, face, metrics, fallback_char_width);
+        let space_width =
+            measurement_face.advance_for_char(font_metrics, ' ', space_fallback_width);
+        DisplayRowMeasuredFace {
+            measurement_face,
+            space_width,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -591,6 +609,26 @@ impl DisplayRowGlyphMeasurementFace {
         advance_px: f32,
     ) -> DisplayTextRunMeasurement {
         DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(text, advance_px)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowMeasuredFace {
+    measurement_face: DisplayRowGlyphMeasurementFace,
+    space_width: f32,
+}
+
+impl DisplayRowMeasuredFace {
+    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
+        &self.measurement_face
+    }
+
+    pub(crate) fn into_measurement_face(self) -> DisplayRowGlyphMeasurementFace {
+        self.measurement_face
+    }
+
+    pub(crate) fn space_width(&self) -> f32 {
+        self.space_width
     }
 }
 

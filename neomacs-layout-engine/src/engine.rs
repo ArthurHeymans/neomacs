@@ -3111,14 +3111,17 @@ impl LayoutEngine {
         let mut current_resolved_face = default_resolved.clone();
         let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
 
-        let default_measurement_face = measurement_policy.measurement_face(
+        let default_measured_face = measurement_policy.measured_face(
             current_text_face_id,
             default_resolved,
             None,
             char_w,
+            face_char_w,
+            &mut self.font_metrics,
         );
-        face_space_w =
-            default_measurement_face.advance_for_char(&mut self.font_metrics, ' ', face_char_w);
+        face_space_w = default_measured_face.space_width();
+        let default_measurement_face = default_measured_face.measurement_face().clone();
+        let mut current_measurement_face = default_measured_face.into_measurement_face();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -3438,14 +3441,16 @@ impl LayoutEngine {
                     current_bg = bg;
                     current_resolved_face = resolved.clone();
                     current_text_face_id = face_id;
-                    let measurement_face =
-                        measurement_policy.measurement_face(face_id, &resolved, metrics, char_w);
-                    face_space_w = measurement_face.glyph_advance_px(
-                        &mut self.font_metrics,
-                        ' ',
-                        1,
+                    let measured_face = measurement_policy.measured_face(
+                        face_id,
+                        &resolved,
+                        metrics,
+                        char_w,
                         face_char_w,
+                        &mut self.font_metrics,
                     );
+                    face_space_w = measured_face.space_width();
+                    current_measurement_face = measured_face.into_measurement_face();
 
                     insert_resolved_display_row_face(
                         &mut self.matrix_builder,
@@ -3696,12 +3701,6 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let measurement_face = measurement_policy.measurement_face(
-                            current_text_face_id,
-                            &current_resolved_face,
-                            None,
-                            face_char_w,
-                        );
                         let ellipsis_frame = text_append_surface.frame(
                             DisplayRowAppendPlacement {
                                 row,
@@ -3716,8 +3715,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement =
-                            measurement_face.text_run_measurement(&mut self.font_metrics, "...");
+                        let measurement = current_measurement_face
+                            .text_run_measurement(&mut self.font_metrics, "...");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -3987,13 +3986,7 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    let measurement_face = measurement_policy.measurement_face(
-                                        current_text_face_id,
-                                        &current_resolved_face,
-                                        None,
-                                        face_char_w,
-                                    );
-                                    measurement_face.advance_for_char(
+                                    current_measurement_face.advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
                                         face_char_w,
@@ -4098,15 +4091,9 @@ impl LayoutEngine {
                                         default_row_height: char_h,
                                     },
                                 );
-                                let measurement_face = measurement_policy.measurement_face(
-                                    current_text_face_id,
-                                    &current_resolved_face,
-                                    None,
-                                    face_char_w,
-                                );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
-                                    measurement_face,
+                                    measurement_face: current_measurement_face.clone(),
                                 };
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,
@@ -4137,13 +4124,7 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let measurement_face = measurement_policy.measurement_face(
-                            current_text_face_id,
-                            &current_resolved_face,
-                            None,
-                            face_char_w,
-                        );
-                        let display_char_width = measurement_face.advance_for_char(
+                        let display_char_width = current_measurement_face.advance_for_char(
                             &mut self.font_metrics,
                             display_ch,
                             face_char_w,
@@ -4442,12 +4423,6 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let measurement_face = measurement_policy.measurement_face(
-                    current_text_face_id,
-                    &current_resolved_face,
-                    None,
-                    face_char_w,
-                );
                 let ellipsis_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
                         row,
@@ -4463,7 +4438,7 @@ impl LayoutEngine {
                     },
                 );
                 let measurement =
-                    measurement_face.text_run_measurement(&mut self.font_metrics, "...");
+                    current_measurement_face.text_run_measurement(&mut self.font_metrics, "...");
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -5088,14 +5063,8 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let measurement_face = measurement_policy.measurement_face(
-                        current_text_face_id,
-                        &current_resolved_face,
-                        None,
-                        face_char_w,
-                    );
-                    let measurement =
-                        measurement_face.text_run_measurement(&mut self.font_metrics, &run_text);
+                    let measurement = current_measurement_face
+                        .text_run_measurement(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its
@@ -5115,28 +5084,14 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => {
-                        let measurement_face = measurement_policy.measurement_face(
-                            current_text_face_id,
-                            &current_resolved_face,
-                            None,
-                            face_char_w,
-                        );
-                        measurement_face.advance_for_char(
-                            &mut self.font_metrics,
-                            ch,
-                            face_char_w * char_cols as f32,
-                        )
-                    }
+                    None => current_measurement_face.advance_for_char(
+                        &mut self.font_metrics,
+                        ch,
+                        face_char_w * char_cols as f32,
+                    ),
                 }
             } else {
-                let measurement_face = measurement_policy.measurement_face(
-                    current_text_face_id,
-                    &current_resolved_face,
-                    None,
-                    face_char_w,
-                );
-                measurement_face.advance_for_char(
+                current_measurement_face.advance_for_char(
                     &mut self.font_metrics,
                     ch,
                     face_char_w * char_cols as f32,
@@ -5459,13 +5414,7 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement_face = measurement_policy.measurement_face(
-                current_text_face_id,
-                &current_resolved_face,
-                None,
-                face_char_w,
-            );
-            let measurement = measurement_face
+            let measurement = current_measurement_face
                 .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
