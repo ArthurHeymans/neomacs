@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_item::RenderFaceRef;
-use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurer};
+use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurementFace, DisplayRowGlyphMeasurer};
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -6536,6 +6536,28 @@ fn display_row_glyph_measurer_is_reusable_for_engine_measurements() {
         .expect("measure known face");
 
     assert_eq!(width, 8.0);
+}
+
+#[test]
+fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
+    let resolved = crate::neovm_bridge::ResolvedFace {
+        font_family: "monospace".to_string(),
+        font_size: 14.0,
+        font_char_width: 7.2,
+        ..Default::default()
+    };
+    let face = DisplayRowFace::from_resolved(42, &resolved);
+    let current_face = DisplayRowGlyphMeasurementFace::new(
+        face,
+        false,
+        7.2,
+        GlyphAdvanceQuantization::SnapToIntegerPixels,
+    );
+    let mut font_metrics_svc = None;
+
+    let width = current_face.glyph_advance_px(&mut font_metrics_svc, 'x', 1, 7.2);
+
+    assert_eq!(width, 7.0);
 }
 
 #[test]

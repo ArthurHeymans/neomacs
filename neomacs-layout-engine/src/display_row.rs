@@ -391,6 +391,54 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowGlyphMeasurementFace {
+    face: DisplayRowFace,
+    use_font_metrics: bool,
+    fallback_char_width: f32,
+    quantization: GlyphAdvanceQuantization,
+}
+
+impl DisplayRowGlyphMeasurementFace {
+    pub(crate) fn new(
+        face: DisplayRowFace,
+        use_font_metrics: bool,
+        fallback_char_width: f32,
+        quantization: GlyphAdvanceQuantization,
+    ) -> Self {
+        Self {
+            face,
+            use_font_metrics,
+            fallback_char_width,
+            quantization,
+        }
+    }
+
+    pub(crate) fn glyph_advance_px(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        columns: u8,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        let faces = [self.face.clone()];
+        let font_metrics = if self.use_font_metrics {
+            font_metrics.as_mut()
+        } else {
+            None
+        };
+        let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
+            &faces,
+            font_metrics,
+            self.fallback_char_width,
+            self.quantization,
+        );
+        measurer
+            .glyph_advance_px(ch, self.face.face_id, columns, fallback_advance_px)
+            .unwrap_or(fallback_advance_px)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct DisplayRowOutputProgress {
     pub end_x: f32,
