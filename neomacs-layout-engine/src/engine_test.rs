@@ -258,6 +258,41 @@ fn face_scan_checkpoint_tracks_resolution_boundaries_and_invalidation() {
 }
 
 #[test]
+fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
+    let mut state = CursorCaptureState::new();
+    let first = CapturedCursorInfo {
+        x: 1.0,
+        y: 2.0,
+        face_w: 7.0,
+        face_h: 14.0,
+        face_ascent: 10.0,
+        bg: Color::from_pixel(0x00112233),
+        byte_idx: 5,
+        col: 3,
+        matrix_row: 2,
+        slot_width: None,
+        stretch_like: false,
+    };
+    let second = CapturedCursorInfo {
+        x: 9.0,
+        byte_idx: 8,
+        ..first
+    };
+
+    assert!(state.is_missing());
+
+    state.capture_once(first);
+    state.capture_once(second);
+    state.update_for_main_char(8, 44.0);
+    state.update_for_main_char(5, 12.5);
+
+    let captured = state.as_ref().expect("cursor should be captured");
+    assert_eq!(captured.x, 1.0);
+    assert_eq!(captured.byte_idx, 5);
+    assert_eq!(captured.slot_width, Some(12.5));
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 

@@ -151,6 +151,11 @@ struct CapturedCursorInfo {
     stretch_like: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct CursorCaptureState {
+    captured: Option<CapturedCursorInfo>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum CapturedCursorSlotWidth {
     FaceChar,
@@ -528,24 +533,55 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
     }
 }
 
-fn capture_cursor_info(target: &mut Option<CapturedCursorInfo>, info: CapturedCursorInfo) {
-    if target.is_none() {
-        *target = Some(info);
+impl CursorCaptureState {
+    fn new() -> Self {
+        Self { captured: None }
+    }
+
+    fn is_missing(self) -> bool {
+        self.captured.is_none()
+    }
+
+    fn is_captured(self) -> bool {
+        self.captured.is_some()
+    }
+
+    fn capture_once(&mut self, info: CapturedCursorInfo) {
+        if self.captured.is_none() {
+            self.captured = Some(info);
+        }
+    }
+
+    fn update_for_main_char(&mut self, byte_idx: usize, advance: f32) {
+        let Some(cursor) = self.captured.as_mut() else {
+            return;
+        };
+        if cursor.byte_idx != byte_idx {
+            return;
+        }
+        cursor.slot_width = Some(advance.max(1.0));
+    }
+
+    #[cfg(test)]
+    fn as_ref(&self) -> Option<&CapturedCursorInfo> {
+        self.captured.as_ref()
+    }
+
+    fn captured(self) -> Option<CapturedCursorInfo> {
+        self.captured
     }
 }
 
+fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
+    target.capture_once(info);
+}
+
 fn update_cursor_info_for_main_char(
-    target: &mut Option<CapturedCursorInfo>,
+    target: &mut CursorCaptureState,
     byte_idx: usize,
     advance: f32,
 ) {
-    let Some(cursor) = target.as_mut() else {
-        return;
-    };
-    if cursor.byte_idx != byte_idx {
-        return;
-    }
-    cursor.slot_width = Some(advance.max(1.0));
+    target.update_for_main_char(byte_idx, advance);
 }
 
 impl WordWrapBreakCandidate {
@@ -1972,7 +2008,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     x: &mut f32,
     col: &mut usize,
     geometry: &mut DisplayRowGeometryState,
-    cursor_info: &mut Option<CapturedCursorInfo>,
+    cursor_info: &mut CursorCaptureState,
     hit_rows: &mut Vec<HitRow>,
     hit_row_range: &mut HitRowRangeTracker,
     anchor_charpos: i64,
@@ -2144,7 +2180,7 @@ fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) 
 fn capture_overlay_string_cursor_at_slot(
     text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
     slot: &crate::display_row_builder::DisplayRowGlyphSlot,
-    cursor_info: &mut Option<CapturedCursorInfo>,
+    cursor_info: &mut CursorCaptureState,
     y: f32,
     matrix_row: usize,
     visual_state: CapturedCursorVisualState,
@@ -2168,7 +2204,7 @@ fn capture_overlay_string_cursor_at_slot(
 fn capture_overlay_string_cursor(
     text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
     char_idx: usize,
-    cursor_info: &mut Option<CapturedCursorInfo>,
+    cursor_info: &mut CursorCaptureState,
     x: f32,
     y: f32,
     col: usize,
@@ -2176,7 +2212,7 @@ fn capture_overlay_string_cursor(
     visual_state: CapturedCursorVisualState,
     slot_width: CapturedCursorSlotWidth,
 ) {
-    if cursor_info.is_some() {
+    if cursor_info.is_captured() {
         return;
     }
     let Some(props) = text_props else {
@@ -4005,7 +4041,7 @@ impl LayoutEngine {
         let mut box_face = BoxFaceRowState::inactive();
 
         // Cursor metrics captured during the main layout loop.
-        let mut cursor_info: Option<CapturedCursorInfo> = None;
+        let mut cursor_info = CursorCaptureState::new();
 
         // Hit-test data for this window
         let mut hit_rows: Vec<HitRow> = Vec::new();
@@ -4286,7 +4322,7 @@ impl LayoutEngine {
                 let (invisible, next_visible) = text_props.check_invisible(charpos);
                 if invisible.hidden {
                     let skip_to = next_visible.min(accessible_end);
-                    let point_in_hidden_region = cursor_info.is_none()
+                    let point_in_hidden_region = cursor_info.is_missing()
                         && point_charpos >= charpos
                         && point_charpos < skip_to;
                     if point_in_hidden_region {
@@ -4441,7 +4477,7 @@ impl LayoutEngine {
                     if has_prefix {
                         prefix_request.request_line();
                     }
-                    if cursor_info.is_none() && point_charpos == charpos {
+                    if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo::line_break_from_active_face_state(
@@ -4505,7 +4541,7 @@ impl LayoutEngine {
                             glyph_row.truncated_left = true;
                         });
                     }
-                    if cursor_info.is_none() && point_charpos == charpos {
+                    if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo::from_active_face_state(
@@ -4540,7 +4576,7 @@ impl LayoutEngine {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
                     let skip_to = text_property_checkpoints.display_skip_to(accessible_end);
-                    let point_in_display_replacement = cursor_info.is_none()
+                    let point_in_display_replacement = cursor_info.is_missing()
                         && point_charpos >= charpos
                         && point_charpos < skip_to;
                     let display_property = classify_display_property(prop_val);
@@ -5019,7 +5055,7 @@ impl LayoutEngine {
             if ch == '\n' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                if cursor_info.is_none() && point_charpos == charpos {
+                if cursor_info.is_missing() && point_charpos == charpos {
                     // GNU `set_cursor_from_row` treats the terminating
                     // newline as an exact match for point on this row.  The
                     // newline itself has no rendered text glyph, so the
@@ -5657,7 +5693,7 @@ impl LayoutEngine {
 
             // Capture cursor metrics at point position during the main layout
             // so cursor emission uses the correct per-face height/width.
-            if cursor_info.is_none() && charpos == point_charpos {
+            if cursor_info.is_missing() && charpos == point_charpos {
                 capture_cursor_info(
                     &mut cursor_info,
                     CapturedCursorInfo::from_active_face_state(
@@ -5841,7 +5877,7 @@ impl LayoutEngine {
         // Capture cursor at end-of-buffer position.
         // GNU Emacs shows point at point-max+1 as a real cursor location.
         // In the layout engine's internal 0-based space, that is `accessible_end`.
-        if cursor_info.is_none() && (charpos == point_charpos || point_is_visible_eob) {
+        if cursor_info.is_missing() && (charpos == point_charpos || point_is_visible_eob) {
             if point_is_visible_eob {
                 tracing::debug!(
                     "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
@@ -6031,7 +6067,7 @@ impl LayoutEngine {
         }
 
         if point_charpos >= window_start && (point_charpos <= charpos || point_is_visible_eob) {
-            if let Some(cursor) = cursor_info {
+            if let Some(cursor) = cursor_info.captured() {
                 let row_metric = row_metrics_for_cursor(
                     output_emitter.row_metrics(),
                     text_matrix_row_base + cursor.matrix_row,
