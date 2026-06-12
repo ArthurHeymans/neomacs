@@ -86,6 +86,18 @@ pub fn resolve_weight_in_family(
     resolved
 }
 
+pub fn family_exists(font_system: &FontSystem, family: &str) -> bool {
+    font_system.db().faces().any(|face| {
+        face.families
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case(family))
+    })
+}
+
+pub fn should_use_monospace_fallback(font_system: &FontSystem, family: &str) -> bool {
+    !family_exists(font_system, family) && crate::fontconfig::family_prefers_monospace(family)
+}
+
 fn resolve_requested_weight(info: &FamilyWeightInfo, requested_weight: u16) -> u16 {
     if let Some((min_w, max_w)) = info.variable_weight_range {
         // Variable fonts can synthesize intermediate weights; keep caller intent and

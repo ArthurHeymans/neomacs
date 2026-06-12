@@ -794,6 +794,11 @@ impl WgpuGlyphAtlas {
                 family_lower.as_str(),
                 "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
             );
+            let use_monospace_fallback = !is_generic
+                && neomacs_layout_engine::font_match::should_use_monospace_fallback(
+                    &self.font_system,
+                    resolved,
+                );
 
             attrs = if is_generic && resolved != effective_family {
                 // Fontconfig resolved to a concrete name — use it directly
@@ -812,6 +817,8 @@ impl WgpuGlyphAtlas {
                     "sans-serif" | "sans" | "sansserif" => attrs.family(Family::SansSerif),
                     _ => attrs.family(Family::Monospace),
                 }
+            } else if use_monospace_fallback {
+                attrs.family(Family::Monospace)
             } else {
                 let interned = if let Some(&existing) = self.interned_families.get(resolved) {
                     existing

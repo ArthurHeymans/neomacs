@@ -618,6 +618,8 @@ fn measure_with_raw_fontsystem(
         family_lower.as_str(),
         "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
     );
+    let use_monospace_fallback =
+        !is_generic && crate::font_match::should_use_monospace_fallback(font_system, resolved);
     let mut attrs = Attrs::new();
     attrs = if is_generic && resolved != effective_family {
         attrs.family(Family::Name(Box::leak(
@@ -629,6 +631,8 @@ fn measure_with_raw_fontsystem(
             "sans-serif" | "sans" | "sansserif" => attrs.family(Family::SansSerif),
             _ => attrs.family(Family::Monospace),
         }
+    } else if use_monospace_fallback {
+        attrs.family(Family::Monospace)
     } else {
         attrs.family(Family::Name(Box::leak(
             resolved.to_string().into_boxed_str(),
