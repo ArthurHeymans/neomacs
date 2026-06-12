@@ -397,6 +397,12 @@ struct HorizontalScrollSkipState {
     remaining_columns: i32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum BoxFaceRowState {
+    Inactive,
+    Active { row: DisplayRowMarker, start_x: f32 },
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct ActiveDisplayPropertySpan<T> {
     value: Option<T>,
@@ -601,6 +607,44 @@ impl HorizontalScrollSkipState {
 
     fn consume_columns(&mut self, columns: i32) {
         self.remaining_columns -= columns.max(0).min(self.remaining_columns);
+    }
+}
+
+impl BoxFaceRowState {
+    fn inactive() -> Self {
+        Self::Inactive
+    }
+
+    fn activate(&mut self, row: DisplayRowMarker, start_x: f32) {
+        *self = Self::Active { row, start_x };
+    }
+
+    fn continue_on_row(&mut self, row: DisplayRowMarker, start_x: f32) {
+        if self.is_active() {
+            self.activate(row, start_x);
+        }
+    }
+
+    fn clear(&mut self) {
+        *self = Self::Inactive;
+    }
+
+    fn is_active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+
+    fn start_x(&self) -> Option<f32> {
+        match self {
+            Self::Active { start_x, .. } => Some(*start_x),
+            Self::Inactive => None,
+        }
+    }
+
+    fn row(&self) -> DisplayRowMarker {
+        match self {
+            Self::Active { row, .. } => *row,
+            Self::Inactive => DisplayRowMarker::Inactive,
+        }
     }
 }
 
@@ -3705,9 +3749,7 @@ impl LayoutEngine {
         let mut row_extend = DisplayRowScopedValue::inactive();
 
         // Box face tracking: track active :box face regions
-        let mut box_active = false;
-        let mut box_start_x: f32 = 0.0;
-        let mut box_row = DisplayRowMarker::Inactive;
+        let mut box_face = BoxFaceRowState::inactive();
 
         // Cursor metrics captured during the main layout loop.
         let mut cursor_info: Option<CapturedCursorInfo> = None;
@@ -3809,13 +3851,11 @@ impl LayoutEngine {
                         row_extend.activate(row_geometry.current_row_marker(), (ext_bg, face_id));
                     }
 
-                    if box_active && resolved.box_type == 0 {
-                        box_active = false;
+                    if box_face.is_active() && resolved.box_type == 0 {
+                        box_face.clear();
                     }
                     if resolved.box_type > 0 {
-                        box_active = true;
-                        box_start_x = x;
-                        box_row = row_geometry.current_row_marker();
+                        box_face.activate(row_geometry.current_row_marker(), x);
                     }
                 }
             };
@@ -4692,10 +4732,7 @@ impl LayoutEngine {
                         // Advance to next row (same as newline handler)
                         x = content_x;
                         row_extend.clear();
-                        if box_active {
-                            box_start_x = content_x;
-                            box_row = row_geometry.next_row_marker();
-                        }
+                        box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::line_break(
                                 DisplayRowHitRange {
@@ -4778,9 +4815,7 @@ impl LayoutEngine {
                 row_extend.clear();
 
                 // Box face tracking: box stays active across line breaks
-                if box_active {
-                    box_start_x = content_x;
-                }
+                box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
 
                 charpos += 1;
 
@@ -4834,9 +4869,7 @@ impl LayoutEngine {
                 }
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_charpos_start = charpos;
-                if box_active {
-                    box_row = row_geometry.current_row_marker();
-                }
+                box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
                 col = 0;
                 current_line += 1;
                 need_line_number = lnum_enabled;
@@ -5626,8 +5659,8 @@ impl LayoutEngine {
         }
 
         // Close any remaining box face region at end of text
-        if box_active {
-            let _ = (box_start_x, box_row); // suppress unused warnings
+        if box_face.is_active() {
+            let _ = (box_face.start_x(), box_face.row()); // suppress unused warnings
         }
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position

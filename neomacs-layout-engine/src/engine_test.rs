@@ -192,6 +192,32 @@ fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
 }
 
 #[test]
+fn box_face_row_state_tracks_active_row_and_start_x() {
+    let mut state = BoxFaceRowState::inactive();
+
+    assert!(!state.is_active());
+    assert_eq!(state.start_x(), None);
+    assert_eq!(state.row(), DisplayRowMarker::Inactive);
+
+    state.activate(DisplayRowMarker::Row(2), 18.0);
+
+    assert!(state.is_active());
+    assert_eq!(state.start_x(), Some(18.0));
+    assert_eq!(state.row(), DisplayRowMarker::Row(2));
+
+    state.continue_on_row(DisplayRowMarker::Row(3), 4.0);
+
+    assert!(state.is_active());
+    assert_eq!(state.start_x(), Some(4.0));
+    assert_eq!(state.row(), DisplayRowMarker::Row(3));
+
+    state.clear();
+
+    assert!(!state.is_active());
+    assert_eq!(state.row(), DisplayRowMarker::Inactive);
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(
