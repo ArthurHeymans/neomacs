@@ -1758,17 +1758,6 @@ impl ProcessManager {
         WaitSourceEvents::from_ready_processes(self.live_process_ids())
     }
 
-    /// Wait for any child process to have output ready, with timeout.
-    ///
-    /// Uses `polling::Poller` (epoll/kqueue/wepoll) for efficient blocking
-    /// instead of sleep-based polling. Returns the set of process IDs that
-    /// have data ready to read.
-    ///
-    /// Falls back to a brief sleep if the poller is unavailable.
-    pub fn wait_for_output(&self, timeout: std::time::Duration) -> Vec<ProcessId> {
-        self.wait_for_process_events(timeout).into_ready_processes()
-    }
-
     #[cfg(unix)]
     pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
         self.wait_backend.register_input_wakeup_fd(fd);

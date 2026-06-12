@@ -41,6 +41,10 @@ impl WaitSourceEvents {
         !self.ready_processes.is_empty()
     }
 
+    pub(crate) fn has_ready_process(&self, process: ProcessId) -> bool {
+        self.ready_processes.contains(&process)
+    }
+
     pub(crate) fn ready_processes(&self) -> &[ProcessId] {
         &self.ready_processes
     }
@@ -745,6 +749,15 @@ mod tests {
 
         assert!(!events.has_input_wakeup());
         assert_eq!(events.ready_processes(), &[7]);
+    }
+
+    #[test]
+    fn source_events_query_individual_ready_processes() {
+        let mut events = WaitSourceEvents::default();
+        events.record_ready_process(7);
+
+        assert!(events.has_ready_process(7));
+        assert!(!events.has_ready_process(8));
     }
 
     #[test]

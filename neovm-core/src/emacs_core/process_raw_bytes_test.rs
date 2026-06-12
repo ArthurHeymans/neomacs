@@ -97,8 +97,8 @@ fn spawn_child_with_environment_uses_process_environment_list() {
         .expect("spawn child");
 
     for _ in 0..20 {
-        let ready = processes.wait_for_output(Duration::from_millis(20));
-        if ready.contains(&pid) {
+        let events = processes.wait_for_process_events(Duration::from_millis(20));
+        if events.has_ready_process(pid) {
             let _ = processes.read_process_output(pid);
         }
         if processes
