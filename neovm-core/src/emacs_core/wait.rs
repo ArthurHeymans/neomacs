@@ -442,11 +442,47 @@ impl WaitRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum WaitCompletion {
+enum WaitCompletion {
     ProcessActivity,
     CommandInputPending,
     SpecialInputActivity,
     DeadlineElapsed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CommandInputWaitOutcome {
+    InputPending,
+    Interrupted,
+    DeadlineElapsed,
+}
+
+impl CommandInputWaitOutcome {
+    fn from_completion(completion: WaitCompletion) -> Self {
+        match completion {
+            WaitCompletion::CommandInputPending => Self::InputPending,
+            WaitCompletion::DeadlineElapsed => Self::DeadlineElapsed,
+            WaitCompletion::ProcessActivity | WaitCompletion::SpecialInputActivity => {
+                Self::Interrupted
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessOutputWaitOutcome {
+    ProcessActivity,
+    NoProcessActivity,
+}
+
+impl ProcessOutputWaitOutcome {
+    fn from_completion(completion: WaitCompletion) -> Self {
+        match completion {
+            WaitCompletion::ProcessActivity => Self::ProcessActivity,
+            WaitCompletion::CommandInputPending
+            | WaitCompletion::SpecialInputActivity
+            | WaitCompletion::DeadlineElapsed => Self::NoProcessActivity,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -781,34 +817,35 @@ impl super::eval::Context {
     pub(crate) fn wait_for_process_output(
         &mut self,
         request: ProcessOutputWaitRequest,
-    ) -> Result<WaitCompletion, Flow> {
+    ) -> Result<ProcessOutputWaitOutcome, Flow> {
         self.wait_reading_process_output(WaitRequest::accept_process_output_request(request))
+            .map(ProcessOutputWaitOutcome::from_completion)
     }
 
-    pub(crate) fn wait_until(&mut self, deadline: Instant) -> Result<WaitCompletion, Flow> {
-        self.wait_reading_process_output(WaitRequest::sleep_until(deadline))
+    pub(crate) fn wait_until(&mut self, deadline: Instant) -> Result<(), Flow> {
+        let _ = self.wait_reading_process_output(WaitRequest::sleep_until(deadline))?;
+        Ok(())
     }
 
-    pub(crate) fn wait_for_resize_ack_until(
-        &mut self,
-        deadline: Instant,
-    ) -> Result<WaitCompletion, Flow> {
-        self.wait_reading_process_output(WaitRequest::resize_ack(deadline))
+    pub(crate) fn wait_for_resize_ack_until(&mut self, deadline: Instant) -> Result<bool, Flow> {
+        let completion = self.wait_reading_process_output(WaitRequest::resize_ack(deadline))?;
+        Ok(completion == WaitCompletion::SpecialInputActivity)
     }
 
     pub(crate) fn wait_for_command_input(
         &mut self,
         deadline: Option<Instant>,
-    ) -> Result<WaitCompletion, Flow> {
+    ) -> Result<CommandInputWaitOutcome, Flow> {
         let request = if let Some(deadline) = deadline {
             if deadline <= Instant::now() {
-                return Ok(WaitCompletion::DeadlineElapsed);
+                return Ok(CommandInputWaitOutcome::DeadlineElapsed);
             }
             WaitRequest::read_command_input_until(deadline)
         } else {
             WaitRequest::read_command_input_forever()
         };
         self.wait_reading_process_output(request)
+            .map(CommandInputWaitOutcome::from_completion)
     }
 
     fn block_for_wait_request(

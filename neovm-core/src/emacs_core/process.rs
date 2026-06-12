@@ -41,7 +41,7 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
-use super::wait::WaitCompletion;
+use super::wait::ProcessOutputWaitOutcome;
 
 /// OS socket owned by a network process.
 ///
@@ -8507,13 +8507,11 @@ pub(crate) fn builtin_accept_process_output(
     };
 
     match eval.wait_for_process_output(request.wait)? {
-        WaitCompletion::ProcessActivity => {
+        ProcessOutputWaitOutcome::ProcessActivity => {
             accept_process_output_run_target_follow_up(eval, request)?;
             Ok(Value::T)
         }
-        WaitCompletion::CommandInputPending
-        | WaitCompletion::SpecialInputActivity
-        | WaitCompletion::DeadlineElapsed => Ok(Value::NIL),
+        ProcessOutputWaitOutcome::NoProcessActivity => Ok(Value::NIL),
     }
 }
 

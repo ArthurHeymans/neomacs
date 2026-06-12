@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::WaitCompletion;
+use crate::emacs_core::wait::CommandInputWaitOutcome;
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2292,11 +2292,11 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
         .expect("send delayed keypress");
     });
 
-    let completion: WaitCompletion = ev
+    let completion: CommandInputWaitOutcome = ev
         .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
         .expect("wait for command input");
 
-    assert_eq!(completion, WaitCompletion::CommandInputPending);
+    assert_eq!(completion, CommandInputWaitOutcome::InputPending);
     assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
 }
 
@@ -2411,7 +2411,7 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
         .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
         .expect("wait for command input through wakeup backend");
 
-    assert_eq!(completion, WaitCompletion::CommandInputPending);
+    assert_eq!(completion, CommandInputWaitOutcome::InputPending);
     let event = ev.read_char().expect("keypress should remain readable");
     assert_eq!(event, Value::fixnum('w' as i64));
 }

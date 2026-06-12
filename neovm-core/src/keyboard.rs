@@ -13,7 +13,7 @@
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
-use crate::emacs_core::wait::WaitCompletion;
+use crate::emacs_core::wait::CommandInputWaitOutcome;
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
@@ -2873,15 +2873,15 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn wait_for_pending_resize_events(&mut self, timeout: Duration) -> bool {
-        let outcome = self
+        let resize_acknowledged = self
             .wait_for_resize_ack_until(Instant::now() + timeout)
-            .ok();
+            .unwrap_or(false);
         sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
             &mut self.frames,
             &self.buffers,
             self.display_host.as_deref(),
         );
-        outcome.is_some_and(|completion| completion == WaitCompletion::SpecialInputActivity)
+        resize_acknowledged
     }
 
     fn take_next_wait_request_special_input_event(
@@ -4013,19 +4013,16 @@ impl crate::emacs_core::eval::Context {
             self.timer_stop_idle();
 
             match wait_result? {
-                WaitCompletion::CommandInputPending => {
+                CommandInputWaitOutcome::InputPending => {
                     continue;
                 }
-                WaitCompletion::DeadlineElapsed => {
+                CommandInputWaitOutcome::DeadlineElapsed => {
                     if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
                         return Ok(None);
                     }
                     continue;
                 }
-                WaitCompletion::ProcessActivity => {
-                    continue;
-                }
-                WaitCompletion::SpecialInputActivity => {
+                CommandInputWaitOutcome::Interrupted => {
                     continue;
                 }
             }
