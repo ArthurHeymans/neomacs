@@ -18,23 +18,26 @@ pub(crate) struct WaitSourceEvents {
 }
 
 impl WaitSourceEvents {
-    pub(crate) fn from_ready_processes(processes: Vec<ProcessId>) -> Self {
+    pub(crate) fn from_sources(input_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
+        Self {
+            input_wakeup,
+            ready_processes,
+        }
+    }
+
+    pub(crate) fn input_wakeup() -> Self {
+        Self::from_sources(true, Vec::new())
+    }
+
+    pub(crate) fn ready_processes(processes: Vec<ProcessId>) -> Self {
         Self {
             input_wakeup: false,
             ready_processes: processes,
         }
     }
 
-    pub(crate) fn record_input_wakeup(&mut self) {
-        self.input_wakeup = true;
-    }
-
     pub(crate) fn has_input_wakeup(&self) -> bool {
         self.input_wakeup
-    }
-
-    pub(crate) fn record_ready_process(&mut self, process: ProcessId) {
-        self.ready_processes.push(process);
     }
 
     pub(crate) fn has_ready_processes(&self) -> bool {
@@ -948,20 +951,16 @@ mod tests {
     }
 
     #[test]
-    fn source_events_record_input_wakeup_explicitly() {
-        let mut events = WaitSourceEvents::default();
-
-        events.record_input_wakeup();
+    fn source_events_construct_input_wakeup_explicitly() {
+        let events = WaitSourceEvents::input_wakeup();
 
         assert!(events.has_input_wakeup());
         assert!(!events.has_ready_processes());
     }
 
     #[test]
-    fn source_events_record_ready_processes_explicitly() {
-        let mut events = WaitSourceEvents::default();
-
-        events.record_ready_process(7);
+    fn source_events_construct_ready_processes_explicitly() {
+        let events = WaitSourceEvents::ready_processes(vec![7]);
 
         assert!(!events.has_input_wakeup());
         assert!(events.has_ready_process(7));
@@ -969,8 +968,7 @@ mod tests {
 
     #[test]
     fn source_events_query_individual_ready_processes() {
-        let mut events = WaitSourceEvents::default();
-        events.record_ready_process(7);
+        let events = WaitSourceEvents::ready_processes(vec![7]);
 
         assert!(events.has_ready_process(7));
         assert!(!events.has_ready_process(8));
@@ -978,17 +976,16 @@ mod tests {
 
     #[test]
     fn source_events_empty_query_reflects_recorded_activity() {
-        let mut events = WaitSourceEvents::default();
+        let empty = WaitSourceEvents::default();
+        let ready = WaitSourceEvents::ready_processes(vec![7]);
 
-        assert!(events.is_empty());
-        events.record_ready_process(7);
-        assert!(!events.is_empty());
+        assert!(empty.is_empty());
+        assert!(!ready.is_empty());
     }
 
     #[test]
     fn source_events_convert_to_process_service() {
-        let mut events = WaitSourceEvents::default();
-        events.record_ready_process(7);
+        let events = WaitSourceEvents::ready_processes(vec![7]);
 
         assert_eq!(
             events.into_process_service(),
@@ -998,9 +995,7 @@ mod tests {
 
     #[test]
     fn block_activity_from_source_events_preserves_wakeup_and_processes() {
-        let mut events = WaitSourceEvents::default();
-        events.record_input_wakeup();
-        events.record_ready_process(3);
+        let events = WaitSourceEvents::from_sources(true, vec![3]);
 
         let activity = WaitBlockActivity::from_source_events(events);
 

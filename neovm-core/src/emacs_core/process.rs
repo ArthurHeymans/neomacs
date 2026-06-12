@@ -518,11 +518,12 @@ impl ProcessWaitBackend {
                 let mut events = polling::Events::new();
                 match poller.wait(&mut events, Some(wait_time)) {
                     Ok(_) => {
-                        let mut backend = WaitSourceEvents::default();
+                        let mut input_wakeup = false;
+                        let mut ready_processes = Vec::new();
                         for event in events.iter() {
                             if event.key == INPUT_WAKEUP_EVENT_KEY {
                                 if interest.wants_input_wakeup() {
-                                    backend.record_input_wakeup();
+                                    input_wakeup = true;
                                 }
                                 continue;
                             }
@@ -531,10 +532,11 @@ impl ProcessWaitBackend {
                                 if processes.get(&id).is_some_and(|process| {
                                     process_status_has_readable_process_io(&process.status)
                                 }) {
-                                    backend.record_ready_process(id);
+                                    ready_processes.push(id);
                                 }
                             }
                         }
+                        let backend = WaitSourceEvents::from_sources(input_wakeup, ready_processes);
                         if backend.has_input_wakeup()
                             || backend.has_ready_processes()
                             || timeout.is_zero()
@@ -1771,7 +1773,7 @@ impl ProcessManager {
 
         // No poller available — sleep fallback
         std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
-        WaitSourceEvents::from_ready_processes(self.live_process_ids())
+        WaitSourceEvents::ready_processes(self.live_process_ids())
     }
 
     #[cfg(unix)]
