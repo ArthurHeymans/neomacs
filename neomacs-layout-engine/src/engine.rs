@@ -23,11 +23,12 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowActiveFace, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowGlyphMeasurementFace, DisplayRowMeasurementPolicy,
-    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
-    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
-    install_measured_frame_chrome_row, install_rendered_display_row,
+    DisplayRowGeometry, DisplayRowGlyphMeasurementFace, DisplayRowMeasuredFaceMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
+    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -3089,9 +3090,12 @@ impl LayoutEngine {
         }
 
         // Per-face metrics — start with defaults, updated on face change
-        let mut face_char_w = default_face_char_w;
-        let mut face_h = default_face_h;
-        let mut face_ascent_val = default_face_ascent;
+        let mut face_metrics = DisplayRowMeasuredFaceMetrics {
+            char_width: default_face_char_w,
+            row_height: default_face_h,
+            ascent: default_face_ascent,
+            space_width: char_w,
+        };
 
         // Face resolution state
         let mut face_next_check: usize = 0;
@@ -3111,17 +3115,15 @@ impl LayoutEngine {
             None,
             char_w,
             DisplayRowFallbackMetrics {
-                char_width: face_char_w,
-                row_height: face_h,
-                ascent: face_ascent_val,
+                char_width: face_metrics.char_width,
+                row_height: face_metrics.row_height,
+                ascent: face_metrics.ascent,
             },
             &mut self.font_metrics,
         );
         let mut current_face =
             DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face);
-        face_char_w = current_face.char_width();
-        face_h = current_face.row_height();
-        face_ascent_val = current_face.ascent();
+        face_metrics = current_face.layout_metrics();
         let default_measurement_face = current_face.measurement_face().clone();
 
         if let Some(echo_message) = echo_message {
@@ -3430,15 +3432,13 @@ impl LayoutEngine {
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     current_face = resolved_measured_face.into_active_face();
-                    face_char_w = current_face.char_width();
-                    face_h = current_face.row_height();
-                    face_ascent_val = current_face.ascent();
+                    face_metrics = current_face.layout_metrics();
 
-                    if face_h > row_max_height {
-                        row_max_height = face_h;
+                    if face_metrics.row_height > row_max_height {
+                        row_max_height = face_metrics.row_height;
                     }
-                    if face_ascent_val > row_max_ascent {
-                        row_max_ascent = face_ascent_val;
+                    if face_metrics.ascent > row_max_ascent {
+                        row_max_ascent = face_metrics.ascent;
                     }
 
                     current_face_id += 1;
@@ -3656,14 +3656,14 @@ impl LayoutEngine {
                             CapturedCursorInfo {
                                 x,
                                 y,
-                                face_w: face_char_w,
-                                face_h,
-                                face_ascent: face_ascent_val,
+                                face_w: face_metrics.char_width,
+                                face_h: face_metrics.row_height,
+                                face_ascent: face_metrics.ascent,
                                 bg: current_face.background(),
                                 byte_idx,
                                 col,
                                 matrix_row: row,
-                                slot_width: Some(face_char_w.max(1.0)),
+                                slot_width: Some(face_metrics.char_width.max(1.0)),
                                 stretch_like: false,
                             },
                         );
@@ -3746,7 +3746,7 @@ impl LayoutEngine {
                                     &mut row_y_positions,
                                     &mut row_max_height,
                                     &mut row_max_ascent,
-                                    face_char_w,
+                                    face_metrics.char_width,
                                     char_h,
                                     default_face_ascent,
                                     right_limit,
@@ -3839,14 +3839,14 @@ impl LayoutEngine {
                             CapturedCursorInfo {
                                 x,
                                 y,
-                                face_w: face_char_w,
+                                face_w: face_metrics.char_width,
                                 face_h: char_h,
-                                face_ascent: face_ascent_val,
+                                face_ascent: face_metrics.ascent,
                                 bg: current_face.background(),
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
-                                slot_width: Some(face_char_w.max(1.0)),
+                                slot_width: Some(face_metrics.char_width.max(1.0)),
                                 stretch_like: false,
                             },
                         );
@@ -3907,14 +3907,14 @@ impl LayoutEngine {
                             CapturedCursorInfo {
                                 x,
                                 y,
-                                face_w: face_char_w,
-                                face_h,
-                                face_ascent: face_ascent_val,
+                                face_w: face_metrics.char_width,
+                                face_h: face_metrics.row_height,
+                                face_ascent: face_metrics.ascent,
                                 bg: current_face.background(),
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
-                                slot_width: Some(face_char_w.max(1.0)),
+                                slot_width: Some(face_metrics.char_width.max(1.0)),
                                 stretch_like: false,
                             },
                         );
@@ -3961,7 +3961,7 @@ impl LayoutEngine {
                                     current_face.measurement_face().advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
-                                        face_char_w,
+                                        face_metrics.char_width,
                                     )
                                 })
                                 .unwrap_or_else(|| char_w.max(1.0));
@@ -3970,9 +3970,9 @@ impl LayoutEngine {
                                 CapturedCursorInfo {
                                     x,
                                     y,
-                                    face_w: face_char_w,
-                                    face_h,
-                                    face_ascent: face_ascent_val,
+                                    face_w: face_metrics.char_width,
+                                    face_h: face_metrics.row_height,
+                                    face_ascent: face_metrics.ascent,
                                     bg: current_face.background(),
                                     byte_idx,
                                     col,
@@ -4096,16 +4096,16 @@ impl LayoutEngine {
                         let display_char_width = current_face.measurement_face().advance_for_char(
                             &mut self.font_metrics,
                             display_ch,
-                            face_char_w,
+                            face_metrics.char_width,
                         );
                         let space_geometry = eval_display_space_geometry(
                             &prop_val,
                             x,
                             content_x,
-                            face_char_w,
+                            face_metrics.char_width,
                             display_char_width,
-                            face_h,
-                            face_ascent_val,
+                            face_metrics.row_height,
+                            face_metrics.ascent,
                             params,
                         );
                         let space_width = space_geometry.width;
@@ -4115,14 +4115,16 @@ impl LayoutEngine {
                                 CapturedCursorInfo {
                                     x,
                                     y,
-                                    face_w: face_char_w,
-                                    face_h,
-                                    face_ascent: face_ascent_val,
+                                    face_w: face_metrics.char_width,
+                                    face_h: face_metrics.row_height,
+                                    face_ascent: face_metrics.ascent,
                                     bg: current_face.background(),
                                     byte_idx,
                                     col,
                                     matrix_row: row,
-                                    slot_width: Some(space_width.max(face_char_w).max(1.0)),
+                                    slot_width: Some(
+                                        space_width.max(face_metrics.char_width).max(1.0),
+                                    ),
                                     stretch_like: true,
                                 },
                             );
@@ -4195,8 +4197,8 @@ impl LayoutEngine {
                                 &prop_val,
                                 evaluator.display_host.as_deref(),
                                 current_face.resolved_face(),
-                                face_char_w,
-                                face_h,
+                                face_metrics.char_width,
+                                face_metrics.row_height,
                             )
                             .filter(|kind| replacement.accepts_resolved_media_item(kind))
                         });
@@ -4212,8 +4214,8 @@ impl LayoutEngine {
                             let (cursor_face_h, cursor_face_ascent) =
                                 if matches!(replacement, DisplayReplacementProperty::Xwidget(_)) {
                                     (
-                                        display_height.max(face_h),
-                                        display_height.max(face_ascent_val),
+                                        display_height.max(face_metrics.row_height),
+                                        display_height.max(face_metrics.ascent),
                                     )
                                 } else {
                                     (display_height, display_height)
@@ -4225,7 +4227,7 @@ impl LayoutEngine {
                                     CapturedCursorInfo {
                                         x,
                                         y,
-                                        face_w: face_char_w,
+                                        face_w: face_metrics.char_width,
                                         face_h: cursor_face_h,
                                         face_ascent: cursor_face_ascent,
                                         bg: current_face.background(),
@@ -4247,7 +4249,7 @@ impl LayoutEngine {
                                 DisplayRowAppendMetrics {
                                     height: display_height,
                                     ascent: display_height,
-                                    char_width: face_char_w,
+                                    char_width: face_metrics.char_width,
                                     space_width: current_face.space_width(),
                                     default_row_height: char_h,
                                 },
@@ -4281,14 +4283,14 @@ impl LayoutEngine {
                                     CapturedCursorInfo {
                                         x,
                                         y,
-                                        face_w: face_char_w,
-                                        face_h,
-                                        face_ascent: face_ascent_val,
+                                        face_w: face_metrics.char_width,
+                                        face_h: face_metrics.row_height,
+                                        face_ascent: face_metrics.ascent,
                                         bg: current_face.background(),
                                         byte_idx,
                                         col,
                                         matrix_row: row,
-                                        slot_width: Some(face_char_w.max(1.0)),
+                                        slot_width: Some(face_metrics.char_width.max(1.0)),
                                         stretch_like: false,
                                     },
                                 );
@@ -4492,14 +4494,14 @@ impl LayoutEngine {
                         CapturedCursorInfo {
                             x,
                             y,
-                            face_w: face_char_w,
-                            face_h,
-                            face_ascent: face_ascent_val,
+                            face_w: face_metrics.char_width,
+                            face_h: face_metrics.row_height,
+                            face_ascent: face_metrics.ascent,
                             bg: current_face.background(),
                             byte_idx: ch_start_byte_idx,
                             col,
                             matrix_row: row,
-                            slot_width: Some(face_char_w.max(1.0)),
+                            slot_width: Some(face_metrics.char_width.max(1.0)),
                             stretch_like: false,
                         },
                     );
@@ -4637,8 +4639,8 @@ impl LayoutEngine {
                                     .copied()
                                     .unwrap_or(text_y + (row - 1) as f32 * char_h);
                                 for dot_i in 0..3 {
-                                    let dot_x = content_x + dot_i as f32 * face_char_w;
-                                    if dot_x + face_char_w <= content_x + avail_width {}
+                                    let dot_x = content_x + dot_i as f32 * face_metrics.char_width;
+                                    if dot_x + face_metrics.char_width <= content_x + avail_width {}
                                 }
                                 shown_ellipsis = true;
                             }
@@ -4664,7 +4666,7 @@ impl LayoutEngine {
             if (ch < ' ' && ch != '\t') || ch == '\x7F' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let needed_width = 2.0 * face_char_w;
+                let needed_width = 2.0 * face_metrics.char_width;
 
                 // Check if we have room for ^X (2 columns)
                 if x + needed_width > content_x + (text_width - lnum_pixel_width) {
@@ -5022,14 +5024,14 @@ impl LayoutEngine {
                     None => current_face.measurement_face().advance_for_char(
                         &mut self.font_metrics,
                         ch,
-                        face_char_w * char_cols as f32,
+                        face_metrics.char_width * char_cols as f32,
                     ),
                 }
             } else {
                 current_face.measurement_face().advance_for_char(
                     &mut self.font_metrics,
                     ch,
-                    face_char_w * char_cols as f32,
+                    face_metrics.char_width * char_cols as f32,
                 )
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
@@ -5251,9 +5253,9 @@ impl LayoutEngine {
                     CapturedCursorInfo {
                         x,
                         y,
-                        face_w: face_char_w,
-                        face_h,
-                        face_ascent: face_ascent_val,
+                        face_w: face_metrics.char_width,
+                        face_h: face_metrics.row_height,
+                        face_ascent: face_metrics.ascent,
                         bg: current_face.background(),
                         byte_idx: ch_start_byte_idx,
                         col,
@@ -5300,7 +5302,7 @@ impl LayoutEngine {
                             &mut row_y_positions,
                             &mut row_max_height,
                             &mut row_max_ascent,
-                            face_char_w,
+                            face_metrics.char_width,
                             char_h,
                             default_face_ascent,
                             right_limit,
@@ -5327,8 +5329,8 @@ impl LayoutEngine {
                 self.run_buf.start(
                     x,
                     gy,
-                    face_h,
-                    face_ascent_val,
+                    face_metrics.row_height,
+                    face_metrics.ascent,
                     current_face.face_id(),
                     false,
                 );
@@ -5417,7 +5419,7 @@ impl LayoutEngine {
                             &mut row_y_positions,
                             &mut row_max_height,
                             &mut row_max_ascent,
-                            face_char_w,
+                            face_metrics.char_width,
                             char_h,
                             default_face_ascent,
                             right_limit,
@@ -5475,14 +5477,14 @@ impl LayoutEngine {
                 CapturedCursorInfo {
                     x,
                     y,
-                    face_w: face_char_w,
-                    face_h,
-                    face_ascent: face_ascent_val,
+                    face_w: face_metrics.char_width,
+                    face_h: face_metrics.row_height,
+                    face_ascent: face_metrics.ascent,
                     bg: current_face.background(),
                     byte_idx,
                     col,
                     matrix_row: row,
-                    slot_width: Some(face_char_w.max(1.0)),
+                    slot_width: Some(face_metrics.char_width.max(1.0)),
                     stretch_like: false,
                 },
             );
@@ -5525,7 +5527,7 @@ impl LayoutEngine {
                     &mut row_y_positions,
                     &mut row_max_height,
                     &mut row_max_ascent,
-                    face_char_w,
+                    face_metrics.char_width,
                     char_h,
                     default_face_ascent,
                     right_limit,
@@ -5563,7 +5565,7 @@ impl LayoutEngine {
                     &mut row_y_positions,
                     &mut row_max_height,
                     &mut row_max_ascent,
-                    face_char_w,
+                    face_metrics.char_width,
                     char_h,
                     default_face_ascent,
                     right_limit,
