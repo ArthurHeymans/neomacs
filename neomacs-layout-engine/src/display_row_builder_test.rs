@@ -7,6 +7,7 @@ use crate::display_item::{
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
 use crate::display_text_run_measurement::{
     DisplayTextRunAdvance, DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
+    DisplayTextRunMeasurementPlan,
 };
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -503,7 +504,7 @@ fn display_text_run_measurement_exposes_measured_advances() {
 
 #[test]
 fn display_text_run_measurement_builds_uniform_advances_for_text() {
-    let measurement = DisplayTextRunMeasurement::uniform_for_text("aé中", 5.0);
+    let measurement = DisplayTextRunMeasurementPlan::uniform_for_text("aé中", 5.0);
 
     let advances = measurement
         .measured_advances()

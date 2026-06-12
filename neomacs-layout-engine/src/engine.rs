@@ -45,7 +45,9 @@ use crate::display_source::{
 };
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::{DisplayTextRunByteAdvance, DisplayTextRunMeasurement};
+use crate::display_text_run_measurement::{
+    DisplayTextRunByteAdvance, DisplayTextRunMeasurementPlan,
+};
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -3727,7 +3729,7 @@ impl LayoutEngine {
                             },
                         );
                         let measurement =
-                            DisplayTextRunMeasurement::uniform_for_text("...", dot_advance);
+                            DisplayTextRunMeasurementPlan::uniform_for_text("...", dot_advance);
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -3915,7 +3917,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement = DisplayTextRunMeasurement::uniform_for_text("$", char_w);
+                        let measurement =
+                            DisplayTextRunMeasurementPlan::uniform_for_text("$", char_w);
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4479,7 +4482,8 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                let measurement = DisplayTextRunMeasurement::uniform_for_text("...", dot_advance);
+                let measurement =
+                    DisplayTextRunMeasurementPlan::uniform_for_text("...", dot_advance);
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -5478,8 +5482,10 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement =
-                DisplayTextRunMeasurement::uniform_for_text(ch.encode_utf8(&mut ch_text), advance);
+            let measurement = DisplayTextRunMeasurementPlan::uniform_for_text(
+                ch.encode_utf8(&mut ch_text),
+                advance,
+            );
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,

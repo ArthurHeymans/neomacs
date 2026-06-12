@@ -41,25 +41,6 @@ pub(crate) enum DisplayTextRunMeasurement {
 }
 
 impl DisplayTextRunMeasurement {
-    pub(crate) fn uniform_for_text(text: &str, advance_px: f32) -> Self {
-        if text.is_empty() {
-            return Self::PerChar;
-        }
-        let advance_px = if advance_px.is_finite() && advance_px >= 0.0 {
-            advance_px
-        } else {
-            0.0
-        };
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .map(|(char_offset, (byte_offset, _))| {
-                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
-            })
-            .collect();
-        Self::Measured(advances)
-    }
-
     pub(crate) fn measured_advances(&self) -> Option<&[DisplayTextRunAdvance]> {
         match self {
             Self::PerChar => None,
@@ -148,6 +129,25 @@ impl DisplayTextRunClusterAdvances {
 pub(crate) struct DisplayTextRunMeasurementPlan;
 
 impl DisplayTextRunMeasurementPlan {
+    pub(crate) fn uniform_for_text(text: &str, advance_px: f32) -> DisplayTextRunMeasurement {
+        if text.is_empty() {
+            return DisplayTextRunMeasurement::PerChar;
+        }
+        let advance_px = if advance_px.is_finite() && advance_px >= 0.0 {
+            advance_px
+        } else {
+            0.0
+        };
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, _))| {
+                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
+            })
+            .collect();
+        DisplayTextRunMeasurement::Measured(advances)
+    }
+
     pub(crate) fn from_shaped_glyphs(
         text: &str,
         glyphs: impl IntoIterator<Item = ShapedGlyph>,
@@ -236,5 +236,21 @@ mod tests {
         assert_eq!(advances.advance_at(3), Some(5.0));
         assert_eq!(advances.advance_at(1), None);
         assert_eq!(advances.advance_at(99), None);
+    }
+
+    #[test]
+    fn measurement_plan_builds_uniform_advances_for_text() {
+        let measurement = DisplayTextRunMeasurementPlan::uniform_for_text("aé中", 5.0);
+
+        let DisplayTextRunMeasurement::Measured(advances) = measurement else {
+            panic!("non-empty text should produce uniform measured advances");
+        };
+        assert_eq!(
+            advances
+                .iter()
+                .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+                .collect::<Vec<_>>(),
+            vec![(0, 0, 5.0), (1, 1, 5.0), (2, 3, 5.0)]
+        );
     }
 }

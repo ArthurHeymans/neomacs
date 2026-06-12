@@ -9,7 +9,9 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_text::DisplayTextFragment;
-use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
+use crate::display_text_run_measurement::{
+    DisplayTextRunAdvance, DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
@@ -130,7 +132,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
         99,
         "...",
         7,
-        Some(DisplayTextRunMeasurement::uniform_for_text("...", 5.0)),
+        Some(DisplayTextRunMeasurementPlan::uniform_for_text("...", 5.0)),
     )
     .expect("synthetic text progress");
 
@@ -1051,7 +1053,7 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
         buf_id,
         &snapshot,
         7,
-        DisplayTextRunMeasurement::uniform_for_text("a", 8.0),
+        DisplayTextRunMeasurementPlan::uniform_for_text("a", 8.0),
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1144,7 +1146,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
         buf_id,
         &snapshot,
         7,
-        DisplayTextRunMeasurement::uniform_for_text("\u{301}", 0.0),
+        DisplayTextRunMeasurementPlan::uniform_for_text("\u{301}", 0.0),
         frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
     )

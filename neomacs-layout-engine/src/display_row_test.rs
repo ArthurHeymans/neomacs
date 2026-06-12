@@ -487,7 +487,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
             _face_id: u32,
         ) -> DisplayRowItemMeasurement {
             DisplayRowItemMeasurement::TextRun(
-                crate::display_text_run_measurement::DisplayTextRunMeasurement::uniform_for_text(
+                crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::uniform_for_text(
                     "ABC", 5.0,
                 ),
             )
