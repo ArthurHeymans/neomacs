@@ -580,6 +580,33 @@ fn display_row_geometry_state_resolves_row_limit_positions() {
 }
 
 #[test]
+fn display_row_geometry_state_marks_current_row_flag_with_limit() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let mut flags = vec![false; 4];
+
+    geometry.mark_current_row_flag(&mut flags, DisplayRowLimit { max_rows: 4 });
+
+    assert_eq!(flags, vec![false, false, true, false]);
+
+    let exhausted = DisplayRowGeometryState {
+        row: 4,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    exhausted.mark_current_row_flag(&mut flags, DisplayRowLimit { max_rows: 4 });
+
+    assert_eq!(flags, vec![false, false, true, false]);
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_row_output() {
     let geometry = DisplayRowGeometryState {
         row: 3,

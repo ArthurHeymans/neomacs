@@ -4782,9 +4782,8 @@ impl LayoutEngine {
                 if x + needed_width > content_x + (text_width - lnum_pixel_width) {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
-                        if current_row_geometry!().is_within_row_limit(row_limit) {
-                            row_truncated[row] = true;
-                        }
+                        current_row_geometry!()
+                            .mark_current_row_flag(&mut row_truncated, row_limit);
                         // Same byte_idx/charpos desync as the main-char
                         // truncation path: byte_idx is past the overflowing
                         // control char, but charpos hasn't been incremented
@@ -4832,9 +4831,8 @@ impl LayoutEngine {
                         }
                         continue;
                     } else {
-                        if current_row_geometry!().is_within_row_limit(row_limit) {
-                            row_continued[row] = true;
-                        }
+                        current_row_geometry!()
+                            .mark_current_row_flag(&mut row_continued, row_limit);
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = -1;
@@ -4866,9 +4864,8 @@ impl LayoutEngine {
                         }
                         col = 0;
                         trailing_ws_start_col = -1;
-                        if current_row_geometry!().is_within_row_limit(row_limit) {
-                            row_continuation[row] = true;
-                        }
+                        current_row_geometry!()
+                            .mark_current_row_flag(&mut row_continuation, row_limit);
                         if has_prefix {
                             need_prefix = 2;
                         }
@@ -5109,9 +5106,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
-                    if current_row_geometry!().is_within_row_limit(row_limit) {
-                        row_truncated[row] = true;
-                    }
+                    current_row_geometry!().mark_current_row_flag(&mut row_truncated, row_limit);
                     // The current char has been decoded and `byte_idx` is
                     // already past it, but `charpos` is not yet incremented
                     // (that happens after the would-be push below). Account
@@ -5170,9 +5165,7 @@ impl LayoutEngine {
                     charpos = wrap_break_charpos;
                     col = 0;
 
-                    if current_row_geometry!().is_within_row_limit(row_limit) {
-                        row_continued[row] = true;
-                    }
+                    current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = -1;
@@ -5203,9 +5196,7 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
-                    if current_row_geometry!().is_within_row_limit(row_limit) {
-                        row_continuation[row] = true;
-                    }
+                    current_row_geometry!().mark_current_row_flag(&mut row_continuation, row_limit);
                     word_wrap_may_wrap = false;
                     wrap_has_break = false;
                     trailing_ws_start_col = -1;
@@ -5222,9 +5213,7 @@ impl LayoutEngine {
                     continue;
                 } else {
                     // Character wrap (no break point available)
-                    if current_row_geometry!().is_within_row_limit(row_limit) {
-                        row_continued[row] = true;
-                    }
+                    current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = -1;
@@ -5255,9 +5244,7 @@ impl LayoutEngine {
                     }
                     col = 0;
                     trailing_ws_start_col = -1;
-                    if current_row_geometry!().is_within_row_limit(row_limit) {
-                        row_continuation[row] = true;
-                    }
+                    current_row_geometry!().mark_current_row_flag(&mut row_continuation, row_limit);
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;

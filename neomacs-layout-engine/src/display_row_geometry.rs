@@ -486,6 +486,14 @@ impl DisplayRowGeometryState {
         self.row.saturating_add(1).min(limit.max_rows)
     }
 
+    pub(crate) fn mark_current_row_flag(&self, flags: &mut [bool], limit: DisplayRowLimit) {
+        if self.is_within_row_limit(limit)
+            && let Some(flag) = flags.get_mut(self.row)
+        {
+            *flag = true;
+        }
+    }
+
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
         let mut metrics = CurrentDisplayRowMetrics::new(self.height, self.ascent);
         metrics.include_glyph(glyph_height, glyph_ascent);
