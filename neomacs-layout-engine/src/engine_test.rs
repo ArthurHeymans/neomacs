@@ -672,6 +672,36 @@ fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
     );
 }
 
+#[test]
+fn display_row_geometry_state_applies_to_legacy_row_variables_by_name() {
+    let state = DisplayRowGeometryState {
+        row: 4,
+        y: 80.0,
+        row_extra_y: 9.0,
+        height: 20.0,
+        ascent: 14.0,
+    };
+    let mut row = 0;
+    let mut y = 0.0;
+    let mut row_extra_y = 0.0;
+    let mut row_height = 1.0;
+    let mut row_ascent = 1.0;
+
+    state.apply_to(
+        &mut row,
+        &mut y,
+        &mut row_extra_y,
+        &mut row_height,
+        &mut row_ascent,
+    );
+
+    assert_eq!(row, 4);
+    assert_eq!(y, 80.0);
+    assert_eq!(row_extra_y, 9.0);
+    assert_eq!(row_height, 20.0);
+    assert_eq!(row_ascent, 14.0);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

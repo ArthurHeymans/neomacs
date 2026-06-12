@@ -534,6 +534,23 @@ struct DisplayRowGeometryState {
     ascent: f32,
 }
 
+impl DisplayRowGeometryState {
+    fn apply_to(
+        self,
+        row: &mut usize,
+        y: &mut f32,
+        row_extra_y: &mut f32,
+        height: &mut f32,
+        ascent: &mut f32,
+    ) {
+        *row = self.row;
+        *y = self.y;
+        *row_extra_y = self.row_extra_y;
+        *height = self.height;
+        *ascent = self.ascent;
+    }
+}
+
 impl CurrentDisplayRowMetrics {
     fn new(height: f32, ascent: f32) -> Self {
         Self { height, ascent }
@@ -1723,11 +1740,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             );
             let begin_row = row_cursor.text_matrix_row_begin(row_base, 0, content_x);
             let state = row_cursor.state();
-            *row = state.row;
-            *y = state.y;
-            *row_extra_y = state.row_extra_y;
-            *row_max_height = state.height;
-            *row_max_ascent = state.ascent;
+            state.apply_to(row, y, row_extra_y, row_max_height, row_max_ascent);
             if *row >= max_rows {
                 finish_text_matrix_row(builder, output_emitter, finished_row);
                 builder.end_row();
@@ -4220,11 +4233,13 @@ impl LayoutEngine {
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     let state = row_cursor.state();
-                    row = state.row;
-                    y = state.y;
-                    row_extra_y = state.row_extra_y;
-                    row_max_height = state.height;
-                    row_max_ascent = state.ascent;
+                    state.apply_to(
+                        &mut row,
+                        &mut y,
+                        &mut row_extra_y,
+                        &mut row_max_height,
+                        &mut row_max_ascent,
+                    );
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -4857,11 +4872,13 @@ impl LayoutEngine {
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         let state = row_cursor.state();
-                        row = state.row;
-                        y = state.y;
-                        row_extra_y = state.row_extra_y;
-                        row_max_height = state.height;
-                        row_max_ascent = state.ascent;
+                        state.apply_to(
+                            &mut row,
+                            &mut y,
+                            &mut row_extra_y,
+                            &mut row_max_height,
+                            &mut row_max_ascent,
+                        );
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -4989,11 +5006,13 @@ impl LayoutEngine {
                 );
                 let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                 let state = row_cursor.state();
-                row = state.row;
-                y = state.y;
-                row_extra_y = state.row_extra_y;
-                row_max_height = state.height;
-                row_max_ascent = state.ascent;
+                state.apply_to(
+                    &mut row,
+                    &mut y,
+                    &mut row_extra_y,
+                    &mut row_max_height,
+                    &mut row_max_ascent,
+                );
                 row_y_positions.push(y);
                 let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,
@@ -5120,11 +5139,13 @@ impl LayoutEngine {
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         let state = row_cursor.state();
-                        row = state.row;
-                        y = state.y;
-                        row_extra_y = state.row_extra_y;
-                        row_max_height = state.height;
-                        row_max_ascent = state.ascent;
+                        state.apply_to(
+                            &mut row,
+                            &mut y,
+                            &mut row_extra_y,
+                            &mut row_max_height,
+                            &mut row_max_ascent,
+                        );
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -5175,11 +5196,13 @@ impl LayoutEngine {
                         let begin_row =
                             row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         let state = row_cursor.state();
-                        row = state.row;
-                        y = state.y;
-                        row_extra_y = state.row_extra_y;
-                        row_max_height = state.height;
-                        row_max_ascent = state.ascent;
+                        state.apply_to(
+                            &mut row,
+                            &mut y,
+                            &mut row_extra_y,
+                            &mut row_max_height,
+                            &mut row_max_ascent,
+                        );
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
@@ -5486,11 +5509,13 @@ impl LayoutEngine {
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     let state = row_cursor.state();
-                    row = state.row;
-                    y = state.y;
-                    row_extra_y = state.row_extra_y;
-                    row_max_height = state.height;
-                    row_max_ascent = state.ascent;
+                    state.apply_to(
+                        &mut row,
+                        &mut y,
+                        &mut row_extra_y,
+                        &mut row_max_height,
+                        &mut row_max_ascent,
+                    );
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -5548,11 +5573,13 @@ impl LayoutEngine {
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     let state = row_cursor.state();
-                    row = state.row;
-                    y = state.y;
-                    row_extra_y = state.row_extra_y;
-                    row_max_height = state.height;
-                    row_max_ascent = state.ascent;
+                    state.apply_to(
+                        &mut row,
+                        &mut y,
+                        &mut row_extra_y,
+                        &mut row_max_height,
+                        &mut row_max_ascent,
+                    );
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
@@ -5612,11 +5639,13 @@ impl LayoutEngine {
                     );
                     let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     let state = row_cursor.state();
-                    row = state.row;
-                    y = state.y;
-                    row_extra_y = state.row_extra_y;
-                    row_max_height = state.height;
-                    row_max_ascent = state.ascent;
+                    state.apply_to(
+                        &mut row,
+                        &mut y,
+                        &mut row_extra_y,
+                        &mut row_max_height,
+                        &mut row_max_ascent,
+                    );
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
