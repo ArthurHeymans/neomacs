@@ -516,7 +516,7 @@ impl DisplayRowGlyphMeasurementFace {
         self.glyph_advance_px(font_metrics, ch, columns, fallback_advance_px)
     }
 
-    pub(crate) fn text_run_measurement(
+    fn shaped_text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         text: &str,
@@ -534,12 +534,12 @@ impl DisplayRowGlyphMeasurementFace {
         measurer.text_run_advances_px(text, self.face.face_id, self.fallback_char_width)
     }
 
-    pub(crate) fn measured_text_run_or_char_advances(
+    pub(crate) fn text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         text: &str,
     ) -> DisplayTextRunMeasurement {
-        let measurement = self.text_run_measurement(font_metrics, text);
+        let measurement = self.shaped_text_run_measurement(font_metrics, text);
         if measurement.measured_advances().is_some() {
             return measurement;
         }
@@ -548,6 +548,14 @@ impl DisplayRowGlyphMeasurementFace {
             self.fallback_char_width,
             |ch, fallback_advance_px| self.advance_for_char(font_metrics, ch, fallback_advance_px),
         )
+    }
+
+    pub(crate) fn resolved_fragment_measurement(
+        &self,
+        text: &str,
+        advance_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(text, advance_px)
     }
 }
 

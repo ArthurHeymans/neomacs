@@ -45,9 +45,7 @@ use crate::display_source::{
 };
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::{
-    DisplayTextRunByteAdvance, DisplayTextRunMeasurementPlan,
-};
+use crate::display_text_run_measurement::DisplayTextRunByteAdvance;
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -706,7 +704,7 @@ impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
         };
         DisplayRowItemMeasurement::TextRun(
             self.measurement_face
-                .measured_text_run_or_char_advances(self.font_metrics_svc, text.text.as_ref()),
+                .text_run_measurement(self.font_metrics_svc, text.text.as_ref()),
         )
     }
 }
@@ -3709,11 +3707,6 @@ impl LayoutEngine {
                             frame_params.window_system,
                             face_char_w,
                         );
-                        let dot_advance = measurement_face.advance_for_char(
-                            &mut self.font_metrics,
-                            '.',
-                            face_char_w,
-                        );
                         let ellipsis_frame = text_append_surface.frame(
                             DisplayRowAppendPlacement {
                                 row,
@@ -3729,7 +3722,7 @@ impl LayoutEngine {
                             },
                         );
                         let measurement =
-                            DisplayTextRunMeasurementPlan::uniform_for_text("...", dot_advance);
+                            measurement_face.text_run_measurement(&mut self.font_metrics, "...");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -3917,8 +3910,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement =
-                            DisplayTextRunMeasurementPlan::uniform_for_text("$", char_w);
+                        let measurement = default_measurement_face
+                            .text_run_measurement(&mut self.font_metrics, "$");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4466,8 +4459,6 @@ impl LayoutEngine {
                     frame_params.window_system,
                     face_char_w,
                 );
-                let dot_advance =
-                    measurement_face.advance_for_char(&mut self.font_metrics, '.', face_char_w);
                 let ellipsis_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
                         row,
@@ -4483,7 +4474,7 @@ impl LayoutEngine {
                     },
                 );
                 let measurement =
-                    DisplayTextRunMeasurementPlan::uniform_for_text("...", dot_advance);
+                    measurement_face.text_run_measurement(&mut self.font_metrics, "...");
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -5482,10 +5473,15 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement = DisplayTextRunMeasurementPlan::uniform_for_text(
-                ch.encode_utf8(&mut ch_text),
-                advance,
+            let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                current_text_face_id,
+                &current_resolved_face,
+                None,
+                frame_params.window_system,
+                face_char_w,
             );
+            let measurement = measurement_face
+                .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,

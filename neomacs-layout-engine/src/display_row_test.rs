@@ -1585,6 +1585,66 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
 }
 
 #[test]
+fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let measurement_face =
+        DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, false, 7.2);
+    let mut font_metrics = None;
+
+    let measurement = measurement_face.text_run_measurement(&mut font_metrics, "a中");
+
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
+    else {
+        panic!("measurement face should fall back to char-advance text-run plans");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 7.0), (1, 1, 14.0)]
+    );
+}
+
+#[test]
+fn display_row_glyph_measurement_face_builds_resolved_fragment_measurement_plan() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 7.2);
+
+    let measurement = measurement_face.resolved_fragment_measurement("\u{301}", 0.0);
+
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
+    else {
+        panic!("resolved fragment advances should produce measured text-run plans");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 0.0)]
+    );
+
+    let wide_measurement = measurement_face.resolved_fragment_measurement("中", 14.0);
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(wide_advances) =
+        wide_measurement
+    else {
+        panic!("resolved wide fragment advance should produce a measured text-run plan");
+    };
+    assert_eq!(
+        wide_advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 14.0)]
+    );
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(

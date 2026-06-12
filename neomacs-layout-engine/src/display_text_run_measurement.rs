@@ -129,6 +129,29 @@ impl DisplayTextRunClusterAdvances {
 pub(crate) struct DisplayTextRunMeasurementPlan;
 
 impl DisplayTextRunMeasurementPlan {
+    pub(crate) fn from_resolved_fragment_advance(
+        text: &str,
+        advance_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        if text.is_empty() {
+            return DisplayTextRunMeasurement::PerChar;
+        }
+        let advance_px = if advance_px.is_finite() && advance_px >= 0.0 {
+            advance_px
+        } else {
+            0.0
+        };
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, _))| {
+                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
+            })
+            .collect();
+        DisplayTextRunMeasurement::Measured(advances)
+    }
+
+    #[cfg(test)]
     pub(crate) fn uniform_for_text(text: &str, advance_px: f32) -> DisplayTextRunMeasurement {
         if text.is_empty() {
             return DisplayTextRunMeasurement::PerChar;
