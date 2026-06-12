@@ -555,16 +555,11 @@ impl WaitServiceOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WaitOutcome {
     completion: WaitCompletion,
-    service: WaitServiceOutcome,
 }
 
 impl WaitOutcome {
     pub(crate) fn completion(self) -> WaitCompletion {
         self.completion
-    }
-
-    fn has_command_input_pending(self) -> bool {
-        self.service.has_command_input_pending()
     }
 }
 
@@ -722,15 +717,11 @@ impl super::eval::Context {
     ) -> Result<WaitOutcome, Flow> {
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
         if let Some(completion) = request.completion_for(outcome) {
-            return Ok(WaitOutcome {
-                completion,
-                service: outcome,
-            });
+            return Ok(WaitOutcome { completion });
         }
         if request.poll_or_deadline_elapsed(Instant::now()) {
             return Ok(WaitOutcome {
                 completion: WaitCompletion::DeadlineElapsed,
-                service: outcome,
             });
         }
 
@@ -739,7 +730,6 @@ impl super::eval::Context {
             if request.deadline_elapsed(now) {
                 return Ok(WaitOutcome {
                     completion: WaitCompletion::DeadlineElapsed,
-                    service: outcome,
                 });
             }
 
@@ -748,10 +738,7 @@ impl super::eval::Context {
             outcome = self.service_wait_request_block_activity(&request, activity)?;
 
             if let Some(completion) = request.completion_for(outcome) {
-                return Ok(WaitOutcome {
-                    completion,
-                    service: outcome,
-                });
+                return Ok(WaitOutcome { completion });
             }
         }
     }
@@ -1138,14 +1125,10 @@ mod tests {
 
     #[test]
     fn wait_outcome_exposes_completion_and_service_queries() {
-        let mut service = WaitServiceOutcome::default();
-        service.record_command_input_pending();
         let outcome = WaitOutcome {
             completion: WaitCompletion::CommandInputPending,
-            service,
         };
 
         assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
-        assert!(outcome.has_command_input_pending());
     }
 }
