@@ -2099,6 +2099,30 @@ fn frame_native_width_syncs_pending_resize_without_read_char() {
 }
 
 #[test]
+fn fire_pending_timers_does_not_service_pending_resize_input() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fid = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::Resize {
+        width: 700,
+        height: 800,
+        emacs_frame_id: 0,
+    })
+    .unwrap();
+
+    ev.fire_pending_timers();
+
+    let frame = ev.frames.get(fid).expect("frame should exist");
+    assert_eq!(frame.width, 960);
+    assert_eq!(frame.height, 640);
+}
+
+#[test]
 fn wait_for_pending_resize_events_blocks_until_resize_and_preserves_keypress() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

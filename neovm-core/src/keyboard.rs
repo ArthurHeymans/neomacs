@@ -5174,7 +5174,7 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn fire_pending_timers(&mut self) {
-        let _ = self.service_pending_timers_with_wait_policy(true);
+        let _ = self.service_wait_request_once(&WaitRequest::timer_service(true));
     }
 
     pub(crate) fn record_input_event(&mut self, event: Value) {

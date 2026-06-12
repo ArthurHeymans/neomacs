@@ -182,9 +182,16 @@ impl TimerWaitPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SpecialInputWaitPolicy {
+    Suppress,
     ServiceOnly,
     CompleteOnAny,
     CompleteOnResize,
+}
+
+impl SpecialInputWaitPolicy {
+    fn services_input(self) -> bool {
+        !matches!(self, Self::Suppress)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,6 +253,17 @@ impl WaitRequest {
         }
     }
 
+    pub(crate) fn timer_service(redisplay: bool) -> Self {
+        Self {
+            deadline: WaitDeadline::Poll,
+            keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
+            processes: ProcessWaitPolicy::None,
+            timers: TimerWaitPolicy::Run,
+            redisplay,
+            special_input: SpecialInputWaitPolicy::Suppress,
+        }
+    }
+
     pub(crate) fn sleep_until(deadline: Instant) -> Self {
         Self {
             deadline: WaitDeadline::Until(deadline),
@@ -280,6 +298,10 @@ impl WaitRequest {
         self.processes.target_process()
     }
 
+    fn services_special_input(self) -> bool {
+        self.special_input.services_input()
+    }
+
     fn backend_interest(self) -> Option<WaitBackendInterest> {
         WaitBackendInterest::from_wait_flags(
             self.keyboard.waits_for_host_input(),
@@ -303,7 +325,8 @@ impl WaitRequest {
             SpecialInputWaitPolicy::CompleteOnResize if outcome.has_resize_activity() => {
                 return Some(WaitCompletion::SpecialInputActivity);
             }
-            SpecialInputWaitPolicy::ServiceOnly
+            SpecialInputWaitPolicy::Suppress
+            | SpecialInputWaitPolicy::ServiceOnly
             | SpecialInputWaitPolicy::CompleteOnAny
             | SpecialInputWaitPolicy::CompleteOnResize => {}
         }
@@ -557,7 +580,11 @@ impl super::eval::Context {
         process_service: WaitProcessService,
     ) -> Result<WaitServiceOutcome, Flow> {
         let mut outcome = WaitServiceOutcome::default();
-        let special_input = self.service_wait_request_special_input_events()?;
+        let special_input = if request.services_special_input() {
+            self.service_wait_request_special_input_events()?
+        } else {
+            WaitSpecialInputOutcome::default()
+        };
         outcome.record_special_input_activity(special_input.activity());
         if request.keyboard.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
@@ -889,6 +916,15 @@ mod tests {
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.process_policy(), ProcessWaitPolicy::Target(12));
         assert_eq!(request.target_process(), Some(12));
+    }
+
+    #[test]
+    fn wait_request_timer_service_suppresses_special_input_and_processes() {
+        let request = WaitRequest::timer_service(true);
+
+        assert_eq!(request.deadline(), WaitDeadline::Poll);
+        assert_eq!(request.process_policy(), ProcessWaitPolicy::None);
+        assert!(!request.services_special_input());
     }
 
     #[test]
