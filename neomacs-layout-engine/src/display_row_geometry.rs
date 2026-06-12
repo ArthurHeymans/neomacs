@@ -95,6 +95,30 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_max_height = state.height;
         *self.row_max_ascent = state.ascent;
     }
+
+    pub(crate) fn finish_begin_and_commit_next_text_matrix_row(
+        self,
+        target: DisplayRowGeometryTransitionTarget<'_>,
+    ) -> TextMatrixRowGeometryTransition {
+        let mut row_cursor = DisplayRowGeometryCursor::from_state(
+            DisplayRowGeometryState::from_legacy(self.snapshot()),
+        );
+        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
+            target.defaults,
+            target.kind,
+            target.row_base,
+            target.col,
+            target.x,
+        );
+        let commit_target = match target.row_y_recording {
+            DisplayRowYRecording::None => DisplayRowGeometryCommitTarget::silent(self),
+            DisplayRowYRecording::RowYPositions(row_y_positions) => {
+                DisplayRowGeometryCommitTarget::recording_row_y(self, row_y_positions)
+            }
+        };
+        row_cursor.commit(commit_target);
+        transition
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -111,6 +135,11 @@ enum DisplayRowYRecorder<'a> {
     RowYPositions(&'a mut Vec<f32>),
 }
 
+pub(crate) enum DisplayRowYRecording<'a> {
+    None,
+    RowYPositions(&'a mut Vec<f32>),
+}
+
 pub(crate) struct DisplayRowGeometryCommitTarget<'a> {
     vars: LegacyDisplayRowGeometryVars<'a>,
     row_y_recorder: DisplayRowYRecorder<'a>,
@@ -123,6 +152,15 @@ pub(crate) struct DisplayRowGeometryAdvanceTarget<'a> {
     col: usize,
     x: f32,
     commit_target: DisplayRowGeometryCommitTarget<'a>,
+}
+
+pub(crate) struct DisplayRowGeometryTransitionTarget<'a> {
+    defaults: DisplayRowGeometryDefaults,
+    kind: DisplayRowAdvanceKind,
+    row_base: usize,
+    col: usize,
+    x: f32,
+    row_y_recording: DisplayRowYRecording<'a>,
 }
 
 impl DisplayRowYRecorder<'_> {
@@ -172,24 +210,6 @@ impl<'a> DisplayRowGeometryAdvanceTarget<'a> {
         }
     }
 
-    pub(crate) fn line_break(
-        defaults: DisplayRowGeometryDefaults,
-        row_base: usize,
-        col: usize,
-        x: f32,
-        line_spacing: f32,
-        commit_target: DisplayRowGeometryCommitTarget<'a>,
-    ) -> Self {
-        Self::new(
-            defaults,
-            DisplayRowAdvanceKind::LineBreak { line_spacing },
-            row_base,
-            col,
-            x,
-            commit_target,
-        )
-    }
-
     pub(crate) fn truncation(
         defaults: DisplayRowGeometryDefaults,
         row_base: usize,
@@ -221,6 +241,44 @@ impl<'a> DisplayRowGeometryAdvanceTarget<'a> {
             col,
             x,
             commit_target,
+        )
+    }
+}
+
+impl<'a> DisplayRowGeometryTransitionTarget<'a> {
+    fn new(
+        defaults: DisplayRowGeometryDefaults,
+        kind: DisplayRowAdvanceKind,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self {
+            defaults,
+            kind,
+            row_base,
+            col,
+            x,
+            row_y_recording,
+        }
+    }
+
+    pub(crate) fn line_break(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::LineBreak { line_spacing },
+            row_base,
+            col,
+            x,
+            row_y_recording,
         )
     }
 }

@@ -42,7 +42,8 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     CurrentDisplayRowMetrics, DisplayRowGeometryAdvanceTarget, DisplayRowGeometryCommitTarget,
     DisplayRowGeometryCursor, DisplayRowGeometryDefaults, DisplayRowGeometryState,
-    LegacyDisplayRowGeometry, LegacyDisplayRowGeometryVars,
+    DisplayRowGeometryTransitionTarget, DisplayRowYRecording, LegacyDisplayRowGeometry,
+    LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -1501,7 +1502,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let mut row_cursor =
+            let row_cursor =
                 DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
                     row: &mut *row,
                     y: &mut *y,
@@ -1511,8 +1512,15 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 });
             hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
-            let geometry_transition = row_cursor.finish_begin_and_commit_next_text_matrix_row(
-                DisplayRowGeometryAdvanceTarget::line_break(
+            let geometry_transition = LegacyDisplayRowGeometryVars {
+                row,
+                y,
+                row_extra_y,
+                row_max_height,
+                row_max_ascent,
+            }
+            .finish_begin_and_commit_next_text_matrix_row(
+                DisplayRowGeometryTransitionTarget::line_break(
                     DisplayRowGeometryDefaults {
                         text_y,
                         height: char_h,
@@ -1522,13 +1530,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     0,
                     content_x,
                     0.0,
-                    DisplayRowGeometryCommitTarget::silent(LegacyDisplayRowGeometryVars {
-                        row,
-                        y,
-                        row_extra_y,
-                        row_max_height,
-                        row_max_ascent,
-                    }),
+                    DisplayRowYRecording::None,
                 ),
             );
             if *row >= max_rows {
@@ -3988,7 +3990,7 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
-                    let mut row_cursor =
+                    let row_cursor =
                         DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
@@ -4005,30 +4007,27 @@ impl LayoutEngine {
                     row_extend_bg = None;
                     row_extend_row = -1;
 
-                    let geometry_transition = row_cursor
-                        .finish_begin_and_commit_next_text_matrix_row(
-                            DisplayRowGeometryAdvanceTarget::line_break(
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                0.0,
-                                DisplayRowGeometryCommitTarget::recording_row_y(
-                                    LegacyDisplayRowGeometryVars {
-                                        row: &mut row,
-                                        y: &mut y,
-                                        row_extra_y: &mut row_extra_y,
-                                        row_max_height: &mut row_max_height,
-                                        row_max_ascent: &mut row_max_ascent,
-                                    },
-                                    &mut row_y_positions,
-                                ),
-                            ),
-                        );
+                    let geometry_transition = LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    }
+                    .finish_begin_and_commit_next_text_matrix_row(
+                        DisplayRowGeometryTransitionTarget::line_break(
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            0.0,
+                            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                        ),
+                    );
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4631,7 +4630,7 @@ impl LayoutEngine {
                     charpos += 1;
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
-                        let mut row_cursor = DisplayRowGeometryCursor::from_legacy_vars(
+                        let row_cursor = DisplayRowGeometryCursor::from_legacy_vars(
                             LegacyDisplayRowGeometryVars {
                                 row: &mut row,
                                 y: &mut y,
@@ -4648,30 +4647,27 @@ impl LayoutEngine {
                             box_start_x = content_x;
                             box_row = row + 1;
                         }
-                        let geometry_transition = row_cursor
-                            .finish_begin_and_commit_next_text_matrix_row(
-                                DisplayRowGeometryAdvanceTarget::line_break(
-                                    DisplayRowGeometryDefaults {
-                                        text_y,
-                                        height: char_h,
-                                        ascent: default_face_ascent,
-                                    },
-                                    text_matrix_row_base,
-                                    col,
-                                    x,
-                                    0.0,
-                                    DisplayRowGeometryCommitTarget::recording_row_y(
-                                        LegacyDisplayRowGeometryVars {
-                                            row: &mut row,
-                                            y: &mut y,
-                                            row_extra_y: &mut row_extra_y,
-                                            row_max_height: &mut row_max_height,
-                                            row_max_ascent: &mut row_max_ascent,
-                                        },
-                                        &mut row_y_positions,
-                                    ),
-                                ),
-                            );
+                        let geometry_transition = LegacyDisplayRowGeometryVars {
+                            row: &mut row,
+                            y: &mut y,
+                            row_extra_y: &mut row_extra_y,
+                            row_max_height: &mut row_max_height,
+                            row_max_ascent: &mut row_max_ascent,
+                        }
+                        .finish_begin_and_commit_next_text_matrix_row(
+                            DisplayRowGeometryTransitionTarget::line_break(
+                                DisplayRowGeometryDefaults {
+                                    text_y,
+                                    height: char_h,
+                                    ascent: default_face_ascent,
+                                },
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                0.0,
+                                DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                            ),
+                        );
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4751,7 +4747,7 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                let mut row_cursor =
+                let row_cursor =
                     DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
@@ -4786,8 +4782,15 @@ impl LayoutEngine {
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
                 hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-                let geometry_transition = row_cursor.finish_begin_and_commit_next_text_matrix_row(
-                    DisplayRowGeometryAdvanceTarget::line_break(
+                let geometry_transition = LegacyDisplayRowGeometryVars {
+                    row: &mut row,
+                    y: &mut y,
+                    row_extra_y: &mut row_extra_y,
+                    row_max_height: &mut row_max_height,
+                    row_max_ascent: &mut row_max_ascent,
+                }
+                .finish_begin_and_commit_next_text_matrix_row(
+                    DisplayRowGeometryTransitionTarget::line_break(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
@@ -4797,16 +4800,7 @@ impl LayoutEngine {
                         col,
                         x,
                         line_spacing,
-                        DisplayRowGeometryCommitTarget::recording_row_y(
-                            LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
-                            &mut row_y_positions,
-                        ),
+                        DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                     ),
                 );
                 let row_transition = TextMatrixRowOutput::new(
