@@ -12,8 +12,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
-    TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
-    finish_text_matrix_row,
+    TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -1943,7 +1942,9 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 ),
             );
             if *row >= max_rows {
-                finish_text_matrix_row(builder, output_emitter, geometry_transition.finished_row);
+                geometry_transition
+                    .finished_row
+                    .finish(builder, output_emitter);
                 builder.end_row();
                 false
             } else {
@@ -4110,18 +4111,14 @@ impl LayoutEngine {
             params.text_bounds,
             params.selected,
         );
-        begin_text_matrix_row(
-            &mut self.matrix_builder,
-            &mut output_emitter,
-            evaluator,
-            TextMatrixRowBegin {
-                matrix_row: text_matrix_row_base,
-                row,
-                col,
-                y,
-                x,
-            },
-        );
+        TextMatrixRowBegin {
+            matrix_row: text_matrix_row_base,
+            row,
+            col,
+            y,
+            x,
+        }
+        .begin(&mut self.matrix_builder, &mut output_emitter, evaluator);
 
         while byte_idx < text.len() && row < max_rows && y + row_max_height <= text_y + text_height
         {
@@ -6461,11 +6458,9 @@ impl LayoutEngine {
                 }),
             );
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-            finish_text_matrix_row(
-                &mut self.matrix_builder,
-                &mut output_emitter,
-                row_cursor.finish_current_row(),
-            );
+            row_cursor
+                .finish_current_row()
+                .finish(&mut self.matrix_builder, &mut output_emitter);
         }
 
         for spec in &params.visual_cursors {
