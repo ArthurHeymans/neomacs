@@ -149,6 +149,55 @@ struct CapturedCursorInfo {
     stretch_like: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CapturedCursorSlotWidth {
+    FaceChar,
+    Explicit(f32),
+}
+
+impl CapturedCursorSlotWidth {
+    fn resolve(self, face_char_width: f32) -> f32 {
+        match self {
+            Self::FaceChar => face_char_width,
+            Self::Explicit(width) => width,
+        }
+        .max(1.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CapturedCursorPlacement {
+    x: f32,
+    y: f32,
+    byte_idx: usize,
+    col: usize,
+    matrix_row: usize,
+    slot_width: CapturedCursorSlotWidth,
+    stretch_like: bool,
+}
+
+impl CapturedCursorInfo {
+    fn from_active_face_state(
+        active_face_state: &DisplayRowActiveFaceState,
+        placement: CapturedCursorPlacement,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        Self {
+            x: placement.x,
+            y: placement.y,
+            face_w: metrics.char_width,
+            face_h: metrics.row_height,
+            face_ascent: metrics.ascent,
+            bg: active_face_state.background(),
+            byte_idx: placement.byte_idx,
+            col: placement.col,
+            matrix_row: placement.matrix_row,
+            slot_width: Some(placement.slot_width.resolve(metrics.char_width)),
+            stretch_like: placement.stretch_like,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ResolvedCursorGeometry {
     slot_id: DisplaySlotId,
@@ -3664,19 +3713,18 @@ impl LayoutEngine {
                     if point_in_hidden_region {
                         capture_cursor_info(
                             &mut cursor_info,
-                            CapturedCursorInfo {
-                                x,
-                                y,
-                                face_w: face_metrics.char_width,
-                                face_h: face_metrics.row_height,
-                                face_ascent: face_metrics.ascent,
-                                bg: active_face_state.background(),
-                                byte_idx,
-                                col,
-                                matrix_row: row,
-                                slot_width: Some(face_metrics.char_width.max(1.0)),
-                                stretch_like: false,
-                            },
+                            CapturedCursorInfo::from_active_face_state(
+                                &active_face_state,
+                                CapturedCursorPlacement {
+                                    x,
+                                    y,
+                                    byte_idx,
+                                    col,
+                                    matrix_row: row,
+                                    slot_width: CapturedCursorSlotWidth::FaceChar,
+                                    stretch_like: false,
+                                },
+                            ),
                         );
                     }
 
@@ -3915,19 +3963,18 @@ impl LayoutEngine {
                     if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
-                            CapturedCursorInfo {
-                                x,
-                                y,
-                                face_w: face_metrics.char_width,
-                                face_h: face_metrics.row_height,
-                                face_ascent: face_metrics.ascent,
-                                bg: active_face_state.background(),
-                                byte_idx: ch_start_byte_idx,
-                                col,
-                                matrix_row: row,
-                                slot_width: Some(face_metrics.char_width.max(1.0)),
-                                stretch_like: false,
-                            },
+                            CapturedCursorInfo::from_active_face_state(
+                                &active_face_state,
+                                CapturedCursorPlacement {
+                                    x,
+                                    y,
+                                    byte_idx: ch_start_byte_idx,
+                                    col,
+                                    matrix_row: row,
+                                    slot_width: CapturedCursorSlotWidth::FaceChar,
+                                    stretch_like: false,
+                                },
+                            ),
                         );
                     }
                 }
@@ -3978,19 +4025,18 @@ impl LayoutEngine {
                                 .unwrap_or_else(|| char_w.max(1.0));
                             capture_cursor_info(
                                 &mut cursor_info,
-                                CapturedCursorInfo {
-                                    x,
-                                    y,
-                                    face_w: face_metrics.char_width,
-                                    face_h: face_metrics.row_height,
-                                    face_ascent: face_metrics.ascent,
-                                    bg: active_face_state.background(),
-                                    byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: Some(slot_width.max(1.0)),
-                                    stretch_like: false,
-                                },
+                                CapturedCursorInfo::from_active_face_state(
+                                    &active_face_state,
+                                    CapturedCursorPlacement {
+                                        x,
+                                        y,
+                                        byte_idx,
+                                        col,
+                                        matrix_row: row,
+                                        slot_width: CapturedCursorSlotWidth::Explicit(slot_width),
+                                        stretch_like: false,
+                                    },
+                                ),
                             );
                         }
                         if !replacement.is_empty() {
@@ -4123,21 +4169,20 @@ impl LayoutEngine {
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,
-                                CapturedCursorInfo {
-                                    x,
-                                    y,
-                                    face_w: face_metrics.char_width,
-                                    face_h: face_metrics.row_height,
-                                    face_ascent: face_metrics.ascent,
-                                    bg: active_face_state.background(),
-                                    byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: Some(
-                                        space_width.max(face_metrics.char_width).max(1.0),
-                                    ),
-                                    stretch_like: true,
-                                },
+                                CapturedCursorInfo::from_active_face_state(
+                                    &active_face_state,
+                                    CapturedCursorPlacement {
+                                        x,
+                                        y,
+                                        byte_idx,
+                                        col,
+                                        matrix_row: row,
+                                        slot_width: CapturedCursorSlotWidth::Explicit(
+                                            space_width.max(face_metrics.char_width),
+                                        ),
+                                        stretch_like: true,
+                                    },
+                                ),
                             );
                         }
                         if space_width > 0.0 {
@@ -4293,19 +4338,18 @@ impl LayoutEngine {
                             if point_in_display_replacement {
                                 capture_cursor_info(
                                     &mut cursor_info,
-                                    CapturedCursorInfo {
-                                        x,
-                                        y,
-                                        face_w: face_metrics.char_width,
-                                        face_h: face_metrics.row_height,
-                                        face_ascent: face_metrics.ascent,
-                                        bg: active_face_state.background(),
-                                        byte_idx,
-                                        col,
-                                        matrix_row: row,
-                                        slot_width: Some(face_metrics.char_width.max(1.0)),
-                                        stretch_like: false,
-                                    },
+                                    CapturedCursorInfo::from_active_face_state(
+                                        &active_face_state,
+                                        CapturedCursorPlacement {
+                                            x,
+                                            y,
+                                            byte_idx,
+                                            col,
+                                            matrix_row: row,
+                                            slot_width: CapturedCursorSlotWidth::FaceChar,
+                                            stretch_like: false,
+                                        },
+                                    ),
                                 );
                             }
                             let replacement_frame = text_append_surface.frame_for_active_face(
@@ -4505,19 +4549,18 @@ impl LayoutEngine {
                     // waiting for the next row.
                     capture_cursor_info(
                         &mut cursor_info,
-                        CapturedCursorInfo {
-                            x,
-                            y,
-                            face_w: face_metrics.char_width,
-                            face_h: face_metrics.row_height,
-                            face_ascent: face_metrics.ascent,
-                            bg: active_face_state.background(),
-                            byte_idx: ch_start_byte_idx,
-                            col,
-                            matrix_row: row,
-                            slot_width: Some(face_metrics.char_width.max(1.0)),
-                            stretch_like: false,
-                        },
+                        CapturedCursorInfo::from_active_face_state(
+                            &active_face_state,
+                            CapturedCursorPlacement {
+                                x,
+                                y,
+                                byte_idx: ch_start_byte_idx,
+                                col,
+                                matrix_row: row,
+                                slot_width: CapturedCursorSlotWidth::FaceChar,
+                                stretch_like: false,
+                            },
+                        ),
                     );
                 }
                 // Highlight trailing whitespace before advancing to next row
@@ -5266,19 +5309,18 @@ impl LayoutEngine {
             if cursor_info.is_none() && charpos == point_charpos {
                 capture_cursor_info(
                     &mut cursor_info,
-                    CapturedCursorInfo {
-                        x,
-                        y,
-                        face_w: face_metrics.char_width,
-                        face_h: face_metrics.row_height,
-                        face_ascent: face_metrics.ascent,
-                        bg: active_face_state.background(),
-                        byte_idx: ch_start_byte_idx,
-                        col,
-                        matrix_row: row,
-                        slot_width: Some(advance.max(1.0)),
-                        stretch_like: ch == '\t',
-                    },
+                    CapturedCursorInfo::from_active_face_state(
+                        &active_face_state,
+                        CapturedCursorPlacement {
+                            x,
+                            y,
+                            byte_idx: ch_start_byte_idx,
+                            col,
+                            matrix_row: row,
+                            slot_width: CapturedCursorSlotWidth::Explicit(advance),
+                            stretch_like: ch == '\t',
+                        },
+                    ),
                 );
             }
 
@@ -5490,19 +5532,18 @@ impl LayoutEngine {
             }
             capture_cursor_info(
                 &mut cursor_info,
-                CapturedCursorInfo {
-                    x,
-                    y,
-                    face_w: face_metrics.char_width,
-                    face_h: face_metrics.row_height,
-                    face_ascent: face_metrics.ascent,
-                    bg: active_face_state.background(),
-                    byte_idx,
-                    col,
-                    matrix_row: row,
-                    slot_width: Some(face_metrics.char_width.max(1.0)),
-                    stretch_like: false,
-                },
+                CapturedCursorInfo::from_active_face_state(
+                    &active_face_state,
+                    CapturedCursorPlacement {
+                        x,
+                        y,
+                        byte_idx,
+                        col,
+                        matrix_row: row,
+                        slot_width: CapturedCursorSlotWidth::FaceChar,
+                        stretch_like: false,
+                    },
+                ),
             );
         }
 
