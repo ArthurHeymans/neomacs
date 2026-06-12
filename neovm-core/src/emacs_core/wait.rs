@@ -612,6 +612,14 @@ impl super::eval::Context {
         Ok(())
     }
 
+    pub(crate) fn service_input_pending_without_timers(&mut self) -> Result<(), Flow> {
+        self.service_wait_request_once(&WaitRequest::input_pending_without_timers())
+    }
+
+    pub(crate) fn service_input_pending_with_timers(&mut self) -> Result<(), Flow> {
+        self.service_wait_request_once(&WaitRequest::input_pending_with_timers())
+    }
+
     fn service_wait_request_once_outcome(
         &mut self,
         request: &WaitRequest,
