@@ -38,9 +38,10 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
-    DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker, DisplayRowStartMarker,
-    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
+    DisplayRowStartMarker, DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions,
+    DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3434,9 +3435,7 @@ impl LayoutEngine {
         // Fringe state tracking
         let left_fringe_x = params.text_bounds.x - params.left_fringe_width;
         let right_fringe_x = params.text_bounds.x + params.text_bounds.width;
-        let mut row_continued = vec![false; max_rows];
-        let mut row_truncated = vec![false; max_rows];
-        let mut row_continuation = vec![false; max_rows];
+        let mut row_flags = DisplayRowFlags::new(max_rows);
 
         // Horizontal scroll: skip first hscroll columns on each line
         let hscroll = if params.truncate_lines {
@@ -4736,7 +4735,11 @@ impl LayoutEngine {
                 if x + needed_width > content_x + (text_width - lnum_pixel_width) {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
-                        row_geometry.mark_current_row_flag(&mut row_truncated, row_limit);
+                        row_geometry.mark_current_row_flag_kind(
+                            &mut row_flags,
+                            DisplayRowFlagKind::Truncated,
+                            row_limit,
+                        );
                         // Same byte_idx/charpos desync as the main-char
                         // truncation path: byte_idx is past the overflowing
                         // control char, but charpos hasn't been incremented
@@ -4783,7 +4786,11 @@ impl LayoutEngine {
                         }
                         continue;
                     } else {
-                        row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
+                        row_geometry.mark_current_row_flag_kind(
+                            &mut row_flags,
+                            DisplayRowFlagKind::Continued,
+                            row_limit,
+                        );
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = DisplayRowMarker::Inactive;
@@ -4814,7 +4821,11 @@ impl LayoutEngine {
                         }
                         col = 0;
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
-                        row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
+                        row_geometry.mark_current_row_flag_kind(
+                            &mut row_flags,
+                            DisplayRowFlagKind::Continuation,
+                            row_limit,
+                        );
                         if has_prefix {
                             need_prefix = 2;
                         }
@@ -5055,7 +5066,11 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
-                    row_geometry.mark_current_row_flag(&mut row_truncated, row_limit);
+                    row_geometry.mark_current_row_flag_kind(
+                        &mut row_flags,
+                        DisplayRowFlagKind::Truncated,
+                        row_limit,
+                    );
                     // The current char has been decoded and `byte_idx` is
                     // already past it, but `charpos` is not yet incremented
                     // (that happens after the would-be push below). Account
@@ -5113,7 +5128,11 @@ impl LayoutEngine {
                     charpos = wrap_break_charpos;
                     col = 0;
 
-                    row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
+                    row_geometry.mark_current_row_flag_kind(
+                        &mut row_flags,
+                        DisplayRowFlagKind::Continued,
+                        row_limit,
+                    );
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
@@ -5143,7 +5162,11 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
-                    row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
+                    row_geometry.mark_current_row_flag_kind(
+                        &mut row_flags,
+                        DisplayRowFlagKind::Continuation,
+                        row_limit,
+                    );
                     word_wrap_may_wrap = false;
                     wrap_has_break = false;
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
@@ -5160,7 +5183,11 @@ impl LayoutEngine {
                     continue;
                 } else {
                     // Character wrap (no break point available)
-                    row_geometry.mark_current_row_flag(&mut row_continued, row_limit);
+                    row_geometry.mark_current_row_flag_kind(
+                        &mut row_flags,
+                        DisplayRowFlagKind::Continued,
+                        row_limit,
+                    );
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = DisplayRowMarker::Inactive;
@@ -5190,7 +5217,11 @@ impl LayoutEngine {
                     }
                     col = 0;
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
-                    row_geometry.mark_current_row_flag(&mut row_continuation, row_limit);
+                    row_geometry.mark_current_row_flag_kind(
+                        &mut row_flags,
+                        DisplayRowFlagKind::Continuation,
+                        row_limit,
+                    );
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
@@ -5538,18 +5569,18 @@ impl LayoutEngine {
                 let _gy = row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
 
                 // Right fringe: continuation arrow for wrapped lines
-                if params.right_fringe_width > 0.0 && row_continued.get(r).copied().unwrap_or(false)
-                {
-                }
+                if params.right_fringe_width > 0.0
+                    && row_flags.is_set(r, DisplayRowFlagKind::Continued)
+                {}
 
                 // Right fringe: truncation indicator
-                if params.right_fringe_width > 0.0 && row_truncated.get(r).copied().unwrap_or(false)
-                {
-                }
+                if params.right_fringe_width > 0.0
+                    && row_flags.is_set(r, DisplayRowFlagKind::Truncated)
+                {}
 
                 // Left fringe: continuation from previous line
                 if params.left_fringe_width > 0.0
-                    && row_continuation.get(r).copied().unwrap_or(false)
+                    && row_flags.is_set(r, DisplayRowFlagKind::Continuation)
                 {}
             }
 
@@ -5930,12 +5961,12 @@ impl LayoutEngine {
             } else {
                 matrix_cols.saturating_sub(1)
             };
-            for row_idx in 0..row_truncated.len() {
+            for row_idx in 0..row_flags.len() {
                 let matrix_row = text_matrix_row_base + row_idx;
-                if row_truncated[row_idx] {
+                if row_flags.is_set(row_idx, DisplayRowFlagKind::Truncated) {
                     self.matrix_builder
                         .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '$', 0);
-                } else if row_continued[row_idx] {
+                } else if row_flags.is_set(row_idx, DisplayRowFlagKind::Continued) {
                     self.matrix_builder
                         .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '\\', 0);
                 }

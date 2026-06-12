@@ -454,7 +454,7 @@ fn display_row_geometry_state_resolves_row_limit_positions() {
 }
 
 #[test]
-fn display_row_geometry_state_marks_current_row_flag_with_limit() {
+fn display_row_flags_mark_and_query_typed_row_flags() {
     let geometry = DisplayRowGeometryState {
         row: 2,
         y: 69.0,
@@ -462,12 +462,6 @@ fn display_row_geometry_state_marks_current_row_flag_with_limit() {
         height: 16.0,
         ascent: 12.0,
     };
-    let mut flags = vec![false; 4];
-
-    geometry.mark_current_row_flag(&mut flags, DisplayRowLimit { max_rows: 4 });
-
-    assert_eq!(flags, vec![false, false, true, false]);
-
     let exhausted = DisplayRowGeometryState {
         row: 4,
         y: 69.0,
@@ -475,9 +469,17 @@ fn display_row_geometry_state_marks_current_row_flag_with_limit() {
         height: 16.0,
         ascent: 12.0,
     };
-    exhausted.mark_current_row_flag(&mut flags, DisplayRowLimit { max_rows: 4 });
+    let limit = DisplayRowLimit { max_rows: 4 };
+    let mut flags = DisplayRowFlags::new(4);
 
-    assert_eq!(flags, vec![false, false, true, false]);
+    geometry.mark_current_row_flag_kind(&mut flags, DisplayRowFlagKind::Truncated, limit);
+    geometry.mark_current_row_flag_kind(&mut flags, DisplayRowFlagKind::Continued, limit);
+    exhausted.mark_current_row_flag_kind(&mut flags, DisplayRowFlagKind::Continuation, limit);
+
+    assert!(flags.is_set(2, DisplayRowFlagKind::Truncated));
+    assert!(flags.is_set(2, DisplayRowFlagKind::Continued));
+    assert!(!flags.is_set(2, DisplayRowFlagKind::Continuation));
+    assert!(!flags.is_set(4, DisplayRowFlagKind::Truncated));
 }
 
 #[test]

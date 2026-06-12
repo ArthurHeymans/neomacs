@@ -98,6 +98,60 @@ pub(crate) struct DisplayRowLimit {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowFlagKind {
+    Continued,
+    Truncated,
+    Continuation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayRowFlags {
+    continued: Vec<bool>,
+    truncated: Vec<bool>,
+    continuation: Vec<bool>,
+}
+
+impl DisplayRowFlags {
+    pub(crate) fn new(row_count: usize) -> Self {
+        Self {
+            continued: vec![false; row_count],
+            truncated: vec![false; row_count],
+            continuation: vec![false; row_count],
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.truncated.len()
+    }
+
+    pub(crate) fn mark(&mut self, row: usize, kind: DisplayRowFlagKind) {
+        if let Some(flag) = self.flags_mut(kind).get_mut(row) {
+            *flag = true;
+        }
+    }
+
+    pub(crate) fn is_set(&self, row: usize, kind: DisplayRowFlagKind) -> bool {
+        self.flags(kind).get(row).copied().unwrap_or(false)
+    }
+
+    fn flags(&self, kind: DisplayRowFlagKind) -> &[bool] {
+        match kind {
+            DisplayRowFlagKind::Continued => &self.continued,
+            DisplayRowFlagKind::Truncated => &self.truncated,
+            DisplayRowFlagKind::Continuation => &self.continuation,
+        }
+    }
+
+    fn flags_mut(&mut self, kind: DisplayRowFlagKind) -> &mut [bool] {
+        match kind {
+            DisplayRowFlagKind::Continued => &mut self.continued,
+            DisplayRowFlagKind::Truncated => &mut self.truncated,
+            DisplayRowFlagKind::Continuation => &mut self.continuation,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowMarker {
     Inactive,
     Row(usize),
@@ -420,11 +474,14 @@ impl DisplayRowGeometryState {
         self.row.saturating_add(1).min(limit.max_rows)
     }
 
-    pub(crate) fn mark_current_row_flag(&self, flags: &mut [bool], limit: DisplayRowLimit) {
-        if self.is_within_row_limit(limit)
-            && let Some(flag) = flags.get_mut(self.row)
-        {
-            *flag = true;
+    pub(crate) fn mark_current_row_flag_kind(
+        &self,
+        flags: &mut DisplayRowFlags,
+        kind: DisplayRowFlagKind,
+        limit: DisplayRowLimit,
+    ) {
+        if self.is_within_row_limit(limit) {
+            flags.mark(self.row, kind);
         }
     }
 
