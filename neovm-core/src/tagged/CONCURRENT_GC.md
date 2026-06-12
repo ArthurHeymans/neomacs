@@ -182,11 +182,26 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
     handshakes (twice per cycle). gc_stress is a worst case for the concurrent
     collector's RELATIVE benefit — it forces a GC at every safe point, so each
     cycle is almost pure handshake overhead with little marking to parallelize.
-  * NEXT real win = STAGE 0: make the obarray root snapshot incremental /
-    remembered-set-driven so the handshakes don't re-enumerate all ~150k symbols.
-    Benefits the incremental (default) collector too. Tracing deferred veclikes
-    concurrently (retired-buffer scheme, option (b)) is secondary — only worth it
-    once the obarray reseed is off the handshake.
+  * STAGE 0 first cut DONE: `seed_root_with_origin` now SKIPS roots that point
+    into the blackened dump (`dump_blackened && owner_is_mapped`). Those objects
+    are already permanent-black (never cleared/swept) and their young children
+    come from the dump remembered set, so seeding them was pure waste — and in
+    blackened mode a pushed dump object is already-marked so it re-traces no
+    children anyway, i.e. NO coverage is lost (the remembered set was always the
+    sole dump->young path). This stops pushing+draining the ~450k interned-symbol
+    value/function/plist cells that still point at dumped objects every handshake.
+    Helps BOTH collectors. Measured (gc_stress, cl-seq.el byte-compile):
+      - incremental (default) termination ~0.9ms -> ~200us median (roots ~150us);
+      - concurrent termination ~1.7ms -> ~500-668us median (roots 841us->~350us).
+    Verified: fresh-build --release with NEOVM_GC_VERIFY_PARTITION=1 clean (0
+    violations), 0 panics on both collectors.
+  * STAGE 0 further (not done, riskier): the residual ~150-350us roots is now the
+    ENUMERATION of the ~150k-entry symbol table itself (cells checked but not
+    pushed). Eliminating it needs a dirty-symbol remembered set (only enumerate
+    symbols mutated since the dump) — but that requires hooking EVERY symbol
+    value/function/plist write (a barrier-completeness problem; a miss = UAF),
+    so verify under gc_stress. Tracing deferred veclikes concurrently
+    (retired-buffer scheme, option (b)) remains secondary.
 
   Original design notes (kept for reference):
   * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes

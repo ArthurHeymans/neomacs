@@ -2848,9 +2848,20 @@ impl TaggedHeap {
     }
 
     pub(crate) fn seed_root_with_origin(&mut self, root: TaggedValue, origin: &str) {
-        if root.is_heap_object() {
-            self.push_gray(root, origin);
+        if !root.is_heap_object() {
+            return;
         }
+        // Stage 0: in the blackened dump partition, a root that points into the
+        // dump image is already permanent-black (never cleared or swept), so it
+        // needs no marking; any young child it gained through mutation is covered
+        // by the dump remembered set (`seed_mapped_remembered`). Skipping these
+        // avoids pushing+draining the ~450k interned-symbol value/function/plist
+        // cells that still point at dumped objects on every root handshake — the
+        // dominant cost of the start + termination pauses.
+        if self.dump_blackened && self.owner_is_mapped(root) {
+            return;
+        }
+        self.push_gray(root, origin);
     }
 
     fn seed_internal_runtime_roots(&mut self) {
