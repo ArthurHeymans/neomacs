@@ -94,6 +94,12 @@ pub(crate) struct DisplayRowLimit {
     pub(crate) max_rows: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowMarker {
+    Inactive,
+    Row(usize),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowYFallback {
     pub(crate) text_y: f32,
@@ -496,6 +502,14 @@ impl DisplayRowGeometryState {
         }
     }
 
+    pub(crate) fn current_row_marker(&self) -> DisplayRowMarker {
+        DisplayRowMarker::Row(self.row)
+    }
+
+    pub(crate) fn next_row_marker(&self) -> DisplayRowMarker {
+        DisplayRowMarker::Row(self.row.saturating_add(1))
+    }
+
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
         let mut metrics = CurrentDisplayRowMetrics::new(self.height, self.ascent);
         metrics.include_glyph(glyph_height, glyph_ascent);
@@ -646,6 +660,12 @@ impl DisplayRowGeometryState {
     ) -> TextMatrixRowGeometryTransition {
         self.finish_boundary_in_place(target)
             .record_hit_row(hit_rows)
+    }
+}
+
+impl DisplayRowMarker {
+    pub(crate) fn is_active_on(&self, geometry: &DisplayRowGeometryState) -> bool {
+        matches!(self, Self::Row(row) if *row == geometry.row)
     }
 }
 

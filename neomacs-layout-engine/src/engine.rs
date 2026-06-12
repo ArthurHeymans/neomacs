@@ -39,8 +39,9 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryBinding, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowTextPosition,
-    DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
+    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions,
+    DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3537,12 +3538,12 @@ impl LayoutEngine {
 
         // Face :extend tracking — extends face background to end of line
         let mut row_extend_bg: Option<(Color, u32)> = None; // (bg_color, face_id)
-        let mut row_extend_row: i32 = -1;
+        let mut row_extend_row = DisplayRowMarker::Inactive;
 
         // Box face tracking: track active :box face regions
         let mut box_active = false;
         let mut box_start_x: f32 = 0.0;
-        let mut box_row: usize = 0;
+        let mut box_row = DisplayRowMarker::Inactive;
 
         // Cursor metrics captured during the main layout loop.
         let mut cursor_info: Option<CapturedCursorInfo> = None;
@@ -3643,7 +3644,7 @@ impl LayoutEngine {
                     if resolved.extend {
                         let ext_bg = Color::from_pixel(resolved.bg);
                         row_extend_bg = Some((ext_bg, face_id));
-                        row_extend_row = row as i32;
+                        row_extend_row = current_row_geometry!().current_row_marker();
                     }
 
                     if box_active && resolved.box_type == 0 {
@@ -3652,7 +3653,7 @@ impl LayoutEngine {
                     if resolved.box_type > 0 {
                         box_active = true;
                         box_start_x = x;
-                        box_row = row;
+                        box_row = current_row_geometry!().current_row_marker();
                     }
                 }
             };
@@ -3968,7 +3969,7 @@ impl LayoutEngine {
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     row_extend_bg = None;
-                    row_extend_row = -1;
+                    row_extend_row = DisplayRowMarker::Inactive;
 
                     let geometry_transition = current_row_geometry_vars!()
                         .finish_boundary_and_record_hit(
@@ -4552,10 +4553,10 @@ impl LayoutEngine {
                         // Advance to next row (same as newline handler)
                         x = content_x;
                         row_extend_bg = None;
-                        row_extend_row = -1;
+                        row_extend_row = DisplayRowMarker::Inactive;
                         if box_active {
                             box_start_x = content_x;
-                            box_row = row + 1;
+                            box_row = current_row_geometry!().next_row_marker();
                         }
                         let geometry_transition = current_row_geometry_vars!()
                             .finish_boundary_and_record_hit(
@@ -4635,13 +4636,13 @@ impl LayoutEngine {
 
                 // Face :extend: fill rest of row with extending face background
                 if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
-                    if row_extend_row == row as i32 {
+                    if row_extend_row.is_active_on(&current_row_geometry!()) {
                         let right_edge = content_x + avail_width;
                         if x < right_edge {}
                     }
                 }
                 row_extend_bg = None;
-                row_extend_row = -1;
+                row_extend_row = DisplayRowMarker::Inactive;
 
                 // Box face tracking: box stays active across line breaks
                 if box_active {
@@ -4702,7 +4703,7 @@ impl LayoutEngine {
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_charpos_start = charpos;
                 if box_active {
-                    box_row = row;
+                    box_row = current_row_geometry!().current_row_marker();
                 }
                 col = 0;
                 current_line += 1;
@@ -4794,7 +4795,7 @@ impl LayoutEngine {
                         }
                         x = content_x;
                         row_extend_bg = None;
-                        row_extend_row = -1;
+                        row_extend_row = DisplayRowMarker::Inactive;
                         let geometry_transition = current_row_geometry_vars!()
                             .finish_boundary_and_record_hit(
                                 DisplayRowBoundaryTarget::truncation(
@@ -4834,7 +4835,7 @@ impl LayoutEngine {
                             .mark_current_row_flag(&mut row_continued, row_limit);
                         x = content_x;
                         row_extend_bg = None;
-                        row_extend_row = -1;
+                        row_extend_row = DisplayRowMarker::Inactive;
                         let geometry_transition = current_row_geometry_vars!()
                             .finish_boundary_and_record_hit(
                                 DisplayRowBoundaryTarget::visual_wrap(
@@ -5119,7 +5120,7 @@ impl LayoutEngine {
                     }
                     x = content_x;
                     row_extend_bg = None;
-                    row_extend_row = -1;
+                    row_extend_row = DisplayRowMarker::Inactive;
                     let geometry_transition = current_row_geometry_vars!()
                         .finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::truncation(
@@ -5167,7 +5168,7 @@ impl LayoutEngine {
                     current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
-                    row_extend_row = -1;
+                    row_extend_row = DisplayRowMarker::Inactive;
                     let geometry_transition = current_row_geometry_vars!()
                         .finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(
@@ -5215,7 +5216,7 @@ impl LayoutEngine {
                     current_row_geometry!().mark_current_row_flag(&mut row_continued, row_limit);
                     x = content_x;
                     row_extend_bg = None;
-                    row_extend_row = -1;
+                    row_extend_row = DisplayRowMarker::Inactive;
                     let geometry_transition = current_row_geometry_vars!()
                         .finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(

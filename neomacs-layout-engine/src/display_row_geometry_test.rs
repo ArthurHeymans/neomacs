@@ -625,6 +625,34 @@ fn display_row_geometry_state_marks_current_row_flag_with_limit() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_typed_row_markers() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let next_row_geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 85.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    let current_marker = geometry.current_row_marker();
+    let next_marker = geometry.next_row_marker();
+
+    assert_eq!(current_marker, DisplayRowMarker::Row(2));
+    assert_eq!(next_marker, DisplayRowMarker::Row(3));
+    assert!(current_marker.is_active_on(&geometry));
+    assert!(!current_marker.is_active_on(&next_row_geometry));
+    assert!(next_marker.is_active_on(&next_row_geometry));
+    assert!(!DisplayRowMarker::Inactive.is_active_on(&geometry));
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_row_output() {
     let geometry = DisplayRowGeometryState {
         row: 3,
