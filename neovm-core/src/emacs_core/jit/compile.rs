@@ -366,6 +366,46 @@ extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     }
 }
 
+/// `Op::SaveCurrentBuffer`: record the current buffer on the specpdl + the
+/// bind stack, exactly like the interpreter arm (conditional + infallible).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_current_buffer(ctx: *mut u8) {
+    use crate::emacs_core::eval::SpecBinding;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(buffer_id) = ctx.buffers.current_buffer().map(|buffer| buffer.id) {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+        ctx.specpdl
+            .push(SpecBinding::SaveCurrentBuffer { buffer_id });
+    }
+}
+
+/// `Op::SaveExcursion`: record point/mark/buffer via the same Context helper
+/// the interpreter uses (`record_save_excursion` pushes the specpdl record and
+/// returns the pre-push depth for the bind stack).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_excursion(ctx: *mut u8) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(count) = ctx.record_save_excursion() {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(count));
+    }
+}
+
+/// `Op::SaveRestriction`: record the narrowing state, exactly like the
+/// interpreter arm (conditional + infallible).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
+    use crate::emacs_core::eval::SpecBinding;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(saved) = ctx.buffers.save_current_restriction_state() {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+        ctx.specpdl
+            .push(SpecBinding::SaveRestriction { state: saved });
+    }
+}
+
 /// Back-edge service poll: GC safepoint + `maybe_quit`, via the same shared
 /// Context helper the interpreter's `branch_to!` wrap path uses
 /// (`bytecode_branch_maybe_gc_and_quit`). Generated code calls this every 255
@@ -966,6 +1006,9 @@ struct RtRefs {
     varbind: FuncRef,
     unbind: FuncRef,
     backedge: FuncRef,
+    save_current_buffer: FuncRef,
+    save_excursion: FuncRef,
+    save_restriction: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1050,6 +1093,12 @@ fn declare_rt_refs(
     sig_backedge.params.push(AbiParam::new(ptr_ty));
     sig_backedge.returns.push(AbiParam::new(i64t));
     let backedge_id = declare(module, "neovm_jit_backedge", &sig_backedge)?;
+    // (vmctx) -> ()  — the infallible Save* records.
+    let mut sig_save = Signature::new(call_conv);
+    sig_save.params.push(AbiParam::new(ptr_ty));
+    let scb_id = declare(module, "neovm_jit_save_current_buffer", &sig_save)?;
+    let sexc_id = declare(module, "neovm_jit_save_excursion", &sig_save)?;
+    let sres_id = declare(module, "neovm_jit_save_restriction", &sig_save)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1065,6 +1114,9 @@ fn declare_rt_refs(
         varbind: module.declare_func_in_func(varbind_id, func),
         unbind: module.declare_func_in_func(unbind_id, func),
         backedge: module.declare_func_in_func(backedge_id, func),
+        save_current_buffer: module.declare_func_in_func(scb_id, func),
+        save_excursion: module.declare_func_in_func(sexc_id, func),
+        save_restriction: module.declare_func_in_func(sres_id, func),
     })
 }
 
@@ -1417,6 +1469,19 @@ fn lower_simple_op(
             let n_v = fb.ins().iconst(types::I64, *n as i64);
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
         }
+        Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => {
+            // Infallible specpdl records (the interpreter arms mirrored in the
+            // shims); restored by the matching Unbind or the frame unwind.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let shim = match op {
+                Op::SaveCurrentBuffer => rt.refs.save_current_buffer,
+                Op::SaveExcursion => rt.refs.save_excursion,
+                Op::SaveRestriction => rt.refs.save_restriction,
+                _ => unreachable!("matched Save* above"),
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            fb.ins().call(shim, &[vmctx]);
+        }
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     }
     Ok(())
@@ -1461,6 +1526,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::VarSet(_) => (1, -1),
         Op::VarBind(_) => (1, -1),
         Op::Unbind(_) => (0, 0),
+        Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => (0, 0),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1700,7 +1766,10 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         max_depth = cur as usize;
                     }
                     match other {
-                        Op::VarBind(_) => binds += 1,
+                        Op::VarBind(_)
+                        | Op::SaveCurrentBuffer
+                        | Op::SaveExcursion
+                        | Op::SaveRestriction => binds += 1,
                         Op::Unbind(un) => {
                             let un = *un as usize;
                             if un > binds {
@@ -1715,10 +1784,17 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     }
                     if matches!(
                         other,
-                        Op::Call(_) | Op::Apply(_) | Op::VarSet(_) | Op::VarBind(_) | Op::Unbind(_)
+                        Op::Call(_)
+                            | Op::Apply(_)
+                            | Op::VarSet(_)
+                            | Op::VarBind(_)
+                            | Op::Unbind(_)
+                            | Op::SaveCurrentBuffer
+                            | Op::SaveExcursion
+                            | Op::SaveRestriction
                     ) {
-                        // Side effects (calls, assignment, dynamic-binding
-                        // push/pop): a later deopt-rerun would replay them.
+                        // Side effects (calls, assignment, specpdl push/pop):
+                        // a later deopt-rerun would replay them.
                         poisoned = true;
                     }
                 }
@@ -1845,6 +1921,18 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_varbind", neovm_jit_varbind as *const u8);
     builder.symbol("neovm_jit_unbind", neovm_jit_unbind as *const u8);
     builder.symbol("neovm_jit_backedge", neovm_jit_backedge as *const u8);
+    builder.symbol(
+        "neovm_jit_save_current_buffer",
+        neovm_jit_save_current_buffer as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_save_excursion",
+        neovm_jit_save_excursion as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_save_restriction",
+        neovm_jit_save_restriction as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -1874,6 +1962,9 @@ pub fn lower_leaf(
                     | Op::VarSet(_)
                     | Op::VarBind(_)
                     | Op::Unbind(_)
+                    | Op::SaveCurrentBuffer
+                    | Op::SaveExcursion
+                    | Op::SaveRestriction
             )
         });
 
@@ -2161,9 +2252,16 @@ pub fn lower_leaf(
         // &optional/&rest lambda lists.
         required: arity,
         has_rest: false,
-        has_binds: ops
-            .iter()
-            .any(|o| matches!(o, Op::VarBind(_) | Op::Unbind(_))),
+        has_binds: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::VarBind(_)
+                    | Op::Unbind(_)
+                    | Op::SaveCurrentBuffer
+                    | Op::SaveExcursion
+                    | Op::SaveRestriction
+            )
+        }),
         entry,
         _module: module,
     })
@@ -2750,6 +2848,87 @@ mod tests {
             leaf.call(ctx_ptr, &[Value::make_int(1000)]),
             NativeRun::Ok(Value::make_int(0).bits())
         );
+    }
+
+    #[test]
+    fn compiles_save_excursion_with_unwind_semantics() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        ev.eval_str(r#"(insert "hello world")"#).expect("insert");
+        let specpdl_before = ev.specpdl.len();
+        let constants = [
+            Value::symbol("goto-char"),
+            Value::make_int(1),
+            Value::symbol("point"),
+        ];
+
+        // Balanced: (save-excursion (goto-char 1)) then (point) — restored.
+        let balanced = lower_nullary_leaf(
+            &[
+                Op::SaveExcursion,
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Call(1),
+                Op::Pop,
+                Op::Unbind(1),
+                Op::Constant(2),
+                Op::Call(0),
+                Op::Return,
+            ],
+            &constants,
+        )
+        .unwrap();
+        assert_eq!(
+            balanced.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(12).bits()),
+            "point must be restored by the Unbind"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+
+        // Early return with the record dangling: the frame unwind restores it.
+        let dangling = lower_nullary_leaf(
+            &[
+                Op::SaveExcursion,
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Call(1),
+                Op::Return,
+            ],
+            &constants,
+        )
+        .unwrap();
+        assert_eq!(
+            dangling.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(1).bits())
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before, "frame unwind pops record");
+        let point_now =
+            lower_nullary_leaf(&[Op::Constant(2), Op::Call(0), Op::Return], &constants).unwrap();
+        assert_eq!(
+            point_now.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(12).bits()),
+            "point must be restored by the frame unwind too"
+        );
+
+        // SaveCurrentBuffer / SaveRestriction: records create + frame-unwind
+        // cleanly (same shim/record machinery; arms mirrored 1:1).
+        for op in [Op::SaveCurrentBuffer, Op::SaveRestriction] {
+            let mech = lower_nullary_leaf(&[op, Op::Nil, Op::Return], &[]).unwrap();
+            assert_eq!(mech.call(ctx_ptr, &[]), NativeRun::Ok(Value::NIL.bits()));
+            assert_eq!(ev.specpdl.len(), specpdl_before);
+        }
+
+        // Save* poisons: a later guard must bail.
+        let err = lower_nullary_leaf(
+            &[Op::SaveExcursion, Op::Constant(1), Op::Add1, Op::Return],
+            &constants,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("guard-after-call")
+        ));
     }
 
     #[test]
