@@ -11,53 +11,9 @@ use std::time::{Duration, Instant};
 use crate::keyboard::SpecialInputServiceOutcome;
 
 use super::error::Flow;
-use super::process::{ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest};
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitSourceEvents {
-    input_wakeup: bool,
-    ready_processes: Vec<ProcessId>,
-}
-
-impl WaitSourceEvents {
-    pub(crate) fn from_sources(input_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
-        Self {
-            input_wakeup,
-            ready_processes,
-        }
-    }
-
-    pub(crate) fn input_wakeup() -> Self {
-        Self::from_sources(true, Vec::new())
-    }
-
-    pub(crate) fn ready_processes(processes: Vec<ProcessId>) -> Self {
-        Self {
-            input_wakeup: false,
-            ready_processes: processes,
-        }
-    }
-
-    pub(crate) fn has_input_wakeup(&self) -> bool {
-        self.input_wakeup
-    }
-
-    pub(crate) fn has_ready_processes(&self) -> bool {
-        !self.ready_processes.is_empty()
-    }
-
-    pub(crate) fn has_ready_process(&self, process: ProcessId) -> bool {
-        self.ready_processes.contains(&process)
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        !self.input_wakeup && self.ready_processes.is_empty()
-    }
-
-    fn into_process_service(self) -> WaitProcessService {
-        WaitProcessService::Ready(self.ready_processes)
-    }
-}
+use super::process::{
+    ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest, ProcessWaitEvents,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WaitDeadline {
@@ -639,10 +595,10 @@ impl WaitBlockActivity {
         }
     }
 
-    fn from_source_events(events: WaitSourceEvents) -> Self {
+    fn from_source_events(events: ProcessWaitEvents) -> Self {
         Self {
             input_wakeup: events.has_input_wakeup(),
-            process_service: events.into_process_service(),
+            process_service: WaitProcessService::Ready(events.into_ready_processes()),
         }
     }
 
@@ -691,7 +647,7 @@ impl super::eval::Context {
     fn service_wait_request_source_events_outcome(
         &mut self,
         request: &WaitRequest,
-        events: WaitSourceEvents,
+        events: ProcessWaitEvents,
     ) -> Result<WaitServiceOutcome, Flow> {
         self.service_wait_request_block_activity(
             request,
@@ -702,7 +658,7 @@ impl super::eval::Context {
     pub(crate) fn service_wait_request_source_events_have_target_process_activity(
         &mut self,
         request: &WaitRequest,
-        events: WaitSourceEvents,
+        events: ProcessWaitEvents,
     ) -> Result<bool, Flow> {
         Ok(self
             .service_wait_request_source_events_outcome(request, events)?
@@ -968,7 +924,7 @@ mod tests {
 
     #[test]
     fn source_events_construct_input_wakeup_explicitly() {
-        let events = WaitSourceEvents::input_wakeup();
+        let events = ProcessWaitEvents::input_wakeup();
 
         assert!(events.has_input_wakeup());
         assert!(!events.has_ready_processes());
@@ -976,7 +932,7 @@ mod tests {
 
     #[test]
     fn source_events_construct_ready_processes_explicitly() {
-        let events = WaitSourceEvents::ready_processes(vec![7]);
+        let events = ProcessWaitEvents::ready_processes(vec![7]);
 
         assert!(!events.has_input_wakeup());
         assert!(events.has_ready_process(7));
@@ -984,7 +940,7 @@ mod tests {
 
     #[test]
     fn source_events_query_individual_ready_processes() {
-        let events = WaitSourceEvents::ready_processes(vec![7]);
+        let events = ProcessWaitEvents::ready_processes(vec![7]);
 
         assert!(events.has_ready_process(7));
         assert!(!events.has_ready_process(8));
@@ -992,8 +948,8 @@ mod tests {
 
     #[test]
     fn source_events_empty_query_reflects_recorded_activity() {
-        let empty = WaitSourceEvents::default();
-        let ready = WaitSourceEvents::ready_processes(vec![7]);
+        let empty = ProcessWaitEvents::default();
+        let ready = ProcessWaitEvents::ready_processes(vec![7]);
 
         assert!(empty.is_empty());
         assert!(!ready.is_empty());
@@ -1001,17 +957,18 @@ mod tests {
 
     #[test]
     fn source_events_convert_to_process_service() {
-        let events = WaitSourceEvents::ready_processes(vec![7]);
+        let events = ProcessWaitEvents::ready_processes(vec![7]);
+        let activity = WaitBlockActivity::from_source_events(events);
 
         assert_eq!(
-            events.into_process_service(),
+            activity.into_process_service(),
             WaitProcessService::Ready(vec![7])
         );
     }
 
     #[test]
     fn block_activity_from_source_events_preserves_wakeup_and_processes() {
-        let events = WaitSourceEvents::from_sources(true, vec![3]);
+        let events = ProcessWaitEvents::from_sources(true, vec![3]);
 
         let activity = WaitBlockActivity::from_source_events(events);
 
@@ -1039,7 +996,7 @@ mod tests {
         let request = WaitRequest::service_once(false);
 
         let outcome = context
-            .service_wait_request_source_events_outcome(&request, WaitSourceEvents::default())
+            .service_wait_request_source_events_outcome(&request, ProcessWaitEvents::default())
             .expect("service source events");
 
         assert!(!outcome.has_command_input_pending());

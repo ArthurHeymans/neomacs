@@ -2395,6 +2395,7 @@ fn process_wait_events_use_structured_event_shape() {
     let processes = ProcessManager::new();
 
     let events = processes.wait_for_process_events(Duration::ZERO);
+    let _: ProcessWaitEvents = events;
 
     assert!(!events.has_input_wakeup());
     assert!(!events.has_ready_processes());

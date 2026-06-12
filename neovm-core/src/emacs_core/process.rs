@@ -41,7 +41,7 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
-use super::wait::{ProcessOutputWaitTiming, WaitCompletion, WaitRequest, WaitSourceEvents};
+use super::wait::{ProcessOutputWaitTiming, WaitCompletion, WaitRequest};
 
 /// OS socket owned by a network process.
 ///
@@ -260,6 +260,52 @@ impl ProcessOutputServiceOutcome {
 
     pub(crate) fn has_target_process_activity(self) -> bool {
         self.activity.target()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ProcessWaitEvents {
+    input_wakeup: bool,
+    ready_processes: Vec<ProcessId>,
+}
+
+impl ProcessWaitEvents {
+    pub(crate) fn from_sources(input_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
+        Self {
+            input_wakeup,
+            ready_processes,
+        }
+    }
+
+    pub(crate) fn input_wakeup() -> Self {
+        Self::from_sources(true, Vec::new())
+    }
+
+    pub(crate) fn ready_processes(processes: Vec<ProcessId>) -> Self {
+        Self {
+            input_wakeup: false,
+            ready_processes: processes,
+        }
+    }
+
+    pub(crate) fn has_input_wakeup(&self) -> bool {
+        self.input_wakeup
+    }
+
+    pub(crate) fn has_ready_processes(&self) -> bool {
+        !self.ready_processes.is_empty()
+    }
+
+    pub(crate) fn has_ready_process(&self, process: ProcessId) -> bool {
+        self.ready_processes.contains(&process)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.input_wakeup && self.ready_processes.is_empty()
+    }
+
+    pub(crate) fn into_ready_processes(self) -> Vec<ProcessId> {
+        self.ready_processes
     }
 }
 
@@ -601,7 +647,7 @@ impl ProcessWaitBackend {
         processes: &HashMap<ProcessId, Process>,
         timeout: std::time::Duration,
         interest: ProcessWaitBackendInterest,
-    ) -> Option<WaitSourceEvents> {
+    ) -> Option<ProcessWaitEvents> {
         if let Some(ref poller) = self.poller {
             let deadline = Instant::now() + timeout;
             loop {
@@ -632,7 +678,8 @@ impl ProcessWaitBackend {
                                 }
                             }
                         }
-                        let backend = WaitSourceEvents::from_sources(input_wakeup, ready_processes);
+                        let backend =
+                            ProcessWaitEvents::from_sources(input_wakeup, ready_processes);
                         if backend.has_input_wakeup()
                             || backend.has_ready_processes()
                             || timeout.is_zero()
@@ -1860,7 +1907,10 @@ impl ProcessManager {
         ProcessOutputRead::NoSource
     }
 
-    pub(crate) fn wait_for_process_events(&self, timeout: std::time::Duration) -> WaitSourceEvents {
+    pub(crate) fn wait_for_process_events(
+        &self,
+        timeout: std::time::Duration,
+    ) -> ProcessWaitEvents {
         if let Some(events) =
             self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::ProcessesOnly)
         {
@@ -1869,7 +1919,7 @@ impl ProcessManager {
 
         // No poller available — sleep fallback
         std::thread::sleep(timeout.min(std::time::Duration::from_millis(10)));
-        WaitSourceEvents::ready_processes(self.live_process_ids())
+        ProcessWaitEvents::ready_processes(self.live_process_ids())
     }
 
     #[cfg(unix)]
@@ -1889,21 +1939,21 @@ impl ProcessManager {
     pub(crate) fn wait_for_input_wakeup_events(
         &self,
         timeout: std::time::Duration,
-    ) -> Option<WaitSourceEvents> {
+    ) -> Option<ProcessWaitEvents> {
         self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupOnly)
     }
 
     pub(crate) fn wait_for_process_backend_events(
         &self,
         timeout: std::time::Duration,
-    ) -> Option<WaitSourceEvents> {
+    ) -> Option<ProcessWaitEvents> {
         self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::ProcessesOnly)
     }
 
     pub(crate) fn wait_for_input_wakeup_or_process_events(
         &self,
         timeout: std::time::Duration,
-    ) -> Option<WaitSourceEvents> {
+    ) -> Option<ProcessWaitEvents> {
         self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupAndProcesses)
     }
 
@@ -1911,7 +1961,7 @@ impl ProcessManager {
         &self,
         timeout: std::time::Duration,
         interest: ProcessWaitBackendInterest,
-    ) -> Option<WaitSourceEvents> {
+    ) -> Option<ProcessWaitEvents> {
         self.wait_backend
             .wait_for_events(&self.processes, timeout, interest)
     }
