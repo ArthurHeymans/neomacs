@@ -390,6 +390,13 @@ struct ActiveDisplayPropertySpan<T> {
     end_charpos: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayRowPrefixRequest {
+    None,
+    Line,
+    Wrap,
+}
+
 impl CursorGeometrySource {
     fn from_captured_cursor(
         cursor: &CapturedCursorInfo,
@@ -562,6 +569,40 @@ impl<T: Copy> ActiveDisplayPropertySpan<T> {
 
     fn value_or(&self, default: T) -> T {
         self.value.unwrap_or(default)
+    }
+}
+
+impl DisplayRowPrefixRequest {
+    fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
+        if has_prefix && has_line_prefix {
+            Self::Line
+        } else {
+            Self::None
+        }
+    }
+
+    fn request_line(&mut self) {
+        *self = Self::Line;
+    }
+
+    fn request_wrap(&mut self) {
+        *self = Self::Wrap;
+    }
+
+    fn clear(&mut self) {
+        *self = Self::None;
+    }
+
+    fn is_requested(self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    fn uses_line_prefix(self) -> bool {
+        matches!(self, Self::Line)
+    }
+
+    fn uses_wrap_prefix(self) -> bool {
+        matches!(self, Self::Wrap)
     }
 }
 
@@ -3544,12 +3585,8 @@ impl LayoutEngine {
         let mut wrap_break = WordWrapBreakCandidate::default();
         let mut word_wrap_may_wrap = false;
 
-        // Line/wrap prefix tracking: 0=none, 1=line-prefix, 2=wrap-prefix
-        let mut need_prefix: u8 = if has_prefix && line_prefix_value.is_some() {
-            1
-        } else {
-            0
-        };
+        let mut prefix_request =
+            DisplayRowPrefixRequest::initial(has_prefix, line_prefix_value.is_some());
 
         let reserve_right_border_width = if reserve_right_border_col {
             char_w
@@ -3826,26 +3863,28 @@ impl LayoutEngine {
             }
 
             // --- Line/wrap prefix rendering ---
-            if need_prefix > 0 {
+            if prefix_request.is_requested() {
                 // Check text property prefix first (overrides buffer-local)
                 let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
-                let prefix = if need_prefix == 2 {
+                let prefix = if prefix_request.uses_wrap_prefix() {
                     text_props
                         .get_property(charpos, Value::symbol("wrap-prefix"))
                         .filter(|value| value.as_lisp_string().is_some())
                         .or(wrap_prefix_value)
-                } else {
+                } else if prefix_request.uses_line_prefix() {
                     text_props
                         .get_property(charpos, Value::symbol("line-prefix"))
                         .filter(|value| value.as_lisp_string().is_some())
                         .or(line_prefix_value)
+                } else {
+                    None
                 };
 
                 if let Some(prefix_value) = prefix {
                     // Flush ligature run before prefix
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let prefix_fragment = if need_prefix == 2 {
+                    let prefix_fragment = if prefix_request.uses_wrap_prefix() {
                         DisplayTextFragment::wrap_prefix(
                             prefix_value,
                             CharPos0::new(charpos as usize),
@@ -3887,7 +3926,7 @@ impl LayoutEngine {
                     x = position.x_px;
                     col = position.col;
                 }
-                need_prefix = 0;
+                prefix_request.clear();
             }
 
             // --- Invisible text check ---
@@ -4054,7 +4093,7 @@ impl LayoutEngine {
                     hscroll_remaining = hscroll; // reset for next line
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
-                        need_prefix = 1;
+                        prefix_request.request_line();
                     }
                     if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
@@ -4628,7 +4667,7 @@ impl LayoutEngine {
                         wrap_break.clear();
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
                         if has_prefix {
-                            need_prefix = 1;
+                            prefix_request.request_line();
                         }
                         break;
                     }
@@ -4742,7 +4781,7 @@ impl LayoutEngine {
                 word_wrap_may_wrap = false;
                 wrap_break.clear();
                 if has_prefix {
-                    need_prefix = 1;
+                    prefix_request.request_line();
                 }
                 // Selective display: skip lines indented beyond threshold
                 if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
@@ -4855,7 +4894,7 @@ impl LayoutEngine {
                         word_wrap_may_wrap = false;
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
                         if has_prefix {
-                            need_prefix = 1;
+                            prefix_request.request_line();
                         }
                         continue;
                     } else {
@@ -4899,7 +4938,7 @@ impl LayoutEngine {
                             row_limit,
                         );
                         if has_prefix {
-                            need_prefix = 2;
+                            prefix_request.request_wrap();
                         }
                         if !row_geometry.current_row_is_visible(row_visibility_limit) {
                             break;
@@ -5185,7 +5224,7 @@ impl LayoutEngine {
                     wrap_break.clear();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
-                        need_prefix = 1;
+                        prefix_request.request_line();
                     }
                     continue;
                 } else if params.word_wrap && wrap_break.is_available() {
@@ -5243,7 +5282,7 @@ impl LayoutEngine {
                     wrap_break.clear();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
-                        need_prefix = 2;
+                        prefix_request.request_wrap();
                     }
 
                     // Force face re-check since we rewound
@@ -5299,7 +5338,7 @@ impl LayoutEngine {
                     word_wrap_may_wrap = false;
                     face_next_check = 0;
                     if has_prefix {
-                        need_prefix = 2;
+                        prefix_request.request_wrap();
                     }
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;

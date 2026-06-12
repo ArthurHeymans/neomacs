@@ -119,6 +119,30 @@ fn active_display_property_span_returns_value_until_expired() {
 }
 
 #[test]
+fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
+    let mut request = DisplayRowPrefixRequest::initial(true, true);
+
+    assert!(request.is_requested());
+    assert!(request.uses_line_prefix());
+    assert!(!request.uses_wrap_prefix());
+
+    request.clear();
+
+    assert!(!request.is_requested());
+
+    request.request_wrap();
+
+    assert!(request.is_requested());
+    assert!(request.uses_wrap_prefix());
+    assert!(!request.uses_line_prefix());
+
+    assert_eq!(
+        DisplayRowPrefixRequest::initial(false, true),
+        DisplayRowPrefixRequest::None
+    );
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(
