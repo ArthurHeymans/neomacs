@@ -45,12 +45,12 @@ impl WaitSourceEvents {
         self.ready_processes.contains(&process)
     }
 
-    pub(crate) fn ready_processes(&self) -> &[ProcessId] {
-        &self.ready_processes
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.input_wakeup && self.ready_processes.is_empty()
     }
 
-    pub(crate) fn into_ready_processes(self) -> Vec<ProcessId> {
-        self.ready_processes
+    fn into_process_service(self) -> WaitProcessService {
+        WaitProcessService::Ready(self.ready_processes)
     }
 }
 
@@ -470,7 +470,7 @@ impl WaitBlockActivity {
     fn from_source_events(events: WaitSourceEvents) -> Self {
         Self {
             input_wakeup: events.has_input_wakeup(),
-            process_service: WaitProcessService::Ready(events.into_ready_processes()),
+            process_service: events.into_process_service(),
         }
     }
 
@@ -738,7 +738,7 @@ mod tests {
         events.record_input_wakeup();
 
         assert!(events.has_input_wakeup());
-        assert!(events.ready_processes().is_empty());
+        assert!(!events.has_ready_processes());
     }
 
     #[test]
@@ -748,7 +748,7 @@ mod tests {
         events.record_ready_process(7);
 
         assert!(!events.has_input_wakeup());
-        assert_eq!(events.ready_processes(), &[7]);
+        assert!(events.has_ready_process(7));
     }
 
     #[test]
@@ -758,6 +758,26 @@ mod tests {
 
         assert!(events.has_ready_process(7));
         assert!(!events.has_ready_process(8));
+    }
+
+    #[test]
+    fn source_events_empty_query_reflects_recorded_activity() {
+        let mut events = WaitSourceEvents::default();
+
+        assert!(events.is_empty());
+        events.record_ready_process(7);
+        assert!(!events.is_empty());
+    }
+
+    #[test]
+    fn source_events_convert_to_process_service() {
+        let mut events = WaitSourceEvents::default();
+        events.record_ready_process(7);
+
+        assert_eq!(
+            events.into_process_service(),
+            WaitProcessService::Ready(vec![7])
+        );
     }
 
     #[test]
