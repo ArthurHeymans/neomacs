@@ -19,6 +19,7 @@ use super::window_output::{
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowOwner,
@@ -1234,20 +1235,6 @@ fn text_display_tab_policy(
     )
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OverlayStringKind {
-    Before,
-    After,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DisplayStringOrigin {
-    OverlayString {
-        anchor_charpos: usize,
-        kind: OverlayStringKind,
-    },
-}
-
 #[derive(Clone, Debug)]
 struct DisplayStringBaseFace {
     face: super::neovm_bridge::ResolvedFace,
@@ -1257,15 +1244,18 @@ struct DisplayStringBaseFace {
 fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     buffer: &B,
     face_resolver: &super::neovm_bridge::FaceResolver,
-    origin: DisplayStringOrigin,
+    origin: DisplayOrigin,
     current_face_id: &mut u32,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
     match origin {
-        DisplayStringOrigin::OverlayString { anchor_charpos, .. } => {
+        DisplayOrigin::OverlayString { anchor_charpos, .. } => {
             let mut next_check = buffer.layout_point_max_char_pos().get();
-            let face =
-                face_resolver.face_for_overlay_string(buffer, anchor_charpos, &mut next_check);
+            let face = face_resolver.face_for_overlay_string(
+                buffer,
+                anchor_charpos.get(),
+                &mut next_check,
+            );
             let face_id = if crate::display_source_resolver::same_resolved_face(
                 &face,
                 face_resolver.default_face(),
@@ -1279,6 +1269,7 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
             insert_resolved_display_row_face(builder, face_id, &face, None);
             DisplayStringBaseFace { face, face_id }
         }
+        other => unreachable!("render_overlay_string received non-overlay origin: {other:?}"),
     }
 }
 
@@ -1294,7 +1285,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     text_value: Value,
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
-    origin: DisplayStringOrigin,
+    origin: DisplayOrigin,
     x: &mut f32,
     y: &mut f32,
     col: &mut usize,
@@ -3852,8 +3843,9 @@ impl LayoutEngine {
                                     overlay_string.string,
                                     &mut self.font_metrics,
                                     face_resolver,
-                                    DisplayStringOrigin::OverlayString {
-                                        anchor_charpos: charpos as usize,
+                                    DisplayOrigin::OverlayString {
+                                        overlay_id: overlay_string.overlay_id,
+                                        anchor_charpos: CharPos0::new(charpos as usize),
                                         kind: OverlayStringKind::After,
                                     },
                                     &mut x,
@@ -5492,8 +5484,9 @@ impl LayoutEngine {
                             overlay_string.string,
                             &mut self.font_metrics,
                             face_resolver,
-                            DisplayStringOrigin::OverlayString {
-                                anchor_charpos: charpos as usize,
+                            DisplayOrigin::OverlayString {
+                                overlay_id: overlay_string.overlay_id,
+                                anchor_charpos: CharPos0::new(charpos as usize),
                                 kind: OverlayStringKind::Before,
                             },
                             &mut x,
@@ -5601,8 +5594,9 @@ impl LayoutEngine {
                             overlay_string.string,
                             &mut self.font_metrics,
                             face_resolver,
-                            DisplayStringOrigin::OverlayString {
-                                anchor_charpos: charpos as usize,
+                            DisplayOrigin::OverlayString {
+                                overlay_id: overlay_string.overlay_id,
+                                anchor_charpos: CharPos0::new(charpos as usize),
                                 kind: OverlayStringKind::After,
                             },
                             &mut x,
@@ -5708,8 +5702,9 @@ impl LayoutEngine {
                     overlay_string.string,
                     &mut self.font_metrics,
                     face_resolver,
-                    DisplayStringOrigin::OverlayString {
-                        anchor_charpos: charpos as usize,
+                    DisplayOrigin::OverlayString {
+                        overlay_id: overlay_string.overlay_id,
+                        anchor_charpos: CharPos0::new(charpos as usize),
                         kind: OverlayStringKind::Before,
                     },
                     &mut x,
@@ -5745,8 +5740,9 @@ impl LayoutEngine {
                     overlay_string.string,
                     &mut self.font_metrics,
                     face_resolver,
-                    DisplayStringOrigin::OverlayString {
-                        anchor_charpos: charpos as usize,
+                    DisplayOrigin::OverlayString {
+                        overlay_id: overlay_string.overlay_id,
+                        anchor_charpos: CharPos0::new(charpos as usize),
                         kind: OverlayStringKind::After,
                     },
                     &mut x,

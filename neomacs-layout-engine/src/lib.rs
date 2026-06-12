@@ -15,6 +15,7 @@ pub(crate) mod display_face_layout;
 pub(crate) mod display_item;
 pub mod display_iterator;
 pub(crate) mod display_media;
+pub(crate) mod display_origin;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;
 pub(crate) mod display_row;
