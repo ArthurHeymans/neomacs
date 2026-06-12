@@ -175,6 +175,8 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
 
     assert_eq!(active.face_id(), 14);
     assert_eq!(active.measurement_face().face_id(), 14);
+    assert_eq!(active.measurement_state().measurement_face().face_id(), 14);
+    assert_eq!(active.measurement_state().metrics().char_width, 7.0);
     assert_eq!(active.layout_metrics().char_width, 7.0);
     assert_eq!(active.layout_metrics().row_height, 15.0);
     assert_eq!(active.layout_metrics().ascent, 10.0);
@@ -1579,9 +1581,13 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
             .advance_for_char(&mut font_metrics, 'x', 7.2),
         7.0
     );
-    assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
+    let measurement_state = active.measurement_state();
+    assert_eq!(
+        measurement_state.advance_for_char(&mut font_metrics, 'x', 7.2),
+        7.0
+    );
 
-    let text_run_measurement = active.text_run_measurement(&mut font_metrics, "a中");
+    let text_run_measurement = measurement_state.text_run_measurement(&mut font_metrics, "a中");
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         text_run_measurement
     else {

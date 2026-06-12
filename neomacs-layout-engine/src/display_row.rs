@@ -729,6 +729,50 @@ impl DisplayRowActiveFaceRenderState {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowActiveFaceMeasurementState {
+    measurement_face: DisplayRowGlyphMeasurementFace,
+    metrics: DisplayRowMeasuredFaceMetrics,
+}
+
+impl DisplayRowActiveFaceMeasurementState {
+    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
+        &self.measurement_face
+    }
+
+    pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
+    }
+
+    pub(crate) fn advance_for_char(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        self.measurement_face
+            .advance_for_char(font_metrics, ch, fallback_advance_px)
+    }
+
+    pub(crate) fn text_run_measurement(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+    ) -> DisplayTextRunMeasurement {
+        self.measurement_face
+            .text_run_measurement(font_metrics, text)
+    }
+
+    pub(crate) fn resolved_fragment_measurement(
+        &self,
+        text: &str,
+        advance_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        self.measurement_face
+            .resolved_fragment_measurement(text, advance_px)
+    }
+}
+
 impl DisplayRowActiveFace {
     pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
         let background = Color::from_pixel(resolved_face.bg);
@@ -761,23 +805,11 @@ impl DisplayRowActiveFace {
         }
     }
 
-    pub(crate) fn advance_for_char(
-        &self,
-        font_metrics: &mut Option<FontMetricsService>,
-        ch: char,
-        fallback_advance_px: f32,
-    ) -> f32 {
-        self.measurement_face
-            .advance_for_char(font_metrics, ch, fallback_advance_px)
-    }
-
-    pub(crate) fn text_run_measurement(
-        &self,
-        font_metrics: &mut Option<FontMetricsService>,
-        text: &str,
-    ) -> DisplayTextRunMeasurement {
-        self.measurement_face
-            .text_run_measurement(font_metrics, text)
+    pub(crate) fn measurement_state(&self) -> DisplayRowActiveFaceMeasurementState {
+        DisplayRowActiveFaceMeasurementState {
+            measurement_face: self.measurement_face.clone(),
+            metrics: self.metrics,
+        }
     }
 }
 
