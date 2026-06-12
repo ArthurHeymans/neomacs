@@ -2509,10 +2509,7 @@ impl super::eval::Context {
             let is_target = target_process.map_or(true, |target| target == pid);
             let mut exited = self.processes.check_child_exit(pid);
             for event in self.processes.accept_network_server_connections(pid) {
-                outcome.any_process_activity = true;
-                if is_target {
-                    outcome.target_process_activity = true;
-                }
+                outcome.record_process_activity(is_target);
                 self.run_process_log_callback(
                     event.log,
                     event.server_id,
@@ -2535,10 +2532,7 @@ impl super::eval::Context {
 
             match read_result {
                 ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    outcome.any_process_activity = true;
-                    if is_target {
-                        outcome.target_process_activity = true;
-                    }
+                    outcome.record_process_activity(is_target);
 
                     let filter = self
                         .processes
@@ -2548,10 +2542,7 @@ impl super::eval::Context {
                     self.run_process_filter_callback(pid, filter, data);
                 }
                 ProcessOutputRead::Eof if is_network => {
-                    outcome.any_process_activity = true;
-                    if is_target {
-                        outcome.target_process_activity = true;
-                    }
+                    outcome.record_process_activity(is_target);
 
                     if let Some(proc) = self.processes.get_mut(pid) {
                         proc.status = process_status_exit_value(0);
@@ -2581,10 +2572,7 @@ impl super::eval::Context {
             }
 
             if exited {
-                outcome.any_process_activity = true;
-                if is_target {
-                    outcome.target_process_activity = true;
-                }
+                outcome.record_process_activity(is_target);
 
                 let sentinel = self
                     .processes
@@ -8306,7 +8294,7 @@ fn accept_process_output_run_target_follow_up(
         } else {
             eval.service_wait_request_ready_processes(&request.wait, ready_processes)?
         };
-        if follow_up.target_process_activity {
+        if follow_up.has_target_process_activity() {
             idle_follow_up_polls = 0;
             continue;
         }

@@ -124,8 +124,8 @@ impl ProcessWaitPolicy {
 
     fn satisfied_by(self, outcome: WaitServiceOutcome) -> bool {
         match self {
-            Self::Any => outcome.any_process_activity,
-            Self::Target(_) | Self::TargetOnly(_) => outcome.target_process_activity,
+            Self::Any => outcome.has_any_process_activity(),
+            Self::Target(_) | Self::TargetOnly(_) => outcome.has_target_process_activity(),
             Self::None | Self::ServiceAny => false,
         }
     }
@@ -272,13 +272,58 @@ pub(crate) enum WaitCompletion {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum WaitProcessActivity {
+    #[default]
+    None,
+    Any,
+    Target,
+}
+
+impl WaitProcessActivity {
+    fn record(self, target: bool) -> Self {
+        if target {
+            Self::Target
+        } else if matches!(self, Self::Target) {
+            Self::Target
+        } else {
+            Self::Any
+        }
+    }
+
+    fn any(self) -> bool {
+        matches!(self, Self::Any | Self::Target)
+    }
+
+    fn target(self) -> bool {
+        matches!(self, Self::Target)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitServiceOutcome {
-    pub(crate) any_process_activity: bool,
-    pub(crate) target_process_activity: bool,
+    process_activity: WaitProcessActivity,
     pub(crate) timers_fired: bool,
     pub(crate) command_input_pending: bool,
     pub(crate) special_input_activity: bool,
     pub(crate) resize_activity: bool,
+}
+
+impl WaitServiceOutcome {
+    pub(crate) fn record_process_activity(&mut self, target: bool) {
+        self.process_activity = self.process_activity.record(target);
+    }
+
+    pub(crate) fn has_any_process_activity(self) -> bool {
+        self.process_activity.any()
+    }
+
+    pub(crate) fn has_target_process_activity(self) -> bool {
+        self.process_activity.target()
+    }
+
+    fn absorb_process_activity(&mut self, process_outcome: Self) {
+        self.process_activity = process_outcome.process_activity;
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -347,8 +392,7 @@ impl super::eval::Context {
                 self.poll_ready_process_output_with_wait_policy(ready_processes, request.processes)
             }
         };
-        outcome.any_process_activity = process_outcome.any_process_activity;
-        outcome.target_process_activity = process_outcome.target_process_activity;
+        outcome.absorb_process_activity(process_outcome);
         if request.redisplay && (special_input.redisplay_needed || outcome.timers_fired) {
             self.redisplay();
         }
@@ -482,5 +526,20 @@ impl super::eval::Context {
             return request.backend_interest();
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn target_process_activity_implies_any_process_activity() {
+        let mut outcome = WaitServiceOutcome::default();
+
+        outcome.record_process_activity(true);
+
+        assert!(outcome.has_target_process_activity());
+        assert!(outcome.has_any_process_activity());
     }
 }
