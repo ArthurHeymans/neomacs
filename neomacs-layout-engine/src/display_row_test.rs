@@ -1636,6 +1636,20 @@ fn display_row_measurement_policy_builds_faces_from_frame_mode() {
 }
 
 #[test]
+fn display_row_fallback_metrics_builds_from_default_face_extents() {
+    let fallback = DisplayRowFallbackMetrics::from_default_face_extents(7.5, 18.0, 13.0);
+
+    assert_eq!(
+        fallback,
+        DisplayRowFallbackMetrics {
+            char_width: 7.5,
+            row_height: 18.0,
+            ascent: 13.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let mut base = base_face();
     base.font_char_width = 7.2;

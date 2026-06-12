@@ -475,6 +475,16 @@ pub(crate) struct DisplayRowFallbackMetrics {
     pub(crate) ascent: f32,
 }
 
+impl DisplayRowFallbackMetrics {
+    pub(crate) fn from_default_face_extents(char_width: f32, row_height: f32, ascent: f32) -> Self {
+        Self {
+            char_width,
+            row_height,
+            ascent,
+        }
+    }
+}
+
 impl DisplayRowMeasurementPolicy {
     pub(crate) fn for_frame(window_system: bool) -> Self {
         Self {

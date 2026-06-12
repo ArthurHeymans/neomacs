@@ -23,11 +23,11 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
-    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
-    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
-    install_measured_frame_chrome_row, install_rendered_display_row,
+    DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
+    DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
+    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -3149,13 +3149,11 @@ impl LayoutEngine {
             return;
         }
 
-        // Per-face metrics — start with defaults, updated on face change
-        let mut face_metrics = DisplayRowMeasuredFaceMetrics {
-            char_width: default_face_char_w,
-            row_height: default_face_h,
-            ascent: default_face_ascent,
-            space_width: char_w,
-        };
+        let default_fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
+            default_face_char_w,
+            default_face_h,
+            default_face_ascent,
+        );
         // Face resolution state
         let mut face_next_check: usize = 0;
         // Load the frame-wide face-id counter so this window's
@@ -3173,16 +3171,13 @@ impl LayoutEngine {
             default_resolved,
             None,
             char_w,
-            DisplayRowFallbackMetrics {
-                char_width: face_metrics.char_width,
-                row_height: face_metrics.row_height,
-                ascent: face_metrics.ascent,
-            },
+            default_fallback_metrics,
             &mut self.font_metrics,
         );
         let mut active_face_state =
             DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
-        face_metrics = active_face_state.metrics();
+        // Per-face metrics — start with defaults, updated on face change.
+        let mut face_metrics = active_face_state.metrics();
         let default_face_state = active_face_state.clone();
 
         if let Some(echo_message) = echo_message {
