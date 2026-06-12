@@ -53,6 +53,16 @@ pub(crate) struct DisplayRowGeometryDefaults {
     pub(crate) ascent: f32,
 }
 
+impl DisplayRowGeometryDefaults {
+    pub(crate) fn new(text_y: f32, height: f32, ascent: f32) -> Self {
+        Self {
+            text_y,
+            height,
+            ascent,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowGeometryCursor {
     row: usize,

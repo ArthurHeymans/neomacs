@@ -1481,6 +1481,7 @@ fn render_overlay_string_with_state<B: super::neovm_bridge::LayoutBufferView>(
         current_face_id,
         builder,
     );
+    let row_geometry_defaults = DisplayRowGeometryDefaults::new(text_y, char_h, default_row_ascent);
 
     macro_rules! finish_overlay_string_row {
         () => {{
@@ -1490,11 +1491,7 @@ fn render_overlay_string_with_state<B: super::neovm_bridge::LayoutBufferView>(
                         charpos_start: *hit_row_charpos_start,
                         charpos_end: anchor_charpos,
                     },
-                    DisplayRowGeometryDefaults {
-                        text_y,
-                        height: char_h,
-                        ascent: default_row_ascent,
-                    },
+                    row_geometry_defaults,
                     row_base,
                     0,
                     content_x,
@@ -3751,6 +3748,8 @@ impl LayoutEngine {
             max_rows,
             bottom_y: text_y + text_height,
         };
+        let row_geometry_defaults =
+            DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
 
         while byte_idx < text.len()
             && current_row_geometry_vars!().current_row_is_visible(row_visibility_limit)
@@ -4032,11 +4031,7 @@ impl LayoutEngine {
                                     charpos_start: hit_row_charpos_start,
                                     charpos_end: charpos,
                                 },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
+                                row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
                                 x,
@@ -4641,11 +4636,7 @@ impl LayoutEngine {
                                         charpos_start: hit_row_charpos_start,
                                         charpos_end: charpos,
                                     },
-                                    DisplayRowGeometryDefaults {
-                                        text_y,
-                                        height: char_h,
-                                        ascent: default_face_ascent,
-                                    },
+                                    row_geometry_defaults,
                                     text_matrix_row_base,
                                     col,
                                     x,
@@ -4766,11 +4757,7 @@ impl LayoutEngine {
                                 charpos_start: hit_row_charpos_start,
                                 charpos_end: charpos,
                             },
-                            DisplayRowGeometryDefaults {
-                                text_y,
-                                height: char_h,
-                                ascent: default_face_ascent,
-                            },
+                            row_geometry_defaults,
                             text_matrix_row_base,
                             col,
                             x,
@@ -4892,11 +4879,7 @@ impl LayoutEngine {
                                         charpos_start: hit_row_charpos_start,
                                         charpos_end: charpos,
                                     },
-                                    DisplayRowGeometryDefaults {
-                                        text_y,
-                                        height: char_h,
-                                        ascent: default_face_ascent,
-                                    },
+                                    row_geometry_defaults,
                                     text_matrix_row_base,
                                     col,
                                     x,
@@ -4937,11 +4920,7 @@ impl LayoutEngine {
                                         charpos_start: hit_row_charpos_start,
                                         charpos_end: charpos,
                                     },
-                                    DisplayRowGeometryDefaults {
-                                        text_y,
-                                        height: char_h,
-                                        ascent: default_face_ascent,
-                                    },
+                                    row_geometry_defaults,
                                     text_matrix_row_base,
                                     col,
                                     x,
@@ -5231,11 +5210,7 @@ impl LayoutEngine {
                                     charpos_start: hit_row_charpos_start,
                                     charpos_end: charpos,
                                 },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
+                                row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
                                 x,
@@ -5285,11 +5260,7 @@ impl LayoutEngine {
                                     charpos_start: hit_row_charpos_start,
                                     charpos_end: charpos,
                                 },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
+                                row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
                                 x,
@@ -5341,11 +5312,7 @@ impl LayoutEngine {
                                     charpos_start: hit_row_charpos_start,
                                     charpos_end: charpos,
                                 },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
+                                row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
                                 x,

@@ -1157,6 +1157,18 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
 }
 
 #[test]
+fn display_row_geometry_defaults_constructor_groups_row_baseline_metrics() {
+    assert_eq!(
+        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0),
+        DisplayRowGeometryDefaults {
+            text_y: 10.0,
+            height: 16.0,
+            ascent: 12.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range() {
     let defaults = DisplayRowGeometryDefaults {
         text_y: 10.0,
