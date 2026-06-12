@@ -7,7 +7,7 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
-    DisplayTextRunAdvance, DisplayTextRunMeasurement, FixedGlyphAdvances,
+    DisplayTextRunAdvance, DisplayTextRunMeasurement,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -580,30 +580,22 @@ impl DisplayRowGlyphMeasurementFace {
         advances
     }
 
-    pub(crate) fn fixed_advances_for_text(
+    pub(crate) fn text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         text: &str,
-        face_id: u32,
-    ) -> FixedGlyphAdvances {
-        let mut advances = FixedGlyphAdvances::new();
-        for ch in text.chars() {
-            if ch == '\t' {
-                continue;
-            }
-            let columns = crate::composition::base_width_cols(ch);
-            let advance = if columns == 0 {
-                0.0
-            } else {
-                self.advance_for_char(
-                    font_metrics,
-                    ch,
-                    f32::from(columns) * self.fallback_char_width.max(1.0),
-                )
-            };
-            advances.insert(ch, face_id, advance);
+    ) -> DisplayTextRunMeasurement {
+        if !self.use_font_metrics {
+            return DisplayTextRunMeasurement::PerChar;
         }
-        advances
+        let faces = [self.face.clone()];
+        let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
+            &faces,
+            font_metrics.as_mut(),
+            self.fallback_char_width,
+            self.quantization,
+        );
+        measurer.text_run_advances_px(text, self.face.face_id, self.fallback_char_width)
     }
 }
 

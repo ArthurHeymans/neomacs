@@ -38,8 +38,8 @@ use crate::display_row_append::{
     render_natural_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
-    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
-    FixedGlyphAdvance, FixedGlyphAdvances,
+    DisplayGlyphMeasurer, DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition,
+    DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvance,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -691,25 +691,48 @@ fn resolve_cursor_geometry(
 struct ReplacementStringItemMeasurer<'a> {
     font_metrics_svc: &'a mut Option<FontMetricsService>,
     measurement_face: DisplayRowGlyphMeasurementFace,
-    scratch: FixedGlyphAdvances,
 }
 
 impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
     fn measurement_for<'a>(
         &'a mut self,
         item: &crate::display_item::DisplayItem,
-        face_id: u32,
+        _face_id: u32,
     ) -> DisplayRowItemMeasurement<'a> {
-        self.scratch = FixedGlyphAdvances::new();
-        let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
+        if !matches!(
+            &item.kind,
+            crate::display_item::DisplayItemKind::SourceMappedText(_)
+        ) {
             return DisplayRowItemMeasurement::Default;
-        };
-        self.scratch = self.measurement_face.fixed_advances_for_text(
+        }
+        DisplayRowItemMeasurement::Measured(self)
+    }
+}
+
+impl DisplayGlyphMeasurer for ReplacementStringItemMeasurer<'_> {
+    fn glyph_advance_px(
+        &mut self,
+        ch: char,
+        _face_id: u32,
+        columns: u8,
+        fallback_advance_px: f32,
+    ) -> Option<f32> {
+        Some(self.measurement_face.glyph_advance_px(
             self.font_metrics_svc,
-            &text.text,
-            face_id,
-        );
-        DisplayRowItemMeasurement::Measured(&mut self.scratch)
+            ch,
+            columns,
+            fallback_advance_px,
+        ))
+    }
+
+    fn text_run_advances_px(
+        &mut self,
+        text: &str,
+        _face_id: u32,
+        _fallback_char_width_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        self.measurement_face
+            .text_run_measurement(self.font_metrics_svc, text)
     }
 }
 
@@ -4124,7 +4147,6 @@ impl LayoutEngine {
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
                                     measurement_face,
-                                    scratch: FixedGlyphAdvances::new(),
                                 };
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,

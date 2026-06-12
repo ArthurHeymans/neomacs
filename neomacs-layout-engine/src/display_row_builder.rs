@@ -206,11 +206,13 @@ impl DisplayGlyphMeasurer for FixedGlyphAdvance {
     }
 }
 
+#[cfg(test)]
 #[derive(Default)]
 pub(crate) struct FixedGlyphAdvances {
     advances: std::collections::HashMap<(char, u32), f32>,
 }
 
+#[cfg(test)]
 impl FixedGlyphAdvances {
     pub(crate) fn new() -> Self {
         Self::default()
@@ -221,6 +223,7 @@ impl FixedGlyphAdvances {
     }
 }
 
+#[cfg(test)]
 impl DisplayGlyphMeasurer for FixedGlyphAdvances {
     fn glyph_advance_px(
         &mut self,

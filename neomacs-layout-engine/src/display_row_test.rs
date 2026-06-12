@@ -1343,26 +1343,6 @@ fn display_row_glyph_measurer_can_snap_terminal_advances() {
 }
 
 #[test]
-fn display_row_glyph_measurement_face_measures_fixed_text_advances() {
-    let mut base = base_face();
-    base.font_char_width = 7.2;
-    let face = DisplayRowFace::from_resolved(8, &base);
-    let measurement_face = DisplayRowGlyphMeasurementFace::new(
-        face,
-        false,
-        7.2,
-        GlyphAdvanceQuantization::SnapToIntegerPixels,
-    );
-    let mut font_metrics = None;
-
-    let mut advances = measurement_face.fixed_advances_for_text(&mut font_metrics, "x中\t", 8);
-
-    assert_eq!(advances.glyph_advance_px('x', 8, 1, 7.2), Some(7.0));
-    assert_eq!(advances.glyph_advance_px('中', 8, 2, 14.4), Some(14.0));
-    assert_eq!(advances.glyph_advance_px('\t', 8, 1, 7.2), None);
-}
-
-#[test]
 fn display_row_glyph_measurement_face_measures_single_char_columns() {
     let mut base = base_face();
     base.font_char_width = 7.2;
@@ -1446,6 +1426,30 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
     assert!(
         advances.iter().all(|advance| advance.advance_px >= 8.0),
         "measured advances should respect the frame cell minimum: {advances:?}"
+    );
+}
+
+#[test]
+fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
+    let mut base = base_face();
+    base.font_family = "monospace".to_string();
+    base.font_size = 14.0;
+    base.font_char_width = 8.0;
+    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 8.0);
+    let mut font_metrics = Some(FontMetricsService::new());
+
+    let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
+
+    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    else {
+        panic!("font-backed measurement face should produce a measured text-run plan");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset))
+            .collect::<Vec<_>>(),
+        vec![(0, 0), (1, 1), (2, 2)]
     );
 }
 
