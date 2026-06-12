@@ -1547,6 +1547,10 @@ fn read_char_respects_inhibit_redisplay_during_input_wait() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));
         tx.send(crate::keyboard::InputEvent::key_press(
@@ -2133,6 +2137,10 @@ fn wait_for_pending_resize_events_blocks_until_resize_and_preserves_keypress() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));
         tx.send(crate::keyboard::InputEvent::Resize {
@@ -4358,6 +4366,10 @@ fn read_char_fires_bootstrapped_gnu_run_with_timer_while_waiting_for_input() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(100));
         tx.send(crate::keyboard::InputEvent::key_press(
@@ -4399,6 +4411,10 @@ fn read_char_fires_bootstrapped_gnu_run_with_idle_timer_while_waiting_for_input(
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     eprintln!("idle test: spawn sender");
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(100));
