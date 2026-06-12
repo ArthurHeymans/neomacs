@@ -510,7 +510,7 @@ impl WaitProcessOutcome {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum WaitSpecialInputActivity {
+enum WaitSpecialInputActivity {
     #[default]
     None,
     Any,
@@ -518,7 +518,7 @@ pub(crate) enum WaitSpecialInputActivity {
 }
 
 impl WaitSpecialInputActivity {
-    pub(crate) fn record(self, activity: Self) -> Self {
+    fn record(self, activity: Self) -> Self {
         match (self, activity) {
             (Self::Resize, _) | (_, Self::Resize) => Self::Resize,
             (Self::Any, _) | (_, Self::Any) => Self::Any,
@@ -526,11 +526,11 @@ impl WaitSpecialInputActivity {
         }
     }
 
-    pub(crate) fn any(self) -> bool {
+    fn any(self) -> bool {
         matches!(self, Self::Any | Self::Resize)
     }
 
-    pub(crate) fn resize(self) -> bool {
+    fn resize(self) -> bool {
         matches!(self, Self::Resize)
     }
 }
@@ -550,16 +550,29 @@ pub(crate) struct WaitSpecialInputOutcome {
 }
 
 impl WaitSpecialInputOutcome {
-    pub(crate) fn record_activity(&mut self, activity: WaitSpecialInputActivity) {
-        self.activity = self.activity.record(activity);
+    pub(crate) fn any_activity() -> Self {
+        Self {
+            redisplay_needed: false,
+            activity: WaitSpecialInputActivity::Any,
+        }
     }
 
-    pub(crate) fn activity(self) -> WaitSpecialInputActivity {
+    pub(crate) fn resize_with_redisplay() -> Self {
+        Self {
+            redisplay_needed: true,
+            activity: WaitSpecialInputActivity::Resize,
+        }
+    }
+
+    pub(crate) fn merge(self, other: Self) -> Self {
+        Self {
+            redisplay_needed: self.redisplay_needed || other.redisplay_needed,
+            activity: self.activity.record(other.activity),
+        }
+    }
+
+    fn activity(self) -> WaitSpecialInputActivity {
         self.activity
-    }
-
-    pub(crate) fn request_redisplay(&mut self) {
-        self.redisplay_needed = true;
     }
 
     pub(crate) fn redisplay_needed(self) -> bool {
@@ -580,7 +593,7 @@ impl WaitServiceOutcome {
         self.process_activity = process_outcome.activity;
     }
 
-    pub(crate) fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
+    fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
         self.special_input_activity = self.special_input_activity.record(activity);
     }
 
@@ -915,20 +928,19 @@ mod tests {
     }
 
     #[test]
-    fn special_input_outcome_records_activity_explicitly() {
-        let mut outcome = WaitSpecialInputOutcome::default();
-
-        outcome.record_activity(WaitSpecialInputActivity::Resize);
+    fn special_input_outcome_constructs_resize_activity_explicitly() {
+        let outcome = WaitSpecialInputOutcome::resize_with_redisplay();
 
         assert_eq!(outcome.activity(), WaitSpecialInputActivity::Resize);
+        assert!(outcome.redisplay_needed());
     }
 
     #[test]
-    fn special_input_outcome_records_redisplay_explicitly() {
-        let mut outcome = WaitSpecialInputOutcome::default();
+    fn special_input_outcome_merges_activity_and_redisplay() {
+        let outcome = WaitSpecialInputOutcome::any_activity()
+            .merge(WaitSpecialInputOutcome::resize_with_redisplay());
 
-        outcome.request_redisplay();
-
+        assert_eq!(outcome.activity(), WaitSpecialInputActivity::Resize);
         assert!(outcome.redisplay_needed());
     }
 
@@ -1154,7 +1166,7 @@ mod tests {
 
         assert!(!redisplay.needs_redisplay_after_service(special, service));
 
-        special.request_redisplay();
+        special = WaitSpecialInputOutcome::resize_with_redisplay();
         assert!(redisplay.needs_redisplay_after_service(special, service));
         assert!(!quiet.needs_redisplay_after_service(special, service));
 
