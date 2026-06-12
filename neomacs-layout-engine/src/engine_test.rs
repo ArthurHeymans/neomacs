@@ -466,7 +466,7 @@ fn current_display_row_metrics_tracks_glyph_extents_and_overflow() {
     assert_eq!(metrics.ascent(), 18.0);
     assert_eq!(metrics.extra_height_over_default(16.0), 8.0);
     assert_eq!(
-        metrics.text_matrix_row_metrics(7.0),
+        metrics.finish_current_row(7.0),
         TextMatrixRowMetrics {
             y: 7.0,
             height: 24.0,
@@ -512,6 +512,25 @@ fn current_display_row_metrics_finishes_row_and_resets_to_default_extents() {
     );
     assert_eq!(metrics.height(), 14.0);
     assert_eq!(metrics.ascent(), 10.0);
+}
+
+#[test]
+fn current_display_row_metrics_finishes_current_row_without_resetting_extents() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    let finished = metrics.finish_current_row(7.0);
+
+    assert_eq!(
+        finished,
+        TextMatrixRowMetrics {
+            y: 7.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+    assert_eq!(metrics.height(), 24.0);
+    assert_eq!(metrics.ascent(), 18.0);
 }
 
 #[test]

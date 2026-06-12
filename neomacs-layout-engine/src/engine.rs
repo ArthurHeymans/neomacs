@@ -540,7 +540,7 @@ impl CurrentDisplayRowMetrics {
         self.extra_height_over_default(default_height) + line_spacing.max(0.0)
     }
 
-    fn text_matrix_row_metrics(&self, y: f32) -> TextMatrixRowMetrics {
+    fn finish_current_row(&self, y: f32) -> TextMatrixRowMetrics {
         TextMatrixRowMetrics {
             y,
             height: self.height,
@@ -559,7 +559,7 @@ impl CurrentDisplayRowMetrics {
         default_height: f32,
         default_ascent: f32,
     ) -> TextMatrixRowMetrics {
-        let finished = self.text_matrix_row_metrics(y);
+        let finished = self.finish_current_row(y);
         self.reset(default_height, default_ascent);
         finished
     }
@@ -6168,20 +6168,17 @@ impl LayoutEngine {
                 .get(row)
                 .copied()
                 .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
+            let current_row_metrics = CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
             hit_rows.push(HitRow {
                 y_start: row_y_start,
-                y_end: row_y_start + row_max_height,
+                y_end: row_y_start + current_row_metrics.height(),
                 charpos_start: hit_row_charpos_start,
                 charpos_end: charpos,
             });
             finish_text_matrix_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
-                TextMatrixRowMetrics {
-                    y: row_y_start,
-                    height: row_max_height,
-                    ascent: row_max_ascent,
-                },
+                current_row_metrics.finish_current_row(row_y_start),
             );
         }
 
