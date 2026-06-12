@@ -4,9 +4,13 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
+use crate::display_row_geometry::*;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
+use crate::window_output::{
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
