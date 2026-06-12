@@ -2328,6 +2328,16 @@ fn wait_service_exposes_target_activity_without_full_service_outcome() {
     assert!(!active);
 }
 
+#[test]
+fn wait_service_once_exposes_side_effects_only() {
+    let mut ev = Context::new();
+    let request = WaitRequest::timer_service(false);
+
+    let _: () = ev
+        .service_wait_request_once(&request)
+        .expect("service wait request");
+}
+
 #[cfg(unix)]
 fn test_pipe_files() -> (std::fs::File, std::fs::File) {
     use std::os::fd::FromRawFd;

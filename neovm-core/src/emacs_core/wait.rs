@@ -693,7 +693,12 @@ enum WaitBlockStrategy {
 }
 
 impl super::eval::Context {
-    pub(crate) fn service_wait_request_once(
+    pub(crate) fn service_wait_request_once(&mut self, request: &WaitRequest) -> Result<(), Flow> {
+        let _ = self.service_wait_request_once_outcome(request)?;
+        Ok(())
+    }
+
+    fn service_wait_request_once_outcome(
         &mut self,
         request: &WaitRequest,
     ) -> Result<WaitServiceOutcome, Flow> {
@@ -705,11 +710,11 @@ impl super::eval::Context {
         request: &WaitRequest,
     ) -> Result<bool, Flow> {
         Ok(self
-            .service_wait_request_once(request)?
+            .service_wait_request_once_outcome(request)?
             .has_target_process_activity())
     }
 
-    pub(crate) fn service_wait_request_source_events(
+    fn service_wait_request_source_events_outcome(
         &mut self,
         request: &WaitRequest,
         events: WaitSourceEvents,
@@ -726,7 +731,7 @@ impl super::eval::Context {
         events: WaitSourceEvents,
     ) -> Result<bool, Flow> {
         Ok(self
-            .service_wait_request_source_events(request, events)?
+            .service_wait_request_source_events_outcome(request, events)?
             .has_target_process_activity())
     }
 
@@ -783,7 +788,7 @@ impl super::eval::Context {
         &mut self,
         request: WaitRequest,
     ) -> Result<WaitOutcome, Flow> {
-        let mut outcome = self.service_wait_request_once(&request)?;
+        let mut outcome = self.service_wait_request_once_outcome(&request)?;
         if let Some(completion) = request.completion_for(outcome) {
             return Ok(WaitOutcome {
                 completion,
@@ -1054,7 +1059,7 @@ mod tests {
         let request = WaitRequest::service_once(false);
 
         let outcome = context
-            .service_wait_request_source_events(&request, WaitSourceEvents::default())
+            .service_wait_request_source_events_outcome(&request, WaitSourceEvents::default())
             .expect("service source events");
 
         assert!(!outcome.has_command_input_pending());
