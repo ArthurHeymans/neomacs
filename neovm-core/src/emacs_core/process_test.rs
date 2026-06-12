@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::{WaitCompletion, WaitProcessOutcome, WaitRequest};
+use crate::emacs_core::wait::{WaitCompletion, WaitRequest};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2309,8 +2309,8 @@ fn process_service_accepts_wait_request_boundary() {
 
     let poll = ev.poll_process_output_for_service_request(&request);
     let ready = ev.poll_ready_process_output_for_service_request(Vec::new(), &request);
-    let _: WaitProcessOutcome = poll;
-    let _: WaitProcessOutcome = ready;
+    let _: ProcessOutputServiceOutcome = poll;
+    let _: ProcessOutputServiceOutcome = ready;
 
     assert!(!poll.has_any_process_activity());
     assert!(!ready.has_any_process_activity());

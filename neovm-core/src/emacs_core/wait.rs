@@ -9,7 +9,7 @@
 use std::time::{Duration, Instant};
 
 use super::error::Flow;
-use super::process::{ProcessId, ProcessOutputServiceRequest};
+use super::process::{ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitSourceEvents {
@@ -504,25 +504,6 @@ impl WaitProcessActivity {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitProcessOutcome {
-    activity: WaitProcessActivity,
-}
-
-impl WaitProcessOutcome {
-    pub(crate) fn record_activity(&mut self, target: bool) {
-        self.activity = self.activity.record(target);
-    }
-
-    pub(crate) fn has_any_process_activity(self) -> bool {
-        self.activity.any()
-    }
-
-    pub(crate) fn has_target_process_activity(self) -> bool {
-        self.activity.target()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum WaitSpecialInputActivity {
     #[default]
     None,
@@ -602,8 +583,12 @@ impl WaitServiceOutcome {
         self.process_activity.target()
     }
 
-    fn absorb_process_activity(&mut self, process_outcome: WaitProcessOutcome) {
-        self.process_activity = process_outcome.activity;
+    fn absorb_process_activity(&mut self, process_outcome: ProcessOutputServiceOutcome) {
+        if process_outcome.has_target_process_activity() {
+            self.process_activity = self.process_activity.record(true);
+        } else if process_outcome.has_any_process_activity() {
+            self.process_activity = self.process_activity.record(false);
+        }
     }
 
     fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
@@ -948,9 +933,11 @@ mod tests {
 
     #[test]
     fn target_process_activity_implies_any_process_activity() {
-        let mut outcome = WaitProcessOutcome::default();
+        let mut process = ProcessOutputServiceOutcome::default();
+        let mut outcome = WaitServiceOutcome::default();
 
-        outcome.record_activity(true);
+        process.record_activity(true);
+        outcome.absorb_process_activity(process);
 
         assert!(outcome.has_target_process_activity());
         assert!(outcome.has_any_process_activity());

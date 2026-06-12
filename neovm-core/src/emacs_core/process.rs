@@ -41,9 +41,7 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
-use super::wait::{
-    ProcessOutputWaitTiming, WaitCompletion, WaitProcessOutcome, WaitRequest, WaitSourceEvents,
-};
+use super::wait::{ProcessOutputWaitTiming, WaitCompletion, WaitRequest, WaitSourceEvents};
 
 /// OS socket owned by a network process.
 ///
@@ -215,6 +213,53 @@ impl ProcessOutputServiceRequest {
                 .into_iter()
                 .collect(),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ProcessOutputServiceActivity {
+    #[default]
+    None,
+    Any,
+    Target,
+}
+
+impl ProcessOutputServiceActivity {
+    fn record(self, target: bool) -> Self {
+        if target {
+            Self::Target
+        } else if matches!(self, Self::Target) {
+            Self::Target
+        } else {
+            Self::Any
+        }
+    }
+
+    fn any(self) -> bool {
+        matches!(self, Self::Any | Self::Target)
+    }
+
+    fn target(self) -> bool {
+        matches!(self, Self::Target)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ProcessOutputServiceOutcome {
+    activity: ProcessOutputServiceActivity,
+}
+
+impl ProcessOutputServiceOutcome {
+    pub(crate) fn record_activity(&mut self, target: bool) {
+        self.activity = self.activity.record(target);
+    }
+
+    pub(crate) fn has_any_process_activity(self) -> bool {
+        self.activity.any()
+    }
+
+    pub(crate) fn has_target_process_activity(self) -> bool {
+        self.activity.target()
     }
 }
 
@@ -2535,7 +2580,7 @@ impl super::eval::Context {
     pub(crate) fn poll_process_output_for_service_request(
         &mut self,
         request: &ProcessOutputServiceRequest,
-    ) -> WaitProcessOutcome {
+    ) -> ProcessOutputServiceOutcome {
         let target_process = request.target_process();
         let proc_ids = request.live_processes(self.processes.live_process_ids());
         self.poll_process_output_for_ids(proc_ids, target_process)
@@ -2545,7 +2590,7 @@ impl super::eval::Context {
         &mut self,
         ready_processes: Vec<ProcessId>,
         request: &ProcessOutputServiceRequest,
-    ) -> WaitProcessOutcome {
+    ) -> ProcessOutputServiceOutcome {
         let target_process = request.target_process();
         let proc_ids = request.ready_processes(ready_processes);
 
@@ -2556,14 +2601,14 @@ impl super::eval::Context {
         &mut self,
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
-    ) -> WaitProcessOutcome {
+    ) -> ProcessOutputServiceOutcome {
         let proc_ids = dedupe_process_ids(proc_ids);
 
         if proc_ids.is_empty() {
-            return WaitProcessOutcome::default();
+            return ProcessOutputServiceOutcome::default();
         }
 
-        let mut outcome = WaitProcessOutcome::default();
+        let mut outcome = ProcessOutputServiceOutcome::default();
 
         for pid in proc_ids {
             if self
