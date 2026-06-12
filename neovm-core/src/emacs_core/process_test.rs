@@ -2292,13 +2292,13 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
         .expect("send delayed keypress");
     });
 
-    let outcome = ev
+    let completion: WaitCompletion = ev
         .wait_reading_process_output(WaitRequest::read_command_input_until(
             std::time::Instant::now() + Duration::from_secs(1),
         ))
         .expect("wait for command input");
 
-    assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
+    assert_eq!(completion, WaitCompletion::CommandInputPending);
     assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
 }
 
@@ -2423,13 +2423,13 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
         write.write_all(&[1]).expect("write input wakeup");
     });
 
-    let outcome = ev
+    let completion = ev
         .wait_reading_process_output(WaitRequest::read_command_input_until(
             std::time::Instant::now() + Duration::from_secs(1),
         ))
         .expect("wait for command input through wakeup backend");
 
-    assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
+    assert_eq!(completion, WaitCompletion::CommandInputPending);
     let event = ev.read_char().expect("keypress should remain readable");
     assert_eq!(event, Value::fixnum('w' as i64));
 }

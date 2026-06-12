@@ -552,17 +552,6 @@ impl WaitServiceOutcome {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WaitOutcome {
-    completion: WaitCompletion,
-}
-
-impl WaitOutcome {
-    pub(crate) fn completion(self) -> WaitCompletion {
-        self.completion
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 enum WaitProcessService {
     Poll,
@@ -714,23 +703,19 @@ impl super::eval::Context {
     pub(crate) fn wait_reading_process_output(
         &mut self,
         request: WaitRequest,
-    ) -> Result<WaitOutcome, Flow> {
+    ) -> Result<WaitCompletion, Flow> {
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
         if let Some(completion) = request.completion_for(outcome) {
-            return Ok(WaitOutcome { completion });
+            return Ok(completion);
         }
         if request.poll_or_deadline_elapsed(Instant::now()) {
-            return Ok(WaitOutcome {
-                completion: WaitCompletion::DeadlineElapsed,
-            });
+            return Ok(WaitCompletion::DeadlineElapsed);
         }
 
         loop {
             let now = Instant::now();
             if request.deadline_elapsed(now) {
-                return Ok(WaitOutcome {
-                    completion: WaitCompletion::DeadlineElapsed,
-                });
+                return Ok(WaitCompletion::DeadlineElapsed);
             }
 
             let wait_time = self.next_wait_request_timeout(&request, now);
@@ -738,7 +723,7 @@ impl super::eval::Context {
             outcome = self.service_wait_request_block_activity(&request, activity)?;
 
             if let Some(completion) = request.completion_for(outcome) {
-                return Ok(WaitOutcome { completion });
+                return Ok(completion);
             }
         }
     }
@@ -1121,14 +1106,5 @@ mod tests {
         special = SpecialInputServiceOutcome::default();
         service.record_timer_activity(true);
         assert!(redisplay.needs_redisplay_after_service(special, service));
-    }
-
-    #[test]
-    fn wait_outcome_exposes_completion_and_service_queries() {
-        let outcome = WaitOutcome {
-            completion: WaitCompletion::CommandInputPending,
-        };
-
-        assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
     }
 }

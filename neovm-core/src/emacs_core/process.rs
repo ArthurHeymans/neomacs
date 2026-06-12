@@ -8444,8 +8444,7 @@ pub(crate) fn builtin_accept_process_output(
         return Ok(Value::NIL);
     };
 
-    let outcome = eval.wait_reading_process_output(request.wait)?;
-    match outcome.completion() {
+    match eval.wait_reading_process_output(request.wait)? {
         WaitCompletion::ProcessActivity => {
             accept_process_output_run_target_follow_up(eval, request)?;
             Ok(Value::T)
