@@ -6379,7 +6379,7 @@ impl LayoutEngine {
                 },
                 Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
                 tab_row_spec,
-                tab_text,
+                DisplayTextFragment::tab_line(tab_text),
             );
         }
 
@@ -6442,7 +6442,7 @@ impl LayoutEngine {
                     header_line_height,
                 ),
                 header_row_spec,
-                header_text,
+                DisplayTextFragment::header_line(header_text, params.selected),
             );
         }
 
@@ -6515,7 +6515,7 @@ impl LayoutEngine {
                 },
                 Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
                 mode_row_spec,
-                mode_text,
+                DisplayTextFragment::mode_line(mode_text, params.selected),
             );
         }
 
@@ -6829,9 +6829,9 @@ impl LayoutEngine {
             GlyphRowRole::TabBar,
             std::collections::HashMap::new(),
         );
-        let Some(rendered) = self.render_lisp_string_row_with_display_host(
+        let Some(rendered) = self.render_display_text_fragment_row_with_display_host(
             tab_bar_spec,
-            tab_bar.text,
+            DisplayTextFragment::tab_bar(tab_bar.text),
             face_resolver,
             evaluator.display_host.as_deref(),
             &mut current_face_id,

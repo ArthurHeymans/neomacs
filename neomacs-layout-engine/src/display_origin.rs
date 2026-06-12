@@ -38,6 +38,7 @@ pub(crate) enum DisplayOrigin {
     ModeLine,
     HeaderLine,
     TabLine,
+    TabBar,
     EchoArea,
 }
 
@@ -68,6 +69,7 @@ mod tests {
         let _ = DisplayOrigin::ModeLine;
         let _ = DisplayOrigin::HeaderLine;
         let _ = DisplayOrigin::TabLine;
+        let _ = DisplayOrigin::TabBar;
         let _ = DisplayOrigin::EchoArea;
     }
 }

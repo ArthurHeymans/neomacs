@@ -23,11 +23,12 @@ use crate::display_row::{
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
+use crate::display_text::DisplayTextFragment;
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::types::Rect;
-use neovm_core::emacs_core::{Context, Value};
+use neovm_core::emacs_core::Context;
 
 impl LayoutEngine {
     pub(crate) fn realize_display_row_face(
@@ -68,11 +69,11 @@ impl LayoutEngine {
         owner: DisplayRowOwner,
         fallback_bounds: Rect,
         row_spec: DisplayRowSpec<'_>,
-        rendered_text: Value,
+        rendered_text: DisplayTextFragment,
     ) -> Option<MeasuredDisplayRow> {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, output);
-        let rendered_row = self.render_lisp_string_row_with_display_host(
+        let rendered_row = self.render_display_text_fragment_row_with_display_host(
             row_spec,
             rendered_text,
             face_resolver,

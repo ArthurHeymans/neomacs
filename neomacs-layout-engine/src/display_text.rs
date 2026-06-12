@@ -1,5 +1,6 @@
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
+use neomacs_display_protocol::face::BasicFaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
@@ -103,6 +104,48 @@ impl DisplayTextFragment {
             value,
             DisplayOrigin::WrapPrefix { anchor_charpos },
             BaseFacePolicy::DefaultFace,
+        )
+    }
+
+    pub(crate) fn mode_line(value: Value, selected_window: bool) -> Self {
+        let face = if selected_window {
+            BasicFaceId::ModeLineActive
+        } else {
+            BasicFaceId::ModeLineInactive
+        };
+        Self::lisp_string(
+            value,
+            DisplayOrigin::ModeLine,
+            BaseFacePolicy::FixedBasicFace(face),
+        )
+    }
+
+    pub(crate) fn header_line(value: Value, selected_window: bool) -> Self {
+        let face = if selected_window {
+            BasicFaceId::HeaderLineActive
+        } else {
+            BasicFaceId::HeaderLineInactive
+        };
+        Self::lisp_string(
+            value,
+            DisplayOrigin::HeaderLine,
+            BaseFacePolicy::FixedBasicFace(face),
+        )
+    }
+
+    pub(crate) fn tab_line(value: Value) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::TabLine,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine),
+        )
+    }
+
+    pub(crate) fn tab_bar(value: Value) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::TabBar,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar),
         )
     }
 }
@@ -243,5 +286,61 @@ mod tests {
             }
         );
         assert_eq!(wrap.base_face_policy, BaseFacePolicy::DefaultFace);
+    }
+
+    #[test]
+    fn display_text_fragment_builds_chrome_fragments() {
+        use neomacs_display_protocol::face::BasicFaceId;
+
+        let _ctx = Context::new();
+        let mode_value = Value::string("mode");
+        let mode = DisplayTextFragment::mode_line(mode_value, true);
+        assert_eq!(mode.storage, DisplayTextStorage::LispString(mode_value));
+        assert_eq!(mode.origin, DisplayOrigin::ModeLine);
+        assert_eq!(
+            mode.base_face_policy,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive)
+        );
+
+        let inactive_mode_value = Value::string("inactive");
+        let inactive_mode = DisplayTextFragment::mode_line(inactive_mode_value, false);
+        assert_eq!(inactive_mode.origin, DisplayOrigin::ModeLine);
+        assert_eq!(
+            inactive_mode.base_face_policy,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineInactive)
+        );
+
+        let header_value = Value::string("header");
+        let header = DisplayTextFragment::header_line(header_value, true);
+        assert_eq!(header.storage, DisplayTextStorage::LispString(header_value));
+        assert_eq!(header.origin, DisplayOrigin::HeaderLine);
+        assert_eq!(
+            header.base_face_policy,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive)
+        );
+
+        let tab_line_value = Value::string("tabs");
+        let tab_line = DisplayTextFragment::tab_line(tab_line_value);
+        assert_eq!(
+            tab_line.storage,
+            DisplayTextStorage::LispString(tab_line_value)
+        );
+        assert_eq!(tab_line.origin, DisplayOrigin::TabLine);
+        assert_eq!(
+            tab_line.base_face_policy,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine)
+        );
+
+        let tab_bar_value = Value::string("frame tabs");
+        let tab_bar = DisplayTextFragment::tab_bar(tab_bar_value);
+        assert_eq!(
+            tab_bar.storage,
+            DisplayTextStorage::LispString(tab_bar_value)
+        );
+        assert_eq!(tab_bar.origin, DisplayOrigin::TabBar);
+        assert_eq!(
+            tab_bar.base_face_policy,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar)
+        );
     }
 }

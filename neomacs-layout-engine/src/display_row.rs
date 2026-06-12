@@ -15,6 +15,7 @@ use crate::display_source_resolver::{
     DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
     resolve_next_display_source_item,
 };
+use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -1308,6 +1309,48 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
+    pub(crate) fn render_display_text_fragment_row(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplayRow> {
+        self.render_display_text_fragment_row_with_display_host(
+            spec,
+            fragment,
+            face_resolver,
+            None,
+            next_face_id,
+        )
+    }
+
+    pub(crate) fn render_display_text_fragment_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplayRow> {
+        let rendered = match fragment.storage {
+            DisplayTextStorage::LispString(value) => value,
+            DisplayTextStorage::Static(value) => Value::string(value),
+            DisplayTextStorage::BufferSpan { .. } => return None,
+        };
+        let base_face_id = spec.base_face_id;
+        let mut source =
+            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
+        self.render_display_item_source_row_with_display_host(
+            spec,
+            &mut source,
+            face_resolver,
+            display_host,
+            next_face_id,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1635,6 +1678,24 @@ impl LayoutEngine {
             display_host,
             next_face_id,
         )
+    }
+
+    pub(crate) fn render_display_text_fragment_row_with_display_host(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        next_face_id: &mut u32,
+    ) -> Option<RenderedDisplayRow> {
+        DisplayRowRenderer::new(&mut self.font_metrics)
+            .render_display_text_fragment_row_with_display_host(
+                spec,
+                fragment,
+                face_resolver,
+                display_host,
+                next_face_id,
+            )
     }
 }
 
