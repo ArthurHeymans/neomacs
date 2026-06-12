@@ -297,50 +297,29 @@ impl FontMetricsService {
         emacs_family.to_string()
     }
 
+    fn intern_family(&mut self, family: &str) -> &'static str {
+        if let Some(&existing) = self.interned_families.get(family) {
+            existing
+        } else {
+            let leaked: &'static str = Box::leak(family.to_string().into_boxed_str());
+            self.interned_families.insert(family.to_string(), leaked);
+            leaked
+        }
+    }
+
     /// Build cosmic-text `Attrs` from face parameters.
     /// Mirrors the logic in `glyph_atlas.rs:face_to_attrs()`.
     fn build_attrs(&mut self, family: &str, weight: u16, slant: FontSlant) -> Attrs<'static> {
         let mut attrs = Attrs::new();
 
-        // Resolve generic family names through fontconfig so we use the same
-        // font as GNU Emacs (e.g., "Monospace" → "Hack").
-        let resolved = crate::fontconfig::resolve_family(family);
-        let family_lower = resolved.to_lowercase();
-        let is_generic = matches!(
-            family_lower.as_str(),
-            "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
-        );
-        let use_monospace_fallback = !is_generic
-            && crate::font_match::should_use_monospace_fallback(&self.font_system, resolved);
-
-        attrs = if is_generic && resolved != family {
-            // Fontconfig resolved to a concrete name — use it directly
-            let interned = if let Some(&existing) = self.interned_families.get(resolved) {
-                existing
-            } else {
-                let leaked: &'static str = Box::leak(resolved.to_string().into_boxed_str());
-                self.interned_families.insert(resolved.to_string(), leaked);
-                leaked
-            };
-            attrs.family(Family::Name(interned))
-        } else if is_generic {
-            // No fontconfig resolution — fall back to cosmic-text generic
-            match family_lower.as_str() {
-                "serif" => attrs.family(Family::Serif),
-                "sans-serif" | "sans" | "sansserif" => attrs.family(Family::SansSerif),
-                _ => attrs.family(Family::Monospace),
+        attrs = match crate::font_match::select_cosmic_family(&self.font_system, family) {
+            crate::font_match::CosmicFamilySelection::Name(family) => {
+                let interned = self.intern_family(family);
+                attrs.family(Family::Name(interned))
             }
-        } else if use_monospace_fallback {
-            attrs.family(Family::Monospace)
-        } else {
-            let interned = if let Some(&existing) = self.interned_families.get(resolved) {
-                existing
-            } else {
-                let leaked: &'static str = Box::leak(resolved.to_string().into_boxed_str());
-                self.interned_families.insert(resolved.to_string(), leaked);
-                leaked
-            };
-            attrs.family(Family::Name(interned))
+            crate::font_match::CosmicFamilySelection::Monospace => attrs.family(Family::Monospace),
+            crate::font_match::CosmicFamilySelection::Serif => attrs.family(Family::Serif),
+            crate::font_match::CosmicFamilySelection::SansSerif => attrs.family(Family::SansSerif),
         };
 
         // Font weight (CSS 100-900): clamp to closest available in this family.

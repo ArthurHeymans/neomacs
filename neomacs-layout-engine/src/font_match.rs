@@ -33,6 +33,14 @@ struct CacheKey {
 static FAMILY_WEIGHT_CACHE: Lazy<RwLock<HashMap<CacheKey, FamilyWeightInfo>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CosmicFamilySelection<'a> {
+    Name(&'a str),
+    Monospace,
+    Serif,
+    SansSerif,
+}
+
 /// Resolve a requested weight to the closest available weight in the same family.
 ///
 /// For explicit family names, this prevents cross-family jumps when a specific
@@ -96,6 +104,32 @@ pub fn family_exists(font_system: &FontSystem, family: &str) -> bool {
 
 pub fn should_use_monospace_fallback(font_system: &FontSystem, family: &str) -> bool {
     !family_exists(font_system, family) && crate::fontconfig::family_prefers_monospace(family)
+}
+
+pub fn select_cosmic_family<'a>(
+    font_system: &FontSystem,
+    requested_family: &'a str,
+) -> CosmicFamilySelection<'a> {
+    let resolved = crate::fontconfig::resolve_family(requested_family);
+    let family_lower = resolved.to_lowercase();
+    let is_generic = matches!(
+        family_lower.as_str(),
+        "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
+    );
+
+    if is_generic && resolved != requested_family {
+        CosmicFamilySelection::Name(resolved)
+    } else if is_generic {
+        match family_lower.as_str() {
+            "serif" => CosmicFamilySelection::Serif,
+            "sans-serif" | "sans" | "sansserif" => CosmicFamilySelection::SansSerif,
+            _ => CosmicFamilySelection::Monospace,
+        }
+    } else if should_use_monospace_fallback(font_system, resolved) {
+        CosmicFamilySelection::Monospace
+    } else {
+        CosmicFamilySelection::Name(resolved)
+    }
 }
 
 fn resolve_requested_weight(info: &FamilyWeightInfo, requested_weight: u16) -> u16 {

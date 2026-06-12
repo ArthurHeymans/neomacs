@@ -612,31 +612,14 @@ fn measure_with_raw_fontsystem(
             )
         })
     };
-    let resolved = crate::fontconfig::resolve_family(&effective_family);
-    let family_lower = resolved.to_lowercase();
-    let is_generic = matches!(
-        family_lower.as_str(),
-        "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
-    );
-    let use_monospace_fallback =
-        !is_generic && crate::font_match::should_use_monospace_fallback(font_system, resolved);
     let mut attrs = Attrs::new();
-    attrs = if is_generic && resolved != effective_family {
-        attrs.family(Family::Name(Box::leak(
-            resolved.to_string().into_boxed_str(),
-        )))
-    } else if is_generic {
-        match family_lower.as_str() {
-            "serif" => attrs.family(Family::Serif),
-            "sans-serif" | "sans" | "sansserif" => attrs.family(Family::SansSerif),
-            _ => attrs.family(Family::Monospace),
+    attrs = match crate::font_match::select_cosmic_family(font_system, &effective_family) {
+        crate::font_match::CosmicFamilySelection::Name(family) => {
+            attrs.family(Family::Name(Box::leak(family.to_string().into_boxed_str())))
         }
-    } else if use_monospace_fallback {
-        attrs.family(Family::Monospace)
-    } else {
-        attrs.family(Family::Name(Box::leak(
-            resolved.to_string().into_boxed_str(),
-        )))
+        crate::font_match::CosmicFamilySelection::Monospace => attrs.family(Family::Monospace),
+        crate::font_match::CosmicFamilySelection::Serif => attrs.family(Family::Serif),
+        crate::font_match::CosmicFamilySelection::SansSerif => attrs.family(Family::SansSerif),
     };
     attrs = attrs.weight(Weight(effective_weight));
     if let Some(style) = font_slant_to_cosmic_style(effective_slant) {

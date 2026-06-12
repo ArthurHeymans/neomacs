@@ -723,6 +723,16 @@ impl WgpuGlyphAtlas {
         .render(&mut scaler, cache_key.glyph_id)
     }
 
+    fn intern_family(&mut self, family: &str) -> &'static str {
+        if let Some(&existing) = self.interned_families.get(family) {
+            existing
+        } else {
+            let leaked: &'static str = Box::leak(family.to_string().into_boxed_str());
+            self.interned_families.insert(leaked);
+            leaked
+        }
+    }
+
     fn face_to_attrs_for_text(&mut self, text: &str, face: Option<&Face>) -> Attrs<'static> {
         let mut attrs = Attrs::new();
 
@@ -786,48 +796,23 @@ impl WgpuGlyphAtlas {
                 }
             }
 
-            // Resolve generic family names through fontconfig so we use the
-            // same font as GNU Emacs (e.g., "Monospace" → "Hack").
-            let resolved = neomacs_layout_engine::fontconfig::resolve_family(&effective_family);
-            let family_lower = resolved.to_lowercase();
-            let is_generic = matches!(
-                family_lower.as_str(),
-                "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
-            );
-            let use_monospace_fallback = !is_generic
-                && neomacs_layout_engine::font_match::should_use_monospace_fallback(
-                    &self.font_system,
-                    resolved,
-                );
-
-            attrs = if is_generic && resolved != effective_family {
-                // Fontconfig resolved to a concrete name — use it directly
-                let interned = if let Some(&existing) = self.interned_families.get(resolved) {
-                    existing
-                } else {
-                    let leaked: &'static str = Box::leak(resolved.to_string().into_boxed_str());
-                    self.interned_families.insert(leaked);
-                    leaked
-                };
-                attrs.family(Family::Name(interned))
-            } else if is_generic {
-                // No fontconfig resolution — fall back to cosmic-text generic
-                match family_lower.as_str() {
-                    "serif" => attrs.family(Family::Serif),
-                    "sans-serif" | "sans" | "sansserif" => attrs.family(Family::SansSerif),
-                    _ => attrs.family(Family::Monospace),
+            attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
+                &self.font_system,
+                &effective_family,
+            ) {
+                neomacs_layout_engine::font_match::CosmicFamilySelection::Name(family) => {
+                    let interned = self.intern_family(family);
+                    attrs.family(Family::Name(interned))
                 }
-            } else if use_monospace_fallback {
-                attrs.family(Family::Monospace)
-            } else {
-                let interned = if let Some(&existing) = self.interned_families.get(resolved) {
-                    existing
-                } else {
-                    let leaked: &'static str = Box::leak(resolved.to_string().into_boxed_str());
-                    self.interned_families.insert(leaked);
-                    leaked
-                };
-                attrs.family(Family::Name(interned))
+                neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
+                    attrs.family(Family::Monospace)
+                }
+                neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
+                    attrs.family(Family::Serif)
+                }
+                neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
+                    attrs.family(Family::SansSerif)
+                }
             };
 
             // Font weight: clamp to the closest available weight in this family,
