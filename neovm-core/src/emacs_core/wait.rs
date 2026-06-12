@@ -239,7 +239,7 @@ impl WaitRequest {
     }
 
     fn completion_for(self, outcome: WaitServiceOutcome) -> Option<WaitCompletion> {
-        if self.keyboard.completes_on_command_input() && outcome.command_input_pending {
+        if self.keyboard.completes_on_command_input() && outcome.has_command_input_pending() {
             return Some(WaitCompletion::CommandInputPending);
         }
 
@@ -329,8 +329,8 @@ impl WaitSpecialInputActivity {
 pub(crate) struct WaitServiceOutcome {
     process_activity: WaitProcessActivity,
     special_input_activity: WaitSpecialInputActivity,
-    pub(crate) timers_fired: bool,
-    pub(crate) command_input_pending: bool,
+    timers_fired: bool,
+    command_input_pending: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -366,6 +366,22 @@ impl WaitServiceOutcome {
 
     pub(crate) fn has_resize_activity(self) -> bool {
         self.special_input_activity.resize()
+    }
+
+    pub(crate) fn record_command_input_pending(&mut self) {
+        self.command_input_pending = true;
+    }
+
+    pub(crate) fn has_command_input_pending(self) -> bool {
+        self.command_input_pending
+    }
+
+    pub(crate) fn record_timer_activity(&mut self, fired: bool) {
+        self.timers_fired |= fired;
+    }
+
+    pub(crate) fn has_timer_activity(self) -> bool {
+        self.timers_fired
     }
 }
 
@@ -417,14 +433,14 @@ impl super::eval::Context {
         if request.keyboard.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
         {
-            outcome.command_input_pending = true;
+            outcome.record_command_input_pending();
             if request.redisplay && special_input.redisplay_needed {
                 self.redisplay();
             }
             return Ok(outcome);
         }
         if request.timers.allow() {
-            outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
+            outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
         }
         let process_outcome = match process_service {
             WaitProcessService::Poll => {
@@ -435,7 +451,7 @@ impl super::eval::Context {
             }
         };
         outcome.absorb_process_activity(process_outcome);
-        if request.redisplay && (special_input.redisplay_needed || outcome.timers_fired) {
+        if request.redisplay && (special_input.redisplay_needed || outcome.has_timer_activity()) {
             self.redisplay();
         }
         Ok(outcome)
@@ -593,5 +609,23 @@ mod tests {
 
         assert!(outcome.has_resize_activity());
         assert!(outcome.has_special_input_activity());
+    }
+
+    #[test]
+    fn command_input_pending_is_recorded_explicitly() {
+        let mut outcome = WaitServiceOutcome::default();
+
+        outcome.record_command_input_pending();
+
+        assert!(outcome.has_command_input_pending());
+    }
+
+    #[test]
+    fn timer_activity_is_recorded_explicitly() {
+        let mut outcome = WaitServiceOutcome::default();
+
+        outcome.record_timer_activity(true);
+
+        assert!(outcome.has_timer_activity());
     }
 }
