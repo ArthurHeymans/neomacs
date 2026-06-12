@@ -618,6 +618,16 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
         cursor.into_parts(),
         (3, 10.0 + 3.0 * 16.0 + 15.0, 15.0, 16.0, 12.0)
     );
+    assert_eq!(
+        cursor.text_matrix_row_begin(5, 7, 13.0),
+        TextMatrixRowBegin {
+            matrix_row: 8,
+            row: 3,
+            col: 7,
+            y: 10.0 + 3.0 * 16.0 + 15.0,
+            x: 13.0,
+        }
+    );
 }
 
 fn test_window_params() -> WindowParams {

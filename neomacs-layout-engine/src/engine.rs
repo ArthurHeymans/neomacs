@@ -640,6 +640,16 @@ impl DisplayRowGeometryCursor {
         row_advance.finished
     }
 
+    fn text_matrix_row_begin(&self, row_base: usize, col: usize, x: f32) -> TextMatrixRowBegin {
+        TextMatrixRowBegin {
+            matrix_row: row_base + self.row,
+            row: self.row,
+            col,
+            y: self.y,
+            x,
+        }
+    }
+
     fn into_parts(self) -> (usize, f32, f32, f32, f32) {
         (
             self.row,
@@ -4201,6 +4211,7 @@ impl LayoutEngine {
                         },
                         DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                     );
+                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
@@ -4208,13 +4219,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        TextMatrixRowBegin {
-                            matrix_row: text_matrix_row_base + row,
-                            row,
-                            col,
-                            y,
-                            x,
-                        },
+                        begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -4813,51 +4818,40 @@ impl LayoutEngine {
                     charpos += 1;
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
-                        let mut current_row_metrics =
-                            CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                        let mut row_cursor = DisplayRowGeometryCursor::new(
+                            row,
+                            y,
+                            row_extra_y,
+                            row_max_height,
+                            row_max_ascent,
+                        );
                         x = content_x;
-                        hit_rows.push(HitRow {
-                            y_start: y,
-                            y_end: y + current_row_metrics.height(),
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        });
+                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
                         row_extend_row = -1;
                         if box_active {
                             box_start_x = content_x;
                             box_row = row + 1;
                         }
-                        let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                            CurrentDisplayRowAdvance {
-                                y,
-                                next_row: row + 1,
+                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                            DisplayRowGeometryDefaults {
                                 text_y,
-                                row_extra_y,
-                                default_height: char_h,
-                                default_ascent: default_face_ascent,
-                                kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                                height: char_h,
+                                ascent: default_face_ascent,
                             },
+                            DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                         );
-                        row_extra_y = row_advance.row_extra_y;
-                        let finished_row = row_advance.finished;
-                        row += 1;
-                        y = row_advance.next_y;
-                        row_max_height = row_advance.next_height;
-                        row_max_ascent = row_advance.next_ascent;
+                        let begin_row =
+                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
+                            row_cursor.into_parts();
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
                             finished_row,
-                            TextMatrixRowBegin {
-                                matrix_row: text_matrix_row_base + row,
-                                row,
-                                col,
-                                y,
-                                x,
-                            },
+                            begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -4933,8 +4927,13 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                let mut current_row_metrics =
-                    CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                let mut row_cursor = DisplayRowGeometryCursor::new(
+                    row,
+                    y,
+                    row_extra_y,
+                    row_max_height,
+                    row_max_ascent,
+                );
                 charpos += 1;
 
                 // Check line-spacing text property on the newline we just consumed.
@@ -4961,41 +4960,24 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                hit_rows.push(HitRow {
-                    y_start: y,
-                    y_end: y + current_row_metrics.height(),
-                    charpos_start: hit_row_charpos_start,
-                    charpos_end: charpos,
-                });
-                let row_advance =
-                    current_row_metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
-                        y,
-                        next_row: row + 1,
+                hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
+                let finished_row = row_cursor.finish_and_advance_to_next_row(
+                    DisplayRowGeometryDefaults {
                         text_y,
-                        row_extra_y,
-                        default_height: char_h,
-                        default_ascent: default_face_ascent,
-                        kind: DisplayRowAdvanceKind::LineBreak { line_spacing },
-                    });
-                row_extra_y = row_advance.row_extra_y;
-                let finished_row = row_advance.finished;
-                row += 1;
-                y = row_advance.next_y;
-                row_max_height = row_advance.next_height;
-                row_max_ascent = row_advance.next_ascent;
+                        height: char_h,
+                        ascent: default_face_ascent,
+                    },
+                    DisplayRowAdvanceKind::LineBreak { line_spacing },
+                );
+                let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                 row_y_positions.push(y);
                 let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
                     finished_row,
-                    TextMatrixRowBegin {
-                        matrix_row: text_matrix_row_base + row,
-                        row,
-                        col,
-                        y,
-                        x,
-                    },
+                    begin_row,
                     max_rows,
                 );
                 if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5091,48 +5073,37 @@ impl LayoutEngine {
                             current_line += 1;
                             need_line_number = lnum_enabled;
                         }
-                        let mut current_row_metrics =
-                            CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                        let mut row_cursor = DisplayRowGeometryCursor::new(
+                            row,
+                            y,
+                            row_extra_y,
+                            row_max_height,
+                            row_max_ascent,
+                        );
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(HitRow {
-                            y_start: y,
-                            y_end: y + current_row_metrics.height(),
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        });
+                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                            CurrentDisplayRowAdvance {
-                                y,
-                                next_row: row + 1,
+                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                            DisplayRowGeometryDefaults {
                                 text_y,
-                                row_extra_y,
-                                default_height: char_h,
-                                default_ascent: default_face_ascent,
-                                kind: DisplayRowAdvanceKind::Truncation,
+                                height: char_h,
+                                ascent: default_face_ascent,
                             },
+                            DisplayRowAdvanceKind::Truncation,
                         );
-                        row_extra_y = row_advance.row_extra_y;
-                        let finished_row = row_advance.finished;
-                        row += 1;
-                        y = row_advance.next_y;
-                        row_max_height = row_advance.next_height;
-                        row_max_ascent = row_advance.next_ascent;
+                        let begin_row =
+                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
+                            row_cursor.into_parts();
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
                             finished_row,
-                            TextMatrixRowBegin {
-                                matrix_row: text_matrix_row_base + row,
-                                row,
-                                col,
-                                y,
-                                x,
-                            },
+                            begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5151,49 +5122,38 @@ impl LayoutEngine {
                         if row < max_rows {
                             row_continued[row] = true;
                         }
-                        let mut current_row_metrics =
-                            CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                        let mut row_cursor = DisplayRowGeometryCursor::new(
+                            row,
+                            y,
+                            row_extra_y,
+                            row_max_height,
+                            row_max_ascent,
+                        );
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(HitRow {
-                            y_start: y,
-                            y_end: y + current_row_metrics.height(),
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        });
+                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         hit_row_charpos_start = charpos;
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                            CurrentDisplayRowAdvance {
-                                y,
-                                next_row: row + 1,
+                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                            DisplayRowGeometryDefaults {
                                 text_y,
-                                row_extra_y,
-                                default_height: char_h,
-                                default_ascent: default_face_ascent,
-                                kind: DisplayRowAdvanceKind::VisualWrap,
+                                height: char_h,
+                                ascent: default_face_ascent,
                             },
+                            DisplayRowAdvanceKind::VisualWrap,
                         );
-                        row_extra_y = row_advance.row_extra_y;
-                        let finished_row = row_advance.finished;
-                        row += 1;
-                        y = row_advance.next_y;
-                        row_max_height = row_advance.next_height;
-                        row_max_ascent = row_advance.next_ascent;
+                        let begin_row =
+                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                        (row, y, row_extra_y, row_max_height, row_max_ascent) =
+                            row_cursor.into_parts();
                         row_y_positions.push(y);
                         let row_transition = finish_and_maybe_begin_text_matrix_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
                             finished_row,
-                            TextMatrixRowBegin {
-                                matrix_row: text_matrix_row_base + row,
-                                row,
-                                col,
-                                y,
-                                x,
-                            },
+                            begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5470,48 +5430,35 @@ impl LayoutEngine {
                         current_line += 1;
                         need_line_number = lnum_enabled;
                     }
-                    let mut current_row_metrics =
-                        CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                    let mut row_cursor = DisplayRowGeometryCursor::new(
+                        row,
+                        y,
+                        row_extra_y,
+                        row_max_height,
+                        row_max_ascent,
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(HitRow {
-                        y_start: y,
-                        y_end: y + current_row_metrics.height(),
-                        charpos_start: hit_row_charpos_start,
-                        charpos_end: charpos,
-                    });
+                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                        CurrentDisplayRowAdvance {
-                            y,
-                            next_row: row + 1,
+                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        DisplayRowGeometryDefaults {
                             text_y,
-                            row_extra_y,
-                            default_height: char_h,
-                            default_ascent: default_face_ascent,
-                            kind: DisplayRowAdvanceKind::Truncation,
+                            height: char_h,
+                            ascent: default_face_ascent,
                         },
+                        DisplayRowAdvanceKind::Truncation,
                     );
-                    row_extra_y = row_advance.row_extra_y;
-                    let finished_row = row_advance.finished;
-                    row += 1;
-                    y = row_advance.next_y;
-                    row_max_height = row_advance.next_height;
-                    row_max_ascent = row_advance.next_ascent;
+                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        TextMatrixRowBegin {
-                            matrix_row: text_matrix_row_base + row,
-                            row,
-                            col,
-                            y,
-                            x,
-                        },
+                        begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5539,48 +5486,35 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut current_row_metrics =
-                        CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                    let mut row_cursor = DisplayRowGeometryCursor::new(
+                        row,
+                        y,
+                        row_extra_y,
+                        row_max_height,
+                        row_max_ascent,
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(HitRow {
-                        y_start: y,
-                        y_end: y + current_row_metrics.height(),
-                        charpos_start: hit_row_charpos_start,
-                        charpos_end: charpos,
-                    });
+                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                        CurrentDisplayRowAdvance {
-                            y,
-                            next_row: row + 1,
+                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        DisplayRowGeometryDefaults {
                             text_y,
-                            row_extra_y,
-                            default_height: char_h,
-                            default_ascent: default_face_ascent,
-                            kind: DisplayRowAdvanceKind::VisualWrap,
+                            height: char_h,
+                            ascent: default_face_ascent,
                         },
+                        DisplayRowAdvanceKind::VisualWrap,
                     );
-                    row_extra_y = row_advance.row_extra_y;
-                    let finished_row = row_advance.finished;
-                    row += 1;
-                    y = row_advance.next_y;
-                    row_max_height = row_advance.next_height;
-                    row_max_ascent = row_advance.next_ascent;
+                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        TextMatrixRowBegin {
-                            matrix_row: text_matrix_row_base + row,
-                            row,
-                            col,
-                            y,
-                            x,
-                        },
+                        begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5610,48 +5544,35 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut current_row_metrics =
-                        CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                    let mut row_cursor = DisplayRowGeometryCursor::new(
+                        row,
+                        y,
+                        row_extra_y,
+                        row_max_height,
+                        row_max_ascent,
+                    );
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(HitRow {
-                        y_start: y,
-                        y_end: y + current_row_metrics.height(),
-                        charpos_start: hit_row_charpos_start,
-                        charpos_end: charpos,
-                    });
+                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                        CurrentDisplayRowAdvance {
-                            y,
-                            next_row: row + 1,
+                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        DisplayRowGeometryDefaults {
                             text_y,
-                            row_extra_y,
-                            default_height: char_h,
-                            default_ascent: default_face_ascent,
-                            kind: DisplayRowAdvanceKind::VisualWrap,
+                            height: char_h,
+                            ascent: default_face_ascent,
                         },
+                        DisplayRowAdvanceKind::VisualWrap,
                     );
-                    row_extra_y = row_advance.row_extra_y;
-                    let finished_row = row_advance.finished;
-                    row += 1;
-                    y = row_advance.next_y;
-                    row_max_height = row_advance.next_height;
-                    row_max_ascent = row_advance.next_ascent;
+                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
+                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         finished_row,
-                        TextMatrixRowBegin {
-                            matrix_row: text_matrix_row_base + row,
-                            row,
-                            col,
-                            y,
-                            x,
-                        },
+                        begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
