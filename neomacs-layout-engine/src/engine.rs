@@ -3090,7 +3090,6 @@ impl LayoutEngine {
 
         // Per-face metrics — start with defaults, updated on face change
         let mut face_char_w = default_face_char_w;
-        let mut face_space_w;
         let mut face_h = default_face_h;
         let mut face_ascent_val = default_face_ascent;
 
@@ -3120,11 +3119,9 @@ impl LayoutEngine {
         );
         let mut current_face =
             DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face);
-        let default_metrics = current_face.metrics();
-        face_char_w = default_metrics.char_width;
-        face_h = default_metrics.row_height;
-        face_ascent_val = default_metrics.ascent;
-        face_space_w = default_metrics.space_width;
+        face_char_w = current_face.char_width();
+        face_h = current_face.row_height();
+        face_ascent_val = current_face.ascent();
         let default_measurement_face = current_face.measurement_face().clone();
 
         if let Some(echo_message) = echo_message {
@@ -3433,11 +3430,9 @@ impl LayoutEngine {
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     current_face = resolved_measured_face.into_active_face();
-                    let measured_metrics = current_face.metrics();
-                    face_char_w = measured_metrics.char_width;
-                    face_h = measured_metrics.row_height;
-                    face_ascent_val = measured_metrics.ascent;
-                    face_space_w = measured_metrics.space_width;
+                    face_char_w = current_face.char_width();
+                    face_h = current_face.row_height();
+                    face_ascent_val = current_face.ascent();
 
                     if face_h > row_max_height {
                         row_max_height = face_h;
@@ -4253,7 +4248,7 @@ impl LayoutEngine {
                                     height: display_height,
                                     ascent: display_height,
                                     char_width: face_char_w,
-                                    space_width: face_space_w,
+                                    space_width: current_face.space_width(),
                                     default_row_height: char_h,
                                 },
                             );
@@ -4959,7 +4954,7 @@ impl LayoutEngine {
             let tab_advance = (ch == '\t').then(|| {
                 text_display_tab_policy(content_x, params).advance_from(
                     crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    face_space_w,
+                    current_face.space_width(),
                 )
             });
 

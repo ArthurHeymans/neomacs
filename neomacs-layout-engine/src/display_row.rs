@@ -744,6 +744,22 @@ impl DisplayRowActiveFace {
         self.metrics
     }
 
+    pub(crate) fn char_width(&self) -> f32 {
+        self.metrics.char_width
+    }
+
+    pub(crate) fn row_height(&self) -> f32 {
+        self.metrics.row_height
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.metrics.ascent
+    }
+
+    pub(crate) fn space_width(&self) -> f32 {
+        self.metrics.space_width
+    }
+
     pub(crate) fn background(&self) -> Color {
         self.background
     }
