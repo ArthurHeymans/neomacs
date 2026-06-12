@@ -175,6 +175,21 @@ fn emit_guard(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, cond: ClifVal
     fb.seal_block(cont);
 }
 
+/// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
+fn guard_fixnum(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, v: ClifValue) {
+    let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
+    let is_fix = fb
+        .ins()
+        .icmp_imm(IntCC::Equal, tag, FIXNUM_CHECK_VALUE as i64);
+    emit_guard(fb, deopt, is_fix);
+}
+
+/// Retag an untagged i64 `n` as a fixnum `Value`: `(n << 2) | 2`.
+fn retag_fixnum(fb: &mut FunctionBuilder, n: ClifValue) -> ClifValue {
+    let shifted = fb.ins().ishl_imm(n, FIXNUM_SHIFT as i64);
+    fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64)
+}
+
 /// Lower a fixnum-fast-path binary op (`Add`/`Sub`) with the exact parity the
 /// interpreter uses (`vm.rs` `Op::Add`): require both operands be fixnums and
 /// the result be in fixnum range, else deopt. Returns the tagged-fixnum result.
@@ -185,17 +200,8 @@ fn lower_fixnum_binop(
     a: ClifValue,
     b: ClifValue,
 ) -> ClifValue {
-    // Guard: both operands are fixnums  ((v & 0b11) == 0b10).
-    let a_tag = fb.ins().band_imm(a, FIXNUM_CHECK_MASK as i64);
-    let a_fix = fb
-        .ins()
-        .icmp_imm(IntCC::Equal, a_tag, FIXNUM_CHECK_VALUE as i64);
-    let b_tag = fb.ins().band_imm(b, FIXNUM_CHECK_MASK as i64);
-    let b_fix = fb
-        .ins()
-        .icmp_imm(IntCC::Equal, b_tag, FIXNUM_CHECK_VALUE as i64);
-    let both = fb.ins().band(a_fix, b_fix);
-    emit_guard(fb, deopt, both);
+    guard_fixnum(fb, deopt, a);
+    guard_fixnum(fb, deopt, b);
 
     // Untag (arithmetic shift right by 2 == GNU XFIXNUM), compute, range-check.
     let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
@@ -222,9 +228,48 @@ fn lower_fixnum_binop(
     let in_range = fb.ins().band(ge_lo, le_hi);
     emit_guard(fb, deopt, in_range);
 
-    // Retag: (res << 2) | 2.
-    let shifted = fb.ins().ishl_imm(res, FIXNUM_SHIFT as i64);
-    fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64)
+    retag_fixnum(fb, res)
+}
+
+/// A fixnum-fast-path unary opcode.
+#[derive(Clone, Copy)]
+enum UnaryKind {
+    /// `1+`: n -> n + 1.
+    Add1,
+    /// `1-`: n -> n - 1.
+    Sub1,
+    /// unary `-`: n -> -n.
+    Negate,
+}
+
+/// Lower a fixnum-fast-path unary op with exact interpreter parity (`vm.rs`
+/// `Op::Add1`/`Op::Sub1`/`Op::Negate`): require a fixnum operand whose result
+/// stays in range, else deopt. The single out-of-range input per op is the
+/// boundary fixnum, so the interpreter's `n != BOUND` guard is reproduced
+/// exactly rather than a post-compute range check.
+fn lower_fixnum_unop(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    kind: UnaryKind,
+    a: ClifValue,
+) -> ClifValue {
+    guard_fixnum(fb, deopt, a);
+    let n = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+
+    // The only input that leaves fixnum range is the op's boundary value.
+    let bound = match kind {
+        UnaryKind::Add1 => Value::MOST_POSITIVE_FIXNUM,
+        UnaryKind::Sub1 | UnaryKind::Negate => Value::MOST_NEGATIVE_FIXNUM,
+    };
+    let in_range = fb.ins().icmp_imm(IntCC::NotEqual, n, bound);
+    emit_guard(fb, deopt, in_range);
+
+    let res = match kind {
+        UnaryKind::Add1 => fb.ins().iadd_imm(n, 1),
+        UnaryKind::Sub1 => fb.ins().iadd_imm(n, -1),
+        UnaryKind::Negate => fb.ins().ineg(n),
+    };
+    retag_fixnum(fb, res)
 }
 
 /// Lower a straight-line, no-argument, leaf bytecode body to native code.
@@ -294,6 +339,17 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
                     let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
                     let is_sub = matches!(op, Op::Sub);
                     let tagged = lower_fixnum_binop(&mut fb, &mut deopt, is_sub, a, b);
+                    stack.push(tagged);
+                }
+                Op::Add1 | Op::Sub1 | Op::Negate => {
+                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let kind = match op {
+                        Op::Add1 => UnaryKind::Add1,
+                        Op::Sub1 => UnaryKind::Sub1,
+                        Op::Negate => UnaryKind::Negate,
+                        _ => unreachable!("matched Add1/Sub1/Negate above"),
+                    };
+                    let tagged = lower_fixnum_unop(&mut fb, &mut deopt, kind, a);
                     stack.push(tagged);
                 }
                 Op::Return => {
@@ -484,6 +540,67 @@ mod tests {
         )
         .unwrap();
         assert_eq!(leaf.call(), Some(Value::make_int(-1).bits()));
+    }
+
+    #[test]
+    fn compiles_unary_fixnum_ops() {
+        // 1+ 41 -> 42
+        let add1 = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Add1, Op::Return],
+            &[Value::make_int(41)],
+        )
+        .unwrap();
+        assert_eq!(add1.call(), Some(Value::make_int(42).bits()));
+
+        // 1- 43 -> 42
+        let sub1 = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Sub1, Op::Return],
+            &[Value::make_int(43)],
+        )
+        .unwrap();
+        assert_eq!(sub1.call(), Some(Value::make_int(42).bits()));
+
+        // - 42 -> -42
+        let neg = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Negate, Op::Return],
+            &[Value::make_int(42)],
+        )
+        .unwrap();
+        assert_eq!(neg.call(), Some(Value::make_int(-42).bits()));
+    }
+
+    #[test]
+    fn unary_boundary_inputs_deopt() {
+        // 1+ MOST_POSITIVE -> overflow -> deopt
+        let add1 = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Add1, Op::Return],
+            &[Value::make_int(Value::MOST_POSITIVE_FIXNUM)],
+        )
+        .unwrap();
+        assert_eq!(add1.call(), None);
+
+        // 1- MOST_NEGATIVE -> underflow -> deopt
+        let sub1 = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Sub1, Op::Return],
+            &[Value::make_int(Value::MOST_NEGATIVE_FIXNUM)],
+        )
+        .unwrap();
+        assert_eq!(sub1.call(), None);
+
+        // - MOST_NEGATIVE -> +MOST_POSITIVE+1 out of range -> deopt
+        let neg = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Negate, Op::Return],
+            &[Value::make_int(Value::MOST_NEGATIVE_FIXNUM)],
+        )
+        .unwrap();
+        assert_eq!(neg.call(), None);
+    }
+
+    #[test]
+    fn unary_on_non_fixnum_deopts() {
+        // 1+ t -> not a fixnum -> deopt
+        let leaf = lower_nullary_leaf(&[Op::True, Op::Add1, Op::Return], &[]).unwrap();
+        assert_eq!(leaf.call(), None);
     }
 
     #[test]
