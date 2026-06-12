@@ -385,7 +385,11 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
         row_max_height: &mut row_max_height,
         row_max_ascent: &mut row_max_ascent,
     }
-    .finish_begin_and_commit_next_text_matrix_row(
+    .finish_boundary(DisplayRowBoundaryTarget::new(
+        DisplayRowHitRange {
+            charpos_start: 0,
+            charpos_end: 0,
+        },
         DisplayRowGeometryTransitionTarget::truncation(
             DisplayRowGeometryDefaults {
                 text_y: 10.0,
@@ -397,7 +401,8 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
             13.0,
             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
         ),
-    );
+    ))
+    .transition;
 
     assert_eq!(
         transition,
@@ -440,7 +445,11 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
         row_max_height: &mut row_max_height,
         row_max_ascent: &mut row_max_ascent,
     }
-    .finish_begin_and_commit_next_text_matrix_row(
+    .finish_boundary(DisplayRowBoundaryTarget::new(
+        DisplayRowHitRange {
+            charpos_start: 0,
+            charpos_end: 0,
+        },
         DisplayRowGeometryTransitionTarget::line_break(
             DisplayRowGeometryDefaults {
                 text_y: 10.0,
@@ -453,7 +462,8 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
             4.0,
             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
         ),
-    );
+    ))
+    .transition;
 
     assert_eq!(
         transition.begin_row,
@@ -485,7 +495,11 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
         row_max_height: &mut row_max_height,
         row_max_ascent: &mut row_max_ascent,
     }
-    .finish_begin_and_commit_next_text_matrix_row(
+    .finish_boundary(DisplayRowBoundaryTarget::new(
+        DisplayRowHitRange {
+            charpos_start: 0,
+            charpos_end: 0,
+        },
         DisplayRowGeometryTransitionTarget::line_break(
             DisplayRowGeometryDefaults {
                 text_y: 10.0,
@@ -498,7 +512,8 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
             4.0,
             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
         ),
-    );
+    ))
+    .transition;
 
     assert_eq!(
         transition,
@@ -523,4 +538,67 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
     assert_eq!(row_max_height, 16.0);
     assert_eq!(row_max_ascent, 12.0);
     assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 15.0]);
+}
+
+#[test]
+fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
+    let mut row = 2;
+    let mut y = 42.0;
+    let mut row_extra_y = 3.0;
+    let mut row_max_height = 24.0;
+    let mut row_max_ascent = 18.0;
+    let mut row_y_positions = vec![8.0];
+
+    let boundary = LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .finish_boundary(DisplayRowBoundaryTarget::new(
+        DisplayRowHitRange {
+            charpos_start: 11,
+            charpos_end: 22,
+        },
+        DisplayRowGeometryTransitionTarget::visual_wrap(
+            DisplayRowGeometryDefaults {
+                text_y: 10.0,
+                height: 16.0,
+                ascent: 12.0,
+            },
+            5,
+            7,
+            13.0,
+            DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+        ),
+    ));
+
+    assert_eq!(boundary.hit_row.y_start, 42.0);
+    assert_eq!(boundary.hit_row.y_end, 66.0);
+    assert_eq!(boundary.hit_row.charpos_start, 11);
+    assert_eq!(boundary.hit_row.charpos_end, 22);
+    assert_eq!(
+        boundary.transition,
+        TextMatrixRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 42.0,
+                height: 24.0,
+                ascent: 18.0,
+            },
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 8,
+                row: 3,
+                col: 7,
+                y: 10.0 + 3.0 * 16.0 + 11.0,
+                x: 13.0,
+            },
+        }
+    );
+    assert_eq!(row, 3);
+    assert_eq!(y, 10.0 + 3.0 * 16.0 + 11.0);
+    assert_eq!(row_extra_y, 11.0);
+    assert_eq!(row_max_height, 16.0);
+    assert_eq!(row_max_ascent, 12.0);
+    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }

@@ -40,9 +40,10 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    CurrentDisplayRowMetrics, DisplayRowGeometryCursor, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowGeometryTransitionTarget, DisplayRowYRecording,
-    LegacyDisplayRowGeometry, LegacyDisplayRowGeometryVars,
+    CurrentDisplayRowMetrics, DisplayRowBoundaryTarget, DisplayRowGeometryCursor,
+    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowGeometryTransitionTarget,
+    DisplayRowHitRange, DisplayRowYRecording, LegacyDisplayRowGeometry,
+    LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -1501,24 +1502,18 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let row_cursor =
-                DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                    row: &mut *row,
-                    y: &mut *y,
-                    row_extra_y: &mut *row_extra_y,
-                    row_max_height: &mut *row_max_height,
-                    row_max_ascent: &mut *row_max_ascent,
-                });
-            hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
-            *hit_row_charpos_start = anchor_charpos;
-            let geometry_transition = LegacyDisplayRowGeometryVars {
+            let boundary = LegacyDisplayRowGeometryVars {
                 row,
                 y,
                 row_extra_y,
                 row_max_height,
                 row_max_ascent,
             }
-            .finish_begin_and_commit_next_text_matrix_row(
+            .finish_boundary(DisplayRowBoundaryTarget::new(
+                DisplayRowHitRange {
+                    charpos_start: *hit_row_charpos_start,
+                    charpos_end: anchor_charpos,
+                },
                 DisplayRowGeometryTransitionTarget::line_break(
                     DisplayRowGeometryDefaults {
                         text_y,
@@ -1531,7 +1526,10 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     0.0,
                     DisplayRowYRecording::None,
                 ),
-            );
+            ));
+            hit_rows.push(boundary.hit_row);
+            *hit_row_charpos_start = anchor_charpos;
+            let geometry_transition = boundary.transition;
             if *row >= max_rows {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
@@ -3989,31 +3987,24 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
-                    let row_cursor =
-                        DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        });
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
-                    // Record hit-test row (hscroll newline)
-                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-                    hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
 
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
+                    let boundary = LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
                         row_extra_y: &mut row_extra_y,
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_begin_and_commit_next_text_matrix_row(
+                    .finish_boundary(DisplayRowBoundaryTarget::new(
+                        DisplayRowHitRange {
+                            charpos_start: hit_row_charpos_start,
+                            charpos_end: charpos,
+                        },
                         DisplayRowGeometryTransitionTarget::line_break(
                             DisplayRowGeometryDefaults {
                                 text_y,
@@ -4026,7 +4017,11 @@ impl LayoutEngine {
                             0.0,
                             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                         ),
-                    );
+                    ));
+                    // Record hit-test row (hscroll newline)
+                    hit_rows.push(boundary.hit_row);
+                    hit_row_charpos_start = charpos;
+                    let geometry_transition = boundary.transition;
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4629,31 +4624,25 @@ impl LayoutEngine {
                     charpos += 1;
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
-                        let row_cursor = DisplayRowGeometryCursor::from_legacy_vars(
-                            LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
-                        );
                         x = content_x;
-                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
                         row_extend_row = -1;
                         if box_active {
                             box_start_x = content_x;
                             box_row = row + 1;
                         }
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
+                        let boundary = LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
                             row_extra_y: &mut row_extra_y,
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_begin_and_commit_next_text_matrix_row(
+                        .finish_boundary(DisplayRowBoundaryTarget::new(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
                             DisplayRowGeometryTransitionTarget::line_break(
                                 DisplayRowGeometryDefaults {
                                     text_y,
@@ -4666,7 +4655,9 @@ impl LayoutEngine {
                                 0.0,
                                 DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                             ),
-                        );
+                        ));
+                        hit_rows.push(boundary.hit_row);
+                        let geometry_transition = boundary.transition;
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4746,14 +4737,6 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                let row_cursor =
-                    DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    });
                 charpos += 1;
 
                 // Check line-spacing text property on the newline we just consumed.
@@ -4780,15 +4763,18 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-                let geometry_transition = LegacyDisplayRowGeometryVars {
+                let boundary = LegacyDisplayRowGeometryVars {
                     row: &mut row,
                     y: &mut y,
                     row_extra_y: &mut row_extra_y,
                     row_max_height: &mut row_max_height,
                     row_max_ascent: &mut row_max_ascent,
                 }
-                .finish_begin_and_commit_next_text_matrix_row(
+                .finish_boundary(DisplayRowBoundaryTarget::new(
+                    DisplayRowHitRange {
+                        charpos_start: hit_row_charpos_start,
+                        charpos_end: charpos,
+                    },
                     DisplayRowGeometryTransitionTarget::line_break(
                         DisplayRowGeometryDefaults {
                             text_y,
@@ -4801,7 +4787,9 @@ impl LayoutEngine {
                         line_spacing,
                         DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                     ),
-                );
+                ));
+                hit_rows.push(boundary.hit_row);
+                let geometry_transition = boundary.transition;
                 let row_transition = TextMatrixRowOutput::new(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4901,28 +4889,21 @@ impl LayoutEngine {
                             current_line += 1;
                             need_line_number = lnum_enabled;
                         }
-                        let row_cursor = DisplayRowGeometryCursor::from_legacy_vars(
-                            LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
-                        );
                         x = content_x;
-                        // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
+                        let boundary = LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
                             row_extra_y: &mut row_extra_y,
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_begin_and_commit_next_text_matrix_row(
+                        .finish_boundary(DisplayRowBoundaryTarget::new(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
                             DisplayRowGeometryTransitionTarget::truncation(
                                 DisplayRowGeometryDefaults {
                                     text_y,
@@ -4934,7 +4915,10 @@ impl LayoutEngine {
                                 x,
                                 DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                             ),
-                        );
+                        ));
+                        // Record hit-test row (wrap/truncation break)
+                        hit_rows.push(boundary.hit_row);
+                        let geometry_transition = boundary.transition;
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4957,29 +4941,21 @@ impl LayoutEngine {
                         if row < max_rows {
                             row_continued[row] = true;
                         }
-                        let row_cursor = DisplayRowGeometryCursor::from_legacy_vars(
-                            LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
-                        );
                         x = content_x;
-                        // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-                        hit_row_charpos_start = charpos;
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
+                        let boundary = LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
                             row_extra_y: &mut row_extra_y,
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_begin_and_commit_next_text_matrix_row(
+                        .finish_boundary(DisplayRowBoundaryTarget::new(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
                             DisplayRowGeometryTransitionTarget::visual_wrap(
                                 DisplayRowGeometryDefaults {
                                     text_y,
@@ -4991,7 +4967,11 @@ impl LayoutEngine {
                                 x,
                                 DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                             ),
-                        );
+                        ));
+                        // Record hit-test row (wrap/truncation break)
+                        hit_rows.push(boundary.hit_row);
+                        hit_row_charpos_start = charpos;
+                        let geometry_transition = boundary.transition;
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -5272,27 +5252,21 @@ impl LayoutEngine {
                         current_line += 1;
                         need_line_number = lnum_enabled;
                     }
-                    let row_cursor =
-                        DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        });
                     x = content_x;
-                    // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
+                    let boundary = LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
                         row_extra_y: &mut row_extra_y,
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_begin_and_commit_next_text_matrix_row(
+                    .finish_boundary(DisplayRowBoundaryTarget::new(
+                        DisplayRowHitRange {
+                            charpos_start: hit_row_charpos_start,
+                            charpos_end: charpos,
+                        },
                         DisplayRowGeometryTransitionTarget::truncation(
                             DisplayRowGeometryDefaults {
                                 text_y,
@@ -5304,7 +5278,10 @@ impl LayoutEngine {
                             x,
                             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                         ),
-                    );
+                    ));
+                    // Record hit-test row (wrap/truncation break)
+                    hit_rows.push(boundary.hit_row);
+                    let geometry_transition = boundary.transition;
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -5336,27 +5313,21 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let row_cursor =
-                        DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        });
                     x = content_x;
-                    // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
+                    let boundary = LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
                         row_extra_y: &mut row_extra_y,
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_begin_and_commit_next_text_matrix_row(
+                    .finish_boundary(DisplayRowBoundaryTarget::new(
+                        DisplayRowHitRange {
+                            charpos_start: hit_row_charpos_start,
+                            charpos_end: charpos,
+                        },
                         DisplayRowGeometryTransitionTarget::visual_wrap(
                             DisplayRowGeometryDefaults {
                                 text_y,
@@ -5368,7 +5339,10 @@ impl LayoutEngine {
                             x,
                             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                         ),
-                    );
+                    ));
+                    // Record hit-test row (wrap/truncation break)
+                    hit_rows.push(boundary.hit_row);
+                    let geometry_transition = boundary.transition;
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -5402,27 +5376,21 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let row_cursor =
-                        DisplayRowGeometryCursor::from_legacy_vars(LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        });
                     x = content_x;
-                    // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
+                    let boundary = LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
                         row_extra_y: &mut row_extra_y,
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_begin_and_commit_next_text_matrix_row(
+                    .finish_boundary(DisplayRowBoundaryTarget::new(
+                        DisplayRowHitRange {
+                            charpos_start: hit_row_charpos_start,
+                            charpos_end: charpos,
+                        },
                         DisplayRowGeometryTransitionTarget::visual_wrap(
                             DisplayRowGeometryDefaults {
                                 text_y,
@@ -5434,7 +5402,10 @@ impl LayoutEngine {
                             x,
                             DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                         ),
-                    );
+                    ));
+                    // Record hit-test row (wrap/truncation break)
+                    hit_rows.push(boundary.hit_row);
+                    let geometry_transition = boundary.transition;
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,

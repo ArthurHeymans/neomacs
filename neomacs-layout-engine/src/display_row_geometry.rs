@@ -96,28 +96,33 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_max_ascent = state.ascent;
     }
 
-    pub(crate) fn finish_begin_and_commit_next_text_matrix_row(
+    pub(crate) fn finish_boundary(
         self,
-        target: DisplayRowGeometryTransitionTarget<'_>,
-    ) -> TextMatrixRowGeometryTransition {
+        target: DisplayRowBoundaryTarget<'_>,
+    ) -> DisplayRowBoundaryTransition {
         let mut row_cursor = DisplayRowGeometryCursor::from_state(
             DisplayRowGeometryState::from_legacy(self.snapshot()),
         );
+        let hit_row =
+            row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
         let transition = row_cursor.finish_and_begin_next_text_matrix_row(
-            target.defaults,
-            target.kind,
-            target.row_base,
-            target.col,
-            target.x,
+            target.transition.defaults,
+            target.transition.kind,
+            target.transition.row_base,
+            target.transition.col,
+            target.transition.x,
         );
-        let commit_target = match target.row_y_recording {
+        let commit_target = match target.transition.row_y_recording {
             DisplayRowYRecording::None => DisplayRowGeometryCommitTarget::silent(self),
             DisplayRowYRecording::RowYPositions(row_y_positions) => {
                 DisplayRowGeometryCommitTarget::recording_row_y(self, row_y_positions)
             }
         };
         row_cursor.commit(commit_target);
-        transition
+        DisplayRowBoundaryTransition {
+            hit_row,
+            transition,
+        }
     }
 }
 
@@ -152,6 +157,23 @@ pub(crate) struct DisplayRowGeometryTransitionTarget<'a> {
     col: usize,
     x: f32,
     row_y_recording: DisplayRowYRecording<'a>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowHitRange {
+    pub(crate) charpos_start: i64,
+    pub(crate) charpos_end: i64,
+}
+
+pub(crate) struct DisplayRowBoundaryTarget<'a> {
+    hit_range: DisplayRowHitRange,
+    transition: DisplayRowGeometryTransitionTarget<'a>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowBoundaryTransition {
+    pub(crate) hit_row: HitRow,
+    pub(crate) transition: TextMatrixRowGeometryTransition,
 }
 
 impl DisplayRowYRecorder<'_> {
@@ -254,6 +276,18 @@ impl<'a> DisplayRowGeometryTransitionTarget<'a> {
     }
 }
 
+impl<'a> DisplayRowBoundaryTarget<'a> {
+    pub(crate) fn new(
+        hit_range: DisplayRowHitRange,
+        transition: DisplayRowGeometryTransitionTarget<'a>,
+    ) -> Self {
+        Self {
+            hit_range,
+            transition,
+        }
+    }
+}
+
 impl DisplayRowGeometryState {
     pub(crate) fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
         Self {
@@ -346,10 +380,6 @@ impl DisplayRowGeometryCursor {
             row_extra_y: state.row_extra_y,
             metrics: CurrentDisplayRowMetrics::new(state.height, state.ascent),
         }
-    }
-
-    pub(crate) fn from_legacy_vars(vars: LegacyDisplayRowGeometryVars<'_>) -> Self {
-        Self::from_state(DisplayRowGeometryState::from_legacy(vars.snapshot()))
     }
 
     pub(crate) fn commit(&self, mut target: DisplayRowGeometryCommitTarget<'_>) {
