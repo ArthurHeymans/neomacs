@@ -418,11 +418,125 @@ pub struct ProcessManager {
     next_id: ProcessId,
     /// Environment variable overrides (for `setenv`/`getenv`).
     env_overrides: HashMap<LispString, Option<LispString>>,
-    /// I/O multiplexer for child process stdout/stderr pipes.
+    wait_backend: ProcessWaitBackend,
+}
+
+struct ProcessWaitBackend {
+    /// I/O multiplexer for process descriptors and render-thread input wakeups.
     poller: Option<polling::Poller>,
     /// Render-thread input wakeup fd registered in the shared wait poller.
     #[cfg(unix)]
-    wait_input_wakeup_fd: Option<std::os::unix::io::RawFd>,
+    input_wakeup_fd: Option<std::os::unix::io::RawFd>,
+}
+
+impl ProcessWaitBackend {
+    fn new() -> Self {
+        Self {
+            poller: polling::Poller::new().ok(),
+            #[cfg(unix)]
+            input_wakeup_fd: None,
+        }
+    }
+
+    fn poller(&self) -> Option<&polling::Poller> {
+        self.poller.as_ref()
+    }
+
+    #[cfg(unix)]
+    fn register_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
+        let Some(ref poller) = self.poller else {
+            self.input_wakeup_fd = None;
+            return;
+        };
+
+        if let Some(old_fd) = self.input_wakeup_fd.take() {
+            let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(old_fd) };
+            let _ = poller.delete(borrowed);
+        }
+
+        // SAFETY: the fd is owned by the display communication layer and
+        // remains valid for the evaluator lifetime after `init_input_system`.
+        let registered = unsafe {
+            poller.add_with_mode(
+                fd,
+                polling::Event::readable(INPUT_WAKEUP_EVENT_KEY),
+                polling::PollMode::Level,
+            )
+        }
+        .is_ok();
+
+        if registered {
+            self.input_wakeup_fd = Some(fd);
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn register_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
+
+    fn has_input_wakeup(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.poller.is_some() && self.input_wakeup_fd.is_some()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+
+    fn wait_for_events(
+        &self,
+        processes: &HashMap<ProcessId, Process>,
+        timeout: std::time::Duration,
+        interest: WaitBackendInterest,
+    ) -> Option<WaitBackendEvents> {
+        if let Some(ref poller) = self.poller {
+            let deadline = Instant::now() + timeout;
+            loop {
+                let now = Instant::now();
+                let wait_time = if timeout.is_zero() {
+                    Duration::ZERO
+                } else {
+                    deadline.saturating_duration_since(now)
+                };
+                let mut events = polling::Events::new();
+                match poller.wait(&mut events, Some(wait_time)) {
+                    Ok(_) => {
+                        let mut backend = WaitBackendEvents::default();
+                        for event in events.iter() {
+                            if event.key == INPUT_WAKEUP_EVENT_KEY {
+                                if interest.input_wakeup {
+                                    backend.input_wakeup = true;
+                                }
+                                continue;
+                            }
+                            if interest.processes {
+                                let id = event.key as ProcessId;
+                                if processes.get(&id).is_some_and(|process| {
+                                    process_status_has_readable_process_io(&process.status)
+                                }) {
+                                    backend.ready_processes.push(id);
+                                }
+                            }
+                        }
+                        if backend.input_wakeup
+                            || !backend.ready_processes.is_empty()
+                            || timeout.is_zero()
+                            || Instant::now() >= deadline
+                        {
+                            return Some(backend);
+                        }
+                        std::thread::yield_now();
+                    }
+                    Err(_) => {
+                        return None;
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 struct AcceptedNetworkConnection {
@@ -1082,9 +1196,7 @@ impl ProcessManager {
             deleted_processes: HashMap::new(),
             next_id: 1,
             env_overrides: HashMap::new(),
-            poller: polling::Poller::new().ok(),
-            #[cfg(unix)]
-            wait_input_wakeup_fd: None,
+            wait_backend: ProcessWaitBackend::new(),
         }
     }
 
@@ -1365,7 +1477,7 @@ impl ProcessManager {
 
                 // Register stdout with the poller where the platform exposes
                 // child pipe descriptors as pollable sources.
-                if let (Some(poller), Some(stdout)) = (&self.poller, &stdout) {
+                if let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout) {
                     Self::register_child_stdout_with_poller(poller, stdout, id);
                 }
 
@@ -1487,7 +1599,7 @@ impl ProcessManager {
                 let flags = libc::fcntl(master_fd, libc::F_GETFL);
                 libc::fcntl(master_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
             }
-            if let Some(ref poller) = self.poller {
+            if let Some(poller) = self.wait_backend.poller() {
                 let _ = Self::register_readable_raw_fd(poller, master_fd, id);
             }
         }
@@ -1655,44 +1767,16 @@ impl ProcessManager {
 
     #[cfg(unix)]
     pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
-        let Some(ref poller) = self.poller else {
-            self.wait_input_wakeup_fd = None;
-            return;
-        };
-
-        if let Some(old_fd) = self.wait_input_wakeup_fd.take() {
-            let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(old_fd) };
-            let _ = poller.delete(borrowed);
-        }
-
-        // SAFETY: the fd is owned by the display communication layer and
-        // remains valid for the evaluator lifetime after `init_input_system`.
-        let registered = unsafe {
-            poller.add_with_mode(
-                fd,
-                polling::Event::readable(INPUT_WAKEUP_EVENT_KEY),
-                polling::PollMode::Level,
-            )
-        }
-        .is_ok();
-
-        if registered {
-            self.wait_input_wakeup_fd = Some(fd);
-        }
+        self.wait_backend.register_input_wakeup_fd(fd);
     }
 
     #[cfg(not(unix))]
-    pub(crate) fn register_wait_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
+    pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: super::eval::WakeupFd) {
+        self.wait_backend.register_input_wakeup_fd(fd);
+    }
 
     pub(crate) fn has_wait_input_wakeup_backend(&self) -> bool {
-        #[cfg(unix)]
-        {
-            self.poller.is_some() && self.wait_input_wakeup_fd.is_some()
-        }
-        #[cfg(not(unix))]
-        {
-            false
-        }
+        self.wait_backend.has_input_wakeup()
     }
 
     pub(crate) fn wait_for_backend_events(
@@ -1700,57 +1784,13 @@ impl ProcessManager {
         timeout: std::time::Duration,
         interest: WaitBackendInterest,
     ) -> Option<WaitBackendEvents> {
-        if let Some(ref poller) = self.poller {
-            let deadline = Instant::now() + timeout;
-            loop {
-                let now = Instant::now();
-                let wait_time = if timeout.is_zero() {
-                    Duration::ZERO
-                } else {
-                    deadline.saturating_duration_since(now)
-                };
-                let mut events = polling::Events::new();
-                match poller.wait(&mut events, Some(wait_time)) {
-                    Ok(_) => {
-                        let mut backend = WaitBackendEvents::default();
-                        for event in events.iter() {
-                            if event.key == INPUT_WAKEUP_EVENT_KEY {
-                                if interest.input_wakeup {
-                                    backend.input_wakeup = true;
-                                }
-                                continue;
-                            }
-                            if interest.processes {
-                                let id = event.key as ProcessId;
-                                if self.processes.get(&id).is_some_and(|process| {
-                                    process_status_has_readable_process_io(&process.status)
-                                }) {
-                                    backend.ready_processes.push(id);
-                                }
-                            }
-                        }
-                        if backend.input_wakeup
-                            || !backend.ready_processes.is_empty()
-                            || timeout.is_zero()
-                            || Instant::now() >= deadline
-                        {
-                            return Some(backend);
-                        }
-                        std::thread::yield_now();
-                    }
-                    Err(_) => {
-                        return None;
-                    }
-                }
-            }
-        }
-
-        None
+        self.wait_backend
+            .wait_for_events(&self.processes, timeout, interest)
     }
 
     fn deactivate_network_process_io(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id) {
-            Self::unregister_process_poll_sources(self.poller.as_ref(), proc);
+            Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
             proc.tls_stream = None;
             proc.network_socket = None;
             proc.gnutls_initstage = GnutlsInitStage::Empty;
@@ -1760,7 +1800,7 @@ impl ProcessManager {
     /// Kill (remove) a process by id.  Returns true if found.
     pub fn kill_process(&mut self, id: ProcessId) -> bool {
         if let Some(proc) = self.processes.get_mut(&id) {
-            Self::unregister_process_poll_sources(self.poller.as_ref(), proc);
+            Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
             if let Some(child) = proc.child.as_mut() {
                 let _ = child.kill();
             }
@@ -1781,7 +1821,7 @@ impl ProcessManager {
     /// Delete a process entirely.
     pub fn delete_process(&mut self, id: ProcessId) -> bool {
         if let Some(mut proc) = self.processes.remove(&id) {
-            Self::unregister_process_poll_sources(self.poller.as_ref(), &proc);
+            Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
             if let Some(child) = proc.child.as_mut() {
                 let _ = child.kill();
             }
@@ -1962,7 +2002,7 @@ impl ProcessManager {
     /// `wait_for_output` wakes up when data arrives.
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
-        if let Some(ref poller) = self.poller {
+        if let Some(poller) = self.wait_backend.poller() {
             if let Some(tls) = proc.tls_stream.as_ref() {
                 Self::register_readable_source(poller, tls.tcp_stream(), id)?;
                 return Ok(());
