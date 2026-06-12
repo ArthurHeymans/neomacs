@@ -11,10 +11,10 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowMetrics,
-    TextMatrixRowTransition, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
-    finish_and_begin_text_matrix_row, finish_and_maybe_begin_text_matrix_row,
-    finish_text_matrix_row,
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
+    TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput, WindowOutputEmitter,
+    begin_text_matrix_row, finish_and_begin_text_matrix_row,
+    finish_and_maybe_begin_text_matrix_row, finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -526,12 +526,6 @@ struct DisplayRowGeometryCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct DisplayRowGeometryTransition {
-    finished_row: TextMatrixRowMetrics,
-    begin_row: TextMatrixRowBegin,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 struct LegacyDisplayRowGeometry {
     row: usize,
     y: f32,
@@ -723,10 +717,10 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
-    ) -> DisplayRowGeometryTransition {
+    ) -> TextMatrixRowGeometryTransition {
         let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
         let begin_row = self.text_matrix_row_begin(row_base, col, x);
-        DisplayRowGeometryTransition {
+        TextMatrixRowGeometryTransition {
             finished_row,
             begin_row,
         }
@@ -1823,8 +1817,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     builder,
                     output_emitter,
                     evaluator,
-                    geometry_transition.finished_row,
-                    geometry_transition.begin_row,
+                    geometry_transition,
                 );
                 true
             }
@@ -4316,8 +4309,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition.finished_row,
-                        geometry_transition.begin_row,
+                        geometry_transition,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -4956,8 +4948,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition.finished_row,
-                            geometry_transition.begin_row,
+                            geometry_transition,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5091,8 +5082,7 @@ impl LayoutEngine {
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    geometry_transition.finished_row,
-                    geometry_transition.begin_row,
+                    geometry_transition,
                     max_rows,
                 );
                 if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5225,8 +5215,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition.finished_row,
-                            geometry_transition.begin_row,
+                            geometry_transition,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5283,8 +5272,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition.finished_row,
-                            geometry_transition.begin_row,
+                            geometry_transition,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5597,8 +5585,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition.finished_row,
-                        geometry_transition.begin_row,
+                        geometry_transition,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5662,8 +5649,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition.finished_row,
-                        geometry_transition.begin_row,
+                        geometry_transition,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5729,8 +5715,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition.finished_row,
-                        geometry_transition.begin_row,
+                        geometry_transition,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {

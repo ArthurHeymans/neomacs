@@ -790,7 +790,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_text_matrix_row_begin() 
 
     assert_eq!(
         transition,
-        DisplayRowGeometryTransition {
+        TextMatrixRowGeometryTransition {
             finished_row: TextMatrixRowMetrics {
                 y: 42.0,
                 height: 24.0,

@@ -1,6 +1,7 @@
 use super::ChromeRowOutput;
 use super::DisplayProgressSink;
 use super::TextMatrixRowBegin;
+use super::TextMatrixRowGeometryTransition;
 use super::TextMatrixRowMetrics;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
@@ -428,17 +429,19 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         &mut builder,
         &mut emitter,
         &mut eval,
-        TextMatrixRowMetrics {
-            y: 0.0,
-            height: 16.0,
-            ascent: 12.0,
-        },
-        TextMatrixRowBegin {
-            matrix_row: 1,
-            row: 1,
-            col: 0,
-            y: 16.0,
-            x: 0.0,
+        TextMatrixRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 0.0,
+                height: 16.0,
+                ascent: 12.0,
+            },
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 1,
+                row: 1,
+                col: 0,
+                y: 16.0,
+                x: 0.0,
+            },
         },
         1,
     );
