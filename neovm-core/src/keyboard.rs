@@ -3969,7 +3969,7 @@ impl crate::emacs_core::eval::Context {
             }
 
             self.redisplay_for_input_wait();
-            let _ = self.service_wait_request_once(&WaitRequest::service_once(true))?;
+            self.service_input_wait_with_redisplay()?;
 
             // GNU read_char re-checks Vunread_command_events after idle
             // timers/sit-for/read-event can requeue input, before consulting
@@ -5227,7 +5227,7 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn fire_pending_timers(&mut self) {
-        let _ = self.service_wait_request_once(&WaitRequest::timer_service(true));
+        let _ = self.service_timers_with_redisplay();
     }
 
     pub(crate) fn record_input_event(&mut self, event: Value) {

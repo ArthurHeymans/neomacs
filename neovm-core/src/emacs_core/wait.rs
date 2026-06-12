@@ -620,6 +620,14 @@ impl super::eval::Context {
         self.service_wait_request_once(&WaitRequest::input_pending_with_timers())
     }
 
+    pub(crate) fn service_input_wait_with_redisplay(&mut self) -> Result<(), Flow> {
+        self.service_wait_request_once(&WaitRequest::service_once(true))
+    }
+
+    pub(crate) fn service_timers_with_redisplay(&mut self) -> Result<(), Flow> {
+        self.service_wait_request_once(&WaitRequest::timer_service(true))
+    }
+
     fn service_wait_request_once_outcome(
         &mut self,
         request: &WaitRequest,
