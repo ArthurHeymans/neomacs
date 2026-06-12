@@ -68,7 +68,7 @@ cranelift-module = { version = "0.131.0", optional = true }
 windows-sys.workspace = true
 
 [features]
-default = []
+default = ["jit"]
 sound = ["rodio"]
 # Tiered JIT execution subsystem (src/emacs_core/jit.rs +
 # bytecode/ELISP_VM_MODERNIZATION.md). Under construction; default OFF so
