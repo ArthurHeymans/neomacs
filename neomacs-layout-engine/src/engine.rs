@@ -3958,7 +3958,7 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    current_face.measurement_face().advance_for_char(
+                                    current_face.advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
                                         face_metrics.char_width,
@@ -4093,7 +4093,7 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_char_width = current_face.measurement_face().advance_for_char(
+                        let display_char_width = current_face.advance_for_char(
                             &mut self.font_metrics,
                             display_ch,
                             face_metrics.char_width,
@@ -5021,14 +5021,14 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => current_face.measurement_face().advance_for_char(
+                    None => current_face.advance_for_char(
                         &mut self.font_metrics,
                         ch,
                         face_metrics.char_width * char_cols as f32,
                     ),
                 }
             } else {
-                current_face.measurement_face().advance_for_char(
+                current_face.advance_for_char(
                     &mut self.font_metrics,
                     ch,
                     face_metrics.char_width * char_cols as f32,

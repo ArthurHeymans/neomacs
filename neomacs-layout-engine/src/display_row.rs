@@ -744,6 +744,16 @@ impl DisplayRowActiveFace {
         self.metrics
     }
 
+    pub(crate) fn advance_for_char(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        self.measurement_face
+            .advance_for_char(font_metrics, ch, fallback_advance_px)
+    }
+
     pub(crate) fn background(&self) -> Color {
         self.background
     }

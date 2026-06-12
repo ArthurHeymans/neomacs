@@ -1578,6 +1578,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
             .advance_for_char(&mut font_metrics, 'x', 7.2),
         7.0
     );
+    assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
 }
 
 #[test]
