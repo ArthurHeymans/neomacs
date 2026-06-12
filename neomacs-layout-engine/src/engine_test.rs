@@ -1,6 +1,8 @@
 use super::*;
 use crate::display_item::RenderFaceRef;
-use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy};
+use crate::display_row::{
+    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
+};
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -1476,13 +1478,25 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
     );
     let mut default_face = resolver.default_face().clone();
     default_face.font_char_width = 8.0;
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(7, &default_face, None, 8.0);
+    let mut no_font_metrics = None;
+    let measured_face = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        7,
+        &default_face,
+        None,
+        8.0,
+        crate::display_row::DisplayRowFallbackMetrics {
+            char_width: 8.0,
+            row_height: 16.0,
+            ascent: 12.0,
+        },
+        &mut no_font_metrics,
+    );
+    let active_face_state = DisplayRowActiveFaceState::new(default_face, measured_face);
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
-    let mut measurer = ReplacementStringItemMeasurer {
-        font_metrics_svc: &mut font_metrics,
-        measurement_face,
-    };
+    let mut measurer = ReplacementStringItemMeasurer::from_active_face_state(
+        &mut font_metrics,
+        &active_face_state,
+    );
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
         RenderFaceRef::FaceId(7),

@@ -23,12 +23,11 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowGlyphMeasurementFace, DisplayRowMeasuredFaceMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
-    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    insert_resolved_display_row_face, install_measured_frame_chrome_row,
-    install_rendered_display_row,
+    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
+    install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -692,7 +691,19 @@ fn resolve_cursor_geometry(
 
 struct ReplacementStringItemMeasurer<'a> {
     font_metrics_svc: &'a mut Option<FontMetricsService>,
-    measurement_face: DisplayRowGlyphMeasurementFace,
+    active_face_state: DisplayRowActiveFaceState,
+}
+
+impl<'a> ReplacementStringItemMeasurer<'a> {
+    fn from_active_face_state(
+        font_metrics_svc: &'a mut Option<FontMetricsService>,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) -> Self {
+        Self {
+            font_metrics_svc,
+            active_face_state: active_face_state.clone(),
+        }
+    }
 }
 
 impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
@@ -705,7 +716,7 @@ impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
             return DisplayRowItemMeasurement::Default;
         };
         DisplayRowItemMeasurement::TextRun(
-            self.measurement_face
+            self.active_face_state
                 .text_run_measurement(self.font_metrics_svc, text.text.as_ref()),
         )
     }
@@ -4061,10 +4072,11 @@ impl LayoutEngine {
                                         char_h,
                                     ),
                                 );
-                                let mut item_measurer = ReplacementStringItemMeasurer {
-                                    font_metrics_svc: &mut self.font_metrics,
-                                    measurement_face: active_face_state.measurement_face().clone(),
-                                };
+                                let mut item_measurer =
+                                    ReplacementStringItemMeasurer::from_active_face_state(
+                                        &mut self.font_metrics,
+                                        &active_face_state,
+                                    );
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,

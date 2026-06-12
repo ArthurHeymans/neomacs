@@ -728,10 +728,6 @@ pub(crate) struct DisplayRowActiveFaceMeasurementState {
 }
 
 impl DisplayRowActiveFaceMeasurementState {
-    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
-        &self.measurement_face
-    }
-
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.metrics
     }
@@ -799,10 +795,6 @@ impl DisplayRowActiveFaceState {
 
     pub(crate) fn resolved_face(&self) -> &ResolvedFace {
         self.render.resolved_face()
-    }
-
-    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
-        self.measurement.measurement_face()
     }
 
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
