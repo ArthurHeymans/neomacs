@@ -1,4 +1,6 @@
 use super::*;
+use crate::display_row::DisplayRowGeometry;
+use crate::display_row_builder::DisplayTabPolicy;
 use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
 };
@@ -753,6 +755,30 @@ fn display_row_geometry_state_resolves_glyph_y_with_offset() {
     };
 
     assert_eq!(geometry.glyph_y(2.5), 71.5);
+}
+
+#[test]
+fn display_row_geometry_state_builds_render_geometry() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let tab_policy = DisplayTabPolicy::every(8);
+
+    assert_eq!(
+        geometry.render_geometry(120.0, 16.0, 7.0, 12.0, tab_policy.clone()),
+        DisplayRowGeometry {
+            y: 69.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 7.0,
+            ascent: 12.0,
+            tab_policy,
+        }
+    );
 }
 
 #[test]

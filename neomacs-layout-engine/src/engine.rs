@@ -1541,14 +1541,13 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         }
 
         let row_spec = DisplayRowSpec {
-            geometry: DisplayRowGeometry {
-                y: geometry.y,
-                width: max_x - content_x,
-                height: char_h,
-                char_width: face_char_w,
-                ascent: default_row_ascent,
-                tab_policy: text_display_tab_policy(content_x, params),
-            },
+            geometry: geometry.render_geometry(
+                max_x - content_x,
+                char_h,
+                face_char_w,
+                default_row_ascent,
+                text_display_tab_policy(content_x, params),
+            ),
             render_bounds: DisplayRowRenderBounds {
                 start: DisplayRowPosition {
                     x_px: *x,
