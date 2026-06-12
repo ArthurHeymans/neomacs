@@ -13,7 +13,7 @@
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
-use crate::emacs_core::wait::{WaitCompletion, WaitRequest};
+use crate::emacs_core::wait::WaitCompletion;
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;

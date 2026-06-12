@@ -12,7 +12,8 @@ use crate::keyboard::SpecialInputServiceOutcome;
 
 use super::error::Flow;
 use super::process::{
-    ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest, ProcessWaitEvents,
+    ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest, ProcessOutputWaitRequest,
+    ProcessOutputWaitTiming, ProcessWaitEvents,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,20 +37,11 @@ impl WaitDeadline {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ProcessOutputWaitTiming {
-    Poll,
-    For(Duration),
-    Forever,
-}
-
-impl ProcessOutputWaitTiming {
-    fn into_deadline(self) -> WaitDeadline {
-        match self {
-            Self::Poll => WaitDeadline::Poll,
-            Self::For(duration) => WaitDeadline::Until(Instant::now() + duration),
-            Self::Forever => WaitDeadline::Forever,
-        }
+fn process_output_wait_deadline(timing: ProcessOutputWaitTiming) -> WaitDeadline {
+    match timing {
+        ProcessOutputWaitTiming::Poll => WaitDeadline::Poll,
+        ProcessOutputWaitTiming::For(duration) => WaitDeadline::Until(Instant::now() + duration),
+        ProcessOutputWaitTiming::Forever => WaitDeadline::Forever,
     }
 }
 
@@ -157,6 +149,23 @@ pub(crate) struct WaitRequest {
 }
 
 impl WaitRequest {
+    fn accept_process_output_request(request: ProcessOutputWaitRequest) -> Self {
+        match (request.target_process(), request.allow_timers()) {
+            (Some(id), true) => Self::accept_target_process_output_with_timers(
+                request.timing(),
+                id,
+                request.just_this_one(),
+            ),
+            (Some(id), false) => Self::accept_target_process_output_without_timers(
+                request.timing(),
+                id,
+                request.just_this_one(),
+            ),
+            (None, true) => Self::accept_any_process_output_with_timers(request.timing()),
+            (None, false) => Self::accept_any_process_output_without_timers(request.timing()),
+        }
+    }
+
     fn accept_process_output(
         deadline: WaitDeadline,
         processes: ProcessWaitPolicy,
@@ -187,13 +196,19 @@ impl WaitRequest {
     }
 
     pub(crate) fn accept_any_process_output_with_timers(timing: ProcessOutputWaitTiming) -> Self {
-        Self::accept_process_output_with_timers(timing.into_deadline(), ProcessWaitPolicy::Any)
+        Self::accept_process_output_with_timers(
+            process_output_wait_deadline(timing),
+            ProcessWaitPolicy::Any,
+        )
     }
 
     pub(crate) fn accept_any_process_output_without_timers(
         timing: ProcessOutputWaitTiming,
     ) -> Self {
-        Self::accept_process_output_without_timers(timing.into_deadline(), ProcessWaitPolicy::Any)
+        Self::accept_process_output_without_timers(
+            process_output_wait_deadline(timing),
+            ProcessWaitPolicy::Any,
+        )
     }
 
     pub(crate) fn accept_target_process_output_with_timers(
@@ -202,7 +217,7 @@ impl WaitRequest {
         just_this_one: bool,
     ) -> Self {
         Self::accept_process_output_with_timers(
-            timing.into_deadline(),
+            process_output_wait_deadline(timing),
             ProcessWaitPolicy::target(process, just_this_one),
         )
     }
@@ -213,7 +228,7 @@ impl WaitRequest {
         just_this_one: bool,
     ) -> Self {
         Self::accept_process_output_without_timers(
-            timing.into_deadline(),
+            process_output_wait_deadline(timing),
             ProcessWaitPolicy::target(process, just_this_one),
         )
     }
@@ -665,6 +680,23 @@ impl super::eval::Context {
             .has_target_process_activity())
     }
 
+    pub(crate) fn service_process_output_wait_once_has_target_process_activity(
+        &mut self,
+        request: ProcessOutputWaitRequest,
+    ) -> Result<bool, Flow> {
+        let wait = WaitRequest::accept_process_output_request(request);
+        self.service_wait_request_once_has_target_process_activity(&wait)
+    }
+
+    pub(crate) fn service_process_output_wait_source_events_have_target_process_activity(
+        &mut self,
+        request: ProcessOutputWaitRequest,
+        events: ProcessWaitEvents,
+    ) -> Result<bool, Flow> {
+        let wait = WaitRequest::accept_process_output_request(request);
+        self.service_wait_request_source_events_have_target_process_activity(&wait, events)
+    }
+
     fn service_wait_request_block_activity(
         &mut self,
         request: &WaitRequest,
@@ -742,6 +774,13 @@ impl super::eval::Context {
                 return Ok(completion);
             }
         }
+    }
+
+    pub(crate) fn wait_for_process_output(
+        &mut self,
+        request: ProcessOutputWaitRequest,
+    ) -> Result<WaitCompletion, Flow> {
+        self.wait_reading_process_output(WaitRequest::accept_process_output_request(request))
     }
 
     pub(crate) fn wait_until(&mut self, deadline: Instant) -> Result<WaitCompletion, Flow> {

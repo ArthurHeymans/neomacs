@@ -41,7 +41,7 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
-use super::wait::{ProcessOutputWaitTiming, WaitCompletion, WaitRequest};
+use super::wait::WaitCompletion;
 
 /// OS socket owned by a network process.
 ///
@@ -164,6 +164,67 @@ use crate::window::FrameManager;
 
 /// Unique identifier for a process.
 pub type ProcessId = u64;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessOutputWaitTiming {
+    Poll,
+    For(Duration),
+    Forever,
+}
+
+impl ProcessOutputWaitTiming {
+    pub(crate) fn is_poll(self) -> bool {
+        matches!(self, Self::Poll)
+    }
+
+    pub(crate) fn is_finite(self) -> bool {
+        matches!(self, Self::For(_))
+    }
+
+    pub(crate) fn is_forever(self) -> bool {
+        matches!(self, Self::Forever)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProcessOutputWaitRequest {
+    timing: ProcessOutputWaitTiming,
+    target_process: Option<ProcessId>,
+    just_this_one: bool,
+    allow_timers: bool,
+}
+
+impl ProcessOutputWaitRequest {
+    pub(crate) fn new(
+        timing: ProcessOutputWaitTiming,
+        target_process: Option<ProcessId>,
+        just_this_one: bool,
+        allow_timers: bool,
+    ) -> Self {
+        Self {
+            timing,
+            target_process,
+            just_this_one,
+            allow_timers,
+        }
+    }
+
+    pub(crate) fn timing(self) -> ProcessOutputWaitTiming {
+        self.timing
+    }
+
+    pub(crate) fn target_process(self) -> Option<ProcessId> {
+        self.target_process
+    }
+
+    pub(crate) fn just_this_one(self) -> bool {
+        self.just_this_one
+    }
+
+    pub(crate) fn allow_timers(self) -> bool {
+        self.allow_timers
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProcessOutputServiceRequest {
@@ -7545,12 +7606,24 @@ fn builtin_make_process_impl_with_environment(
 
 #[derive(Clone, Copy, Debug)]
 struct AcceptProcessOutputRequest {
-    wait: WaitRequest,
+    wait: ProcessOutputWaitRequest,
     target_process: Option<ProcessId>,
     just_this_one: bool,
 }
 
 impl AcceptProcessOutputRequest {
+    fn wait_timing_is_poll(self) -> bool {
+        self.wait.timing().is_poll()
+    }
+
+    fn wait_timing_is_finite(self) -> bool {
+        self.wait.timing().is_finite()
+    }
+
+    fn wait_timing_is_forever(self) -> bool {
+        self.wait.timing().is_forever()
+    }
+
     fn completes_on_any_process_activity(self) -> bool {
         self.target_process.is_none()
     }
@@ -7653,19 +7726,8 @@ fn parse_accept_process_output_request(
     } else {
         ProcessOutputWaitTiming::Poll
     };
-    let wait = match (target_id, allow_timers) {
-        (Some(id), true) => {
-            WaitRequest::accept_target_process_output_with_timers(timing, id, just_this_one)
-        }
-        (Some(id), false) => {
-            WaitRequest::accept_target_process_output_without_timers(timing, id, just_this_one)
-        }
-        (None, true) => WaitRequest::accept_any_process_output_with_timers(timing),
-        (None, false) => WaitRequest::accept_any_process_output_without_timers(timing),
-    };
-
     Ok(Some(AcceptProcessOutputRequest {
-        wait,
+        wait: ProcessOutputWaitRequest::new(timing, target_id, just_this_one, allow_timers),
         target_process: target_id,
         just_this_one,
     }))
@@ -8444,7 +8506,7 @@ pub(crate) fn builtin_accept_process_output(
         return Ok(Value::NIL);
     };
 
-    match eval.wait_reading_process_output(request.wait)? {
+    match eval.wait_for_process_output(request.wait)? {
         WaitCompletion::ProcessActivity => {
             accept_process_output_run_target_follow_up(eval, request)?;
             Ok(Value::T)
@@ -8471,12 +8533,12 @@ fn accept_process_output_run_target_follow_up(
     loop {
         let events = eval.processes.wait_for_process_events(Duration::ZERO);
         let target_activity = if events.has_ready_processes() {
-            eval.service_wait_request_source_events_have_target_process_activity(
-                &request.wait,
+            eval.service_process_output_wait_source_events_have_target_process_activity(
+                request.wait,
                 events,
             )?
         } else {
-            eval.service_wait_request_once_has_target_process_activity(&request.wait)?
+            eval.service_process_output_wait_once_has_target_process_activity(request.wait)?
         };
         if target_activity {
             idle_follow_up_polls = 0;
