@@ -1512,7 +1512,8 @@ fn display_text_run_measurement_plan_builds_from_shaped_glyphs() {
             GlyphAdvanceQuantization::PreserveLogicalPixels,
         );
 
-    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
     else {
         panic!("shaped glyphs should produce measured text-run advances");
     };

@@ -7,10 +7,15 @@ use crate::display_item::{
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::unicode::is_cluster_extender;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
+
+#[cfg(test)]
+pub(crate) use crate::display_text_run_measurement::DisplayTextRunAdvance;
+pub(crate) use crate::display_text_run_measurement::{
+    DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowLayout {
@@ -129,108 +134,6 @@ pub(crate) trait DisplayGlyphMeasurer {
 pub(crate) enum DisplayRowItemMeasurement {
     Default,
     TextRun(DisplayTextRunMeasurement),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayTextRunAdvance {
-    pub(crate) char_offset: usize,
-    pub(crate) byte_offset: usize,
-    pub(crate) advance_px: f32,
-}
-
-impl DisplayTextRunAdvance {
-    pub(crate) fn new(char_offset: usize, byte_offset: usize, advance_px: f32) -> Self {
-        Self {
-            char_offset,
-            byte_offset,
-            advance_px,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayTextRunByteAdvance {
-    pub(crate) byte_offset: usize,
-    pub(crate) advance_px: f32,
-}
-
-impl DisplayTextRunByteAdvance {
-    pub(crate) fn new(byte_offset: usize, advance_px: f32) -> Self {
-        Self {
-            byte_offset,
-            advance_px,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum DisplayTextRunMeasurement {
-    PerChar,
-    Measured(Vec<DisplayTextRunAdvance>),
-}
-
-impl DisplayTextRunMeasurement {
-    pub(crate) fn uniform_for_text(text: &str, advance_px: f32) -> Self {
-        if text.is_empty() {
-            return Self::PerChar;
-        }
-        let advance_px = if advance_px.is_finite() && advance_px >= 0.0 {
-            advance_px
-        } else {
-            0.0
-        };
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .map(|(char_offset, (byte_offset, _))| {
-                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
-            })
-            .collect();
-        Self::Measured(advances)
-    }
-
-    pub(crate) fn measured_advances(&self) -> Option<&[DisplayTextRunAdvance]> {
-        match self {
-            Self::PerChar => None,
-            Self::Measured(advances) => Some(advances),
-        }
-    }
-
-    pub(crate) fn base_char_byte_advances(
-        &self,
-        text: &str,
-        base_byte_offset: usize,
-    ) -> Vec<DisplayTextRunByteAdvance> {
-        let Self::Measured(advances) = self else {
-            return Vec::new();
-        };
-
-        advances
-            .iter()
-            .filter_map(|advance| {
-                let c = text.get(advance.byte_offset..)?.chars().next()?;
-                (!is_cluster_extender(c)).then_some(DisplayTextRunByteAdvance::new(
-                    base_byte_offset + advance.byte_offset,
-                    advance.advance_px,
-                ))
-            })
-            .collect()
-    }
-
-    fn advance_for(&self, char_offset: usize, byte_offset: usize) -> Option<f32> {
-        match self {
-            Self::PerChar => None,
-            Self::Measured(advances) => advances
-                .iter()
-                .find(|advance| {
-                    advance.char_offset == char_offset && advance.byte_offset == byte_offset
-                })
-                .and_then(|advance| {
-                    (advance.advance_px.is_finite() && advance.advance_px >= 0.0)
-                        .then_some(advance.advance_px)
-                }),
-        }
-    }
 }
 
 pub(crate) trait DisplayRowItemMeasurer {
