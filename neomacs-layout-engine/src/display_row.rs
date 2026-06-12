@@ -535,6 +535,10 @@ pub(crate) struct DisplayRowGlyphMeasurementFace {
 }
 
 impl DisplayRowGlyphMeasurementFace {
+    pub(crate) fn face_id(&self) -> u32 {
+        self.face.face_id
+    }
+
     pub(crate) fn with_mode(
         face: DisplayRowFace,
         mode: DisplayRowMeasurementMode,
@@ -639,6 +643,10 @@ pub(crate) struct DisplayRowMeasuredFace {
 }
 
 impl DisplayRowMeasuredFace {
+    pub(crate) fn face_id(&self) -> u32 {
+        self.measurement_face.face_id()
+    }
+
     pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
         &self.measurement_face
     }

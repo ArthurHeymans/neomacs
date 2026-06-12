@@ -1542,6 +1542,29 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
 }
 
 #[test]
+fn display_row_measured_face_exposes_face_identity() {
+    let base = base_face();
+    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let mut font_metrics = None;
+
+    let measured = policy.measured_face(
+        42,
+        &base,
+        None,
+        7.2,
+        DisplayRowFallbackMetrics {
+            char_width: 7.2,
+            row_height: 16.0,
+            ascent: 11.0,
+        },
+        &mut font_metrics,
+    );
+
+    assert_eq!(measured.face_id(), 42);
+    assert_eq!(measured.measurement_face().face_id(), 42);
+}
+
+#[test]
 fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
