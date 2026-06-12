@@ -3617,10 +3617,7 @@ impl LayoutEngine {
                             y,
                             glyph_y: y + raise_y_offset,
                         },
-                        DisplayRowAppendMetrics::from_active_measurement_state(
-                            &active_face_state.measurement,
-                            char_h,
-                        ),
+                        DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
                     );
                     let position = append_lisp_string_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -3686,8 +3683,8 @@ impl LayoutEngine {
                                 y,
                                 glyph_y: y + raise_y_offset,
                             },
-                            DisplayRowAppendMetrics::from_active_measurement_state(
-                                &active_face_state.measurement,
+                            DisplayRowAppendMetrics::from_active_face_state(
+                                &active_face_state,
                                 char_h,
                             ),
                         );
@@ -4060,8 +4057,8 @@ impl LayoutEngine {
                                         y,
                                         glyph_y: y + raise_y_offset,
                                     },
-                                    DisplayRowAppendMetrics::from_active_measurement_state(
-                                        &active_face_state.measurement,
+                                    DisplayRowAppendMetrics::from_active_face_state(
+                                        &active_face_state,
                                         char_h,
                                     ),
                                 );
@@ -4164,8 +4161,8 @@ impl LayoutEngine {
                                     y,
                                     glyph_y: y + raise_y_offset,
                                 },
-                                DisplayRowAppendMetrics::from_active_measurement_state(
-                                    &active_face_state.measurement,
+                                DisplayRowAppendMetrics::from_active_face_state(
+                                    &active_face_state,
                                     char_h,
                                 ),
                             );
@@ -4313,8 +4310,8 @@ impl LayoutEngine {
                                     y,
                                     glyph_y: y + raise_y_offset,
                                 },
-                                DisplayRowAppendMetrics::from_active_measurement_state(
-                                    &active_face_state.measurement,
+                                DisplayRowAppendMetrics::from_active_face_state(
+                                    &active_face_state,
                                     char_h,
                                 ),
                             );
@@ -4405,10 +4402,7 @@ impl LayoutEngine {
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_measurement_state(
-                        &active_face_state.measurement,
-                        char_h,
-                    ),
+                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
                 );
                 let measurement = active_face_state
                     .measurement
@@ -4826,10 +4820,7 @@ impl LayoutEngine {
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_measurement_state(
-                        &active_face_state.measurement,
-                        char_h,
-                    ),
+                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
                 );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -4880,10 +4871,7 @@ impl LayoutEngine {
                             y,
                             glyph_y: y + raise_y_offset,
                         },
-                        DisplayRowAppendMetrics::from_active_measurement_state(
-                            &active_face_state.measurement,
-                            char_h,
-                        ),
+                        DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
                     );
                     if let Some((_progress, position)) =
                         append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -4949,10 +4937,7 @@ impl LayoutEngine {
                         y,
                         glyph_y: y + raise_y_offset,
                     },
-                    DisplayRowAppendMetrics::from_active_measurement_state(
-                        &active_face_state.measurement,
-                        char_h,
-                    ),
+                    DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
                 );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -5373,10 +5358,7 @@ impl LayoutEngine {
                     y,
                     glyph_y: y + raise_y_offset,
                 },
-                DisplayRowAppendMetrics::from_active_measurement_state(
-                    &active_face_state.measurement,
-                    char_h,
-                ),
+                DisplayRowAppendMetrics::from_active_face_state(&active_face_state, char_h),
             );
             let buffer_text_fragment = DisplayTextFragment::buffer_text(
                 CharPos0::new(charpos as usize),
