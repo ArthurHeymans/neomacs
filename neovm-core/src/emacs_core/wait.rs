@@ -242,7 +242,7 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn input_pending_poll(timers: TimerWaitPolicy) -> Self {
+    fn input_pending_poll(timers: TimerWaitPolicy) -> Self {
         Self {
             deadline: WaitDeadline::Poll,
             keyboard: KeyboardWaitPolicy::YieldOnCommandInput,
@@ -251,6 +251,14 @@ impl WaitRequest {
             redisplay: false,
             special_input: SpecialInputWaitPolicy::ServiceOnly,
         }
+    }
+
+    pub(crate) fn input_pending_without_timers() -> Self {
+        Self::input_pending_poll(TimerWaitPolicy::Suppress)
+    }
+
+    pub(crate) fn input_pending_with_timers() -> Self {
+        Self::input_pending_poll(TimerWaitPolicy::Run)
     }
 
     pub(crate) fn timer_service(redisplay: bool) -> Self {
@@ -300,6 +308,10 @@ impl WaitRequest {
 
     fn services_special_input(self) -> bool {
         self.special_input.services_input()
+    }
+
+    fn runs_timers(self) -> bool {
+        self.timers.allow()
     }
 
     fn backend_interest(self) -> Option<WaitBackendInterest> {
@@ -925,6 +937,15 @@ mod tests {
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.process_policy(), ProcessWaitPolicy::None);
         assert!(!request.services_special_input());
+    }
+
+    #[test]
+    fn wait_request_input_pending_constructors_capture_timer_policy() {
+        let suppress = WaitRequest::input_pending_without_timers();
+        let run = WaitRequest::input_pending_with_timers();
+
+        assert!(!suppress.runs_timers());
+        assert!(run.runs_timers());
     }
 
     #[test]

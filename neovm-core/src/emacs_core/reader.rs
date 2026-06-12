@@ -7,7 +7,7 @@ use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
-use super::wait::{TimerWaitPolicy, WaitRequest};
+use super::wait::WaitRequest;
 use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1};
 use std::io::Write;
 use std::time::Duration;
@@ -2104,8 +2104,7 @@ pub(crate) fn builtin_input_pending_p(
     expect_max_args("input-pending-p", &args, 1)?;
     ctx.sync_keyboard_terminal_owner();
     let filter_events = ctx.input_pending_p_filters_events();
-    let _ =
-        ctx.service_wait_request_once(&WaitRequest::input_pending_poll(TimerWaitPolicy::Suppress))?;
+    let _ = ctx.service_wait_request_once(&WaitRequest::input_pending_without_timers())?;
 
     if input_pending_now(ctx, filter_events) {
         return Ok(Value::T);
@@ -2114,8 +2113,7 @@ pub(crate) fn builtin_input_pending_p(
     if args.first().is_some_and(|v| v.is_truthy()) {
         // GNU `input-pending-p' can run due timers here, but it does not
         // force a redisplay the way `detect_input_pending_run_timers' does.
-        let _ =
-            ctx.service_wait_request_once(&WaitRequest::input_pending_poll(TimerWaitPolicy::Run))?;
+        let _ = ctx.service_wait_request_once(&WaitRequest::input_pending_with_timers())?;
     }
 
     Ok(Value::bool_val(input_pending_now(ctx, filter_events)))
