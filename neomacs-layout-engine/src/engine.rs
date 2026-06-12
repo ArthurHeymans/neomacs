@@ -5824,26 +5824,14 @@ impl LayoutEngine {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
             if x < right_edge && row < max_rows {
-                let _ry = row_y_positions.y_for_row(
-                    row,
-                    DisplayRowYFallback {
-                        text_y,
-                        default_height: char_h,
-                        row_extra_y,
-                    },
-                );
+                let _ry = row_y_positions
+                    .y_for_row(row, current_row_geometry!().row_y_fallback(text_y, char_h));
             }
             // Then fill completely empty rows below
             let start_row = (row + 1).min(max_rows);
             for r in start_row..max_rows {
-                let ry = row_y_positions.y_for_row(
-                    r,
-                    DisplayRowYFallback {
-                        text_y,
-                        default_height: char_h,
-                        row_extra_y,
-                    },
-                );
+                let ry = row_y_positions
+                    .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
                 if ry + char_h > text_y + text_height {
                     break;
                 } // Don't extend past text area
@@ -5884,14 +5872,8 @@ impl LayoutEngine {
             if params.indicate_empty_lines > 0 {
                 let eob_start = row.min(max_rows);
                 for r in eob_start..max_rows {
-                    let _gy = row_y_positions.y_for_row(
-                        r,
-                        DisplayRowYFallback {
-                            text_y,
-                            default_height: char_h,
-                            row_extra_y,
-                        },
-                    );
+                    let _gy = row_y_positions
+                        .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
                     let _fringe_x = if params.indicate_empty_lines == 2 {
                         right_fringe_x
                     } else {
@@ -6046,14 +6028,8 @@ impl LayoutEngine {
 
         let has_pending_row_output = output_emitter.current_row_has_output();
         if row < max_rows && (charpos > hit_row_charpos_start || has_pending_row_output) {
-            let row_y_start = row_y_positions.y_for_row(
-                row,
-                DisplayRowYFallback {
-                    text_y,
-                    default_height: char_h,
-                    row_extra_y,
-                },
-            );
+            let row_y_start = row_y_positions
+                .y_for_row(row, current_row_geometry!().row_y_fallback(text_y, char_h));
             let row_cursor = DisplayRowGeometryCursor::from_state(
                 DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                     row,

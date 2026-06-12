@@ -427,6 +427,14 @@ impl DisplayRowGeometryState {
         row_y_positions.push(self.y);
     }
 
+    pub(crate) fn row_y_fallback(&self, text_y: f32, default_height: f32) -> DisplayRowYFallback {
+        DisplayRowYFallback {
+            text_y,
+            default_height,
+            row_extra_y: self.row_extra_y,
+        }
+    }
+
     pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
         TextRowOutput {
             row: self.row,

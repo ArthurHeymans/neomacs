@@ -430,6 +430,28 @@ fn display_row_geometry_state_records_current_row_y() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_row_y_fallback_from_current_extra_y() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    let fallback = geometry.row_y_fallback(10.0, 16.0);
+
+    assert_eq!(
+        fallback,
+        DisplayRowYFallback {
+            text_y: 10.0,
+            default_height: 16.0,
+            row_extra_y: 11.0,
+        }
+    );
+}
+
+#[test]
 fn display_row_geometry_state_builds_text_row_output() {
     let geometry = DisplayRowGeometryState {
         row: 3,
