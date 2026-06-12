@@ -424,6 +424,12 @@ struct ActiveDisplayPropertySpan<T> {
     end_charpos: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TrailingWhitespaceRenderState {
+    background: Option<Color>,
+    start_marker: DisplayRowStartMarker,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TextPropertyScanCheckpoints {
     invisible_next: i64,
@@ -812,6 +818,47 @@ impl<T: Copy> ActiveDisplayPropertySpan<T> {
 
     fn value_or(&self, default: T) -> T {
         self.value.unwrap_or(default)
+    }
+}
+
+impl TrailingWhitespaceRenderState {
+    fn new(enabled: bool, background_pixel: u32) -> Self {
+        Self {
+            background: enabled.then(|| Color::from_pixel(background_pixel)),
+            start_marker: DisplayRowStartMarker::Inactive,
+        }
+    }
+
+    #[cfg(test)]
+    fn background(self) -> Option<Color> {
+        self.background
+    }
+
+    #[cfg(test)]
+    fn start_marker(self) -> DisplayRowStartMarker {
+        self.start_marker
+    }
+
+    fn reset_after_row_transition(&mut self) {
+        self.start_marker = DisplayRowStartMarker::Inactive;
+    }
+
+    fn track_rendered_char(&mut self, ch: char, start_marker: DisplayRowStartMarker) {
+        if self.background.is_none() {
+            return;
+        }
+
+        if ch == ' ' || ch == '\t' {
+            if !self.start_marker.is_active() {
+                self.start_marker = start_marker;
+            }
+        } else {
+            self.reset_after_row_transition();
+        }
+    }
+
+    fn highlight_start_x(self, geometry: &DisplayRowGeometryState) -> Option<(Color, f32)> {
+        Some((self.background?, self.start_marker.x_on(geometry)?))
     }
 }
 
@@ -3889,13 +3936,10 @@ impl LayoutEngine {
         let mut row_geometry = row_geometry_defaults.initial_state();
         let mut row_y_positions =
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
-        // Trailing whitespace tracking
-        let trailing_ws_bg = if params.show_trailing_whitespace {
-            Some(Color::from_pixel(params.trailing_ws_bg))
-        } else {
-            None
-        };
-        let mut trailing_ws_start = DisplayRowStartMarker::Inactive;
+        let mut trailing_whitespace = TrailingWhitespaceRenderState::new(
+            params.show_trailing_whitespace,
+            params.trailing_ws_bg,
+        );
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
@@ -4343,7 +4387,7 @@ impl LayoutEngine {
                     col = 0;
                     line_numbers.advance_line();
                     hscroll_skip.reset_line();
-                    trailing_ws_start = DisplayRowStartMarker::Inactive;
+                    trailing_whitespace.reset_after_row_transition();
                     if has_prefix {
                         prefix_request.request_line();
                     }
@@ -4913,7 +4957,7 @@ impl LayoutEngine {
                         line_numbers.advance_line();
                         hscroll_skip.reset_line();
                         word_wrap.reset_after_row_transition();
-                        trailing_ws_start = DisplayRowStartMarker::Inactive;
+                        trailing_whitespace.reset_after_row_transition();
                         if has_prefix {
                             prefix_request.request_line();
                         }
@@ -4947,13 +4991,11 @@ impl LayoutEngine {
                     );
                 }
                 // Highlight trailing whitespace before advancing to next row
-                if let Some(_tw_bg) = trailing_ws_bg {
-                    if let Some(tw_x) = trailing_ws_start.x_on(&row_geometry) {
-                        let tw_w = x - tw_x;
-                        if tw_w > 0.0 {}
-                    }
+                if let Some((_tw_bg, tw_x)) = trailing_whitespace.highlight_start_x(&row_geometry) {
+                    let tw_w = x - tw_x;
+                    if tw_w > 0.0 {}
                 }
-                trailing_ws_start = DisplayRowStartMarker::Inactive;
+                trailing_whitespace.reset_after_row_transition();
 
                 // Face :extend: fill rest of row with extending face background
                 if let Some((_ext_bg, _ext_face_id)) = row_extend.value_on(&row_geometry) {
@@ -5133,7 +5175,7 @@ impl LayoutEngine {
                         hit_row_charpos_start = charpos;
                         col = 0;
                         word_wrap.disallow_after_current_char();
-                        trailing_ws_start = DisplayRowStartMarker::Inactive;
+                        trailing_whitespace.reset_after_row_transition();
                         if has_prefix {
                             prefix_request.request_line();
                         }
@@ -5172,7 +5214,7 @@ impl LayoutEngine {
                             break;
                         }
                         col = 0;
-                        trailing_ws_start = DisplayRowStartMarker::Inactive;
+                        trailing_whitespace.reset_after_row_transition();
                         row_geometry.mark_current_row_flag_kind(
                             &mut row_flags,
                             DisplayRowFlagKind::Continuation,
@@ -5456,7 +5498,7 @@ impl LayoutEngine {
                     }
                     col = 0;
                     word_wrap.reset_after_row_transition();
-                    trailing_ws_start = DisplayRowStartMarker::Inactive;
+                    trailing_whitespace.reset_after_row_transition();
                     if has_prefix {
                         prefix_request.request_line();
                     }
@@ -5514,7 +5556,7 @@ impl LayoutEngine {
                         row_limit,
                     );
                     word_wrap.reset_after_row_transition();
-                    trailing_ws_start = DisplayRowStartMarker::Inactive;
+                    trailing_whitespace.reset_after_row_transition();
                     if has_prefix {
                         prefix_request.request_wrap();
                     }
@@ -5560,7 +5602,7 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    trailing_ws_start = DisplayRowStartMarker::Inactive;
+                    trailing_whitespace.reset_after_row_transition();
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,
                         DisplayRowFlagKind::Continuation,
@@ -5758,16 +5800,8 @@ impl LayoutEngine {
                 }
             }
 
-            // Track trailing whitespace
-            if trailing_ws_bg.is_some() {
-                if ch == ' ' || ch == '\t' {
-                    if !trailing_ws_start.is_active() {
-                        trailing_ws_start = row_geometry.start_marker_at_x(x - advance);
-                    }
-                } else {
-                    trailing_ws_start = DisplayRowStartMarker::Inactive;
-                }
-            }
+            trailing_whitespace
+                .track_rendered_char(ch, row_geometry.start_marker_at_x(x - advance));
         }
 
         flush_run(&self.run_buf, ligatures);

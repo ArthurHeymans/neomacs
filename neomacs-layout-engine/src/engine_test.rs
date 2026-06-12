@@ -178,6 +178,42 @@ fn text_property_scan_checkpoints_track_next_visibility_and_display_changes() {
 }
 
 #[test]
+fn trailing_whitespace_render_state_tracks_enabled_marker_and_background() {
+    let marker = DisplayRowStartMarker::Active {
+        row: DisplayRowMarker::Row(0),
+        x: 24.0,
+    };
+    let later_marker = DisplayRowStartMarker::Active {
+        row: DisplayRowMarker::Row(0),
+        x: 48.0,
+    };
+    let mut state = TrailingWhitespaceRenderState::new(true, 0x00112233);
+
+    assert_eq!(state.background(), Some(Color::from_pixel(0x00112233)));
+    assert_eq!(state.start_marker(), DisplayRowStartMarker::Inactive);
+
+    state.track_rendered_char(' ', marker);
+    state.track_rendered_char('\t', later_marker);
+
+    assert_eq!(state.start_marker(), marker);
+
+    state.track_rendered_char('x', later_marker);
+
+    assert_eq!(state.start_marker(), DisplayRowStartMarker::Inactive);
+
+    state.track_rendered_char('\t', later_marker);
+    state.reset_after_row_transition();
+
+    assert_eq!(state.start_marker(), DisplayRowStartMarker::Inactive);
+
+    let mut disabled = TrailingWhitespaceRenderState::new(false, 0x00ABCDEF);
+    disabled.track_rendered_char(' ', marker);
+
+    assert_eq!(disabled.background(), None);
+    assert_eq!(disabled.start_marker(), DisplayRowStartMarker::Inactive);
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 
