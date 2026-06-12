@@ -3445,7 +3445,7 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
 }
 
 #[test]
-fn x_popup_menu_interactive_keyboard_select_roots_selected_event() {
+fn x_popup_menu_interactive_ignores_tty_mouse_navigation() {
     let mut eval = crate::emacs_core::Context::new();
     let (tx, rx) = crossbeam_channel::unbounded();
     eval.input_rx = Some(rx);
@@ -3454,15 +3454,46 @@ fn x_popup_menu_interactive_keyboard_select_roots_selected_event() {
     let tty_menu_navigation_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     crate::emacs_core::keymap::list_keymap_define(
         tty_menu_navigation_map,
-        Value::symbol("down"),
-        Value::symbol("tty-menu-next-item"),
-    );
-    crate::emacs_core::keymap::list_keymap_define(
-        tty_menu_navigation_map,
-        Value::fixnum(13),
+        Value::symbol("mouse-movement"),
         Value::symbol("tty-menu-select"),
     );
     eval.set_variable("tty-menu-navigation-map", tty_menu_navigation_map);
+    eval.set_variable("track-mouse", Value::T);
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("first"),
+        Value::cons(Value::string("First"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::MouseMove {
+        x: 8.0,
+        y: 18.0,
+        modifiers: crate::keyboard::Modifiers::none(),
+        target_frame_id: 0,
+    })
+    .unwrap();
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: -1 })
+        .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .unwrap();
+
+    assert!(
+        result.is_nil(),
+        "native popup hover must not run tty-menu-select"
+    );
+}
+
+#[test]
+fn x_popup_menu_interactive_keyboard_select_roots_selected_event() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
 
     let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
     crate::emacs_core::keymap::list_keymap_define(
@@ -3650,13 +3681,6 @@ fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
         "menu-bar-final-items",
         Value::list(vec![Value::symbol("help-menu")]),
     );
-    let tty_menu_navigation_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    crate::emacs_core::keymap::list_keymap_define(
-        tty_menu_navigation_map,
-        Value::symbol("right"),
-        Value::symbol("tty-menu-next-menu"),
-    );
-    eval.set_variable("tty-menu-navigation-map", tty_menu_navigation_map);
 
     crate::emacs_core::keymap::list_keymap_define(
         file_menu,

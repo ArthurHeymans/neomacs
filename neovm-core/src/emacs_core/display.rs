@@ -1420,11 +1420,12 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
     for event in &events {
         ctx.push_specpdl_root(*event);
     }
-    let tty_navigation_map = ctx
-        .eval_symbol("tty-menu-navigation-map")
-        .unwrap_or(Value::NIL);
-    ctx.specbind(intern("overriding-terminal-local-map"), tty_navigation_map);
-    ctx.specbind(intern("track-mouse"), Value::T);
+    // Native popup menus are modal in the display layer.  The renderer owns
+    // hover/keyboard navigation and reports only committed selections here.
+    // Letting the TTY menu map see raw mouse movement can execute menu items
+    // from hover alone.
+    ctx.specbind(intern("overriding-terminal-local-map"), Value::NIL);
+    ctx.specbind(intern("track-mouse"), Value::NIL);
 
     let result = x_popup_menu_interactive_loop(
         ctx,
@@ -1466,10 +1467,12 @@ fn x_popup_menu_interactive_loop(
             return Ok(events.get(index as usize).copied().unwrap_or(Value::NIL));
         }
 
-        match binding
+        let command = binding
             .as_symbol_name()
             .and_then(TtyMenuNavigationCommand::from_symbol_name)
-        {
+            .or_else(|| native_popup_navigation_command(&keys));
+
+        match command {
             Some(TtyMenuNavigationCommand::TtyMenuNextItem) => {
                 *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
                 show_popup_menu_selection(ctx, x, y, entries, *selected)?;
@@ -1548,6 +1551,25 @@ fn popup_menu_selection_index(keys: &[Value]) -> Option<i32> {
         return None;
     }
     Some(parts[1].as_fixnum()? as i32)
+}
+
+fn native_popup_navigation_command(keys: &[Value]) -> Option<TtyMenuNavigationCommand> {
+    let event = *keys.first()?;
+    if let Some(name) = event.as_symbol_name() {
+        return match name {
+            "down" => Some(TtyMenuNavigationCommand::TtyMenuNextItem),
+            "up" => Some(TtyMenuNavigationCommand::TtyMenuPrevItem),
+            "right" => Some(TtyMenuNavigationCommand::TtyMenuNextMenu),
+            "left" => Some(TtyMenuNavigationCommand::TtyMenuPrevMenu),
+            _ => None,
+        };
+    }
+
+    match event.as_fixnum()? {
+        13 => Some(TtyMenuNavigationCommand::TtyMenuSelect),
+        27 => Some(TtyMenuNavigationCommand::KeyboardEscapeQuit),
+        _ => None,
+    }
 }
 
 pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
