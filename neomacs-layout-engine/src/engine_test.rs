@@ -143,6 +143,30 @@ fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
 }
 
 #[test]
+fn complex_text_run_advance_cache_tracks_range_and_absolute_advances() {
+    let mut cache = ComplexTextRunAdvanceCache::default();
+
+    assert!(!cache.contains(12));
+    assert_eq!(cache.advance_for(12), None);
+
+    cache.record(
+        10,
+        18,
+        vec![
+            crate::display_text_run_measurement::DisplayTextRunByteAdvance::new(10, 7.5),
+            crate::display_text_run_measurement::DisplayTextRunByteAdvance::new(14, 0.0),
+        ],
+    );
+
+    assert!(cache.contains(10));
+    assert!(cache.contains(17));
+    assert!(!cache.contains(18));
+    assert_eq!(cache.advance_for(10), Some(7.5));
+    assert_eq!(cache.advance_for(14), Some(0.0));
+    assert_eq!(cache.advance_for(12), None);
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(

@@ -384,6 +384,13 @@ struct WordWrapBreakCandidate {
     available: bool,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ComplexTextRunAdvanceCache {
+    start_byte_idx: usize,
+    end_byte_idx: usize,
+    advances: Vec<DisplayTextRunByteAdvance>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct ActiveDisplayPropertySpan<T> {
     value: Option<T>,
@@ -530,6 +537,30 @@ impl WordWrapBreakCandidate {
 
     fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+}
+
+impl ComplexTextRunAdvanceCache {
+    fn record(
+        &mut self,
+        start_byte_idx: usize,
+        end_byte_idx: usize,
+        advances: Vec<DisplayTextRunByteAdvance>,
+    ) {
+        self.start_byte_idx = start_byte_idx;
+        self.end_byte_idx = end_byte_idx;
+        self.advances = advances;
+    }
+
+    fn contains(&self, byte_idx: usize) -> bool {
+        self.start_byte_idx <= byte_idx && byte_idx < self.end_byte_idx
+    }
+
+    fn advance_for(&self, byte_idx: usize) -> Option<f32> {
+        self.advances
+            .iter()
+            .find(|advance| advance.byte_offset == byte_idx)
+            .map(|advance| advance.advance_px)
     }
 }
 
@@ -3631,9 +3662,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut complex_run_adv: Vec<DisplayTextRunByteAdvance> = Vec::new();
-        let mut complex_run_start: usize = usize::MAX;
-        let mut complex_run_end: usize = 0;
+        let mut complex_run_cache = ComplexTextRunAdvanceCache::default();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -5128,8 +5157,7 @@ impl LayoutEngine {
                 // up with the rendered letters (isolated-form widths over-
                 // reserve). Shape the run once and cache advances by absolute
                 // byte offset.
-                if !(complex_run_start <= ch_start_byte_idx && ch_start_byte_idx < complex_run_end)
-                {
+                if !complex_run_cache.contains(ch_start_byte_idx) {
                     let script = crate::composition::complex_script(ch);
                     let mut end = ch_start_byte_idx;
                     let mut run_text = String::new();
@@ -5146,20 +5174,16 @@ impl LayoutEngine {
                     }
                     let measurement =
                         active_face_state.text_run_measurement(&mut self.font_metrics, &run_text);
-                    complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its
                     // isolated width rather than collapsing to zero.
-                    complex_run_adv =
-                        measurement.base_char_byte_advances(&run_text, ch_start_byte_idx);
-                    complex_run_start = ch_start_byte_idx;
-                    complex_run_end = end;
+                    complex_run_cache.record(
+                        ch_start_byte_idx,
+                        end,
+                        measurement.base_char_byte_advances(&run_text, ch_start_byte_idx),
+                    );
                 }
-                match complex_run_adv
-                    .iter()
-                    .find(|advance| advance.byte_offset == ch_start_byte_idx)
-                    .map(|advance| advance.advance_px)
-                {
+                match complex_run_cache.advance_for(ch_start_byte_idx) {
                     // In the shaped run: use it, including 0 for a character
                     // covered by a preceding ligature glyph (no double-count).
                     Some(a) => a,
