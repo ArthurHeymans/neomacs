@@ -1134,11 +1134,15 @@ fn popup_menu_string(value: Value) -> Option<String> {
     value.as_runtime_string_owned()
 }
 
-fn popup_menu_key_event(key: Value) -> Value {
-    Value::list(vec![key])
+fn popup_menu_key_event_from_path(path: &[Value]) -> Value {
+    Value::list(path.to_vec())
 }
 
-fn popup_menu_item_from_binding(key: Value, def: Value) -> Option<(PopupMenuEntry, Value)> {
+fn popup_menu_item_from_binding(
+    key: Value,
+    def: Value,
+    depth: u32,
+) -> Option<(PopupMenuEntry, Option<Value>)> {
     if !def.is_cons() {
         return None;
     }
@@ -1154,30 +1158,32 @@ fn popup_menu_item_from_binding(key: Value, def: Value) -> Option<(PopupMenuEntr
         } else {
             Value::NIL
         };
+        let submenu = super::keymap::is_list_keymap(&command);
         return Some((
             PopupMenuEntry {
                 label,
                 shortcut: String::new(),
                 enabled: !command.is_nil(),
                 separator: false,
-                submenu: super::keymap::is_list_keymap(&command),
-                depth: 0,
+                submenu,
+                depth,
             },
-            popup_menu_key_event(key),
+            submenu.then_some(command),
         ));
     }
 
     let label = popup_menu_string(car)?;
+    let submenu = super::keymap::is_list_keymap(&cdr);
     Some((
         PopupMenuEntry {
             label,
             shortcut: String::new(),
             enabled: !cdr.is_nil(),
             separator: false,
-            submenu: super::keymap::is_list_keymap(&cdr),
-            depth: 0,
+            submenu,
+            depth,
         },
-        popup_menu_key_event(key),
+        submenu.then_some(cdr),
     ))
 }
 
@@ -1187,12 +1193,36 @@ fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value
     }
     let mut entries = Vec::new();
     let mut events = Vec::new();
-    super::keymap::list_keymap_for_each_binding(&menu, |key, def| {
-        if let Some((entry, event)) = popup_menu_item_from_binding(key, def) {
-            entries.push(entry);
-            events.push(event);
+
+    fn append_keymap(
+        menu: Value,
+        depth: u32,
+        path: &mut Vec<Value>,
+        entries: &mut Vec<PopupMenuEntry>,
+        events: &mut Vec<Value>,
+    ) {
+        if depth > 32 {
+            return;
         }
-    });
+
+        super::keymap::list_keymap_for_each_binding(&menu, |key, def| {
+            let Some((entry, submenu)) = popup_menu_item_from_binding(key, def, depth) else {
+                return;
+            };
+
+            path.push(key);
+            entries.push(entry);
+            events.push(popup_menu_key_event_from_path(path));
+
+            if let Some(child_menu) = submenu {
+                append_keymap(child_menu, depth + 1, path, entries, events);
+            }
+
+            path.pop();
+        });
+    }
+
+    append_keymap(menu, 0, &mut Vec::new(), &mut entries, &mut events);
     Some((entries, events))
 }
 

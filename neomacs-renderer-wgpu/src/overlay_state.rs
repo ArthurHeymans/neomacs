@@ -37,6 +37,13 @@ pub struct PopupMenuState {
     char_width: f32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PopupMenuHit {
+    Outside,
+    PanelBody { depth: usize },
+    Item { depth: usize, local_index: usize },
+}
+
 impl PopupMenuState {
     pub fn layout_panel(
         x: f32,
@@ -153,6 +160,45 @@ impl PopupMenuState {
             .unwrap_or(&mut self.root_panel)
     }
 
+    fn panel(&self, depth: usize) -> Option<&MenuPanel> {
+        if depth == 0 {
+            Some(&self.root_panel)
+        } else {
+            self.submenu_panels.get(depth - 1)
+        }
+    }
+
+    fn panel_mut(&mut self, depth: usize) -> Option<&mut MenuPanel> {
+        if depth == 0 {
+            Some(&mut self.root_panel)
+        } else {
+            self.submenu_panels.get_mut(depth - 1)
+        }
+    }
+
+    fn item_global_index(&self, depth: usize, local_index: usize) -> Option<usize> {
+        self.panel(depth)
+            .and_then(|panel| panel.item_indices.get(local_index).copied())
+    }
+
+    fn truncate_submenus_after(&mut self, depth: usize) -> bool {
+        let keep_len = depth;
+        let changed = self.submenu_panels.len() > keep_len;
+        self.submenu_panels.truncate(keep_len);
+        changed
+    }
+
+    fn set_panel_hover(&mut self, depth: usize, hover_index: i32) -> bool {
+        let Some(panel) = self.panel_mut(depth) else {
+            return false;
+        };
+        if panel.hover_index == hover_index {
+            return false;
+        }
+        panel.hover_index = hover_index;
+        true
+    }
+
     /// Move hover in the active panel. Returns true if changed.
     pub fn move_hover(&mut self, direction: i32) -> bool {
         // Read panel state without mutable borrow
@@ -188,24 +234,24 @@ impl PopupMenuState {
 
     /// Open submenu for the currently hovered item (if it has one)
     pub fn open_submenu(&mut self) -> bool {
-        let panel = self.active_panel();
-        if panel.hover_index < 0 {
+        let depth = self.submenu_panels.len();
+        let hover_index = self.active_panel().hover_index;
+        if hover_index < 0 {
             return false;
         }
-        let hover_idx = panel.hover_index as usize;
-        if hover_idx >= panel.item_indices.len() {
+        self.open_submenu_for(depth, hover_index as usize)
+    }
+
+    fn open_submenu_for(&mut self, depth: usize, local_index: usize) -> bool {
+        let Some(parent_global_idx) = self.item_global_index(depth, local_index) else {
             return false;
-        }
-        let parent_global_idx = panel.item_indices[hover_idx];
+        };
         let parent = &self.all_items[parent_global_idx];
         if !parent.submenu {
-            return false;
+            return self.truncate_submenus_after(depth);
         }
-        let parent_depth = parent.depth;
-        let child_depth = parent_depth + 1;
 
-        // Collect children: items immediately after parent with depth == child_depth
-        // until we see an item with depth <= parent_depth
+        let child_depth = parent.depth + 1;
         let mut child_indices = Vec::new();
         for i in (parent_global_idx + 1)..self.all_items.len() {
             let item = &self.all_items[i];
@@ -216,17 +262,20 @@ impl PopupMenuState {
                 child_indices.push(i);
             }
         }
-
         if child_indices.is_empty() {
-            return false;
+            return self.truncate_submenus_after(depth);
         }
 
-        // Position submenu to the right of the parent panel
-        let (px, py, pw, _ph) = panel.bounds;
-        let item_y = py + panel.item_offsets[hover_idx];
-        let sub_x = px + pw - 2.0; // Overlap by 2px
-        let sub_y = item_y;
-
+        let (sub_x, sub_y) = {
+            let Some(panel) = self.panel(depth) else {
+                return false;
+            };
+            let (px, py, pw, _ph) = panel.bounds;
+            (
+                px + pw - 2.0,
+                py + panel.item_offsets.get(local_index).copied().unwrap_or(0.0),
+            )
+        };
         let sub_panel = Self::layout_panel(
             sub_x,
             sub_y,
@@ -237,6 +286,16 @@ impl PopupMenuState {
             self.line_height,
             self.char_width,
         );
+
+        let child_panel_index = depth;
+        if let Some(existing) = self.submenu_panels.get(child_panel_index)
+            && existing.item_indices == sub_panel.item_indices
+            && existing.bounds == sub_panel.bounds
+        {
+            return self.truncate_submenus_after(depth + 1);
+        }
+
+        let _ = self.truncate_submenus_after(depth);
         self.submenu_panels.push(sub_panel);
         true
     }
@@ -271,6 +330,38 @@ impl PopupMenuState {
             return (0, -1);
         }
         (-1, -1)
+    }
+
+    fn hit_at(&self, mx: f32, my: f32) -> PopupMenuHit {
+        match self.hit_test_all(mx, my) {
+            (depth, _) if depth < 0 => PopupMenuHit::Outside,
+            (depth, local_index) if local_index < 0 => PopupMenuHit::PanelBody {
+                depth: depth as usize,
+            },
+            (depth, local_index) => PopupMenuHit::Item {
+                depth: depth as usize,
+                local_index: local_index as usize,
+            },
+        }
+    }
+
+    pub fn update_hover_at(&mut self, mx: f32, my: f32) -> bool {
+        match self.hit_at(mx, my) {
+            PopupMenuHit::Outside => false,
+            PopupMenuHit::PanelBody { depth } => self.set_panel_hover(depth, -1),
+            PopupMenuHit::Item { depth, local_index } => {
+                let mut changed = self.set_panel_hover(depth, local_index as i32);
+                let Some(global_index) = self.item_global_index(depth, local_index) else {
+                    return changed;
+                };
+                if self.all_items[global_index].submenu {
+                    changed |= self.open_submenu_for(depth, local_index);
+                } else {
+                    changed |= self.truncate_submenus_after(depth);
+                }
+                changed
+            }
+        }
     }
 
     fn hit_test_panel(panel: &MenuPanel, all_items: &[PopupMenuItem], mx: f32, my: f32) -> i32 {

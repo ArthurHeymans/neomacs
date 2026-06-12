@@ -570,6 +570,17 @@ fn open_submenu_succeeds_for_submenu_item() {
 }
 
 #[test]
+fn open_submenu_does_not_duplicate_already_open_keyboard_submenu() {
+    let mut state = menu_with_submenu();
+    state.root_panel.hover_index = 1;
+
+    assert!(state.open_submenu());
+    assert!(!state.open_submenu());
+    assert_eq!(state.submenu_panels.len(), 1);
+    assert_eq!(state.submenu_panels[0].item_indices, vec![2, 3, 4]);
+}
+
+#[test]
 fn open_submenu_position_is_right_of_parent() {
     let mut state = menu_with_submenu();
     state.root_panel.hover_index = 1;
@@ -1168,4 +1179,38 @@ fn open_submenu_skips_grandchildren_in_indices() {
     assert!(state.open_submenu());
     // Only depth-1 items should be in submenu: [1, 2, 4]
     assert_eq!(state.submenu_panels[0].item_indices, vec![1, 2, 4]);
+}
+
+#[test]
+fn update_hover_at_keeps_submenu_open_when_mouse_stays_on_parent() {
+    let mut state = menu_with_submenu();
+    let root = &state.root_panel;
+    let mx = root.bounds.0 + 10.0;
+    let my = root.bounds.1 + root.item_offsets[1] + 2.0;
+
+    assert!(state.update_hover_at(mx, my));
+    assert_eq!(state.root_panel.hover_index, 1);
+    assert_eq!(state.submenu_panels.len(), 1);
+
+    assert!(!state.update_hover_at(mx, my));
+    assert_eq!(state.root_panel.hover_index, 1);
+    assert_eq!(state.submenu_panels.len(), 1);
+}
+
+#[test]
+fn update_hover_at_keeps_parent_submenu_open_when_mouse_enters_child_panel() {
+    let mut state = menu_with_submenu();
+    let root = &state.root_panel;
+    let parent_x = root.bounds.0 + 10.0;
+    let parent_y = root.bounds.1 + root.item_offsets[1] + 2.0;
+    state.update_hover_at(parent_x, parent_y);
+
+    let sub = &state.submenu_panels[0];
+    let child_x = sub.bounds.0 + 10.0;
+    let child_y = sub.bounds.1 + sub.item_offsets[0] + 2.0;
+
+    assert!(state.update_hover_at(child_x, child_y));
+    assert_eq!(state.root_panel.hover_index, 1);
+    assert_eq!(state.submenu_panels.len(), 1);
+    assert_eq!(state.submenu_panels[0].hover_index, 0);
 }

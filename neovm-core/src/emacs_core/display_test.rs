@@ -3445,6 +3445,91 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
 }
 
 #[test]
+fn x_popup_menu_interactive_keymap_flattens_submenu_entries() {
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval.frames.create_frame("popup-owner", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    eval.set_display_host(Box::new(host));
+
+    let submenu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        submenu,
+        Value::symbol("visual-line-mode"),
+        Value::cons(Value::string("Visual Line Mode"), Value::T),
+    );
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("line-wrapping"),
+        Value::cons(Value::string("Line Wrapping in this Buffer"), submenu),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: -1 })
+        .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .unwrap();
+
+    assert!(result.is_nil());
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].entries.len(), 2);
+    assert_eq!(shown[0].entries[0].label, "Line Wrapping in this Buffer");
+    assert!(shown[0].entries[0].submenu);
+    assert_eq!(shown[0].entries[0].depth, 0);
+    assert_eq!(shown[0].entries[1].label, "Visual Line Mode");
+    assert!(!shown[0].entries[1].submenu);
+    assert_eq!(shown[0].entries[1].depth, 1);
+}
+
+#[test]
+fn x_popup_menu_interactive_submenu_selection_returns_full_event_path() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
+
+    let submenu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        submenu,
+        Value::symbol("visual-line-mode"),
+        Value::cons(Value::string("Visual Line Mode"), Value::T),
+    );
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("line-wrapping"),
+        Value::cons(Value::string("Line Wrapping in this Buffer"), submenu),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 1 })
+        .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .unwrap();
+
+    let events = crate::emacs_core::value::list_to_vec(&result).expect("event list");
+    assert_eq!(
+        events,
+        vec![
+            Value::symbol("line-wrapping"),
+            Value::symbol("visual-line-mode")
+        ]
+    );
+}
+
+#[test]
 fn x_popup_menu_interactive_ignores_tty_mouse_navigation() {
     let mut eval = crate::emacs_core::Context::new();
     let (tx, rx) = crossbeam_channel::unbounded();
