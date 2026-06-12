@@ -379,6 +379,18 @@ fn lower_simple_op(
                 .ok_or(CompileError::StackUnderflow)?;
             stack.push(stack[idx]);
         }
+        Op::StackSet(n) => {
+            // Assign TOS into the slot N below TOS, then pop TOS (N = 0 == pop).
+            let n = *n as usize;
+            let top = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            if n != 0 {
+                let idx = stack
+                    .len()
+                    .checked_sub(n)
+                    .ok_or(CompileError::StackUnderflow)?;
+                stack[idx] = top;
+            }
+        }
         Op::Add | Op::Sub => {
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -419,6 +431,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
     Ok(match op {
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
+        Op::StackSet(n) => (*n as usize + 1, -1),
         Op::Dup => (1, 1),
         Op::Pop => (1, -1),
         Op::Add | Op::Sub | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => (2, -1),
@@ -1158,6 +1171,78 @@ mod tests {
                 Some(want),
                 "if-branch mismatch for arg bits {}",
                 arg.bits()
+            );
+        }
+    }
+
+    #[test]
+    fn compiles_stackset() {
+        // (lambda (a) (setq a (1+ a)) a):
+        //  0 StackRef(0); 1 Add1; 2 StackSet(1); 3 StackRef(0); 4 Return
+        let f = lower_leaf(
+            &[
+                Op::StackRef(0),
+                Op::Add1,
+                Op::StackSet(1),
+                Op::StackRef(0),
+                Op::Return,
+            ],
+            &[],
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            f.call(&[Value::make_int(41)]),
+            Some(Value::make_int(42).bits())
+        );
+    }
+
+    #[test]
+    fn compiles_countdown_loop_matches_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        // (lambda (n) (while (> n 0) (setq n (1- n))) n) -> 0. A back-edge loop:
+        //  0 StackRef(0); 1 Constant(0=>0); 2 Gtr; 3 GotoIfNil(8);
+        //  4 StackRef(0); 5 Sub1; 6 StackSet(1); 7 Goto(0);
+        //  8 StackRef(0); 9 Return
+        let ops = [
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Gtr,
+            Op::GotoIfNil(8),
+            Op::StackRef(0),
+            Op::Sub1,
+            Op::StackSet(1),
+            Op::Goto(0),
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        let constants = [Value::make_int(0)];
+        for n in [0i64, 1, 4, 9] {
+            let mut eval = Context::new_minimal_vm_harness();
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![crate::emacs_core::intern::SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.to_vec();
+            f.constants = constants.to_vec();
+            f.max_stack = 16;
+            let want = {
+                let mut vm = Vm::from_context(&mut eval);
+                vm.execute(&f, vec![Value::make_int(n)])
+                    .expect("interp loop")
+                    .bits()
+            };
+            let got = lower_leaf(&ops, &constants, 1)
+                .unwrap()
+                .call(&[Value::make_int(n)]);
+            assert_eq!(got, Some(want), "loop mismatch for n={n}");
+            assert_eq!(
+                got,
+                Some(Value::make_int(0).bits()),
+                "countdown should reach 0 (n={n})"
             );
         }
     }
