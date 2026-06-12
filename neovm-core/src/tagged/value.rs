@@ -51,11 +51,13 @@ pub(crate) fn reset_current_subrs() {
 pub(crate) const TAG_BITS: usize = 3;
 pub(crate) const TAG_MASK: usize = 0b111;
 
-const TAG_SYMBOL: usize = 0b000;
-const TAG_CONS: usize = 0b011;
-const TAG_STRING: usize = 0b100;
-const TAG_VECLIKE: usize = 0b101;
-const TAG_FLOAT: usize = 0b111;
+// pub(crate) so the JIT backend can lower type predicates against the same tag
+// layout instead of hardcoding it.
+pub(crate) const TAG_SYMBOL: usize = 0b000;
+pub(crate) const TAG_CONS: usize = 0b011;
+pub(crate) const TAG_STRING: usize = 0b100;
+pub(crate) const TAG_VECLIKE: usize = 0b101;
+pub(crate) const TAG_FLOAT: usize = 0b111;
 
 // Fixnum uses two tags: 010 and 110. Both have (v & 3) == 2.
 // pub(crate) so the JIT backend (emacs_core::jit) lowers fixnum ops against the

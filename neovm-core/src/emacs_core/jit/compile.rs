@@ -52,7 +52,9 @@ use super::backend::BackendError;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::value::Value;
-use crate::tagged::value::{FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT};
+use crate::tagged::value::{
+    FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING,
+};
 
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
@@ -372,6 +374,45 @@ fn lower_fixnum_mul(
     retag_fixnum(fb, res)
 }
 
+/// A non-allocating unary type/nil predicate. Inspects only the tagged bits;
+/// never dereferences the value, allocates, or deopts.
+#[derive(Clone, Copy)]
+enum PredKind {
+    /// `null`/`not`: value is nil.
+    Null,
+    /// `consp`: value is a cons.
+    Consp,
+    /// `stringp`: value is a string.
+    Stringp,
+    /// `listp`: value is nil or a cons.
+    Listp,
+}
+
+/// Lower a type/nil predicate to `t`/`nil` via `select` (no branch, no deopt —
+/// it matches the interpreter for any value by inspecting the tag bits).
+fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> ClifValue {
+    let cond = match kind {
+        PredKind::Null => fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64),
+        PredKind::Consp => {
+            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
+            fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64)
+        }
+        PredKind::Stringp => {
+            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
+            fb.ins().icmp_imm(IntCC::Equal, tag, TAG_STRING as i64)
+        }
+        PredKind::Listp => {
+            let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
+            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
+            let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
+            fb.ins().bor(is_nil, is_cons)
+        }
+    };
+    let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+    let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+    fb.ins().select(cond, t, nil)
+}
+
 /// Lower a no-argument straight-line leaf body. Thin wrapper over [`lower_leaf`]
 /// kept for the existing call sites/tests.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
@@ -475,6 +516,17 @@ fn lower_simple_op(
             };
             stack.push(lower_fixnum_compare(fb, deopt, cc, a, b));
         }
+        Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => {
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let kind = match op {
+                Op::Null | Op::Not => PredKind::Null,
+                Op::Consp => PredKind::Consp,
+                Op::Stringp => PredKind::Stringp,
+                Op::Listp => PredKind::Listp,
+                _ => unreachable!("matched predicate ops above"),
+            };
+            stack.push(lower_predicate(fb, kind, a));
+        }
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     }
     Ok(())
@@ -502,6 +554,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
             (2, -1)
         }
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
+        Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => (1, 0),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1388,6 +1441,38 @@ mod tests {
     }
 
     #[test]
+    fn compiles_type_predicates() {
+        // Inspects only tag bits; never dereferences, so heap values needn't be
+        // kept alive (no GC safepoint in the JIT call).
+        fn pred(op: Op, v: Value) -> Option<usize> {
+            lower_nullary_leaf(&[Op::Constant(0), op, Op::Return], &[v])
+                .unwrap()
+                .call(&[])
+        }
+        let t = Some(Value::T.bits());
+        let nil = Some(Value::NIL.bits());
+        let cons = Value::cons(Value::make_int(1), Value::make_int(2));
+        let s = Value::string("hi");
+
+        // null / not: only nil is null; fixnum 0 is NOT nil.
+        assert_eq!(pred(Op::Null, Value::NIL), t);
+        assert_eq!(pred(Op::Null, Value::make_int(0)), nil);
+        assert_eq!(pred(Op::Not, Value::T), nil);
+        assert_eq!(pred(Op::Not, Value::NIL), t);
+        // consp
+        assert_eq!(pred(Op::Consp, cons), t);
+        assert_eq!(pred(Op::Consp, Value::NIL), nil);
+        assert_eq!(pred(Op::Consp, Value::make_int(5)), nil);
+        // stringp
+        assert_eq!(pred(Op::Stringp, s), t);
+        assert_eq!(pred(Op::Stringp, Value::make_int(5)), nil);
+        // listp: nil or cons
+        assert_eq!(pred(Op::Listp, cons), t);
+        assert_eq!(pred(Op::Listp, Value::NIL), t);
+        assert_eq!(pred(Op::Listp, Value::make_int(5)), nil);
+    }
+
+    #[test]
     fn bails_on_missing_return() {
         let err = lower_nullary_leaf(&[Op::Nil], &[]).unwrap_err();
         assert!(matches!(err, CompileError::NoReturn));
@@ -1536,6 +1621,19 @@ mod tests {
             (
                 &[Op::Constant(0), Op::Constant(1), Op::Mul, Op::Return],
                 &[Value::make_int(-6), Value::make_int(7)],
+            ),
+            (&[Op::Nil, Op::Null, Op::Return], &[]),
+            (
+                &[Op::Constant(0), Op::Null, Op::Return],
+                &[Value::make_int(0)],
+            ),
+            (
+                &[Op::Constant(0), Op::Consp, Op::Return],
+                &[Value::make_int(5)],
+            ),
+            (
+                &[Op::Constant(0), Op::Listp, Op::Return],
+                &[Value::make_int(5)],
             ),
             (
                 &[Op::Constant(0), Op::Add1, Op::Return],
