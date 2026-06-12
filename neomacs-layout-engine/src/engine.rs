@@ -1587,7 +1587,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     max_x: f32,
     content_x: f32,
     text_y: f32,
-    row_extra_y: f32,
+    row_extra_y: &mut f32,
     row_base: usize,
     max_rows: usize,
     current_face_id: &mut u32,
@@ -1612,27 +1612,36 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
+            let mut current_row_metrics =
+                CurrentDisplayRowMetrics::new(*row_max_height, *row_max_ascent);
             hit_rows.push(HitRow {
                 y_start: *y,
-                y_end: *y + *row_max_height,
+                y_end: *y + current_row_metrics.height(),
                 charpos_start: *hit_row_charpos_start,
                 charpos_end: anchor_charpos,
             });
             *hit_row_charpos_start = anchor_charpos;
-            let finished_row = TextMatrixRowMetrics {
-                y: *y,
-                height: *row_max_height,
-                ascent: *row_max_ascent,
-            };
+            let row_advance =
+                current_row_metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+                    y: *y,
+                    next_row: *row + 1,
+                    text_y,
+                    row_extra_y: *row_extra_y,
+                    default_height: char_h,
+                    default_ascent: default_row_ascent,
+                    kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                });
+            *row_extra_y = row_advance.row_extra_y;
+            let finished_row = row_advance.finished;
             *row += 1;
             if *row >= max_rows {
                 finish_text_matrix_row(builder, output_emitter, finished_row);
                 builder.end_row();
                 false
             } else {
-                *y = text_y + *row as f32 * char_h + row_extra_y;
-                *row_max_height = char_h;
-                *row_max_ascent = default_row_ascent;
+                *y = row_advance.next_y;
+                *row_max_height = row_advance.next_height;
+                *row_max_ascent = row_advance.next_ascent;
                 row_y_positions.push(*y);
                 *x = content_x;
                 *col = 0;
@@ -4071,7 +4080,7 @@ impl LayoutEngine {
                                     right_limit,
                                     content_x,
                                     text_y,
-                                    row_extra_y,
+                                    &mut row_extra_y,
                                     text_matrix_row_base,
                                     max_rows,
                                     &mut current_face_id,
@@ -5675,7 +5684,7 @@ impl LayoutEngine {
                             right_limit,
                             content_x,
                             text_y,
-                            row_extra_y,
+                            &mut row_extra_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut current_face_id,
@@ -5792,7 +5801,7 @@ impl LayoutEngine {
                             right_limit,
                             content_x,
                             text_y,
-                            row_extra_y,
+                            &mut row_extra_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut current_face_id,
@@ -5899,7 +5908,7 @@ impl LayoutEngine {
                     right_limit,
                     content_x,
                     text_y,
-                    row_extra_y,
+                    &mut row_extra_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut current_face_id,
@@ -5937,7 +5946,7 @@ impl LayoutEngine {
                     right_limit,
                     content_x,
                     text_y,
-                    row_extra_y,
+                    &mut row_extra_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut current_face_id,
