@@ -13,7 +13,7 @@
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
-use crate::emacs_core::wait::{WaitCompletion, WaitRequest, WaitSpecialInputOutcome};
+use crate::emacs_core::wait::{WaitCompletion, WaitRequest};
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
@@ -116,6 +116,73 @@ impl Modifiers {
 
     pub fn is_empty(&self) -> bool {
         !self.ctrl && !self.meta && !self.shift && !self.super_ && !self.hyper
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum SpecialInputServiceActivity {
+    #[default]
+    None,
+    Any,
+    Resize,
+}
+
+impl SpecialInputServiceActivity {
+    fn record(self, activity: Self) -> Self {
+        match (self, activity) {
+            (Self::Resize, _) | (_, Self::Resize) => Self::Resize,
+            (Self::Any, _) | (_, Self::Any) => Self::Any,
+            (Self::None, Self::None) => Self::None,
+        }
+    }
+
+    fn any(self) -> bool {
+        matches!(self, Self::Any | Self::Resize)
+    }
+
+    fn resize(self) -> bool {
+        matches!(self, Self::Resize)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SpecialInputServiceOutcome {
+    redisplay_needed: bool,
+    activity: SpecialInputServiceActivity,
+}
+
+impl SpecialInputServiceOutcome {
+    pub(crate) fn any_activity() -> Self {
+        Self {
+            redisplay_needed: false,
+            activity: SpecialInputServiceActivity::Any,
+        }
+    }
+
+    pub(crate) fn resize_with_redisplay() -> Self {
+        Self {
+            redisplay_needed: true,
+            activity: SpecialInputServiceActivity::Resize,
+        }
+    }
+
+    pub(crate) fn merge(self, other: Self) -> Self {
+        Self {
+            redisplay_needed: self.redisplay_needed || other.redisplay_needed,
+            activity: self.activity.record(other.activity),
+        }
+    }
+
+    pub(crate) fn has_any_activity(self) -> bool {
+        self.activity.any()
+    }
+
+    pub(crate) fn has_resize_activity(self) -> bool {
+        self.activity.resize()
+    }
+
+    pub(crate) fn redisplay_needed(self) -> bool {
+        self.redisplay_needed
     }
 }
 
@@ -2980,11 +3047,11 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn service_wait_request_special_input_events(
         &mut self,
-    ) -> Result<WaitSpecialInputOutcome, crate::emacs_core::error::Flow> {
-        let mut outcome = WaitSpecialInputOutcome::default();
+    ) -> Result<SpecialInputServiceOutcome, crate::emacs_core::error::Flow> {
+        let mut outcome = SpecialInputServiceOutcome::default();
 
         if self.sync_pending_resize_events() {
-            outcome = outcome.merge(WaitSpecialInputOutcome::resize_with_redisplay());
+            outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
         }
 
         while let Some(event) = self.take_next_wait_request_special_input_event()? {
@@ -3000,11 +3067,11 @@ impl crate::emacs_core::eval::Context {
                     height,
                     emacs_frame_id,
                 } => {
-                    outcome = outcome.merge(WaitSpecialInputOutcome::resize_with_redisplay());
+                    outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
                     self.apply_resize_input_event(width, height, emacs_frame_id, false);
                 }
                 InputEvent::MonitorsChanged { monitors } => {
-                    outcome = outcome.merge(WaitSpecialInputOutcome::any_activity());
+                    outcome = outcome.merge(SpecialInputServiceOutcome::any_activity());
                     crate::emacs_core::builtins::set_neomacs_monitor_info(monitors);
                     let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(
                         self,
@@ -3023,12 +3090,12 @@ impl crate::emacs_core::eval::Context {
                     target_frame_id,
                     ..
                 } => {
-                    outcome = outcome.merge(WaitSpecialInputOutcome::any_activity());
+                    outcome = outcome.merge(SpecialInputServiceOutcome::any_activity());
                     self.note_mouse_move_input_event(x, y, target_frame_id);
                     self.timer_resume_idle();
                 }
                 InputEvent::WindowClose { emacs_frame_id } => {
-                    outcome = outcome.merge(WaitSpecialInputOutcome::any_activity());
+                    outcome = outcome.merge(SpecialInputServiceOutcome::any_activity());
                     self.handle_window_close_input_event(emacs_frame_id)?;
                 }
                 _ => {}

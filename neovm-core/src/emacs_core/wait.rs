@@ -8,6 +8,8 @@
 
 use std::time::{Duration, Instant};
 
+use crate::keyboard::SpecialInputServiceOutcome;
+
 use super::error::Flow;
 use super::process::{ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest};
 
@@ -431,13 +433,16 @@ impl WaitRequest {
 
     fn needs_redisplay_after_service(
         self,
-        special_input: WaitSpecialInputOutcome,
+        special_input: SpecialInputServiceOutcome,
         outcome: WaitServiceOutcome,
     ) -> bool {
         self.redisplay && (special_input.redisplay_needed() || outcome.has_timer_activity())
     }
 
-    fn needs_redisplay_after_command_input(self, special_input: WaitSpecialInputOutcome) -> bool {
+    fn needs_redisplay_after_command_input(
+        self,
+        special_input: SpecialInputServiceOutcome,
+    ) -> bool {
         self.redisplay && special_input.redisplay_needed()
     }
 
@@ -537,43 +542,6 @@ struct WaitServiceOutcome {
     command_input_pending: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitSpecialInputOutcome {
-    redisplay_needed: bool,
-    activity: WaitSpecialInputActivity,
-}
-
-impl WaitSpecialInputOutcome {
-    pub(crate) fn any_activity() -> Self {
-        Self {
-            redisplay_needed: false,
-            activity: WaitSpecialInputActivity::Any,
-        }
-    }
-
-    pub(crate) fn resize_with_redisplay() -> Self {
-        Self {
-            redisplay_needed: true,
-            activity: WaitSpecialInputActivity::Resize,
-        }
-    }
-
-    pub(crate) fn merge(self, other: Self) -> Self {
-        Self {
-            redisplay_needed: self.redisplay_needed || other.redisplay_needed,
-            activity: self.activity.record(other.activity),
-        }
-    }
-
-    fn activity(self) -> WaitSpecialInputActivity {
-        self.activity
-    }
-
-    pub(crate) fn redisplay_needed(self) -> bool {
-        self.redisplay_needed
-    }
-}
-
 impl WaitServiceOutcome {
     fn has_any_process_activity(self) -> bool {
         self.process_activity.any()
@@ -591,8 +559,16 @@ impl WaitServiceOutcome {
         }
     }
 
-    fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
-        self.special_input_activity = self.special_input_activity.record(activity);
+    fn absorb_special_input_activity(&mut self, special_input: SpecialInputServiceOutcome) {
+        if special_input.has_resize_activity() {
+            self.special_input_activity = self
+                .special_input_activity
+                .record(WaitSpecialInputActivity::Resize);
+        } else if special_input.has_any_activity() {
+            self.special_input_activity = self
+                .special_input_activity
+                .record(WaitSpecialInputActivity::Any);
+        }
     }
 
     fn has_special_input_activity(self) -> bool {
@@ -754,9 +730,9 @@ impl super::eval::Context {
         let special_input = if request.services_special_input() {
             self.service_wait_request_special_input_events()?
         } else {
-            WaitSpecialInputOutcome::default()
+            SpecialInputServiceOutcome::default()
         };
-        outcome.record_special_input_activity(special_input.activity());
+        outcome.absorb_special_input_activity(special_input);
         if request.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
         {
@@ -947,7 +923,7 @@ mod tests {
     fn resize_special_input_activity_implies_any_special_input_activity() {
         let mut outcome = WaitServiceOutcome::default();
 
-        outcome.record_special_input_activity(WaitSpecialInputActivity::Resize);
+        outcome.absorb_special_input_activity(SpecialInputServiceOutcome::resize_with_redisplay());
 
         assert!(outcome.has_resize_activity());
         assert!(outcome.has_special_input_activity());
@@ -955,18 +931,20 @@ mod tests {
 
     #[test]
     fn special_input_outcome_constructs_resize_activity_explicitly() {
-        let outcome = WaitSpecialInputOutcome::resize_with_redisplay();
+        let outcome = SpecialInputServiceOutcome::resize_with_redisplay();
 
-        assert_eq!(outcome.activity(), WaitSpecialInputActivity::Resize);
+        assert!(outcome.has_resize_activity());
+        assert!(outcome.has_any_activity());
         assert!(outcome.redisplay_needed());
     }
 
     #[test]
     fn special_input_outcome_merges_activity_and_redisplay() {
-        let outcome = WaitSpecialInputOutcome::any_activity()
-            .merge(WaitSpecialInputOutcome::resize_with_redisplay());
+        let outcome = SpecialInputServiceOutcome::any_activity()
+            .merge(SpecialInputServiceOutcome::resize_with_redisplay());
 
-        assert_eq!(outcome.activity(), WaitSpecialInputActivity::Resize);
+        assert!(outcome.has_resize_activity());
+        assert!(outcome.has_any_activity());
         assert!(outcome.redisplay_needed());
     }
 
@@ -1187,16 +1165,16 @@ mod tests {
     fn wait_request_redisplay_query_tracks_request_and_activity() {
         let redisplay = WaitRequest::service_once(true);
         let quiet = WaitRequest::service_once(false);
-        let mut special = WaitSpecialInputOutcome::default();
+        let mut special = SpecialInputServiceOutcome::default();
         let mut service = WaitServiceOutcome::default();
 
         assert!(!redisplay.needs_redisplay_after_service(special, service));
 
-        special = WaitSpecialInputOutcome::resize_with_redisplay();
+        special = SpecialInputServiceOutcome::resize_with_redisplay();
         assert!(redisplay.needs_redisplay_after_service(special, service));
         assert!(!quiet.needs_redisplay_after_service(special, service));
 
-        special = WaitSpecialInputOutcome::default();
+        special = SpecialInputServiceOutcome::default();
         service.record_timer_activity(true);
         assert!(redisplay.needs_redisplay_after_service(special, service));
     }
