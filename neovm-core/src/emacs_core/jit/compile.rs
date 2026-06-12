@@ -366,6 +366,40 @@ extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     }
 }
 
+/// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
+/// Compiled bodies have no local handlers (handler opcodes bail), so a throw
+/// always propagates out — exactly the interpreter's `resume_nonlocal` once no
+/// local handler matches. Context-free.
+extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
+    stash_pending_flow(Flow::Throw {
+        tag: Value::from_bits(tag as usize),
+        value: Value::from_bits(value as usize),
+    });
+}
+
+/// Slow path for `integerp` when the value isn't a fixnum: bignums are
+/// veclikes, so delegate to the value layer's own predicate. Context-free,
+/// pure, never allocates or signals.
+extern "C" fn neovm_jit_integerp_slow(v: i64) -> i64 {
+    let v = Value::from_bits(v as usize);
+    (if v.is_integer() {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
+}
+
+/// Slow path for `numberp` when the value isn't a fixnum (floats, bignums).
+/// Context-free, pure, never allocates or signals.
+extern "C" fn neovm_jit_numberp_slow(v: i64) -> i64 {
+    let v = Value::from_bits(v as usize);
+    (if v.is_number() {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
+}
+
 /// `Op::SaveCurrentBuffer`: record the current buffer on the specpdl + the
 /// bind stack, exactly like the interpreter arm (conditional + infallible).
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
@@ -924,21 +958,26 @@ fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> Cl
     fb.ins().select(cond, t, nil)
 }
 
-/// Lower `car`/`cdr` with exact interpreter parity: a cons yields the loaded
-/// field, nil yields nil, and anything else deopts (the interpreter signals
-/// `wrong-type-argument`). Non-allocating; reading a cons field needs no SATB
+/// Lower `car`/`cdr` (and the `-safe` variants) with exact interpreter parity:
+/// a cons yields the loaded field; otherwise plain car/cdr yields nil for nil
+/// and deopts for anything else (the interpreter signals
+/// `wrong-type-argument`), while car-safe/cdr-safe yield nil for ANY non-cons
+/// (total, no deopt). Non-allocating; reading a cons field needs no SATB
 /// barrier (the barrier is on writes), and there is no GC safepoint here.
 fn lower_car_cdr(
     fb: &mut FunctionBuilder,
     deopt: &mut Option<Block>,
     is_cdr: bool,
+    safe: bool,
     a: ClifValue,
 ) -> ClifValue {
     let tag = fb.ins().band_imm(a, TAG_MASK as i64);
     let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
-    let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
-    let valid = fb.ins().bor(is_cons, is_nil);
-    emit_guard(fb, deopt, valid);
+    if !safe {
+        let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
+        let valid = fb.ins().bor(is_cons, is_nil);
+        emit_guard(fb, deopt, valid);
+    }
 
     // Branch: cons -> load the field; nil -> nil. The result flows through a
     // fresh SSA variable (Cranelift inserts the phi at the merge).
@@ -962,7 +1001,13 @@ fn lower_car_cdr(
     fb.ins().jump(merge, &[]);
 
     fb.switch_to_block(nil_blk);
-    fb.def_var(res, a); // nil -> nil (a already holds nil)
+    if safe {
+        // -safe variants: ANY non-cons yields nil.
+        let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+        fb.def_var(res, nil);
+    } else {
+        fb.def_var(res, a); // nil -> nil (a already holds nil, guarded above)
+    }
     fb.ins().jump(merge, &[]);
 
     fb.switch_to_block(merge);
@@ -1009,6 +1054,9 @@ struct RtRefs {
     save_current_buffer: FuncRef,
     save_excursion: FuncRef,
     save_restriction: FuncRef,
+    throw_flow: FuncRef,
+    integerp_slow: FuncRef,
+    numberp_slow: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1099,6 +1147,17 @@ fn declare_rt_refs(
     let scb_id = declare(module, "neovm_jit_save_current_buffer", &sig_save)?;
     let sexc_id = declare(module, "neovm_jit_save_excursion", &sig_save)?;
     let sres_id = declare(module, "neovm_jit_save_restriction", &sig_save)?;
+    // (tag, value) -> ()  — context-free Flow stash.
+    let mut sig_throw = Signature::new(call_conv);
+    sig_throw.params.push(AbiParam::new(i64t));
+    sig_throw.params.push(AbiParam::new(i64t));
+    let throw_id = declare(module, "neovm_jit_throw", &sig_throw)?;
+    // (v) -> t/nil bits  — context-free predicates.
+    let mut sig_pred1 = Signature::new(call_conv);
+    sig_pred1.params.push(AbiParam::new(i64t));
+    sig_pred1.returns.push(AbiParam::new(i64t));
+    let intp_id = declare(module, "neovm_jit_integerp_slow", &sig_pred1)?;
+    let nump_id = declare(module, "neovm_jit_numberp_slow", &sig_pred1)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1117,6 +1176,9 @@ fn declare_rt_refs(
         save_current_buffer: module.declare_func_in_func(scb_id, func),
         save_excursion: module.declare_func_in_func(sexc_id, func),
         save_restriction: module.declare_func_in_func(sres_id, func),
+        throw_flow: module.declare_func_in_func(throw_id, func),
+        integerp_slow: module.declare_func_in_func(intp_id, func),
+        numberp_slow: module.declare_func_in_func(nump_id, func),
     })
 }
 
@@ -1301,7 +1363,68 @@ fn lower_simple_op(
         Op::Car | Op::Cdr => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_cdr = matches!(op, Op::Cdr);
-            stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
+            stack.push(lower_car_cdr(fb, deopt, is_cdr, false, a));
+        }
+        Op::CarSafe | Op::CdrSafe => {
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let is_cdr = matches!(op, Op::CdrSafe);
+            stack.push(lower_car_cdr(fb, deopt, is_cdr, true, a));
+        }
+        Op::Max | Op::Min => {
+            // Both fixnum -> keep the original tagged operand selected by the
+            // untagged comparison (exact interpreter parity: fixnum_ge ->
+            // a-else-b for max, fixnum_le -> a-else-b for min); otherwise deopt
+            // to the interpreter's number-coercing builtin.
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            guard_fixnum(fb, deopt, a);
+            guard_fixnum(fb, deopt, b);
+            let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+            let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+            let cc = if matches!(op, Op::Max) {
+                IntCC::SignedGreaterThanOrEqual
+            } else {
+                IntCC::SignedLessThanOrEqual
+            };
+            let keep_a = fb.ins().icmp(cc, av, bv);
+            stack.push(fb.ins().select(keep_a, a, b));
+        }
+        Op::Integerp | Op::Numberp => {
+            // Fixnum tag -> t natively; anything else (bignum/float/non-number)
+            // through the context-free slow shim.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("predicate"))?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let shim = if matches!(op, Op::Integerp) {
+                rt.refs.integerp_slow
+            } else {
+                rt.refs.numberp_slow
+            };
+            let res = fb.declare_var(types::I64);
+            let fast = fb.create_block();
+            let slow = fb.create_block();
+            let merge = fb.create_block();
+            let tagbits = fb.ins().band_imm(a, FIXNUM_CHECK_MASK as i64);
+            let is_fix = fb
+                .ins()
+                .icmp_imm(IntCC::Equal, tagbits, FIXNUM_CHECK_VALUE as i64);
+            fb.ins().brif(is_fix, fast, &[], slow, &[]);
+
+            fb.switch_to_block(fast);
+            fb.seal_block(fast);
+            let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+            fb.def_var(res, t);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(slow);
+            fb.seal_block(slow);
+            let call = fb.ins().call(shim, &[a]);
+            let slow_res = fb.inst_results(call)[0];
+            fb.def_var(res, slow_res);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(merge);
+            fb.seal_block(merge);
+            stack.push(fb.use_var(res));
         }
         Op::VarRef(idx) => {
             // Read through the runtime's variable machinery (buffer-locals,
@@ -1518,7 +1641,9 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         | Op::Geq => (2, -1),
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp | Op::Symbolp => (1, 0),
-        Op::Car | Op::Cdr => (1, 0),
+        Op::Integerp | Op::Numberp => (1, 0),
+        Op::Car | Op::Cdr | Op::CarSafe | Op::CdrSafe => (1, 0),
+        Op::Max | Op::Min => (2, -1),
         Op::Cons => (2, -1),
         // [func a1 .. aN] -> [result]
         Op::Call(n) | Op::Apply(n) => (*n as usize + 1, -(*n as i64)),
@@ -1561,6 +1686,8 @@ fn emits_guard(op: &Op) -> bool {
             | Op::Geq
             | Op::Car
             | Op::Cdr
+            | Op::Max
+            | Op::Min
     )
 }
 
@@ -1639,7 +1766,7 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     leader_set.insert(i + 1);
                 }
             }
-            Op::Return => {
+            Op::Return | Op::Throw => {
                 if i + 1 < n {
                     leader_set.insert(i + 1);
                 }
@@ -1679,6 +1806,15 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     // Returning with outstanding binds is fine: the frame
                     // unwind in CompiledLeaf::call unbinds to the entry base,
                     // exactly like cleanup_bytecode_frame.
+                    terminated = true;
+                    break;
+                }
+                Op::Throw => {
+                    // [tag value] -> non-local exit; a terminator for compiled
+                    // code (no local handlers exist — handler opcodes bail).
+                    if cur < 2 {
+                        return Err(CompileError::StackUnderflow);
+                    }
                     terminated = true;
                     break;
                 }
@@ -1933,6 +2069,15 @@ pub fn lower_leaf(
         "neovm_jit_save_restriction",
         neovm_jit_save_restriction as *const u8,
     );
+    builder.symbol("neovm_jit_throw", neovm_jit_throw as *const u8);
+    builder.symbol(
+        "neovm_jit_integerp_slow",
+        neovm_jit_integerp_slow as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_numberp_slow",
+        neovm_jit_numberp_slow as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -1965,6 +2110,9 @@ pub fn lower_leaf(
                     | Op::SaveCurrentBuffer
                     | Op::SaveExcursion
                     | Op::SaveRestriction
+                    | Op::Throw
+                    | Op::Integerp
+                    | Op::Numberp
             )
         });
 
@@ -2085,6 +2233,18 @@ pub fn lower_leaf(
                         fb.ins().store(MemFlags::trusted(), result, out, 0);
                         let one = fb.ins().iconst(types::I64, 1);
                         fb.ins().return_(&[one]);
+                        terminated = true;
+                        break;
+                    }
+                    Op::Throw => {
+                        // Stash Flow::Throw{tag, value} and exit via the signal
+                        // path (no local handlers exist in compiled bodies).
+                        let value = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let tag = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let rt = rt.as_ref().ok_or(CompileError::UnsupportedOp("throw"))?;
+                        fb.ins().call(rt.refs.throw_flow, &[tag, value]);
+                        let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+                        fb.ins().jump(se, &[]);
                         terminated = true;
                         break;
                     }
@@ -2929,6 +3089,84 @@ mod tests {
             err,
             CompileError::UnsupportedOp("guard-after-call")
         ));
+    }
+
+    #[test]
+    fn compiles_trivial_natives_carsafe_maxmin_throw_numpreds() {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let t = NativeRun::Ok(Value::T.bits());
+        let nil = NativeRun::Ok(Value::NIL.bits());
+        let run1 = |op: Op, v: Value, ctx: *mut u8| {
+            lower_nullary_leaf(&[Op::Constant(0), op, Op::Return], &[v])
+                .unwrap()
+                .call(ctx, &[])
+        };
+
+        // car-safe / cdr-safe: total — non-cons (incl. fixnums) -> nil, no deopt.
+        let cons = Value::cons(Value::make_int(3), Value::make_int(4));
+        assert_eq!(
+            run1(Op::CarSafe, cons, ctx_ptr),
+            NativeRun::Ok(Value::make_int(3).bits())
+        );
+        assert_eq!(
+            run1(Op::CdrSafe, cons, ctx_ptr),
+            NativeRun::Ok(Value::make_int(4).bits())
+        );
+        assert_eq!(run1(Op::CarSafe, Value::make_int(9), ctx_ptr), nil);
+        assert_eq!(run1(Op::CdrSafe, Value::T, ctx_ptr), nil);
+        assert_eq!(run1(Op::CarSafe, Value::NIL, ctx_ptr), nil);
+
+        // max / min: fixnum fast path keeps the original tagged operand;
+        // non-fixnum deopts to the interpreter's coercing builtin.
+        let run2 = |op: Op, a: Value, b: Value, ctx: *mut u8| {
+            lower_nullary_leaf(&[Op::Constant(0), Op::Constant(1), op, Op::Return], &[a, b])
+                .unwrap()
+                .call(ctx, &[])
+        };
+        assert_eq!(
+            run2(Op::Max, Value::make_int(3), Value::make_int(7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(7).bits())
+        );
+        assert_eq!(
+            run2(Op::Max, Value::make_int(-3), Value::make_int(-7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(-3).bits())
+        );
+        assert_eq!(
+            run2(Op::Min, Value::make_int(3), Value::make_int(7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(3).bits())
+        );
+        assert_eq!(
+            run2(Op::Max, Value::make_float(1.5), Value::make_int(7), ctx_ptr),
+            NativeRun::Deopt
+        );
+
+        // integerp / numberp: fixnum natively; float/bignum via the slow shim.
+        assert_eq!(run1(Op::Integerp, Value::make_int(5), ctx_ptr), t);
+        assert_eq!(run1(Op::Integerp, Value::make_float(1.5), ctx_ptr), nil);
+        assert_eq!(run1(Op::Integerp, Value::T, ctx_ptr), nil);
+        assert_eq!(run1(Op::Numberp, Value::make_int(5), ctx_ptr), t);
+        assert_eq!(run1(Op::Numberp, Value::make_float(1.5), ctx_ptr), t);
+        assert_eq!(run1(Op::Numberp, Value::NIL, ctx_ptr), nil);
+
+        // throw: stashes Flow::Throw and exits via the signal path.
+        let tag = Value::symbol("jit-throw-tag");
+        let thrown = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Throw],
+            &[tag, Value::make_int(42)],
+        )
+        .unwrap();
+        assert_eq!(thrown.call(ctx_ptr, &[]), NativeRun::Signal);
+        match take_pending_flow().expect("throw Flow stashed") {
+            Flow::Throw {
+                tag: got_tag,
+                value,
+            } => {
+                assert_eq!(got_tag, tag);
+                assert_eq!(value, Value::make_int(42));
+            }
+            other => panic!("expected Flow::Throw, got {other:?}"),
+        }
     }
 
     #[test]
