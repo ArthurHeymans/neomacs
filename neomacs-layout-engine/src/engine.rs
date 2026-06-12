@@ -22,7 +22,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowActiveFace, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
+    DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowGlyphMeasurementFace, DisplayRowMeasuredFaceMetrics,
     DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds,
     DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
@@ -3121,7 +3121,7 @@ impl LayoutEngine {
             &mut self.font_metrics,
         );
         let mut active_face_state =
-            DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face).into_state();
+            DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
         face_metrics = active_face_state.metrics();
         let default_measurement_state = active_face_state.measurement_state().clone();
 

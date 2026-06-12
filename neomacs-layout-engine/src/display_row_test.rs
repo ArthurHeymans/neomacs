@@ -246,6 +246,34 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
 }
 
 #[test]
+fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
+    let mut font_metrics = None;
+    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let mut face = base_face();
+    face.fg = 0x00112233;
+    face.bg = 0x00445566;
+    let measured = policy.measured_face(
+        14,
+        &face,
+        None,
+        7.0,
+        DisplayRowFallbackMetrics {
+            char_width: 7.0,
+            row_height: 15.0,
+            ascent: 10.0,
+        },
+        &mut font_metrics,
+    );
+
+    let active = DisplayRowActiveFaceState::new(face.clone(), measured);
+
+    assert_eq!(active.face_id(), 14);
+    assert_eq!(active.background(), Color::from_pixel(face.bg));
+    assert_eq!(active.resolved_face().fg, face.fg);
+    assert_eq!(active.metrics().char_width, 7.0);
+}
+
+#[test]
 fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let _eval = Context::new();
     let mut font_metrics = None;
@@ -1617,7 +1645,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let policy = DisplayRowMeasurementPolicy::for_frame(false);
     let mut font_metrics = None;
 
-    let active = DisplayRowActiveFace::new(
+    let active = DisplayRowActiveFaceState::new(
         base.clone(),
         policy.measured_face(
             8,
@@ -1631,8 +1659,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
             },
             &mut font_metrics,
         ),
-    )
-    .into_state();
+    );
 
     let measurement_state = active.measurement_state();
     assert_eq!(measurement_state.metrics().space_width, 7.0);
@@ -1713,7 +1740,7 @@ fn display_row_measured_face_exposes_face_identity() {
         &mut font_metrics,
     );
 
-    let active = DisplayRowActiveFace::new(base, measured).into_state();
+    let active = DisplayRowActiveFaceState::new(base, measured);
     assert_eq!(active.face_id(), 42);
     assert_eq!(active.measurement_state().measurement_face().face_id(), 42);
 }

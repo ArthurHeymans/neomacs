@@ -699,25 +699,13 @@ impl DisplayRowResolvedMeasuredFace {
         self.measured_face.face_id()
     }
 
-    pub(crate) fn into_active_face(self) -> DisplayRowActiveFace {
-        DisplayRowActiveFace::new(self.face, self.measured_face)
-    }
-
     pub(crate) fn into_active_face_state(self) -> DisplayRowActiveFaceState {
-        self.into_active_face().into_state()
+        DisplayRowActiveFaceState::new(self.face, self.measured_face)
     }
 
     pub(crate) fn install_into(&self, builder: &mut GlyphMatrixBuilder) {
         insert_resolved_display_row_face(builder, self.face_id(), &self.face, self.metrics);
     }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct DisplayRowActiveFace {
-    resolved_face: ResolvedFace,
-    measurement_face: DisplayRowGlyphMeasurementFace,
-    metrics: DisplayRowMeasuredFaceMetrics,
-    background: Color,
 }
 
 #[derive(Clone, Debug)]
@@ -784,6 +772,23 @@ pub(crate) struct DisplayRowActiveFaceState {
 }
 
 impl DisplayRowActiveFaceState {
+    pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
+        let face_id = measured_face.face_id();
+        let background = Color::from_pixel(resolved_face.bg);
+        let metrics = measured_face.metrics();
+        Self {
+            render: DisplayRowActiveFaceRenderState {
+                face_id,
+                background,
+                resolved_face,
+            },
+            measurement: DisplayRowActiveFaceMeasurementState {
+                measurement_face: measured_face.into_measurement_face(),
+                metrics,
+            },
+        }
+    }
+
     pub(crate) fn face_id(&self) -> u32 {
         self.render.face_id
     }
@@ -829,34 +834,6 @@ impl DisplayRowActiveFaceState {
     ) -> DisplayTextRunMeasurement {
         self.measurement
             .resolved_fragment_measurement(text, advance_px)
-    }
-}
-
-impl DisplayRowActiveFace {
-    pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
-        let background = Color::from_pixel(resolved_face.bg);
-        let metrics = measured_face.metrics();
-        Self {
-            resolved_face,
-            measurement_face: measured_face.into_measurement_face(),
-            metrics,
-            background,
-        }
-    }
-
-    pub(crate) fn into_state(self) -> DisplayRowActiveFaceState {
-        let face_id = self.measurement_face.face_id();
-        DisplayRowActiveFaceState {
-            render: DisplayRowActiveFaceRenderState {
-                face_id,
-                background: self.background,
-                resolved_face: self.resolved_face,
-            },
-            measurement: DisplayRowActiveFaceMeasurementState {
-                measurement_face: self.measurement_face,
-                metrics: self.metrics,
-            },
-        }
     }
 }
 

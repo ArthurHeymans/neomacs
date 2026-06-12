@@ -4,7 +4,7 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_row::{
-    DisplayRowActiveFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
     DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
 };
@@ -102,7 +102,7 @@ fn display_row_append_metrics_builds_from_active_face_state() {
         },
         &mut font_metrics,
     );
-    let active_face = DisplayRowActiveFace::new(base, measured).into_state();
+    let active_face = DisplayRowActiveFaceState::new(base, measured);
 
     let metrics = DisplayRowAppendMetrics::from_active_face_state(&active_face, 16.0);
 
