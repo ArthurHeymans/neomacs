@@ -524,11 +524,14 @@ fn display_text_run_measurement_maps_base_char_byte_advances() {
 
     assert_eq!(
         measurement.base_char_byte_advances("a\u{301}中", 100),
-        vec![(100, 7.0), (103, 9.0)]
+        vec![
+            DisplayTextRunByteAdvance::new(100, 7.0),
+            DisplayTextRunByteAdvance::new(103, 9.0),
+        ]
     );
     assert_eq!(
         DisplayTextRunMeasurement::PerChar.base_char_byte_advances("a\u{301}", 100),
-        Vec::<(usize, f32)>::new()
+        Vec::<DisplayTextRunByteAdvance>::new()
     );
 }
 

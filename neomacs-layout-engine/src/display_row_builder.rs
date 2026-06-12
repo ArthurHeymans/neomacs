@@ -149,6 +149,21 @@ impl DisplayTextRunAdvance {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayTextRunByteAdvance {
+    pub(crate) byte_offset: usize,
+    pub(crate) advance_px: f32,
+}
+
+impl DisplayTextRunByteAdvance {
+    pub(crate) fn new(byte_offset: usize, advance_px: f32) -> Self {
+        Self {
+            byte_offset,
+            advance_px,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayTextRunMeasurement {
     PerChar,
     Measured(Vec<DisplayTextRunAdvance>),
@@ -185,7 +200,7 @@ impl DisplayTextRunMeasurement {
         &self,
         text: &str,
         base_byte_offset: usize,
-    ) -> Vec<(usize, f32)> {
+    ) -> Vec<DisplayTextRunByteAdvance> {
         let Self::Measured(advances) = self else {
             return Vec::new();
         };
@@ -194,8 +209,10 @@ impl DisplayTextRunMeasurement {
             .iter()
             .filter_map(|advance| {
                 let c = text.get(advance.byte_offset..)?.chars().next()?;
-                (!is_cluster_extender(c))
-                    .then_some((base_byte_offset + advance.byte_offset, advance.advance_px))
+                (!is_cluster_extender(c)).then_some(DisplayTextRunByteAdvance::new(
+                    base_byte_offset + advance.byte_offset,
+                    advance.advance_px,
+                ))
             })
             .collect()
     }

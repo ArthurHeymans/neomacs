@@ -39,7 +39,7 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
-    DisplayTextRunMeasurement,
+    DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3319,7 +3319,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut complex_run_adv: Vec<(usize, f32)> = Vec::new();
+        let mut complex_run_adv: Vec<DisplayTextRunByteAdvance> = Vec::new();
         let mut complex_run_start: usize = usize::MAX;
         let mut complex_run_end: usize = 0;
 
@@ -5124,8 +5124,8 @@ impl LayoutEngine {
                 }
                 match complex_run_adv
                     .iter()
-                    .find(|(b, _)| *b == ch_start_byte_idx)
-                    .map(|(_, a)| *a)
+                    .find(|advance| advance.byte_offset == ch_start_byte_idx)
+                    .map(|advance| advance.advance_px)
                 {
                     // In the shaped run: use it, including 0 for a character
                     // covered by a preceding ligature glyph (no double-count).
