@@ -1488,7 +1488,18 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let policy = DisplayRowMeasurementPolicy::for_frame(false);
     let mut font_metrics = None;
 
-    let measured = policy.measured_face(8, &base, None, 7.2, 7.2, &mut font_metrics);
+    let measured = policy.measured_face(
+        8,
+        &base,
+        None,
+        7.2,
+        DisplayRowFallbackMetrics {
+            char_width: 7.2,
+            row_height: 16.0,
+            ascent: 11.0,
+        },
+        &mut font_metrics,
+    );
 
     assert_eq!(measured.space_width(), 7.0);
     assert_eq!(
@@ -1497,6 +1508,37 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
             .advance_for_char(&mut font_metrics, 'x', 7.2),
         7.0
     );
+}
+
+#[test]
+fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let metrics = crate::font_metrics::FontMetrics {
+        ascent: 13.0,
+        descent: 5.0,
+        line_height: 18.0,
+        char_width: 9.0,
+    };
+    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let mut font_metrics = None;
+
+    let measured = policy.measured_face(
+        8,
+        &base,
+        Some(metrics),
+        7.2,
+        DisplayRowFallbackMetrics {
+            char_width: 7.2,
+            row_height: 16.0,
+            ascent: 11.0,
+        },
+        &mut font_metrics,
+    );
+
+    assert_eq!(measured.char_width(), 9.0);
+    assert_eq!(measured.row_height(), 18.0);
+    assert_eq!(measured.ascent(), 13.0);
 }
 
 #[test]

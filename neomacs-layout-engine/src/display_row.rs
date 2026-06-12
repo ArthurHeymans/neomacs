@@ -468,6 +468,13 @@ pub(crate) struct DisplayRowMeasurementPolicy {
     mode: DisplayRowMeasurementMode,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowFallbackMetrics {
+    pub(crate) char_width: f32,
+    pub(crate) row_height: f32,
+    pub(crate) ascent: f32,
+}
+
 impl DisplayRowMeasurementPolicy {
     pub(crate) fn for_frame(window_system: bool) -> Self {
         Self {
@@ -496,14 +503,24 @@ impl DisplayRowMeasurementPolicy {
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
         fallback_char_width: f32,
-        space_fallback_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowMeasuredFace {
         let measurement_face = self.measurement_face(face_id, face, metrics, fallback_char_width);
         let space_width =
-            measurement_face.advance_for_char(font_metrics, ' ', space_fallback_width);
+            measurement_face.advance_for_char(font_metrics, ' ', fallback_metrics.char_width);
+        let (char_width, row_height, ascent) = metrics
+            .map(|metrics| (metrics.char_width, metrics.line_height, metrics.ascent))
+            .unwrap_or((
+                fallback_metrics.char_width,
+                fallback_metrics.row_height,
+                fallback_metrics.ascent,
+            ));
         DisplayRowMeasuredFace {
             measurement_face,
+            char_width,
+            row_height,
+            ascent,
             space_width,
         }
     }
@@ -615,6 +632,9 @@ impl DisplayRowGlyphMeasurementFace {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowMeasuredFace {
     measurement_face: DisplayRowGlyphMeasurementFace,
+    char_width: f32,
+    row_height: f32,
+    ascent: f32,
     space_width: f32,
 }
 
@@ -629,6 +649,18 @@ impl DisplayRowMeasuredFace {
 
     pub(crate) fn space_width(&self) -> f32 {
         self.space_width
+    }
+
+    pub(crate) fn char_width(&self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn row_height(&self) -> f32 {
+        self.row_height
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.ascent
     }
 }
 

@@ -22,11 +22,11 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurementFace,
-    DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
-    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowGlyphMeasurementFace, DisplayRowMeasurementPolicy, DisplayRowOutputProgress,
+    DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
     install_rendered_display_row,
 };
 use crate::display_row_append::{
@@ -3116,9 +3116,16 @@ impl LayoutEngine {
             default_resolved,
             None,
             char_w,
-            face_char_w,
+            DisplayRowFallbackMetrics {
+                char_width: face_char_w,
+                row_height: face_h,
+                ascent: face_ascent_val,
+            },
             &mut self.font_metrics,
         );
+        face_char_w = default_measured_face.char_width();
+        face_h = default_measured_face.row_height();
+        face_ascent_val = default_measured_face.ascent();
         face_space_w = default_measured_face.space_width();
         let default_measurement_face = default_measured_face.measurement_face().clone();
         let mut current_measurement_face = default_measured_face.into_measurement_face();
@@ -3415,26 +3422,6 @@ impl LayoutEngine {
                     } else {
                         None
                     };
-                    if let Some(m) = metrics {
-                        // face_char_w is the canonical column width for the
-                        // current face. Per-character advances are measured
-                        // through DisplayRowGlyphMeasurementFace below.
-                        face_char_w = m.char_width;
-                        face_h = m.line_height;
-                        face_ascent_val = m.ascent;
-                    } else {
-                        face_char_w = char_w;
-                        face_h = char_h;
-                        face_ascent_val = font_ascent;
-                    }
-
-                    if face_h > row_max_height {
-                        row_max_height = face_h;
-                    }
-                    if face_ascent_val > row_max_ascent {
-                        row_max_ascent = face_ascent_val;
-                    }
-
                     let fg = Color::from_pixel(resolved.fg);
                     _current_fg = fg;
                     let bg = Color::from_pixel(resolved.bg);
@@ -3446,11 +3433,25 @@ impl LayoutEngine {
                         &resolved,
                         metrics,
                         char_w,
-                        face_char_w,
+                        DisplayRowFallbackMetrics {
+                            char_width: char_w,
+                            row_height: char_h,
+                            ascent: font_ascent,
+                        },
                         &mut self.font_metrics,
                     );
+                    face_char_w = measured_face.char_width();
+                    face_h = measured_face.row_height();
+                    face_ascent_val = measured_face.ascent();
                     face_space_w = measured_face.space_width();
                     current_measurement_face = measured_face.into_measurement_face();
+
+                    if face_h > row_max_height {
+                        row_max_height = face_h;
+                    }
+                    if face_ascent_val > row_max_ascent {
+                        row_max_ascent = face_ascent_val;
+                    }
 
                     insert_resolved_display_row_face(
                         &mut self.matrix_builder,
