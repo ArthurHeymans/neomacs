@@ -85,7 +85,7 @@ fn display_row_append_metrics_builds_from_measured_face_metrics() {
 }
 
 #[test]
-fn display_row_append_metrics_builds_from_active_face() {
+fn display_row_append_metrics_builds_from_active_measurement_state() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base = resolver.default_face().clone();
@@ -104,7 +104,10 @@ fn display_row_append_metrics_builds_from_active_face() {
     );
     let active_face = DisplayRowActiveFace::new(base, measured);
 
-    let metrics = DisplayRowAppendMetrics::from_active_face(&active_face, 16.0);
+    let metrics = DisplayRowAppendMetrics::from_active_measurement_state(
+        &active_face.measurement_state(),
+        16.0,
+    );
 
     assert_eq!(
         metrics,

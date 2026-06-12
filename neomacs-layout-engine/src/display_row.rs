@@ -789,14 +789,6 @@ impl DisplayRowActiveFace {
         self.measurement_face.face_id()
     }
 
-    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
-        &self.measurement_face
-    }
-
-    pub(crate) fn layout_metrics(&self) -> DisplayRowMeasuredFaceMetrics {
-        self.metrics
-    }
-
     pub(crate) fn render_state(&self) -> DisplayRowActiveFaceRenderState {
         DisplayRowActiveFaceRenderState {
             face_id: self.face_id(),
