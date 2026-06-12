@@ -1379,6 +1379,8 @@ impl<'a> LoadDecoder<'a> {
                 interactive: None,
                 closure_slot_count: 4,
                 extra_slots: Vec::new(),
+                #[cfg(feature = "jit")]
+                runtime: crate::emacs_core::jit::Runtime::new(),
             }),
             DumpHeapObject::Record(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
@@ -4008,6 +4010,8 @@ pub(crate) fn load_bytecode(
             .iter()
             .map(|value| decoder.load_value(value))
             .collect(),
+        #[cfg(feature = "jit")]
+        runtime: crate::emacs_core::jit::Runtime::new(),
     })
 }
 
@@ -4049,6 +4053,8 @@ fn load_bytecode_owned(
             .into_iter()
             .map(|value| decoder.load_value_owned(value))
             .collect(),
+        #[cfg(feature = "jit")]
+        runtime: crate::emacs_core::jit::Runtime::new(),
     })
 }
 

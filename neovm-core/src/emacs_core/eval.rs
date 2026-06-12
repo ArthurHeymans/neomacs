@@ -10183,6 +10183,8 @@ impl Context {
             interactive: None,
             closure_slot_count: 4,
             extra_slots: Vec::new(),
+            #[cfg(feature = "jit")]
+            runtime: crate::emacs_core::jit::Runtime::new(),
         };
 
         let mut vm = super::bytecode::Vm::from_context(self);
@@ -11149,8 +11151,24 @@ impl Context {
                 // cloning per call dominated debug-build batch-byte-compile
                 // runtime.
                 let bc_data = function.get_bytecode_data().unwrap();
-                let mut vm = super::bytecode::Vm::from_context(self);
-                vm.execute_with_func_value(bc_data, args, function)
+                // Tier-up dispatch seam (JIT Phase 0). The `match` over the
+                // dispatch plan is intentionally exhaustive: once a compiled
+                // tier exists it MUST be handled here, enforced by the compiler.
+                // Behind the `jit` feature; the default build is unchanged.
+                #[cfg(feature = "jit")]
+                {
+                    match bc_data.runtime.dispatch() {
+                        crate::emacs_core::jit::Plan::Interpret => {
+                            let mut vm = super::bytecode::Vm::from_context(self);
+                            vm.execute_with_func_value(bc_data, args, function)
+                        }
+                    }
+                }
+                #[cfg(not(feature = "jit"))]
+                {
+                    let mut vm = super::bytecode::Vm::from_context(self);
+                    vm.execute_with_func_value(bc_data, args, function)
+                }
             }
             ValueKind::Veclike(VecLikeType::Lambda) => self.apply_lambda(function, args),
             ValueKind::Veclike(VecLikeType::Macro) => self.apply_lambda(function, args),

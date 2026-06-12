@@ -92,6 +92,11 @@ pub struct ByteCodeFunction {
     /// GNU accepts `&rest ELEMENTS` after the interactive slot.  They have no
     /// execution significance, but remain observable through closure slots.
     pub extra_slots: Vec<Value>,
+    /// Runtime tiering/profiling state (the JIT path). NOT part of the dumped
+    /// representation — pure runtime state, started cold each session and on
+    /// each clone. Present only under the `jit` feature. See `jit.rs`.
+    #[cfg(feature = "jit")]
+    pub runtime: crate::emacs_core::jit::Runtime,
 }
 
 #[cfg(test)]
@@ -127,6 +132,9 @@ impl Clone for ByteCodeFunction {
             interactive: self.interactive,
             closure_slot_count: self.closure_slot_count,
             extra_slots: self.extra_slots.clone(),
+            // A cloned function starts cold (profiling is per-instance).
+            #[cfg(feature = "jit")]
+            runtime: crate::emacs_core::jit::Runtime::new(),
         }
     }
 }
@@ -149,6 +157,8 @@ impl ByteCodeFunction {
             interactive: None,
             closure_slot_count: 4,
             extra_slots: Vec::new(),
+            #[cfg(feature = "jit")]
+            runtime: crate::emacs_core::jit::Runtime::new(),
         }
     }
 

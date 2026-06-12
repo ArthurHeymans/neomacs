@@ -5523,6 +5523,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 interactive: None,
                 closure_slot_count: 4,
                 extra_slots: Vec::new(),
+                #[cfg(feature = "jit")]
+                runtime: crate::emacs_core::jit::Runtime::new(),
             };
 
             ctx.refresh_features_from_variable();

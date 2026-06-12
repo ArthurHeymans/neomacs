@@ -64,6 +64,10 @@ windows-sys.workspace = true
 [features]
 default = []
 sound = ["rodio"]
+# Tiered JIT execution subsystem (src/emacs_core/jit.rs +
+# bytecode/ELISP_VM_MODERNIZATION.md). Under construction; default OFF so
+# production is byte-for-byte unchanged. Build/test with `--features jit`.
+jit = []
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }

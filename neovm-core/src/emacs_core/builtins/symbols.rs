@@ -5936,6 +5936,8 @@ fn make_byte_code_from_parts_with_slots(
         interactive: interactive.copied(),
         closure_slot_count,
         extra_slots: extra_slots.to_vec(),
+        #[cfg(feature = "jit")]
+        runtime: crate::emacs_core::jit::Runtime::new(),
     };
 
     Ok(Value::make_bytecode(bc))
