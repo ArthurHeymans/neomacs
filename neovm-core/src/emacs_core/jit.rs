@@ -21,6 +21,14 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use crate::emacs_core::intern::SymId;
 
+/// Cranelift codegen backend (Phase 3+). Only compiled with the `jit` feature,
+/// since it links Cranelift. Today it exposes a self-contained smoke path that
+/// proves the codegen toolchain works inside neovm-core's own build before any
+/// bytecode is lowered onto it — the same "prove the tool, then build on it"
+/// discipline used to validate TSan before trusting the concurrent GC.
+#[cfg(feature = "jit")]
+pub mod backend;
+
 /// Which execution tier currently backs a compiled function.
 ///
 /// Only [`Tier::Bytecode`] exists today. Later phases add `Baseline`
