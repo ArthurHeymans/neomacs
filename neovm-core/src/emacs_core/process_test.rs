@@ -2297,7 +2297,7 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
         )))
         .expect("wait for command input");
 
-    assert_eq!(outcome.completion, WaitCompletion::CommandInputPending);
+    assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
     assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
 }
 
@@ -2394,7 +2394,7 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
         )))
         .expect("wait for command input through wakeup backend");
 
-    assert_eq!(outcome.completion, WaitCompletion::CommandInputPending);
+    assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
     let event = ev.read_char().expect("keypress should remain readable");
     assert_eq!(event, Value::fixnum('w' as i64));
 }

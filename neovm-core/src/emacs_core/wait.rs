@@ -436,8 +436,18 @@ impl WaitServiceOutcome {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WaitOutcome {
-    pub(crate) completion: WaitCompletion,
-    pub(crate) service: WaitServiceOutcome,
+    completion: WaitCompletion,
+    service: WaitServiceOutcome,
+}
+
+impl WaitOutcome {
+    pub(crate) fn completion(self) -> WaitCompletion {
+        self.completion
+    }
+
+    pub(crate) fn service(self) -> WaitServiceOutcome {
+        self.service
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -843,5 +853,18 @@ mod tests {
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.process_policy(), ProcessWaitPolicy::Target(12));
         assert_eq!(request.target_process(), Some(12));
+    }
+
+    #[test]
+    fn wait_outcome_exposes_completion_and_service_queries() {
+        let mut service = WaitServiceOutcome::default();
+        service.record_command_input_pending();
+        let outcome = WaitOutcome {
+            completion: WaitCompletion::CommandInputPending,
+            service,
+        };
+
+        assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
+        assert!(outcome.service().has_command_input_pending());
     }
 }

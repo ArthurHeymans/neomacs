@@ -2817,7 +2817,7 @@ impl crate::emacs_core::eval::Context {
             &self.buffers,
             self.display_host.as_deref(),
         );
-        outcome.is_some_and(|outcome| outcome.completion == WaitCompletion::SpecialInputActivity)
+        outcome.is_some_and(|outcome| outcome.completion() == WaitCompletion::SpecialInputActivity)
     }
 
     fn take_next_wait_request_special_input_event(
@@ -3960,7 +3960,7 @@ impl crate::emacs_core::eval::Context {
                 self.wait_reading_process_output(WaitRequest::read_command_input(wait_deadline));
             self.timer_stop_idle();
 
-            match wait_result?.completion {
+            match wait_result?.completion() {
                 WaitCompletion::CommandInputPending => {
                     continue;
                 }
