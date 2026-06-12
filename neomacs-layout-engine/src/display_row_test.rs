@@ -177,7 +177,6 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.measurement_face().face_id(), 14);
     assert_eq!(active.metrics().char_width, 7.0);
-    assert_eq!(active.foreground(), Color::from_pixel(face.fg));
     assert_eq!(active.background(), Color::from_pixel(face.bg));
 }
 

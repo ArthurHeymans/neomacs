@@ -713,20 +713,17 @@ pub(crate) struct DisplayRowActiveFace {
     resolved_face: ResolvedFace,
     measurement_face: DisplayRowGlyphMeasurementFace,
     metrics: DisplayRowMeasuredFaceMetrics,
-    foreground: Color,
     background: Color,
 }
 
 impl DisplayRowActiveFace {
     pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
-        let foreground = Color::from_pixel(resolved_face.fg);
         let background = Color::from_pixel(resolved_face.bg);
         let metrics = measured_face.metrics();
         Self {
             resolved_face,
             measurement_face: measured_face.into_measurement_face(),
             metrics,
-            foreground,
             background,
         }
     }
@@ -745,10 +742,6 @@ impl DisplayRowActiveFace {
 
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.metrics
-    }
-
-    pub(crate) fn foreground(&self) -> Color {
-        self.foreground
     }
 
     pub(crate) fn background(&self) -> Color {

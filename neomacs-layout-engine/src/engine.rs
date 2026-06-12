@@ -2805,7 +2805,6 @@ impl LayoutEngine {
         // redisplay when faces override font size, ascent, or box widths.
         let default_resolved = face_resolver.default_face();
         let default_fg = Color::from_pixel(default_resolved.fg);
-        let default_bg = Color::from_pixel(default_resolved.bg);
 
         let (default_face_char_w, default_face_h, default_face_ascent) = if frame_params
             .window_system
@@ -3105,9 +3104,6 @@ impl LayoutEngine {
         // counter per frame at `src/xfaces.c::lookup_face` /
         // `init_frame_faces`.
         let mut current_face_id: u32 = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
-        let mut _current_fg: Color = default_fg; // tracks foreground across face changes
-        let mut current_bg: Color = default_bg; // tracks background across face changes
-        let mut current_resolved_face = default_resolved.clone();
         let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
 
         let default_measured_face = measurement_policy.measured_face(
@@ -3437,9 +3433,6 @@ impl LayoutEngine {
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     current_face = resolved_measured_face.into_active_face();
-                    _current_fg = current_face.foreground();
-                    current_bg = current_face.background();
-                    current_resolved_face = current_face.resolved_face().clone();
                     let measured_metrics = current_face.metrics();
                     face_char_w = measured_metrics.char_width;
                     face_h = measured_metrics.row_height;
@@ -3671,7 +3664,7 @@ impl LayoutEngine {
                                 face_w: face_char_w,
                                 face_h,
                                 face_ascent: face_ascent_val,
-                                bg: current_bg,
+                                bg: current_face.background(),
                                 byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3706,7 +3699,7 @@ impl LayoutEngine {
                             &mut output_emitter,
                             evaluator,
                             face_resolver,
-                            &current_resolved_face,
+                            current_face.resolved_face(),
                             ellipsis_frame,
                             DisplayRowPosition { x_px: x, col },
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
@@ -3854,7 +3847,7 @@ impl LayoutEngine {
                                 face_w: face_char_w,
                                 face_h: char_h,
                                 face_ascent: face_ascent_val,
-                                bg: current_bg,
+                                bg: current_face.background(),
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3922,7 +3915,7 @@ impl LayoutEngine {
                                 face_w: face_char_w,
                                 face_h,
                                 face_ascent: face_ascent_val,
-                                bg: current_bg,
+                                bg: current_face.background(),
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3985,7 +3978,7 @@ impl LayoutEngine {
                                     face_w: face_char_w,
                                     face_h,
                                     face_ascent: face_ascent_val,
-                                    bg: current_bg,
+                                    bg: current_face.background(),
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4026,7 +4019,7 @@ impl LayoutEngine {
                             let replacement_base_face_id =
                                 if crate::display_source_resolver::same_resolved_face(
                                     &replacement_base_face,
-                                    &current_resolved_face,
+                                    current_face.resolved_face(),
                                 ) {
                                     current_face.face_id()
                                 } else if crate::display_source_resolver::same_resolved_face(
@@ -4130,7 +4123,7 @@ impl LayoutEngine {
                                     face_w: face_char_w,
                                     face_h,
                                     face_ascent: face_ascent_val,
-                                    bg: current_bg,
+                                    bg: current_face.background(),
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4175,7 +4168,7 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    &current_resolved_face,
+                                    current_face.resolved_face(),
                                     current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
@@ -4206,7 +4199,7 @@ impl LayoutEngine {
                             resolve_display_property_media(
                                 &prop_val,
                                 evaluator.display_host.as_deref(),
-                                &current_resolved_face,
+                                current_face.resolved_face(),
                                 face_char_w,
                                 face_h,
                             )
@@ -4240,7 +4233,7 @@ impl LayoutEngine {
                                         face_w: face_char_w,
                                         face_h: cursor_face_h,
                                         face_ascent: cursor_face_ascent,
-                                        bg: current_bg,
+                                        bg: current_face.background(),
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4272,7 +4265,7 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    &current_resolved_face,
+                                    current_face.resolved_face(),
                                     current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
@@ -4296,7 +4289,7 @@ impl LayoutEngine {
                                         face_w: face_char_w,
                                         face_h,
                                         face_ascent: face_ascent_val,
-                                        bg: current_bg,
+                                        bg: current_face.background(),
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4322,7 +4315,7 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    &current_resolved_face,
+                                    current_face.resolved_face(),
                                     current_face.face_id(),
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
@@ -4408,7 +4401,7 @@ impl LayoutEngine {
                     &mut output_emitter,
                     evaluator,
                     face_resolver,
-                    &current_resolved_face,
+                    current_face.resolved_face(),
                     ellipsis_frame,
                     DisplayRowPosition { x_px: x, col },
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
@@ -4507,7 +4500,7 @@ impl LayoutEngine {
                             face_w: face_char_w,
                             face_h,
                             face_ascent: face_ascent_val,
-                            bg: current_bg,
+                            bg: current_face.background(),
                             byte_idx: ch_start_byte_idx,
                             col,
                             matrix_row: row,
@@ -4827,7 +4820,7 @@ impl LayoutEngine {
                         buffer,
                         buf_id,
                         face_resolver,
-                        &current_resolved_face,
+                        current_face.resolved_face(),
                         current_face.face_id(),
                         crate::display_item::DisplayItemKind::ControlChar { ch },
                         text_item_frame,
@@ -4878,7 +4871,7 @@ impl LayoutEngine {
                             buffer,
                             buf_id,
                             face_resolver,
-                            &current_resolved_face,
+                            current_face.resolved_face(),
                             current_face.face_id(),
                             crate::display_item::DisplayItemKind::SourceMappedText(
                                 crate::display_item::DisplaySourceMappedText::new(mapped_text),
@@ -4944,7 +4937,7 @@ impl LayoutEngine {
                         buffer,
                         buf_id,
                         face_resolver,
-                        &current_resolved_face,
+                        current_face.resolved_face(),
                         current_face.face_id(),
                         crate::display_item::DisplayItemKind::Glyphless(
                             crate::display_item::DisplayGlyphless { ch, method },
@@ -5266,7 +5259,7 @@ impl LayoutEngine {
                         face_w: face_char_w,
                         face_h,
                         face_ascent: face_ascent_val,
-                        bg: current_bg,
+                        bg: current_face.background(),
                         byte_idx: ch_start_byte_idx,
                         col,
                         matrix_row: row,
@@ -5371,7 +5364,7 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 buffer_text_fragment,
                 face_resolver,
-                &current_resolved_face,
+                current_face.resolved_face(),
                 buf_id,
                 buffer,
                 current_face.face_id(),
@@ -5490,7 +5483,7 @@ impl LayoutEngine {
                     face_w: face_char_w,
                     face_h,
                     face_ascent: face_ascent_val,
-                    bg: current_bg,
+                    bg: current_face.background(),
                     byte_idx,
                     col,
                     matrix_row: row,
