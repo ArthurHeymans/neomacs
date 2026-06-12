@@ -526,6 +526,12 @@ struct DisplayRowGeometryCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowGeometryTransition {
+    finished_row: TextMatrixRowMetrics,
+    begin_row: TextMatrixRowBegin,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct LegacyDisplayRowGeometry {
     row: usize,
     y: f32,
@@ -708,6 +714,22 @@ impl DisplayRowGeometryCursor {
         self.metrics =
             CurrentDisplayRowMetrics::new(row_advance.next_height, row_advance.next_ascent);
         row_advance.finished
+    }
+
+    fn finish_and_begin_next_text_matrix_row(
+        &mut self,
+        defaults: DisplayRowGeometryDefaults,
+        kind: DisplayRowAdvanceKind,
+        row_base: usize,
+        col: usize,
+        x: f32,
+    ) -> DisplayRowGeometryTransition {
+        let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
+        let begin_row = self.text_matrix_row_begin(row_base, col, x);
+        DisplayRowGeometryTransition {
+            finished_row,
+            begin_row,
+        }
     }
 
     fn text_matrix_row_begin(&self, row_base: usize, col: usize, x: f32) -> TextMatrixRowBegin {
@@ -1771,15 +1793,17 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 });
             hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
-            let finished_row = row_cursor.finish_and_advance_to_next_row(
+            let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                 DisplayRowGeometryDefaults {
                     text_y,
                     height: char_h,
                     ascent: default_row_ascent,
                 },
                 DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                row_base,
+                0,
+                content_x,
             );
-            let begin_row = row_cursor.text_matrix_row_begin(row_base, 0, content_x);
             row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                 row,
                 y,
@@ -1788,7 +1812,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 row_max_ascent,
             });
             if *row >= max_rows {
-                finish_text_matrix_row(builder, output_emitter, finished_row);
+                finish_text_matrix_row(builder, output_emitter, geometry_transition.finished_row);
                 builder.end_row();
                 false
             } else {
@@ -1799,8 +1823,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     builder,
                     output_emitter,
                     evaluator,
-                    finished_row,
-                    begin_row,
+                    geometry_transition.finished_row,
+                    geometry_transition.begin_row,
                 );
                 true
             }
@@ -4269,15 +4293,17 @@ impl LayoutEngine {
                     row_extend_bg = None;
                     row_extend_row = -1;
 
-                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                    let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
                             ascent: default_face_ascent,
                         },
                         DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                        text_matrix_row_base,
+                        col,
+                        x,
                     );
-                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
@@ -4290,8 +4316,8 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        finished_row,
-                        begin_row,
+                        geometry_transition.finished_row,
+                        geometry_transition.begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -4907,16 +4933,17 @@ impl LayoutEngine {
                             box_start_x = content_x;
                             box_row = row + 1;
                         }
-                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                             DisplayRowGeometryDefaults {
                                 text_y,
                                 height: char_h,
                                 ascent: default_face_ascent,
                             },
                             DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                            text_matrix_row_base,
+                            col,
+                            x,
                         );
-                        let begin_row =
-                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
@@ -4929,8 +4956,8 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            finished_row,
-                            begin_row,
+                            geometry_transition.finished_row,
+                            geometry_transition.begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5041,15 +5068,17 @@ impl LayoutEngine {
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
                 hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-                let finished_row = row_cursor.finish_and_advance_to_next_row(
+                let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                     DisplayRowGeometryDefaults {
                         text_y,
                         height: char_h,
                         ascent: default_face_ascent,
                     },
                     DisplayRowAdvanceKind::LineBreak { line_spacing },
+                    text_matrix_row_base,
+                    col,
+                    x,
                 );
-                let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                 row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                     row: &mut row,
                     y: &mut y,
@@ -5062,8 +5091,8 @@ impl LayoutEngine {
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    finished_row,
-                    begin_row,
+                    geometry_transition.finished_row,
+                    geometry_transition.begin_row,
                     max_rows,
                 );
                 if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5173,16 +5202,17 @@ impl LayoutEngine {
                         hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                             DisplayRowGeometryDefaults {
                                 text_y,
                                 height: char_h,
                                 ascent: default_face_ascent,
                             },
                             DisplayRowAdvanceKind::Truncation,
+                            text_matrix_row_base,
+                            col,
+                            x,
                         );
-                        let begin_row =
-                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
@@ -5195,8 +5225,8 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            finished_row,
-                            begin_row,
+                            geometry_transition.finished_row,
+                            geometry_transition.begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5230,16 +5260,17 @@ impl LayoutEngine {
                         hit_row_charpos_start = charpos;
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                             DisplayRowGeometryDefaults {
                                 text_y,
                                 height: char_h,
                                 ascent: default_face_ascent,
                             },
                             DisplayRowAdvanceKind::VisualWrap,
+                            text_matrix_row_base,
+                            col,
+                            x,
                         );
-                        let begin_row =
-                            row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                         row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                             row: &mut row,
                             y: &mut y,
@@ -5252,8 +5283,8 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            finished_row,
-                            begin_row,
+                            geometry_transition.finished_row,
+                            geometry_transition.begin_row,
                             max_rows,
                         );
                         if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5543,15 +5574,17 @@ impl LayoutEngine {
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                    let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
                             ascent: default_face_ascent,
                         },
                         DisplayRowAdvanceKind::Truncation,
+                        text_matrix_row_base,
+                        col,
+                        x,
                     );
-                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
@@ -5564,8 +5597,8 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        finished_row,
-                        begin_row,
+                        geometry_transition.finished_row,
+                        geometry_transition.begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5606,15 +5639,17 @@ impl LayoutEngine {
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                    let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
                             ascent: default_face_ascent,
                         },
                         DisplayRowAdvanceKind::VisualWrap,
+                        text_matrix_row_base,
+                        col,
+                        x,
                     );
-                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
@@ -5627,8 +5662,8 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        finished_row,
-                        begin_row,
+                        geometry_transition.finished_row,
+                        geometry_transition.begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {
@@ -5671,15 +5706,17 @@ impl LayoutEngine {
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                    let geometry_transition = row_cursor.finish_and_begin_next_text_matrix_row(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
                             ascent: default_face_ascent,
                         },
                         DisplayRowAdvanceKind::VisualWrap,
+                        text_matrix_row_base,
+                        col,
+                        x,
                     );
-                    let begin_row = row_cursor.text_matrix_row_begin(text_matrix_row_base, col, x);
                     row_cursor.apply_to_legacy_vars(LegacyDisplayRowGeometryVars {
                         row: &mut row,
                         y: &mut y,
@@ -5692,8 +5729,8 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        finished_row,
-                        begin_row,
+                        geometry_transition.finished_row,
+                        geometry_transition.begin_row,
                         max_rows,
                     );
                     if row_transition == TextMatrixRowTransition::ExhaustedRows {

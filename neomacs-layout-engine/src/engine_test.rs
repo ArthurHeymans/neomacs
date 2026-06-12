@@ -766,6 +766,57 @@ fn display_row_geometry_cursor_applies_state_to_legacy_vars_by_name() {
     assert_eq!(row_max_ascent, 18.0);
 }
 
+#[test]
+fn display_row_geometry_cursor_finishes_and_builds_next_text_matrix_row_begin() {
+    let mut cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    });
+
+    let transition = cursor.finish_and_begin_next_text_matrix_row(
+        DisplayRowGeometryDefaults {
+            text_y: 10.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+        DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
+        5,
+        7,
+        13.0,
+    );
+
+    assert_eq!(
+        transition,
+        DisplayRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 42.0,
+                height: 24.0,
+                ascent: 18.0,
+            },
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 8,
+                row: 3,
+                col: 7,
+                y: 10.0 + 3.0 * 16.0 + 15.0,
+                x: 13.0,
+            },
+        }
+    );
+    assert_eq!(
+        cursor.state(),
+        DisplayRowGeometryState {
+            row: 3,
+            y: 10.0 + 3.0 * 16.0 + 15.0,
+            row_extra_y: 15.0,
+            height: 16.0,
+            ascent: 12.0,
+        }
+    );
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
