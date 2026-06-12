@@ -5591,8 +5591,7 @@ impl LayoutEngine {
             // Then fill completely empty rows below
             let start_row = current_row_geometry!().first_row_below_current(row_limit);
             for r in start_row..max_rows {
-                let ry = row_y_positions
-                    .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
+                let ry = current_row_geometry!().row_y(r, &row_y_positions, text_y, char_h);
                 if ry + char_h > text_y + text_height {
                     break;
                 } // Don't extend past text area
@@ -5633,8 +5632,7 @@ impl LayoutEngine {
             if params.indicate_empty_lines > 0 {
                 let eob_start = current_row_geometry!().rendered_row_count(row_limit);
                 for r in eob_start..max_rows {
-                    let _gy = row_y_positions
-                        .y_for_row(r, current_row_geometry!().row_y_fallback(text_y, char_h));
+                    let _gy = current_row_geometry!().row_y(r, &row_y_positions, text_y, char_h);
                     let _fringe_x = if params.indicate_empty_lines == 2 {
                         right_fringe_x
                     } else {

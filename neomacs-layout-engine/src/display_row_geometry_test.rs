@@ -559,6 +559,22 @@ fn display_row_geometry_state_resolves_recorded_current_row_y() {
 }
 
 #[test]
+fn display_row_geometry_state_resolves_any_row_y_with_current_fallback() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
+    row_y_positions.record(1, 25.0);
+
+    assert_eq!(geometry.row_y(1, &row_y_positions, 10.0, 16.0), 25.0);
+    assert_eq!(geometry.row_y(3, &row_y_positions, 10.0, 16.0), 69.0);
+}
+
+#[test]
 fn display_row_geometry_state_resolves_row_limit_positions() {
     let geometry = DisplayRowGeometryState {
         row: 3,
