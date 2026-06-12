@@ -110,6 +110,14 @@ pub(crate) enum ProcessWaitPolicy {
 }
 
 impl ProcessWaitPolicy {
+    fn target(process: ProcessId, just_this_one: bool) -> Self {
+        if just_this_one {
+            Self::TargetOnly(process)
+        } else {
+            Self::Target(process)
+        }
+    }
+
     pub(crate) fn target_process(self) -> Option<ProcessId> {
         match self {
             Self::Target(id) | Self::TargetOnly(id) => Some(id),
@@ -186,18 +194,48 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn accept_process_output_with_timers(
+    fn accept_process_output_with_timers(
         deadline: WaitDeadline,
         processes: ProcessWaitPolicy,
     ) -> Self {
         Self::accept_process_output(deadline, processes, TimerWaitPolicy::Run)
     }
 
-    pub(crate) fn accept_process_output_without_timers(
+    fn accept_process_output_without_timers(
         deadline: WaitDeadline,
         processes: ProcessWaitPolicy,
     ) -> Self {
         Self::accept_process_output(deadline, processes, TimerWaitPolicy::Suppress)
+    }
+
+    pub(crate) fn accept_any_process_output_with_timers(deadline: WaitDeadline) -> Self {
+        Self::accept_process_output_with_timers(deadline, ProcessWaitPolicy::Any)
+    }
+
+    pub(crate) fn accept_any_process_output_without_timers(deadline: WaitDeadline) -> Self {
+        Self::accept_process_output_without_timers(deadline, ProcessWaitPolicy::Any)
+    }
+
+    pub(crate) fn accept_target_process_output_with_timers(
+        deadline: WaitDeadline,
+        process: ProcessId,
+        just_this_one: bool,
+    ) -> Self {
+        Self::accept_process_output_with_timers(
+            deadline,
+            ProcessWaitPolicy::target(process, just_this_one),
+        )
+    }
+
+    pub(crate) fn accept_target_process_output_without_timers(
+        deadline: WaitDeadline,
+        process: ProcessId,
+        just_this_one: bool,
+    ) -> Self {
+        Self::accept_process_output_without_timers(
+            deadline,
+            ProcessWaitPolicy::target(process, just_this_one),
+        )
     }
 
     pub(crate) fn read_command_input(deadline: WaitDeadline) -> Self {
@@ -925,10 +963,8 @@ mod tests {
 
     #[test]
     fn wait_request_exposes_deadline_and_process_completion_queries() {
-        let request = WaitRequest::accept_process_output_with_timers(
-            WaitDeadline::Poll,
-            ProcessWaitPolicy::Target(12),
-        );
+        let request =
+            WaitRequest::accept_target_process_output_with_timers(WaitDeadline::Poll, 12, false);
 
         assert_eq!(request.deadline(), WaitDeadline::Poll);
         assert_eq!(request.target_process(), Some(12));
@@ -939,17 +975,28 @@ mod tests {
 
     #[test]
     fn wait_request_accept_process_output_constructors_capture_timer_policy() {
-        let run = WaitRequest::accept_process_output_with_timers(
-            WaitDeadline::Poll,
-            ProcessWaitPolicy::Any,
-        );
-        let suppress = WaitRequest::accept_process_output_without_timers(
-            WaitDeadline::Poll,
-            ProcessWaitPolicy::Any,
-        );
+        let run = WaitRequest::accept_any_process_output_with_timers(WaitDeadline::Poll);
+        let suppress = WaitRequest::accept_any_process_output_without_timers(WaitDeadline::Poll);
 
         assert!(run.runs_timers());
         assert!(!suppress.runs_timers());
+    }
+
+    #[test]
+    fn wait_request_accept_process_output_named_constructors_capture_process_scope() {
+        let any = WaitRequest::accept_any_process_output_with_timers(WaitDeadline::Poll);
+        let target =
+            WaitRequest::accept_target_process_output_with_timers(WaitDeadline::Poll, 7, false);
+        let target_only =
+            WaitRequest::accept_target_process_output_without_timers(WaitDeadline::Poll, 9, true);
+
+        assert!(any.completes_on_any_process_activity());
+        assert_eq!(any.target_process(), None);
+        assert!(target.completes_on_target_process_activity(7));
+        assert!(!target.restricts_process_service_to_target());
+        assert!(target_only.completes_on_target_process_activity(9));
+        assert!(target_only.restricts_process_service_to_target());
+        assert!(!target_only.runs_timers());
     }
 
     #[test]

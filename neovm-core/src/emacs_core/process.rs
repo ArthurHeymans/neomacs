@@ -42,8 +42,7 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest, WaitServiceOutcome,
-    WaitSourceEvents,
+    WaitCompletion, WaitDeadline, WaitRequest, WaitServiceOutcome, WaitSourceEvents,
 };
 
 /// OS socket owned by a network process.
@@ -7501,16 +7500,15 @@ fn parse_accept_process_output_request(
     } else {
         WaitDeadline::Poll
     };
-    let processes = match (target_id, just_this_one) {
-        (Some(id), true) => ProcessWaitPolicy::TargetOnly(id),
-        (Some(id), false) => ProcessWaitPolicy::Target(id),
-        (None, _) => ProcessWaitPolicy::Any,
-    };
-
-    let wait = if allow_timers {
-        WaitRequest::accept_process_output_with_timers(deadline, processes)
-    } else {
-        WaitRequest::accept_process_output_without_timers(deadline, processes)
+    let wait = match (target_id, allow_timers) {
+        (Some(id), true) => {
+            WaitRequest::accept_target_process_output_with_timers(deadline, id, just_this_one)
+        }
+        (Some(id), false) => {
+            WaitRequest::accept_target_process_output_without_timers(deadline, id, just_this_one)
+        }
+        (None, true) => WaitRequest::accept_any_process_output_with_timers(deadline),
+        (None, false) => WaitRequest::accept_any_process_output_without_timers(deadline),
     };
 
     Ok(Some(AcceptProcessOutputRequest { wait }))
