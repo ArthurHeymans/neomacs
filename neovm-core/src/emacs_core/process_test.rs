@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::{WaitCompletion, WaitRequest};
+use crate::emacs_core::wait::WaitCompletion;
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2293,9 +2293,7 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
     });
 
     let completion: WaitCompletion = ev
-        .wait_reading_process_output(WaitRequest::read_command_input_until(
-            std::time::Instant::now() + Duration::from_secs(1),
-        ))
+        .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
         .expect("wait for command input");
 
     assert_eq!(completion, WaitCompletion::CommandInputPending);
@@ -2317,25 +2315,11 @@ fn process_service_accepts_wait_request_boundary() {
 }
 
 #[test]
-fn wait_service_exposes_target_activity_without_full_service_outcome() {
+fn timer_service_intent_exposes_side_effects_only() {
     let mut ev = Context::new();
-    let request = WaitRequest::timer_service(false);
-
-    let active = ev
-        .service_wait_request_once_has_target_process_activity(&request)
-        .expect("service wait request");
-
-    assert!(!active);
-}
-
-#[test]
-fn wait_service_once_exposes_side_effects_only() {
-    let mut ev = Context::new();
-    let request = WaitRequest::timer_service(false);
-
     let _: () = ev
-        .service_wait_request_once(&request)
-        .expect("service wait request");
+        .service_timers_without_redisplay()
+        .expect("service timer wait intent");
 }
 
 #[cfg(unix)]
@@ -2424,9 +2408,7 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
     });
 
     let completion = ev
-        .wait_reading_process_output(WaitRequest::read_command_input_until(
-            std::time::Instant::now() + Duration::from_secs(1),
-        ))
+        .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
         .expect("wait for command input through wakeup backend");
 
     assert_eq!(completion, WaitCompletion::CommandInputPending);

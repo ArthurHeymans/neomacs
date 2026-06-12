@@ -139,7 +139,7 @@ impl SpecialInputWaitPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WaitRequest {
+struct WaitRequest {
     deadline: WaitDeadline,
     keyboard: KeyboardWaitPolicy,
     processes: ProcessWaitPolicy,
@@ -195,23 +195,21 @@ impl WaitRequest {
         Self::accept_process_output(deadline, processes, TimerWaitPolicy::Suppress)
     }
 
-    pub(crate) fn accept_any_process_output_with_timers(timing: ProcessOutputWaitTiming) -> Self {
+    fn accept_any_process_output_with_timers(timing: ProcessOutputWaitTiming) -> Self {
         Self::accept_process_output_with_timers(
             process_output_wait_deadline(timing),
             ProcessWaitPolicy::Any,
         )
     }
 
-    pub(crate) fn accept_any_process_output_without_timers(
-        timing: ProcessOutputWaitTiming,
-    ) -> Self {
+    fn accept_any_process_output_without_timers(timing: ProcessOutputWaitTiming) -> Self {
         Self::accept_process_output_without_timers(
             process_output_wait_deadline(timing),
             ProcessWaitPolicy::Any,
         )
     }
 
-    pub(crate) fn accept_target_process_output_with_timers(
+    fn accept_target_process_output_with_timers(
         timing: ProcessOutputWaitTiming,
         process: ProcessId,
         just_this_one: bool,
@@ -222,7 +220,7 @@ impl WaitRequest {
         )
     }
 
-    pub(crate) fn accept_target_process_output_without_timers(
+    fn accept_target_process_output_without_timers(
         timing: ProcessOutputWaitTiming,
         process: ProcessId,
         just_this_one: bool,
@@ -244,15 +242,15 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn read_command_input_until(deadline: Instant) -> Self {
+    fn read_command_input_until(deadline: Instant) -> Self {
         Self::read_command_input(WaitDeadline::Until(deadline))
     }
 
-    pub(crate) fn read_command_input_forever() -> Self {
+    fn read_command_input_forever() -> Self {
         Self::read_command_input(WaitDeadline::Forever)
     }
 
-    pub(crate) fn service_once(redisplay: bool) -> Self {
+    fn service_once(redisplay: bool) -> Self {
         Self {
             deadline: WaitDeadline::Poll,
             keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
@@ -274,15 +272,15 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn input_pending_without_timers() -> Self {
+    fn input_pending_without_timers() -> Self {
         Self::input_pending_poll(TimerWaitPolicy::Suppress)
     }
 
-    pub(crate) fn input_pending_with_timers() -> Self {
+    fn input_pending_with_timers() -> Self {
         Self::input_pending_poll(TimerWaitPolicy::Run)
     }
 
-    pub(crate) fn timer_service(redisplay: bool) -> Self {
+    fn timer_service(redisplay: bool) -> Self {
         Self {
             deadline: WaitDeadline::Poll,
             keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
@@ -293,7 +291,7 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn sleep_until(deadline: Instant) -> Self {
+    fn sleep_until(deadline: Instant) -> Self {
         Self {
             deadline: WaitDeadline::Until(deadline),
             keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
@@ -304,7 +302,7 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn resize_ack(deadline: Instant) -> Self {
+    fn resize_ack(deadline: Instant) -> Self {
         Self {
             deadline: WaitDeadline::Until(deadline),
             keyboard: KeyboardWaitPolicy::WaitForSpecialInput,
@@ -319,15 +317,15 @@ impl WaitRequest {
         self.deadline
     }
 
-    pub(crate) fn deadline_is_poll(self) -> bool {
+    fn deadline_is_poll(self) -> bool {
         matches!(self.deadline, WaitDeadline::Poll)
     }
 
-    pub(crate) fn deadline_is_finite(self) -> bool {
+    fn deadline_is_finite(self) -> bool {
         matches!(self.deadline, WaitDeadline::Until(_))
     }
 
-    pub(crate) fn deadline_is_forever(self) -> bool {
+    fn deadline_is_forever(self) -> bool {
         matches!(self.deadline, WaitDeadline::Forever)
     }
 
@@ -622,7 +620,7 @@ enum WaitBlockStrategy {
 }
 
 impl super::eval::Context {
-    pub(crate) fn service_wait_request_once(&mut self, request: &WaitRequest) -> Result<(), Flow> {
+    fn service_wait_request_once(&mut self, request: &WaitRequest) -> Result<(), Flow> {
         let _ = self.service_wait_request_once_outcome(request)?;
         Ok(())
     }
@@ -643,6 +641,10 @@ impl super::eval::Context {
         self.service_wait_request_once(&WaitRequest::timer_service(true))
     }
 
+    pub(crate) fn service_timers_without_redisplay(&mut self) -> Result<(), Flow> {
+        self.service_wait_request_once(&WaitRequest::timer_service(false))
+    }
+
     fn service_wait_request_once_outcome(
         &mut self,
         request: &WaitRequest,
@@ -650,7 +652,7 @@ impl super::eval::Context {
         self.service_wait_request_processes(request, WaitProcessService::Poll)
     }
 
-    pub(crate) fn service_wait_request_once_has_target_process_activity(
+    fn service_wait_request_once_has_target_process_activity(
         &mut self,
         request: &WaitRequest,
     ) -> Result<bool, Flow> {
@@ -670,7 +672,7 @@ impl super::eval::Context {
         )
     }
 
-    pub(crate) fn service_wait_request_source_events_have_target_process_activity(
+    fn service_wait_request_source_events_have_target_process_activity(
         &mut self,
         request: &WaitRequest,
         events: ProcessWaitEvents,
@@ -748,7 +750,7 @@ impl super::eval::Context {
         Ok(outcome)
     }
 
-    pub(crate) fn wait_reading_process_output(
+    fn wait_reading_process_output(
         &mut self,
         request: WaitRequest,
     ) -> Result<WaitCompletion, Flow> {
@@ -855,11 +857,7 @@ impl super::eval::Context {
         }
     }
 
-    pub(crate) fn next_wait_request_timeout(
-        &self,
-        request: &WaitRequest,
-        now: Instant,
-    ) -> Duration {
+    fn next_wait_request_timeout(&self, request: &WaitRequest, now: Instant) -> Duration {
         let mut timeout = request.base_timeout(now);
 
         if request.runs_timers() {
