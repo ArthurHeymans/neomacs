@@ -316,6 +316,18 @@ impl WaitRequest {
         self.deadline
     }
 
+    pub(crate) fn deadline_is_poll(self) -> bool {
+        matches!(self.deadline, WaitDeadline::Poll)
+    }
+
+    pub(crate) fn deadline_is_finite(self) -> bool {
+        matches!(self.deadline, WaitDeadline::Until(_))
+    }
+
+    pub(crate) fn deadline_is_forever(self) -> bool {
+        matches!(self.deadline, WaitDeadline::Forever)
+    }
+
     pub(crate) fn target_process(self) -> Option<ProcessId> {
         self.processes.target_process()
     }

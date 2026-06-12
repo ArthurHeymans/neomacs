@@ -2253,7 +2253,7 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     let poll = parse_accept_process_output_request(&mut processes, &[])
         .expect("parse no-arg accept-process-output")
         .expect("live request");
-    assert_eq!(poll.wait.deadline(), WaitDeadline::Poll);
+    assert!(poll.wait.deadline_is_poll());
     assert!(poll.wait.completes_on_any_process_activity());
     assert_eq!(poll.wait.target_process(), None);
 
@@ -2261,7 +2261,7 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
         parse_accept_process_output_request(&mut processes, &[Value::NIL, Value::make_float(0.25)])
             .expect("parse timed accept-process-output")
             .expect("live request");
-    assert!(matches!(timeout.wait.deadline(), WaitDeadline::Until(_)));
+    assert!(timeout.wait.deadline_is_finite());
     assert!(timeout.wait.completes_on_any_process_activity());
     assert_eq!(timeout.wait.target_process(), None);
 
@@ -2272,7 +2272,7 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     )
     .expect("parse target accept-process-output")
     .expect("live request");
-    assert_eq!(target.wait.deadline(), WaitDeadline::Forever);
+    assert!(target.wait.deadline_is_forever());
     assert!(target.wait.completes_on_target_process_activity(id));
     assert!(!target.wait.restricts_process_service_to_target());
 }
