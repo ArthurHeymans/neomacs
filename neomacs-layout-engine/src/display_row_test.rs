@@ -151,6 +151,37 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
 }
 
 #[test]
+fn display_row_resolved_measured_face_builds_active_face_state_directly() {
+    let mut font_metrics = None;
+    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let face = base_face();
+
+    let active = policy
+        .resolved_measured_face(
+            12,
+            face.clone(),
+            Some(FontMetrics {
+                ascent: 11.0,
+                descent: 4.0,
+                line_height: 15.0,
+                char_width: 7.5,
+            }),
+            7.0,
+            DisplayRowFallbackMetrics {
+                char_width: 7.0,
+                row_height: 14.0,
+                ascent: 10.0,
+            },
+            &mut font_metrics,
+        )
+        .into_active_face_state();
+
+    assert_eq!(active.face_id(), 12);
+    assert_eq!(active.resolved_face().fg, face.fg);
+    assert_eq!(active.metrics().row_height, 15.0);
+}
+
+#[test]
 fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
     let mut font_metrics = None;
     let policy = DisplayRowMeasurementPolicy::for_frame(false);
@@ -171,8 +202,7 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
             },
             &mut font_metrics,
         )
-        .into_active_face()
-        .into_state();
+        .into_active_face_state();
 
     assert_eq!(active.face_id(), 14);
     let measurement_state = active.measurement_state();
@@ -206,8 +236,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
             },
             &mut font_metrics,
         )
-        .into_active_face()
-        .into_state();
+        .into_active_face_state();
 
     assert_eq!(active.face_id(), 14);
     assert_eq!(active.background(), Color::from_pixel(face.bg));

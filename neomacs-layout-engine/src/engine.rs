@@ -3430,7 +3430,7 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
-                    active_face_state = resolved_measured_face.into_active_face().into_state();
+                    active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
 
                     if face_metrics.row_height > row_max_height {

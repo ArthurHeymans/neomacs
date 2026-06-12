@@ -703,6 +703,10 @@ impl DisplayRowResolvedMeasuredFace {
         DisplayRowActiveFace::new(self.face, self.measured_face)
     }
 
+    pub(crate) fn into_active_face_state(self) -> DisplayRowActiveFaceState {
+        self.into_active_face().into_state()
+    }
+
     pub(crate) fn install_into(&self, builder: &mut GlyphMatrixBuilder) {
         insert_resolved_display_row_face(builder, self.face_id(), &self.face, self.metrics);
     }
