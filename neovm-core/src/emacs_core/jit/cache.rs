@@ -97,9 +97,9 @@ mod tests {
 
     #[test]
     fn returns_none_for_noncompilable_body() {
-        // Mul is unsupported -> NotCompilable -> None (interpreter fallback).
+        // Div is unsupported -> NotCompilable -> None (interpreter fallback).
         let f = nullary_fn(
-            vec![Op::Constant(0), Op::Constant(0), Op::Mul, Op::Return],
+            vec![Op::Constant(0), Op::Constant(0), Op::Div, Op::Return],
             vec![Value::make_int(2)],
         );
         assert_eq!(try_run_compiled(&f, &[]), None);

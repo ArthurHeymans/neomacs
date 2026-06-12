@@ -338,6 +338,40 @@ fn lower_fixnum_compare(
     fb.ins().select(cond, t, nil)
 }
 
+/// Lower a fixnum multiply with exact interpreter parity (`vm.rs` `Op::Mul`):
+/// both operands fixnums and the exact product in fixnum range, else deopt.
+///
+/// Operands are <= 61-bit so the product is <= 122-bit; widening to `i128` makes
+/// it exact, then a single range check covers both i64 overflow and
+/// fixnum-range overflow at once.
+fn lower_fixnum_mul(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    a: ClifValue,
+    b: ClifValue,
+) -> ClifValue {
+    guard_fixnum(fb, deopt, a);
+    guard_fixnum(fb, deopt, b);
+    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+
+    let a128 = fb.ins().sextend(types::I128, av);
+    let b128 = fb.ins().sextend(types::I128, bv);
+    let prod = fb.ins().imul(a128, b128);
+
+    let lo = fb.ins().iconst(types::I64, Value::MOST_NEGATIVE_FIXNUM);
+    let hi = fb.ins().iconst(types::I64, Value::MOST_POSITIVE_FIXNUM);
+    let lo128 = fb.ins().sextend(types::I128, lo);
+    let hi128 = fb.ins().sextend(types::I128, hi);
+    let ge = fb.ins().icmp(IntCC::SignedGreaterThanOrEqual, prod, lo128);
+    let le = fb.ins().icmp(IntCC::SignedLessThanOrEqual, prod, hi128);
+    let in_range = fb.ins().band(ge, le);
+    emit_guard(fb, deopt, in_range);
+
+    let res = fb.ins().ireduce(types::I64, prod);
+    retag_fixnum(fb, res)
+}
+
 /// Lower a no-argument straight-line leaf body. Thin wrapper over [`lower_leaf`]
 /// kept for the existing call sites/tests.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
@@ -413,6 +447,11 @@ fn lower_simple_op(
             let is_sub = matches!(op, Op::Sub);
             stack.push(lower_fixnum_binop(fb, deopt, is_sub, a, b));
         }
+        Op::Mul => {
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            stack.push(lower_fixnum_mul(fb, deopt, a, b));
+        }
         Op::Add1 | Op::Sub1 | Op::Negate => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let kind = match op {
@@ -459,7 +498,9 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         }
         Op::Dup => (1, 1),
         Op::Pop => (1, -1),
-        Op::Add | Op::Sub | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => (2, -1),
+        Op::Add | Op::Sub | Op::Mul | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+            (2, -1)
+        }
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
@@ -1309,13 +1350,41 @@ mod tests {
 
     #[test]
     fn bails_on_unsupported_arithmetic() {
-        // Mul is not in the supported subset -> refuse, do not miscompile.
+        // Div is not in the supported subset -> refuse, do not miscompile.
         let err = lower_nullary_leaf(
-            &[Op::Constant(0), Op::Constant(0), Op::Mul, Op::Return],
+            &[Op::Constant(0), Op::Constant(0), Op::Div, Op::Return],
             &[Value::make_int(1)],
         )
         .unwrap_err();
         assert!(matches!(err, CompileError::UnsupportedOp("arithmetic")));
+    }
+
+    #[test]
+    fn compiles_fixnum_mul() {
+        let mul = |a: i64, b: i64| {
+            lower_nullary_leaf(
+                &[Op::Constant(0), Op::Constant(1), Op::Mul, Op::Return],
+                &[Value::make_int(a), Value::make_int(b)],
+            )
+            .unwrap()
+            .call(&[])
+        };
+        assert_eq!(mul(6, 7), Some(Value::make_int(42).bits()));
+        assert_eq!(mul(-6, 7), Some(Value::make_int(-42).bits()));
+        assert_eq!(mul(0, 12345), Some(Value::make_int(0).bits()));
+        // Product overflowing fixnum range -> deopt.
+        assert_eq!(mul(Value::MOST_POSITIVE_FIXNUM, 2), None);
+        assert_eq!(mul(1 << 40, 1 << 40), None); // 2^80, way out of range
+    }
+
+    #[test]
+    fn mul_non_fixnum_deopts() {
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Nil, Op::Mul, Op::Return],
+            &[Value::make_int(5)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(&[]), None);
     }
 
     #[test]
@@ -1463,6 +1532,10 @@ mod tests {
             (
                 &[Op::Constant(0), Op::Constant(1), Op::Sub, Op::Return],
                 &[Value::make_int(3), Value::make_int(10)],
+            ),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Mul, Op::Return],
+                &[Value::make_int(-6), Value::make_int(7)],
             ),
             (
                 &[Op::Constant(0), Op::Add1, Op::Return],
