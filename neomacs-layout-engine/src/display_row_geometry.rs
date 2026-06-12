@@ -493,6 +493,15 @@ impl DisplayRowGeometryState {
         }
     }
 
+    pub(crate) fn current_row_y(
+        &self,
+        row_y_positions: &DisplayRowYPositions,
+        text_y: f32,
+        default_height: f32,
+    ) -> f32 {
+        row_y_positions.y_for_row(self.row, self.row_y_fallback(text_y, default_height))
+    }
+
     pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
         TextRowOutput {
             row: self.row,

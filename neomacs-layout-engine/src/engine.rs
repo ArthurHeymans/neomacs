@@ -5597,8 +5597,7 @@ impl LayoutEngine {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
             if x < right_edge && row < max_rows {
-                let _ry = row_y_positions
-                    .y_for_row(row, current_row_geometry!().row_y_fallback(text_y, char_h));
+                let _ry = current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
             }
             // Then fill completely empty rows below
             let start_row = (row + 1).min(max_rows);
@@ -5798,8 +5797,8 @@ impl LayoutEngine {
 
         let has_pending_row_output = output_emitter.current_row_has_output();
         if row < max_rows && (charpos > hit_row_charpos_start || has_pending_row_output) {
-            let row_y_start = row_y_positions
-                .y_for_row(row, current_row_geometry!().row_y_fallback(text_y, char_h));
+            let row_y_start =
+                current_row_geometry!().current_row_y(&row_y_positions, text_y, char_h);
             let row_cursor = current_row_geometry!().with_row_y(row_y_start).cursor();
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
