@@ -11895,6 +11895,32 @@ fn jit_tierup_executes_through_funcall_seam() {
         ev.funcall_general_untraced(mul, vec![]).unwrap(),
         Value::make_int(42)
     );
+
+    // A function WITH required (lexical) args also tiers up: (lambda (a b) (+ a b)).
+    let mut addf = ByteCodeFunction::new(LambdaParams {
+        required: vec![
+            crate::emacs_core::intern::SymId(1),
+            crate::emacs_core::intern::SymId(2),
+        ],
+        optional: Vec::new(),
+        rest: None,
+    });
+    addf.lexical = true;
+    addf.ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return];
+    addf.max_stack = 16;
+    addf.runtime.set_hot_for_test();
+    let addv = Value::make_bytecode(addf);
+    assert_eq!(
+        ev.funcall_general_untraced(addv, vec![Value::make_int(40), Value::make_int(2)])
+            .unwrap(),
+        Value::make_int(42)
+    );
+    // Wrong argument count -> native is skipped (arity mismatch); the interpreter
+    // fallback signals wrong-number-of-arguments.
+    assert!(
+        ev.funcall_general_untraced(addv, vec![Value::make_int(1)])
+            .is_err()
+    );
 }
 
 #[test]

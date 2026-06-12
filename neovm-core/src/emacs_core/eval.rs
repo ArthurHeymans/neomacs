@@ -11164,17 +11164,12 @@ impl Context {
                             vm.execute_with_func_value(bc_data, args, function)
                         }
                         Plan::Compiled => {
-                            // The baseline tier compiles only nullary leaf bodies;
-                            // a nullary function called with arguments must signal,
-                            // so only attempt native code for a zero-arg call. A
-                            // `None` result means non-compilable or a deopt —
-                            // either way, fall back to the Tier-0 interpreter.
-                            let native = if args.is_empty() {
-                                crate::emacs_core::jit::try_run_compiled(bc_data)
-                            } else {
-                                None
-                            };
-                            match native {
+                            // Run native code when the body is compilable and the
+                            // call is valid (arity is checked inside
+                            // try_run_compiled). A `None` result — non-compilable
+                            // body, a deopt, or an arity mismatch — falls back to
+                            // the Tier-0 interpreter.
+                            match crate::emacs_core::jit::try_run_compiled(bc_data, &args) {
                                 Some(bits) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
                                 None => {
                                     let mut vm = super::bytecode::Vm::from_context(self);
