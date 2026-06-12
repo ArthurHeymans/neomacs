@@ -13,7 +13,7 @@ use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
     TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
-    finish_and_begin_text_matrix_row, finish_text_matrix_row,
+    finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -1950,12 +1950,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 row_y_positions.push(*y);
                 *x = content_x;
                 *col = 0;
-                finish_and_begin_text_matrix_row(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    geometry_transition,
-                );
+                geometry_transition.emit(builder, output_emitter, evaluator);
                 true
             }
         }};
