@@ -589,7 +589,13 @@ fn current_display_row_metrics_advances_visual_wrap_without_line_spacing() {
 
 #[test]
 fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
-    let mut cursor = DisplayRowGeometryCursor::new(2, 42.0, 3.0, 24.0, 18.0);
+    let mut cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    });
 
     let hit_row = cursor.hit_row(11, 22);
     assert_eq!(hit_row.y_start, 42.0);
@@ -638,7 +644,13 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
 
 #[test]
 fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
-    let cursor = DisplayRowGeometryCursor::new(2, 42.0, 3.0, 24.0, 18.0);
+    let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    });
 
     assert_eq!(
         cursor.finish_current_row(),

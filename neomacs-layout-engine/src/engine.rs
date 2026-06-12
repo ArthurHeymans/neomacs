@@ -607,12 +607,12 @@ impl CurrentDisplayRowMetrics {
 }
 
 impl DisplayRowGeometryCursor {
-    fn new(row: usize, y: f32, row_extra_y: f32, height: f32, ascent: f32) -> Self {
+    fn from_state(state: DisplayRowGeometryState) -> Self {
         Self {
-            row,
-            y,
-            row_extra_y,
-            metrics: CurrentDisplayRowMetrics::new(height, ascent),
+            row: state.row,
+            y: state.y,
+            row_extra_y: state.row_extra_y,
+            metrics: CurrentDisplayRowMetrics::new(state.height, state.ascent),
         }
     }
 
@@ -1704,13 +1704,13 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let mut row_cursor = DisplayRowGeometryCursor::new(
-                *row,
-                *y,
-                *row_extra_y,
-                *row_max_height,
-                *row_max_ascent,
-            );
+            let mut row_cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                row: *row,
+                y: *y,
+                row_extra_y: *row_extra_y,
+                height: *row_max_height,
+                ascent: *row_max_ascent,
+            });
             hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
             let finished_row = row_cursor.finish_and_advance_to_next_row(
@@ -4193,13 +4193,14 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
-                    let mut row_cursor = DisplayRowGeometryCursor::new(
-                        row,
-                        y,
-                        row_extra_y,
-                        row_max_height,
-                        row_max_ascent,
-                    );
+                    let mut row_cursor =
+                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                            row,
+                            y,
+                            row_extra_y,
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        });
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
@@ -4829,13 +4830,14 @@ impl LayoutEngine {
                     charpos += 1;
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
-                        let mut row_cursor = DisplayRowGeometryCursor::new(
-                            row,
-                            y,
-                            row_extra_y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                        let mut row_cursor =
+                            DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                                row,
+                                y,
+                                row_extra_y,
+                                height: row_max_height,
+                                ascent: row_max_ascent,
+                            });
                         x = content_x;
                         hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                         row_extend_bg = None;
@@ -4942,13 +4944,14 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                let mut row_cursor = DisplayRowGeometryCursor::new(
-                    row,
-                    y,
-                    row_extra_y,
-                    row_max_height,
-                    row_max_ascent,
-                );
+                let mut row_cursor =
+                    DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                        row,
+                        y,
+                        row_extra_y,
+                        height: row_max_height,
+                        ascent: row_max_ascent,
+                    });
                 charpos += 1;
 
                 // Check line-spacing text property on the newline we just consumed.
@@ -5093,13 +5096,14 @@ impl LayoutEngine {
                             current_line += 1;
                             need_line_number = lnum_enabled;
                         }
-                        let mut row_cursor = DisplayRowGeometryCursor::new(
-                            row,
-                            y,
-                            row_extra_y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                        let mut row_cursor =
+                            DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                                row,
+                                y,
+                                row_extra_y,
+                                height: row_max_height,
+                                ascent: row_max_ascent,
+                            });
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
                         hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5146,13 +5150,14 @@ impl LayoutEngine {
                         if row < max_rows {
                             row_continued[row] = true;
                         }
-                        let mut row_cursor = DisplayRowGeometryCursor::new(
-                            row,
-                            y,
-                            row_extra_y,
-                            row_max_height,
-                            row_max_ascent,
-                        );
+                        let mut row_cursor =
+                            DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                                row,
+                                y,
+                                row_extra_y,
+                                height: row_max_height,
+                                ascent: row_max_ascent,
+                            });
                         x = content_x;
                         // Record hit-test row (wrap/truncation break)
                         hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5458,13 +5463,14 @@ impl LayoutEngine {
                         current_line += 1;
                         need_line_number = lnum_enabled;
                     }
-                    let mut row_cursor = DisplayRowGeometryCursor::new(
-                        row,
-                        y,
-                        row_extra_y,
-                        row_max_height,
-                        row_max_ascent,
-                    );
+                    let mut row_cursor =
+                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                            row,
+                            y,
+                            row_extra_y,
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        });
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5519,13 +5525,14 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut row_cursor = DisplayRowGeometryCursor::new(
-                        row,
-                        y,
-                        row_extra_y,
-                        row_max_height,
-                        row_max_ascent,
-                    );
+                    let mut row_cursor =
+                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                            row,
+                            y,
+                            row_extra_y,
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        });
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -5582,13 +5589,14 @@ impl LayoutEngine {
                     if row < max_rows {
                         row_continued[row] = true;
                     }
-                    let mut row_cursor = DisplayRowGeometryCursor::new(
-                        row,
-                        y,
-                        row_extra_y,
-                        row_max_height,
-                        row_max_ascent,
-                    );
+                    let mut row_cursor =
+                        DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+                            row,
+                            y,
+                            row_extra_y,
+                            height: row_max_height,
+                            ascent: row_max_ascent,
+                        });
                     x = content_x;
                     // Record hit-test row (wrap/truncation break)
                     hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
@@ -6193,13 +6201,13 @@ impl LayoutEngine {
                 .get(row)
                 .copied()
                 .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
-            let row_cursor = DisplayRowGeometryCursor::new(
+            let row_cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
                 row,
-                row_y_start,
+                y: row_y_start,
                 row_extra_y,
-                row_max_height,
-                row_max_ascent,
-            );
+                height: row_max_height,
+                ascent: row_max_ascent,
+            });
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             finish_text_matrix_row(
                 &mut self.matrix_builder,
