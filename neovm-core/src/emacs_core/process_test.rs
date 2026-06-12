@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::{ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest};
+use crate::emacs_core::wait::{WaitCompletion, WaitDeadline, WaitRequest};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2254,14 +2254,16 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
         .expect("parse no-arg accept-process-output")
         .expect("live request");
     assert_eq!(poll.wait.deadline(), WaitDeadline::Poll);
-    assert_eq!(poll.wait.process_policy(), ProcessWaitPolicy::Any);
+    assert!(poll.wait.completes_on_any_process_activity());
+    assert_eq!(poll.wait.target_process(), None);
 
     let timeout =
         parse_accept_process_output_request(&mut processes, &[Value::NIL, Value::make_float(0.25)])
             .expect("parse timed accept-process-output")
             .expect("live request");
     assert!(matches!(timeout.wait.deadline(), WaitDeadline::Until(_)));
-    assert_eq!(timeout.wait.process_policy(), ProcessWaitPolicy::Any);
+    assert!(timeout.wait.completes_on_any_process_activity());
+    assert_eq!(timeout.wait.target_process(), None);
 
     let id = processes.create_process("target".into(), Value::NIL, "cat".into(), vec![]);
     let target = parse_accept_process_output_request(
@@ -2271,7 +2273,8 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     .expect("parse target accept-process-output")
     .expect("live request");
     assert_eq!(target.wait.deadline(), WaitDeadline::Forever);
-    assert_eq!(target.wait.process_policy(), ProcessWaitPolicy::Target(id));
+    assert!(target.wait.completes_on_target_process_activity(id));
+    assert!(!target.wait.restricts_process_service_to_target());
 }
 
 #[test]

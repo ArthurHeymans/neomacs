@@ -278,12 +278,23 @@ impl WaitRequest {
         self.deadline
     }
 
-    pub(crate) fn process_policy(self) -> ProcessWaitPolicy {
-        self.processes
-    }
-
     pub(crate) fn target_process(self) -> Option<ProcessId> {
         self.processes.target_process()
+    }
+
+    pub(crate) fn completes_on_any_process_activity(self) -> bool {
+        matches!(self.processes, ProcessWaitPolicy::Any)
+    }
+
+    pub(crate) fn completes_on_target_process_activity(self, process: ProcessId) -> bool {
+        matches!(
+            self.processes,
+            ProcessWaitPolicy::Target(id) | ProcessWaitPolicy::TargetOnly(id) if id == process
+        )
+    }
+
+    pub(crate) fn restricts_process_service_to_target(self) -> bool {
+        self.processes.just_this_one()
     }
 
     fn services_special_input(self) -> bool {
@@ -911,15 +922,17 @@ mod tests {
     }
 
     #[test]
-    fn wait_request_exposes_deadline_and_process_policy_queries() {
+    fn wait_request_exposes_deadline_and_process_completion_queries() {
         let request = WaitRequest::accept_process_output_with_timers(
             WaitDeadline::Poll,
             ProcessWaitPolicy::Target(12),
         );
 
         assert_eq!(request.deadline(), WaitDeadline::Poll);
-        assert_eq!(request.process_policy(), ProcessWaitPolicy::Target(12));
         assert_eq!(request.target_process(), Some(12));
+        assert!(request.completes_on_target_process_activity(12));
+        assert!(!request.completes_on_any_process_activity());
+        assert!(!request.restricts_process_service_to_target());
     }
 
     #[test]
@@ -942,7 +955,8 @@ mod tests {
         let request = WaitRequest::timer_service(true);
 
         assert_eq!(request.deadline(), WaitDeadline::Poll);
-        assert_eq!(request.process_policy(), ProcessWaitPolicy::None);
+        assert_eq!(request.target_process(), None);
+        assert!(!request.completes_on_any_process_activity());
         assert!(!request.services_special_input());
     }
 
