@@ -536,7 +536,7 @@ impl WaitSpecialInputActivity {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitServiceOutcome {
+struct WaitServiceOutcome {
     process_activity: WaitProcessActivity,
     special_input_activity: WaitSpecialInputActivity,
     timers_fired: bool,
@@ -581,11 +581,11 @@ impl WaitSpecialInputOutcome {
 }
 
 impl WaitServiceOutcome {
-    pub(crate) fn has_any_process_activity(self) -> bool {
+    fn has_any_process_activity(self) -> bool {
         self.process_activity.any()
     }
 
-    pub(crate) fn has_target_process_activity(self) -> bool {
+    fn has_target_process_activity(self) -> bool {
         self.process_activity.target()
     }
 
@@ -597,27 +597,27 @@ impl WaitServiceOutcome {
         self.special_input_activity = self.special_input_activity.record(activity);
     }
 
-    pub(crate) fn has_special_input_activity(self) -> bool {
+    fn has_special_input_activity(self) -> bool {
         self.special_input_activity.any()
     }
 
-    pub(crate) fn has_resize_activity(self) -> bool {
+    fn has_resize_activity(self) -> bool {
         self.special_input_activity.resize()
     }
 
-    pub(crate) fn record_command_input_pending(&mut self) {
+    fn record_command_input_pending(&mut self) {
         self.command_input_pending = true;
     }
 
-    pub(crate) fn has_command_input_pending(self) -> bool {
+    fn has_command_input_pending(self) -> bool {
         self.command_input_pending
     }
 
-    pub(crate) fn record_timer_activity(&mut self, fired: bool) {
+    fn record_timer_activity(&mut self, fired: bool) {
         self.timers_fired |= fired;
     }
 
-    pub(crate) fn has_timer_activity(self) -> bool {
+    fn has_timer_activity(self) -> bool {
         self.timers_fired
     }
 }
@@ -633,8 +633,8 @@ impl WaitOutcome {
         self.completion
     }
 
-    pub(crate) fn service(self) -> WaitServiceOutcome {
-        self.service
+    fn has_command_input_pending(self) -> bool {
+        self.service.has_command_input_pending()
     }
 }
 
@@ -1209,6 +1209,6 @@ mod tests {
         };
 
         assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
-        assert!(outcome.service().has_command_input_pending());
+        assert!(outcome.has_command_input_pending());
     }
 }
