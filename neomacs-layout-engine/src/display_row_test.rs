@@ -180,7 +180,6 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
     assert_eq!(active.layout_metrics().row_height, 15.0);
     assert_eq!(active.layout_metrics().ascent, 10.0);
     assert_eq!(active.layout_metrics().space_width, 7.0);
-    assert_eq!(active.space_width(), 7.0);
     assert_eq!(active.background(), Color::from_pixel(face.bg));
 }
 

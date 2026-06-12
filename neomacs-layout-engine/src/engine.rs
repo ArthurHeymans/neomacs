@@ -4250,7 +4250,7 @@ impl LayoutEngine {
                                     height: display_height,
                                     ascent: display_height,
                                     char_width: face_metrics.char_width,
-                                    space_width: current_face.space_width(),
+                                    space_width: face_metrics.space_width,
                                     default_row_height: char_h,
                                 },
                             );
@@ -4956,7 +4956,7 @@ impl LayoutEngine {
             let tab_advance = (ch == '\t').then(|| {
                 text_display_tab_policy(content_x, params).advance_from(
                     crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    current_face.space_width(),
+                    face_metrics.space_width,
                 )
             });
 
