@@ -391,6 +391,12 @@ struct ComplexTextRunAdvanceCache {
     advances: Vec<DisplayTextRunByteAdvance>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct HorizontalScrollSkipState {
+    configured_columns: i32,
+    remaining_columns: i32,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct ActiveDisplayPropertySpan<T> {
     value: Option<T>,
@@ -561,6 +567,40 @@ impl ComplexTextRunAdvanceCache {
             .iter()
             .find(|advance| advance.byte_offset == byte_idx)
             .map(|advance| advance.advance_px)
+    }
+}
+
+impl HorizontalScrollSkipState {
+    fn new(truncate_lines: bool, hscroll_columns: i32) -> Self {
+        let configured_columns = if truncate_lines {
+            hscroll_columns.max(0) as i32
+        } else {
+            0
+        };
+        Self {
+            configured_columns,
+            remaining_columns: configured_columns,
+        }
+    }
+
+    fn reset_line(&mut self) {
+        self.remaining_columns = self.configured_columns;
+    }
+
+    fn should_skip(self) -> bool {
+        self.remaining_columns > 0
+    }
+
+    fn should_show_left_truncation(self) -> bool {
+        self.configured_columns > 0
+    }
+
+    fn consumed_columns(self) -> i32 {
+        self.configured_columns - self.remaining_columns
+    }
+
+    fn consume_columns(&mut self, columns: i32) {
+        self.remaining_columns -= columns.max(0).min(self.remaining_columns);
     }
 }
 
@@ -3603,14 +3643,8 @@ impl LayoutEngine {
         let right_fringe_x = params.text_bounds.x + params.text_bounds.width;
         let mut row_flags = DisplayRowFlags::new(max_rows);
 
-        // Horizontal scroll: skip first hscroll columns on each line
-        let hscroll = if params.truncate_lines {
-            params.hscroll.max(0) as i32
-        } else {
-            0
-        };
-        let show_left_trunc = hscroll > 0;
-        let mut hscroll_remaining = hscroll;
+        let mut hscroll_skip =
+            HorizontalScrollSkipState::new(params.truncate_lines, params.hscroll);
 
         // Word-wrap break tracking
         let mut wrap_break = WordWrapBreakCandidate::default();
@@ -4076,7 +4110,7 @@ impl LayoutEngine {
             }
 
             // Handle hscroll: skip columns consumed by horizontal scroll
-            if hscroll_remaining > 0 {
+            if hscroll_skip.should_skip() {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let ch_start_byte_idx = byte_idx;
@@ -4119,7 +4153,7 @@ impl LayoutEngine {
                     col = 0;
                     current_line += 1;
                     need_line_number = lnum_enabled;
-                    hscroll_remaining = hscroll; // reset for next line
+                    hscroll_skip.reset_line();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
                         prefix_request.request_line();
@@ -4141,17 +4175,17 @@ impl LayoutEngine {
                 } else {
                     let ch_cols: i32 = if ch == '\t' {
                         let tab_w = params.tab_width.max(1) as i32;
-                        let consumed = hscroll - hscroll_remaining;
+                        let consumed = hscroll_skip.consumed_columns();
                         ((consumed / tab_w + 1) * tab_w) - consumed
                     } else if is_wide_char(ch) {
                         2
                     } else {
                         1
                     };
-                    hscroll_remaining -= ch_cols.min(hscroll_remaining);
+                    hscroll_skip.consume_columns(ch_cols);
 
                     // When hscroll is exhausted, show $ indicator at left edge
-                    if hscroll_remaining <= 0 && show_left_trunc {
+                    if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
                         let trunc_frame = text_append_surface.frame(
                             row_geometry.append_placement(0.0),
@@ -4691,7 +4725,7 @@ impl LayoutEngine {
                         col = 0;
                         current_line += 1;
                         need_line_number = lnum_enabled;
-                        hscroll_remaining = hscroll;
+                        hscroll_skip.reset_line();
                         word_wrap_may_wrap = false;
                         wrap_break.clear();
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
@@ -4806,7 +4840,7 @@ impl LayoutEngine {
                 col = 0;
                 current_line += 1;
                 need_line_number = lnum_enabled;
-                hscroll_remaining = hscroll;
+                hscroll_skip.reset_line();
                 word_wrap_may_wrap = false;
                 wrap_break.clear();
                 if has_prefix {

@@ -167,6 +167,31 @@ fn complex_text_run_advance_cache_tracks_range_and_absolute_advances() {
 }
 
 #[test]
+fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
+    let mut state = HorizontalScrollSkipState::new(true, 5);
+
+    assert!(state.should_skip());
+    assert!(state.should_show_left_truncation());
+    assert_eq!(state.consumed_columns(), 0);
+
+    state.consume_columns(2);
+
+    assert!(state.should_skip());
+    assert_eq!(state.consumed_columns(), 2);
+
+    state.consume_columns(9);
+
+    assert!(!state.should_skip());
+    assert_eq!(state.consumed_columns(), 5);
+
+    state.reset_line();
+
+    assert!(state.should_skip());
+    assert_eq!(state.consumed_columns(), 0);
+    assert!(!HorizontalScrollSkipState::new(false, 5).should_skip());
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(
