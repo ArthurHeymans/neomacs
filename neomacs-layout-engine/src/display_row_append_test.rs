@@ -8,7 +8,7 @@ use crate::display_row::{
     DisplayRowSpec,
 };
 use crate::display_row_builder::{
-    DisplayRowPosition, DisplayTabPolicy, FixedGlyphAdvance, FixedGlyphAdvances,
+    DisplayRowPosition, DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvances,
 };
 use crate::display_text::DisplayTextFragment;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -120,8 +120,6 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
         },
         DisplayTabPolicy::every(8),
     );
-    let mut measurer = FixedGlyphAdvance::new('.', 7, 5.0);
-
     let (progress, end) = append_synthetic_text_to_display_row(
         &mut builder,
         &mut output_emitter,
@@ -133,7 +131,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
         99,
         "...",
         7,
-        Some(&mut measurer),
+        Some(DisplayTextRunMeasurement::uniform_for_text("...", 5.0)),
     )
     .expect("synthetic text progress");
 

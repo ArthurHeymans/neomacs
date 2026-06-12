@@ -499,6 +499,22 @@ fn display_text_run_measurement_exposes_measured_advances() {
 }
 
 #[test]
+fn display_text_run_measurement_builds_uniform_advances_for_text() {
+    let measurement = DisplayTextRunMeasurement::uniform_for_text("aé中", 5.0);
+
+    let advances = measurement
+        .measured_advances()
+        .expect("uniform measurement should produce advances");
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset, advance.advance_px))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 5.0), (1, 1, 5.0), (2, 3, 5.0)]
+    );
+}
+
+#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));

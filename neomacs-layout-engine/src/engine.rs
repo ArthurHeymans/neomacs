@@ -39,7 +39,7 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition,
-    DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvance,
+    DisplayTabPolicy, DisplayTextRunMeasurement,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3753,8 +3753,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let mut measurer =
-                            FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
+                        let measurement =
+                            DisplayTextRunMeasurement::uniform_for_text("...", dot_advance);
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -3766,7 +3766,7 @@ impl LayoutEngine {
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
                             current_text_face_id,
-                            Some(&mut measurer),
+                            Some(measurement),
                         ) {
                             x = position.x_px;
                             col = position.col;
@@ -3942,7 +3942,7 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let mut measurer = FixedGlyphAdvance::new('$', trunc_face_id, char_w);
+                        let measurement = DisplayTextRunMeasurement::uniform_for_text("$", char_w);
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -3957,7 +3957,7 @@ impl LayoutEngine {
                             SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
                             "$",
                             trunc_face_id,
-                            Some(&mut measurer),
+                            Some(measurement),
                         ) {
                             x = position.x_px;
                             col = position.col;
@@ -4506,7 +4506,7 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                let mut measurer = FixedGlyphAdvance::new('.', current_text_face_id, dot_advance);
+                let measurement = DisplayTextRunMeasurement::uniform_for_text("...", dot_advance);
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4518,7 +4518,7 @@ impl LayoutEngine {
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
                     current_text_face_id,
-                    Some(&mut measurer),
+                    Some(measurement),
                 ) {
                     x = position.x_px;
                     col = position.col;

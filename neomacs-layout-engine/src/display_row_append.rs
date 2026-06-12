@@ -19,7 +19,7 @@ use crate::display_row::{
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics,
-    DisplayTabPolicy, FixedGlyphAdvance,
+    DisplayTabPolicy, DisplayTextRunMeasurement, FixedGlyphAdvance,
 };
 #[cfg(test)]
 use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
@@ -78,6 +78,45 @@ impl DisplayRowRenderPolicy for MeasuredDisplayRowRenderPolicy<'_> {
         _face_id: u32,
     ) -> DisplayRowItemMeasurement<'a> {
         DisplayRowItemMeasurement::Measured(&mut *self.glyph_measurer)
+    }
+}
+
+struct TextRunMeasurementMeasurer {
+    face_id: u32,
+    measurement: DisplayTextRunMeasurement,
+}
+
+impl TextRunMeasurementMeasurer {
+    fn new(face_id: u32, measurement: DisplayTextRunMeasurement) -> Self {
+        Self {
+            face_id,
+            measurement,
+        }
+    }
+}
+
+impl DisplayGlyphMeasurer for TextRunMeasurementMeasurer {
+    fn glyph_advance_px(
+        &mut self,
+        _ch: char,
+        _face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        None
+    }
+
+    fn text_run_advances_px(
+        &mut self,
+        _text: &str,
+        face_id: u32,
+        _fallback_char_width_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        if face_id == self.face_id {
+            self.measurement.clone()
+        } else {
+            DisplayTextRunMeasurement::PerChar
+        }
     }
 }
 
@@ -1271,14 +1310,15 @@ pub(crate) fn append_synthetic_text_to_display_row(
     source_id: u64,
     text: impl Into<Box<str>>,
     face_id: u32,
-    glyph_measurer: Option<&mut dyn DisplayGlyphMeasurer>,
+    measurement: Option<DisplayTextRunMeasurement>,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source_id, text, face_id);
     let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face);
-    match glyph_measurer {
-        Some(measurer) => {
+    match measurement {
+        Some(measurement) => {
+            let mut measurer = TextRunMeasurementMeasurer::new(face_id, measurement);
             let mut render_policy = MeasuredDisplayRowRenderPolicy {
-                glyph_measurer: measurer,
+                glyph_measurer: &mut measurer,
             };
             append_single_display_item_fragment_to_text_row_and_emit(
                 builder,

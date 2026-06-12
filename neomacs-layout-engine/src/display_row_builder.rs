@@ -154,6 +154,25 @@ pub(crate) enum DisplayTextRunMeasurement {
 }
 
 impl DisplayTextRunMeasurement {
+    pub(crate) fn uniform_for_text(text: &str, advance_px: f32) -> Self {
+        if text.is_empty() {
+            return Self::PerChar;
+        }
+        let advance_px = if advance_px.is_finite() && advance_px >= 0.0 {
+            advance_px
+        } else {
+            0.0
+        };
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, _))| {
+                DisplayTextRunAdvance::new(char_offset, byte_offset, advance_px)
+            })
+            .collect();
+        Self::Measured(advances)
+    }
+
     pub(crate) fn measured_advances(&self) -> Option<&[DisplayTextRunAdvance]> {
         match self {
             Self::PerChar => None,
