@@ -296,6 +296,68 @@ impl<'a> DisplayRowBoundaryTarget<'a> {
             transition,
         }
     }
+
+    pub(crate) fn line_break(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            hit_range,
+            DisplayRowGeometryTransitionTarget::line_break(
+                defaults,
+                row_base,
+                col,
+                x,
+                line_spacing,
+                row_y_recording,
+            ),
+        )
+    }
+
+    pub(crate) fn truncation(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            hit_range,
+            DisplayRowGeometryTransitionTarget::truncation(
+                defaults,
+                row_base,
+                col,
+                x,
+                row_y_recording,
+            ),
+        )
+    }
+
+    pub(crate) fn visual_wrap(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+    ) -> Self {
+        Self::new(
+            hit_range,
+            DisplayRowGeometryTransitionTarget::visual_wrap(
+                defaults,
+                row_base,
+                col,
+                x,
+                row_y_recording,
+            ),
+        )
+    }
 }
 
 impl DisplayRowGeometryState {

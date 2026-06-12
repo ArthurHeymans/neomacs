@@ -654,3 +654,65 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
         }
     );
 }
+
+#[test]
+fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range() {
+    let defaults = DisplayRowGeometryDefaults {
+        text_y: 10.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    let mut line_break_y_positions = vec![8.0];
+    let line_break = DisplayRowBoundaryTarget::line_break(
+        DisplayRowHitRange {
+            charpos_start: 11,
+            charpos_end: 22,
+        },
+        defaults,
+        5,
+        7,
+        13.0,
+        4.0,
+        DisplayRowYRecording::RowYPositions(&mut line_break_y_positions),
+    );
+    let mut truncation_y_positions = vec![8.0];
+    let truncation = DisplayRowBoundaryTarget::truncation(
+        DisplayRowHitRange {
+            charpos_start: 11,
+            charpos_end: 22,
+        },
+        defaults,
+        5,
+        7,
+        13.0,
+        DisplayRowYRecording::RowYPositions(&mut truncation_y_positions),
+    );
+    let mut visual_wrap_y_positions = vec![8.0];
+    let visual_wrap = DisplayRowBoundaryTarget::visual_wrap(
+        DisplayRowHitRange {
+            charpos_start: 11,
+            charpos_end: 22,
+        },
+        defaults,
+        5,
+        7,
+        13.0,
+        DisplayRowYRecording::RowYPositions(&mut visual_wrap_y_positions),
+    );
+
+    assert_eq!(line_break.hit_range.charpos_start, 11);
+    assert_eq!(line_break.hit_range.charpos_end, 22);
+    assert!(matches!(
+        line_break.transition.kind,
+        DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 }
+    ));
+    assert!(matches!(
+        truncation.transition.kind,
+        DisplayRowAdvanceKind::Truncation
+    ));
+    assert!(matches!(
+        visual_wrap.transition.kind,
+        DisplayRowAdvanceKind::VisualWrap
+    ));
+}
