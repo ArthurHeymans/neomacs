@@ -3452,6 +3452,71 @@ mod tests {
     // the full `+`/bignum builtins (it signals on that fallback), so it cannot
     // serve as the oracle for the slow path.
 
+    /// Phase-8 micro-benchmark: the hot fixnum countdown loop, Tier 0 vs JIT.
+    /// `#[ignore]`d (timing does not belong in CI); run explicitly, in release:
+    /// `cargo nextest run --cargo-profile release --features jit --run-ignored all jit_bench`
+    #[test]
+    #[ignore = "manual perf measurement; run in release"]
+    fn jit_bench_countdown_loop() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        use std::time::Instant;
+
+        // (lambda (n) (while (> n 0) (setq n (1- n))) n)
+        let ops = [
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Gtr,
+            Op::GotoIfNil(8),
+            Op::StackRef(0),
+            Op::Sub1,
+            Op::StackSet(1),
+            Op::Goto(0),
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        let constants = [Value::make_int(0)];
+        let iters: i64 = 3_000_000;
+        let calls = 5;
+
+        let mut ev = Context::new_minimal_vm_harness();
+
+        // Tier 0.
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+        let t0 = Instant::now();
+        for _ in 0..calls {
+            let mut vm = Vm::from_context(&mut ev);
+            let r = vm.execute(&f, vec![Value::make_int(iters)]).unwrap();
+            assert_eq!(r, Value::make_int(0));
+        }
+        let interp = t0.elapsed();
+
+        // JIT.
+        let leaf = lower_leaf(&ops, &constants, 1).unwrap();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        let t1 = Instant::now();
+        for _ in 0..calls {
+            assert_eq!(
+                leaf.call(ctx_ptr, &[Value::make_int(iters)]),
+                NativeRun::Ok(Value::make_int(0).bits())
+            );
+        }
+        let jit = t1.elapsed();
+
+        eprintln!(
+            "[jit-bench] countdown {iters}x{calls}: interp {interp:?}  jit {jit:?}  speedup {:.1}x",
+            interp.as_secs_f64() / jit.as_secs_f64()
+        );
+    }
+
     /// Differential fuzzing (the Phase-9 discipline, brought forward): generate
     /// seeded random straight-line bodies over the supported non-allocating op
     /// subset, run each through BOTH tiers, and hold the tiering contract:
