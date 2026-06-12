@@ -1868,18 +1868,19 @@ fn install_rendered_display_row_derives_buffer_bounds_from_source_slots() {
 }
 
 #[test]
-fn install_rendered_display_row_installs_media_fragments_in_current_window() {
+fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.enabled = true;
-    row.height_px = 16.0;
-    row.ascent_px = 12.0;
+    row.pixel_y = 4.0;
+    row.height_px = 54.0;
+    row.ascent_px = 42.0;
     let rendered = RenderedDisplayRow {
         row,
         progress: DisplayRowOutputProgress {
             end_x: 0.0,
             end_col: 0,
             y: 4.0,
-            height: 16.0,
+            height: 54.0,
         },
         source_slots: Vec::new(),
         faces: Vec::new(),
@@ -1893,24 +1894,35 @@ fn install_rendered_display_row_installs_media_fragments_in_current_window() {
         }],
     };
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
+    let window_bounds = Rect::new(0.0, 0.0, 200.0, 80.0);
+    let row_bounds = Rect::new(0.0, 4.0, 200.0, 54.0);
     builder.begin_window_with_text_bounds(
         77,
         1,
         10,
-        Rect::new(0.0, 0.0, 200.0, 80.0),
-        text_bounds,
+        window_bounds,
+        Rect::new(10.0, 20.0, 160.0, 64.0),
         true,
     );
 
-    install_rendered_display_row(&mut builder, &rendered, 0);
+    let measured = MeasuredDisplayRow::new(
+        DisplayRowOwner::WindowChrome {
+            window_id: 77,
+            kind: WindowChromeKind::TabLine,
+        },
+        0,
+        row_bounds,
+        rendered,
+        DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+    );
+    install_measured_window_display_row(&mut builder, &measured);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
     let xwidget = state.xwidgets.first().expect("xwidget side item");
     assert_eq!(xwidget.window_id, 77);
     assert_eq!(xwidget.row_role, GlyphRowRole::TabLine);
-    assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert_eq!(xwidget.clip_rect, Some(row_bounds));
     assert_eq!(
         xwidget.slot_id,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
@@ -1924,4 +1936,79 @@ fn install_rendered_display_row_installs_media_fragments_in_current_window() {
     assert_eq!(xwidget.y, 4.0);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
+}
+
+#[test]
+fn measured_display_row_promotes_bounds_from_rendered_row_metrics() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabLine);
+    row.enabled = true;
+    row.height_px = 24.0;
+    row.ascent_px = 20.0;
+    let measured = MeasuredDisplayRow::new(
+        DisplayRowOwner::WindowChrome {
+            window_id: 77,
+            kind: WindowChromeKind::TabLine,
+        },
+        0,
+        Rect::new(10.0, 6.0, 120.0, 17.0),
+        RenderedDisplayRow {
+            row,
+            progress: DisplayRowOutputProgress {
+                end_x: 24.0,
+                end_col: 3,
+                y: 6.0,
+                height: 24.0,
+            },
+            source_slots: Vec::new(),
+            faces: Vec::new(),
+            media: Vec::new(),
+        },
+        DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+    );
+
+    assert_eq!(measured.bounds.height, 24.0);
+    assert_eq!(measured.row_height(), 24.0);
+    assert_eq!(measured.row_ascent(), 20.0);
+}
+
+#[test]
+fn measured_display_row_content_policy_ignores_allocated_row_height() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.enabled = true;
+    row.height_px = 120.0;
+    row.ascent_px = 13.0;
+    let mut face = neomacs_display_protocol::face::Face::default();
+    face.id = 8;
+    face.font_ascent = 13;
+    face.font_descent = 4;
+    let measured = MeasuredDisplayRow::new(
+        DisplayRowOwner::FrameChrome {
+            kind: FrameChromeKind::TabBar,
+        },
+        0,
+        Rect::new(0.0, 0.0, 640.0, 120.0),
+        RenderedDisplayRow {
+            row,
+            progress: DisplayRowOutputProgress {
+                end_x: 24.0,
+                end_col: 1,
+                y: 0.0,
+                height: 120.0,
+            },
+            source_slots: Vec::new(),
+            faces: vec![face],
+            media: vec![RenderedDisplayRowMedia {
+                kind: RenderedDisplayRowMediaKind::Image { image_id: 77 },
+                x: 0.0,
+                y: 0.0,
+                col: 0,
+                width: 32.0,
+                height: 24.0,
+            }],
+        },
+        DisplayRowBoundsPolicy::MeasureContent,
+    );
+
+    assert_eq!(measured.bounds.height, 24.0);
+    assert_eq!(measured.row_height(), 24.0);
 }

@@ -16,13 +16,17 @@
 use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
+use crate::display_row::{
+    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowSpec, MeasuredDisplayRow,
+    install_measured_window_display_row,
+};
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
-use crate::display_row::{DisplayRowSpec, install_rendered_display_row};
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
+use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::{Context, Value};
 
 impl LayoutEngine {
@@ -61,9 +65,11 @@ impl LayoutEngine {
         next_face_id: &mut u32,
         matrix_row: usize,
         output: ChromeRowOutput,
+        owner: DisplayRowOwner,
+        fallback_bounds: Rect,
         row_spec: DisplayRowSpec<'_>,
         rendered_text: Value,
-    ) {
+    ) -> Option<MeasuredDisplayRow> {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, output);
         let rendered_row = self.render_lisp_string_row_with_display_host(
@@ -73,14 +79,24 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             next_face_id,
         );
-        if let Some(ref rendered_row) = rendered_row {
-            install_rendered_display_row(&mut builder, rendered_row, matrix_row);
-            output_emitter.emit_chrome_progress(evaluator, output, rendered_row.progress);
+        let measured_row = rendered_row.map(|rendered| {
+            MeasuredDisplayRow::new(
+                owner,
+                matrix_row.min(u32::MAX as usize) as u32,
+                fallback_bounds,
+                rendered,
+                DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+            )
+        });
+        if let Some(ref measured_row) = measured_row {
+            install_measured_window_display_row(&mut builder, measured_row);
+            output_emitter.emit_chrome_progress(evaluator, output, measured_row.output_progress());
         }
         self.matrix_builder = builder;
-        if let Some(rendered_row) = rendered_row {
-            output_emitter.finish_chrome_progress(rendered_row.progress);
+        if let Some(ref measured_row) = measured_row {
+            output_emitter.finish_chrome_progress(measured_row.output_progress());
         }
+        measured_row
     }
 }
 

@@ -397,6 +397,119 @@ pub(crate) struct RenderedDisplayRow {
     pub(crate) media: Vec<RenderedDisplayRowMedia>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WindowChromeKind {
+    TabLine,
+    HeaderLine,
+    ModeLine,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FrameChromeKind {
+    TabBar,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowOwner {
+    WindowChrome {
+        window_id: u64,
+        kind: WindowChromeKind,
+    },
+    FrameChrome {
+        kind: FrameChromeKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowBoundsPolicy {
+    PreserveAllocatedMinimum,
+    MeasureContent,
+}
+
+pub(crate) struct MeasuredDisplayRow {
+    pub(crate) owner: DisplayRowOwner,
+    pub(crate) row_index: u32,
+    pub(crate) bounds: Rect,
+    pub(crate) rendered: RenderedDisplayRow,
+}
+
+fn stable_pixel_ceil(px: f32) -> f32 {
+    if !px.is_finite() {
+        return 1.0;
+    }
+    let px = px.max(1.0);
+    let rounded = px.round();
+    if (px - rounded).abs() <= 0.01 {
+        rounded.max(1.0)
+    } else {
+        px.ceil().max(1.0)
+    }
+}
+
+fn rendered_display_row_content_height(rendered: &RenderedDisplayRow) -> f32 {
+    let mut height = 1.0_f32;
+    for glyph in rendered.row.glyphs.iter().flatten() {
+        if let Some(face) = rendered.faces.iter().find(|face| face.id == glyph.face_id) {
+            let face_height = (face.font_ascent + face.font_descent).max(1) as f32;
+            height = height.max(face_height + glyph.vertical_offset_px.abs());
+        }
+    }
+    for media in &rendered.media {
+        height = height.max(media.height);
+    }
+    height
+}
+
+impl MeasuredDisplayRow {
+    pub(crate) fn new(
+        owner: DisplayRowOwner,
+        row_index: u32,
+        fallback_bounds: Rect,
+        rendered: RenderedDisplayRow,
+        bounds_policy: DisplayRowBoundsPolicy,
+    ) -> Self {
+        let content_height = stable_pixel_ceil(rendered_display_row_content_height(&rendered));
+        let allocated_height = stable_pixel_ceil(
+            fallback_bounds
+                .height
+                .max(rendered.row.height_px)
+                .max(rendered.progress.height)
+                .max(content_height),
+        );
+        let height = match bounds_policy {
+            DisplayRowBoundsPolicy::PreserveAllocatedMinimum => allocated_height,
+            DisplayRowBoundsPolicy::MeasureContent => content_height,
+        };
+        Self {
+            owner,
+            row_index,
+            bounds: Rect::new(
+                fallback_bounds.x,
+                fallback_bounds.y,
+                fallback_bounds.width,
+                height,
+            ),
+            rendered,
+        }
+    }
+
+    pub(crate) fn row_height(&self) -> f32 {
+        self.bounds.height.max(1.0)
+    }
+
+    pub(crate) fn row_ascent(&self) -> f32 {
+        self.rendered.row.ascent_px.max(0.0).min(self.row_height())
+    }
+
+    pub(crate) fn output_progress(&self) -> DisplayRowOutputProgress {
+        DisplayRowOutputProgress {
+            y: self.bounds.y,
+            height: self.bounds.height,
+            ..self.rendered.progress
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct DisplayRowSourceState {
     resolve_state: DisplaySourceResolveState,
@@ -701,25 +814,67 @@ pub(crate) fn install_rendered_display_row(
     }
 }
 
-pub(crate) fn install_rendered_frame_chrome_row(
+pub(crate) fn install_measured_window_display_row(
     builder: &mut GlyphMatrixBuilder,
-    frame_chrome_rows: &mut Vec<FrameChromeRow>,
-    rendered: &RenderedDisplayRow,
-    row_index: u32,
-    pixel_bounds: Rect,
+    measured: &MeasuredDisplayRow,
 ) {
-    for face in &rendered.faces {
+    let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
+        panic!("frame chrome rows must use install_measured_frame_chrome_row");
+    };
+    debug_assert!(window_id > 0);
+    debug_assert!(matches!(
+        kind,
+        WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
+    ));
+    for face in &measured.rendered.faces {
         builder.insert_face(face.id, face.clone());
     }
-    for media in &rendered.media {
-        media.install_frame_chrome(builder, rendered.row.role, row_index, pixel_bounds);
+    let matrix_row = measured.row_index as usize;
+    builder.begin_row(matrix_row, measured.rendered.row.role);
+    let mut row = rendered_row_with_source_bounds(&measured.rendered);
+    row.pixel_y = measured.bounds.y;
+    row.height_px = measured.row_height();
+    row.ascent_px = measured.row_ascent();
+    builder.install_prebuilt_current_row(&row);
+    builder.end_prebuilt_row();
+    for media in &measured.rendered.media {
+        media.install_window_row(
+            builder,
+            measured.rendered.row.role,
+            measured.row_index,
+            measured.bounds,
+        );
     }
-    let mut row = rendered.row.clone();
-    apply_source_slot_bounds_to_row(&mut row, &rendered.source_slots);
-    row.pixel_y = pixel_bounds.y;
+}
+
+pub(crate) fn install_measured_frame_chrome_row(
+    builder: &mut GlyphMatrixBuilder,
+    frame_chrome_rows: &mut Vec<FrameChromeRow>,
+    measured: &MeasuredDisplayRow,
+) {
+    let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
+        panic!("window-owned rows must use install_measured_window_display_row");
+    };
+    debug_assert!(matches!(kind, FrameChromeKind::TabBar));
+    for face in &measured.rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+    for media in &measured.rendered.media {
+        media.install_frame_chrome(
+            builder,
+            measured.rendered.row.role,
+            measured.row_index,
+            measured.bounds,
+        );
+    }
+    let mut row = measured.rendered.row.clone();
+    apply_source_slot_bounds_to_row(&mut row, &measured.rendered.source_slots);
+    row.pixel_y = measured.bounds.y;
+    row.height_px = measured.row_height();
+    row.ascent_px = measured.row_ascent();
     frame_chrome_rows.push(FrameChromeRow {
-        row_index,
-        pixel_bounds,
+        row_index: measured.row_index,
+        pixel_bounds: measured.bounds,
         row,
     });
 }
@@ -819,6 +974,58 @@ impl RenderedDisplayRowMedia {
                     role,
                     row,
                     self.col,
+                    xwidget_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                ),
+        }
+    }
+
+    fn install_window_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        role: GlyphRowRole,
+        row: u32,
+        clip: Rect,
+    ) {
+        match self.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => builder
+                .push_current_window_image_with_clip(
+                    role,
+                    row,
+                    self.col,
+                    clip,
+                    image_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                ),
+            RenderedDisplayRowMediaKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => builder.push_current_window_video_with_clip(
+                role,
+                row,
+                self.col,
+                clip,
+                video_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                loop_count,
+                autoplay,
+            ),
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
+                .push_current_window_xwidget_with_clip(
+                    role,
+                    row,
+                    self.col,
+                    clip,
                     xwidget_id,
                     self.x,
                     self.y,

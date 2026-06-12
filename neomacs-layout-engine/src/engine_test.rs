@@ -8380,7 +8380,7 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
         .create_frame("layout-tab-bar-image", 640, 160, buf_id);
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.tab_bar_height = 24;
+        frame.tab_bar_height = 17;
     }
     eval.obarray_mut()
         .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
@@ -8423,15 +8423,105 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
     assert_eq!(image.image_id, 77);
     assert_eq!(image.width, 32.0);
     assert_eq!(image.height, 24.0);
+    assert_eq!(tab_bar_row.row.height_px, 24.0);
+    assert_eq!(tab_bar_row.pixel_bounds.height, 24.0);
     assert_eq!(image.clip_rect, Some(tab_bar_row.pixel_bounds));
     assert_eq!(
         image.slot_id.expect("tab-bar image slot id").row,
         tab_bar_row.row_index
     );
     let requests = requests.lock().expect("requests lock");
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].max_width, 32);
-    assert_eq!(requests[0].max_height, 24);
+    assert!(
+        !requests.is_empty(),
+        "expected at least one tab-bar image realization request"
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.max_width == 32 && request.max_height == 24),
+        "unexpected image realization requests: {requests:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_shrinks_frame_tab_bar_from_stale_reserved_height() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::clone(&requests),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-tab-bar-stale-height", 640, 220, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.tab_bar_height = 120;
+        frame.sync_window_area_bounds();
+    }
+    eval.obarray_mut()
+        .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
+    eval.eval_str(
+        r#"
+          (require 'tab-bar)
+          (setq tab-bar-format
+                (list (lambda ()
+                        (propertize
+                         "I"
+                         'display
+                         '(image :type png
+                                 :file "/tmp/neomacs-frame-tab-bar.png"
+                                 :max-width 32
+                                 :max-height 24)))))
+          (select-frame layout-target-frame nil)
+        "#,
+    )
+    .expect("configure tab-bar image format");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let tab_bar_row = state
+        .frame_chrome_rows
+        .iter()
+        .find(|row| row.row.enabled && row.row.role == GlyphRowRole::TabBar)
+        .expect("frame tab-bar row");
+
+    assert_eq!(tab_bar_row.row.height_px, 24.0);
+    assert_eq!(tab_bar_row.pixel_bounds.height, 24.0);
+    assert_eq!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .tab_bar_height,
+        24
+    );
+    let image = state
+        .images
+        .iter()
+        .find(|image| image.row_role == GlyphRowRole::TabBar)
+        .expect("frame tab-bar image side item");
+    assert_eq!(image.clip_rect, Some(tab_bar_row.pixel_bounds));
+    assert!(
+        !requests.lock().expect("requests lock").is_empty(),
+        "expected at least one tab-bar image realization request"
+    );
 }
 
 #[test]

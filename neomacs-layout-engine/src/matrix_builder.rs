@@ -942,6 +942,37 @@ impl GlyphMatrixBuilder {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_current_window_image_with_clip(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        image_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        let window_id = self.current_window_id as i64;
+        self.push_image_with_slot_id(
+            window_id,
+            role,
+            Some(clip),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
+            image_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_frame_chrome_image(
         &mut self,
         role: GlyphRowRole,
@@ -1020,6 +1051,41 @@ impl GlyphMatrixBuilder {
             window_id,
             role,
             Some(self.current_text_pixel_bounds),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
+            video_id,
+            x,
+            y,
+            w,
+            h,
+            loop_count,
+            autoplay,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_current_window_video_with_clip(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        video_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        loop_count: i32,
+        autoplay: bool,
+    ) {
+        let window_id = self.current_window_id as i64;
+        self.push_video_with_slot_id(
+            window_id,
+            role,
+            Some(clip),
             DisplaySlotId {
                 window_id,
                 row,
@@ -1142,6 +1208,37 @@ impl GlyphMatrixBuilder {
             window_id,
             role,
             Some(self.current_text_pixel_bounds),
+            DisplaySlotId {
+                window_id,
+                row,
+                col,
+            },
+            xwidget_id,
+            x,
+            y,
+            w,
+            h,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_current_window_xwidget_with_clip(
+        &mut self,
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        let window_id = self.current_window_id as i64;
+        self.push_xwidget_with_slot_id(
+            window_id,
+            role,
+            Some(clip),
             DisplaySlotId {
                 window_id,
                 row,

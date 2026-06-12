@@ -21,10 +21,11 @@ use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layou
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, RenderedDisplayRow,
-    insert_resolved_display_row_face, install_rendered_display_row,
-    install_rendered_frame_chrome_row,
+    DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowOwner,
+    DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
+    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -2221,6 +2222,7 @@ impl LayoutEngine {
         // re-layout the entire frame.  The `mini_resize_attempted` flag
         // limits this to a single retry to prevent infinite loops.
         let mut mini_resize_attempted = false;
+        let mut tab_bar_resize_attempted = false;
 
         let (frame_params, curr_window_infos) = loop {
             // Collect window and frame params from neovm-core
@@ -2305,13 +2307,22 @@ impl LayoutEngine {
 
             let tab_bar_height = frame_params.tab_bar_height;
             if tab_bar_height > 0.0 {
-                self.render_frame_tab_bar_rust(
+                if let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
                     evaluator,
                     frame_id.0 as i64,
                     &face_resolver,
                     &frame_params,
                     tab_bar_height,
-                );
+                ) && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
+                    && !tab_bar_resize_attempted
+                {
+                    if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                        frame.tab_bar_height = actual_tab_bar_height.round().max(1.0) as u32;
+                        frame.sync_window_area_bounds();
+                    }
+                    tab_bar_resize_attempted = true;
+                    continue;
+                }
             }
 
             tracing::debug!(
@@ -6234,6 +6245,11 @@ impl LayoutEngine {
                 &mut current_face_id,
                 0,
                 tab_row_output,
+                DisplayRowOwner::WindowChrome {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::TabLine,
+                },
+                Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
                 tab_row_spec,
                 tab_text,
             );
@@ -6287,6 +6303,16 @@ impl LayoutEngine {
                 &mut current_face_id,
                 usize::from(tab_line_height > 0.0),
                 header_row_output,
+                DisplayRowOwner::WindowChrome {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::HeaderLine,
+                },
+                Rect::new(
+                    params.bounds.x,
+                    hl_y,
+                    params.bounds.width,
+                    header_line_height,
+                ),
                 header_row_spec,
                 header_text,
             );
@@ -6355,6 +6381,11 @@ impl LayoutEngine {
                 &mut current_face_id,
                 mode_line_matrix_row,
                 mode_row_output,
+                DisplayRowOwner::WindowChrome {
+                    window_id: params.window_id as u64,
+                    kind: WindowChromeKind::ModeLine,
+                },
+                Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
                 mode_row_spec,
                 mode_text,
             );
@@ -6626,11 +6657,11 @@ impl LayoutEngine {
         face_resolver: &super::neovm_bridge::FaceResolver,
         frame_params: &FrameParams,
         tab_bar_height: f32,
-    ) {
+    ) -> Option<f32> {
         let gc_roots = ScratchGcRootScope::new();
         let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)
         else {
-            return;
+            return None;
         };
 
         let width = frame_params.width;
@@ -6640,6 +6671,9 @@ impl LayoutEngine {
         }
         if tab_bar_face.font_ascent <= 0.0 {
             tab_bar_face.font_ascent = frame_params.char_height * 0.8;
+        }
+        if tab_bar_face.font_line_height <= 0.0 {
+            tab_bar_face.font_line_height = frame_params.char_height.max(tab_bar_face.font_ascent);
         }
         let chrome_before_tab = frame_params.menu_bar_height
             + frame_params.tool_bar_height
@@ -6652,7 +6686,6 @@ impl LayoutEngine {
             0
         };
         let tab_bar_y = chrome_before_tab;
-        let pixel_bounds = Rect::new(0.0, tab_bar_y, width, tab_bar_height);
         let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
         let tab_bar_spec = DisplayRowSpec::from_base_face(
             DisplayRowGeometry {
@@ -6675,26 +6708,35 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             &mut current_face_id,
         ) else {
-            return;
+            return None;
         };
         self.frame_face_id_counter = current_face_id;
         if rendered.row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
             .is_empty()
         {
-            return;
+            return None;
         }
-        install_rendered_frame_chrome_row(
+        let measured = MeasuredDisplayRow::new(
+            DisplayRowOwner::FrameChrome {
+                kind: FrameChromeKind::TabBar,
+            },
+            row_index,
+            Rect::new(0.0, tab_bar_y, width, tab_bar_height),
+            rendered,
+            DisplayRowBoundsPolicy::MeasureContent,
+        );
+        let actual_tab_bar_height = measured.bounds.height;
+        install_measured_frame_chrome_row(
             &mut self.matrix_builder,
             &mut self.pending_frame_chrome_rows,
-            &rendered,
-            row_index,
-            pixel_bounds,
+            &measured,
         );
         self.pending_tab_bar = Some(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
             items: tab_bar.items,
             y: tab_bar_y,
-            height: tab_bar_height,
+            height: actual_tab_bar_height,
         });
+        Some(actual_tab_bar_height)
     }
 
     /// Layout a MockFrameContent into FrameDisplayState snapshots.

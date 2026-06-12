@@ -906,6 +906,25 @@ fn display_row_builder_emits_stretch_with_pixel_width() {
 }
 
 #[test]
+fn display_row_builder_promotes_explicit_stretch_height_to_row_metrics() {
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(DisplayItem::new(
+        SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(4),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(24.0)),
+            height: Some(DisplayLength::Pixels(24.0)),
+            ascent: Some(DisplayLength::Pixels(24.0)),
+        }),
+    ));
+
+    let row = builder.finish();
+
+    assert_eq!(row.height_px, 24.0);
+    assert_eq!(row.ascent_px, 24.0);
+}
+
+#[test]
 fn display_row_builder_ceil_pixel_stretch_columns() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(stretch_item(DisplayLength::Pixels(9.0)));

@@ -877,6 +877,22 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_height,
             pixel_ascent,
         );
+        self.promote_row_metrics_for_explicit_stretch();
+    }
+
+    fn promote_row_metrics_for_explicit_stretch(&mut self) {
+        let Some(glyph) = self.row.glyphs[GlyphArea::Text.index()].last() else {
+            return;
+        };
+        if glyph.pixel_height <= 0.0 {
+            return;
+        }
+        self.row.height_px = self.row.height_px.max(glyph.pixel_height).max(1.0);
+        self.row.ascent_px = self
+            .row
+            .ascent_px
+            .max(glyph.pixel_ascent)
+            .min(self.row.height_px);
     }
 
     fn push_control_char(&mut self, ch: char, face_id: u32, charpos: usize) {
