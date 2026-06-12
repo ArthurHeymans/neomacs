@@ -31,8 +31,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
-    DisplayRowAppendSurface, append_buffer_text_char_to_text_row,
-    append_buffer_text_item_to_text_row_and_emit,
+    DisplayRowAppendSurface, append_buffer_text_fragment_to_text_row,
+    append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
@@ -43,8 +43,7 @@ use crate::display_row_builder::{
     FixedGlyphAdvance, FixedGlyphAdvances,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayReplacementBox,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
 };
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
@@ -5006,11 +5005,9 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     current_face_id += 1;
                 }
-                let source = BufferTextItemSource::single_char(
-                    buf_id,
+                let buffer_text_fragment = DisplayTextFragment::buffer_text(
                     CharPos0::new(charpos as usize),
-                    EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                    EmacsBytePos::new(text_start_byte + byte_idx),
+                    CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
@@ -5026,18 +5023,22 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                if let Some((_progress, position)) = append_buffer_text_item_to_text_row_and_emit(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    source,
-                    face_resolver,
-                    &current_resolved_face,
-                    current_text_face_id,
-                    crate::display_item::DisplayItemKind::ControlChar { ch },
-                    text_item_frame,
-                    DisplayRowPosition { x_px: x, col },
-                ) {
+                if let Some((_progress, position)) =
+                    append_buffer_text_item_fragment_to_text_row_and_emit(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        buffer_text_fragment,
+                        buffer,
+                        buf_id,
+                        face_resolver,
+                        &current_resolved_face,
+                        current_text_face_id,
+                        crate::display_item::DisplayItemKind::ControlChar { ch },
+                        text_item_frame,
+                        DisplayRowPosition { x_px: x, col },
+                    )
+                {
                     x = position.x_px;
                     col = position.col;
                 }
@@ -5061,11 +5062,9 @@ impl LayoutEngine {
                         let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                         current_face_id += 1;
                     }
-                    let source = BufferTextItemSource::single_char(
-                        buf_id,
+                    let buffer_text_fragment = DisplayTextFragment::buffer_text(
                         CharPos0::new(charpos as usize),
-                        EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                        EmacsBytePos::new(text_start_byte + byte_idx),
+                        CharPos0::new((charpos + 1) as usize),
                     );
                     let text_item_frame = text_append_surface.frame(
                         DisplayRowAppendPlacement {
@@ -5082,11 +5081,13 @@ impl LayoutEngine {
                         },
                     );
                     if let Some((_progress, position)) =
-                        append_buffer_text_item_to_text_row_and_emit(
+                        append_buffer_text_item_fragment_to_text_row_and_emit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            source,
+                            buffer_text_fragment,
+                            buffer,
+                            buf_id,
                             face_resolver,
                             &current_resolved_face,
                             current_text_face_id,
@@ -5133,11 +5134,9 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let source = BufferTextItemSource::single_char(
-                    buf_id,
+                let buffer_text_fragment = DisplayTextFragment::buffer_text(
                     CharPos0::new(charpos as usize),
-                    EmacsBytePos::new(text_start_byte + ch_start_byte_idx),
-                    EmacsBytePos::new(text_start_byte + byte_idx),
+                    CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame(
                     DisplayRowAppendPlacement {
@@ -5153,20 +5152,24 @@ impl LayoutEngine {
                         default_row_height: char_h,
                     },
                 );
-                if let Some((_progress, position)) = append_buffer_text_item_to_text_row_and_emit(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    source,
-                    face_resolver,
-                    &current_resolved_face,
-                    current_text_face_id,
-                    crate::display_item::DisplayItemKind::Glyphless(
-                        crate::display_item::DisplayGlyphless { ch, method },
-                    ),
-                    text_item_frame,
-                    DisplayRowPosition { x_px: x, col },
-                ) {
+                if let Some((_progress, position)) =
+                    append_buffer_text_item_fragment_to_text_row_and_emit(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        buffer_text_fragment,
+                        buffer,
+                        buf_id,
+                        face_resolver,
+                        &current_resolved_face,
+                        current_text_face_id,
+                        crate::display_item::DisplayItemKind::Glyphless(
+                            crate::display_item::DisplayGlyphless { ch, method },
+                        ),
+                        text_item_frame,
+                        DisplayRowPosition { x_px: x, col },
+                    )
+                {
                     x = position.x_px;
                     col = position.col;
                 }
@@ -5608,18 +5611,21 @@ impl LayoutEngine {
                     default_row_height: char_h,
                 },
             );
-            let Some((_progress, position)) = append_buffer_text_char_to_text_row(
+            let buffer_text_fragment = DisplayTextFragment::buffer_text(
+                CharPos0::new(charpos as usize),
+                CharPos0::new((charpos + 1) as usize),
+            );
+            let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
+                buffer_text_fragment,
                 face_resolver,
                 &current_resolved_face,
                 buf_id,
                 buffer,
-                CharPos0::new(charpos as usize),
                 current_text_face_id,
-                ch,
                 advance,
                 frame,
                 DisplayRowPosition { x_px: x, col },

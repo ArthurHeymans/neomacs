@@ -3,6 +3,7 @@ use crate::display_item::{
 };
 #[cfg(test)]
 use crate::display_item::{DisplayMediaReplacement, DisplayMediaReplacementKind};
+use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_row::DisplayRowSourceWalker;
 #[cfg(test)]
@@ -29,11 +30,12 @@ use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::unicode::decode_utf8;
 #[cfg(test)]
 use crate::window_output::DisplayProgressSink;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neovm_core::buffer::{BufferId, CharLen, CharPos0};
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::Context;
 #[cfg(test)]
 use neovm_core::emacs_core::Value;
@@ -463,6 +465,59 @@ pub(crate) fn append_lisp_string_to_text_row(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    buffer_id: BufferId,
+    buffer: &B,
+    face_id: u32,
+    advance: f32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let DisplayTextStorage::BufferSpan { start, end } = fragment.storage else {
+        return None;
+    };
+    let DisplayOrigin::BufferText { charpos } = fragment.origin else {
+        return None;
+    };
+    if start != charpos || end != start.add_len(CharLen::new(1)) {
+        return None;
+    }
+
+    let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
+    let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
+    let mut bytes = Vec::new();
+    buffer.layout_copy_emacs_byte_range_to(EmacsByteRange::new(byte_start, byte_end), &mut bytes);
+    let (ch, len) = decode_utf8(&bytes);
+    if len == 0 {
+        return None;
+    }
+
+    append_buffer_text_char_to_text_row(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        face_resolver,
+        base_face,
+        buffer_id,
+        buffer,
+        start,
+        face_id,
+        ch,
+        advance,
+        frame,
+        position,
+    )
+}
+
 pub(crate) fn append_buffer_text_char_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -578,6 +633,55 @@ pub(crate) fn append_buffer_text_item_to_text_row_and_emit(
         face_resolver,
         request,
         &mut render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
+    B: LayoutBufferView + ?Sized,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    fragment: DisplayTextFragment,
+    buffer: &B,
+    buffer_id: BufferId,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    face_id: u32,
+    kind: DisplayItemKind,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let DisplayTextStorage::BufferSpan { start, end } = fragment.storage else {
+        return None;
+    };
+    let DisplayOrigin::BufferText { charpos } = fragment.origin else {
+        return None;
+    };
+    if start != charpos || end <= start {
+        return None;
+    }
+
+    let source = BufferTextItemSource::new(
+        buffer_id,
+        start,
+        buffer.layout_char_pos_to_emacs_byte_pos(start),
+        end,
+        buffer.layout_char_pos_to_emacs_byte_pos(end),
+    );
+
+    append_buffer_text_item_to_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        source,
+        face_resolver,
+        base_face,
+        face_id,
+        kind,
+        frame,
+        position,
     )
 }
 

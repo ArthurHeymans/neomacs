@@ -35,6 +35,15 @@ impl DisplayTextFragment {
         }
     }
 
+    pub(crate) fn buffer_text(start: CharPos0, end: CharPos0) -> Self {
+        Self::buffer_span(
+            start,
+            end,
+            DisplayOrigin::BufferText { charpos: start },
+            BaseFacePolicy::BufferFaceIncludingOverlays,
+        )
+    }
+
     pub(crate) fn lisp_string(
         value: Value,
         origin: DisplayOrigin,
@@ -286,6 +295,28 @@ mod tests {
             }
         );
         assert_eq!(wrap.base_face_policy, BaseFacePolicy::DefaultFace);
+    }
+
+    #[test]
+    fn display_text_fragment_builds_buffer_text_fragment() {
+        let fragment = DisplayTextFragment::buffer_text(CharPos0::new(4), CharPos0::new(5));
+        assert_eq!(
+            fragment.storage,
+            DisplayTextStorage::BufferSpan {
+                start: CharPos0::new(4),
+                end: CharPos0::new(5)
+            }
+        );
+        assert_eq!(
+            fragment.origin,
+            DisplayOrigin::BufferText {
+                charpos: CharPos0::new(4)
+            }
+        );
+        assert_eq!(
+            fragment.base_face_policy,
+            BaseFacePolicy::BufferFaceIncludingOverlays
+        );
     }
 
     #[test]
