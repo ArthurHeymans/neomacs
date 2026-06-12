@@ -343,12 +343,51 @@ impl WaitRequest {
         self.special_input.services_input()
     }
 
+    fn waits_for_host_input(self) -> bool {
+        self.keyboard.waits_for_host_input()
+    }
+
+    fn completes_on_command_input(self) -> bool {
+        self.keyboard.completes_on_command_input()
+    }
+
+    fn sets_waiting_for_user_input(self) -> bool {
+        self.keyboard.sets_waiting_for_user_input()
+    }
+
     fn runs_timers(self) -> bool {
         self.timers.allow()
     }
 
+    fn poll_or_deadline_elapsed(self, now: Instant) -> bool {
+        matches!(self.deadline, WaitDeadline::Poll) || self.deadline.expired(now)
+    }
+
+    fn deadline_elapsed(self, now: Instant) -> bool {
+        self.deadline.expired(now)
+    }
+
+    fn base_timeout(self, now: Instant) -> Duration {
+        self.deadline
+            .remaining(now)
+            .unwrap_or_else(|| Duration::from_millis(50))
+            .min(Duration::from_millis(50))
+    }
+
+    fn needs_redisplay_after_service(
+        self,
+        special_input: WaitSpecialInputOutcome,
+        outcome: WaitServiceOutcome,
+    ) -> bool {
+        self.redisplay && (special_input.redisplay_needed() || outcome.has_timer_activity())
+    }
+
+    fn needs_redisplay_after_command_input(self, special_input: WaitSpecialInputOutcome) -> bool {
+        self.redisplay && special_input.redisplay_needed()
+    }
+
     fn completion_for(self, outcome: WaitServiceOutcome) -> Option<WaitCompletion> {
-        if self.keyboard.completes_on_command_input() && outcome.has_command_input_pending() {
+        if self.completes_on_command_input() && outcome.has_command_input_pending() {
             return Some(WaitCompletion::CommandInputPending);
         }
 
@@ -626,16 +665,16 @@ impl super::eval::Context {
             WaitSpecialInputOutcome::default()
         };
         outcome.record_special_input_activity(special_input.activity());
-        if request.keyboard.completes_on_command_input()
+        if request.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
         {
             outcome.record_command_input_pending();
-            if request.redisplay && special_input.redisplay_needed() {
+            if request.needs_redisplay_after_command_input(special_input) {
                 self.redisplay();
             }
             return Ok(outcome);
         }
-        if request.timers.allow() {
+        if request.runs_timers() {
             outcome.record_timer_activity(self.service_pending_timers_with_wait_policy(false));
         }
         let process_outcome = match process_service {
@@ -645,7 +684,7 @@ impl super::eval::Context {
             }
         };
         outcome.absorb_process_activity(process_outcome);
-        if request.redisplay && (special_input.redisplay_needed() || outcome.has_timer_activity()) {
+        if request.needs_redisplay_after_service(special_input, outcome) {
             self.redisplay();
         }
         Ok(outcome)
@@ -662,9 +701,7 @@ impl super::eval::Context {
                 service: outcome,
             });
         }
-        if matches!(request.deadline, WaitDeadline::Poll)
-            || request.deadline.expired(Instant::now())
-        {
+        if request.poll_or_deadline_elapsed(Instant::now()) {
             return Ok(WaitOutcome {
                 completion: WaitCompletion::DeadlineElapsed,
                 service: outcome,
@@ -673,7 +710,7 @@ impl super::eval::Context {
 
         loop {
             let now = Instant::now();
-            if request.deadline.expired(now) {
+            if request.deadline_elapsed(now) {
                 return Ok(WaitOutcome {
                     completion: WaitCompletion::DeadlineElapsed,
                     service: outcome,
@@ -724,7 +761,7 @@ impl super::eval::Context {
             WaitBlockStrategy::HostInput => {
                 let _ = self.wait_for_next_host_input_event(
                     wait_time,
-                    request.keyboard.sets_waiting_for_user_input(),
+                    request.sets_waiting_for_user_input(),
                 )?;
                 Ok(WaitBlockActivity::poll())
             }
@@ -744,13 +781,9 @@ impl super::eval::Context {
         request: &WaitRequest,
         now: Instant,
     ) -> Duration {
-        let mut timeout = request
-            .deadline
-            .remaining(now)
-            .unwrap_or_else(|| Duration::from_millis(50))
-            .min(Duration::from_millis(50));
+        let mut timeout = request.base_timeout(now);
 
-        if request.timers.allow() {
+        if request.runs_timers() {
             if let Some(next) = self.next_input_wait_timeout() {
                 timeout = timeout.min(next);
             }
@@ -768,7 +801,7 @@ impl super::eval::Context {
             return strategy;
         }
 
-        if request.keyboard.waits_for_host_input() && self.input_rx.is_some() {
+        if request.waits_for_host_input() && self.input_rx.is_some() {
             return WaitBlockStrategy::HostInput;
         }
 
@@ -787,13 +820,13 @@ impl super::eval::Context {
             return None;
         }
         if request.services_process_output() {
-            return if request.keyboard.waits_for_host_input() {
+            return if request.waits_for_host_input() {
                 Some(WaitBlockStrategy::BackendInputWakeupAndProcesses)
             } else {
                 Some(WaitBlockStrategy::BackendProcesses)
             };
         }
-        if request.keyboard.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
+        if request.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
             return Some(WaitBlockStrategy::BackendInputWakeup);
         }
         None
@@ -1016,6 +1049,50 @@ mod tests {
 
         assert!(!suppress.runs_timers());
         assert!(run.runs_timers());
+    }
+
+    #[test]
+    fn wait_request_exposes_scheduler_queries() {
+        let now = Instant::now();
+        let read =
+            WaitRequest::read_command_input(WaitDeadline::Until(now + Duration::from_secs(1)));
+        let poll = WaitRequest::service_once(true);
+        let resize = WaitRequest::resize_ack(now);
+
+        assert!(read.waits_for_host_input());
+        assert!(read.completes_on_command_input());
+        assert!(read.sets_waiting_for_user_input());
+        assert!(read.runs_timers());
+        assert!(!read.poll_or_deadline_elapsed(now));
+        assert_eq!(
+            read.base_timeout(now + Duration::from_secs(2)),
+            Duration::ZERO
+        );
+
+        assert!(!poll.waits_for_host_input());
+        assert!(!poll.completes_on_command_input());
+        assert!(poll.poll_or_deadline_elapsed(now));
+
+        assert!(resize.waits_for_host_input());
+        assert!(!resize.runs_timers());
+    }
+
+    #[test]
+    fn wait_request_redisplay_query_tracks_request_and_activity() {
+        let redisplay = WaitRequest::service_once(true);
+        let quiet = WaitRequest::service_once(false);
+        let mut special = WaitSpecialInputOutcome::default();
+        let mut service = WaitServiceOutcome::default();
+
+        assert!(!redisplay.needs_redisplay_after_service(special, service));
+
+        special.request_redisplay();
+        assert!(redisplay.needs_redisplay_after_service(special, service));
+        assert!(!quiet.needs_redisplay_after_service(special, service));
+
+        special = WaitSpecialInputOutcome::default();
+        service.record_timer_activity(true);
+        assert!(redisplay.needs_redisplay_after_service(special, service));
     }
 
     #[test]
