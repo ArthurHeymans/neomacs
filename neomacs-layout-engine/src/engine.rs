@@ -3744,7 +3744,7 @@ impl LayoutEngine {
                 let num_chars = num_str.len() as i32;
                 let padding = (lnum_cols - 1) - num_chars; // -1 for trailing space
 
-                let _gy = y;
+                let _gy = current_row_geometry!().glyph_y(0.0);
 
                 // Leading padding (stretch)
                 if padding > 0 {
@@ -5339,7 +5339,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
             } else if self.run_buf.is_empty() {
-                let gy = y + raise_y_offset;
+                let gy = current_row_geometry!().glyph_y(raise_y_offset);
                 self.run_buf.start(
                     x,
                     gy,
@@ -5475,7 +5475,7 @@ impl LayoutEngine {
                 tracing::debug!(
                     "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
                     x,
-                    y,
+                    current_row_geometry!().glyph_y(0.0),
                     point_charpos,
                     accessible_end
                 );

@@ -743,6 +743,19 @@ fn display_row_geometry_state_builds_append_placement_with_glyph_offset() {
 }
 
 #[test]
+fn display_row_geometry_state_resolves_glyph_y_with_offset() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    assert_eq!(geometry.glyph_y(2.5), 71.5);
+}
+
+#[test]
 fn display_row_y_positions_preserve_recorded_rows_and_fallback_by_geometry() {
     let mut positions = DisplayRowYPositions::with_first_row(10.0, 16.0);
     positions.record(1, 30.0);

@@ -584,8 +584,12 @@ impl DisplayRowGeometryState {
         DisplayRowAppendPlacement {
             row: self.row,
             y: self.y,
-            glyph_y: self.y + glyph_y_offset,
+            glyph_y: self.glyph_y(glyph_y_offset),
         }
+    }
+
+    pub(crate) fn glyph_y(&self, glyph_y_offset: f32) -> f32 {
+        self.y + glyph_y_offset
     }
 
     pub(crate) fn finish_boundary_in_place(
