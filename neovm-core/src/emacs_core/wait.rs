@@ -572,31 +572,7 @@ impl super::eval::Context {
             }
 
             let wait_time = self.next_wait_request_timeout(&request, now);
-            let activity = match self.wait_block_strategy(&request, wait_time) {
-                WaitBlockStrategy::ServiceNow => WaitBlockActivity::poll(),
-                WaitBlockStrategy::Backend(interest) => {
-                    let backend = self
-                        .processes
-                        .wait_for_backend_events(wait_time, interest)
-                        .unwrap_or_default();
-                    WaitBlockActivity::from_source_events(backend)
-                }
-                WaitBlockStrategy::HostInput => {
-                    let _ = self.wait_for_next_host_input_event(
-                        wait_time,
-                        request.keyboard.sets_waiting_for_user_input(),
-                    )?;
-                    WaitBlockActivity::poll()
-                }
-                WaitBlockStrategy::ProcessOutput => {
-                    let events = self.processes.wait_for_process_events(wait_time);
-                    WaitBlockActivity::from_source_events(events)
-                }
-                WaitBlockStrategy::Sleep => {
-                    std::thread::sleep(wait_time);
-                    WaitBlockActivity::ready_processes(Vec::new())
-                }
-            };
+            let activity = self.block_for_wait_request(&request, wait_time)?;
             outcome = self.service_wait_request_block_activity(&request, activity)?;
 
             if let Some(completion) = request.completion_for(outcome) {
@@ -604,6 +580,38 @@ impl super::eval::Context {
                     completion,
                     service: outcome,
                 });
+            }
+        }
+    }
+
+    fn block_for_wait_request(
+        &mut self,
+        request: &WaitRequest,
+        wait_time: Duration,
+    ) -> Result<WaitBlockActivity, Flow> {
+        match self.wait_block_strategy(request, wait_time) {
+            WaitBlockStrategy::ServiceNow => Ok(WaitBlockActivity::poll()),
+            WaitBlockStrategy::Backend(interest) => {
+                let events = self
+                    .processes
+                    .wait_for_backend_events(wait_time, interest)
+                    .unwrap_or_default();
+                Ok(WaitBlockActivity::from_source_events(events))
+            }
+            WaitBlockStrategy::HostInput => {
+                let _ = self.wait_for_next_host_input_event(
+                    wait_time,
+                    request.keyboard.sets_waiting_for_user_input(),
+                )?;
+                Ok(WaitBlockActivity::poll())
+            }
+            WaitBlockStrategy::ProcessOutput => {
+                let events = self.processes.wait_for_process_events(wait_time);
+                Ok(WaitBlockActivity::from_source_events(events))
+            }
+            WaitBlockStrategy::Sleep => {
+                std::thread::sleep(wait_time);
+                Ok(WaitBlockActivity::ready_processes(Vec::new()))
             }
         }
     }
@@ -764,5 +772,18 @@ mod tests {
 
         assert!(!outcome.has_command_input_pending());
         assert!(!outcome.has_any_process_activity());
+    }
+
+    #[test]
+    fn block_for_wait_request_zero_timeout_returns_poll_activity() {
+        let mut context = crate::emacs_core::eval::Context::new();
+        let request = WaitRequest::service_once(false);
+
+        let activity = context
+            .block_for_wait_request(&request, Duration::ZERO)
+            .expect("block for wait request");
+
+        assert!(!activity.has_input_wakeup());
+        assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
     }
 }
