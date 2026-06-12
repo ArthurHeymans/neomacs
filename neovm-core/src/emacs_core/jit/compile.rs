@@ -412,6 +412,27 @@ static JIT_BUILTIN3: [JitBuiltin3; 1] = [
     b::builtin_put_3, // 0
 ];
 
+/// Slice-shaped builtins (`fn(&[Value]) -> EvalResult`, no Context) — the
+/// exact functions the interpreter's `Nconc`/`Concat`/`Substring` arms call.
+type JitBuiltinSlice = fn(&[Value]) -> Result<Value, Flow>;
+
+static JIT_BUILTIN_SLICE: [JitBuiltinSlice; 3] = [
+    b::builtin_nconc_slice_values, // 0
+    b::builtin_concat_slice,       // 1
+    b::builtin_substring_slice,    // 2
+];
+
+/// `(nargs, table_index, mutates)` for ops lowered through the slice-builtin
+/// shim. `Concat`'s arity rides in the opcode; `Nconc`/`Substring` are fixed.
+fn slice_builtin_spec(op: &Op) -> Option<(usize, usize, bool)> {
+    Some(match op {
+        Op::Nconc => (2, 0, true),
+        Op::Concat(n) => (*n as usize, 1, false),
+        Op::Substring => (3, 2, false),
+        _ => return None,
+    })
+}
+
 /// `(table_arity, table_index, mutates)` for ops lowered through the generic
 /// direct-builtin shims. `mutates` ops poison later guards (a deopt-rerun would
 /// replay the mutation); pure ones are rerun-safe.
@@ -511,6 +532,60 @@ extern "C" fn neovm_jit_builtin3(
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let status = match JIT_BUILTIN3[idx as usize](ctx, a, b, c) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// `Op::List`: build a list from `n` operand words (the interpreter's
+/// `Value::list_from_slice` on the live stack slice). The values are rooted
+/// here across the per-cell allocations; the generated code rooted the rest of
+/// its frame. Infallible, context-free.
+extern "C" fn neovm_jit_list(args_ptr: *const i64, nargs: i64) -> i64 {
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    let result = Value::list_from_slice(&args).bits() as i64;
+    restore_scratch_gc_roots(saved);
+    result
+}
+
+/// Call a slice-shaped direct builtin (`JIT_BUILTIN_SLICE[idx]`) — the
+/// identical function the interpreter arm calls (`nconc`/`concat`/
+/// `substring`). Roots the operands across the call (they may allocate);
+/// context-free like the interpreter's slice calls.
+extern "C" fn neovm_jit_builtin_slice(
+    idx: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
+    for i in 0..nargs {
+        // SAFETY: see neovm_jit_list — the same spill-slot contract.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    let status = match JIT_BUILTIN_SLICE[idx as usize](&args) {
         Ok(value) => {
             // SAFETY: `out` is the generated code's result stack slot.
             unsafe { *out = value.bits() as i64 };
@@ -1556,6 +1631,8 @@ struct RtRefs {
     match_handler: FuncRef,
     switch_lookup: FuncRef,
     switch_stale: FuncRef,
+    list: FuncRef,
+    builtin_slice: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1692,6 +1769,20 @@ fn declare_rt_refs(
     // () -> ()  — stash the stale-table signal.
     let sig_void = Signature::new(call_conv);
     let switch_stale_id = declare(module, "neovm_jit_switch_stale", &sig_void)?;
+    // (args_ptr, nargs) -> list bits  — infallible n-ary list builder.
+    let mut sig_list = Signature::new(call_conv);
+    sig_list.params.push(AbiParam::new(ptr_ty));
+    sig_list.params.push(AbiParam::new(i64t));
+    sig_list.returns.push(AbiParam::new(i64t));
+    let list_id = declare(module, "neovm_jit_list", &sig_list)?;
+    // (idx, args_ptr, nargs, out_ptr) -> status  — slice-shaped builtins.
+    let mut sig_slice = Signature::new(call_conv);
+    sig_slice.params.push(AbiParam::new(i64t));
+    sig_slice.params.push(AbiParam::new(ptr_ty));
+    sig_slice.params.push(AbiParam::new(i64t));
+    sig_slice.params.push(AbiParam::new(ptr_ty));
+    sig_slice.returns.push(AbiParam::new(i64t));
+    let slice_id = declare(module, "neovm_jit_builtin_slice", &sig_slice)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1724,6 +1815,8 @@ fn declare_rt_refs(
         match_handler: module.declare_func_in_func(match_id, func),
         switch_lookup: module.declare_func_in_func(switch_id, func),
         switch_stale: module.declare_func_in_func(switch_stale_id, func),
+        list: module.declare_func_in_func(list_id, func),
+        builtin_slice: module.declare_func_in_func(slice_id, func),
     })
 }
 
@@ -2267,7 +2360,86 @@ fn lower_simple_op(
             let vmctx = fb.use_var(rt.vmctx_var);
             fb.ins().call(rt.refs.unwind_protect, &[vmctx, forms]);
         }
+        Op::List(n) => {
+            // N-ary list builder — infallible allocation through the shim
+            // (the interpreter's Value::list_from_slice on the stack slice).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let n = *n as usize;
+            if stack.len() < n {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - n;
+            for (i, &v) in stack[at..].iter().enumerate() {
+                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+            }
+            stack.truncate(at);
+            // Root remaining live values (the allocation may GC; the shim
+            // roots the operands themselves).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+            let n_val = fb.ins().iconst(types::I64, n as i64);
+            let call = fb.ins().call(rt.refs.list, &[args_addr, n_val]);
+            let result = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            stack.push(result);
+        }
         other => {
+            // Slice-shaped builtins (nconc/concat/substring): spill the
+            // operands and call the generic slice shim with the table index
+            // baked in — the SAME builtins::*_slice function the interpreter
+            // arm calls.
+            if let Some((nargs, idx, _mutates)) = slice_builtin_spec(other) {
+                let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+                if stack.len() < nargs {
+                    return Err(CompileError::StackUnderflow);
+                }
+                let at = stack.len() - nargs;
+                for (i, &v) in stack[at..].iter().enumerate() {
+                    fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                }
+                stack.truncate(at);
+                let saved = if stack.is_empty() {
+                    None
+                } else {
+                    let c = fb.ins().call(rt.refs.gc_save, &[]);
+                    let s = fb.inst_results(c)[0];
+                    for &v in stack.iter() {
+                        fb.ins().call(rt.refs.gc_push, &[v]);
+                    }
+                    Some(s)
+                };
+                let idx_v = fb.ins().iconst(types::I64, idx as i64);
+                let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+                let n_val = fb.ins().iconst(types::I64, nargs as i64);
+                let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+                let call = fb
+                    .ins()
+                    .call(rt.refs.builtin_slice, &[idx_v, args_addr, n_val, out_addr]);
+                let status = fb.inst_results(call)[0];
+                if let Some(s) = saved {
+                    fb.ins().call(rt.refs.gc_restore, &[s]);
+                }
+                let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+                let cont = fb.create_block();
+                let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+                fb.ins().brif(ok, cont, &[], se, &[]);
+                fb.switch_to_block(cont);
+                fb.seal_block(cont);
+                let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+                stack.push(result);
+                return Ok(());
+            }
             // Direct-builtin ops: pop the operands, root the rest of the live
             // frame, and call the arity-shaped generic shim with the table
             // index baked in — the shim invokes the SAME builtins::* function
@@ -2331,7 +2503,11 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         // N operands -> one result.
         return Ok((arity as usize, 1 - arity as i64));
     }
+    if let Some((nargs, _, _)) = slice_builtin_spec(op) {
+        return Ok((nargs, 1 - nargs as i64));
+    }
     Ok(match op {
+        Op::List(n) => (*n as usize, 1 - *n as i64),
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
         Op::StackSet(n) => (*n as usize + 1, -1),
@@ -2849,6 +3025,7 @@ fn analyze_cfg(
                         _ => {}
                     }
                     if direct_builtin_spec(other).is_some_and(|(_, _, mutates)| mutates)
+                        || slice_builtin_spec(other).is_some_and(|(_, _, mutates)| mutates)
                         || matches!(
                             other,
                             Op::Call(_)
@@ -3051,6 +3228,11 @@ pub fn lower_leaf_with_map(
         "neovm_jit_switch_stale",
         neovm_jit_switch_stale as *const u8,
     );
+    builder.symbol("neovm_jit_list", neovm_jit_list as *const u8);
+    builder.symbol(
+        "neovm_jit_builtin_slice",
+        neovm_jit_builtin_slice as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -3074,6 +3256,8 @@ pub fn lower_leaf_with_map(
     let needs_rt = has_backedge
         || ops.iter().any(|o| {
             direct_builtin_spec(o).is_some()
+                || slice_builtin_spec(o).is_some()
+                || matches!(o, Op::List(_))
                 || matches!(
                     o,
                     Op::Cons
@@ -3124,7 +3308,9 @@ pub fn lower_leaf_with_map(
             let max_call_args = ops
                 .iter()
                 .filter_map(|o| match o {
-                    Op::Call(n) | Op::Apply(n) => Some(*n as usize),
+                    Op::Call(n) | Op::Apply(n) | Op::List(n) | Op::Concat(n) => Some(*n as usize),
+                    Op::Nconc => Some(2),
+                    Op::Substring => Some(3),
                     _ => None,
                 })
                 .max()
@@ -4574,6 +4760,100 @@ mod tests {
         let err = lower_nullary_leaf(&[Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return], &[])
             .unwrap_err();
         assert!(matches!(err, CompileError::UnsupportedOp("switch-dynamic")));
+    }
+
+    #[test]
+    fn list_and_slice_builtins_run_natively() {
+        use crate::emacs_core::print::print_value;
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+
+        // (list 1 2 3)
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::List(3),
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2), Value::make_int(3)],
+        )
+        .expect("list body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native list failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "(1 2 3)");
+
+        // (concat "foo" "bar")
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Concat(2), Op::Return],
+            &[Value::string("foo"), Value::string("bar")],
+        )
+        .expect("concat body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native concat failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "\"foobar\"");
+
+        // (substring "hello" 1 3)
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::Substring,
+                Op::Return,
+            ],
+            &[
+                Value::string("hello"),
+                Value::make_int(1),
+                Value::make_int(3),
+            ],
+        )
+        .expect("substring body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native substring failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "\"el\"");
+
+        // (nconc (list 1 2) (list 3)) — built natively end-to-end.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::List(2),
+                Op::Constant(2),
+                Op::List(1),
+                Op::Nconc,
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2), Value::make_int(3)],
+        )
+        .expect("nconc body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native nconc failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "(1 2 3)");
+
+        // Signal path: (substring 5 0 1) is a wrong-type-argument.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::Substring,
+                Op::Return,
+            ],
+            &[Value::make_int(5), Value::make_int(0), Value::make_int(1)],
+        )
+        .expect("substring body compiles");
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let flow = take_pending_flow().expect("signal stashed");
+        match flow {
+            Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+            other => panic!("expected wrong-type-argument, got {other:?}"),
+        }
     }
 
     #[test]
