@@ -11166,15 +11166,30 @@ impl Context {
                         Plan::Compiled => {
                             // Run native code when the body is compilable and the
                             // call is valid (arity is checked inside
-                            // try_run_compiled). A `None` result — non-compilable
-                            // body, a deopt, or an arity mismatch — falls back to
-                            // the Tier-0 interpreter.
-                            match crate::emacs_core::jit::try_run_compiled(bc_data, &args) {
-                                Some(bits) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
-                                None => {
+                            // try_run_compiled). Ok(None) — non-compilable body, a
+                            // deopt (sound to rerun: guards never follow a call),
+                            // or an arity mismatch — falls back to the Tier-0
+                            // interpreter; Err propagates a Flow raised by a
+                            // runtime call inside native code.
+                            //
+                            // Root the executing function for the duration: native
+                            // code references its constants by raw bits, and a
+                            // runtime call inside (Call/cons) may trigger GC.
+                            let saved_roots = save_scratch_gc_roots();
+                            push_scratch_gc_root(function);
+                            let ctx_ptr = self as *mut Context;
+                            let native =
+                                crate::emacs_core::jit::try_run_compiled(ctx_ptr, bc_data, &args);
+                            restore_scratch_gc_roots(saved_roots);
+                            match native {
+                                Ok(Some(bits)) => {
+                                    Ok(crate::emacs_core::value::Value::from_bits(bits))
+                                }
+                                Ok(None) => {
                                     let mut vm = super::bytecode::Vm::from_context(self);
                                     vm.execute_with_func_value(bc_data, args, function)
                                 }
+                                Err(flow) => Err(flow),
                             }
                         }
                     }

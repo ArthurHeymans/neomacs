@@ -4082,6 +4082,43 @@ impl<'a> Vm<'a> {
         self.ctx.unbind_to_with_result(bt_count, result)
     }
 
+    /// One bytecode-level function call with the interpreter's `Op::Call`
+    /// semantics: mutating-string-arg writeback detection, the lisp-nesting
+    /// depth guard, the traced `call_function` path, and the after-call
+    /// writeback. Used by the JIT call shim (`jit::compile::neovm_jit_call`) so
+    /// compiled code re-enters the runtime through exactly the interpreter's
+    /// call path — keep in sync with the `Op::Call` arm of `run_loop` (which
+    /// keeps an in-place stack-args fast path for the no-writeback case).
+    ///
+    /// The caller polls `maybe_quit` first (GNU `bytecode.c:Bcall` order).
+    #[cfg(feature = "jit")]
+    pub(crate) fn call_for_jit(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
+        let writeback_names = if args.first().is_some_and(|value| value.is_string()) {
+            self.writeback_mutating_callable_names(&func_val)
+        } else {
+            None
+        };
+        let writeback_args = writeback_names.as_ref().map(|_| args.clone());
+        let result = self.with_bytecode_call_depth(|vm| vm.call_function(func_val, args))?;
+        if let (Some((called_name, alias_target)), Some(writeback_args)) =
+            (writeback_names.as_ref(), writeback_args.as_ref())
+        {
+            let root_scope = self.ctx.save_vm_roots();
+            self.push_dynamic_vm_root(result);
+            for value in writeback_args.iter().copied() {
+                self.push_dynamic_vm_root(value);
+            }
+            self.maybe_writeback_mutating_first_arg(
+                called_name,
+                *alias_target,
+                writeback_args,
+                &result,
+            );
+            self.ctx.restore_vm_roots(root_scope);
+        }
+        Ok(result)
+    }
+
     fn call_function_from_stack_args(
         &mut self,
         func_val: Value,

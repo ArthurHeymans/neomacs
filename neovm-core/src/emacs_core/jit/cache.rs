@@ -18,15 +18,20 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use super::compile::{CompiledLeaf, compile_bytecode_function};
+use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function, take_pending_flow};
 use crate::emacs_core::bytecode::ByteCodeFunction;
+use crate::emacs_core::error::Flow;
+use crate::emacs_core::eval::Context;
 use crate::emacs_core::value::Value;
 
 /// One thread's knowledge of a function's compiled state.
 enum CacheEntry {
-    /// Native code, ready to run.
-    Compiled(CompiledLeaf),
+    /// Native code, ready to run. `Rc` so execution can happen *outside* the
+    /// cache borrow — compiled code can `Call` back into elisp, and a hot callee
+    /// re-enters this cache (a nested `borrow_mut` would panic).
+    Compiled(Rc<CompiledLeaf>),
     /// The body is outside the baseline JIT's supported subset; never retried.
     NotCompilable,
 }
@@ -38,33 +43,48 @@ thread_local! {
 
 /// Tier-up entry point: run `func`'s body as native code if possible.
 ///
-/// Returns `Some(bits)` with the result's raw tagged [`crate::emacs_core::value::Value`]
-/// bits when native code produced a result; returns `None` when the caller must
-/// fall back to the interpreter — either because the body is not compilable by
-/// this tier, or because compiled code **deoptimized** (a speculation guard
-/// failed).
+/// - `Ok(Some(bits))` — native code produced the result (raw tagged bits).
+/// - `Ok(None)` — fall back to the Tier-0 interpreter: the body is not
+///   compilable by this tier, the arity didn't match (the interpreter must
+///   signal wrong-number-of-arguments), or compiled code **deoptimized**. A
+///   deopt can only happen before any side effect (the guard-after-call
+///   poisoning analysis rejects everything else), so rerunning is sound.
+/// - `Err(flow)` — a runtime call inside native code raised a non-local exit;
+///   propagate it.
 ///
-/// Compiles on first use (per thread) and caches the outcome, so a
-/// non-compilable body is only attempted once. Native code runs only when
-/// `args.len()` matches the compiled function's arity; a mismatch returns `None`
-/// so the interpreter signals the wrong-argument-count error (matching GNU).
-pub fn try_run_compiled(func: &ByteCodeFunction, args: &[Value]) -> Option<usize> {
+/// `ctx` is the `Context` the dispatch seam is executing in; runtime-call shims
+/// re-enter elisp through it. Compiles on first use (per thread) and caches the
+/// outcome, so a non-compilable body is only attempted once.
+pub fn try_run_compiled(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    args: &[Value],
+) -> Result<Option<usize>, Flow> {
     let id = func.runtime.compiled_id_or_assign();
-    COMPILED.with(|cache| {
+    let leaf: Option<Rc<CompiledLeaf>> = COMPILED.with(|cache| {
         let mut cache = cache.borrow_mut();
-        let entry = cache
+        match cache
             .entry(id)
             .or_insert_with(|| match compile_bytecode_function(func) {
-                Ok(leaf) => CacheEntry::Compiled(leaf),
+                Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
                 Err(_) => CacheEntry::NotCompilable,
-            });
-        match entry {
+            }) {
             // Only run native for a valid call (matching arity); a mismatch is a
             // wrong-arg-count call the interpreter must signal.
-            CacheEntry::Compiled(leaf) if args.len() == leaf.arity() => leaf.call(args),
+            CacheEntry::Compiled(leaf) if args.len() == leaf.arity() => Some(Rc::clone(leaf)),
             _ => None,
         }
-    })
+    });
+    // Execute OUTSIDE the cache borrow (see `CacheEntry::Compiled`).
+    match leaf {
+        None => Ok(None),
+        Some(leaf) => match leaf.call(ctx as *mut u8, args) {
+            NativeRun::Ok(bits) => Ok(Some(bits)),
+            NativeRun::Deopt => Ok(None),
+            NativeRun::Signal => Err(take_pending_flow()
+                .expect("STATUS_SIGNAL from compiled code implies a stashed Flow")),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -90,9 +110,15 @@ mod tests {
         let c = Value::make_int(42);
         let f = nullary_fn(vec![Op::Constant(0), Op::Return], vec![c]);
         // First call compiles + caches; result is the constant's bits.
-        assert_eq!(try_run_compiled(&f, &[]), Some(c.bits()));
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            Some(c.bits())
+        );
         // Second call hits the cache; same result.
-        assert_eq!(try_run_compiled(&f, &[]), Some(c.bits()));
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            Some(c.bits())
+        );
     }
 
     #[test]
@@ -102,8 +128,14 @@ mod tests {
             vec![Op::Constant(0), Op::Constant(0), Op::Div, Op::Return],
             vec![Value::make_int(2)],
         );
-        assert_eq!(try_run_compiled(&f, &[]), None);
-        assert_eq!(try_run_compiled(&f, &[]), None);
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            None
+        );
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -116,7 +148,10 @@ mod tests {
                 Value::make_int(1),
             ],
         );
-        assert_eq!(try_run_compiled(&f, &[]), None);
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -147,10 +182,18 @@ mod tests {
         f.max_stack = 16;
         // Correct arity -> native result.
         assert_eq!(
-            try_run_compiled(&f, &[Value::make_int(40), Value::make_int(2)]),
+            try_run_compiled(
+                std::ptr::null_mut(),
+                &f,
+                &[Value::make_int(40), Value::make_int(2)]
+            )
+            .unwrap(),
             Some(Value::make_int(42).bits())
         );
         // Wrong arity -> None (interpreter will signal wrong-number-of-arguments).
-        assert_eq!(try_run_compiled(&f, &[Value::make_int(40)]), None);
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, &[Value::make_int(40)]).unwrap(),
+            None
+        );
     }
 }

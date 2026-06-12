@@ -11959,6 +11959,157 @@ fn jit_cons_through_funcall_seam() {
     assert_eq!(r.cons_cdr(), Value::make_int(2));
 }
 
+/// End-to-end: a hot function that CALLS another function runs as native code
+/// through the funcall seam — the call shim re-enters the runtime, the callee
+/// executes, and the result flows back into native code. Also covers nested
+/// JIT->JIT dispatch, deopt-before-call fallback, and signal propagation.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_call_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // Callee: (lambda (y) (* y 2)) as cold bytecode (a bare Context has no
+    // elisp preloaded, so build it directly instead of via defun).
+    let mut dbl = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    dbl.lexical = true;
+    dbl.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+    dbl.constants = vec![Value::make_int(2)];
+    dbl.max_stack = 16;
+    let dbl_sym = Value::symbol("jit-e2e-double");
+    let ValueKind::Symbol(dbl_id) = dbl_sym.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray
+        .set_symbol_function_id(dbl_id, Value::make_bytecode(dbl));
+
+    // Hot caller: (lambda (x) (jit-e2e-double (1+ x))) — a guard BEFORE the
+    // call (allowed by the poisoning analysis).
+    let mk_caller = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::Constant(0), // 'jit-e2e-double
+            Op::StackRef(1), // x
+            Op::Add1,        // guard before the call
+            Op::Call(1),
+            Op::Return,
+        ];
+        f.constants = vec![Value::symbol("jit-e2e-double")];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // Native path result must equal the pure-interpreter result.
+    let hot = mk_caller(true);
+    let cold = mk_caller(false);
+    let native = ev
+        .funcall_general_untraced(hot, vec![Value::make_int(5)])
+        .expect("native call runs");
+    let interp = ev
+        .funcall_general_untraced(cold, vec![Value::make_int(5)])
+        .expect("interp call runs");
+    assert_eq!(native, Value::make_int(12));
+    assert_eq!(native, interp);
+
+    // Deopt-before-call: boundary input fails the 1+ guard BEFORE the call ran,
+    // so the seam reruns the interpreter, which promotes to a bignum.
+    let big_native = ev
+        .funcall_general_untraced(hot, vec![Value::make_int(Value::MOST_POSITIVE_FIXNUM)])
+        .expect("deopt falls back to the interpreter");
+    let big_interp = ev
+        .funcall_general_untraced(cold, vec![Value::make_int(Value::MOST_POSITIVE_FIXNUM)])
+        .expect("interp bignum path");
+    assert!(!big_native.is_fixnum(), "result must promote past fixnum");
+    assert!(
+        ev.eval_str("nil").is_ok(),
+        "context stays healthy after deopt"
+    );
+    assert_eq!(
+        crate::emacs_core::print::print_value(&big_native),
+        crate::emacs_core::print::print_value(&big_interp),
+        "deopt fallback must match the interpreter exactly"
+    );
+
+    // Nested JIT->JIT: a HOT bytecode callee makes the inner dispatch re-enter
+    // the per-thread compiled cache from inside native code (the Rc-clone
+    // execution path; a borrow-held call would panic the RefCell).
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+    callee.constants = vec![Value::make_int(3)];
+    callee.max_stack = 16;
+    callee.runtime.set_hot_for_test();
+    let callee_sym = Value::symbol("jit-e2e-triple-hot");
+    let ValueKind::Symbol(callee_id) = callee_sym.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray
+        .set_symbol_function_id(callee_id, Value::make_bytecode(callee));
+
+    let mut nested = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    nested.lexical = true;
+    nested.ops = vec![
+        Op::Constant(0), // 'jit-e2e-triple-hot
+        Op::StackRef(1), // x
+        Op::Call(1),
+        Op::Return,
+    ];
+    nested.constants = vec![callee_sym];
+    nested.max_stack = 16;
+    nested.runtime.set_hot_for_test();
+    let nested_v = Value::make_bytecode(nested);
+    assert_eq!(
+        ev.funcall_general_untraced(nested_v, vec![Value::make_int(14)])
+            .expect("nested JIT->JIT call runs"),
+        Value::make_int(42)
+    );
+
+    // Signal propagation: calling an unbound function from native code must
+    // surface the same error the interpreter raises.
+    let mut sig = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    sig.lexical = true;
+    sig.ops = vec![Op::Constant(0), Op::Call(0), Op::Return];
+    sig.constants = vec![Value::symbol("jit-e2e-no-such-function")];
+    sig.max_stack = 16;
+    sig.runtime.set_hot_for_test();
+    let sig_v = Value::make_bytecode(sig);
+    assert!(
+        ev.funcall_general_untraced(sig_v, vec![]).is_err(),
+        "void-function must propagate out of native code"
+    );
+    assert!(
+        ev.eval_str("(+ 1 2)").is_ok(),
+        "context stays healthy after a propagated signal"
+    );
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

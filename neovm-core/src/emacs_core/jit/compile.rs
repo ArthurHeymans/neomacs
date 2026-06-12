@@ -46,7 +46,8 @@
 use cranelift_codegen::ir::Value as ClifValue;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    AbiParam, Block, FuncRef, Function, InstBuilder, MemFlags, Signature, UserFuncName, types,
+    AbiParam, Block, FuncRef, Function, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData,
+    StackSlotKind, Type, UserFuncName, types,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
@@ -55,10 +56,11 @@ use smallvec::SmallVec;
 use std::collections::{BTreeSet, HashMap};
 
 use super::backend::BackendError;
-use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
+use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{
-    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+    Context, LispArgVec, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
 use crate::emacs_core::value::Value;
 use crate::tagged::header::ConsCell;
@@ -100,6 +102,95 @@ extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
     let result = Value::cons(car, cdr).bits() as i64;
     restore_scratch_gc_roots(saved);
     result
+}
+
+std::thread_local! {
+    /// The non-local `Flow` (signal/throw/...) raised inside a runtime call made
+    /// by JIT code. The call shim stashes it and returns [`STATUS_SIGNAL`]; the
+    /// nearest Rust caller of the compiled function takes it and re-raises.
+    /// Thread-local because compiled code and its dispatch run on one thread.
+    static PENDING_FLOW: std::cell::RefCell<Option<Flow>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Native return code: success, result bits written through `out`.
+pub const STATUS_OK: i64 = 1;
+/// Native return code: a speculation guard failed before any side effect ran —
+/// rerun the body on the Tier-0 interpreter.
+pub const STATUS_DEOPT: i64 = 0;
+/// Native return code: a runtime call raised a non-local `Flow`; take it with
+/// [`take_pending_flow`] and propagate.
+pub const STATUS_SIGNAL: i64 = 2;
+
+/// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
+pub fn take_pending_flow() -> Option<Flow> {
+    PENDING_FLOW.with(|p| p.borrow_mut().take())
+}
+
+fn stash_pending_flow(flow: Flow) {
+    PENDING_FLOW.with(|p| *p.borrow_mut() = Some(flow));
+}
+
+/// Call a function from JIT code with the interpreter's `Op::Call` semantics
+/// (quit poll, writeback, depth guard — see `Vm::call_for_jit`). Reads `nargs`
+/// argument words from `args_ptr`; on success writes the result bits through
+/// `out` and returns [`STATUS_OK`]; on a non-local exit stashes the `Flow` and
+/// returns [`STATUS_SIGNAL`].
+///
+/// SAFETY contract with the generated code and the dispatch seam:
+/// - `ctx` is the `*mut Context` the seam passed into this invocation of the
+///   compiled function. The seam's `&mut Context` is dormant for the entire
+///   native call (it is not touched until the compiled function returns), the
+///   elisp mutator is single-threaded, and the pointer round-trips through
+///   native code — so reconstructing `&mut Context` here does not create a
+///   *used* aliasing `&mut`.
+/// - `args_ptr` points at `nargs` valid argument words (a JIT stack slot).
+/// - The generated code rooted every *other* live `Value` of its frame before
+///   this call; the callee + args are rooted here, so a GC inside the callee
+///   traces everything that survives the call.
+extern "C" fn neovm_jit_call(
+    ctx: *mut u8,
+    func_bits: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    let func_val = Value::from_bits(func_bits as usize);
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(func_val);
+    let mut args = LispArgVec::new();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    // SAFETY: see the function-level contract — seam-provided, dormant, single
+    // mutator thread.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match ctx.maybe_quit() {
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+        Ok(()) => {
+            let mut vm = Vm::from_context(ctx);
+            match vm.call_for_jit(func_val, args) {
+                Ok(value) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
 }
 
 /// Why a bytecode body could not be compiled by this baseline tier.
@@ -162,6 +253,20 @@ impl core::fmt::Debug for CompiledLeaf {
     }
 }
 
+/// Outcome of executing a compiled function.
+#[derive(Debug, PartialEq, Eq)]
+pub enum NativeRun {
+    /// Native code produced a result (the raw tagged [`Value`] bits).
+    Ok(usize),
+    /// A speculation guard failed. The poisoning analysis guarantees no side
+    /// effect (no runtime call) ran before any guard, so the caller can safely
+    /// rerun the body on the Tier-0 interpreter.
+    Deopt,
+    /// A runtime call inside the body raised a non-local `Flow` (signal/throw);
+    /// take it with [`take_pending_flow`] and propagate it.
+    Signal,
+}
+
 impl CompiledLeaf {
     /// The number of fixed arguments this compiled function expects.
     pub fn arity(&self) -> usize {
@@ -171,10 +276,11 @@ impl CompiledLeaf {
     /// Execute the compiled function with `args` (whose length must equal
     /// [`arity`](Self::arity)).
     ///
-    /// Returns `Some(bits)` with the result's raw tagged [`Value`] bits on
-    /// success, or `None` if the native code **deoptimized** (a speculation
-    /// guard failed) and the caller must fall back to the interpreter.
-    pub fn call(&self, args: &[Value]) -> Option<usize> {
+    /// `vmctx` is the `*mut Context` runtime-call shims re-enter through. It may
+    /// be null **only** when the body performs no runtime re-entry (it contains
+    /// no `Call`); allocation (`cons`) uses the thread-local heap and tolerates
+    /// a null vmctx too.
+    pub fn call(&self, vmctx: *mut u8, args: &[Value]) -> NativeRun {
         debug_assert_eq!(args.len(), self.arity, "compiled call arity mismatch");
         // Copy the argument bits into a contiguous i64 buffer for the native
         // ABI (no heap alloc for the common <= 8 args). A `Value` is an opaque
@@ -182,16 +288,36 @@ impl CompiledLeaf {
         let arg_bits: SmallVec<[i64; 8]> = args.iter().map(|v| v.bits() as i64).collect();
         let mut out: i64 = 0;
         // SAFETY: `entry` is finalized native code with ABI
-        // `extern "C" fn(args: *const i64, out: *mut i64) -> i64` (built in
-        // `lower_leaf`): it reads `self.arity` words from `args`, writes the
-        // result bits through `out`, and returns 1 on success or 0 (without
-        // touching `out`) on deopt. `_module` keeps the code mapped for `&self`;
-        // `arg_bits` and `out` outlive the call; for arity 0 `args` is never read.
-        let ok = unsafe {
-            let f: extern "C" fn(*const i64, *mut i64) -> i64 = core::mem::transmute(self.entry);
-            f(arg_bits.as_ptr(), &mut out as *mut i64)
+        // `extern "C" fn(vmctx: *mut u8, args: *const i64, out: *mut i64) -> i64`
+        // (built in `lower_leaf`): it reads `self.arity` words from `args`,
+        // writes the result bits through `out` and returns STATUS_OK, or returns
+        // STATUS_DEOPT/STATUS_SIGNAL without touching `out`. `_module` keeps the
+        // code mapped for `&self`; `arg_bits` and `out` outlive the call; for
+        // arity 0 `args` is never read; `vmctx` is only dereferenced inside the
+        // call shim under its own documented contract.
+        let status = unsafe {
+            let f: extern "C" fn(*mut u8, *const i64, *mut i64) -> i64 =
+                core::mem::transmute(self.entry);
+            f(vmctx, arg_bits.as_ptr(), &mut out as *mut i64)
         };
-        (ok != 0).then_some(out as usize)
+        match status {
+            STATUS_OK => NativeRun::Ok(out as usize),
+            STATUS_SIGNAL => NativeRun::Signal,
+            _ => NativeRun::Deopt,
+        }
+    }
+
+    /// Test-only adapter: run with a null vmctx (valid because the test bodies
+    /// using it perform no runtime re-entry through `Call`) and map the outcome
+    /// to the legacy Option shape (`Ok -> Some(bits)`, `Deopt -> None`).
+    /// A `Signal` panics — no shim-free test body can produce one.
+    #[cfg(test)]
+    pub(crate) fn call_for_test(&self, args: &[Value]) -> Option<usize> {
+        match self.call(core::ptr::null_mut(), args) {
+            NativeRun::Ok(bits) => Some(bits),
+            NativeRun::Deopt => None,
+            NativeRun::Signal => panic!("unexpected STATUS_SIGNAL from a test body"),
+        }
     }
 }
 
@@ -510,23 +636,35 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
     lower_leaf(ops, constants, 0)
 }
 
-/// References to the JIT-callable runtime shims, declared into the function being
-/// built. Present only when the body needs allocation (currently: `Cons`).
+/// Per-function runtime-call machinery: shim references plus the vmctx variable
+/// and the scratch stack slots `Call` spills through. Present only when the body
+/// re-enters the runtime (`Cons` / `Call`).
 struct RtCtx {
     gc_save: FuncRef,
     gc_push: FuncRef,
     gc_restore: FuncRef,
     cons: FuncRef,
+    call: FuncRef,
+    /// The `*mut Context` function parameter, carried in an SSA variable so any
+    /// block can read it.
+    vmctx_var: Variable,
+    /// Pointer type of the target (for `stack_addr`).
+    ptr_ty: Type,
+    /// Spill buffer for outgoing call arguments (max `Call` nargs in the body).
+    call_args_slot: StackSlot,
+    /// 8-byte result slot the call shim writes through.
+    call_result_slot: StackSlot,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
 /// refs. The matching addresses are registered on the `JITBuilder` in
 /// [`lower_leaf`] via `builder.symbol(...)`.
-fn declare_rt(
+fn declare_rt_refs(
     module: &mut JITModule,
     func: &mut Function,
     call_conv: cranelift_codegen::isa::CallConv,
-) -> Result<RtCtx, CompileError> {
+    ptr_ty: Type,
+) -> Result<(FuncRef, FuncRef, FuncRef, FuncRef, FuncRef), CompileError> {
     let i64t = types::I64;
     let mut sig_ret = Signature::new(call_conv); // () -> i64
     sig_ret.returns.push(AbiParam::new(i64t));
@@ -536,6 +674,14 @@ fn declare_rt(
     sig_cons.params.push(AbiParam::new(i64t));
     sig_cons.params.push(AbiParam::new(i64t));
     sig_cons.returns.push(AbiParam::new(i64t));
+    // (vmctx, func_bits, args_ptr, nargs, out_ptr) -> status
+    let mut sig_call = Signature::new(call_conv);
+    sig_call.params.push(AbiParam::new(ptr_ty));
+    sig_call.params.push(AbiParam::new(i64t));
+    sig_call.params.push(AbiParam::new(ptr_ty));
+    sig_call.params.push(AbiParam::new(i64t));
+    sig_call.params.push(AbiParam::new(ptr_ty));
+    sig_call.returns.push(AbiParam::new(i64t));
 
     let declare = |module: &mut JITModule, name: &str, sig: &Signature| {
         module
@@ -547,13 +693,15 @@ fn declare_rt(
     let push_id = declare(module, "neovm_jit_gc_push", &sig_arg)?;
     let restore_id = declare(module, "neovm_jit_gc_restore", &sig_arg)?;
     let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
+    let call_id = declare(module, "neovm_jit_call", &sig_call)?;
 
-    Ok(RtCtx {
-        gc_save: module.declare_func_in_func(save_id, func),
-        gc_push: module.declare_func_in_func(push_id, func),
-        gc_restore: module.declare_func_in_func(restore_id, func),
-        cons: module.declare_func_in_func(cons_id, func),
-    })
+    Ok((
+        module.declare_func_in_func(save_id, func),
+        module.declare_func_in_func(push_id, func),
+        module.declare_func_in_func(restore_id, func),
+        module.declare_func_in_func(cons_id, func),
+        module.declare_func_in_func(call_id, func),
+    ))
 }
 
 /// Lower one non-control-flow opcode, updating the compile-time operand `stack`
@@ -562,6 +710,7 @@ fn declare_rt(
 fn lower_simple_op(
     fb: &mut FunctionBuilder,
     deopt: &mut Option<Block>,
+    signal_exit: &mut Option<Block>,
     constants: &[Value],
     stack: &mut Vec<ClifValue>,
     rt: Option<&RtCtx>,
@@ -670,6 +819,56 @@ fn lower_simple_op(
             let is_cdr = matches!(op, Op::Cdr);
             stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
         }
+        Op::Call(n) => {
+            // `rt` is always present here (`needs_rt` includes Call). Stack:
+            // [func a1 .. aN] -> [result], mirroring the interpreter's Op::Call.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("call"))?;
+            let n = *n as usize;
+            if stack.len() < n + 1 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let args_at = stack.len() - n;
+            // Spill the args into the call buffer for the shim.
+            for (i, &v) in stack[args_at..].iter().enumerate() {
+                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+            }
+            let func_val = stack[args_at - 1];
+            stack.truncate(args_at - 1);
+            // Root every value that stays live across the call (the callee +
+            // args are rooted by the shim; the constants are rooted by the
+            // dispatch seam via the executing function).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let n_val = fb.ins().iconst(types::I64, n as i64);
+            let call = fb
+                .ins()
+                .call(rt.call, &[vmctx, func_val, args_addr, n_val, out_addr]);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.gc_restore, &[s]);
+            }
+            // STATUS_OK -> continue with the result; anything else from the call
+            // shim is STATUS_SIGNAL -> propagate via the shared signal block.
+            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
         Op::Cons => {
             // `rt` is always present here: analyze_cfg accepts Cons only when the
             // function declares the shims (see `needs_rt` in lower_leaf).
@@ -726,6 +925,8 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => (1, 0),
         Op::Car | Op::Cdr => (1, 0),
         Op::Cons => (2, -1),
+        // [func a1 .. aN] -> [result]
+        Op::Call(n) => (*n as usize + 1, -(*n as i64)),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -738,14 +939,42 @@ struct Cfg {
     max_depth: usize,
 }
 
-/// Record that `target` is entered with stack depth `d`, scheduling it for
-/// analysis. Depth must be non-negative and consistent across all paths (the
-/// byte-compiler guarantees a single static depth per program point).
+/// True iff lowering this op emits a speculation guard (a possible deopt). Used
+/// by the poisoning analysis: a guard reachable after a `Call` would make
+/// rerun-on-deopt unsound (the call's side effects already happened), so such
+/// bodies bail to the interpreter instead of compiling.
+fn emits_guard(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Eqlsign
+            | Op::Lss
+            | Op::Gtr
+            | Op::Leq
+            | Op::Geq
+            | Op::Car
+            | Op::Cdr
+    )
+}
+
+/// Record that `target` is entered with stack depth `d` and side-effect state
+/// `poisoned`, scheduling (or re-scheduling) it for analysis. Depth must be
+/// non-negative and consistent across all paths (the byte-compiler guarantees a
+/// single static depth per program point); poison merges with OR and forces a
+/// re-visit when it newly turns on, so the fixpoint is reached in <= 2 visits
+/// per block.
 fn push_succ(
     entry_depth: &mut HashMap<usize, usize>,
+    entry_poison: &mut HashMap<usize, bool>,
     work: &mut Vec<usize>,
     target: usize,
     d: i64,
+    poisoned: bool,
 ) -> Result<(), CompileError> {
     if d < 0 {
         return Err(CompileError::StackUnderflow);
@@ -755,9 +984,17 @@ fn push_succ(
         Some(&existing) if existing != d => {
             Err(CompileError::UnsupportedOp("inconsistent stack depth"))
         }
-        Some(_) => Ok(()),
+        Some(_) => {
+            let prior = entry_poison.get(&target).copied().unwrap_or(false);
+            if poisoned && !prior {
+                entry_poison.insert(target, true);
+                work.push(target);
+            }
+            Ok(())
+        }
         None => {
             entry_depth.insert(target, d);
+            entry_poison.insert(target, poisoned);
             work.push(target);
             Ok(())
         }
@@ -804,14 +1041,20 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
     let leaders: Vec<usize> = leader_set.into_iter().collect();
     let next_leader = |idx: usize| leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
 
-    // 2. Propagate entry depths over the CFG (worklist).
+    // 2. Propagate entry depths + call-poisoning over the CFG (worklist).
+    // "Poisoned" = a `Call` may already have executed on some path reaching this
+    // point; encountering a guard-emitting op while poisoned makes
+    // rerun-on-deopt unsound, so such bodies bail.
     let mut entry_depth: HashMap<usize, usize> = HashMap::new();
+    let mut entry_poison: HashMap<usize, bool> = HashMap::new();
     entry_depth.insert(0, arity);
+    entry_poison.insert(0, false);
     let mut work = vec![0usize];
     let mut max_depth = arity;
 
     while let Some(l) = work.pop() {
         let mut cur = entry_depth[&l] as i64;
+        let mut poisoned = entry_poison.get(&l).copied().unwrap_or(false);
         let end = next_leader(l);
         let mut terminated = false;
         for op in &ops[l..end] {
@@ -825,7 +1068,14 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     break;
                 }
                 Op::Goto(t) => {
-                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_poison,
+                        &mut work,
+                        *t as usize,
+                        cur,
+                        poisoned,
+                    )?;
                     terminated = true;
                     break;
                 }
@@ -834,8 +1084,23 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         return Err(CompileError::StackUnderflow);
                     }
                     cur -= 1; // pop the condition
-                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
-                    push_succ(&mut entry_depth, &mut work, end, cur)?; // fall-through
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_poison,
+                        &mut work,
+                        *t as usize,
+                        cur,
+                        poisoned,
+                    )?;
+                    // fall-through
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_poison,
+                        &mut work,
+                        end,
+                        cur,
+                        poisoned,
+                    )?;
                     terminated = true;
                     break;
                 }
@@ -844,12 +1109,29 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         return Err(CompileError::StackUnderflow);
                     }
                     // The jump preserves TOS (depth cur); the fall-through pops it.
-                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
-                    push_succ(&mut entry_depth, &mut work, end, cur - 1)?;
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_poison,
+                        &mut work,
+                        *t as usize,
+                        cur,
+                        poisoned,
+                    )?;
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_poison,
+                        &mut work,
+                        end,
+                        cur - 1,
+                        poisoned,
+                    )?;
                     terminated = true;
                     break;
                 }
                 other => {
+                    if poisoned && emits_guard(other) {
+                        return Err(CompileError::UnsupportedOp("guard-after-call"));
+                    }
                     let (needs, delta) = simple_effect(other)?;
                     if cur < needs as i64 {
                         return Err(CompileError::StackUnderflow);
@@ -857,6 +1139,9 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     cur += delta;
                     if cur as usize > max_depth {
                         max_depth = cur as usize;
+                    }
+                    if matches!(other, Op::Call(_)) {
+                        poisoned = true;
                     }
                 }
             }
@@ -867,7 +1152,14 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
             if end >= n {
                 return Err(CompileError::NoReturn);
             }
-            push_succ(&mut entry_depth, &mut work, end, cur)?;
+            push_succ(
+                &mut entry_depth,
+                &mut entry_poison,
+                &mut work,
+                end,
+                cur,
+                poisoned,
+            )?;
         }
     }
 
@@ -910,15 +1202,19 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
     builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
     builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
+    builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
-    let needs_rt = ops.iter().any(|o| matches!(o, Op::Cons));
+    let needs_rt = ops.iter().any(|o| matches!(o, Op::Cons | Op::Call(_)));
 
-    // ABI: fn(args: *const i64, out: *mut i64) -> i64. Reads `arity` argument
-    // words from `args`; returns 1 + writes result bits via `out` on success, or
-    // returns 0 (deopt) otherwise.
+    // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
+    // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
+    // result bits via `out` on success, STATUS_DEOPT on a failed guard, or
+    // STATUS_SIGNAL when a runtime call raised a Flow (stashed for
+    // `take_pending_flow`). `vmctx` is only used by runtime-call shims.
     let mut sig = Signature::new(call_conv);
+    sig.params.push(AbiParam::new(ptr_ty)); // vmctx
     sig.params.push(AbiParam::new(ptr_ty)); // args
     sig.params.push(AbiParam::new(ptr_ty)); // out
     sig.returns.push(AbiParam::new(types::I64));
@@ -928,10 +1224,38 @@ pub fn lower_leaf(
     {
         let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
 
-        // Declare runtime-allocation shims into this function if the body needs
-        // them (e.g. contains `Cons`).
+        // Declare the runtime-call machinery into this function if the body
+        // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
-            Some(declare_rt(&mut module, fb.func, call_conv)?)
+            let (gc_save, gc_push, gc_restore, cons, call) =
+                declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
+            let vmctx_var = fb.declare_var(ptr_ty);
+            let max_call_args = ops
+                .iter()
+                .filter_map(|o| match o {
+                    Op::Call(n) => Some(*n as usize),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0);
+            let call_args_slot = fb.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                (max_call_args.max(1) * 8) as u32,
+                3,
+            ));
+            let call_result_slot =
+                fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            Some(RtCtx {
+                gc_save,
+                gc_push,
+                gc_restore,
+                cons,
+                call,
+                vmctx_var,
+                ptr_ty,
+                call_args_slot,
+                call_result_slot,
+            })
         } else {
             None
         };
@@ -952,14 +1276,21 @@ pub fn lower_leaf(
             .collect();
         // Shared deopt landing block, created lazily on the first guard.
         let mut deopt: Option<Block> = None;
+        // Shared signal-propagation block (returns STATUS_SIGNAL), created
+        // lazily by the first `Call` lowering.
+        let mut signal_exit: Option<Block> = None;
 
-        // Function-entry block: load args into the slot variables, stash the out
-        // pointer, then jump into bytecode block 0.
+        // Function-entry block: stash vmctx + the out pointer, load args into
+        // the slot variables, then jump into bytecode block 0.
         let entry = fb.create_block();
         fb.append_block_params_for_function_params(entry);
         fb.switch_to_block(entry);
-        let args_ptr = fb.block_params(entry)[0];
-        let out_ptr = fb.block_params(entry)[1];
+        let vmctx_param = fb.block_params(entry)[0];
+        let args_ptr = fb.block_params(entry)[1];
+        let out_ptr = fb.block_params(entry)[2];
+        if let Some(rt) = &rt {
+            fb.def_var(rt.vmctx_var, vmctx_param);
+        }
         fb.def_var(out_var, out_ptr);
         for i in 0..arity {
             let v = fb
@@ -1038,6 +1369,7 @@ pub fn lower_leaf(
                     other => lower_simple_op(
                         &mut fb,
                         &mut deopt,
+                        &mut signal_exit,
                         constants,
                         &mut stack,
                         rt.as_ref(),
@@ -1053,11 +1385,17 @@ pub fn lower_leaf(
             }
         }
 
-        // Terminate the shared deopt block (return 0) iff any guard used it.
+        // Terminate the shared deopt block (return STATUS_DEOPT) iff used.
         if let Some(db) = deopt {
             fb.switch_to_block(db);
-            let zero = fb.ins().iconst(types::I64, 0);
-            fb.ins().return_(&[zero]);
+            let code = fb.ins().iconst(types::I64, STATUS_DEOPT);
+            fb.ins().return_(&[code]);
+        }
+        // Terminate the shared signal block (return STATUS_SIGNAL) iff used.
+        if let Some(sb) = signal_exit {
+            fb.switch_to_block(sb);
+            let code = fb.ins().iconst(types::I64, STATUS_SIGNAL);
+            fb.ins().return_(&[code]);
         }
 
         fb.seal_all_blocks();
@@ -1104,7 +1442,7 @@ mod tests {
         // (lambda () 42)  ==  [Constant(0), Return], constants = [42]
         let c = Value::make_int(42);
         let leaf = lower_nullary_leaf(&[Op::Constant(0), Op::Return], &[c]).unwrap();
-        assert_eq!(leaf.call(&[]), Some(c.bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(c.bits()));
     }
 
     #[test]
@@ -1112,13 +1450,13 @@ mod tests {
         assert_eq!(
             lower_nullary_leaf(&[Op::Nil, Op::Return], &[])
                 .unwrap()
-                .call(&[]),
+                .call_for_test(&[]),
             Some(Value::NIL.bits())
         );
         assert_eq!(
             lower_nullary_leaf(&[Op::True, Op::Return], &[])
                 .unwrap()
-                .call(&[]),
+                .call_for_test(&[]),
             Some(Value::T.bits())
         );
     }
@@ -1139,7 +1477,7 @@ mod tests {
             &[a, b],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), Some(b.bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(b.bits()));
     }
 
     #[test]
@@ -1157,7 +1495,7 @@ mod tests {
             &[a, b],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), Some(a.bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(a.bits()));
     }
 
     #[test]
@@ -1168,7 +1506,7 @@ mod tests {
             &[Value::make_int(40), Value::make_int(2)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), Some(Value::make_int(42).bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(Value::make_int(42).bits()));
     }
 
     #[test]
@@ -1179,7 +1517,7 @@ mod tests {
             &[Value::make_int(3), Value::make_int(10)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), Some(Value::make_int(-7).bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(Value::make_int(-7).bits()));
     }
 
     #[test]
@@ -1194,7 +1532,7 @@ mod tests {
             ],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), None);
+        assert_eq!(leaf.call_for_test(&[]), None);
     }
 
     #[test]
@@ -1205,7 +1543,7 @@ mod tests {
             &[Value::make_int(5)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), None);
+        assert_eq!(leaf.call_for_test(&[]), None);
     }
 
     #[test]
@@ -1223,7 +1561,7 @@ mod tests {
             &[Value::make_int(1), Value::make_int(2), Value::make_int(4)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), Some(Value::make_int(-1).bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(Value::make_int(-1).bits()));
     }
 
     #[test]
@@ -1234,7 +1572,7 @@ mod tests {
             &[Value::make_int(41)],
         )
         .unwrap();
-        assert_eq!(add1.call(&[]), Some(Value::make_int(42).bits()));
+        assert_eq!(add1.call_for_test(&[]), Some(Value::make_int(42).bits()));
 
         // 1- 43 -> 42
         let sub1 = lower_nullary_leaf(
@@ -1242,7 +1580,7 @@ mod tests {
             &[Value::make_int(43)],
         )
         .unwrap();
-        assert_eq!(sub1.call(&[]), Some(Value::make_int(42).bits()));
+        assert_eq!(sub1.call_for_test(&[]), Some(Value::make_int(42).bits()));
 
         // - 42 -> -42
         let neg = lower_nullary_leaf(
@@ -1250,7 +1588,7 @@ mod tests {
             &[Value::make_int(42)],
         )
         .unwrap();
-        assert_eq!(neg.call(&[]), Some(Value::make_int(-42).bits()));
+        assert_eq!(neg.call_for_test(&[]), Some(Value::make_int(-42).bits()));
     }
 
     #[test]
@@ -1261,7 +1599,7 @@ mod tests {
             &[Value::make_int(Value::MOST_POSITIVE_FIXNUM)],
         )
         .unwrap();
-        assert_eq!(add1.call(&[]), None);
+        assert_eq!(add1.call_for_test(&[]), None);
 
         // 1- MOST_NEGATIVE -> underflow -> deopt
         let sub1 = lower_nullary_leaf(
@@ -1269,7 +1607,7 @@ mod tests {
             &[Value::make_int(Value::MOST_NEGATIVE_FIXNUM)],
         )
         .unwrap();
-        assert_eq!(sub1.call(&[]), None);
+        assert_eq!(sub1.call_for_test(&[]), None);
 
         // - MOST_NEGATIVE -> +MOST_POSITIVE+1 out of range -> deopt
         let neg = lower_nullary_leaf(
@@ -1277,14 +1615,14 @@ mod tests {
             &[Value::make_int(Value::MOST_NEGATIVE_FIXNUM)],
         )
         .unwrap();
-        assert_eq!(neg.call(&[]), None);
+        assert_eq!(neg.call_for_test(&[]), None);
     }
 
     #[test]
     fn unary_on_non_fixnum_deopts() {
         // 1+ t -> not a fixnum -> deopt
         let leaf = lower_nullary_leaf(&[Op::True, Op::Add1, Op::Return], &[]).unwrap();
-        assert_eq!(leaf.call(&[]), None);
+        assert_eq!(leaf.call_for_test(&[]), None);
     }
 
     #[test]
@@ -1292,7 +1630,7 @@ mod tests {
         fn cmp(ops: &[Op], a: i64, b: i64) -> Option<usize> {
             lower_nullary_leaf(ops, &[Value::make_int(a), Value::make_int(b)])
                 .unwrap()
-                .call(&[])
+                .call_for_test(&[])
         }
         let t = Some(Value::T.bits());
         let nil = Some(Value::NIL.bits());
@@ -1362,7 +1700,7 @@ mod tests {
             &[Value::make_int(1)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), None);
+        assert_eq!(leaf.call_for_test(&[]), None);
     }
 
     #[test]
@@ -1383,12 +1721,18 @@ mod tests {
             1,
         )
         .unwrap();
-        assert_eq!(f.call(&[Value::T]), Some(Value::make_int(1).bits()));
         assert_eq!(
-            f.call(&[Value::make_int(99)]),
+            f.call_for_test(&[Value::T]),
             Some(Value::make_int(1).bits())
         );
-        assert_eq!(f.call(&[Value::NIL]), Some(Value::make_int(2).bits()));
+        assert_eq!(
+            f.call_for_test(&[Value::make_int(99)]),
+            Some(Value::make_int(1).bits())
+        );
+        assert_eq!(
+            f.call_for_test(&[Value::NIL]),
+            Some(Value::make_int(2).bits())
+        );
     }
 
     #[test]
@@ -1407,8 +1751,14 @@ mod tests {
             1,
         )
         .unwrap();
-        assert_eq!(f.call(&[Value::NIL]), Some(Value::make_int(1).bits()));
-        assert_eq!(f.call(&[Value::T]), Some(Value::make_int(2).bits()));
+        assert_eq!(
+            f.call_for_test(&[Value::NIL]),
+            Some(Value::make_int(1).bits())
+        );
+        assert_eq!(
+            f.call_for_test(&[Value::T]),
+            Some(Value::make_int(2).bits())
+        );
     }
 
     #[test]
@@ -1429,10 +1779,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            f.call(&[Value::make_int(5)]),
+            f.call_for_test(&[Value::make_int(5)]),
             Some(Value::make_int(7).bits())
         );
-        assert_eq!(f.call(&[Value::NIL]), Some(Value::NIL.bits()));
+        assert_eq!(f.call_for_test(&[Value::NIL]), Some(Value::NIL.bits()));
     }
 
     #[test]
@@ -1444,7 +1794,7 @@ mod tests {
             0,
         )
         .unwrap();
-        assert_eq!(f.call(&[]), Some(Value::make_int(5).bits()));
+        assert_eq!(f.call_for_test(&[]), Some(Value::make_int(5).bits()));
     }
 
     #[test]
@@ -1475,7 +1825,9 @@ mod tests {
                 let mut vm = Vm::from_context(&mut eval);
                 vm.execute(&f, vec![arg]).expect("interp runs if").bits()
             };
-            let got = lower_leaf(&ops, &constants, 1).unwrap().call(&[arg]);
+            let got = lower_leaf(&ops, &constants, 1)
+                .unwrap()
+                .call_for_test(&[arg]);
             assert_eq!(
                 got,
                 Some(want),
@@ -1502,7 +1854,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            f.call(&[Value::make_int(41)]),
+            f.call_for_test(&[Value::make_int(41)]),
             Some(Value::make_int(42).bits())
         );
     }
@@ -1526,7 +1878,7 @@ mod tests {
             consts,
         )
         .unwrap();
-        assert_eq!(np.call(&[]), Some(Value::make_int(10).bits()));
+        assert_eq!(np.call_for_test(&[]), Some(Value::make_int(10).bits()));
         // Preserve TOS: push 10,20,30; discardN(2 | 0x80) keeps 30 -> 30.
         let pr = lower_nullary_leaf(
             &[
@@ -1539,7 +1891,7 @@ mod tests {
             consts,
         )
         .unwrap();
-        assert_eq!(pr.call(&[]), Some(Value::make_int(30).bits()));
+        assert_eq!(pr.call_for_test(&[]), Some(Value::make_int(30).bits()));
     }
 
     #[test]
@@ -1582,7 +1934,7 @@ mod tests {
             };
             let got = lower_leaf(&ops, &constants, 1)
                 .unwrap()
-                .call(&[Value::make_int(n)]);
+                .call_for_test(&[Value::make_int(n)]);
             assert_eq!(got, Some(want), "loop mismatch for n={n}");
             assert_eq!(
                 got,
@@ -1611,7 +1963,7 @@ mod tests {
                 &[Value::make_int(a), Value::make_int(b)],
             )
             .unwrap()
-            .call(&[])
+            .call_for_test(&[])
         };
         assert_eq!(mul(6, 7), Some(Value::make_int(42).bits()));
         assert_eq!(mul(-6, 7), Some(Value::make_int(-42).bits()));
@@ -1628,7 +1980,7 @@ mod tests {
             &[Value::make_int(5)],
         )
         .unwrap();
-        assert_eq!(leaf.call(&[]), None);
+        assert_eq!(leaf.call_for_test(&[]), None);
     }
 
     #[test]
@@ -1638,7 +1990,7 @@ mod tests {
         fn pred(op: Op, v: Value) -> Option<usize> {
             lower_nullary_leaf(&[Op::Constant(0), op, Op::Return], &[v])
                 .unwrap()
-                .call(&[])
+                .call_for_test(&[])
         }
         let t = Some(Value::T.bits());
         let nil = Some(Value::NIL.bits());
@@ -1676,11 +2028,15 @@ mod tests {
         // and left dangling on drop, which would crash the later cons allocation.
         // car/cdr correctness is fully pinned by the expected values here.
         assert_eq!(
-            lower_nullary_leaf(&car_ops, &[cons]).unwrap().call(&[]),
+            lower_nullary_leaf(&car_ops, &[cons])
+                .unwrap()
+                .call_for_test(&[]),
             Some(Value::make_int(11).bits())
         );
         assert_eq!(
-            lower_nullary_leaf(&cdr_ops, &[cons]).unwrap().call(&[]),
+            lower_nullary_leaf(&cdr_ops, &[cons])
+                .unwrap()
+                .call_for_test(&[]),
             Some(Value::make_int(22).bits())
         );
 
@@ -1688,13 +2044,13 @@ mod tests {
         assert_eq!(
             lower_nullary_leaf(&car_ops, &[Value::NIL])
                 .unwrap()
-                .call(&[]),
+                .call_for_test(&[]),
             Some(Value::NIL.bits())
         );
         assert_eq!(
             lower_nullary_leaf(&cdr_ops, &[Value::NIL])
                 .unwrap()
-                .call(&[]),
+                .call_for_test(&[]),
             Some(Value::NIL.bits())
         );
 
@@ -1702,7 +2058,7 @@ mod tests {
         assert_eq!(
             lower_nullary_leaf(&car_ops, &[Value::make_int(5)])
                 .unwrap()
-                .call(&[]),
+                .call_for_test(&[]),
             None
         );
 
@@ -1713,7 +2069,7 @@ mod tests {
         );
         let cadr =
             lower_nullary_leaf(&[Op::Constant(0), Op::Cdr, Op::Car, Op::Return], &[list]).unwrap();
-        assert_eq!(cadr.call(&[]), Some(Value::make_int(22).bits()));
+        assert_eq!(cadr.call_for_test(&[]), Some(Value::make_int(22).bits()));
     }
 
     #[test]
@@ -1725,7 +2081,7 @@ mod tests {
             &[Value::make_int(1), Value::make_int(2)],
         )
         .unwrap();
-        let cell = Value::from_bits(leaf.call(&[]).expect("cons runs"));
+        let cell = Value::from_bits(leaf.call_for_test(&[]).expect("cons runs"));
         assert!(cell.is_cons());
         assert_eq!(cell.cons_car(), Value::make_int(1));
         assert_eq!(cell.cons_cdr(), Value::make_int(2));
@@ -1747,12 +2103,136 @@ mod tests {
             &[Value::make_int(7), Value::make_int(8)],
         )
         .unwrap();
-        let result = Value::from_bits(leaf.call(&[]).expect("nested cons runs"));
+        let result = Value::from_bits(leaf.call_for_test(&[]).expect("nested cons runs"));
         assert_eq!(result.cons_car(), Value::make_int(7));
         let tail = result.cons_cdr();
         assert!(tail.is_cons());
         assert_eq!(tail.cons_car(), Value::make_int(8));
         assert!(tail.cons_cdr().is_nil());
+    }
+
+    /// Build a harness Context with `name` bound to a lexical one-arg bytecode
+    /// callee `(lambda (y) (1+ y))`, returning (ctx, callee symbol Value).
+    fn harness_with_inc_callee(name: &str) -> (crate::emacs_core::eval::Context, Value) {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let sym_val = Value::symbol(name);
+        let crate::emacs_core::value::ValueKind::Symbol(sym_id) = sym_val.kind() else {
+            panic!("Value::symbol must produce a symbol");
+        };
+        let mut callee = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        callee.lexical = true;
+        callee.ops = vec![Op::StackRef(0), Op::Add1, Op::Return];
+        callee.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(sym_id, Value::make_bytecode(callee));
+        (ev, sym_val)
+    }
+
+    #[test]
+    fn compiles_call_to_bytecode_callee() {
+        // (lambda () (callee 41)) where callee = (lambda (y) (1+ y)).
+        // The native code re-enters the runtime through the call shim; the
+        // callee runs on the interpreter and the result flows back.
+        let (mut ev, sym_val) = harness_with_inc_callee("jit-test-inc-callee");
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Call(1), Op::Return],
+            &[sym_val, Value::make_int(41)],
+        )
+        .unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(42).bits())
+        );
+    }
+
+    #[test]
+    fn call_with_live_values_below_roots_and_returns() {
+        // (lambda () (let ((keep 7)) (+0-guard-free use of keep after a call)).
+        // Body: push keep=7, push sym, push 41, Call(1) -> keep stays live below
+        // the call (exercises the gc_save/gc_push rooting path), then combine:
+        // [keep, result] -> StackSet(1) folds result into keep slot -> Return.
+        let (mut ev, sym_val) = harness_with_inc_callee("jit-test-inc-callee-2");
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(2), // keep = 7
+                Op::Constant(0), // sym
+                Op::Constant(1), // 41
+                Op::Call(1),     // -> [keep, 42]
+                Op::StackSet(1), // -> [42]
+                Op::Return,
+            ],
+            &[sym_val, Value::make_int(41), Value::make_int(7)],
+        )
+        .unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(42).bits())
+        );
+    }
+
+    #[test]
+    fn call_signal_propagates() {
+        // Calling an unbound function must surface as NativeRun::Signal with the
+        // Flow stashed for the caller — not a deopt, not a crash.
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let sym_val = Value::symbol("jit-test-no-such-function");
+        let leaf =
+            lower_nullary_leaf(&[Op::Constant(0), Op::Call(0), Op::Return], &[sym_val]).unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        assert!(
+            take_pending_flow().is_some(),
+            "STATUS_SIGNAL must stash the Flow"
+        );
+    }
+
+    #[test]
+    fn bails_on_guard_after_call() {
+        // A deopt guard reachable after a call would make rerun-on-deopt unsound
+        // (the call's side effects already ran) -> must refuse to compile.
+        let err = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Call(0), Op::Add1, Op::Return],
+            &[Value::symbol("jit-test-any")],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("guard-after-call")
+        ));
+    }
+
+    #[test]
+    fn guard_before_call_compiles_and_deopts_cleanly() {
+        // Guards strictly before the first call are fine: a deopt there reruns
+        // the interpreter with no side effect having happened.
+        let (mut ev, sym_val) = harness_with_inc_callee("jit-test-inc-callee-3");
+        let ops = [
+            Op::Constant(0), // sym
+            Op::Constant(1), // n
+            Op::Add1,        // guard BEFORE the call
+            Op::Call(1),
+            Op::Return,
+        ];
+        // In-range: runs natively end-to-end: (1+ 40) = 41 -> callee -> 42.
+        let leaf = lower_nullary_leaf(&ops, &[sym_val, Value::make_int(40)]).unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(42).bits())
+        );
+        // Boundary input: the pre-call guard deopts BEFORE the call ran.
+        let leaf2 = lower_nullary_leaf(
+            &ops,
+            &[sym_val, Value::make_int(Value::MOST_POSITIVE_FIXNUM)],
+        )
+        .unwrap();
+        assert_eq!(leaf2.call(ctx_ptr, &[]), NativeRun::Deopt);
     }
 
     #[test]
@@ -1783,7 +2263,7 @@ mod tests {
         f.constants = vec![c];
         f.ops = vec![Op::Constant(0), Op::Return];
         let leaf = compile_bytecode_function(&f).unwrap();
-        assert_eq!(leaf.call(&[]), Some(c.bits()));
+        assert_eq!(leaf.call_for_test(&[]), Some(c.bits()));
     }
 
     #[test]
@@ -1792,13 +2272,13 @@ mod tests {
         let id = lower_leaf(&[Op::StackRef(0), Op::Return], &[], 1).unwrap();
         assert_eq!(id.arity(), 1);
         assert_eq!(
-            id.call(&[Value::make_int(7)]),
+            id.call_for_test(&[Value::make_int(7)]),
             Some(Value::make_int(7).bits())
         );
         // (lambda (x) (1+ x))
         let inc = lower_leaf(&[Op::StackRef(0), Op::Add1, Op::Return], &[], 1).unwrap();
         assert_eq!(
-            inc.call(&[Value::make_int(41)]),
+            inc.call_for_test(&[Value::make_int(41)]),
             Some(Value::make_int(42).bits())
         );
     }
@@ -1814,11 +2294,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            add.call(&[Value::make_int(40), Value::make_int(2)]),
+            add.call_for_test(&[Value::make_int(40), Value::make_int(2)]),
             Some(Value::make_int(42).bits())
         );
         // A non-fixnum argument makes the speculative Add deopt.
-        assert_eq!(add.call(&[Value::make_int(40), Value::NIL]), None);
+        assert_eq!(add.call_for_test(&[Value::make_int(40), Value::NIL]), None);
     }
 
     #[test]
@@ -1836,7 +2316,7 @@ mod tests {
         let leaf = compile_bytecode_function(&f).unwrap();
         assert_eq!(leaf.arity(), 2);
         assert_eq!(
-            leaf.call(&[Value::make_int(1), Value::make_int(41)]),
+            leaf.call_for_test(&[Value::make_int(1), Value::make_int(41)]),
             Some(Value::make_int(42).bits())
         );
     }
@@ -1984,7 +2464,7 @@ mod tests {
         ];
         for (i, (ops, consts)) in cases.iter().enumerate() {
             let want = interp_nullary(ops, consts).bits();
-            let got = lower_nullary_leaf(ops, consts).unwrap().call(&[]);
+            let got = lower_nullary_leaf(ops, consts).unwrap().call_for_test(&[]);
             assert_eq!(got, Some(want), "JIT/interpreter mismatch on case {i}");
         }
     }
@@ -2016,7 +2496,7 @@ mod tests {
                 .bits()
         };
 
-        let got = lower_leaf(&ops, &[], 2).unwrap().call(&args);
+        let got = lower_leaf(&ops, &[], 2).unwrap().call_for_test(&args);
         assert_eq!(got, Some(want), "JIT must match the interpreter with args");
     }
 
