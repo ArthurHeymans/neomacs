@@ -281,6 +281,15 @@ enum WaitProcessService {
     Ready(Vec<ProcessId>),
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum WaitBlockStrategy {
+    ServiceNow,
+    Backend(WaitBackendInterest),
+    HostInput,
+    ProcessOutput,
+    Sleep,
+}
+
 impl super::eval::Context {
     pub(crate) fn service_wait_request_once(
         &mut self,
@@ -364,33 +373,38 @@ impl super::eval::Context {
             }
 
             let wait_time = self.next_wait_request_timeout(&request, now);
-            if wait_time.is_zero() {
-                outcome = self.service_wait_request_once(&request)?;
-            } else if self.wait_request_can_use_backend(&request) {
-                let backend = self
-                    .processes
-                    .wait_for_backend_events(wait_time, request.backend_interest())
-                    .unwrap_or_default();
-                if backend.input_wakeup {
-                    self.clear_input_wakeup_fd();
-                    let _ = self.stage_next_host_input_event_if_available()?;
+            match self.wait_block_strategy(&request, wait_time) {
+                WaitBlockStrategy::ServiceNow => {
+                    outcome = self.service_wait_request_once(&request)?;
                 }
-                outcome =
-                    self.service_wait_request_ready_processes(&request, backend.ready_processes)?;
-            } else if request.keyboard.waits_for_host_input() && self.input_rx.is_some() {
-                let _ = self.wait_for_next_host_input_event(
-                    wait_time,
-                    request.keyboard.sets_waiting_for_user_input(),
-                )?;
-                outcome = self.service_wait_request_once(&request)?;
-            } else {
-                let ready_processes = if request.processes.services_processes() {
-                    self.processes.wait_for_output(wait_time)
-                } else {
+                WaitBlockStrategy::Backend(interest) => {
+                    let backend = self
+                        .processes
+                        .wait_for_backend_events(wait_time, interest)
+                        .unwrap_or_default();
+                    if backend.input_wakeup {
+                        self.clear_input_wakeup_fd();
+                        let _ = self.stage_next_host_input_event_if_available()?;
+                    }
+                    outcome = self
+                        .service_wait_request_ready_processes(&request, backend.ready_processes)?;
+                }
+                WaitBlockStrategy::HostInput => {
+                    let _ = self.wait_for_next_host_input_event(
+                        wait_time,
+                        request.keyboard.sets_waiting_for_user_input(),
+                    )?;
+                    outcome = self.service_wait_request_once(&request)?;
+                }
+                WaitBlockStrategy::ProcessOutput => {
+                    let ready_processes = self.processes.wait_for_output(wait_time);
+                    outcome =
+                        self.service_wait_request_ready_processes(&request, ready_processes)?;
+                }
+                WaitBlockStrategy::Sleep => {
                     std::thread::sleep(wait_time);
-                    Vec::new()
-                };
-                outcome = self.service_wait_request_ready_processes(&request, ready_processes)?;
+                    outcome = self.service_wait_request_ready_processes(&request, Vec::new())?;
+                }
             }
 
             if let Some(completion) = request.completion_for(outcome) {
@@ -422,13 +436,39 @@ impl super::eval::Context {
         timeout
     }
 
-    fn wait_request_can_use_backend(&self, request: &WaitRequest) -> bool {
+    fn wait_block_strategy(&self, request: &WaitRequest, wait_time: Duration) -> WaitBlockStrategy {
+        if wait_time.is_zero() {
+            return WaitBlockStrategy::ServiceNow;
+        }
+
+        if let Some(interest) = self.wait_backend_interest_for_request(request) {
+            return WaitBlockStrategy::Backend(interest);
+        }
+
+        if request.keyboard.waits_for_host_input() && self.input_rx.is_some() {
+            return WaitBlockStrategy::HostInput;
+        }
+
+        if request.processes.services_processes() {
+            return WaitBlockStrategy::ProcessOutput;
+        }
+
+        WaitBlockStrategy::Sleep
+    }
+
+    fn wait_backend_interest_for_request(
+        &self,
+        request: &WaitRequest,
+    ) -> Option<WaitBackendInterest> {
         if !self.processes.has_wait_input_wakeup_backend() {
-            return false;
+            return None;
         }
         if request.processes.services_processes() {
-            return true;
+            return Some(request.backend_interest());
         }
-        request.keyboard.waits_for_host_input() && self.processes.live_process_ids().is_empty()
+        if request.keyboard.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
+            return Some(request.backend_interest());
+        }
+        None
     }
 }
