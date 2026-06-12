@@ -1527,9 +1527,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     DisplayRowYRecording::None,
                 ),
             ));
-            hit_rows.push(boundary.hit_row);
+            let geometry_transition = boundary.record_hit_row(hit_rows);
             *hit_row_charpos_start = anchor_charpos;
-            let geometry_transition = boundary.transition;
             if *row >= max_rows {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
@@ -4019,9 +4018,8 @@ impl LayoutEngine {
                         ),
                     ));
                     // Record hit-test row (hscroll newline)
-                    hit_rows.push(boundary.hit_row);
+                    let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     hit_row_charpos_start = charpos;
-                    let geometry_transition = boundary.transition;
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4656,8 +4654,7 @@ impl LayoutEngine {
                                 DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                             ),
                         ));
-                        hit_rows.push(boundary.hit_row);
-                        let geometry_transition = boundary.transition;
+                        let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4788,8 +4785,7 @@ impl LayoutEngine {
                         DisplayRowYRecording::RowYPositions(&mut row_y_positions),
                     ),
                 ));
-                hit_rows.push(boundary.hit_row);
-                let geometry_transition = boundary.transition;
+                let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                 let row_transition = TextMatrixRowOutput::new(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4917,8 +4913,7 @@ impl LayoutEngine {
                             ),
                         ));
                         // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(boundary.hit_row);
-                        let geometry_transition = boundary.transition;
+                        let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4969,9 +4964,8 @@ impl LayoutEngine {
                             ),
                         ));
                         // Record hit-test row (wrap/truncation break)
-                        hit_rows.push(boundary.hit_row);
+                        let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                         hit_row_charpos_start = charpos;
-                        let geometry_transition = boundary.transition;
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -5280,8 +5274,7 @@ impl LayoutEngine {
                         ),
                     ));
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(boundary.hit_row);
-                    let geometry_transition = boundary.transition;
+                    let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -5341,8 +5334,7 @@ impl LayoutEngine {
                         ),
                     ));
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(boundary.hit_row);
-                    let geometry_transition = boundary.transition;
+                    let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -5404,8 +5396,7 @@ impl LayoutEngine {
                         ),
                     ));
                     // Record hit-test row (wrap/truncation break)
-                    hit_rows.push(boundary.hit_row);
-                    let geometry_transition = boundary.transition;
+                    let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,

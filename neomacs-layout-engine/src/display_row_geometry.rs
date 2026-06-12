@@ -176,6 +176,16 @@ pub(crate) struct DisplayRowBoundaryTransition {
     pub(crate) transition: TextMatrixRowGeometryTransition,
 }
 
+impl DisplayRowBoundaryTransition {
+    pub(crate) fn record_hit_row(
+        self,
+        hit_rows: &mut Vec<HitRow>,
+    ) -> TextMatrixRowGeometryTransition {
+        hit_rows.push(self.hit_row);
+        self.transition
+    }
+}
+
 impl DisplayRowYRecorder<'_> {
     fn record(self, y: f32) {
         match self {

@@ -602,3 +602,55 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
     assert_eq!(row_max_ascent, 12.0);
     assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 11.0]);
 }
+
+#[test]
+fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transition() {
+    let boundary = DisplayRowBoundaryTransition {
+        hit_row: HitRow {
+            y_start: 42.0,
+            y_end: 66.0,
+            charpos_start: 11,
+            charpos_end: 22,
+        },
+        transition: TextMatrixRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 42.0,
+                height: 24.0,
+                ascent: 18.0,
+            },
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 8,
+                row: 3,
+                col: 7,
+                y: 69.0,
+                x: 13.0,
+            },
+        },
+    };
+    let mut hit_rows = Vec::new();
+
+    let transition = boundary.record_hit_row(&mut hit_rows);
+
+    assert_eq!(hit_rows.len(), 1);
+    assert_eq!(hit_rows[0].y_start, 42.0);
+    assert_eq!(hit_rows[0].y_end, 66.0);
+    assert_eq!(hit_rows[0].charpos_start, 11);
+    assert_eq!(hit_rows[0].charpos_end, 22);
+    assert_eq!(
+        transition,
+        TextMatrixRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 42.0,
+                height: 24.0,
+                ascent: 18.0,
+            },
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 8,
+                row: 3,
+                col: 7,
+                y: 69.0,
+                x: 13.0,
+            },
+        }
+    );
+}
