@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::{WaitCompletion, WaitDeadline, WaitRequest};
+use crate::emacs_core::wait::{WaitCompletion, WaitRequest};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -2293,9 +2293,9 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
     });
 
     let outcome = ev
-        .wait_reading_process_output(WaitRequest::read_command_input(WaitDeadline::Until(
+        .wait_reading_process_output(WaitRequest::read_command_input_until(
             std::time::Instant::now() + Duration::from_secs(1),
-        )))
+        ))
         .expect("wait for command input");
 
     assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);
@@ -2399,9 +2399,9 @@ fn wait_scheduler_uses_registered_input_wakeup_backend() {
     });
 
     let outcome = ev
-        .wait_reading_process_output(WaitRequest::read_command_input(WaitDeadline::Until(
+        .wait_reading_process_output(WaitRequest::read_command_input_until(
             std::time::Instant::now() + Duration::from_secs(1),
-        )))
+        ))
         .expect("wait for command input through wakeup backend");
 
     assert_eq!(outcome.completion(), WaitCompletion::CommandInputPending);

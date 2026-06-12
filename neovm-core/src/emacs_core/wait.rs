@@ -55,7 +55,7 @@ impl WaitSourceEvents {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum WaitDeadline {
+enum WaitDeadline {
     Poll,
     Until(Instant),
     Forever,
@@ -93,7 +93,7 @@ impl ProcessOutputWaitTiming {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum KeyboardWaitPolicy {
+enum KeyboardWaitPolicy {
     ServiceSpecialOnly,
     WaitForSpecialInput,
     YieldOnCommandInput,
@@ -101,7 +101,7 @@ pub(crate) enum KeyboardWaitPolicy {
 }
 
 impl KeyboardWaitPolicy {
-    pub(crate) fn completes_on_command_input(self) -> bool {
+    fn completes_on_command_input(self) -> bool {
         matches!(self, Self::YieldOnCommandInput | Self::ReadCommandInput)
     }
 
@@ -112,13 +112,13 @@ impl KeyboardWaitPolicy {
         )
     }
 
-    pub(crate) fn sets_waiting_for_user_input(self) -> bool {
+    fn sets_waiting_for_user_input(self) -> bool {
         matches!(self, Self::ReadCommandInput)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ProcessWaitPolicy {
+enum ProcessWaitPolicy {
     None,
     ServiceAny,
     Any,
@@ -135,18 +135,18 @@ impl ProcessWaitPolicy {
         }
     }
 
-    pub(crate) fn target_process(self) -> Option<ProcessId> {
+    fn target_process(self) -> Option<ProcessId> {
         match self {
             Self::Target(id) | Self::TargetOnly(id) => Some(id),
             Self::None | Self::ServiceAny | Self::Any => None,
         }
     }
 
-    pub(crate) fn just_this_one(self) -> bool {
+    fn just_this_one(self) -> bool {
         matches!(self, Self::TargetOnly(_))
     }
 
-    pub(crate) fn services_processes(self) -> bool {
+    fn services_processes(self) -> bool {
         !matches!(self, Self::None)
     }
 
@@ -160,19 +160,19 @@ impl ProcessWaitPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TimerWaitPolicy {
+enum TimerWaitPolicy {
     Run,
     Suppress,
 }
 
 impl TimerWaitPolicy {
-    pub(crate) fn allow(self) -> bool {
+    fn allow(self) -> bool {
         matches!(self, Self::Run)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SpecialInputWaitPolicy {
+enum SpecialInputWaitPolicy {
     Suppress,
     ServiceOnly,
     CompleteOnAny,
@@ -257,7 +257,7 @@ impl WaitRequest {
         )
     }
 
-    pub(crate) fn read_command_input(deadline: WaitDeadline) -> Self {
+    fn read_command_input(deadline: WaitDeadline) -> Self {
         Self {
             deadline,
             keyboard: KeyboardWaitPolicy::ReadCommandInput,
@@ -266,6 +266,14 @@ impl WaitRequest {
             redisplay: true,
             special_input: SpecialInputWaitPolicy::ServiceOnly,
         }
+    }
+
+    pub(crate) fn read_command_input_until(deadline: Instant) -> Self {
+        Self::read_command_input(WaitDeadline::Until(deadline))
+    }
+
+    pub(crate) fn read_command_input_forever() -> Self {
+        Self::read_command_input(WaitDeadline::Forever)
     }
 
     pub(crate) fn service_once(redisplay: bool) -> Self {
@@ -331,7 +339,7 @@ impl WaitRequest {
         }
     }
 
-    pub(crate) fn deadline(self) -> WaitDeadline {
+    fn deadline(self) -> WaitDeadline {
         self.deadline
     }
 
@@ -1105,8 +1113,7 @@ mod tests {
     #[test]
     fn wait_request_exposes_scheduler_queries() {
         let now = Instant::now();
-        let read =
-            WaitRequest::read_command_input(WaitDeadline::Until(now + Duration::from_secs(1)));
+        let read = WaitRequest::read_command_input_until(now + Duration::from_secs(1));
         let poll = WaitRequest::service_once(true);
         let resize = WaitRequest::resize_ack(now);
 

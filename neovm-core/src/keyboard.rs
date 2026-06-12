@@ -14,7 +14,7 @@ use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 use crate::emacs_core::wait::{
-    WaitCompletion, WaitDeadline, WaitRequest, WaitSpecialInputActivity, WaitSpecialInputOutcome,
+    WaitCompletion, WaitRequest, WaitSpecialInputActivity, WaitSpecialInputOutcome,
 };
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
@@ -3946,17 +3946,16 @@ impl crate::emacs_core::eval::Context {
             }
 
             self.timer_start_idle();
-            let wait_deadline = if let Some(deadline) = deadline {
+            let wait_request = if let Some(deadline) = deadline {
                 if deadline <= std::time::Instant::now() {
                     self.timer_stop_idle();
                     return Ok(None);
                 }
-                WaitDeadline::Until(deadline)
+                WaitRequest::read_command_input_until(deadline)
             } else {
-                WaitDeadline::Forever
+                WaitRequest::read_command_input_forever()
             };
-            let wait_result =
-                self.wait_reading_process_output(WaitRequest::read_command_input(wait_deadline));
+            let wait_result = self.wait_reading_process_output(wait_request);
             self.timer_stop_idle();
 
             match wait_result?.completion() {
