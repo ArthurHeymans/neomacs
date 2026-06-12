@@ -4,8 +4,9 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds, DisplayRowRenderer,
-    DisplayRowSourceState, DisplayRowSpec,
+    DisplayRowActiveFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_text::DisplayTextFragment;
@@ -70,6 +71,40 @@ fn display_row_append_metrics_builds_from_measured_face_metrics() {
         },
         16.0,
     );
+
+    assert_eq!(
+        metrics,
+        DisplayRowAppendMetrics {
+            height: 18.0,
+            ascent: 13.0,
+            char_width: 7.5,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        }
+    );
+}
+
+#[test]
+fn display_row_append_metrics_builds_from_active_face() {
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base = resolver.default_face().clone();
+    let mut font_metrics = None;
+    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        7,
+        &base,
+        None,
+        7.5,
+        DisplayRowFallbackMetrics {
+            char_width: 7.5,
+            row_height: 18.0,
+            ascent: 13.0,
+        },
+        &mut font_metrics,
+    );
+    let active_face = DisplayRowActiveFace::new(base, measured);
+
+    let metrics = DisplayRowAppendMetrics::from_active_face(&active_face, 16.0);
 
     assert_eq!(
         metrics,

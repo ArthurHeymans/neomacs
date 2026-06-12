@@ -11,10 +11,10 @@ use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowOutputProgress,
-    DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
-    install_rendered_display_row_fragment_assets,
+    DisplayRowActiveFace, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
+    DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
+    DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
+    DisplayRowSpec, install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
 #[cfg(test)]
@@ -965,6 +965,13 @@ pub(crate) struct DisplayRowAppendMetrics {
 }
 
 impl DisplayRowAppendMetrics {
+    pub(crate) fn from_active_face(
+        active_face: &DisplayRowActiveFace,
+        default_row_height: f32,
+    ) -> Self {
+        Self::from_measured_face_metrics(active_face.metrics(), default_row_height)
+    }
+
     pub(crate) fn from_measured_face_metrics(
         metrics: DisplayRowMeasuredFaceMetrics,
         default_row_height: f32,
