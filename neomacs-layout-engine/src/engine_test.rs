@@ -526,7 +526,7 @@ fn current_display_row_metrics_advances_to_next_row_from_finished_extents() {
         row_extra_y: 2.0,
         default_height: 16.0,
         default_ascent: 12.0,
-        line_spacing: 3.0,
+        kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 3.0 },
     });
 
     assert_eq!(
@@ -543,6 +543,27 @@ fn current_display_row_metrics_advances_to_next_row_from_finished_extents() {
             next_ascent: 12.0,
         }
     );
+    assert_eq!(metrics.height(), 16.0);
+    assert_eq!(metrics.ascent(), 12.0);
+}
+
+#[test]
+fn current_display_row_metrics_advances_visual_wrap_without_line_spacing() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+        y: 7.0,
+        next_row: 2,
+        text_y: 10.0,
+        row_extra_y: 2.0,
+        default_height: 16.0,
+        default_ascent: 12.0,
+        kind: DisplayRowAdvanceKind::VisualWrap,
+    });
+
+    assert_eq!(advance.row_extra_y, 10.0);
+    assert_eq!(advance.next_y, 10.0 + 2.0 * 16.0 + 10.0);
     assert_eq!(metrics.height(), 16.0);
     assert_eq!(metrics.ascent(), 12.0);
 }
