@@ -41,7 +41,7 @@ use super::tls::{
     RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
-pub(crate) use super::wait::{
+use super::wait::{
     ProcessWaitPolicy, TimerWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest,
     WaitServiceOutcome,
 };

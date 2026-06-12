@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::wait::{ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
