@@ -174,7 +174,6 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
         .into_active_face();
 
     assert_eq!(active.face_id(), 14);
-    assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.measurement_face().face_id(), 14);
     assert_eq!(active.layout_metrics().char_width, 7.0);
     assert_eq!(active.layout_metrics().row_height, 15.0);
@@ -182,6 +181,7 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
     assert_eq!(active.layout_metrics().space_width, 7.0);
     assert_eq!(active.render_state().face_id, 14);
     assert_eq!(active.render_state().background, Color::from_pixel(face.bg));
+    assert_eq!(active.render_state().resolved_face().fg, face.fg);
 }
 
 #[test]

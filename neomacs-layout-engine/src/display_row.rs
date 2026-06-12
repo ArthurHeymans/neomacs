@@ -716,10 +716,17 @@ pub(crate) struct DisplayRowActiveFace {
     background: Color,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct DisplayRowActiveFaceRenderState {
     pub(crate) face_id: u32,
     pub(crate) background: Color,
+    resolved_face: ResolvedFace,
+}
+
+impl DisplayRowActiveFaceRenderState {
+    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
+        &self.resolved_face
+    }
 }
 
 impl DisplayRowActiveFace {
@@ -738,10 +745,6 @@ impl DisplayRowActiveFace {
         self.measurement_face.face_id()
     }
 
-    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
-        &self.resolved_face
-    }
-
     pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
         &self.measurement_face
     }
@@ -754,6 +757,7 @@ impl DisplayRowActiveFace {
         DisplayRowActiveFaceRenderState {
             face_id: self.face_id(),
             background: self.background,
+            resolved_face: self.resolved_face.clone(),
         }
     }
 
