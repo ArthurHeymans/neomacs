@@ -823,7 +823,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_text_matrix_row_begin() 
 }
 
 #[test]
-fn display_row_geometry_cursor_finishes_begins_and_commits_next_text_matrix_row() {
+fn display_row_geometry_advance_target_groups_transition_and_commit_inputs() {
     let mut cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
         row: 2,
         y: 42.0,
@@ -838,27 +838,28 @@ fn display_row_geometry_cursor_finishes_begins_and_commits_next_text_matrix_row(
     let mut row_max_ascent = 1.0;
     let mut row_y_positions = vec![8.0];
 
-    let transition = cursor.finish_begin_and_commit_next_text_matrix_row(
-        DisplayRowGeometryDefaults {
-            text_y: 10.0,
-            height: 16.0,
-            ascent: 12.0,
-        },
-        DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
-        5,
-        7,
-        13.0,
-        DisplayRowGeometryCommitTarget::recording_row_y(
-            LegacyDisplayRowGeometryVars {
-                row: &mut row,
-                y: &mut y,
-                row_extra_y: &mut row_extra_y,
-                row_max_height: &mut row_max_height,
-                row_max_ascent: &mut row_max_ascent,
+    let transition =
+        cursor.finish_begin_and_commit_next_text_matrix_row(DisplayRowGeometryAdvanceTarget::new(
+            DisplayRowGeometryDefaults {
+                text_y: 10.0,
+                height: 16.0,
+                ascent: 12.0,
             },
-            &mut row_y_positions,
-        ),
-    );
+            DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
+            5,
+            7,
+            13.0,
+            DisplayRowGeometryCommitTarget::recording_row_y(
+                LegacyDisplayRowGeometryVars {
+                    row: &mut row,
+                    y: &mut y,
+                    row_extra_y: &mut row_extra_y,
+                    row_max_height: &mut row_max_height,
+                    row_max_ascent: &mut row_max_ascent,
+                },
+                &mut row_y_positions,
+            ),
+        ));
 
     assert_eq!(
         transition,
