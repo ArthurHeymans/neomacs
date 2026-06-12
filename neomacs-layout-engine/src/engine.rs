@@ -425,6 +425,12 @@ struct ActiveDisplayPropertySpan<T> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TextPropertyScanCheckpoints {
+    invisible_next: i64,
+    display_next: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DisplayRowPrefixRequest {
     None,
     Line,
@@ -806,6 +812,39 @@ impl<T: Copy> ActiveDisplayPropertySpan<T> {
 
     fn value_or(&self, default: T) -> T {
         self.value.unwrap_or(default)
+    }
+}
+
+impl TextPropertyScanCheckpoints {
+    fn new(start_charpos: i64) -> Self {
+        Self {
+            invisible_next: start_charpos,
+            display_next: start_charpos,
+        }
+    }
+
+    fn should_check_invisible(self, charpos: i64) -> bool {
+        charpos >= self.invisible_next
+    }
+
+    fn should_check_display(self, charpos: i64) -> bool {
+        charpos >= self.display_next
+    }
+
+    fn record_invisible_next(&mut self, charpos: i64) {
+        self.invisible_next = charpos;
+    }
+
+    fn record_display_next(&mut self, charpos: i64) {
+        self.display_next = charpos;
+    }
+
+    fn display_skip_to(self, accessible_end: i64) -> i64 {
+        self.display_next.min(accessible_end)
+    }
+
+    fn display_next(self) -> i64 {
+        self.display_next
     }
 }
 
@@ -3794,8 +3833,7 @@ impl LayoutEngine {
         let mut col = 0usize;
         let mut byte_idx = 0usize;
         let mut charpos = window_start;
-        let mut invis_next_check: i64 = window_start; // Next position where visibility might change
-        let mut display_next_check: i64 = window_start; // Next position where display props might change
+        let mut text_property_checkpoints = TextPropertyScanCheckpoints::new(window_start);
 
         // Display :raise property: vertical Y offset for glyphs
         let mut raise_span = ActiveDisplayPropertySpan::inactive();
@@ -4146,7 +4184,7 @@ impl LayoutEngine {
 
             // --- Invisible text check ---
             // Only call check_invisible at property change boundaries for efficiency
-            if charpos >= invis_next_check {
+            if text_property_checkpoints.should_check_invisible(charpos) {
                 let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
                 let (invisible, next_visible) = text_props.check_invisible(charpos);
                 if invisible.hidden {
@@ -4169,7 +4207,7 @@ impl LayoutEngine {
                     }
 
                     skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
-                    invis_next_check = next_visible;
+                    text_property_checkpoints.record_invisible_next(next_visible);
 
                     // GNU displays ellipsis only when the matching
                     // `buffer-invisibility-spec' entry requests it.
@@ -4258,7 +4296,7 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     continue;
                 }
-                invis_next_check = next_visible;
+                text_property_checkpoints.record_invisible_next(next_visible);
             }
 
             // Handle hscroll: skip columns consumed by horizontal scroll
@@ -4396,18 +4434,18 @@ impl LayoutEngine {
                 face_next_check = 0;
             }
             resolve_current_face_state!();
-            if charpos >= display_next_check {
+            if text_property_checkpoints.should_check_display(charpos) {
                 let display_prop_val: Option<neovm_core::emacs_core::Value> = {
                     let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
                     let (dp, next_change) = text_props.check_display_prop(charpos);
-                    display_next_check = next_change;
+                    text_property_checkpoints.record_display_next(next_change);
                     dp
                 };
 
                 if let Some(prop_val) = display_prop_val {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let skip_to = display_next_check.min(accessible_end);
+                    let skip_to = text_property_checkpoints.display_skip_to(accessible_end);
                     let point_in_display_replacement = cursor_info.is_none()
                         && point_charpos >= charpos
                         && point_charpos < skip_to;
@@ -4760,13 +4798,14 @@ impl LayoutEngine {
 
                     // Case 4: Raise — (raise FACTOR) or plist with :raise
                     if let Some(factor) = display_property.modifiers.raise {
-                        raise_span.set(-(factor * char_h), display_next_check);
+                        raise_span
+                            .set(-(factor * char_h), text_property_checkpoints.display_next());
                     }
 
                     // Case 5: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = display_property.modifiers.height {
                         if factor.is_finite() && factor > 0.0 {
-                            height_span.set(factor, display_next_check);
+                            height_span.set(factor, text_property_checkpoints.display_next());
                             face_next_check = 0;
                             resolve_current_face_state!();
                         }

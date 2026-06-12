@@ -159,6 +159,25 @@ fn active_display_property_span_returns_value_until_expired() {
 }
 
 #[test]
+fn text_property_scan_checkpoints_track_next_visibility_and_display_changes() {
+    let mut checkpoints = TextPropertyScanCheckpoints::new(10);
+
+    assert!(!checkpoints.should_check_invisible(9));
+    assert!(checkpoints.should_check_invisible(10));
+    assert!(checkpoints.should_check_display(10));
+
+    checkpoints.record_invisible_next(15);
+    checkpoints.record_display_next(20);
+
+    assert!(!checkpoints.should_check_invisible(14));
+    assert!(checkpoints.should_check_invisible(15));
+    assert!(!checkpoints.should_check_display(19));
+    assert!(checkpoints.should_check_display(20));
+    assert_eq!(checkpoints.display_skip_to(18), 18);
+    assert_eq!(checkpoints.display_skip_to(25), 20);
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 
