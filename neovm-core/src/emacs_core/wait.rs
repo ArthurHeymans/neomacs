@@ -358,26 +358,26 @@ impl WaitRequest {
         matches!(self.deadline, WaitDeadline::Forever)
     }
 
-    pub(crate) fn target_process(self) -> Option<ProcessId> {
+    fn target_process(self) -> Option<ProcessId> {
         self.processes.target_process()
     }
 
-    pub(crate) fn completes_on_any_process_activity(self) -> bool {
+    fn completes_on_any_process_activity(self) -> bool {
         matches!(self.processes, ProcessWaitPolicy::Any)
     }
 
-    pub(crate) fn completes_on_target_process_activity(self, process: ProcessId) -> bool {
+    fn completes_on_target_process_activity(self, process: ProcessId) -> bool {
         matches!(
             self.processes,
             ProcessWaitPolicy::Target(id) | ProcessWaitPolicy::TargetOnly(id) if id == process
         )
     }
 
-    pub(crate) fn restricts_process_service_to_target(self) -> bool {
+    fn restricts_process_service_to_target(self) -> bool {
         self.processes.just_this_one()
     }
 
-    pub(crate) fn services_process_output(self) -> bool {
+    fn services_process_output(self) -> bool {
         self.processes.services_processes()
     }
 

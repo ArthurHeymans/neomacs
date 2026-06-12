@@ -7496,6 +7496,26 @@ fn builtin_make_process_impl_with_environment(
 #[derive(Clone, Copy, Debug)]
 struct AcceptProcessOutputRequest {
     wait: WaitRequest,
+    target_process: Option<ProcessId>,
+    just_this_one: bool,
+}
+
+impl AcceptProcessOutputRequest {
+    fn completes_on_any_process_activity(self) -> bool {
+        self.target_process.is_none()
+    }
+
+    fn completes_on_target_process_activity(self, process: ProcessId) -> bool {
+        self.target_process == Some(process)
+    }
+
+    fn services_only_target_process_output(self) -> bool {
+        self.just_this_one
+    }
+
+    fn target_process_for_follow_up(self) -> Option<ProcessId> {
+        self.target_process
+    }
 }
 
 fn parse_accept_process_output_request(
@@ -7594,7 +7614,11 @@ fn parse_accept_process_output_request(
         (None, false) => WaitRequest::accept_any_process_output_without_timers(timing),
     };
 
-    Ok(Some(AcceptProcessOutputRequest { wait }))
+    Ok(Some(AcceptProcessOutputRequest {
+        wait,
+        target_process: target_id,
+        just_this_one,
+    }))
 }
 
 fn accept_process_output_positive_timeout(args: &[Value]) -> Option<Duration> {
@@ -8386,7 +8410,7 @@ fn accept_process_output_run_target_follow_up(
     eval: &mut super::eval::Context,
     request: AcceptProcessOutputRequest,
 ) -> Result<(), Flow> {
-    let Some(target_id) = request.wait.target_process() else {
+    let Some(target_id) = request.target_process_for_follow_up() else {
         return Ok(());
     };
 
