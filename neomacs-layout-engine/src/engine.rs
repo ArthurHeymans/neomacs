@@ -308,6 +308,41 @@ struct CursorGeometrySource {
     cursor_fg: Color,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CursorGeometryContext {
+    window_id: i64,
+    slot_width: f32,
+    default_line_height: f32,
+    ends_at_visible_eob: bool,
+}
+
+impl CursorGeometrySource {
+    fn from_captured_cursor(
+        cursor: &CapturedCursorInfo,
+        row_metric: RowMetricsSnapshot,
+        context: CursorGeometryContext,
+    ) -> Self {
+        Self {
+            slot_id: DisplaySlotId {
+                window_id: context.window_id,
+                row: row_metric.row as u32,
+                col: cursor.col as u16,
+            },
+            x: cursor.x,
+            y: cursor.y,
+            slot_width: context.slot_width.max(1.0),
+            face_height: cursor.face_h,
+            face_ascent: cursor.face_ascent,
+            row_height: row_metric.height,
+            row_ascent: row_metric.ascent,
+            default_line_height: context.default_line_height,
+            stretch_like: cursor.stretch_like,
+            ends_at_visible_eob: context.ends_at_visible_eob,
+            cursor_fg: cursor.bg,
+        }
+    }
+}
+
 impl ResolvedCursorGeometry {
     fn window_id(&self) -> i64 {
         self.slot_id.window_id
@@ -5823,24 +5858,16 @@ impl LayoutEngine {
                         )
                         .max(1.0)
                     };
-                    let source = CursorGeometrySource {
-                        slot_id: DisplaySlotId {
+                    let source = CursorGeometrySource::from_captured_cursor(
+                        &cursor,
+                        row_metric,
+                        CursorGeometryContext {
                             window_id: params.window_id,
-                            row: (text_matrix_row_base + cursor.matrix_row) as u32,
-                            col: cursor.col as u16,
+                            slot_width: computed_slot_width,
+                            default_line_height: char_h,
+                            ends_at_visible_eob: point_is_visible_eob,
                         },
-                        x: cursor.x,
-                        y: cursor.y,
-                        slot_width: computed_slot_width,
-                        face_height: cursor.face_h,
-                        face_ascent: cursor.face_ascent,
-                        row_height: row_metric.height,
-                        row_ascent: row_metric.ascent,
-                        default_line_height: char_h,
-                        stretch_like: cursor.stretch_like,
-                        ends_at_visible_eob: point_is_visible_eob,
-                        cursor_fg: cursor.bg,
-                    };
+                    );
                     let resolved_cursor = resolve_cursor_geometry(
                         style,
                         source,

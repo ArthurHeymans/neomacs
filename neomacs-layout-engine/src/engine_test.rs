@@ -267,6 +267,64 @@ fn captured_cursor_info_builds_from_visual_state() {
     assert!(cursor.stretch_like);
 }
 
+#[test]
+fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
+    let cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 9.0,
+            face_height: 22.0,
+            face_ascent: 17.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 21.0,
+            y: 34.0,
+            byte_idx: 5,
+            col: 3,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(18.0),
+            stretch_like: true,
+        },
+    );
+    let row_metric = RowMetricsSnapshot {
+        row: 9,
+        pixel_y: 32.0,
+        height: 25.0,
+        ascent: 19.0,
+    };
+
+    let source = CursorGeometrySource::from_captured_cursor(
+        &cursor,
+        row_metric,
+        CursorGeometryContext {
+            window_id: 7,
+            slot_width: 18.0,
+            default_line_height: 16.0,
+            ends_at_visible_eob: true,
+        },
+    );
+
+    assert_eq!(
+        source.slot_id,
+        DisplaySlotId {
+            window_id: 7,
+            row: 9,
+            col: 3,
+        }
+    );
+    assert_eq!(source.x, 21.0);
+    assert_eq!(source.y, 34.0);
+    assert_eq!(source.slot_width, 18.0);
+    assert_eq!(source.face_height, 22.0);
+    assert_eq!(source.face_ascent, 17.0);
+    assert_eq!(source.row_height, 25.0);
+    assert_eq!(source.row_ascent, 19.0);
+    assert_eq!(source.default_line_height, 16.0);
+    assert!(source.stretch_like);
+    assert!(source.ends_at_visible_eob);
+    assert_eq!(source.cursor_fg, Color::from_pixel(0x00112233));
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
