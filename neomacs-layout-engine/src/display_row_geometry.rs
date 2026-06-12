@@ -172,6 +172,15 @@ impl LegacyDisplayRowGeometryVars<'_> {
             transition,
         }
     }
+
+    pub(crate) fn finish_boundary_and_record_hit(
+        &mut self,
+        target: DisplayRowBoundaryTarget<'_>,
+        hit_rows: &mut Vec<HitRow>,
+    ) -> TextMatrixRowGeometryTransition {
+        self.finish_boundary_in_place(target)
+            .record_hit_row(hit_rows)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
