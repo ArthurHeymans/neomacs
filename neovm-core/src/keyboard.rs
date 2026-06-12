@@ -15,6 +15,7 @@ use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 use crate::emacs_core::wait::{
     ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest, WaitSpecialInputActivity,
+    WaitSpecialInputOutcome,
 };
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
@@ -1943,12 +1944,6 @@ fn input_event_is_wait_request_special(event: &InputEvent) -> bool {
     )
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct WaitRequestSpecialInputOutcome {
-    pub(crate) redisplay_needed: bool,
-    pub(crate) activity: WaitSpecialInputActivity,
-}
-
 fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
     frames: &mut crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
@@ -2988,8 +2983,8 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn service_wait_request_special_input_events(
         &mut self,
-    ) -> Result<WaitRequestSpecialInputOutcome, crate::emacs_core::error::Flow> {
-        let mut outcome = WaitRequestSpecialInputOutcome::default();
+    ) -> Result<WaitSpecialInputOutcome, crate::emacs_core::error::Flow> {
+        let mut outcome = WaitSpecialInputOutcome::default();
 
         if self.sync_pending_resize_events() {
             outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Resize);

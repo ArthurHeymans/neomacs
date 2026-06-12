@@ -333,6 +333,12 @@ pub(crate) struct WaitServiceOutcome {
     pub(crate) command_input_pending: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WaitSpecialInputOutcome {
+    pub(crate) redisplay_needed: bool,
+    pub(crate) activity: WaitSpecialInputActivity,
+}
+
 impl WaitServiceOutcome {
     pub(crate) fn record_process_activity(&mut self, target: bool) {
         self.process_activity = self.process_activity.record(target);
