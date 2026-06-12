@@ -422,3 +422,7 @@ impl DisplayRowGeometryCursor {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "display_row_geometry_test.rs"]
+mod tests;
