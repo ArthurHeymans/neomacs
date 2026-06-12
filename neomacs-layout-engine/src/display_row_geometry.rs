@@ -114,6 +114,13 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_max_ascent = state.ascent;
     }
 
+    pub(crate) fn with_state<R>(&mut self, f: impl FnOnce(&mut DisplayRowGeometryState) -> R) -> R {
+        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let result = f(&mut state);
+        self.apply(state);
+        result
+    }
+
     pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
         DisplayRowGeometryState::from_legacy(self.snapshot()).current_row_is_visible(limit)
     }
@@ -128,14 +135,6 @@ impl LegacyDisplayRowGeometryVars<'_> {
         let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
         state.include_row_extents(height, ascent);
         self.apply(state);
-    }
-
-    pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
-        DisplayRowGeometryState::from_legacy(self.snapshot()).record_current_row_y(row_y_positions);
-    }
-
-    pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
-        DisplayRowGeometryState::from_legacy(self.snapshot()).text_row_output(height)
     }
 
     pub(crate) fn finish_boundary_and_record_hit(

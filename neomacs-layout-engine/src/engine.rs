@@ -1441,7 +1441,7 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
 /// and resets `x`/`col` — matching GNU `display_line()` behaviour for overlay
 /// strings that contain newlines (e.g. fido-vertical-mode completions).
-fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
+fn render_overlay_string_with_state<B: super::neovm_bridge::LayoutBufferView>(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
@@ -1450,7 +1450,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     face_resolver: &super::neovm_bridge::FaceResolver,
     x: &mut f32,
     col: &mut usize,
-    geometry: &mut LegacyDisplayRowGeometryVars<'_>,
+    geometry: &mut DisplayRowGeometryState,
     cursor_info: &mut Option<CapturedCursorInfo>,
     hit_rows: &mut Vec<HitRow>,
     hit_row_charpos_start: &mut i64,
@@ -1506,7 +1506,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 hit_rows,
             );
             *hit_row_charpos_start = anchor_charpos;
-            if *geometry.row >= max_rows {
+            if geometry.row >= max_rows {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
                 false
@@ -1530,14 +1530,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     };
     let mut source_state = DisplayRowSourceState::default();
 
-    while *geometry.row < max_rows {
+    while geometry.row < max_rows {
         if *x >= max_x {
             break;
         }
 
         let row_spec = DisplayRowSpec {
             geometry: DisplayRowGeometry {
-                y: *geometry.y,
+                y: geometry.y,
                 width: max_x - content_x,
                 height: char_h,
                 char_width: face_char_w,
@@ -1583,8 +1583,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 text_props.as_ref(),
                 slot,
                 cursor_info,
-                *geometry.y,
-                *geometry.row,
+                geometry.y,
+                geometry.row,
                 overlay_cursor_visual_state,
             );
         }
@@ -1613,6 +1613,64 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             DisplayRowRenderStop::RowBreak => unreachable!("row break handled above"),
         }
     }
+}
+
+fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
+    evaluator: &mut Context,
+    output_emitter: &mut WindowOutputEmitter,
+    buffer: &B,
+    fragment: DisplayTextFragment,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    x: &mut f32,
+    col: &mut usize,
+    geometry: &mut LegacyDisplayRowGeometryVars<'_>,
+    cursor_info: &mut Option<CapturedCursorInfo>,
+    hit_rows: &mut Vec<HitRow>,
+    hit_row_charpos_start: &mut i64,
+    anchor_charpos: i64,
+    row_y_positions: &mut DisplayRowYPositions,
+    face_char_w: f32,
+    char_h: f32,
+    default_row_ascent: f32,
+    max_x: f32,
+    content_x: f32,
+    text_y: f32,
+    row_base: usize,
+    max_rows: usize,
+    current_face_id: &mut u32,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    params: &WindowParams,
+) {
+    geometry.with_state(|geometry| {
+        render_overlay_string_with_state(
+            evaluator,
+            output_emitter,
+            buffer,
+            fragment,
+            font_metrics,
+            face_resolver,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_charpos_start,
+            anchor_charpos,
+            row_y_positions,
+            face_char_w,
+            char_h,
+            default_row_ascent,
+            max_x,
+            content_x,
+            text_y,
+            row_base,
+            max_rows,
+            current_face_id,
+            builder,
+            params,
+        );
+    });
 }
 
 fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) -> Option<usize> {

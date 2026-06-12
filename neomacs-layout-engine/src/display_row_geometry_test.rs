@@ -284,6 +284,38 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
 }
 
 #[test]
+fn legacy_display_row_geometry_vars_can_run_owned_state_scope_and_apply_result() {
+    let mut row = 2;
+    let mut y = 42.0;
+    let mut row_extra_y = 3.0;
+    let mut row_max_height = 24.0;
+    let mut row_max_ascent = 18.0;
+
+    let result = LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .with_state(|geometry| {
+        geometry.row += 1;
+        geometry.y += 16.0;
+        geometry.row_extra_y += 5.0;
+        geometry.include_row_extents(32.0, 20.0);
+        geometry.text_row_output(16.0)
+    });
+
+    assert_eq!(row, 3);
+    assert_eq!(y, 58.0);
+    assert_eq!(row_extra_y, 8.0);
+    assert_eq!(row_max_height, 32.0);
+    assert_eq!(row_max_ascent, 20.0);
+    assert_eq!(result.row, 3);
+    assert_eq!(result.row_y, 58.0);
+}
+
+#[test]
 fn legacy_display_row_geometry_vars_include_glyph_vertical_metrics_by_name() {
     let mut row = 4;
     let mut y = 80.0;
@@ -382,44 +414,32 @@ fn legacy_display_row_geometry_vars_report_current_row_visibility_by_name() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_record_current_row_y_by_name() {
-    let mut row = 3;
-    let mut y = 69.0;
-    let mut row_extra_y = 11.0;
-    let mut row_max_height = 16.0;
-    let mut row_max_ascent = 12.0;
+fn display_row_geometry_state_records_current_row_y() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
-    LegacyDisplayRowGeometryVars {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .record_current_row_y(&mut row_y_positions);
+    geometry.record_current_row_y(&mut row_y_positions);
 
     assert_eq!(row_y_positions.recorded(), &[8.0, 69.0]);
-    assert_eq!(row, 3);
-    assert_eq!(y, 69.0);
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_build_text_row_output_by_name() {
-    let mut row = 3;
-    let mut y = 69.0;
-    let mut row_extra_y = 11.0;
-    let mut row_max_height = 16.0;
-    let mut row_max_ascent = 12.0;
+fn display_row_geometry_state_builds_text_row_output() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
 
-    let output = LegacyDisplayRowGeometryVars {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    }
-    .text_row_output(24.0);
+    let output = geometry.text_row_output(24.0);
 
     assert_eq!(
         output,
@@ -874,7 +894,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_by_mut_ref() {
         &mut hit_rows,
     );
 
-    let output = vars.text_row_output(16.0);
+    let output = DisplayRowGeometryState::from_legacy(vars.snapshot()).text_row_output(16.0);
 
     assert_eq!(hit_rows[0].y_start, 42.0);
     assert_eq!(hit_rows[0].y_end, 66.0);
