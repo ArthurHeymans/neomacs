@@ -4009,16 +4009,7 @@ impl crate::emacs_core::eval::Context {
             }
 
             self.timer_start_idle();
-            let wait_request = if let Some(deadline) = deadline {
-                if deadline <= std::time::Instant::now() {
-                    self.timer_stop_idle();
-                    return Ok(None);
-                }
-                WaitRequest::read_command_input_until(deadline)
-            } else {
-                WaitRequest::read_command_input_forever()
-            };
-            let wait_result = self.wait_reading_process_output(wait_request);
+            let wait_result = self.wait_for_command_input(deadline);
             self.timer_stop_idle();
 
             match wait_result? {

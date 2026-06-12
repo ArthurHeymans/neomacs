@@ -747,6 +747,21 @@ impl super::eval::Context {
         self.wait_reading_process_output(WaitRequest::resize_ack(deadline))
     }
 
+    pub(crate) fn wait_for_command_input(
+        &mut self,
+        deadline: Option<Instant>,
+    ) -> Result<WaitCompletion, Flow> {
+        let request = if let Some(deadline) = deadline {
+            if deadline <= Instant::now() {
+                return Ok(WaitCompletion::DeadlineElapsed);
+            }
+            WaitRequest::read_command_input_until(deadline)
+        } else {
+            WaitRequest::read_command_input_forever()
+        };
+        self.wait_reading_process_output(request)
+    }
+
     fn block_for_wait_request(
         &mut self,
         request: &WaitRequest,
