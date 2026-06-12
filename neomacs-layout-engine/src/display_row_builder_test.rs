@@ -515,20 +515,6 @@ fn display_text_run_measurement_builds_uniform_advances_for_text() {
 }
 
 #[test]
-fn display_text_run_measurer_returns_measurement_for_matching_face() {
-    let measurement =
-        DisplayTextRunMeasurement::Measured(vec![DisplayTextRunAdvance::new(0, 0, 8.0)]);
-    let mut measurer = DisplayTextRunMeasurer::new(7, measurement.clone());
-
-    assert_eq!(measurer.text_run_advances_px("x", 7, 9.0), measurement);
-    assert_eq!(
-        measurer.text_run_advances_px("x", 8, 9.0),
-        DisplayTextRunMeasurement::PerChar
-    );
-    assert_eq!(measurer.glyph_advance_px('x', 7, 1, 9.0), None);
-}
-
-#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));
@@ -763,6 +749,36 @@ fn display_row_progress_writer_uses_text_run_measurement_plan() {
             .collect::<Vec<_>>(),
         vec![4.0, 20.0, 6.0]
     );
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .map(|glyph| glyph.pixel_width)
+            .collect::<Vec<_>>(),
+        vec![4.0, 20.0, 6.0]
+    );
+}
+
+#[test]
+fn display_row_progress_writer_accepts_direct_text_run_measurement_plan() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let measurement = DisplayTextRunMeasurement::Measured(vec![
+        DisplayTextRunAdvance::new(0, 0, 4.0),
+        DisplayTextRunAdvance::new(1, 1, 20.0),
+        DisplayTextRunAdvance::new(2, 2, 6.0),
+    ]);
+    let mut writer = DisplayRowProgressWriter::with_text_run_measurement(
+        &row_layout,
+        &mut row,
+        measurement,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        80.0,
+    );
+
+    let progress = writer.push_item(text_item("abc"));
+
+    assert_eq!(progress.status, DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end, DisplayRowPosition { x_px: 30.0, col: 3 });
     assert_eq!(
         row.glyphs[GlyphArea::Text.index()]
             .iter()

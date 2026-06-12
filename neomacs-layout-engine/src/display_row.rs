@@ -7,7 +7,7 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
-    DisplayTextRunAdvance, DisplayTextRunMeasurement, DisplayTextRunMeasurer,
+    DisplayTextRunAdvance, DisplayTextRunMeasurement,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -1797,11 +1797,10 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     row_writer.push_item(item)
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
-                    let mut measurer = DisplayTextRunMeasurer::new(item_face_id, measurement);
-                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
+                    let mut row_writer = DisplayRowProgressWriter::with_text_run_measurement(
                         &row_layout,
                         &mut *row,
-                        &mut measurer,
+                        measurement,
                         position,
                         render_bounds.max_x_px,
                     );

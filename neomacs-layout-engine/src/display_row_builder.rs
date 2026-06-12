@@ -196,45 +196,6 @@ impl DisplayTextRunMeasurement {
     }
 }
 
-pub(crate) struct DisplayTextRunMeasurer {
-    face_id: u32,
-    measurement: DisplayTextRunMeasurement,
-}
-
-impl DisplayTextRunMeasurer {
-    pub(crate) fn new(face_id: u32, measurement: DisplayTextRunMeasurement) -> Self {
-        Self {
-            face_id,
-            measurement,
-        }
-    }
-}
-
-impl DisplayGlyphMeasurer for DisplayTextRunMeasurer {
-    fn glyph_advance_px(
-        &mut self,
-        _ch: char,
-        _face_id: u32,
-        _columns: u8,
-        _fallback_advance_px: f32,
-    ) -> Option<f32> {
-        None
-    }
-
-    fn text_run_advances_px(
-        &mut self,
-        _text: &str,
-        face_id: u32,
-        _fallback_char_width_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        if face_id == self.face_id {
-            self.measurement.clone()
-        } else {
-            DisplayTextRunMeasurement::PerChar
-        }
-    }
-}
-
 pub(crate) trait DisplayRowItemMeasurer {
     fn measurement_for(&mut self, item: &DisplayItem, face_id: u32) -> DisplayRowItemMeasurement;
 }
@@ -409,6 +370,7 @@ pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
     writer: DisplayRowWriter<'layout, 'row, 'measurer>,
     position: DisplayRowPosition,
     max_x_px: f32,
+    text_run_measurement: Option<DisplayTextRunMeasurement>,
 }
 
 #[cfg(test)]
@@ -570,23 +532,6 @@ impl<'a> DisplayRowBuilder<'a> {
     }
 }
 
-#[cfg(test)]
-impl<'layout, 'row> DisplayRowWriter<'layout, 'row, '_> {
-    pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
-        row.enabled = true;
-        row.role = layout.role;
-        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
-        row.pixel_y = layout.y_px;
-        row.height_px = layout.height_px.max(1.0);
-        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
-        Self {
-            layout,
-            row,
-            glyph_measurer: None,
-        }
-    }
-}
-
 impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
     #[cfg(test)]
     pub(crate) fn new(
@@ -599,6 +544,7 @@ impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
             writer: DisplayRowWriter::new(layout, row),
             position,
             max_x_px,
+            text_run_measurement: None,
         }
     }
 }
@@ -615,6 +561,22 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             writer: DisplayRowWriter::with_glyph_measurer(layout, row, glyph_measurer),
             position,
             max_x_px,
+            text_run_measurement: None,
+        }
+    }
+
+    pub(crate) fn with_text_run_measurement(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        text_run_measurement: DisplayTextRunMeasurement,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+    ) -> Self {
+        Self {
+            writer: DisplayRowWriter::new(layout, row),
+            position,
+            max_x_px,
+            text_run_measurement: Some(text_run_measurement),
         }
     }
 
@@ -637,7 +599,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
             DisplayItemKind::TextRun(run) => {
                 let face_id = self.writer.face_id(face);
-                let measurement = self.writer.text_run_measurement(run.text.as_ref(), face_id);
+                let measurement = self.text_run_measurement(run.text.as_ref(), face_id);
                 let mut charpos = source_span_start_char(&span);
                 let mut char_offset = 0usize;
                 let mut byte_offset = 0usize;
@@ -688,9 +650,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
             DisplayItemKind::SourceMappedText(text) => {
                 let face_id = self.writer.face_id(face);
-                let measurement = self
-                    .writer
-                    .text_run_measurement(text.text.as_ref(), face_id);
+                let measurement = self.text_run_measurement(text.text.as_ref(), face_id);
                 let charpos = source_span_start_char(&span);
                 let mut char_offset = 0usize;
                 let mut byte_offset = 0usize;
@@ -794,9 +754,29 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         self.position.x_px += metrics.width_px;
         self.position.col += metrics.width_cols;
     }
+
+    fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
+        self.text_run_measurement
+            .clone()
+            .unwrap_or_else(|| self.writer.text_run_measurement(text, face_id))
+    }
 }
 
 impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
+    pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
+        row.enabled = true;
+        row.role = layout.role;
+        row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
+        row.pixel_y = layout.y_px;
+        row.height_px = layout.height_px.max(1.0);
+        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        Self {
+            layout,
+            row,
+            glyph_measurer: None,
+        }
+    }
+
     pub(crate) fn with_glyph_measurer(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
