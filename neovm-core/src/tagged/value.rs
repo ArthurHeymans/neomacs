@@ -58,9 +58,11 @@ const TAG_VECLIKE: usize = 0b101;
 const TAG_FLOAT: usize = 0b111;
 
 // Fixnum uses two tags: 010 and 110. Both have (v & 3) == 2.
-const FIXNUM_CHECK_MASK: usize = 0b11;
-const FIXNUM_CHECK_VALUE: usize = 0b10;
-const FIXNUM_SHIFT: u32 = 2; // integer stored in bits 2..63
+// pub(crate) so the JIT backend (emacs_core::jit) lowers fixnum ops against the
+// same single source of truth instead of hardcoding the layout.
+pub(crate) const FIXNUM_CHECK_MASK: usize = 0b11;
+pub(crate) const FIXNUM_CHECK_VALUE: usize = 0b10;
+pub(crate) const FIXNUM_SHIFT: u32 = 2; // integer stored in bits 2..63
 
 thread_local! {
     static STATIC_SUBR_OBJECTS: RefCell<Vec<Option<TaggedValue>>> = const { RefCell::new(Vec::new()) };

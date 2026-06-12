@@ -1,27 +1,40 @@
-//! Baseline bytecode → native lowering (Phase 3b).
+//! Baseline bytecode → native lowering (Phase 3b/3c).
 //!
 //! The first *real* compilation of neovm-core bytecode to machine code. It is
-//! deliberately a tiny, always-correct vertical slice: it compiles only
+//! deliberately a small, always-correct vertical slice: it compiles only
 //! **no-argument, straight-line, leaf** functions whose body uses the pure
-//! operand-stack opcodes `{Constant, Nil, True, Pop, Dup, StackRef, Return}`,
-//! and it **bails to the interpreter** (returns [`CompileError`]) on anything
-//! else — arguments, control flow, arithmetic, variable access, calls,
-//! allocation. None of the supported ops touch the heap, allocate, call back
-//! into the runtime, or cross a GC safepoint, so this tier needs *none* of the
-//! runtime-ABI / GC-stackmap / deopt machinery yet. Those arrive in later
-//! increments, each gated the same speculative way: compile what is provably
-//! safe, fall back otherwise.
+//! operand-stack opcodes `{Constant, Nil, True, Pop, Dup, StackRef, Return}`
+//! plus the fixnum fast paths `{Add, Sub}`, and it **bails to the interpreter**
+//! (returns [`CompileError`]) on anything else — arguments, control flow, other
+//! arithmetic, variable access, calls, allocation.
+//!
+//! ## Speculation + deopt
+//!
+//! The arithmetic ops are *speculative*: native code assumes the operands are
+//! fixnums and the result stays in fixnum range — exactly the interpreter's
+//! fast path (`vm.rs` `Op::Add`). Each assumption is a **guard**; if a guard
+//! fails at run time the function **deoptimizes**: it returns a 0 flag and the
+//! caller re-runs the body on the Tier-0 interpreter, which handles the slow
+//! cases (non-numbers signal, out-of-range promotes to a bignum). Because every
+//! op in the supported subset is pure (no heap writes, no calls, no side
+//! effects), re-running from the start after a deopt is always correct.
+//!
+//! ABI: `extern "C" fn(out: *mut i64) -> i64`. Returns 1 and writes the result's
+//! raw tagged bits through `out` on success; returns 0 (deopt) otherwise,
+//! leaving `out` untouched. None of the supported ops allocate or cross a GC
+//! safepoint, so this tier still needs none of the runtime-ABI / GC-stackmap
+//! machinery — that arrives when calls and allocation are lowered.
 //!
 //! The bytecode operand stack is modelled at *compile time* as a `Vec` of
-//! Cranelift SSA values (abstract interpretation): stack-only ops (`Dup`,
-//! `StackRef`, `Pop`) just rearrange that vector and emit no code, while
-//! `Constant`/`Nil`/`True` emit an `iconst` of the value's raw tagged bits and
-//! `Return` terminates the block. A `Value` is opaque to native code here — it
-//! flows as its `usize` bit pattern (`i64` in CLIF), exactly as the interpreter
-//! stores it.
+//! Cranelift SSA values (abstract interpretation). A `Value` is opaque to native
+//! code: it flows as its `usize` bit pattern (`i64` in CLIF), exactly as the
+//! interpreter stores it.
 
 use cranelift_codegen::ir::Value as ClifValue;
-use cranelift_codegen::ir::{AbiParam, Function, InstBuilder, Signature, UserFuncName, types};
+use cranelift_codegen::ir::condcodes::IntCC;
+use cranelift_codegen::ir::{
+    AbiParam, Block, Function, InstBuilder, MemFlags, Signature, UserFuncName, types,
+};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
@@ -30,11 +43,11 @@ use super::backend::BackendError;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::value::Value;
+use crate::tagged::value::{FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT};
 
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
-/// Every variant means "stay on the Tier-0 interpreter"; none is fatal. Matched
-/// exhaustively, with no catch-all, per the JIT subsystem's completeness rule.
+/// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
 #[derive(Debug)]
 pub enum CompileError {
     /// The function takes arguments; only nullary functions are handled yet.
@@ -66,15 +79,14 @@ impl core::fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
-/// A compiled nullary leaf function: native code returning the raw tagged bits
-/// of the resulting [`Value`].
+/// A compiled nullary leaf function.
 ///
 /// Owns its [`JITModule`], which keeps the executable memory mapped for the
 /// lifetime of this handle. The raw entry pointer makes this neither `Send` nor
 /// `Sync`, which is correct — the code is tied to its owning module.
 pub struct CompiledLeaf {
-    // Field order matters for drop: `entry` is just a pointer into `_module`'s
-    // memory; keep `_module` alive as long as the handle exists.
+    // Field order matters for drop: `entry` points into `_module`'s memory; keep
+    // `_module` alive as long as the handle exists.
     entry: *const u8,
     _module: JITModule,
 }
@@ -89,18 +101,23 @@ impl core::fmt::Debug for CompiledLeaf {
 }
 
 impl CompiledLeaf {
-    /// Execute the compiled function and return the result's raw tagged bits.
+    /// Execute the compiled function.
     ///
-    /// Reconstruct a [`Value`] from the result with `Value::from_bits`-equivalent
-    /// logic at the call site (the interpreter compares via [`Value::bits`]).
-    pub fn call(&self) -> usize {
-        // SAFETY: `entry` points at finalized native code with ABI
-        // `extern "C" fn() -> i64` (a nullary signature returning one i64, built
-        // below). `_module` owns and keeps that code mapped for `&self`.
-        unsafe {
-            let f: extern "C" fn() -> i64 = core::mem::transmute(self.entry);
-            f() as usize
-        }
+    /// Returns `Some(bits)` with the result's raw tagged [`Value`] bits on
+    /// success, or `None` if the native code **deoptimized** (a speculation
+    /// guard failed) and the caller must fall back to the interpreter.
+    pub fn call(&self) -> Option<usize> {
+        let mut out: i64 = 0;
+        // SAFETY: `entry` is finalized native code with ABI
+        // `extern "C" fn(*mut i64) -> i64` (built in `lower_nullary_leaf`): it
+        // writes the result bits through the out-pointer and returns 1 on
+        // success, or returns 0 without touching `out` on deopt. `_module` keeps
+        // the code mapped for `&self`, and the `out` local outlives the call.
+        let ok = unsafe {
+            let f: extern "C" fn(*mut i64) -> i64 = core::mem::transmute(self.entry);
+            f(&mut out as *mut i64)
+        };
+        (ok != 0).then_some(out as usize)
     }
 }
 
@@ -136,17 +153,94 @@ pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, C
     lower_nullary_leaf(&f.ops, &f.constants)
 }
 
+/// Emit a speculation guard.
+///
+/// If `cond` (an `i8` boolean from `icmp`) is false, branch to the shared deopt
+/// block — created lazily on first use; otherwise fall through into a fresh,
+/// sealed continuation block. On return, the builder is positioned in the
+/// continuation so lowering continues on the success path.
+fn emit_guard(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, cond: ClifValue) {
+    let db = match *deopt {
+        Some(b) => b,
+        None => {
+            let b = fb.create_block();
+            *deopt = Some(b);
+            b
+        }
+    };
+    let cont = fb.create_block();
+    fb.ins().brif(cond, cont, &[], db, &[]);
+    fb.switch_to_block(cont);
+    // `cont`'s only predecessor is the guard branch just emitted.
+    fb.seal_block(cont);
+}
+
+/// Lower a fixnum-fast-path binary op (`Add`/`Sub`) with the exact parity the
+/// interpreter uses (`vm.rs` `Op::Add`): require both operands be fixnums and
+/// the result be in fixnum range, else deopt. Returns the tagged-fixnum result.
+fn lower_fixnum_binop(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    is_sub: bool,
+    a: ClifValue,
+    b: ClifValue,
+) -> ClifValue {
+    // Guard: both operands are fixnums  ((v & 0b11) == 0b10).
+    let a_tag = fb.ins().band_imm(a, FIXNUM_CHECK_MASK as i64);
+    let a_fix = fb
+        .ins()
+        .icmp_imm(IntCC::Equal, a_tag, FIXNUM_CHECK_VALUE as i64);
+    let b_tag = fb.ins().band_imm(b, FIXNUM_CHECK_MASK as i64);
+    let b_fix = fb
+        .ins()
+        .icmp_imm(IntCC::Equal, b_tag, FIXNUM_CHECK_VALUE as i64);
+    let both = fb.ins().band(a_fix, b_fix);
+    emit_guard(fb, deopt, both);
+
+    // Untag (arithmetic shift right by 2 == GNU XFIXNUM), compute, range-check.
+    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+    // Operands are <= 61-bit, so the i64 result cannot overflow; a fixnum-range
+    // check is sufficient and matches the interpreter exactly.
+    let res = if is_sub {
+        fb.ins().isub(av, bv)
+    } else {
+        fb.ins().iadd(av, bv)
+    };
+
+    // Guard: MOST_NEGATIVE_FIXNUM <= res <= MOST_POSITIVE_FIXNUM.
+    let ge_lo = fb.ins().icmp_imm(
+        IntCC::SignedGreaterThanOrEqual,
+        res,
+        Value::MOST_NEGATIVE_FIXNUM,
+    );
+    let le_hi = fb.ins().icmp_imm(
+        IntCC::SignedLessThanOrEqual,
+        res,
+        Value::MOST_POSITIVE_FIXNUM,
+    );
+    let in_range = fb.ins().band(ge_lo, le_hi);
+    emit_guard(fb, deopt, in_range);
+
+    // Retag: (res << 2) | 2.
+    let shifted = fb.ins().ishl_imm(res, FIXNUM_SHIFT as i64);
+    fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64)
+}
+
 /// Lower a straight-line, no-argument, leaf bytecode body to native code.
 ///
-/// `ops` must end in `Return` and use only the supported pure-stack opcodes.
+/// `ops` must end in `Return` and use only the supported subset.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
     let builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
+    let ptr_ty = module.target_config().pointer_type();
 
-    // Native signature: () -> i64 (the result's raw tagged bits).
+    // ABI: fn(out: *mut i64) -> i64.  Returns 1 + writes result bits via `out`
+    // on success; returns 0 (deopt) otherwise.
     let mut sig = Signature::new(call_conv);
+    sig.params.push(AbiParam::new(ptr_ty));
     sig.returns.push(AbiParam::new(types::I64));
 
     let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
@@ -154,10 +248,14 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
     let mut returned = false;
     {
         let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
-        let block = fb.create_block();
-        fb.switch_to_block(block);
-        fb.seal_block(block);
+        let entry = fb.create_block();
+        fb.append_block_params_for_function_params(entry);
+        fb.switch_to_block(entry);
+        fb.seal_block(entry);
+        let out_ptr = fb.block_params(entry)[0];
 
+        // The shared deopt landing block, created lazily on the first guard.
+        let mut deopt: Option<Block> = None;
         // Compile-time model of the bytecode operand stack.
         let mut stack: Vec<ClifValue> = Vec::with_capacity(8);
 
@@ -191,12 +289,20 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
                         .ok_or(CompileError::StackUnderflow)?;
                     stack.push(stack[idx]);
                 }
+                Op::Add | Op::Sub => {
+                    let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let is_sub = matches!(op, Op::Sub);
+                    let tagged = lower_fixnum_binop(&mut fb, &mut deopt, is_sub, a, b);
+                    stack.push(tagged);
+                }
                 Op::Return => {
                     let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    fb.ins().return_(&[result]);
+                    fb.ins().store(MemFlags::trusted(), result, out_ptr, 0);
+                    let one = fb.ins().iconst(types::I64, 1);
+                    fb.ins().return_(&[one]);
                     returned = true;
-                    // Anything after Return is unreachable dead code; stop here so
-                    // we keep a single, well-terminated block.
+                    // Anything after Return is unreachable dead code; stop here.
                     break;
                 }
                 other => return Err(CompileError::UnsupportedOp(op_category(other))),
@@ -206,6 +312,14 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
         if !returned {
             // Abandon the half-built function; nothing was finalized.
             return Err(CompileError::NoReturn);
+        }
+
+        // Terminate the shared deopt block (return 0) iff any guard used it.
+        if let Some(db) = deopt {
+            fb.switch_to_block(db);
+            fb.seal_block(db);
+            let zero = fb.ins().iconst(types::I64, 0);
+            fb.ins().return_(&[zero]);
         }
 
         fb.finalize();
@@ -250,11 +364,7 @@ mod tests {
         // (lambda () 42)  ==  [Constant(0), Return], constants = [42]
         let c = Value::make_int(42);
         let leaf = lower_nullary_leaf(&[Op::Constant(0), Op::Return], &[c]).unwrap();
-        assert_eq!(
-            leaf.call(),
-            c.bits(),
-            "native result must equal the constant"
-        );
+        assert_eq!(leaf.call(), Some(c.bits()));
     }
 
     #[test]
@@ -263,13 +373,13 @@ mod tests {
             lower_nullary_leaf(&[Op::Nil, Op::Return], &[])
                 .unwrap()
                 .call(),
-            Value::NIL.bits()
+            Some(Value::NIL.bits())
         );
         assert_eq!(
             lower_nullary_leaf(&[Op::True, Op::Return], &[])
                 .unwrap()
                 .call(),
-            Value::T.bits()
+            Some(Value::T.bits())
         );
     }
 
@@ -289,7 +399,7 @@ mod tests {
             &[a, b],
         )
         .unwrap();
-        assert_eq!(leaf.call(), b.bits());
+        assert_eq!(leaf.call(), Some(b.bits()));
     }
 
     #[test]
@@ -307,14 +417,80 @@ mod tests {
             &[a, b],
         )
         .unwrap();
-        assert_eq!(leaf.call(), a.bits());
+        assert_eq!(leaf.call(), Some(a.bits()));
     }
 
     #[test]
-    fn bails_on_arithmetic() {
-        // Add is out of the supported subset -> must refuse, not miscompile.
+    fn compiles_fixnum_add() {
+        // (+ 40 2) -> 42, all fixnums in range
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Add, Op::Return],
+            &[Value::make_int(40), Value::make_int(2)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(), Some(Value::make_int(42).bits()));
+    }
+
+    #[test]
+    fn compiles_fixnum_sub_including_negative() {
+        // (- 3 10) -> -7
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Sub, Op::Return],
+            &[Value::make_int(3), Value::make_int(10)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(), Some(Value::make_int(-7).bits()));
+    }
+
+    #[test]
+    fn add_overflowing_fixnum_range_deopts() {
+        // MOST_POSITIVE_FIXNUM + 1 leaves fixnum range -> deopt (None), so the
+        // interpreter can promote to a bignum.
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Add, Op::Return],
+            &[
+                Value::make_int(Value::MOST_POSITIVE_FIXNUM),
+                Value::make_int(1),
+            ],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(), None);
+    }
+
+    #[test]
+    fn add_non_fixnum_operand_deopts() {
+        // a = fixnum 5, b = nil -> not both fixnums -> deopt.
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Nil, Op::Add, Op::Return],
+            &[Value::make_int(5)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(), None);
+    }
+
+    #[test]
+    fn add_then_sub_chain() {
+        // ((1 + 2) - 4) = -1
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Add,
+                Op::Constant(2),
+                Op::Sub,
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2), Value::make_int(4)],
+        )
+        .unwrap();
+        assert_eq!(leaf.call(), Some(Value::make_int(-1).bits()));
+    }
+
+    #[test]
+    fn bails_on_unsupported_arithmetic() {
+        // Mul is not in the supported subset -> refuse, do not miscompile.
         let err = lower_nullary_leaf(
-            &[Op::Constant(0), Op::Constant(0), Op::Add, Op::Return],
+            &[Op::Constant(0), Op::Constant(0), Op::Mul, Op::Return],
             &[Value::make_int(1)],
         )
         .unwrap_err();
@@ -349,6 +525,6 @@ mod tests {
         f.constants = vec![c];
         f.ops = vec![Op::Constant(0), Op::Return];
         let leaf = compile_bytecode_function(&f).unwrap();
-        assert_eq!(leaf.call(), c.bits());
+        assert_eq!(leaf.call(), Some(c.bits()));
     }
 }
