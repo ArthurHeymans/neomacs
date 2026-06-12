@@ -2,13 +2,14 @@
 //!
 //! Real compilation of neovm-core bytecode to machine code, grown as a series of
 //! always-correct vertical slices. It compiles **leaf** functions with 0+
-//! required (stack) arguments and arbitrary intra-function control flow, whose
-//! body uses the operand-stack opcodes `{Constant, Nil, True, Pop, Dup, StackRef,
-//! Return}`, branches `{Goto, GotoIfNil, GotoIfNotNil, GotoIf*ElsePop}`, the
-//! fixnum arithmetic `{Add, Sub, 1+, 1-, unary -}`, and the fixnum comparisons
-//! `{=, <, >, <=, >=}`. It **bails to the interpreter** (returns [`CompileError`])
-//! on anything else — `&optional`/`&rest` params, dynamic binding, variables,
-//! calls, allocation, `switch`, and non-fixnum / non-supported arithmetic.
+//! required (stack) arguments and arbitrary intra-function control flow: the
+//! operand-stack ops, branches `{Goto, GotoIf*}`, fixnum arithmetic
+//! `{+, -, *, 1+, 1-, neg}` and comparisons `{=, <, >, <=, >=}`, the
+//! non-allocating type predicates `{null, not, consp, stringp, listp}`,
+//! `car`/`cdr`, and the allocating `cons`. It **bails to the interpreter**
+//! (returns [`CompileError`]) on anything else — `&optional`/`&rest`/dynamic
+//! params, dynamic-binding bytecode, variables, function `Call`/`Apply`,
+//! `switch`, `eq`/`symbolp`, `Div`/`Rem`, and non-fixnum arithmetic.
 //!
 //! Control flow builds a CLIF basic-block CFG (`analyze_cfg` + `lower_leaf`); the
 //! operand stack flows across edges through per-slot SSA variables, so Cranelift
@@ -28,9 +29,14 @@
 //! ABI: `extern "C" fn(args: *const i64, out: *mut i64) -> i64`. Reads the
 //! function's fixed arguments from `args` (seeding the operand stack), returns 1
 //! and writes the result's raw tagged bits through `out` on success; returns 0
-//! (deopt) otherwise, leaving `out` untouched. None of the supported ops allocate
-//! or cross a GC safepoint, so this tier still needs none of the runtime-ABI /
-//! GC-stackmap machinery — that arrives when calls and allocation are lowered.
+//! (deopt) otherwise, leaving `out` untouched.
+//!
+//! Allocation (`cons`) calls a C-ABI runtime shim. Because that may trigger GC,
+//! live `Value`s held across it are kept alive by pushing them onto the
+//! GC-traced scratch-root stack (see the `neovm_jit_*` shims); the GC is
+//! non-moving, so the JIT's SSA registers stay valid afterward without a reload.
+//! No vmctx is needed yet (`cons` uses the thread-local heap directly); that
+//! arrives with `Call`/`Apply`.
 //!
 //! The bytecode operand stack is modelled at *compile time* as a `Vec` of
 //! Cranelift SSA values (abstract interpretation). A `Value` is opaque to native
@@ -40,7 +46,7 @@
 use cranelift_codegen::ir::Value as ClifValue;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    AbiParam, Block, Function, InstBuilder, MemFlags, Signature, UserFuncName, types,
+    AbiParam, Block, FuncRef, Function, InstBuilder, MemFlags, Signature, UserFuncName, types,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
@@ -51,11 +57,50 @@ use std::collections::{BTreeSet, HashMap};
 use super::backend::BackendError;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
+use crate::emacs_core::eval::{
+    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+};
 use crate::emacs_core::value::Value;
 use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
     FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING,
 };
+
+// ---------------------------------------------------------------------------
+// Runtime shims — C-ABI functions the JIT calls for operations that allocate
+// (and so may trigger GC). Live `Value`s held across such a call are kept alive
+// by pushing them onto the GC-traced scratch-root stack; the GC is non-moving,
+// so the JIT's SSA registers stay valid afterward (no reload). These are the
+// foundation the eventual `Call`/`Apply` reuse.
+// ---------------------------------------------------------------------------
+
+/// Snapshot the scratch-root depth so it can be restored after a rooted region.
+extern "C" fn neovm_jit_gc_save() -> i64 {
+    save_scratch_gc_roots() as i64
+}
+
+/// Root one live `Value` (by its raw bits) across an upcoming allocation.
+extern "C" fn neovm_jit_gc_push(bits: i64) {
+    push_scratch_gc_root(Value::from_bits(bits as usize));
+}
+
+/// Pop the scratch roots back to a saved depth.
+extern "C" fn neovm_jit_gc_restore(saved: i64) {
+    restore_scratch_gc_roots(saved as usize);
+}
+
+/// Allocate `(cons car cdr)`. Roots car+cdr across the allocation itself; the
+/// caller roots any *other* live values first.
+extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
+    let car = Value::from_bits(car as usize);
+    let cdr = Value::from_bits(cdr as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(car);
+    push_scratch_gc_root(cdr);
+    let result = Value::cons(car, cdr).bits() as i64;
+    restore_scratch_gc_roots(saved);
+    result
+}
 
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
@@ -465,6 +510,52 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
     lower_leaf(ops, constants, 0)
 }
 
+/// References to the JIT-callable runtime shims, declared into the function being
+/// built. Present only when the body needs allocation (currently: `Cons`).
+struct RtCtx {
+    gc_save: FuncRef,
+    gc_push: FuncRef,
+    gc_restore: FuncRef,
+    cons: FuncRef,
+}
+
+/// Declare the runtime-shim imports into `module`/`func` and return the callable
+/// refs. The matching addresses are registered on the `JITBuilder` in
+/// [`lower_leaf`] via `builder.symbol(...)`.
+fn declare_rt(
+    module: &mut JITModule,
+    func: &mut Function,
+    call_conv: cranelift_codegen::isa::CallConv,
+) -> Result<RtCtx, CompileError> {
+    let i64t = types::I64;
+    let mut sig_ret = Signature::new(call_conv); // () -> i64
+    sig_ret.returns.push(AbiParam::new(i64t));
+    let mut sig_arg = Signature::new(call_conv); // (i64) -> ()
+    sig_arg.params.push(AbiParam::new(i64t));
+    let mut sig_cons = Signature::new(call_conv); // (i64, i64) -> i64
+    sig_cons.params.push(AbiParam::new(i64t));
+    sig_cons.params.push(AbiParam::new(i64t));
+    sig_cons.returns.push(AbiParam::new(i64t));
+
+    let declare = |module: &mut JITModule, name: &str, sig: &Signature| {
+        module
+            .declare_function(name, Linkage::Import, sig)
+            .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))
+    };
+
+    let save_id = declare(module, "neovm_jit_gc_save", &sig_ret)?;
+    let push_id = declare(module, "neovm_jit_gc_push", &sig_arg)?;
+    let restore_id = declare(module, "neovm_jit_gc_restore", &sig_arg)?;
+    let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
+
+    Ok(RtCtx {
+        gc_save: module.declare_func_in_func(save_id, func),
+        gc_push: module.declare_func_in_func(push_id, func),
+        gc_restore: module.declare_func_in_func(restore_id, func),
+        cons: module.declare_func_in_func(cons_id, func),
+    })
+}
+
 /// Lower one non-control-flow opcode, updating the compile-time operand `stack`
 /// (the live CLIF SSA values within the current basic block). Terminators
 /// (`Return`/`Goto`/`GotoIf*`) are handled by the block lowerer before this.
@@ -473,6 +564,7 @@ fn lower_simple_op(
     deopt: &mut Option<Block>,
     constants: &[Value],
     stack: &mut Vec<ClifValue>,
+    rt: Option<&RtCtx>,
     op: &Op,
 ) -> Result<(), CompileError> {
     match op {
@@ -578,6 +670,32 @@ fn lower_simple_op(
             let is_cdr = matches!(op, Op::Cdr);
             stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
         }
+        Op::Cons => {
+            // `rt` is always present here: analyze_cfg accepts Cons only when the
+            // function declares the shims (see `needs_rt` in lower_leaf).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("cons"))?;
+            let cdr = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let car = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            // The cons shim roots car+cdr across the allocation; we must root any
+            // *other* live operand-stack values too (none in the common case).
+            let result = if stack.is_empty() {
+                let call = fb.ins().call(rt.cons, &[car, cdr]);
+                fb.inst_results(call)[0]
+            } else {
+                let saved = {
+                    let c = fb.ins().call(rt.gc_save, &[]);
+                    fb.inst_results(c)[0]
+                };
+                for &v in stack.iter() {
+                    fb.ins().call(rt.gc_push, &[v]);
+                }
+                let call = fb.ins().call(rt.cons, &[car, cdr]);
+                let r = fb.inst_results(call)[0];
+                fb.ins().call(rt.gc_restore, &[saved]);
+                r
+            };
+            stack.push(result);
+        }
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     }
     Ok(())
@@ -607,6 +725,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => (1, 0),
         Op::Car | Op::Cdr => (1, 0),
+        Op::Cons => (2, -1),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -785,11 +904,16 @@ pub fn lower_leaf(
     let cfg = analyze_cfg(ops, arity)?;
     let n = ops.len();
 
-    let builder = JITBuilder::new(default_libcall_names())
+    let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
+    builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
+    builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
+    builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
+    builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
+    let needs_rt = ops.iter().any(|o| matches!(o, Op::Cons));
 
     // ABI: fn(args: *const i64, out: *mut i64) -> i64. Reads `arity` argument
     // words from `args`; returns 1 + writes result bits via `out` on success, or
@@ -803,6 +927,14 @@ pub fn lower_leaf(
     let mut fbctx = FunctionBuilderContext::new();
     {
         let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
+
+        // Declare runtime-allocation shims into this function if the body needs
+        // them (e.g. contains `Cons`).
+        let rt = if needs_rt {
+            Some(declare_rt(&mut module, fb.func, call_conv)?)
+        } else {
+            None
+        };
 
         // SSA variables: one I64 slot per operand-stack position (carries the
         // stack across block edges), plus one for the out pointer (used by
@@ -903,7 +1035,14 @@ pub fn lower_leaf(
                         terminated = true;
                         break;
                     }
-                    other => lower_simple_op(&mut fb, &mut deopt, constants, &mut stack, other)?,
+                    other => lower_simple_op(
+                        &mut fb,
+                        &mut deopt,
+                        constants,
+                        &mut stack,
+                        rt.as_ref(),
+                        other,
+                    )?,
                 }
             }
             if !terminated {
@@ -1532,14 +1671,10 @@ mod tests {
         let cdr_ops = [Op::Constant(0), Op::Cdr, Op::Return];
 
         // car/cdr of a cons load the fields; differential vs the interpreter.
-        assert_eq!(
-            lower_nullary_leaf(&car_ops, &[cons]).unwrap().call(&[]),
-            Some(interp_nullary(&car_ops, &[cons]).bits())
-        );
-        assert_eq!(
-            lower_nullary_leaf(&cdr_ops, &[cons]).unwrap().call(&[]),
-            Some(interp_nullary(&cdr_ops, &[cons]).bits())
-        );
+        // Direct value assertions, not an interp differential: interp_nullary
+        // builds a Context whose heap is installed as the thread-local TAGGED_HEAP
+        // and left dangling on drop, which would crash the later cons allocation.
+        // car/cdr correctness is fully pinned by the expected values here.
         assert_eq!(
             lower_nullary_leaf(&car_ops, &[cons]).unwrap().call(&[]),
             Some(Value::make_int(11).bits())
@@ -1579,6 +1714,45 @@ mod tests {
         let cadr =
             lower_nullary_leaf(&[Op::Constant(0), Op::Cdr, Op::Car, Op::Return], &[list]).unwrap();
         assert_eq!(cadr.call(&[]), Some(Value::make_int(22).bits()));
+    }
+
+    #[test]
+    fn compiles_cons() {
+        // (cons 1 2): allocates a cons cell. No GC between the call and the deref
+        // (nothing allocates), so the fresh cons stays valid.
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Cons, Op::Return],
+            &[Value::make_int(1), Value::make_int(2)],
+        )
+        .unwrap();
+        let cell = Value::from_bits(leaf.call(&[]).expect("cons runs"));
+        assert!(cell.is_cons());
+        assert_eq!(cell.cons_car(), Value::make_int(1));
+        assert_eq!(cell.cons_cdr(), Value::make_int(2));
+    }
+
+    #[test]
+    fn compiles_nested_cons_list() {
+        // (cons 7 (cons 8 nil)) = (7 8). The inner cons leaves 7 live below it on
+        // the operand stack, exercising the gc_push rooting path.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Nil,
+                Op::Cons,
+                Op::Cons,
+                Op::Return,
+            ],
+            &[Value::make_int(7), Value::make_int(8)],
+        )
+        .unwrap();
+        let result = Value::from_bits(leaf.call(&[]).expect("nested cons runs"));
+        assert_eq!(result.cons_car(), Value::make_int(7));
+        let tail = result.cons_cdr();
+        assert!(tail.is_cons());
+        assert_eq!(tail.cons_car(), Value::make_int(8));
+        assert!(tail.cons_cdr().is_nil());
     }
 
     #[test]

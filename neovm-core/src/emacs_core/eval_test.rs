@@ -11923,6 +11923,42 @@ fn jit_tierup_executes_through_funcall_seam() {
     );
 }
 
+/// End-to-end: a hot function that allocates (`cons`) runs as native code
+/// through the funcall seam against a real `Context` heap, exercising the JIT's
+/// runtime-shim call + GC rooting on the live dispatch path.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cons_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // (lambda (a b) (cons a b)):
+    //  0 StackRef(1)=a; 1 StackRef(1)=b; 2 Cons; 3 Return
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![
+            crate::emacs_core::intern::SymId(1),
+            crate::emacs_core::intern::SymId(2),
+        ],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Return];
+    f.max_stack = 16;
+    f.runtime.set_hot_for_test();
+    let fv = Value::make_bytecode(f);
+
+    let r = ev
+        .funcall_general_untraced(fv, vec![Value::make_int(1), Value::make_int(2)])
+        .expect("native cons runs");
+    assert!(r.is_cons());
+    assert_eq!(r.cons_car(), Value::make_int(1));
+    assert_eq!(r.cons_cdr(), Value::make_int(2));
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();
