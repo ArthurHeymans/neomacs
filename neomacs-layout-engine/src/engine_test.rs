@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_item::RenderFaceRef;
-use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurementFace, DisplayRowGlyphMeasurer};
+use crate::display_row::{DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy};
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -1477,7 +1477,7 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
     let mut default_face = resolver.default_face().clone();
     default_face.font_char_width = 8.0;
     let measurement_face =
-        DisplayRowGlyphMeasurementFace::from_resolved(7, &default_face, None, false, 8.0);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(7, &default_face, None, 8.0);
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
     let mut measurer = ReplacementStringItemMeasurer {
         font_metrics_svc: &mut font_metrics,
@@ -6460,8 +6460,9 @@ fn display_row_measurement_face_distinguishes_semantic_font_identity() {
         font_weight: 700,
         ..regular.clone()
     };
-    let regular_face = DisplayRowGlyphMeasurementFace::from_resolved(42, &regular, None, true, 8.0);
-    let bold_face = DisplayRowGlyphMeasurementFace::from_resolved(43, &bold, None, true, 8.0);
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let regular_face = measurement_policy.measurement_face(42, &regular, None, 8.0);
+    let bold_face = measurement_policy.measurement_face(43, &bold, None, 8.0);
 
     let regular_width = regular_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
     let bold_width = bold_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
@@ -6490,7 +6491,7 @@ fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font
         ..Default::default()
     };
     let current_face =
-        DisplayRowGlyphMeasurementFace::from_resolved(42, &resolved, None, true, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(42, &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.advance_for_char(&mut font_metrics_svc, 'x', 7.2);
@@ -6525,13 +6526,8 @@ fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
         font_char_width: 7.2,
         ..Default::default()
     };
-    let face = DisplayRowFace::from_resolved(42, &resolved);
-    let current_face = DisplayRowGlyphMeasurementFace::new(
-        face,
-        false,
-        7.2,
-        GlyphAdvanceQuantization::SnapToIntegerPixels,
-    );
+    let current_face =
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(42, &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.glyph_advance_px(&mut font_metrics_svc, 'x', 1, 7.2);

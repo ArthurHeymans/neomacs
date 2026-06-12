@@ -1434,9 +1434,9 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
     let mut base = base_face();
     base.font_char_width = 7.2;
     let face = DisplayRowFace::from_resolved(8, &base);
-    let measurement_face = DisplayRowGlyphMeasurementFace::new(
+    let measurement_face = DisplayRowGlyphMeasurementFace::with_mode(
         face,
-        false,
+        DisplayRowMeasurementMode::FallbackMetrics,
         7.2,
         GlyphAdvanceQuantization::SnapToIntegerPixels,
     );
@@ -1457,7 +1457,7 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
     let mut base = base_face();
     base.font_char_width = 7.2;
     let measurement_face =
-        DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, false, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
     let mut font_metrics = None;
 
     assert_eq!(
@@ -1487,7 +1487,8 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.font_char_width = 8.0;
-    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 8.0);
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
@@ -1580,7 +1581,8 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.font_char_width = 8.0;
-    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 8.0);
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
@@ -1604,7 +1606,7 @@ fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan(
     let mut base = base_face();
     base.font_char_width = 7.2;
     let measurement_face =
-        DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, false, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
     let mut font_metrics = None;
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "a中");
@@ -1627,7 +1629,8 @@ fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan(
 fn display_row_glyph_measurement_face_builds_resolved_fragment_measurement_plan() {
     let mut base = base_face();
     base.font_char_width = 7.2;
-    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, true, 7.2);
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
 
     let measurement = measurement_face.resolved_fragment_measurement("\u{301}", 0.0);
 

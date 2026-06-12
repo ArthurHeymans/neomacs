@@ -451,15 +451,6 @@ impl DisplayRowMeasurementMode {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_font_metrics_enabled(enabled: bool) -> Self {
-        if enabled {
-            Self::FontMetrics
-        } else {
-            Self::FallbackMetrics
-        }
-    }
-
     fn uses_font_metrics(self) -> bool {
         matches!(self, Self::FontMetrics)
     }
@@ -509,21 +500,6 @@ pub(crate) struct DisplayRowGlyphMeasurementFace {
 }
 
 impl DisplayRowGlyphMeasurementFace {
-    #[cfg(test)]
-    pub(crate) fn new(
-        face: DisplayRowFace,
-        use_font_metrics: bool,
-        fallback_char_width: f32,
-        quantization: GlyphAdvanceQuantization,
-    ) -> Self {
-        Self::with_mode(
-            face,
-            DisplayRowMeasurementMode::from_font_metrics_enabled(use_font_metrics),
-            fallback_char_width,
-            quantization,
-        )
-    }
-
     pub(crate) fn with_mode(
         face: DisplayRowFace,
         mode: DisplayRowMeasurementMode,
@@ -536,20 +512,6 @@ impl DisplayRowGlyphMeasurementFace {
             fallback_char_width,
             quantization,
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn from_resolved(
-        face_id: u32,
-        face: &ResolvedFace,
-        metrics: Option<FontMetrics>,
-        use_font_metrics: bool,
-        fallback_char_width: f32,
-    ) -> Self {
-        DisplayRowMeasurementPolicy {
-            mode: DisplayRowMeasurementMode::from_font_metrics_enabled(use_font_metrics),
-        }
-        .measurement_face(face_id, face, metrics, fallback_char_width)
     }
 
     pub(crate) fn glyph_advance_px(
