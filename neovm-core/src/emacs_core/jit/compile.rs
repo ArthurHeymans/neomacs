@@ -322,6 +322,50 @@ extern "C" fn neovm_jit_varset(ctx: *mut u8, sym: i64, val: i64) -> i64 {
     status
 }
 
+std::thread_local! {
+    /// Per-thread analogue of the interpreter's per-frame `bind_stack`: the
+    /// specpdl depth recorded before each JIT-made `varbind`, consumed by the
+    /// `unbind` shim. [`CompiledLeaf::call`] truncates a frame's segment on
+    /// every exit (the `cleanup_bytecode_frame` parity unwind).
+    static JIT_BIND_STACK: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Dynamically bind a variable (`Op::VarBind` semantics: GNU `Bvarbind`,
+/// `specbind(sym, POP)` — infallible, like the interpreter arm). Records the
+/// pre-bind specpdl depth for the matching `unbind`.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) {
+    use crate::emacs_core::intern::SymId;
+    let value = Value::from_bits(val as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+    ctx.specbind(SymId(sym as u32), value);
+}
+
+/// Unbind the `n` most recent JIT-made dynamic bindings (`Op::Unbind`
+/// semantics). The static bind-depth analysis guarantees `n` never exceeds this
+/// frame's outstanding binds; the `min` is defensive only.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let target = JIT_BIND_STACK.with(|s| {
+        let mut s = s.borrow_mut();
+        let take = (n as usize).min(s.len());
+        if take == 0 {
+            return None;
+        }
+        let target = s[s.len() - take];
+        let new_len = s.len() - take;
+        s.truncate(new_len);
+        Some(target)
+    });
+    if let Some(target) = target {
+        ctx.unbind_to(target);
+    }
+}
+
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
 /// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
@@ -373,6 +417,11 @@ pub struct CompiledLeaf {
     required: usize,
     /// Whether the last native slot is a `&rest` list.
     has_rest: bool,
+    /// Whether the body makes dynamic bindings (`varbind`/`unbind`). When set,
+    /// [`call`](Self::call) restores the entry specpdl depth on every exit —
+    /// the `cleanup_bytecode_frame` parity unwind — and requires a non-null
+    /// vmctx.
+    has_binds: bool,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -459,11 +508,32 @@ impl CompiledLeaf {
         // code mapped for `&self`; `arg_bits` and `out` outlive the call; for
         // arity 0 `args` is never read; `vmctx` is only dereferenced inside the
         // call shim under its own documented contract.
+        // Frame-unwind bookkeeping for dynamic bindings: record the entry
+        // specpdl depth and this frame's bind-stack segment base, and restore
+        // both on every exit — exactly cleanup_bytecode_frame's unconditional
+        // unbind_to(specpdl_base). On a deopt this is a no-op by construction
+        // (varbind poisons, so no binding can precede a deopt).
+        let bind_frame = if self.has_binds {
+            debug_assert!(!vmctx.is_null(), "binding bodies require a Context");
+            // SAFETY: the vmctx contract (dormant seam-provided Context); only
+            // a length read here.
+            let spec_base = unsafe { (*(vmctx as *const Context)).specpdl.len() };
+            let stack_base = JIT_BIND_STACK.with(|s| s.borrow().len());
+            Some((spec_base, stack_base))
+        } else {
+            None
+        };
         let status = unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64) -> i64 =
                 core::mem::transmute(self.entry);
             f(vmctx, arg_bits.as_ptr(), &mut out as *mut i64)
         };
+        if let Some((spec_base, stack_base)) = bind_frame {
+            JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(stack_base));
+            // SAFETY: the native call has returned; the seam's &mut Context is
+            // still dormant (we are inside its dynamic extent).
+            unsafe { (*(vmctx as *mut Context)).unbind_to(spec_base) };
+        }
         match status {
             STATUS_OK => NativeRun::Ok(out as usize),
             STATUS_SIGNAL => NativeRun::Signal,
@@ -875,6 +945,8 @@ struct RtRefs {
     symbolp_slow: FuncRef,
     varref: FuncRef,
     varset: FuncRef,
+    varbind: FuncRef,
+    unbind: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -943,6 +1015,17 @@ fn declare_rt_refs(
     sig_varset.returns.push(AbiParam::new(i64t));
     let varref_id = declare(module, "neovm_jit_varref", &sig_varref)?;
     let varset_id = declare(module, "neovm_jit_varset", &sig_varset)?;
+    // (vmctx, sym_id, val) -> ()  — specbind is infallible.
+    let mut sig_varbind = Signature::new(call_conv);
+    sig_varbind.params.push(AbiParam::new(ptr_ty));
+    sig_varbind.params.push(AbiParam::new(i64t));
+    sig_varbind.params.push(AbiParam::new(i64t));
+    // (vmctx, n) -> ()  — unbind_to is infallible.
+    let mut sig_unbind = Signature::new(call_conv);
+    sig_unbind.params.push(AbiParam::new(ptr_ty));
+    sig_unbind.params.push(AbiParam::new(i64t));
+    let varbind_id = declare(module, "neovm_jit_varbind", &sig_varbind)?;
+    let unbind_id = declare(module, "neovm_jit_unbind", &sig_unbind)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -955,6 +1038,8 @@ fn declare_rt_refs(
         symbolp_slow: module.declare_func_in_func(symp_id, func),
         varref: module.declare_func_in_func(varref_id, func),
         varset: module.declare_func_in_func(varset_id, func),
+        varbind: module.declare_func_in_func(varbind_id, func),
+        unbind: module.declare_func_in_func(unbind_id, func),
     })
 }
 
@@ -1288,6 +1373,25 @@ fn lower_simple_op(
             };
             stack.push(result);
         }
+        Op::VarBind(idx) => {
+            // GNU Bvarbind: specbind(sym, POP) — infallible, no status branch.
+            // The shim records the pre-bind specpdl depth; the frame unwind in
+            // CompiledLeaf::call restores the entry base on every exit.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let sym = const_sym_id(constants, *idx)?;
+            let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
+        }
+        Op::Unbind(n) => {
+            // Unbind the N most recent dynamic bindings — infallible; the
+            // static bind-depth analysis guarantees balance.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let n_v = fb.ins().iconst(types::I64, *n as i64);
+            fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
+        }
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     }
     Ok(())
@@ -1330,6 +1434,8 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Call(n) | Op::Apply(n) => (*n as usize + 1, -(*n as i64)),
         Op::VarRef(_) => (0, 1),
         Op::VarSet(_) => (1, -1),
+        Op::VarBind(_) => (1, -1),
+        Op::Unbind(_) => (0, 0),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1367,19 +1473,22 @@ fn emits_guard(op: &Op) -> bool {
     )
 }
 
-/// Record that `target` is entered with stack depth `d` and side-effect state
-/// `poisoned`, scheduling (or re-scheduling) it for analysis. Depth must be
-/// non-negative and consistent across all paths (the byte-compiler guarantees a
-/// single static depth per program point); poison merges with OR and forces a
-/// re-visit when it newly turns on, so the fixpoint is reached in <= 2 visits
-/// per block.
+/// Record that `target` is entered with stack depth `d`, outstanding dynamic
+/// bind count `binds`, and side-effect state `poisoned`, scheduling (or
+/// re-scheduling) it for analysis. Depth and bind count must be non-negative
+/// and consistent across all paths (the byte-compiler guarantees a single
+/// static value per program point); poison merges with OR and forces a re-visit
+/// when it newly turns on, so the fixpoint is reached in <= 2 visits per block.
+#[allow(clippy::too_many_arguments)]
 fn push_succ(
     entry_depth: &mut HashMap<usize, usize>,
     entry_poison: &mut HashMap<usize, bool>,
+    entry_binds: &mut HashMap<usize, usize>,
     work: &mut Vec<usize>,
     target: usize,
     d: i64,
     poisoned: bool,
+    binds: usize,
 ) -> Result<(), CompileError> {
     if d < 0 {
         return Err(CompileError::StackUnderflow);
@@ -1390,6 +1499,9 @@ fn push_succ(
             Err(CompileError::UnsupportedOp("inconsistent stack depth"))
         }
         Some(_) => {
+            if entry_binds.get(&target).copied().unwrap_or(0) != binds {
+                return Err(CompileError::UnsupportedOp("inconsistent bind depth"));
+            }
             let prior = entry_poison.get(&target).copied().unwrap_or(false);
             if poisoned && !prior {
                 entry_poison.insert(target, true);
@@ -1400,6 +1512,7 @@ fn push_succ(
         None => {
             entry_depth.insert(target, d);
             entry_poison.insert(target, poisoned);
+            entry_binds.insert(target, binds);
             work.push(target);
             Ok(())
         }
@@ -1452,14 +1565,17 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
     // rerun-on-deopt unsound, so such bodies bail.
     let mut entry_depth: HashMap<usize, usize> = HashMap::new();
     let mut entry_poison: HashMap<usize, bool> = HashMap::new();
+    let mut entry_binds: HashMap<usize, usize> = HashMap::new();
     entry_depth.insert(0, arity);
     entry_poison.insert(0, false);
+    entry_binds.insert(0, 0);
     let mut work = vec![0usize];
     let mut max_depth = arity;
 
     while let Some(l) = work.pop() {
         let mut cur = entry_depth[&l] as i64;
         let mut poisoned = entry_poison.get(&l).copied().unwrap_or(false);
+        let mut binds = entry_binds.get(&l).copied().unwrap_or(0);
         let end = next_leader(l);
         let mut terminated = false;
         for op in &ops[l..end] {
@@ -1469,6 +1585,9 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     if cur < 1 {
                         return Err(CompileError::StackUnderflow);
                     }
+                    // Returning with outstanding binds is fine: the frame
+                    // unwind in CompiledLeaf::call unbinds to the entry base,
+                    // exactly like cleanup_bytecode_frame.
                     terminated = true;
                     break;
                 }
@@ -1476,10 +1595,12 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     push_succ(
                         &mut entry_depth,
                         &mut entry_poison,
+                        &mut entry_binds,
                         &mut work,
                         *t as usize,
                         cur,
                         poisoned,
+                        binds,
                     )?;
                     terminated = true;
                     break;
@@ -1492,19 +1613,23 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     push_succ(
                         &mut entry_depth,
                         &mut entry_poison,
+                        &mut entry_binds,
                         &mut work,
                         *t as usize,
                         cur,
                         poisoned,
+                        binds,
                     )?;
                     // fall-through
                     push_succ(
                         &mut entry_depth,
                         &mut entry_poison,
+                        &mut entry_binds,
                         &mut work,
                         end,
                         cur,
                         poisoned,
+                        binds,
                     )?;
                     terminated = true;
                     break;
@@ -1517,18 +1642,22 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     push_succ(
                         &mut entry_depth,
                         &mut entry_poison,
+                        &mut entry_binds,
                         &mut work,
                         *t as usize,
                         cur,
                         poisoned,
+                        binds,
                     )?;
                     push_succ(
                         &mut entry_depth,
                         &mut entry_poison,
+                        &mut entry_binds,
                         &mut work,
                         end,
                         cur - 1,
                         poisoned,
+                        binds,
                     )?;
                     terminated = true;
                     break;
@@ -1545,7 +1674,26 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     if cur as usize > max_depth {
                         max_depth = cur as usize;
                     }
-                    if matches!(other, Op::Call(_) | Op::Apply(_) | Op::VarSet(_)) {
+                    match other {
+                        Op::VarBind(_) => binds += 1,
+                        Op::Unbind(un) => {
+                            let un = *un as usize;
+                            if un > binds {
+                                // Unbinding more than this function bound —
+                                // bail to the interpreter (its bind_stack
+                                // saturation handles it).
+                                return Err(CompileError::UnsupportedOp("unbalanced-unbind"));
+                            }
+                            binds -= un;
+                        }
+                        _ => {}
+                    }
+                    if matches!(
+                        other,
+                        Op::Call(_) | Op::Apply(_) | Op::VarSet(_) | Op::VarBind(_) | Op::Unbind(_)
+                    ) {
+                        // Side effects (calls, assignment, dynamic-binding
+                        // push/pop): a later deopt-rerun would replay them.
                         poisoned = true;
                     }
                 }
@@ -1560,10 +1708,12 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
             push_succ(
                 &mut entry_depth,
                 &mut entry_poison,
+                &mut entry_binds,
                 &mut work,
                 end,
                 cur,
                 poisoned,
+                binds,
             )?;
         }
     }
@@ -1616,11 +1766,13 @@ pub fn lower_leaf(
     );
     builder.symbol("neovm_jit_varref", neovm_jit_varref as *const u8);
     builder.symbol("neovm_jit_varset", neovm_jit_varset as *const u8);
+    builder.symbol("neovm_jit_varbind", neovm_jit_varbind as *const u8);
+    builder.symbol("neovm_jit_unbind", neovm_jit_unbind as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
     // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
-    // VarRef/VarSet re-enter the runtime's variable machinery.
+    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery.
     let needs_rt = ops.iter().any(|o| {
         matches!(
             o,
@@ -1631,6 +1783,8 @@ pub fn lower_leaf(
                 | Op::Symbolp
                 | Op::VarRef(_)
                 | Op::VarSet(_)
+                | Op::VarBind(_)
+                | Op::Unbind(_)
         )
     });
 
@@ -1844,6 +1998,9 @@ pub fn lower_leaf(
         // &optional/&rest lambda lists.
         required: arity,
         has_rest: false,
+        has_binds: ops
+            .iter()
+            .any(|o| matches!(o, Op::VarBind(_) | Op::Unbind(_))),
         entry,
         _module: module,
     })
@@ -2371,13 +2528,11 @@ mod tests {
 
     #[test]
     fn bails_on_unsupported_op() {
-        // VarBind (dynamic binding) is not in the supported subset -> refuse.
-        let err = lower_nullary_leaf(
-            &[Op::Nil, Op::VarBind(0), Op::Nil, Op::Return],
-            &[Value::symbol("jit-test-var")],
-        )
-        .unwrap_err();
-        assert!(matches!(err, CompileError::UnsupportedOp("variable")));
+        // Switch (hash-table jump tables) is not in the supported subset ->
+        // refuse, do not miscompile.
+        let err = lower_nullary_leaf(&[Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return], &[])
+            .unwrap_err();
+        assert!(matches!(err, CompileError::UnsupportedOp("control-flow")));
     }
 
     #[test]
@@ -2415,6 +2570,123 @@ mod tests {
         let bad = lower_nullary_leaf(&[Op::VarRef(0), Op::Return], &[unbound]).unwrap();
         assert_eq!(bad.call(ctx_ptr, &[]), NativeRun::Signal);
         assert!(take_pending_flow().is_some());
+    }
+
+    #[test]
+    fn compiles_varbind_unbind_with_full_unwind_semantics() {
+        use crate::emacs_core::bytecode::Vm;
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let var = Value::symbol("jit-test-bind-var");
+        let crate::emacs_core::value::ValueKind::Symbol(var_id) = var.kind() else {
+            panic!("symbol expected");
+        };
+        ev.obarray.set_symbol_value_id(var_id, Value::make_int(99));
+        let read = lower_nullary_leaf(&[Op::VarRef(0), Op::Return], &[var]).unwrap();
+        let global_now = |ev: &mut crate::emacs_core::eval::Context| {
+            let p = ev as *mut crate::emacs_core::eval::Context as *mut u8;
+            match read.call(p, &[]) {
+                NativeRun::Ok(bits) => Value::from_bits(bits),
+                other => panic!("global read failed: {other:?}"),
+            }
+        };
+
+        // Balanced let: bind 5, read it, unbind, return. Matches the
+        // interpreter on the same body.
+        let ops = [
+            Op::Constant(1), // 5
+            Op::VarBind(0),
+            Op::VarRef(0),
+            Op::Unbind(1),
+            Op::Return,
+        ];
+        let consts = [var, Value::make_int(5)];
+        let balanced = lower_nullary_leaf(&ops, &consts).unwrap();
+        assert_eq!(
+            balanced.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(5).bits())
+        );
+        assert_eq!(global_now(&mut ev), Value::make_int(99), "binding popped");
+        let interp = {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: Vec::new(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.to_vec();
+            f.constants = consts.to_vec();
+            f.max_stack = 16;
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&f, vec![]).expect("interp runs let")
+        };
+        assert_eq!(interp, Value::make_int(5), "interpreter agrees");
+        assert_eq!(global_now(&mut ev), Value::make_int(99));
+
+        // Early return with the binding still active: the frame unwind must
+        // restore the global (cleanup_bytecode_frame parity).
+        let early = lower_nullary_leaf(
+            &[Op::Constant(1), Op::VarBind(0), Op::True, Op::Return],
+            &consts,
+        )
+        .unwrap();
+        assert_eq!(early.call(ctx_ptr, &[]), NativeRun::Ok(Value::T.bits()));
+        assert_eq!(
+            global_now(&mut ev),
+            Value::make_int(99),
+            "early return must unwind the dangling binding"
+        );
+
+        // Signal inside the dynamic extent: the binding must also unwind.
+        let sig = lower_nullary_leaf(
+            &[
+                Op::Constant(1),
+                Op::VarBind(0),
+                Op::Constant(2), // undefined function symbol
+                Op::Call(0),
+                Op::Return,
+            ],
+            &[
+                var,
+                Value::make_int(5),
+                Value::symbol("jit-bind-no-such-fn"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(sig.call(ctx_ptr, &[]), NativeRun::Signal);
+        assert!(take_pending_flow().is_some());
+        assert_eq!(
+            global_now(&mut ev),
+            Value::make_int(99),
+            "signal must unwind the dangling binding"
+        );
+    }
+
+    #[test]
+    fn guard_after_varbind_and_unbalanced_unbind_bail() {
+        // Bindings are side effects: later guards must bail.
+        let err = lower_nullary_leaf(
+            &[
+                Op::Constant(1),
+                Op::VarBind(0),
+                Op::Constant(1),
+                Op::Add1,
+                Op::Return,
+            ],
+            &[Value::symbol("jit-test-bind-poison"), Value::make_int(1)],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("guard-after-call")
+        ));
+
+        // Unbinding more than this function bound bails to the interpreter.
+        let err = lower_nullary_leaf(&[Op::Unbind(1), Op::Nil, Op::Return], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("unbalanced-unbind")
+        ));
     }
 
     #[test]

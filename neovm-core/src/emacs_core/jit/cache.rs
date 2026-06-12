@@ -123,10 +123,10 @@ mod tests {
 
     #[test]
     fn returns_none_for_noncompilable_body() {
-        // VarBind is unsupported -> NotCompilable -> None (interpreter fallback).
+        // Switch is unsupported -> NotCompilable -> None (interpreter fallback).
         let f = nullary_fn(
-            vec![Op::Nil, Op::VarBind(0), Op::Nil, Op::Return],
-            vec![Value::symbol("jit-cache-test-var")],
+            vec![Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return],
+            vec![],
         );
         assert_eq!(
             try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
