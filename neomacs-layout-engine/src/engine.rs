@@ -3120,12 +3120,10 @@ impl LayoutEngine {
             },
             &mut self.font_metrics,
         );
-        let mut current_face =
-            DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face);
-        let mut face_measurement_state = current_face.measurement_state();
-        face_metrics = face_measurement_state.metrics();
-        let mut face_render_state = current_face.render_state();
-        let default_measurement_state = face_measurement_state.clone();
+        let mut active_face_state =
+            DisplayRowActiveFace::new(default_resolved.clone(), default_measured_face).into_state();
+        face_metrics = active_face_state.measurement.metrics();
+        let default_measurement_state = active_face_state.measurement.clone();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -3432,10 +3430,8 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
-                    current_face = resolved_measured_face.into_active_face();
-                    face_measurement_state = current_face.measurement_state();
-                    face_metrics = face_measurement_state.metrics();
-                    face_render_state = current_face.render_state();
+                    active_face_state = resolved_measured_face.into_active_face().into_state();
+                    face_metrics = active_face_state.measurement.metrics();
 
                     if face_metrics.row_height > row_max_height {
                         row_max_height = face_metrics.row_height;
@@ -3622,7 +3618,7 @@ impl LayoutEngine {
                             glyph_y: y + raise_y_offset,
                         },
                         DisplayRowAppendMetrics::from_active_measurement_state(
-                            &face_measurement_state,
+                            &active_face_state.measurement,
                             char_h,
                         ),
                     );
@@ -3665,7 +3661,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: face_metrics.row_height,
                                 face_ascent: face_metrics.ascent,
-                                bg: face_render_state.background,
+                                bg: active_face_state.render.background,
                                 byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3691,23 +3687,24 @@ impl LayoutEngine {
                                 glyph_y: y + raise_y_offset,
                             },
                             DisplayRowAppendMetrics::from_active_measurement_state(
-                                &face_measurement_state,
+                                &active_face_state.measurement,
                                 char_h,
                             ),
                         );
-                        let measurement = face_measurement_state
+                        let measurement = active_face_state
+                            .measurement
                             .text_run_measurement(&mut self.font_metrics, "...");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
                             face_resolver,
-                            face_render_state.resolved_face(),
+                            active_face_state.render.resolved_face(),
                             ellipsis_frame,
                             DisplayRowPosition { x_px: x, col },
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
-                            face_render_state.face_id,
+                            active_face_state.render.face_id,
                             Some(measurement),
                         ) {
                             x = position.x_px;
@@ -3850,7 +3847,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: char_h,
                                 face_ascent: face_metrics.ascent,
-                                bg: face_render_state.background,
+                                bg: active_face_state.render.background,
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3918,7 +3915,7 @@ impl LayoutEngine {
                                 face_w: face_metrics.char_width,
                                 face_h: face_metrics.row_height,
                                 face_ascent: face_metrics.ascent,
-                                bg: face_render_state.background,
+                                bg: active_face_state.render.background,
                                 byte_idx: ch_start_byte_idx,
                                 col,
                                 matrix_row: row,
@@ -3966,7 +3963,7 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    face_measurement_state.advance_for_char(
+                                    active_face_state.measurement.advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
                                         face_metrics.char_width,
@@ -3981,7 +3978,7 @@ impl LayoutEngine {
                                     face_w: face_metrics.char_width,
                                     face_h: face_metrics.row_height,
                                     face_ascent: face_metrics.ascent,
-                                    bg: face_render_state.background,
+                                    bg: active_face_state.render.background,
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4022,9 +4019,9 @@ impl LayoutEngine {
                             let replacement_base_face_id =
                                 if crate::display_source_resolver::same_resolved_face(
                                     &replacement_base_face,
-                                    face_render_state.resolved_face(),
+                                    active_face_state.render.resolved_face(),
                                 ) {
-                                    face_render_state.face_id
+                                    active_face_state.render.face_id
                                 } else if crate::display_source_resolver::same_resolved_face(
                                     &replacement_base_face,
                                     face_resolver.default_face(),
@@ -4064,13 +4061,14 @@ impl LayoutEngine {
                                         glyph_y: y + raise_y_offset,
                                     },
                                     DisplayRowAppendMetrics::from_active_measurement_state(
-                                        &face_measurement_state,
+                                        &active_face_state.measurement,
                                         char_h,
                                     ),
                                 );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
-                                    measurement_face: face_measurement_state
+                                    measurement_face: active_face_state
+                                        .measurement
                                         .measurement_face()
                                         .clone(),
                                 };
@@ -4103,7 +4101,7 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_char_width = face_measurement_state.advance_for_char(
+                        let display_char_width = active_face_state.measurement.advance_for_char(
                             &mut self.font_metrics,
                             display_ch,
                             face_metrics.char_width,
@@ -4128,7 +4126,7 @@ impl LayoutEngine {
                                     face_w: face_metrics.char_width,
                                     face_h: face_metrics.row_height,
                                     face_ascent: face_metrics.ascent,
-                                    bg: face_render_state.background,
+                                    bg: active_face_state.render.background,
                                     byte_idx,
                                     col,
                                     matrix_row: row,
@@ -4153,7 +4151,7 @@ impl LayoutEngine {
                                 text_start_byte + byte_idx,
                             );
                             let item = replacement_source.stretch_item(
-                                face_render_state.face_id,
+                                active_face_state.render.face_id,
                                 DisplayReplacementBox::new(
                                     space_width,
                                     space_geometry.height,
@@ -4167,7 +4165,7 @@ impl LayoutEngine {
                                     glyph_y: y + raise_y_offset,
                                 },
                                 DisplayRowAppendMetrics::from_active_measurement_state(
-                                    &face_measurement_state,
+                                    &active_face_state.measurement,
                                     char_h,
                                 ),
                             );
@@ -4178,8 +4176,8 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    face_render_state.resolved_face(),
-                                    face_render_state.face_id,
+                                    active_face_state.render.resolved_face(),
+                                    active_face_state.render.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4209,7 +4207,7 @@ impl LayoutEngine {
                             resolve_display_property_media(
                                 &prop_val,
                                 evaluator.display_host.as_deref(),
-                                face_render_state.resolved_face(),
+                                active_face_state.render.resolved_face(),
                                 face_metrics.char_width,
                                 face_metrics.row_height,
                             )
@@ -4243,7 +4241,7 @@ impl LayoutEngine {
                                         face_w: face_metrics.char_width,
                                         face_h: cursor_face_h,
                                         face_ascent: cursor_face_ascent,
-                                        bg: face_render_state.background,
+                                        bg: active_face_state.render.background,
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4267,8 +4265,8 @@ impl LayoutEngine {
                                     default_row_height: char_h,
                                 },
                             );
-                            let item =
-                                replacement_source.item(face_render_state.face_id, media_item);
+                            let item = replacement_source
+                                .item(active_face_state.render.face_id, media_item);
                             if let Some((progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4276,8 +4274,8 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    face_render_state.resolved_face(),
-                                    face_render_state.face_id,
+                                    active_face_state.render.resolved_face(),
+                                    active_face_state.render.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4300,7 +4298,7 @@ impl LayoutEngine {
                                         face_w: face_metrics.char_width,
                                         face_h: face_metrics.row_height,
                                         face_ascent: face_metrics.ascent,
-                                        bg: face_render_state.background,
+                                        bg: active_face_state.render.background,
                                         byte_idx,
                                         col,
                                         matrix_row: row,
@@ -4316,12 +4314,14 @@ impl LayoutEngine {
                                     glyph_y: y + raise_y_offset,
                                 },
                                 DisplayRowAppendMetrics::from_active_measurement_state(
-                                    &face_measurement_state,
+                                    &active_face_state.measurement,
                                     char_h,
                                 ),
                             );
-                            let item = replacement_source
-                                .source_mapped_text_item(face_render_state.face_id, placeholder);
+                            let item = replacement_source.source_mapped_text_item(
+                                active_face_state.render.face_id,
+                                placeholder,
+                            );
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4329,8 +4329,8 @@ impl LayoutEngine {
                                     evaluator,
                                     item,
                                     face_resolver,
-                                    face_render_state.resolved_face(),
-                                    face_render_state.face_id,
+                                    active_face_state.render.resolved_face(),
+                                    active_face_state.render.face_id,
                                     replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
@@ -4406,23 +4406,24 @@ impl LayoutEngine {
                         glyph_y: y + raise_y_offset,
                     },
                     DisplayRowAppendMetrics::from_active_measurement_state(
-                        &face_measurement_state,
+                        &active_face_state.measurement,
                         char_h,
                     ),
                 );
-                let measurement =
-                    face_measurement_state.text_run_measurement(&mut self.font_metrics, "...");
+                let measurement = active_face_state
+                    .measurement
+                    .text_run_measurement(&mut self.font_metrics, "...");
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
                     face_resolver,
-                    face_render_state.resolved_face(),
+                    active_face_state.render.resolved_face(),
                     ellipsis_frame,
                     DisplayRowPosition { x_px: x, col },
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
-                    face_render_state.face_id,
+                    active_face_state.render.face_id,
                     Some(measurement),
                 ) {
                     x = position.x_px;
@@ -4516,7 +4517,7 @@ impl LayoutEngine {
                             face_w: face_metrics.char_width,
                             face_h: face_metrics.row_height,
                             face_ascent: face_metrics.ascent,
-                            bg: face_render_state.background,
+                            bg: active_face_state.render.background,
                             byte_idx: ch_start_byte_idx,
                             col,
                             matrix_row: row,
@@ -4826,7 +4827,7 @@ impl LayoutEngine {
                         glyph_y: y + raise_y_offset,
                     },
                     DisplayRowAppendMetrics::from_active_measurement_state(
-                        &face_measurement_state,
+                        &active_face_state.measurement,
                         char_h,
                     ),
                 );
@@ -4839,8 +4840,8 @@ impl LayoutEngine {
                         buffer,
                         buf_id,
                         face_resolver,
-                        face_render_state.resolved_face(),
-                        face_render_state.face_id,
+                        active_face_state.render.resolved_face(),
+                        active_face_state.render.face_id,
                         crate::display_item::DisplayItemKind::ControlChar { ch },
                         text_item_frame,
                         DisplayRowPosition { x_px: x, col },
@@ -4880,7 +4881,7 @@ impl LayoutEngine {
                             glyph_y: y + raise_y_offset,
                         },
                         DisplayRowAppendMetrics::from_active_measurement_state(
-                            &face_measurement_state,
+                            &active_face_state.measurement,
                             char_h,
                         ),
                     );
@@ -4893,8 +4894,8 @@ impl LayoutEngine {
                             buffer,
                             buf_id,
                             face_resolver,
-                            face_render_state.resolved_face(),
-                            face_render_state.face_id,
+                            active_face_state.render.resolved_face(),
+                            active_face_state.render.face_id,
                             crate::display_item::DisplayItemKind::SourceMappedText(
                                 crate::display_item::DisplaySourceMappedText::new(mapped_text),
                             ),
@@ -4949,7 +4950,7 @@ impl LayoutEngine {
                         glyph_y: y + raise_y_offset,
                     },
                     DisplayRowAppendMetrics::from_active_measurement_state(
-                        &face_measurement_state,
+                        &active_face_state.measurement,
                         char_h,
                     ),
                 );
@@ -4962,8 +4963,8 @@ impl LayoutEngine {
                         buffer,
                         buf_id,
                         face_resolver,
-                        face_render_state.resolved_face(),
-                        face_render_state.face_id,
+                        active_face_state.render.resolved_face(),
+                        active_face_state.render.face_id,
                         crate::display_item::DisplayItemKind::Glyphless(
                             crate::display_item::DisplayGlyphless { ch, method },
                         ),
@@ -5027,7 +5028,8 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let measurement = face_measurement_state
+                    let measurement = active_face_state
+                        .measurement
                         .text_run_measurement(&mut self.font_metrics, &run_text);
                     complex_run_adv.clear();
                     // Leave the cache empty when shaping yields nothing (no
@@ -5048,14 +5050,14 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => face_measurement_state.advance_for_char(
+                    None => active_face_state.measurement.advance_for_char(
                         &mut self.font_metrics,
                         ch,
                         face_metrics.char_width * char_cols as f32,
                     ),
                 }
             } else {
-                face_measurement_state.advance_for_char(
+                active_face_state.measurement.advance_for_char(
                     &mut self.font_metrics,
                     ch,
                     face_metrics.char_width * char_cols as f32,
@@ -5283,7 +5285,7 @@ impl LayoutEngine {
                         face_w: face_metrics.char_width,
                         face_h: face_metrics.row_height,
                         face_ascent: face_metrics.ascent,
-                        bg: face_render_state.background,
+                        bg: active_face_state.render.background,
                         byte_idx: ch_start_byte_idx,
                         col,
                         matrix_row: row,
@@ -5358,7 +5360,7 @@ impl LayoutEngine {
                     gy,
                     face_metrics.row_height,
                     face_metrics.ascent,
-                    face_render_state.face_id,
+                    active_face_state.render.face_id,
                     false,
                 );
             }
@@ -5372,7 +5374,7 @@ impl LayoutEngine {
                     glyph_y: y + raise_y_offset,
                 },
                 DisplayRowAppendMetrics::from_active_measurement_state(
-                    &face_measurement_state,
+                    &active_face_state.measurement,
                     char_h,
                 ),
             );
@@ -5381,7 +5383,8 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement = face_measurement_state
+            let measurement = active_face_state
+                .measurement
                 .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
             let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
@@ -5390,10 +5393,10 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 buffer_text_fragment,
                 face_resolver,
-                face_render_state.resolved_face(),
+                active_face_state.render.resolved_face(),
                 buf_id,
                 buffer,
-                face_render_state.face_id,
+                active_face_state.render.face_id,
                 measurement,
                 frame,
                 DisplayRowPosition { x_px: x, col },
@@ -5509,7 +5512,7 @@ impl LayoutEngine {
                     face_w: face_metrics.char_width,
                     face_h: face_metrics.row_height,
                     face_ascent: face_metrics.ascent,
-                    bg: face_render_state.background,
+                    bg: active_face_state.render.background,
                     byte_idx,
                     col,
                     matrix_row: row,

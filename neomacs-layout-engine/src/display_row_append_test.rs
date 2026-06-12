@@ -102,12 +102,10 @@ fn display_row_append_metrics_builds_from_active_measurement_state() {
         },
         &mut font_metrics,
     );
-    let active_face = DisplayRowActiveFace::new(base, measured);
+    let active_face = DisplayRowActiveFace::new(base, measured).into_state();
 
-    let metrics = DisplayRowAppendMetrics::from_active_measurement_state(
-        &active_face.measurement_state(),
-        16.0,
-    );
+    let metrics =
+        DisplayRowAppendMetrics::from_active_measurement_state(&active_face.measurement, 16.0);
 
     assert_eq!(
         metrics,

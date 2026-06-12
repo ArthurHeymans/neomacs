@@ -773,6 +773,12 @@ impl DisplayRowActiveFaceMeasurementState {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowActiveFaceState {
+    pub(crate) render: DisplayRowActiveFaceRenderState,
+    pub(crate) measurement: DisplayRowActiveFaceMeasurementState,
+}
+
 impl DisplayRowActiveFace {
     pub(crate) fn new(resolved_face: ResolvedFace, measured_face: DisplayRowMeasuredFace) -> Self {
         let background = Color::from_pixel(resolved_face.bg);
@@ -785,22 +791,18 @@ impl DisplayRowActiveFace {
         }
     }
 
-    pub(crate) fn face_id(&self) -> u32 {
-        self.measurement_face.face_id()
-    }
-
-    pub(crate) fn render_state(&self) -> DisplayRowActiveFaceRenderState {
-        DisplayRowActiveFaceRenderState {
-            face_id: self.face_id(),
-            background: self.background,
-            resolved_face: self.resolved_face.clone(),
-        }
-    }
-
-    pub(crate) fn measurement_state(&self) -> DisplayRowActiveFaceMeasurementState {
-        DisplayRowActiveFaceMeasurementState {
-            measurement_face: self.measurement_face.clone(),
-            metrics: self.metrics,
+    pub(crate) fn into_state(self) -> DisplayRowActiveFaceState {
+        let face_id = self.measurement_face.face_id();
+        DisplayRowActiveFaceState {
+            render: DisplayRowActiveFaceRenderState {
+                face_id,
+                background: self.background,
+                resolved_face: self.resolved_face,
+            },
+            measurement: DisplayRowActiveFaceMeasurementState {
+                measurement_face: self.measurement_face,
+                metrics: self.metrics,
+            },
         }
     }
 }
