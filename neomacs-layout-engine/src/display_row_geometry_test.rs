@@ -511,6 +511,38 @@ fn display_row_geometry_state_builds_typed_row_markers() {
 }
 
 #[test]
+fn display_row_scoped_value_tracks_value_by_owning_row() {
+    let geometry = DisplayRowGeometryState {
+        row: 2,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let next_row_geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 85.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+    let mut scoped_value = DisplayRowScopedValue::inactive();
+
+    assert_eq!(scoped_value.value(), None);
+    assert_eq!(scoped_value.value_on(&geometry), None);
+
+    scoped_value.activate(geometry.current_row_marker(), "extend-face");
+
+    assert_eq!(scoped_value.value(), Some(&"extend-face"));
+    assert_eq!(scoped_value.value_on(&geometry), Some(&"extend-face"));
+    assert_eq!(scoped_value.value_on(&next_row_geometry), None);
+
+    scoped_value.clear();
+
+    assert_eq!(scoped_value.value(), None);
+}
+
+#[test]
 fn display_row_geometry_state_builds_row_scoped_start_marker() {
     let geometry = DisplayRowGeometryState {
         row: 2,

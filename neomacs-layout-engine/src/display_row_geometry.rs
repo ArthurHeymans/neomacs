@@ -157,6 +157,12 @@ pub(crate) enum DisplayRowMarker {
     Row(usize),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowScopedValue<T> {
+    Inactive,
+    Active { row: DisplayRowMarker, value: T },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplayRowStartMarker {
     Inactive,
@@ -656,6 +662,34 @@ impl DisplayRowGeometryState {
 impl DisplayRowMarker {
     pub(crate) fn is_active_on(&self, geometry: &DisplayRowGeometryState) -> bool {
         matches!(self, Self::Row(row) if *row == geometry.row)
+    }
+}
+
+impl<T> DisplayRowScopedValue<T> {
+    pub(crate) fn inactive() -> Self {
+        Self::Inactive
+    }
+
+    pub(crate) fn activate(&mut self, row: DisplayRowMarker, value: T) {
+        *self = Self::Active { row, value };
+    }
+
+    pub(crate) fn clear(&mut self) {
+        *self = Self::Inactive;
+    }
+
+    pub(crate) fn value(&self) -> Option<&T> {
+        match self {
+            Self::Active { value, .. } => Some(value),
+            Self::Inactive => None,
+        }
+    }
+
+    pub(crate) fn value_on(&self, geometry: &DisplayRowGeometryState) -> Option<&T> {
+        match self {
+            Self::Active { row, value } if row.is_active_on(geometry) => Some(value),
+            Self::Active { .. } | Self::Inactive => None,
+        }
     }
 }
 

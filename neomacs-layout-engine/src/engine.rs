@@ -40,8 +40,8 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
-    DisplayRowStartMarker, DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions,
-    DisplayRowYRecording,
+    DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowTextPosition,
+    DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3515,8 +3515,7 @@ impl LayoutEngine {
         let has_overlays = !buffer.overlays().is_empty();
 
         // Face :extend tracking — extends face background to end of line
-        let mut row_extend_bg: Option<(Color, u32)> = None; // (bg_color, face_id)
-        let mut row_extend_row = DisplayRowMarker::Inactive;
+        let mut row_extend = DisplayRowScopedValue::inactive();
 
         // Box face tracking: track active :box face regions
         let mut box_active = false;
@@ -3620,8 +3619,7 @@ impl LayoutEngine {
 
                     if resolved.extend {
                         let ext_bg = Color::from_pixel(resolved.bg);
-                        row_extend_bg = Some((ext_bg, face_id));
-                        row_extend_row = row_geometry.current_row_marker();
+                        row_extend.activate(row_geometry.current_row_marker(), (ext_bg, face_id));
                     }
 
                     if box_active && resolved.box_type == 0 {
@@ -3937,8 +3935,7 @@ impl LayoutEngine {
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
-                    row_extend_bg = None;
-                    row_extend_row = DisplayRowMarker::Inactive;
+                    row_extend.clear();
 
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::line_break(
@@ -4511,8 +4508,7 @@ impl LayoutEngine {
                     if skip_ch == '\n' {
                         // Advance to next row (same as newline handler)
                         x = content_x;
-                        row_extend_bg = None;
-                        row_extend_row = DisplayRowMarker::Inactive;
+                        row_extend.clear();
                         if box_active {
                             box_start_x = content_x;
                             box_row = row_geometry.next_row_marker();
@@ -4592,14 +4588,11 @@ impl LayoutEngine {
                 trailing_ws_start = DisplayRowStartMarker::Inactive;
 
                 // Face :extend: fill rest of row with extending face background
-                if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
-                    if row_extend_row.is_active_on(&row_geometry) {
-                        let right_edge = content_x + avail_width;
-                        if x < right_edge {}
-                    }
+                if let Some((_ext_bg, _ext_face_id)) = row_extend.value_on(&row_geometry) {
+                    let right_edge = content_x + avail_width;
+                    if x < right_edge {}
                 }
-                row_extend_bg = None;
-                row_extend_row = DisplayRowMarker::Inactive;
+                row_extend.clear();
 
                 // Box face tracking: box stays active across line breaks
                 if box_active {
@@ -4750,8 +4743,7 @@ impl LayoutEngine {
                             need_line_number = lnum_enabled;
                         }
                         x = content_x;
-                        row_extend_bg = None;
-                        row_extend_row = DisplayRowMarker::Inactive;
+                        row_extend.clear();
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::truncation(
                                 DisplayRowHitRange {
@@ -4792,8 +4784,7 @@ impl LayoutEngine {
                             row_limit,
                         );
                         x = content_x;
-                        row_extend_bg = None;
-                        row_extend_row = DisplayRowMarker::Inactive;
+                        row_extend.clear();
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(
                                 DisplayRowHitRange {
@@ -5083,8 +5074,7 @@ impl LayoutEngine {
                         need_line_number = lnum_enabled;
                     }
                     x = content_x;
-                    row_extend_bg = None;
-                    row_extend_row = DisplayRowMarker::Inactive;
+                    row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::truncation(
                             DisplayRowHitRange {
@@ -5134,8 +5124,7 @@ impl LayoutEngine {
                         row_limit,
                     );
                     x = content_x;
-                    row_extend_bg = None;
-                    row_extend_row = DisplayRowMarker::Inactive;
+                    row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::visual_wrap(
                             DisplayRowHitRange {
@@ -5189,8 +5178,7 @@ impl LayoutEngine {
                         row_limit,
                     );
                     x = content_x;
-                    row_extend_bg = None;
-                    row_extend_row = DisplayRowMarker::Inactive;
+                    row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::visual_wrap(
                             DisplayRowHitRange {
@@ -5545,7 +5533,7 @@ impl LayoutEngine {
 
         // Face :extend at end-of-buffer: fill remaining empty rows
         // with the last :extend face's background color
-        if let Some((_ext_bg, _ext_face_id)) = row_extend_bg {
+        if let Some((_ext_bg, _ext_face_id)) = row_extend.value() {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
             if x < right_edge && row_geometry.is_within_row_limit(row_limit) {
