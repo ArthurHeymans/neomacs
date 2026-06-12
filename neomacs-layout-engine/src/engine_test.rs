@@ -100,6 +100,46 @@ fn word_wrap_break_candidate_records_rewind_position_and_clears() {
 }
 
 #[test]
+fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
+    let mut state = WordWrapRenderState::new(true);
+
+    assert!(!state.candidate().is_available());
+
+    state.record_candidate(
+        ' ',
+        7,
+        42,
+        3,
+        (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+    );
+
+    assert!(!state.candidate().is_available());
+
+    state.allow_after_current_char(' ');
+    state.record_candidate(
+        'a',
+        7,
+        42,
+        3,
+        (Some(LispCharPos1::new(9)), Some(LispCharPos1::new(13))),
+    );
+
+    assert!(state.candidate().is_available());
+    assert_eq!(state.candidate().byte_idx(), 7);
+    assert_eq!(state.candidate().charpos(), 42);
+
+    state.reset_after_row_transition();
+
+    assert!(!state.candidate().is_available());
+
+    let mut disabled = WordWrapRenderState::new(false);
+    disabled.allow_after_current_char(' ');
+    disabled.record_candidate('a', 1, 2, 3, (None, None));
+
+    assert!(!disabled.candidate().is_available());
+}
+
+#[test]
 fn active_display_property_span_returns_value_until_expired() {
     let mut span = ActiveDisplayPropertySpan::inactive();
 

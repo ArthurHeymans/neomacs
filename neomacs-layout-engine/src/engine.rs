@@ -384,6 +384,13 @@ struct WordWrapBreakCandidate {
     available: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WordWrapRenderState {
+    enabled: bool,
+    may_wrap: bool,
+    candidate: WordWrapBreakCandidate,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 struct ComplexTextRunAdvanceCache {
     start_byte_idx: usize,
@@ -557,6 +564,59 @@ impl WordWrapBreakCandidate {
 
     fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+}
+
+impl WordWrapRenderState {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            may_wrap: false,
+            candidate: WordWrapBreakCandidate::default(),
+        }
+    }
+
+    fn can_record_candidate(self, ch: char) -> bool {
+        self.enabled && self.may_wrap && char_can_wrap_before_basic(ch)
+    }
+
+    fn record_candidate(
+        &mut self,
+        ch: char,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+    ) {
+        if self.can_record_candidate(ch) {
+            self.candidate.record(
+                byte_idx,
+                charpos,
+                display_point_count,
+                row_display_positions,
+            );
+        }
+    }
+
+    fn allow_after_current_char(&mut self, ch: char) {
+        self.may_wrap = char_can_wrap_after_basic(ch);
+    }
+
+    fn disallow_after_current_char(&mut self) {
+        self.may_wrap = false;
+    }
+
+    fn reset_after_row_transition(&mut self) {
+        self.may_wrap = false;
+        self.candidate.clear();
+    }
+
+    fn has_candidate(self) -> bool {
+        self.enabled && self.candidate.is_available()
+    }
+
+    fn candidate(self) -> WordWrapBreakCandidate {
+        self.candidate
     }
 }
 
@@ -3753,8 +3813,7 @@ impl LayoutEngine {
             HorizontalScrollSkipState::new(params.truncate_lines, params.hscroll);
 
         // Word-wrap break tracking
-        let mut wrap_break = WordWrapBreakCandidate::default();
-        let mut word_wrap_may_wrap = false;
+        let mut word_wrap = WordWrapRenderState::new(params.word_wrap);
 
         let mut prefix_request =
             DisplayRowPrefixRequest::initial(has_prefix, line_prefix_value.is_some());
@@ -3925,10 +3984,11 @@ impl LayoutEngine {
 
         macro_rules! save_word_wrap_candidate {
             ($ch:expr, $break_byte_idx:expr) => {
-                if params.word_wrap && word_wrap_may_wrap && char_can_wrap_before_basic($ch) {
+                if word_wrap.can_record_candidate($ch) {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    wrap_break.record(
+                    word_wrap.record_candidate(
+                        $ch,
                         $break_byte_idx,
                         charpos,
                         output_emitter.display_point_len(),
@@ -4813,8 +4873,7 @@ impl LayoutEngine {
                         col = 0;
                         line_numbers.advance_line();
                         hscroll_skip.reset_line();
-                        word_wrap_may_wrap = false;
-                        wrap_break.clear();
+                        word_wrap.reset_after_row_transition();
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
                         if has_prefix {
                             prefix_request.request_line();
@@ -4923,8 +4982,7 @@ impl LayoutEngine {
                 col = 0;
                 line_numbers.advance_line();
                 hscroll_skip.reset_line();
-                word_wrap_may_wrap = false;
-                wrap_break.clear();
+                word_wrap.reset_after_row_transition();
                 if has_prefix {
                     prefix_request.request_line();
                 }
@@ -5035,7 +5093,7 @@ impl LayoutEngine {
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_charpos_start = charpos;
                         col = 0;
-                        word_wrap_may_wrap = false;
+                        word_wrap.disallow_after_current_char();
                         trailing_ws_start = DisplayRowStartMarker::Inactive;
                         if has_prefix {
                             prefix_request.request_line();
@@ -5123,7 +5181,7 @@ impl LayoutEngine {
                     col = position.col;
                 }
                 charpos += 1;
-                word_wrap_may_wrap = false;
+                word_wrap.disallow_after_current_char();
                 face_next_check = 0; // force face re-check to restore text face
                 continue;
             }
@@ -5173,7 +5231,7 @@ impl LayoutEngine {
                         col = position.col;
                     }
                     charpos += 1;
-                    word_wrap_may_wrap = false;
+                    word_wrap.disallow_after_current_char();
                     face_next_check = 0;
                     continue;
                 }
@@ -5236,7 +5294,7 @@ impl LayoutEngine {
                     col = position.col;
                 }
                 charpos += 1;
-                word_wrap_may_wrap = false;
+                word_wrap.disallow_after_current_char();
                 continue;
             }
 
@@ -5358,15 +5416,15 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    word_wrap_may_wrap = false;
-                    wrap_break.clear();
+                    word_wrap.reset_after_row_transition();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
                         prefix_request.request_line();
                     }
                     continue;
-                } else if params.word_wrap && wrap_break.is_available() {
+                } else if word_wrap.has_candidate() {
                     // Word-wrap: rewind to last break point
+                    let wrap_break = word_wrap.candidate();
                     output_emitter.truncate_display_points(wrap_break.display_point_count());
                     let (row_first_display_pos, row_last_display_pos) =
                         wrap_break.row_display_positions();
@@ -5416,8 +5474,7 @@ impl LayoutEngine {
                         DisplayRowFlagKind::Continuation,
                         row_limit,
                     );
-                    word_wrap_may_wrap = false;
-                    wrap_break.clear();
+                    word_wrap.reset_after_row_transition();
                     trailing_ws_start = DisplayRowStartMarker::Inactive;
                     if has_prefix {
                         prefix_request.request_wrap();
@@ -5473,7 +5530,7 @@ impl LayoutEngine {
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_charpos_start = charpos;
-                    word_wrap_may_wrap = false;
+                    word_wrap.disallow_after_current_char();
                     face_next_check = 0;
                     if has_prefix {
                         prefix_request.request_wrap();
@@ -5611,7 +5668,7 @@ impl LayoutEngine {
             x = position.x_px;
             col = position.col;
             charpos += 1;
-            word_wrap_may_wrap = char_can_wrap_after_basic(ch);
+            word_wrap.allow_after_current_char(ch);
 
             // --- Overlay after-strings ---
             if has_overlays {
