@@ -459,6 +459,91 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     assert_eq!(row_text_expanding_stretches(&second.rendered.row), "C");
 }
 
+#[test]
+fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
+    struct OnceSource {
+        item: Option<crate::display_item::DisplayItem>,
+    }
+
+    impl crate::display_source::DisplayItemSource for OnceSource {
+        fn next_item(
+            &mut self,
+            _context: &mut crate::display_source::DisplaySourceContext<'_>,
+        ) -> Option<crate::display_item::DisplayItem> {
+            self.item.take()
+        }
+
+        fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
+            crate::display_item::DisplaySourcePosition::synthetic(10, 0)
+        }
+    }
+
+    struct DirectTextRunPolicy;
+
+    impl DisplayRowRenderPolicy for DirectTextRunPolicy {
+        fn measurement_for<'a>(
+            &'a mut self,
+            _item: &crate::display_item::DisplayItem,
+            _face_id: u32,
+        ) -> DisplayRowItemMeasurement<'a> {
+            DisplayRowItemMeasurement::TextRun(
+                crate::display_row_builder::DisplayTextRunMeasurement::uniform_for_text("ABC", 5.0),
+            )
+        }
+    }
+
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let base_face = resolver.default_face();
+    let base_face_id = 1;
+    let mut next_face_id = 2;
+    let mut source = OnceSource {
+        item: Some(crate::display_item::DisplayItem::new(
+            crate::display_item::SourceSpan::synthetic(10, 0, 3),
+            crate::display_item::RenderFaceRef::FaceId(base_face_id),
+            crate::display_item::DisplayItemKind::TextRun(
+                crate::display_item::DisplayTextRun::new("ABC"),
+            ),
+        )),
+    };
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let mut state = DisplayRowSourceState::default();
+    let mut policy = DirectTextRunPolicy;
+
+    let result = renderer
+        .render_display_item_source_row_fragment_step_into_row_with_policy(
+            DisplayRowSpec {
+                geometry: DisplayRowGeometry {
+                    y: 0.0,
+                    width: 240.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+                },
+                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
+                base_face_id,
+                base_face,
+                role: GlyphRowRole::Text,
+                symbol_values: std::collections::HashMap::new(),
+            },
+            &mut row,
+            &mut source,
+            &mut state,
+            &resolver,
+            None,
+            &mut next_face_id,
+            &mut policy,
+        )
+        .expect("rendered row");
+
+    assert_eq!(result.progress.end_x, 15.0);
+    assert_eq!(result.progress.end_col, 3);
+    assert_eq!(row.glyphs[GlyphArea::Text.index()][0].pixel_width, 5.0);
+}
+
 fn row_text_expanding_stretches(row: &GlyphRow) -> String {
     row.glyphs[1]
         .iter()

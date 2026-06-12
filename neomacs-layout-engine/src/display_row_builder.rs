@@ -127,6 +127,7 @@ pub(crate) trait DisplayGlyphMeasurer {
 
 pub(crate) enum DisplayRowItemMeasurement<'a> {
     Default,
+    TextRun(DisplayTextRunMeasurement),
     Measured(&'a mut dyn DisplayGlyphMeasurer),
 }
 
