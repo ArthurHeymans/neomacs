@@ -1588,8 +1588,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 text_props.as_ref(),
                 slot,
                 cursor_info,
-                geometry.y,
-                geometry.row,
+                geometry.y(),
+                geometry.row(),
                 overlay_cursor_visual_state,
             );
         }
@@ -4698,7 +4698,7 @@ impl LayoutEngine {
                         }
                         if indent > selective_display {
                             // Show ... ellipsis once for the hidden block
-                            let current_row = row_geometry.row;
+                            let current_row = row_geometry.row();
                             if !shown_ellipsis && current_row > 0 {
                                 let _prev_row_y = row_y_positions.y_for_row(
                                     current_row - 1,

@@ -120,11 +120,11 @@ pub(crate) struct DisplayRowTextPosition {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowGeometryState {
-    pub(crate) row: usize,
-    pub(crate) y: f32,
-    pub(crate) row_extra_y: f32,
-    pub(crate) height: f32,
-    pub(crate) ascent: f32,
+    row: usize,
+    y: f32,
+    row_extra_y: f32,
+    height: f32,
+    ascent: f32,
 }
 
 pub(crate) enum DisplayRowYRecording<'a> {
@@ -373,6 +373,14 @@ impl DisplayRowGeometryState {
             height,
             ascent,
         }
+    }
+
+    pub(crate) fn row(&self) -> usize {
+        self.row
+    }
+
+    pub(crate) fn y(&self) -> f32 {
+        self.y
     }
 
     pub(crate) fn with_row_y(mut self, y: f32) -> Self {

@@ -263,6 +263,14 @@ fn display_row_geometry_state_constructor_groups_current_row_fields() {
 }
 
 #[test]
+fn display_row_geometry_state_exposes_current_row_position_by_name() {
+    let geometry = DisplayRowGeometryState::new(3, 40.0, 7.0, 18.0, 13.0);
+
+    assert_eq!(geometry.row(), 3);
+    assert_eq!(geometry.y(), 40.0);
+}
+
+#[test]
 fn display_row_geometry_state_can_be_mutated_directly() {
     let mut geometry = DisplayRowGeometryState {
         row: 2,
