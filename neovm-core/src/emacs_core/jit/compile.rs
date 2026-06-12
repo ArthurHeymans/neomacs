@@ -1,12 +1,18 @@
 //! Baseline bytecode → native lowering.
 //!
 //! Real compilation of neovm-core bytecode to machine code, grown as a series of
-//! always-correct vertical slices. It compiles **straight-line leaf** functions
-//! with 0+ required (stack) arguments, whose body uses the pure operand-stack
-//! opcodes `{Constant, Nil, True, Pop, Dup, StackRef, Return}` plus the fixnum
-//! fast paths `{Add, Sub, 1+, 1-, unary -}`, and it **bails to the interpreter**
-//! (returns [`CompileError`]) on anything else — `&optional`/`&rest` params,
-//! dynamic binding, control flow, other arithmetic, variables, calls, allocation.
+//! always-correct vertical slices. It compiles **leaf** functions with 0+
+//! required (stack) arguments and arbitrary intra-function control flow, whose
+//! body uses the operand-stack opcodes `{Constant, Nil, True, Pop, Dup, StackRef,
+//! Return}`, branches `{Goto, GotoIfNil, GotoIfNotNil, GotoIf*ElsePop}`, the
+//! fixnum arithmetic `{Add, Sub, 1+, 1-, unary -}`, and the fixnum comparisons
+//! `{=, <, >, <=, >=}`. It **bails to the interpreter** (returns [`CompileError`])
+//! on anything else — `&optional`/`&rest` params, dynamic binding, variables,
+//! calls, allocation, `switch`, and non-fixnum / non-supported arithmetic.
+//!
+//! Control flow builds a CLIF basic-block CFG (`analyze_cfg` + `lower_leaf`); the
+//! operand stack flows across edges through per-slot SSA variables, so Cranelift
+//! inserts the phi nodes and branches carry no explicit block arguments.
 //!
 //! ## Speculation + deopt
 //!
@@ -36,10 +42,11 @@ use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
     AbiParam, Block, Function, InstBuilder, MemFlags, Signature, UserFuncName, types,
 };
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 use smallvec::SmallVec;
+use std::collections::{BTreeSet, HashMap};
 
 use super::backend::BackendError;
 use crate::emacs_core::bytecode::ByteCodeFunction;
@@ -337,17 +344,263 @@ pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLea
     lower_leaf(ops, constants, 0)
 }
 
-/// Lower a straight-line leaf bytecode body taking `arity` fixed arguments.
+/// Lower one non-control-flow opcode, updating the compile-time operand `stack`
+/// (the live CLIF SSA values within the current basic block). Terminators
+/// (`Return`/`Goto`/`GotoIf*`) are handled by the block lowerer before this.
+fn lower_simple_op(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    constants: &[Value],
+    stack: &mut Vec<ClifValue>,
+    op: &Op,
+) -> Result<(), CompileError> {
+    match op {
+        Op::Constant(idx) => {
+            let v = constants
+                .get(*idx as usize)
+                .ok_or(CompileError::BadOperand)?;
+            stack.push(fb.ins().iconst(types::I64, v.bits() as i64));
+        }
+        Op::Nil => stack.push(fb.ins().iconst(types::I64, Value::NIL.bits() as i64)),
+        Op::True => stack.push(fb.ins().iconst(types::I64, Value::T.bits() as i64)),
+        Op::Pop => {
+            stack.pop().ok_or(CompileError::StackUnderflow)?;
+        }
+        Op::Dup => {
+            let top = *stack.last().ok_or(CompileError::StackUnderflow)?;
+            stack.push(top);
+        }
+        Op::StackRef(n) => {
+            // 0 = top of stack, 1 = one below, ...
+            let n = *n as usize;
+            let idx = stack
+                .len()
+                .checked_sub(1 + n)
+                .ok_or(CompileError::StackUnderflow)?;
+            stack.push(stack[idx]);
+        }
+        Op::Add | Op::Sub => {
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let is_sub = matches!(op, Op::Sub);
+            stack.push(lower_fixnum_binop(fb, deopt, is_sub, a, b));
+        }
+        Op::Add1 | Op::Sub1 | Op::Negate => {
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let kind = match op {
+                Op::Add1 => UnaryKind::Add1,
+                Op::Sub1 => UnaryKind::Sub1,
+                Op::Negate => UnaryKind::Negate,
+                _ => unreachable!("matched Add1/Sub1/Negate above"),
+            };
+            stack.push(lower_fixnum_unop(fb, deopt, kind, a));
+        }
+        Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let cc = match op {
+                Op::Eqlsign => IntCC::Equal,
+                Op::Lss => IntCC::SignedLessThan,
+                Op::Gtr => IntCC::SignedGreaterThan,
+                Op::Leq => IntCC::SignedLessThanOrEqual,
+                Op::Geq => IntCC::SignedGreaterThanOrEqual,
+                _ => unreachable!("matched comparison ops above"),
+            };
+            stack.push(lower_fixnum_compare(fb, deopt, cc, a, b));
+        }
+        other => return Err(CompileError::UnsupportedOp(op_category(other))),
+    }
+    Ok(())
+}
+
+/// Minimum operand-stack depth a simple op requires, and its net depth change.
+/// `Err` for anything outside the supported simple subset.
+fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
+    Ok(match op {
+        Op::Constant(_) | Op::Nil | Op::True => (0, 1),
+        Op::StackRef(n) => (*n as usize + 1, 1),
+        Op::Dup => (1, 1),
+        Op::Pop => (1, -1),
+        Op::Add | Op::Sub | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => (2, -1),
+        Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
+        other => return Err(CompileError::UnsupportedOp(op_category(other))),
+    })
+}
+
+/// Basic-block analysis: sorted block leaders, the operand-stack depth at each
+/// block's entry, and the max depth seen at any block boundary.
+struct Cfg {
+    leaders: Vec<usize>,
+    entry_depth: HashMap<usize, usize>,
+    max_depth: usize,
+}
+
+/// Record that `target` is entered with stack depth `d`, scheduling it for
+/// analysis. Depth must be non-negative and consistent across all paths (the
+/// byte-compiler guarantees a single static depth per program point).
+fn push_succ(
+    entry_depth: &mut HashMap<usize, usize>,
+    work: &mut Vec<usize>,
+    target: usize,
+    d: i64,
+) -> Result<(), CompileError> {
+    if d < 0 {
+        return Err(CompileError::StackUnderflow);
+    }
+    let d = d as usize;
+    match entry_depth.get(&target) {
+        Some(&existing) if existing != d => {
+            Err(CompileError::UnsupportedOp("inconsistent stack depth"))
+        }
+        Some(_) => Ok(()),
+        None => {
+            entry_depth.insert(target, d);
+            work.push(target);
+            Ok(())
+        }
+    }
+}
+
+/// Partition `ops` into basic blocks and compute the operand-stack depth at each
+/// block boundary, validating that every op is supported, jump targets are in
+/// range, depth never underflows, and every path ends in `Return`.
+fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
+    let n = ops.len();
+    if n == 0 {
+        return Err(CompileError::NoReturn);
+    }
+
+    // 1. Block leaders: index 0, every jump target, and every index following a
+    //    branch/goto/return.
+    let mut leader_set: BTreeSet<usize> = BTreeSet::new();
+    leader_set.insert(0);
+    for (i, op) in ops.iter().enumerate() {
+        match op {
+            Op::Goto(t)
+            | Op::GotoIfNil(t)
+            | Op::GotoIfNotNil(t)
+            | Op::GotoIfNilElsePop(t)
+            | Op::GotoIfNotNilElsePop(t) => {
+                let t = *t as usize;
+                if t >= n {
+                    return Err(CompileError::BadOperand);
+                }
+                leader_set.insert(t);
+                if i + 1 < n {
+                    leader_set.insert(i + 1);
+                }
+            }
+            Op::Return => {
+                if i + 1 < n {
+                    leader_set.insert(i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    let leaders: Vec<usize> = leader_set.into_iter().collect();
+    let next_leader = |idx: usize| leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
+
+    // 2. Propagate entry depths over the CFG (worklist).
+    let mut entry_depth: HashMap<usize, usize> = HashMap::new();
+    entry_depth.insert(0, arity);
+    let mut work = vec![0usize];
+    let mut max_depth = arity;
+
+    while let Some(l) = work.pop() {
+        let mut cur = entry_depth[&l] as i64;
+        let end = next_leader(l);
+        let mut terminated = false;
+        for op in &ops[l..end] {
+            // The terminator (if any) is always the last op of the block.
+            match op {
+                Op::Return => {
+                    if cur < 1 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    terminated = true;
+                    break;
+                }
+                Op::Goto(t) => {
+                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
+                    terminated = true;
+                    break;
+                }
+                Op::GotoIfNil(t) | Op::GotoIfNotNil(t) => {
+                    if cur < 1 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    cur -= 1; // pop the condition
+                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
+                    push_succ(&mut entry_depth, &mut work, end, cur)?; // fall-through
+                    terminated = true;
+                    break;
+                }
+                Op::GotoIfNilElsePop(t) | Op::GotoIfNotNilElsePop(t) => {
+                    if cur < 1 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    // The jump preserves TOS (depth cur); the fall-through pops it.
+                    push_succ(&mut entry_depth, &mut work, *t as usize, cur)?;
+                    push_succ(&mut entry_depth, &mut work, end, cur - 1)?;
+                    terminated = true;
+                    break;
+                }
+                other => {
+                    let (needs, delta) = simple_effect(other)?;
+                    if cur < needs as i64 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    cur += delta;
+                    if cur as usize > max_depth {
+                        max_depth = cur as usize;
+                    }
+                }
+            }
+        }
+        if !terminated {
+            // Block falls through into the next leader (guaranteed to exist and
+            // be < n; a block running off the end with no Return is invalid).
+            if end >= n {
+                return Err(CompileError::NoReturn);
+            }
+            push_succ(&mut entry_depth, &mut work, end, cur)?;
+        }
+    }
+
+    for &d in entry_depth.values() {
+        max_depth = max_depth.max(d);
+    }
+    Ok(Cfg {
+        leaders,
+        entry_depth,
+        max_depth,
+    })
+}
+
+/// Write the live operand `stack` back into the slot variables so a successor
+/// block can read it (the variable/SSA machinery inserts the needed phis).
+fn write_stack_to_vars(fb: &mut FunctionBuilder, vars: &[Variable], stack: &[ClifValue]) {
+    for (k, &v) in stack.iter().enumerate() {
+        fb.def_var(vars[k], v);
+    }
+}
+
+/// Lower a leaf bytecode body taking `arity` fixed arguments to native code.
 ///
-/// `ops` must end in `Return` and use only the supported subset. The `arity`
-/// arguments are loaded from the args pointer and seed the bottom of the operand
-/// stack (arg0 deepest), exactly as the interpreter's `run_frame` pushes them —
-/// so the body's `StackRef` opcodes reach them.
+/// Handles arbitrary intra-function control flow (`Goto`/`GotoIf*`) by building a
+/// CLIF basic-block CFG: each bytecode basic block becomes a CLIF block, and the
+/// operand stack flows across edges through per-slot SSA variables (Cranelift
+/// inserts the phis). The `arity` arguments are loaded and seed the bottom of the
+/// stack (arg0 deepest), exactly as the interpreter's `run_frame` pushes them.
 pub fn lower_leaf(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
 ) -> Result<CompiledLeaf, CompileError> {
+    let cfg = analyze_cfg(ops, arity)?;
+    let n = ops.len();
+
     let builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
     let mut module = JITModule::new(builder);
@@ -364,117 +617,127 @@ pub fn lower_leaf(
 
     let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
     let mut fbctx = FunctionBuilderContext::new();
-    let mut returned = false;
     {
         let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
+
+        // SSA variables: one I64 slot per operand-stack position (carries the
+        // stack across block edges), plus one for the out pointer (used by
+        // `Return` in any block).
+        let vars: Vec<Variable> = (0..cfg.max_depth)
+            .map(|_| fb.declare_var(types::I64))
+            .collect();
+        let out_var = fb.declare_var(ptr_ty);
+
+        // One CLIF block per bytecode basic block.
+        let block_for: HashMap<usize, Block> = cfg
+            .leaders
+            .iter()
+            .map(|&l| (l, fb.create_block()))
+            .collect();
+        // Shared deopt landing block, created lazily on the first guard.
+        let mut deopt: Option<Block> = None;
+
+        // Function-entry block: load args into the slot variables, stash the out
+        // pointer, then jump into bytecode block 0.
         let entry = fb.create_block();
         fb.append_block_params_for_function_params(entry);
         fb.switch_to_block(entry);
-        fb.seal_block(entry);
         let args_ptr = fb.block_params(entry)[0];
         let out_ptr = fb.block_params(entry)[1];
-
-        // The shared deopt landing block, created lazily on the first guard.
-        let mut deopt: Option<Block> = None;
-        // Compile-time model of the bytecode operand stack, seeded with the
-        // incoming arguments at the bottom of the frame (arg0 deepest), matching
-        // the interpreter's run_frame.
-        let mut stack: Vec<ClifValue> = Vec::with_capacity(arity + 8);
+        fb.def_var(out_var, out_ptr);
         for i in 0..arity {
             let v = fb
                 .ins()
                 .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
-            stack.push(v);
+            fb.def_var(vars[i], v);
         }
+        fb.ins().jump(block_for[&0], &[]);
 
-        for op in ops {
-            match op {
-                Op::Constant(idx) => {
-                    let v = constants
-                        .get(*idx as usize)
-                        .ok_or(CompileError::BadOperand)?;
-                    stack.push(fb.ins().iconst(types::I64, v.bits() as i64));
+        let next_leader = |idx: usize| cfg.leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
+
+        for &l in &cfg.leaders {
+            let blk = block_for[&l];
+            fb.switch_to_block(blk);
+            // Materialize the incoming operand stack from the slot variables.
+            let depth = cfg.entry_depth[&l];
+            let mut stack: Vec<ClifValue> = (0..depth).map(|k| fb.use_var(vars[k])).collect();
+
+            let end = next_leader(l);
+            let mut terminated = false;
+            for (off, op) in ops[l..end].iter().enumerate() {
+                let i = l + off;
+                match op {
+                    Op::Return => {
+                        let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let out = fb.use_var(out_var);
+                        fb.ins().store(MemFlags::trusted(), result, out, 0);
+                        let one = fb.ins().iconst(types::I64, 1);
+                        fb.ins().return_(&[one]);
+                        terminated = true;
+                        break;
+                    }
+                    Op::Goto(t) => {
+                        write_stack_to_vars(&mut fb, &vars, &stack);
+                        fb.ins().jump(block_for[&(*t as usize)], &[]);
+                        terminated = true;
+                        break;
+                    }
+                    Op::GotoIfNil(t) | Op::GotoIfNotNil(t) => {
+                        let cond = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        write_stack_to_vars(&mut fb, &vars, &stack);
+                        let is_nil =
+                            fb.ins()
+                                .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
+                        let target = block_for[&(*t as usize)];
+                        let fallthrough = block_for[&(i + 1)];
+                        // brif takes the `then` block when the condition is true.
+                        if matches!(op, Op::GotoIfNil(_)) {
+                            fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
+                        } else {
+                            fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
+                        }
+                        terminated = true;
+                        break;
+                    }
+                    Op::GotoIfNilElsePop(t) | Op::GotoIfNotNilElsePop(t) => {
+                        // Peek the condition without popping; write the FULL stack
+                        // (cond on top) to vars. The jump-taken successor reads it
+                        // all (depth D); the fall-through (depth D-1) ignores the
+                        // top slot — implementing the "ElsePop".
+                        let cond = *stack.last().ok_or(CompileError::StackUnderflow)?;
+                        write_stack_to_vars(&mut fb, &vars, &stack);
+                        let is_nil =
+                            fb.ins()
+                                .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
+                        let target = block_for[&(*t as usize)];
+                        let fallthrough = block_for[&(i + 1)];
+                        if matches!(op, Op::GotoIfNilElsePop(_)) {
+                            fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
+                        } else {
+                            fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
+                        }
+                        terminated = true;
+                        break;
+                    }
+                    other => lower_simple_op(&mut fb, &mut deopt, constants, &mut stack, other)?,
                 }
-                Op::Nil => {
-                    stack.push(fb.ins().iconst(types::I64, Value::NIL.bits() as i64));
-                }
-                Op::True => {
-                    stack.push(fb.ins().iconst(types::I64, Value::T.bits() as i64));
-                }
-                Op::Pop => {
-                    stack.pop().ok_or(CompileError::StackUnderflow)?;
-                }
-                Op::Dup => {
-                    let top = *stack.last().ok_or(CompileError::StackUnderflow)?;
-                    stack.push(top);
-                }
-                Op::StackRef(n) => {
-                    // 0 = top of stack, 1 = one below, ...
-                    let n = *n as usize;
-                    let idx = stack
-                        .len()
-                        .checked_sub(1 + n)
-                        .ok_or(CompileError::StackUnderflow)?;
-                    stack.push(stack[idx]);
-                }
-                Op::Add | Op::Sub => {
-                    let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    let is_sub = matches!(op, Op::Sub);
-                    let tagged = lower_fixnum_binop(&mut fb, &mut deopt, is_sub, a, b);
-                    stack.push(tagged);
-                }
-                Op::Add1 | Op::Sub1 | Op::Negate => {
-                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    let kind = match op {
-                        Op::Add1 => UnaryKind::Add1,
-                        Op::Sub1 => UnaryKind::Sub1,
-                        Op::Negate => UnaryKind::Negate,
-                        _ => unreachable!("matched Add1/Sub1/Negate above"),
-                    };
-                    let tagged = lower_fixnum_unop(&mut fb, &mut deopt, kind, a);
-                    stack.push(tagged);
-                }
-                Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
-                    let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    let cc = match op {
-                        Op::Eqlsign => IntCC::Equal,
-                        Op::Lss => IntCC::SignedLessThan,
-                        Op::Gtr => IntCC::SignedGreaterThan,
-                        Op::Leq => IntCC::SignedLessThanOrEqual,
-                        Op::Geq => IntCC::SignedGreaterThanOrEqual,
-                        _ => unreachable!("matched comparison ops above"),
-                    };
-                    let r = lower_fixnum_compare(&mut fb, &mut deopt, cc, a, b);
-                    stack.push(r);
-                }
-                Op::Return => {
-                    let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
-                    fb.ins().store(MemFlags::trusted(), result, out_ptr, 0);
-                    let one = fb.ins().iconst(types::I64, 1);
-                    fb.ins().return_(&[one]);
-                    returned = true;
-                    // Anything after Return is unreachable dead code; stop here.
-                    break;
-                }
-                other => return Err(CompileError::UnsupportedOp(op_category(other))),
             }
-        }
-
-        if !returned {
-            // Abandon the half-built function; nothing was finalized.
-            return Err(CompileError::NoReturn);
+            if !terminated {
+                // Fall through into the next leader block (analyze guaranteed it
+                // exists and is < n).
+                write_stack_to_vars(&mut fb, &vars, &stack);
+                fb.ins().jump(block_for[&end], &[]);
+            }
         }
 
         // Terminate the shared deopt block (return 0) iff any guard used it.
         if let Some(db) = deopt {
             fb.switch_to_block(db);
-            fb.seal_block(db);
             let zero = fb.ins().iconst(types::I64, 0);
             fb.ins().return_(&[zero]);
         }
 
+        fb.seal_all_blocks();
         fb.finalize();
     }
 
@@ -777,6 +1040,126 @@ mod tests {
         )
         .unwrap();
         assert_eq!(leaf.call(&[]), None);
+    }
+
+    #[test]
+    fn compiles_if_branch() {
+        // (lambda (x) (if x 1 2)):
+        //  0 StackRef(0); 1 GotoIfNil(4); 2 Constant(0=>1); 3 Return;
+        //  4 Constant(1=>2); 5 Return
+        let f = lower_leaf(
+            &[
+                Op::StackRef(0),
+                Op::GotoIfNil(4),
+                Op::Constant(0),
+                Op::Return,
+                Op::Constant(1),
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2)],
+            1,
+        )
+        .unwrap();
+        assert_eq!(f.call(&[Value::T]), Some(Value::make_int(1).bits()));
+        assert_eq!(
+            f.call(&[Value::make_int(99)]),
+            Some(Value::make_int(1).bits())
+        );
+        assert_eq!(f.call(&[Value::NIL]), Some(Value::make_int(2).bits()));
+    }
+
+    #[test]
+    fn compiles_goto_if_not_nil() {
+        // jumps to the second arm when the arg is non-nil.
+        let f = lower_leaf(
+            &[
+                Op::StackRef(0),
+                Op::GotoIfNotNil(4),
+                Op::Constant(0),
+                Op::Return,
+                Op::Constant(1),
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2)],
+            1,
+        )
+        .unwrap();
+        assert_eq!(f.call(&[Value::NIL]), Some(Value::make_int(1).bits()));
+        assert_eq!(f.call(&[Value::T]), Some(Value::make_int(2).bits()));
+    }
+
+    #[test]
+    fn compiles_goto_if_nil_else_pop() {
+        // (lambda (x) (and x 7)) shape:
+        //  0 StackRef(0); 1 GotoIfNilElsePop(3); 2 Constant(0=>7); 3 Return
+        // x nil  -> jump keeping x -> return x (nil);
+        // x else -> pop x, push 7 -> return 7.  A join with differing stacks (phi).
+        let f = lower_leaf(
+            &[
+                Op::StackRef(0),
+                Op::GotoIfNilElsePop(3),
+                Op::Constant(0),
+                Op::Return,
+            ],
+            &[Value::make_int(7)],
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            f.call(&[Value::make_int(5)]),
+            Some(Value::make_int(7).bits())
+        );
+        assert_eq!(f.call(&[Value::NIL]), Some(Value::NIL.bits()));
+    }
+
+    #[test]
+    fn compiles_unconditional_goto() {
+        //  0 Goto(1); 1 Constant(0=>5); 2 Return
+        let f = lower_leaf(
+            &[Op::Goto(1), Op::Constant(0), Op::Return],
+            &[Value::make_int(5)],
+            0,
+        )
+        .unwrap();
+        assert_eq!(f.call(&[]), Some(Value::make_int(5).bits()));
+    }
+
+    #[test]
+    fn jit_matches_interpreter_on_if_branch() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        let ops = [
+            Op::StackRef(0),
+            Op::GotoIfNil(4),
+            Op::Constant(0),
+            Op::Return,
+            Op::Constant(1),
+            Op::Return,
+        ];
+        let constants = [Value::make_int(10), Value::make_int(20)];
+        for arg in [Value::T, Value::NIL, Value::make_int(3)] {
+            let mut eval = Context::new_minimal_vm_harness();
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![crate::emacs_core::intern::SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.to_vec();
+            f.constants = constants.to_vec();
+            f.max_stack = 16;
+            let want = {
+                let mut vm = Vm::from_context(&mut eval);
+                vm.execute(&f, vec![arg]).expect("interp runs if").bits()
+            };
+            let got = lower_leaf(&ops, &constants, 1).unwrap().call(&[arg]);
+            assert_eq!(
+                got,
+                Some(want),
+                "if-branch mismatch for arg bits {}",
+                arg.bits()
+            );
+        }
     }
 
     #[test]
