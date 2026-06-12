@@ -4082,6 +4082,54 @@ impl<'a> Vm<'a> {
         self.ctx.unbind_to_with_result(bt_count, result)
     }
 
+    /// One bytecode-level `apply` with the interpreter's `Op::Apply` semantics:
+    /// spread the last argument as a list, writeback detection + after-call
+    /// writeback, and the plain traced `call_function` path (`Op::Apply` has no
+    /// nesting-depth guard — mirror that exactly). Used by the JIT apply shim;
+    /// keep in sync with the `Op::Apply` arm of `run_loop`. The caller polls
+    /// `maybe_quit` first and roots `func_val` + `raw_args` (the spread values
+    /// stay reachable through the rooted list).
+    #[cfg(feature = "jit")]
+    pub(crate) fn apply_for_jit(
+        &mut self,
+        func_val: Value,
+        mut raw_args: LispArgVec,
+    ) -> EvalResult {
+        if raw_args.is_empty() {
+            return self.call_function(func_val, LispArgVec::new());
+        }
+        // Spread the last argument.
+        if let Some(last) = raw_args.pop() {
+            let spread = list_to_vec(&last).unwrap_or_default();
+            raw_args.extend(spread);
+        }
+        let args = raw_args;
+        let writeback_names = if args.first().is_some_and(|value| value.is_string()) {
+            self.writeback_mutating_callable_names(&func_val)
+        } else {
+            None
+        };
+        let writeback_args = writeback_names.as_ref().map(|_| args.clone());
+        let result = self.call_function(func_val, args)?;
+        if let (Some((called_name, alias_target)), Some(writeback_args)) =
+            (writeback_names.as_ref(), writeback_args.as_ref())
+        {
+            let root_scope = self.ctx.save_vm_roots();
+            self.push_dynamic_vm_root(result);
+            for value in writeback_args.iter().copied() {
+                self.push_dynamic_vm_root(value);
+            }
+            self.maybe_writeback_mutating_first_arg(
+                called_name,
+                *alias_target,
+                writeback_args,
+                &result,
+            );
+            self.ctx.restore_vm_roots(root_scope);
+        }
+        Ok(result)
+    }
+
     /// One bytecode-level function call with the interpreter's `Op::Call`
     /// semantics: mutating-string-arg writeback detection, the lisp-nesting
     /// depth guard, the traced `call_function` path, and the after-call

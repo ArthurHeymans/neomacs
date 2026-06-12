@@ -193,6 +193,55 @@ extern "C" fn neovm_jit_call(
     status
 }
 
+/// `apply` a function from JIT code with the interpreter's `Op::Apply`
+/// semantics (quit poll first, last argument spread as a list, writeback, NO
+/// nesting-depth guard — see `Vm::apply_for_jit`). Same SAFETY contract as
+/// [`neovm_jit_call`].
+extern "C" fn neovm_jit_apply(
+    ctx: *mut u8,
+    func_bits: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    let func_val = Value::from_bits(func_bits as usize);
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(func_val);
+    let mut args = LispArgVec::new();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match ctx.maybe_quit() {
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+        Ok(()) => {
+            let mut vm = Vm::from_context(ctx);
+            match vm.apply_for_jit(func_val, args) {
+                Ok(value) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
 /// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
@@ -645,6 +694,7 @@ struct RtCtx {
     gc_restore: FuncRef,
     cons: FuncRef,
     call: FuncRef,
+    apply: FuncRef,
     /// The `*mut Context` function parameter, carried in an SSA variable so any
     /// block can read it.
     vmctx_var: Variable,
@@ -664,7 +714,7 @@ fn declare_rt_refs(
     func: &mut Function,
     call_conv: cranelift_codegen::isa::CallConv,
     ptr_ty: Type,
-) -> Result<(FuncRef, FuncRef, FuncRef, FuncRef, FuncRef), CompileError> {
+) -> Result<(FuncRef, FuncRef, FuncRef, FuncRef, FuncRef, FuncRef), CompileError> {
     let i64t = types::I64;
     let mut sig_ret = Signature::new(call_conv); // () -> i64
     sig_ret.returns.push(AbiParam::new(i64t));
@@ -694,6 +744,7 @@ fn declare_rt_refs(
     let restore_id = declare(module, "neovm_jit_gc_restore", &sig_arg)?;
     let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
     let call_id = declare(module, "neovm_jit_call", &sig_call)?;
+    let apply_id = declare(module, "neovm_jit_apply", &sig_call)?;
 
     Ok((
         module.declare_func_in_func(save_id, func),
@@ -701,6 +752,7 @@ fn declare_rt_refs(
         module.declare_func_in_func(restore_id, func),
         module.declare_func_in_func(cons_id, func),
         module.declare_func_in_func(call_id, func),
+        module.declare_func_in_func(apply_id, func),
     ))
 }
 
@@ -819,10 +871,17 @@ fn lower_simple_op(
             let is_cdr = matches!(op, Op::Cdr);
             stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
         }
-        Op::Call(n) => {
-            // `rt` is always present here (`needs_rt` includes Call). Stack:
-            // [func a1 .. aN] -> [result], mirroring the interpreter's Op::Call.
+        Op::Call(n) | Op::Apply(n) => {
+            // `rt` is always present here (`needs_rt` includes Call/Apply).
+            // Stack: [func a1 .. aN] -> [result], mirroring the interpreter's
+            // Op::Call / Op::Apply; the two differ only in which shim runs
+            // (apply spreads its last argument inside the runtime).
             let rt = rt.ok_or(CompileError::UnsupportedOp("call"))?;
+            let shim = if matches!(op, Op::Apply(_)) {
+                rt.apply
+            } else {
+                rt.call
+            };
             let n = *n as usize;
             if stack.len() < n + 1 {
                 return Err(CompileError::StackUnderflow);
@@ -853,7 +912,7 @@ fn lower_simple_op(
             let n_val = fb.ins().iconst(types::I64, n as i64);
             let call = fb
                 .ins()
-                .call(rt.call, &[vmctx, func_val, args_addr, n_val, out_addr]);
+                .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.gc_restore, &[s]);
@@ -926,7 +985,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Car | Op::Cdr => (1, 0),
         Op::Cons => (2, -1),
         // [func a1 .. aN] -> [result]
-        Op::Call(n) => (*n as usize + 1, -(*n as i64)),
+        Op::Call(n) | Op::Apply(n) => (*n as usize + 1, -(*n as i64)),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1140,7 +1199,7 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     if cur as usize > max_depth {
                         max_depth = cur as usize;
                     }
-                    if matches!(other, Op::Call(_)) {
+                    if matches!(other, Op::Call(_) | Op::Apply(_)) {
                         poisoned = true;
                     }
                 }
@@ -1203,10 +1262,13 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
     builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
+    builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
-    let needs_rt = ops.iter().any(|o| matches!(o, Op::Cons | Op::Call(_)));
+    let needs_rt = ops
+        .iter()
+        .any(|o| matches!(o, Op::Cons | Op::Call(_) | Op::Apply(_)));
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
@@ -1227,13 +1289,13 @@ pub fn lower_leaf(
         // Declare the runtime-call machinery into this function if the body
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
-            let (gc_save, gc_push, gc_restore, cons, call) =
+            let (gc_save, gc_push, gc_restore, cons, call, apply) =
                 declare_rt_refs(&mut module, fb.func, call_conv, ptr_ty)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()
                 .filter_map(|o| match o {
-                    Op::Call(n) => Some(*n as usize),
+                    Op::Call(n) | Op::Apply(n) => Some(*n as usize),
                     _ => None,
                 })
                 .max()
@@ -1251,6 +1313,7 @@ pub fn lower_leaf(
                 gc_restore,
                 cons,
                 call,
+                apply,
                 vmctx_var,
                 ptr_ty,
                 call_args_slot,
@@ -2233,6 +2296,64 @@ mod tests {
         )
         .unwrap();
         assert_eq!(leaf2.call(ctx_ptr, &[]), NativeRun::Deopt);
+    }
+
+    #[test]
+    fn compiles_apply_with_spread() {
+        // (apply 'inc (list 41)) -> 42: the last argument spreads as the list.
+        let (mut ev, sym_val) = harness_with_inc_callee("jit-test-inc-apply");
+        let arg_list = Value::cons(Value::make_int(41), Value::NIL);
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Apply(1), Op::Return],
+            &[sym_val, arg_list],
+        )
+        .unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(42).bits())
+        );
+    }
+
+    #[test]
+    fn compiles_apply_with_leading_args() {
+        // (apply 'add2 40 (list 2)) -> 42: leading args + spread tail.
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let sym_val = Value::symbol("jit-test-add2-apply");
+        let crate::emacs_core::value::ValueKind::Symbol(sym_id) = sym_val.kind() else {
+            panic!("symbol expected");
+        };
+        let mut callee = ByteCodeFunction::new(LambdaParams {
+            required: vec![
+                crate::emacs_core::intern::SymId(1),
+                crate::emacs_core::intern::SymId(2),
+            ],
+            optional: Vec::new(),
+            rest: None,
+        });
+        callee.lexical = true;
+        callee.ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return];
+        callee.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(sym_id, Value::make_bytecode(callee));
+
+        let tail = Value::cons(Value::make_int(2), Value::NIL);
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0), // sym
+                Op::Constant(1), // 40
+                Op::Constant(2), // (2)
+                Op::Apply(2),
+                Op::Return,
+            ],
+            &[sym_val, Value::make_int(40), tail],
+        )
+        .unwrap();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(42).bits())
+        );
     }
 
     #[test]
