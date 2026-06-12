@@ -237,7 +237,7 @@ pub(crate) fn resolve_display_property_media(
     )
 }
 
-fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
+pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
     lhs.fg == rhs.fg
         && lhs.bg == rhs.bg
         && lhs.font_family == rhs.font_family

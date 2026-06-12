@@ -17,6 +17,7 @@ use crate::display_source_resolver::{
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
+use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -322,6 +323,7 @@ struct DisplayRowGlyphMeasurer<'a> {
     faces: &'a [DisplayRowFace],
     font_metrics: Option<&'a mut FontMetricsService>,
     fallback_char_width: f32,
+    quantization: GlyphAdvanceQuantization,
 }
 
 impl<'a> DisplayRowGlyphMeasurer<'a> {
@@ -334,6 +336,7 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
             faces,
             font_metrics,
             fallback_char_width,
+            quantization: GlyphAdvanceQuantization::PreserveLogicalPixels,
         }
     }
 
@@ -366,19 +369,11 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             .as_mut()
             .map(|svc| svc.char_width(ch, &font_family, font_weight, italic, font_size));
 
-        Some(snap_glyph_advance(
-            measured.unwrap_or(fallback_advance_px.max(min_advance)),
-            min_advance,
-        ))
+        Some(
+            self.quantization
+                .resolve(measured, fallback_advance_px.max(min_advance), min_advance),
+        )
     }
-}
-
-fn snap_glyph_advance(advance: f32, min_advance: f32) -> f32 {
-    let snapped_min = min_advance.round().max(1.0);
-    if !advance.is_finite() || advance <= 0.0 {
-        return snapped_min;
-    }
-    advance.round().max(snapped_min)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

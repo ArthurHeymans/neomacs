@@ -1812,6 +1812,55 @@ fn test_face_resolver_overlay_face() {
 }
 
 #[test]
+fn face_for_overlay_string_uses_text_property_but_ignores_overlay_face() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*overlay-string-face*");
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        set_buffer_text(buf, "anchor");
+        buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf.id()),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        buf.overlays_mut()
+            .overlay_put(overlay, Value::symbol("face"), Value::symbol("italic"))
+            .unwrap();
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    let mut normal_next_check = buf.point_max_char_pos().get();
+    let normal_text_face = resolver.face_at_pos(buf, 0, &mut normal_next_check);
+    assert_eq!(normal_text_face.font_weight, FontWeight::BOLD.css_weight());
+    assert!(
+        normal_text_face.italic,
+        "normal buffer text should include overlay face"
+    );
+
+    let mut overlay_next_check = buf.point_max_char_pos().get();
+    let overlay_string_face = resolver.face_for_overlay_string(buf, 0, &mut overlay_next_check);
+    assert_eq!(
+        overlay_string_face.font_weight,
+        FontWeight::BOLD.css_weight()
+    );
+    assert!(
+        !overlay_string_face.italic,
+        "GNU overlay string base face ignores overlay faces"
+    );
+}
+
+#[test]
 fn test_face_resolver_overlay_priority() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let mut table = FaceTable::new();

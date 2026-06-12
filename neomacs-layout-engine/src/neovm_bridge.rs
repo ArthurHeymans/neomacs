@@ -2735,6 +2735,40 @@ impl FaceResolver {
         resolved
     }
 
+    /// Resolve the base face for an overlay `before-string' or
+    /// `after-string'.
+    ///
+    /// GNU redisplay treats overlay strings specially: their base face depends
+    /// only on text properties at the anchor position and ignores overlay
+    /// faces/current iterator face.  The overlay string's own text properties
+    /// are merged later by the Lisp string display-source iterator.
+    pub(crate) fn face_for_overlay_string<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        anchor_charpos: usize,
+        next_check: &mut usize,
+    ) -> ResolvedFace {
+        let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, CharPos0::new(anchor_charpos));
+        let mut min_next = buffer.layout_point_max_char_pos().get();
+        let mut resolved = self.resolve_buffer_default_face(buffer);
+        let mut remap_stack = Vec::new();
+
+        if let Some(face_prop) =
+            buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"))
+            && let Some(next) =
+                self.resolve_buffer_face_value_over(buffer, &resolved, &face_prop, &mut remap_stack)
+        {
+            resolved = next;
+        }
+
+        if let Some(nc) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(bytepos) {
+            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nc));
+        }
+
+        *next_check = min_next;
+        resolved
+    }
+
     /// Extract face name(s) from a Lisp Value.
     ///
     /// Face property values can be:

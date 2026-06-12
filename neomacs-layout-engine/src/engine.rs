@@ -46,6 +46,7 @@ use crate::display_source::{
 };
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::fontconfig::FontSizing;
+use crate::glyph_advance::GlyphAdvanceQuantization;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
@@ -1233,19 +1234,67 @@ fn text_display_tab_policy(
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OverlayStringKind {
+    Before,
+    After,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayStringOrigin {
+    OverlayString {
+        anchor_charpos: usize,
+        kind: OverlayStringKind,
+    },
+}
+
+#[derive(Clone, Debug)]
+struct DisplayStringBaseFace {
+    face: super::neovm_bridge::ResolvedFace,
+    face_id: u32,
+}
+
+fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    origin: DisplayStringOrigin,
+    current_face_id: &mut u32,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
+    match origin {
+        DisplayStringOrigin::OverlayString { anchor_charpos, .. } => {
+            let mut next_check = buffer.layout_point_max_char_pos().get();
+            let face =
+                face_resolver.face_for_overlay_string(buffer, anchor_charpos, &mut next_check);
+            let face_id = if crate::display_source_resolver::same_resolved_face(
+                &face,
+                face_resolver.default_face(),
+            ) {
+                u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
+            } else {
+                let face_id = *current_face_id;
+                *current_face_id += 1;
+                face_id
+            };
+            insert_resolved_display_row_face(builder, face_id, &face, None);
+            DisplayStringBaseFace { face, face_id }
+        }
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
 /// and resets `x`/`col` — matching GNU `display_line()` behaviour for overlay
 /// strings that contain newlines (e.g. fido-vertical-mode completions).
-fn render_overlay_string(
+fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
+    buffer: &B,
     text_value: Value,
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
-    base_face: &super::neovm_bridge::ResolvedFace,
-    base_face_id: u32,
+    origin: DisplayStringOrigin,
     x: &mut f32,
     y: &mut f32,
     col: &mut usize,
@@ -1266,7 +1315,6 @@ fn render_overlay_string(
     row_extra_y: f32,
     row_base: usize,
     max_rows: usize,
-    overlay_face: Option<&super::neovm_bridge::ResolvedFace>,
     current_face_id: &mut u32,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     params: &WindowParams,
@@ -1275,14 +1323,8 @@ fn render_overlay_string(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let (overlay_base_face, overlay_base_face_id) = if let Some(face) = overlay_face {
-        let face_id = *current_face_id;
-        insert_resolved_display_row_face(builder, face_id, face, None);
-        *current_face_id += 1;
-        (face, face_id)
-    } else {
-        (base_face, base_face_id)
-    };
+    let base_face =
+        display_string_base_face(buffer, face_resolver, origin, current_face_id, builder);
 
     macro_rules! finish_overlay_string_row {
         () => {{
@@ -1331,7 +1373,7 @@ fn render_overlay_string(
     let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
         1,
         text_value,
-        crate::display_item::RenderFaceRef::FaceId(overlay_base_face_id),
+        crate::display_item::RenderFaceRef::FaceId(base_face.face_id),
     ) else {
         return;
     };
@@ -1358,8 +1400,8 @@ fn render_overlay_string(
                 },
                 max_x_px: max_x,
             },
-            base_face_id: overlay_base_face_id,
-            base_face: overlay_base_face,
+            base_face_id: base_face.face_id,
+            base_face: &base_face.face,
             role: GlyphRowRole::Text,
             symbol_values: std::collections::HashMap::new(),
         };
@@ -1399,7 +1441,7 @@ fn render_overlay_string(
                 char_h,
                 default_row_ascent,
                 *row,
-                Color::from_pixel(overlay_base_face.bg),
+                Color::from_pixel(base_face.face.bg),
             );
         }
         *x = outcome.end.x_px;
@@ -3803,21 +3845,17 @@ impl LayoutEngine {
                             self.run_buf.clear();
                             let right_limit = content_x + avail_width;
                             for overlay_string in &after_strings {
-                                let ov_face = buffer
-                                    .overlays()
-                                    .overlay_get_named(
-                                        overlay_string.overlay_id,
-                                        Value::symbol("face"),
-                                    )
-                                    .and_then(|val| face_resolver.resolve_face_from_value(&val));
                                 render_overlay_string(
                                     evaluator,
                                     &mut output_emitter,
+                                    buffer,
                                     overlay_string.string,
                                     &mut self.font_metrics,
                                     face_resolver,
-                                    &current_resolved_face,
-                                    current_text_face_id,
+                                    DisplayStringOrigin::OverlayString {
+                                        anchor_charpos: charpos as usize,
+                                        kind: OverlayStringKind::After,
+                                    },
                                     &mut x,
                                     &mut y,
                                     &mut col,
@@ -3838,7 +3876,6 @@ impl LayoutEngine {
                                     row_extra_y,
                                     text_matrix_row_base,
                                     max_rows,
-                                    ov_face.as_ref(),
                                     &mut current_face_id,
                                     &mut self.matrix_builder,
                                     params,
@@ -5448,18 +5485,17 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &before_strings {
-                        let ov_face = buffer
-                            .overlays()
-                            .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
-                            .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
                             evaluator,
                             &mut output_emitter,
+                            buffer,
                             overlay_string.string,
                             &mut self.font_metrics,
                             face_resolver,
-                            &current_resolved_face,
-                            current_text_face_id,
+                            DisplayStringOrigin::OverlayString {
+                                anchor_charpos: charpos as usize,
+                                kind: OverlayStringKind::Before,
+                            },
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5480,7 +5516,6 @@ impl LayoutEngine {
                             row_extra_y,
                             text_matrix_row_base,
                             max_rows,
-                            ov_face.as_ref(),
                             &mut current_face_id,
                             &mut self.matrix_builder,
                             params,
@@ -5559,18 +5594,17 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let right_limit = content_x + avail_width;
                     for overlay_string in &after_strings {
-                        let ov_face = buffer
-                            .overlays()
-                            .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
-                            .and_then(|val| face_resolver.resolve_face_from_value(&val));
                         render_overlay_string(
                             evaluator,
                             &mut output_emitter,
+                            buffer,
                             overlay_string.string,
                             &mut self.font_metrics,
                             face_resolver,
-                            &current_resolved_face,
-                            current_text_face_id,
+                            DisplayStringOrigin::OverlayString {
+                                anchor_charpos: charpos as usize,
+                                kind: OverlayStringKind::After,
+                            },
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5591,7 +5625,6 @@ impl LayoutEngine {
                             row_extra_y,
                             text_matrix_row_base,
                             max_rows,
-                            ov_face.as_ref(),
                             &mut current_face_id,
                             &mut self.matrix_builder,
                             params,
@@ -5667,19 +5700,18 @@ impl LayoutEngine {
             );
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
             let right_limit = content_x + avail_width;
-            for overlay_string in before_strings.iter().chain(after_strings.iter()) {
-                let ov_face = buffer
-                    .overlays()
-                    .overlay_get_named(overlay_string.overlay_id, Value::symbol("face"))
-                    .and_then(|val| face_resolver.resolve_face_from_value(&val));
+            for overlay_string in &before_strings {
                 render_overlay_string(
                     evaluator,
                     &mut output_emitter,
+                    buffer,
                     overlay_string.string,
                     &mut self.font_metrics,
                     face_resolver,
-                    &current_resolved_face,
-                    current_text_face_id,
+                    DisplayStringOrigin::OverlayString {
+                        anchor_charpos: charpos as usize,
+                        kind: OverlayStringKind::Before,
+                    },
                     &mut x,
                     &mut y,
                     &mut col,
@@ -5700,7 +5732,43 @@ impl LayoutEngine {
                     row_extra_y,
                     text_matrix_row_base,
                     max_rows,
-                    ov_face.as_ref(),
+                    &mut current_face_id,
+                    &mut self.matrix_builder,
+                    params,
+                );
+            }
+            for overlay_string in &after_strings {
+                render_overlay_string(
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    overlay_string.string,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    DisplayStringOrigin::OverlayString {
+                        anchor_charpos: charpos as usize,
+                        kind: OverlayStringKind::After,
+                    },
+                    &mut x,
+                    &mut y,
+                    &mut col,
+                    &mut row,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_charpos_start,
+                    charpos,
+                    &mut row_y_positions,
+                    &mut row_max_height,
+                    &mut row_max_ascent,
+                    face_char_w,
+                    char_h,
+                    default_face_ascent,
+                    right_limit,
+                    content_x,
+                    text_y,
+                    row_extra_y,
+                    text_matrix_row_base,
+                    max_rows,
                     &mut current_face_id,
                     &mut self.matrix_builder,
                     params,
@@ -7053,21 +7121,6 @@ fn char_advance(
     font_weight: u16,
     font_italic: bool,
 ) -> f32 {
-    #[inline]
-    fn snap_advance_to_pixel_grid(advance: f32, min_advance: f32) -> f32 {
-        let snapped_min = min_advance.round().max(1.0);
-        if !advance.is_finite() || advance <= 0.0 {
-            return snapped_min;
-        }
-
-        // GNU Emacs stores realized glyph widths and positions in integer
-        // pixels. Snapping each advance before it enters layout keeps the
-        // published window geometry (`posn-at-point`, cursor x, etc.) on the
-        // same integer grid instead of accumulating fractional drift across a
-        // row.
-        advance.round().max(1.0)
-    }
-
     // Use the face-specific character width when available (handles
     // faces with :height attribute that use a differently-sized font).
     let face_w = if face_char_w > 0.0 {
@@ -7079,16 +7132,21 @@ fn char_advance(
         return 0.0;
     }
     let min_grid_advance = char_cols as f32 * face_w;
+    let quantization = if use_font_metrics {
+        GlyphAdvanceQuantization::PreserveLogicalPixels
+    } else {
+        GlyphAdvanceQuantization::SnapToIntegerPixels
+    };
 
     // TTY redisplay uses character-cell metrics even if this test/engine
     // instance owns a GUI font service for another frame.
     if !use_font_metrics {
-        return snap_advance_to_pixel_grid(min_grid_advance, min_grid_advance);
+        return quantization.quantize(min_grid_advance, min_grid_advance);
     }
 
     let svc = match font_metrics_svc.as_mut() {
         Some(svc) => svc,
-        None => return snap_advance_to_pixel_grid(min_grid_advance, min_grid_advance),
+        None => return quantization.quantize(min_grid_advance, min_grid_advance),
     };
     let font_size_f = if font_size > 0 {
         font_size as f32
@@ -7102,7 +7160,7 @@ fn char_advance(
             let mut widths =
                 svc.fill_ascii_widths(font_family, font_weight, font_italic, font_size_f);
             for w in &mut widths {
-                *w = snap_advance_to_pixel_grid(*w, min_grid_advance);
+                *w = quantization.resolve(Some(*w), min_grid_advance, min_grid_advance);
             }
             widths
         });
@@ -7110,7 +7168,7 @@ fn char_advance(
     }
 
     let measured = svc.char_width(ch, font_family, font_weight, font_italic, font_size_f);
-    snap_advance_to_pixel_grid(measured, min_grid_advance)
+    quantization.resolve(Some(measured), min_grid_advance, min_grid_advance)
 }
 
 #[cfg(test)]

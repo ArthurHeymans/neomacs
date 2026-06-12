@@ -1,6 +1,7 @@
 use super::*;
 use crate::display_item::RenderFaceRef;
 use crate::display_source::DisplayItemSource;
+use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -250,6 +251,51 @@ fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+fn expected_gui_glyph_advance(
+    metrics: &mut FontMetricsService,
+    ch: char,
+    family: &str,
+    weight: u16,
+    italic: bool,
+    font_size: f32,
+) -> f32 {
+    let face_metrics = metrics.font_metrics(family, weight, italic, font_size);
+    let columns = crate::composition::base_width_cols(ch);
+    let minimum = f32::from(columns) * face_metrics.char_width.max(1.0);
+    let measured = metrics.char_width(ch, family, weight, italic, font_size);
+
+    GlyphAdvanceQuantization::PreserveLogicalPixels.resolve(Some(measured), minimum, minimum)
+}
+
+fn assert_point_width_matches_advance(
+    point: &DisplayPointSnapshot,
+    expected_advance: f32,
+    label: &str,
+    all_points: &[DisplayPointSnapshot],
+) {
+    let expected_width = expected_advance.round() as i64;
+    assert!(
+        (point.width - expected_width).abs() <= 1,
+        "expected {label} width near {expected_width} ({expected_advance:.3}px), got {point:?}; points={all_points:?}"
+    );
+}
+
+fn assert_point_delta_matches_advance(
+    from: &DisplayPointSnapshot,
+    to: &DisplayPointSnapshot,
+    expected_advance: f32,
+    label: &str,
+    all_points: &[DisplayPointSnapshot],
+) {
+    let observed = (to.x - from.x) as f32;
+    assert!(
+        (observed - expected_advance).abs() <= 1.0,
+        "expected {label} x delta near {expected_advance:.3}px, got {} -> {}; points={all_points:?}",
+        from.x,
+        to.x
+    );
 }
 
 fn assert_replacement_slot_between_neighbors(
@@ -2527,15 +2573,30 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
     let default_font_size = frame.font_pixel_size;
     let face_font_size = default_font_size * 1.6;
     let mut metrics = FontMetricsService::new();
-    let expected_a = metrics
-        .char_width('a', "JetBrains Mono", 800, false, face_font_size)
-        .round() as i64;
-    let expected_hao = metrics
-        .char_width('好', "JetBrains Mono", 800, false, face_font_size)
-        .round() as i64;
-    let expected_b = metrics
-        .char_width('b', "JetBrains Mono", 800, false, face_font_size)
-        .round() as i64;
+    let expected_a = expected_gui_glyph_advance(
+        &mut metrics,
+        'a',
+        "JetBrains Mono",
+        800,
+        false,
+        face_font_size,
+    );
+    let expected_hao = expected_gui_glyph_advance(
+        &mut metrics,
+        '好',
+        "JetBrains Mono",
+        800,
+        false,
+        face_font_size,
+    );
+    let expected_b = expected_gui_glyph_advance(
+        &mut metrics,
+        'b',
+        "JetBrains Mono",
+        800,
+        false,
+        face_font_size,
+    );
     let cached_ascii = engine
         .ascii_width_cache
         .iter()
@@ -2549,55 +2610,29 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
         .expect("cached JetBrains Mono widths");
 
     assert!(
-        (cached_ascii['a' as usize].round() as i64 - expected_a).abs() <= 1,
-        "expected cached width for 'a' to match FontMetricsService, got {} vs expected {expected_a}",
+        (cached_ascii['a' as usize] - expected_a).abs() <= 1.0,
+        "expected cached width for 'a' to match FontMetricsService, got {} vs expected {expected_a:.3}",
         cached_ascii['a' as usize]
     );
     assert!(
-        (cached_ascii['b' as usize].round() as i64 - expected_b).abs() <= 1,
-        "expected cached width for 'b' to match FontMetricsService, got {} vs expected {expected_b}",
+        (cached_ascii['b' as usize] - expected_b).abs() <= 1.0,
+        "expected cached width for 'b' to match FontMetricsService, got {} vs expected {expected_b:.3}",
         cached_ascii['b' as usize]
     );
-    assert!(
-        (a.width - expected_a).abs() <= 1,
-        "expected inline face width for 'a' to follow FontMetricsService (expected {expected_a}, got {a:?}); points={all_points:?}"
+    assert_point_width_matches_advance(a, expected_a, "inline face a", &all_points);
+    assert_point_width_matches_advance(hao1, expected_hao, "inline face first 好", &all_points);
+    assert_point_width_matches_advance(hao2, expected_hao, "inline face second 好", &all_points);
+    assert_point_width_matches_advance(b, expected_b, "inline face b", &all_points);
+    assert_point_delta_matches_advance(a, hao1, expected_a, "inline face first 好", &all_points);
+    assert_point_delta_matches_advance(
+        hao1,
+        hao2,
+        expected_hao,
+        "inline face second 好",
+        &all_points,
     );
-    assert!(
-        (hao1.width - expected_hao).abs() <= 1,
-        "expected inline face width for first 好 to follow FontMetricsService (expected {expected_hao}, got {hao1:?}); points={all_points:?}"
-    );
-    assert!(
-        (hao2.width - expected_hao).abs() <= 1,
-        "expected inline face width for second 好 to follow FontMetricsService (expected {expected_hao}, got {hao2:?}); points={all_points:?}"
-    );
-    assert!(
-        (b.width - expected_b).abs() <= 1,
-        "expected inline face width for 'b' to follow FontMetricsService (expected {expected_b}, got {b:?}); points={all_points:?}"
-    );
-    assert!(
-        ((hao1.x - a.x) - expected_a).abs() <= 1,
-        "expected next point after 'a' to advance by {expected_a}, got {} -> {} with points={all_points:?}",
-        a.x,
-        hao1.x
-    );
-    assert!(
-        ((hao2.x - hao1.x) - expected_hao).abs() <= 1,
-        "expected next point after first 好 to advance by {expected_hao}, got {} -> {} with points={all_points:?}",
-        hao1.x,
-        hao2.x
-    );
-    assert!(
-        ((b.x - hao2.x) - expected_hao).abs() <= 1,
-        "expected next point after second 好 to advance by {expected_hao}, got {} -> {} with points={all_points:?}",
-        hao2.x,
-        b.x
-    );
-    assert!(
-        ((space.x - b.x) - expected_b).abs() <= 1,
-        "expected next point after 'b' to advance by {expected_b}, got {} -> {} with points={all_points:?}",
-        b.x,
-        space.x
-    );
+    assert_point_delta_matches_advance(hao2, b, expected_hao, "inline face b", &all_points);
+    assert_point_delta_matches_advance(b, space, expected_b, "inline face space", &all_points);
 }
 
 #[test]
@@ -2661,12 +2696,12 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let face_font_size = frame.font_pixel_size;
     let mut metrics = FontMetricsService::new();
-    let expected_i = metrics
-        .char_width('i', "Noto Sans", 400, false, face_font_size)
-        .round() as i64;
-    let expected_w = metrics
-        .char_width('W', "Noto Sans", 400, false, face_font_size)
-        .round() as i64;
+    let expected_i =
+        expected_gui_glyph_advance(&mut metrics, 'i', "Noto Sans", 400, false, face_font_size)
+            .round() as i64;
+    let expected_w =
+        expected_gui_glyph_advance(&mut metrics, 'W', "Noto Sans", 400, false, face_font_size)
+            .round() as i64;
     assert_ne!(
         expected_i, expected_w,
         "test requires proportional metrics for i and W"
@@ -5173,57 +5208,44 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
 
     let face_font_size = frame.font_pixel_size * 0.9;
     let mut metrics = FontMetricsService::new();
-    let expected_a = metrics
-        .char_width('a', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
-    let expected_hao = metrics
-        .char_width('好', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
-    let expected_b = metrics
-        .char_width('b', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
+    let expected_a = expected_gui_glyph_advance(
+        &mut metrics,
+        'a',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
+    let expected_hao = expected_gui_glyph_advance(
+        &mut metrics,
+        '好',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
+    let expected_b = expected_gui_glyph_advance(
+        &mut metrics,
+        'b',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
 
-    assert!(
-        (a.width - expected_a).abs() <= 1,
-        "expected a width {expected_a}, got {a:?}; points={all_points:?}"
-    );
-    assert!(
-        (hao1.width - expected_hao).abs() <= 1,
-        "expected first 好 width {expected_hao}, got {hao1:?}; points={all_points:?}"
-    );
-    assert!(
-        (hao2.width - expected_hao).abs() <= 1,
-        "expected second 好 width {expected_hao}, got {hao2:?}; points={all_points:?}"
-    );
-    assert!(
-        (b.width - expected_b).abs() <= 1,
-        "expected b width {expected_b}, got {b:?}; points={all_points:?}"
-    );
-    assert!(
-        ((hao1.x - a.x) - expected_a).abs() <= 1,
-        "expected first 好 x delta {expected_a}, got {} -> {}; points={all_points:?}",
-        a.x,
-        hao1.x
-    );
-    assert!(
-        ((hao2.x - hao1.x) - expected_hao).abs() <= 1,
-        "expected second 好 x delta {expected_hao}, got {} -> {}; points={all_points:?}",
-        hao1.x,
-        hao2.x
-    );
-    assert!(
-        ((b.x - hao2.x) - expected_hao).abs() <= 1,
-        "expected b x delta {expected_hao}, got {} -> {}; points={all_points:?}",
-        hao2.x,
-        b.x
-    );
+    assert_point_width_matches_advance(a, expected_a, "a", &all_points);
+    assert_point_width_matches_advance(hao1, expected_hao, "first 好", &all_points);
+    assert_point_width_matches_advance(hao2, expected_hao, "second 好", &all_points);
+    assert_point_width_matches_advance(b, expected_b, "b", &all_points);
+    assert_point_delta_matches_advance(a, hao1, expected_a, "first 好", &all_points);
+    assert_point_delta_matches_advance(hao1, hao2, expected_hao, "second 好", &all_points);
+    assert_point_delta_matches_advance(hao2, b, expected_hao, "b", &all_points);
     let space = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(sample_pos + 4))
         .expect("space");
-    assert_eq!(
-        space.x - b.x,
-        b.width,
-        "expected next point after 'b' to land exactly one snapped advance later; b={b:?} space={space:?} points={all_points:?}"
+    assert!(
+        ((space.x - b.x) as f32 - expected_b).abs() <= 1.0,
+        "expected next point after 'b' to land near one logical advance later; b={b:?} space={space:?} points={all_points:?}"
     );
 }
 
@@ -5312,50 +5334,38 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
 
     let face_font_size = frame.font_pixel_size * 0.9;
     let mut metrics = FontMetricsService::new();
-    let expected_a = metrics
-        .char_width('a', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
-    let expected_hao = metrics
-        .char_width('好', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
-    let expected_b = metrics
-        .char_width('b', "Noto Sans Mono", 400, false, face_font_size)
-        .round() as i64;
+    let expected_a = expected_gui_glyph_advance(
+        &mut metrics,
+        'a',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
+    let expected_hao = expected_gui_glyph_advance(
+        &mut metrics,
+        '好',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
+    let expected_b = expected_gui_glyph_advance(
+        &mut metrics,
+        'b',
+        "Noto Sans Mono",
+        400,
+        false,
+        face_font_size,
+    );
 
-    assert!(
-        (a.width - expected_a).abs() <= 1,
-        "expected a width {expected_a}, got {a:?}; points={all_points:?}"
-    );
-    assert!(
-        (hao1.width - expected_hao).abs() <= 1,
-        "expected first 好 width {expected_hao}, got {hao1:?}; points={all_points:?}"
-    );
-    assert!(
-        (hao2.width - expected_hao).abs() <= 1,
-        "expected second 好 width {expected_hao}, got {hao2:?}; points={all_points:?}"
-    );
-    assert!(
-        (b.width - expected_b).abs() <= 1,
-        "expected b width {expected_b}, got {b:?}; points={all_points:?}"
-    );
-    assert!(
-        ((hao1.x - a.x) - expected_a).abs() <= 1,
-        "expected first 好 x delta {expected_a}, got {} -> {}; points={all_points:?}",
-        a.x,
-        hao1.x
-    );
-    assert!(
-        ((hao2.x - hao1.x) - expected_hao).abs() <= 1,
-        "expected second 好 x delta {expected_hao}, got {} -> {}; points={all_points:?}",
-        hao1.x,
-        hao2.x
-    );
-    assert!(
-        ((b.x - hao2.x) - expected_hao).abs() <= 1,
-        "expected b x delta {expected_hao}, got {} -> {}; points={all_points:?}",
-        hao2.x,
-        b.x
-    );
+    assert_point_width_matches_advance(a, expected_a, "a", &all_points);
+    assert_point_width_matches_advance(hao1, expected_hao, "first 好", &all_points);
+    assert_point_width_matches_advance(hao2, expected_hao, "second 好", &all_points);
+    assert_point_width_matches_advance(b, expected_b, "b", &all_points);
+    assert_point_delta_matches_advance(a, hao1, expected_a, "first 好", &all_points);
+    assert_point_delta_matches_advance(hao1, hao2, expected_hao, "second 好", &all_points);
+    assert_point_delta_matches_advance(hao2, b, expected_hao, "b", &all_points);
 }
 
 #[test]
@@ -5526,56 +5536,53 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
             .expect("sample trailing space");
 
         let face_font_size = frame.font_pixel_size * target.height;
-        let expected_a = metrics
-            .char_width('a', "JetBrains Mono", target.weight, false, face_font_size)
-            .round() as i64;
-        let expected_hao = metrics
-            .char_width('好', "JetBrains Mono", target.weight, false, face_font_size)
-            .round() as i64;
-        let expected_b = metrics
-            .char_width('b', "JetBrains Mono", target.weight, false, face_font_size)
-            .round() as i64;
+        let expected_a = expected_gui_glyph_advance(
+            &mut metrics,
+            'a',
+            "JetBrains Mono",
+            target.weight,
+            false,
+            face_font_size,
+        );
+        let expected_hao = expected_gui_glyph_advance(
+            &mut metrics,
+            '好',
+            "JetBrains Mono",
+            target.weight,
+            false,
+            face_font_size,
+        );
+        let expected_b = expected_gui_glyph_advance(
+            &mut metrics,
+            'b',
+            "JetBrains Mono",
+            target.weight,
+            false,
+            face_font_size,
+        );
 
-        assert!(
-            (a.width - expected_a).abs() <= 1,
-            "expected a width {expected_a} after sequential point moves, got {a:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
+        assert_point_width_matches_advance(a, expected_a, "sequential a", &all_points);
+        assert_point_width_matches_advance(hao1, expected_hao, "sequential first 好", &all_points);
+        assert_point_width_matches_advance(hao2, expected_hao, "sequential second 好", &all_points);
+        assert_point_width_matches_advance(b, expected_b, "sequential b", &all_points);
+        assert_point_delta_matches_advance(a, hao1, expected_a, "sequential first 好", &all_points);
+        assert_point_delta_matches_advance(
+            hao1,
+            hao2,
+            expected_hao,
+            "sequential second 好",
+            &all_points,
         );
-        assert!(
-            (hao1.width - expected_hao).abs() <= 1,
-            "expected first 好 width {expected_hao} after sequential point moves, got {hao1:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
+        assert_point_delta_matches_advance(hao2, b, expected_hao, "sequential b", &all_points);
+        assert_point_delta_matches_advance(
+            b,
+            after_b,
+            expected_b,
+            "sequential after b",
+            &all_points,
         );
-        assert!(
-            (hao2.width - expected_hao).abs() <= 1,
-            "expected second 好 width {expected_hao} after sequential point moves, got {hao2:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
-        );
-        assert!(
-            (b.width - expected_b).abs() <= 1,
-            "expected b width {expected_b} after sequential point moves, got {b:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
-        );
-        assert!(
-            ((hao1.x - a.x) - expected_a).abs() <= 1,
-            "expected first 好 x delta {expected_a} after sequential point moves, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            a.x,
-            hao1.x
-        );
-        assert!(
-            ((hao2.x - hao1.x) - expected_hao).abs() <= 1,
-            "expected second 好 x delta {expected_hao} after sequential point moves, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            hao1.x,
-            hao2.x
-        );
-        assert!(
-            ((b.x - hao2.x) - expected_hao).abs() <= 1,
-            "expected b x delta {expected_hao} after sequential point moves, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            hao2.x,
-            b.x
-        );
-        assert!(
-            ((after_b.x - b.x) - expected_b).abs() <= 1,
-            "expected post-b x delta {expected_b} after sequential point moves, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            b.x,
-            after_b.x
-        );
+
+        let _ = sample_chars;
     }
 }
 
@@ -5782,57 +5789,69 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
             });
 
         let face_font_size = frame.font_pixel_size * target.height;
-        let expected_a = metrics
-            .char_width('a', target.family, target.weight, false, face_font_size)
-            .round() as i64;
-        let expected_hao = metrics
-            .char_width('好', target.family, target.weight, false, face_font_size)
-            .round() as i64;
-        let expected_b = metrics
-            .char_width('b', target.family, target.weight, false, face_font_size)
-            .round() as i64;
-
-        assert!(
-            (a.width - expected_a).abs() <= 1,
-            "expected a width {expected_a}, got {a:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
+        let expected_a = expected_gui_glyph_advance(
+            &mut metrics,
+            'a',
+            target.family,
+            target.weight,
+            false,
+            face_font_size,
         );
-        assert!(
-            (hao1.width - expected_hao).abs() <= 1,
-            "expected first 好 width {expected_hao}, got {hao1:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
+        let expected_hao = expected_gui_glyph_advance(
+            &mut metrics,
+            '好',
+            target.family,
+            target.weight,
+            false,
+            face_font_size,
         );
-        assert!(
-            (hao2.width - expected_hao).abs() <= 1,
-            "expected second 好 width {expected_hao}, got {hao2:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
-        );
-        assert!(
-            (b.width - expected_b).abs() <= 1,
-            "expected b width {expected_b}, got {b:?}; target={target:?}; chars={sample_chars:?}; points={all_points:?}"
-        );
-        assert!(
-            ((hao1.x - a.x) - expected_a).abs() <= 1,
-            "expected first 好 x delta {expected_a}, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            a.x,
-            hao1.x
-        );
-        assert!(
-            ((hao2.x - hao1.x) - expected_hao).abs() <= 1,
-            "expected second 好 x delta {expected_hao}, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            hao1.x,
-            hao2.x
-        );
-        assert!(
-            ((b.x - hao2.x) - expected_hao).abs() <= 1,
-            "expected b x delta {expected_hao}, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            hao2.x,
-            b.x
-        );
-        assert!(
-            ((after_b.x - b.x) - expected_b).abs() <= 1,
-            "expected post-b x delta {expected_b}, got {} -> {}; target={target:?}; chars={sample_chars:?}; points={all_points:?}",
-            b.x,
-            after_b.x
+        let expected_b = expected_gui_glyph_advance(
+            &mut metrics,
+            'b',
+            target.family,
+            target.weight,
+            false,
+            face_font_size,
         );
 
+        assert_point_width_matches_advance(a, expected_a, "family-switch a", &all_points);
+        assert_point_width_matches_advance(
+            hao1,
+            expected_hao,
+            "family-switch first 好",
+            &all_points,
+        );
+        assert_point_width_matches_advance(
+            hao2,
+            expected_hao,
+            "family-switch second 好",
+            &all_points,
+        );
+        assert_point_width_matches_advance(b, expected_b, "family-switch b", &all_points);
+        assert_point_delta_matches_advance(
+            a,
+            hao1,
+            expected_a,
+            "family-switch first 好",
+            &all_points,
+        );
+        assert_point_delta_matches_advance(
+            hao1,
+            hao2,
+            expected_hao,
+            "family-switch second 好",
+            &all_points,
+        );
+        assert_point_delta_matches_advance(hao2, b, expected_hao, "family-switch b", &all_points);
+        assert_point_delta_matches_advance(
+            b,
+            after_b,
+            expected_b,
+            "family-switch after b",
+            &all_points,
+        );
+
+        let _ = sample_chars;
         let _ = target.weight_name;
     }
 }
@@ -6474,6 +6493,28 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
         2,
         "expected cache size to stay stable when the semantic font spec is unchanged"
     );
+}
+
+#[test]
+fn char_advance_preserves_fractional_gui_cell_width_without_font_metrics() {
+    let mut ascii_width_cache = std::collections::HashMap::new();
+    let mut font_metrics_svc = None;
+
+    let width = char_advance(
+        &mut ascii_width_cache,
+        true,
+        &mut font_metrics_svc,
+        'x',
+        1,
+        7.2,
+        12,
+        7.2,
+        "JetBrainsMono Nerd Font",
+        400,
+        false,
+    );
+
+    assert_eq!(width, 7.2);
 }
 
 #[test]
@@ -7877,6 +7918,122 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     assert!(
         rows.iter().any(|row| row.contains("config.el")),
         "expected zero-length EOB before-string to render config.el, rows={rows:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("M-x s");
+        let prompt_face = Value::list(vec![
+            Value::keyword("background"),
+            Value::string("#ffff00"),
+            Value::keyword("foreground"),
+            Value::string("#000000"),
+        ]);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            prompt_face,
+        );
+
+        let eob = buf.point_max_emacs_byte_pos().get();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("\ncandidate"),
+        );
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-string-base-face", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("window matrix entry");
+    let default_bg = state
+        .faces
+        .get(&u32::from(
+            neomacs_display_protocol::face::BasicFaceId::Default,
+        ))
+        .expect("default face")
+        .background;
+
+    let prompt_face_id = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[1].iter())
+        .find_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch: 'M' } => Some(glyph.face_id),
+            _ => None,
+        })
+        .expect("prompt glyph face");
+    let prompt_bg = state
+        .faces
+        .get(&prompt_face_id)
+        .expect("prompt face")
+        .background;
+    assert_ne!(
+        prompt_bg, default_bg,
+        "test setup should make prompt face distinguishable from default"
+    );
+
+    let candidate_face_id = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[1].iter())
+        .find_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch: 'c' } => Some(glyph.face_id),
+            _ => None,
+        })
+        .expect("candidate glyph face");
+    let candidate_bg = state
+        .faces
+        .get(&candidate_face_id)
+        .expect("candidate face")
+        .background;
+
+    assert_eq!(
+        candidate_bg, default_bg,
+        "GNU overlay strings use a default/text-property base face, not the current prompt face"
     );
 }
 
