@@ -171,9 +171,22 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
     correct .elc output. Concurrent termination pause ~1.7-1.9ms [roots ~0.9ms +
     deferred-veclike drain ~0.85ms] — the cons-spine traversal ran off the pause.
     (NEOVM_GC_STRESS=1 is a new env hook that stress-GCs at every safe point.)
-  * NEXT (Phase 5b, optimization): trace deferred veclikes concurrently too, via
-    the retired-buffer scheme (option (b) below), to shrink the termination pause
-    further. Until then the termination is O(reachable veclikes + cons residue).
+  * PAUSE BOTTLENECK MEASURED (don't re-chase the wrong one): under gc_stress
+    the concurrent termination ~1.7ms = roots ~0.9ms + drain ~0.9ms, and BOTH
+    halves are dominated by RE-SEEDING + RE-DRAINING the full obarray (~150k
+    interned symbols) at the handshake — NOT the deferred-veclike trace. Slicing
+    the deferred-veclike drain into the incremental slicer was TRIED and REVERTED:
+    it left the termination unchanged (veclike drain was never the bottleneck) and
+    slightly regressed it (added Steele-barrier churn; p90/max rose to ~1.5/2.3ms).
+    The obarray reseed is the Stage-0 floor, paid at BOTH the start and termination
+    handshakes (twice per cycle). gc_stress is a worst case for the concurrent
+    collector's RELATIVE benefit — it forces a GC at every safe point, so each
+    cycle is almost pure handshake overhead with little marking to parallelize.
+  * NEXT real win = STAGE 0: make the obarray root snapshot incremental /
+    remembered-set-driven so the handshakes don't re-enumerate all ~150k symbols.
+    Benefits the incremental (default) collector too. Tracing deferred veclikes
+    concurrently (retired-buffer scheme, option (b)) is secondary — only worth it
+    once the obarray reseed is off the handshake.
 
   Original design notes (kept for reference):
   * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes
