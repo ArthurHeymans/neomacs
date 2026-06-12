@@ -205,6 +205,20 @@ pub struct Runtime {
 /// `fetch_add + 1` so 0 stays reserved for "unassigned".
 static NEXT_COMPILED_ID: AtomicU64 = AtomicU64::new(0);
 
+/// Invocations before a function tiers up to the JIT. Defaults to
+/// [`Runtime::HOT_THRESHOLD`]; the `NEOVM_JIT_THRESHOLD` environment variable
+/// overrides it — e.g. `=1` runs every compilable function through the JIT,
+/// the every-function differential soak used to qualify default-on (Phase 9).
+pub fn hot_threshold() -> u32 {
+    static THRESHOLD: OnceLock<u32> = OnceLock::new();
+    *THRESHOLD.get_or_init(|| {
+        std::env::var("NEOVM_JIT_THRESHOLD")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(Runtime::HOT_THRESHOLD)
+    })
+}
+
 impl Runtime {
     /// Invocations before a function is "hot" enough to tier up. Placeholder —
     /// tuned against the benchmark harness in Phase 8.
@@ -223,16 +237,17 @@ impl Runtime {
     /// the returned [`Plan`] exhaustively.
     ///
     /// Counts the invocation and returns [`Plan::Compiled`] once the function
-    /// crosses [`Runtime::HOT_THRESHOLD`], else [`Plan::Interpret`]. The compiled
-    /// plan only means "the JIT may run this" — the cache still falls back to the
-    /// interpreter for non-compilable bodies and on deopt.
+    /// crosses [`hot_threshold`] (default [`Runtime::HOT_THRESHOLD`]), else
+    /// [`Plan::Interpret`]. The compiled plan only means "the JIT may run this"
+    /// — the cache still falls back to the interpreter for non-compilable
+    /// bodies and on deopt.
     #[inline]
     pub fn dispatch(&self) -> Plan {
         // Saturating bump — a long-lived hot function must never wrap to cold.
         let prev = self.heat.load(Ordering::Relaxed);
         let now = prev.saturating_add(1);
         self.heat.store(now, Ordering::Relaxed);
-        if now >= Self::HOT_THRESHOLD {
+        if now >= hot_threshold() {
             Plan::Compiled
         } else {
             Plan::Interpret
@@ -262,7 +277,7 @@ impl Runtime {
     /// True once this function has crossed the tier-up threshold.
     #[inline]
     pub fn is_hot(&self) -> bool {
-        self.heat.load(Ordering::Relaxed) >= Self::HOT_THRESHOLD
+        self.heat.load(Ordering::Relaxed) >= hot_threshold()
     }
 
     /// Current invocation count.
