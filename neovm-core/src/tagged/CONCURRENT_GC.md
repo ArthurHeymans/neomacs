@@ -158,10 +158,19 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
     concurrently; veclike tracing stays in the (now smaller) termination pause.
   * VERIFIED: ThreadSanitizer (`-Zsanitizer=thread -Zbuild-std`) on a focused
     300k-cons test with GC/mutator overlap reports 0 data races; full default
-    suite 7092/7092. TSan caught nothing, but a correctness bug DID surface in
-    testing: `note_heap_write_record` short-circuited before `record_heap_write`
-    when owner-tracking was Disabled, so the SATB log never fired — fixed with a
+    suite 7092/7092; full suite with NEOVM_GC_CONCURRENT=1 also 7092/7092. TSan
+    caught nothing, but a correctness bug DID surface in testing:
+    `note_heap_write_record` short-circuited before `record_heap_write` when
+    owner-tracking was Disabled, so the SATB log never fired — fixed with a
     `TAGGED_HEAP_CONCURRENT_ACTIVE` thread-local in the fast-path gate.
+  * END-TO-END VERIFIED on the real binary: `cargo xtask fresh-build --release`
+    (full loadup + byte-compile + dump) succeeds under NEOVM_GC_CONCURRENT=1, no
+    crashes. Running the matched binary+pdump (partitioned, dump-blackened) with
+    NEOVM_GC_STRESS=1 NEOVM_GC_CONCURRENT=1 NEOVM_GC_TRACE=1 byte-compiling a real
+    .el file: 262 GC cycles, ALL 262 going through the concurrent path, 0 panics,
+    correct .elc output. Concurrent termination pause ~1.7-1.9ms [roots ~0.9ms +
+    deferred-veclike drain ~0.85ms] — the cons-spine traversal ran off the pause.
+    (NEOVM_GC_STRESS=1 is a new env hook that stress-GCs at every safe point.)
   * NEXT (Phase 5b, optimization): trace deferred veclikes concurrently too, via
     the retired-buffer scheme (option (b) below), to shrink the termination pause
     further. Until then the termination is O(reachable veclikes + cons residue).

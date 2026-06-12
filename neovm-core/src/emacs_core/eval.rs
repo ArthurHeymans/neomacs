@@ -52,6 +52,14 @@ use crate::gc_trace::GcTrace;
 use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
 use crate::window::{FrameManager, WindowId};
 
+/// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
+/// Mirrors the per-evaluator `gc_stress` test flag, exposed as an env hook so a
+/// real binary run exercises the incremental/concurrent collectors hard (every
+/// safe point collects). Default off — production behavior is unchanged.
+fn gc_stress_from_env() -> bool {
+    std::env::var("NEOVM_GC_STRESS").as_deref() == Ok("1")
+}
+
 const EVAL_STACK_RED_ZONE: usize = 128 * 1024;
 const EVAL_STACK_SEGMENT: usize = 2 * 1024 * 1024;
 const STACK_GROWTH_PROBE_START_DEPTH: usize = 16;
@@ -2580,7 +2588,7 @@ impl Context {
         ev.max_depth = 1600;
         ev.gc_pending = false;
         ev.gc_count = 0;
-        ev.gc_stress = false;
+        ev.gc_stress = gc_stress_from_env();
         ev.condition_stack.clear();
         ev.next_resume_id = 1;
         ev.named_call_cache.clear();
@@ -4735,7 +4743,7 @@ impl Context {
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
-            gc_stress: false,
+            gc_stress: gc_stress_from_env(),
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
@@ -4915,7 +4923,7 @@ impl Context {
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
-            gc_stress: false,
+            gc_stress: gc_stress_from_env(),
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
