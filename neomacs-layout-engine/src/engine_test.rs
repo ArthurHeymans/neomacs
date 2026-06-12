@@ -587,6 +587,39 @@ fn current_display_row_metrics_advances_visual_wrap_without_line_spacing() {
     assert_eq!(metrics.ascent(), 12.0);
 }
 
+#[test]
+fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
+    let mut cursor = DisplayRowGeometryCursor::new(2, 42.0, 3.0, 24.0, 18.0);
+
+    let hit_row = cursor.hit_row(11, 22);
+    assert_eq!(hit_row.y_start, 42.0);
+    assert_eq!(hit_row.y_end, 66.0);
+    assert_eq!(hit_row.charpos_start, 11);
+    assert_eq!(hit_row.charpos_end, 22);
+
+    let finished = cursor.finish_and_advance_to_next_row(
+        DisplayRowGeometryDefaults {
+            text_y: 10.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+        DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
+    );
+
+    assert_eq!(
+        finished,
+        TextMatrixRowMetrics {
+            y: 42.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+    assert_eq!(
+        cursor.into_parts(),
+        (3, 10.0 + 3.0 * 16.0 + 15.0, 15.0, 16.0, 12.0)
+    );
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

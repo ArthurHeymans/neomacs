@@ -510,6 +510,21 @@ struct DisplayRowAdvance {
     next_ascent: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowGeometryDefaults {
+    text_y: f32,
+    height: f32,
+    ascent: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowGeometryCursor {
+    row: usize,
+    y: f32,
+    row_extra_y: f32,
+    metrics: CurrentDisplayRowMetrics,
+}
+
 impl CurrentDisplayRowMetrics {
     fn new(height: f32, ascent: f32) -> Self {
         Self { height, ascent }
@@ -579,6 +594,60 @@ impl CurrentDisplayRowMetrics {
             next_height: self.height(),
             next_ascent: self.ascent(),
         }
+    }
+}
+
+impl DisplayRowGeometryCursor {
+    fn new(row: usize, y: f32, row_extra_y: f32, height: f32, ascent: f32) -> Self {
+        Self {
+            row,
+            y,
+            row_extra_y,
+            metrics: CurrentDisplayRowMetrics::new(height, ascent),
+        }
+    }
+
+    fn hit_row(&self, charpos_start: i64, charpos_end: i64) -> HitRow {
+        HitRow {
+            y_start: self.y,
+            y_end: self.y + self.metrics.height(),
+            charpos_start,
+            charpos_end,
+        }
+    }
+
+    fn finish_and_advance_to_next_row(
+        &mut self,
+        defaults: DisplayRowGeometryDefaults,
+        kind: DisplayRowAdvanceKind,
+    ) -> TextMatrixRowMetrics {
+        let row_advance = self
+            .metrics
+            .finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+                y: self.y,
+                next_row: self.row + 1,
+                text_y: defaults.text_y,
+                row_extra_y: self.row_extra_y,
+                default_height: defaults.height,
+                default_ascent: defaults.ascent,
+                kind,
+            });
+        self.row += 1;
+        self.y = row_advance.next_y;
+        self.row_extra_y = row_advance.row_extra_y;
+        self.metrics =
+            CurrentDisplayRowMetrics::new(row_advance.next_height, row_advance.next_ascent);
+        row_advance.finished
+    }
+
+    fn into_parts(self) -> (usize, f32, f32, f32, f32) {
+        (
+            self.row,
+            self.y,
+            self.row_extra_y,
+            self.metrics.height(),
+            self.metrics.ascent(),
+        )
     }
 }
 
@@ -4108,39 +4177,31 @@ impl LayoutEngine {
                 charpos += 1;
 
                 if ch == '\n' {
-                    let mut current_row_metrics =
-                        CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
+                    let mut row_cursor = DisplayRowGeometryCursor::new(
+                        row,
+                        y,
+                        row_extra_y,
+                        row_max_height,
+                        row_max_ascent,
+                    );
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     // Record hit-test row (hscroll newline)
-                    hit_rows.push(HitRow {
-                        y_start: y,
-                        y_end: y + current_row_metrics.height(),
-                        charpos_start: hit_row_charpos_start,
-                        charpos_end: charpos,
-                    });
+                    hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                     hit_row_charpos_start = charpos;
                     row_extend_bg = None;
                     row_extend_row = -1;
 
-                    let row_advance = current_row_metrics.finish_and_advance_to_next_row(
-                        CurrentDisplayRowAdvance {
-                            y,
-                            next_row: row + 1,
+                    let finished_row = row_cursor.finish_and_advance_to_next_row(
+                        DisplayRowGeometryDefaults {
                             text_y,
-                            row_extra_y,
-                            default_height: char_h,
-                            default_ascent: default_face_ascent,
-                            kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+                            height: char_h,
+                            ascent: default_face_ascent,
                         },
+                        DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                     );
-                    row_extra_y = row_advance.row_extra_y;
-                    let finished_row = row_advance.finished;
-                    row += 1;
-                    y = row_advance.next_y;
-                    row_max_height = row_advance.next_height;
-                    row_max_ascent = row_advance.next_ascent;
+                    (row, y, row_extra_y, row_max_height, row_max_ascent) = row_cursor.into_parts();
                     row_y_positions.push(y);
                     let row_transition = finish_and_maybe_begin_text_matrix_row(
                         &mut self.matrix_builder,
