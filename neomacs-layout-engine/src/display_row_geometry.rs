@@ -69,6 +69,12 @@ pub(crate) struct LegacyDisplayRowGeometry {
     pub(crate) row_max_ascent: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowVisibilityLimit {
+    pub(crate) max_rows: usize,
+    pub(crate) bottom_y: f32,
+}
+
 pub(crate) struct LegacyDisplayRowGeometryVars<'a> {
     pub(crate) row: &'a mut usize,
     pub(crate) y: &'a mut f32,
@@ -94,6 +100,10 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_extra_y = state.row_extra_y;
         *self.row_max_height = state.height;
         *self.row_max_ascent = state.ascent;
+    }
+
+    pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
+        self.snapshot().current_row_is_visible(limit)
     }
 
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
@@ -369,6 +379,12 @@ impl<'a> DisplayRowBoundaryTarget<'a> {
                 row_y_recording,
             ),
         )
+    }
+}
+
+impl LegacyDisplayRowGeometry {
+    pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
+        self.row < limit.max_rows && self.y + self.row_max_height <= limit.bottom_y
     }
 }
 

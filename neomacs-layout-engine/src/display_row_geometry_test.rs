@@ -332,6 +332,56 @@ fn legacy_display_row_geometry_vars_include_row_extents_by_name() {
 }
 
 #[test]
+fn legacy_display_row_geometry_reports_current_row_visibility_by_limit() {
+    let geometry = LegacyDisplayRowGeometry {
+        row: 4,
+        y: 80.0,
+        row_extra_y: 9.0,
+        row_max_height: 24.0,
+        row_max_ascent: 18.0,
+    };
+
+    assert!(geometry.current_row_is_visible(DisplayRowVisibilityLimit {
+        max_rows: 5,
+        bottom_y: 104.0,
+    }));
+    assert!(!geometry.current_row_is_visible(DisplayRowVisibilityLimit {
+        max_rows: 4,
+        bottom_y: 104.0,
+    }));
+    assert!(!geometry.current_row_is_visible(DisplayRowVisibilityLimit {
+        max_rows: 5,
+        bottom_y: 103.9,
+    }));
+}
+
+#[test]
+fn legacy_display_row_geometry_vars_report_current_row_visibility_by_name() {
+    let mut row = 4;
+    let mut y = 80.0;
+    let mut row_extra_y = 9.0;
+    let mut row_max_height = 24.0;
+    let mut row_max_ascent = 18.0;
+
+    let vars = LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    };
+
+    assert!(vars.current_row_is_visible(DisplayRowVisibilityLimit {
+        max_rows: 5,
+        bottom_y: 104.0,
+    }));
+    assert!(!vars.current_row_is_visible(DisplayRowVisibilityLimit {
+        max_rows: 5,
+        bottom_y: 103.9,
+    }));
+}
+
+#[test]
 fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
         row: 5,

@@ -41,8 +41,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryCursor, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowYRecording, LegacyDisplayRowGeometry,
-    LegacyDisplayRowGeometryVars,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYRecording,
+    LegacyDisplayRowGeometry, LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3702,7 +3702,20 @@ impl LayoutEngine {
             },
         );
 
-        while byte_idx < text.len() && row < max_rows && y + row_max_height <= text_y + text_height
+        let row_visibility_limit = DisplayRowVisibilityLimit {
+            max_rows,
+            bottom_y: text_y + text_height,
+        };
+
+        while byte_idx < text.len()
+            && (LegacyDisplayRowGeometryVars {
+                row: &mut row,
+                y: &mut y,
+                row_extra_y: &mut row_extra_y,
+                row_max_height: &mut row_max_height,
+                row_max_ascent: &mut row_max_ascent,
+            })
+            .current_row_is_visible(row_visibility_limit)
         {
             // Render line number at start of each visual line
             if need_line_number && lnum_enabled {
@@ -4984,7 +4997,15 @@ impl LayoutEngine {
                         if has_prefix {
                             need_prefix = 2;
                         }
-                        if row >= max_rows || y + row_max_height > text_y + text_height {
+                        if !(LegacyDisplayRowGeometryVars {
+                            row: &mut row,
+                            y: &mut y,
+                            row_extra_y: &mut row_extra_y,
+                            row_max_height: &mut row_max_height,
+                            row_max_ascent: &mut row_max_ascent,
+                        })
+                        .current_row_is_visible(row_visibility_limit)
+                        {
                             break;
                         }
                     }
@@ -5356,7 +5377,15 @@ impl LayoutEngine {
                     // Force face re-check since we rewound
                     face_next_check = 0;
 
-                    if row >= max_rows || y + row_max_height > text_y + text_height {
+                    if !(LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    })
+                    .current_row_is_visible(row_visibility_limit)
+                    {
                         break;
                     }
                     continue;
@@ -5414,7 +5443,15 @@ impl LayoutEngine {
                     if has_prefix {
                         need_prefix = 2;
                     }
-                    if row >= max_rows || y + row_max_height > text_y + text_height {
+                    if !(LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    })
+                    .current_row_is_visible(row_visibility_limit)
+                    {
                         break;
                     }
                     continue;
