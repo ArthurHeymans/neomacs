@@ -18,24 +18,31 @@ pub(crate) struct WaitBackendEvents {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WaitBackendInterest {
-    pub(crate) input_wakeup: bool,
-    pub(crate) processes: bool,
+pub(crate) enum WaitBackendInterest {
+    ProcessesOnly,
+    InputWakeupOnly,
+    InputWakeupAndProcesses,
 }
 
 impl WaitBackendInterest {
     pub(crate) fn processes_only() -> Self {
-        Self {
-            input_wakeup: false,
-            processes: true,
-        }
+        Self::ProcessesOnly
     }
 
     pub(crate) fn for_wait_request(input_wakeup: bool, processes: bool) -> Self {
-        Self {
-            input_wakeup,
-            processes,
+        match (input_wakeup, processes) {
+            (true, true) => Self::InputWakeupAndProcesses,
+            (true, false) => Self::InputWakeupOnly,
+            (false, true) | (false, false) => Self::ProcessesOnly,
         }
+    }
+
+    pub(crate) fn wants_input_wakeup(self) -> bool {
+        matches!(self, Self::InputWakeupOnly | Self::InputWakeupAndProcesses)
+    }
+
+    pub(crate) fn wants_processes(self) -> bool {
+        matches!(self, Self::ProcessesOnly | Self::InputWakeupAndProcesses)
     }
 }
 

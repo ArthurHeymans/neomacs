@@ -505,12 +505,12 @@ impl ProcessWaitBackend {
                         let mut backend = WaitBackendEvents::default();
                         for event in events.iter() {
                             if event.key == INPUT_WAKEUP_EVENT_KEY {
-                                if interest.input_wakeup {
+                                if interest.wants_input_wakeup() {
                                     backend.input_wakeup = true;
                                 }
                                 continue;
                             }
-                            if interest.processes {
+                            if interest.wants_processes() {
                                 let id = event.key as ProcessId;
                                 if processes.get(&id).is_some_and(|process| {
                                     process_status_has_readable_process_io(&process.status)
