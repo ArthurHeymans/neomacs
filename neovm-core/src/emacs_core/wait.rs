@@ -275,34 +275,18 @@ pub(crate) struct WaitOutcome {
     pub(crate) service: WaitServiceOutcome,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum WaitProcessService {
+    Poll,
+    Ready(Vec<ProcessId>),
+}
+
 impl super::eval::Context {
     pub(crate) fn service_wait_request_once(
         &mut self,
         request: &WaitRequest,
     ) -> Result<WaitServiceOutcome, Flow> {
-        let mut outcome = WaitServiceOutcome::default();
-        let special_input = self.service_wait_request_special_input_events()?;
-        outcome.special_input_activity = special_input.activity;
-        outcome.resize_activity = special_input.resize_activity;
-        if request.keyboard.completes_on_command_input()
-            && self.stage_pending_command_input_for_wait_request()?
-        {
-            outcome.command_input_pending = true;
-            if request.redisplay && special_input.redisplay_needed {
-                self.redisplay();
-            }
-            return Ok(outcome);
-        }
-        if request.timers.allow() {
-            outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
-        }
-        let process_outcome = self.poll_process_output_with_wait_policy(request.processes);
-        outcome.any_process_activity = process_outcome.any_process_activity;
-        outcome.target_process_activity = process_outcome.target_process_activity;
-        if request.redisplay && (special_input.redisplay_needed || outcome.timers_fired) {
-            self.redisplay();
-        }
-        Ok(outcome)
+        self.service_wait_request_processes(request, WaitProcessService::Poll)
     }
 
     pub(crate) fn service_wait_request_ready_processes(
@@ -310,6 +294,14 @@ impl super::eval::Context {
         request: &WaitRequest,
         ready_processes: Vec<ProcessId>,
     ) -> Result<WaitServiceOutcome, Flow> {
+        self.service_wait_request_processes(request, WaitProcessService::Ready(ready_processes))
+    }
+
+    fn service_wait_request_processes(
+        &mut self,
+        request: &WaitRequest,
+        process_service: WaitProcessService,
+    ) -> Result<WaitServiceOutcome, Flow> {
         let mut outcome = WaitServiceOutcome::default();
         let special_input = self.service_wait_request_special_input_events()?;
         outcome.special_input_activity = special_input.activity;
@@ -326,8 +318,14 @@ impl super::eval::Context {
         if request.timers.allow() {
             outcome.timers_fired = self.service_pending_timers_with_wait_policy(false);
         }
-        let process_outcome =
-            self.poll_ready_process_output_with_wait_policy(ready_processes, request.processes);
+        let process_outcome = match process_service {
+            WaitProcessService::Poll => {
+                self.poll_process_output_with_wait_policy(request.processes)
+            }
+            WaitProcessService::Ready(ready_processes) => {
+                self.poll_ready_process_output_with_wait_policy(ready_processes, request.processes)
+            }
+        };
         outcome.any_process_activity = process_outcome.any_process_activity;
         outcome.target_process_activity = process_outcome.target_process_activity;
         if request.redisplay && (special_input.redisplay_needed || outcome.timers_fired) {
