@@ -984,6 +984,22 @@ impl DisplayRowAppendMetrics {
         Self::from_measured_face_metrics(active_face.metrics(), default_row_height)
     }
 
+    pub(crate) fn display_box_from_active_face_state(
+        active_face: &DisplayRowActiveFaceState,
+        height: f32,
+        ascent: f32,
+        default_row_height: f32,
+    ) -> Self {
+        let metrics = active_face.metrics();
+        Self {
+            height,
+            ascent,
+            char_width: metrics.char_width,
+            space_width: metrics.space_width,
+            default_row_height,
+        }
+    }
+
     pub(crate) fn from_measured_face_metrics(
         metrics: DisplayRowMeasuredFaceMetrics,
         default_row_height: f32,

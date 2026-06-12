@@ -119,6 +119,41 @@ fn display_row_append_metrics_builds_from_active_face_state() {
 }
 
 #[test]
+fn display_row_append_metrics_builds_display_box_from_active_face_state() {
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base = resolver.default_face().clone();
+    let mut font_metrics = None;
+    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        7,
+        &base,
+        None,
+        7.5,
+        DisplayRowFallbackMetrics {
+            char_width: 7.5,
+            row_height: 18.0,
+            ascent: 13.0,
+        },
+        &mut font_metrics,
+    );
+    let active_face = DisplayRowActiveFaceState::new(base, measured);
+
+    let metrics =
+        DisplayRowAppendMetrics::display_box_from_active_face_state(&active_face, 42.0, 31.0, 16.0);
+
+    assert_eq!(
+        metrics,
+        DisplayRowAppendMetrics {
+            height: 42.0,
+            ascent: 31.0,
+            char_width: 7.5,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        }
+    );
+}
+
+#[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
     let item = synthetic_display_text_item(9, "...", 7);
 

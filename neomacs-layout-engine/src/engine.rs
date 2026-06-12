@@ -4292,13 +4292,12 @@ impl LayoutEngine {
                                     y,
                                     glyph_y: y + raise_y_offset,
                                 },
-                                DisplayRowAppendMetrics {
-                                    height: display_height,
-                                    ascent: display_height,
-                                    char_width: face_metrics.char_width,
-                                    space_width: face_metrics.space_width,
-                                    default_row_height: char_h,
-                                },
+                                DisplayRowAppendMetrics::display_box_from_active_face_state(
+                                    &active_face_state,
+                                    display_height,
+                                    display_height,
+                                    char_h,
+                                ),
                             );
                             let item =
                                 replacement_source.item(active_face_state.face_id(), media_item);
