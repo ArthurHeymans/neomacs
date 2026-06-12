@@ -983,9 +983,12 @@ pub struct TaggedHeap {
     /// default incremental collector uses the dirty-owner re-trace and is
     /// unaffected. (The concurrent path in Phase 5 will rely on SATB instead.)
     satb_active: bool,
-    /// Run the mark phase on the background GC thread. Env
-    /// `NEOVM_GC_CONCURRENT`, default off. Phase 5 overlaps marking with the
-    /// mutator (verified under ThreadSanitizer).
+    /// Run the mark phase on the background GC thread (the concurrent collector).
+    /// DEFAULT ON; set env `NEOVM_GC_CONCURRENT=0` to fall back to the
+    /// (sliced, mutator-side) incremental collector. Phase 5 overlaps cons-spine
+    /// marking with the mutator (verified under ThreadSanitizer). When the
+    /// concurrent collector is fully matured this fallback + the incremental
+    /// slicer can be removed and the path made unconditional.
     concurrent: bool,
     /// True between a concurrent mark's start and termination handshakes — the
     /// mutator runs while the GC thread marks.
@@ -1071,7 +1074,8 @@ impl TaggedHeap {
             mark_in_progress: false,
             incremental_mark_us: 0,
             satb_active: std::env::var("NEOVM_GC_SATB").as_deref() == Ok("1"),
-            concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() == Ok("1"),
+            // Default ON; only `NEOVM_GC_CONCURRENT=0` disables it (-> incremental).
+            concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() != Ok("0"),
             concurrent_mark_running: false,
             satb_shared: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             deferred_veclikes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -3040,7 +3044,8 @@ impl TaggedHeap {
     // mutator runs; only two short stop-the-world handshakes (start + finish).
     // ---------------------------------------------------------------------
 
-    /// True if the concurrent collector is enabled (env `NEOVM_GC_CONCURRENT`).
+    /// True if the concurrent collector is enabled (default on; off only when
+    /// env `NEOVM_GC_CONCURRENT=0`).
     pub fn concurrent_enabled(&self) -> bool {
         self.concurrent
     }

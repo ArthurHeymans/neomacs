@@ -5,8 +5,16 @@ with the mutator, so the mutator only stops for short safe-point handshakes
 (root snapshot + mark termination), each sub-millisecond. This is the Go-style
 design: concurrent tri-color mark, SATB write barrier, cooperative safe points.
 
-Built behind `NEOVM_GC_CONCURRENT` (default OFF) until proven; the existing
-incremental collector (default) stays untouched and is the fallback.
+STATUS: the concurrent collector is now the DEFAULT (Phases 1-5 done, TSan-
+verified, full suite + fresh-build green). Set `NEOVM_GC_CONCURRENT=0` to fall
+back to the (sliced, mutator-side) incremental collector, which stays as the
+fallback path. When the concurrent collector is fully matured in production, the
+fallback + the incremental slicer can be removed and the concurrent path made
+unconditional (mirroring how the incremental collector itself became default in
+`9ba9859b6`). Tradeoff note: under gc_stress the concurrent STW termination
+(~500-668us) is higher than the incremental one (~200us), but the cons-spine
+MARK runs off the mutator thread, so the mutator spends no time marking (better
+on large heaps / multi-core); both are sub-ms and imperceptible.
 
 ## Where we start from
 
