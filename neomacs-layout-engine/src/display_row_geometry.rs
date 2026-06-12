@@ -1,3 +1,4 @@
+use crate::display_row_append::DisplayRowAppendPlacement;
 use crate::hit_test::HitRow;
 use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
@@ -432,6 +433,14 @@ impl DisplayRowGeometryState {
             row_y: self.y,
             glyph_y: self.y,
             height,
+        }
+    }
+
+    pub(crate) fn append_placement(&self, glyph_y_offset: f32) -> DisplayRowAppendPlacement {
+        DisplayRowAppendPlacement {
+            row: self.row,
+            y: self.y,
+            glyph_y: self.y + glyph_y_offset,
         }
     }
 

@@ -28,9 +28,8 @@ use crate::display_row::{
     install_rendered_display_row,
 };
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
-    DisplayRowAppendSurface, append_buffer_text_fragment_to_text_row,
-    append_buffer_text_item_fragment_to_text_row_and_emit,
+    DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    append_buffer_text_fragment_to_text_row, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
@@ -3554,6 +3553,17 @@ impl LayoutEngine {
         let mut row_extra_y: f32 = 0.0; // cumulative extra height from previous rows
         let mut row_y_positions =
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
+        macro_rules! current_row_geometry {
+            () => {
+                DisplayRowGeometryState {
+                    row,
+                    y,
+                    row_extra_y,
+                    height: row_max_height,
+                    ascent: row_max_ascent,
+                }
+            };
+        }
         // Trailing whitespace tracking
         let trailing_ws_bg = if params.show_trailing_whitespace {
             Some(Color::from_pixel(params.trailing_ws_bg))
@@ -3864,11 +3874,7 @@ impl LayoutEngine {
                     );
 
                     let append_frame = text_append_surface.frame_for_active_face(
-                        DisplayRowAppendPlacement {
-                            row,
-                            y,
-                            glyph_y: y + raise_y_offset,
-                        },
+                        current_row_geometry!().append_placement(raise_y_offset),
                         &active_face_state,
                         char_h,
                     );
@@ -3930,11 +3936,7 @@ impl LayoutEngine {
                         self.run_buf.clear();
 
                         let ellipsis_frame = text_append_surface.frame_for_active_face(
-                            DisplayRowAppendPlacement {
-                                row,
-                                y,
-                                glyph_y: y + raise_y_offset,
-                            },
+                            current_row_geometry!().append_placement(raise_y_offset),
                             &active_face_state,
                             char_h,
                         );
@@ -4118,7 +4120,7 @@ impl LayoutEngine {
                     if hscroll_remaining <= 0 && show_left_trunc {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
                         let trunc_frame = text_append_surface.frame(
-                            DisplayRowAppendPlacement { row, y, glyph_y: y },
+                            current_row_geometry!().append_placement(0.0),
                             DisplayRowAppendMetrics {
                                 height: char_h,
                                 ascent: default_face_ascent,
@@ -4300,11 +4302,7 @@ impl LayoutEngine {
                                 );
                                 let append_frame = replacement_string_surface
                                     .frame_for_active_face(
-                                        DisplayRowAppendPlacement {
-                                            row,
-                                            y,
-                                            glyph_y: y + raise_y_offset,
-                                        },
+                                        current_row_geometry!().append_placement(raise_y_offset),
                                         &active_face_state,
                                         char_h,
                                     );
@@ -4404,11 +4402,7 @@ impl LayoutEngine {
                                 ),
                             );
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                DisplayRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
+                                current_row_geometry!().append_placement(raise_y_offset),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4498,11 +4492,7 @@ impl LayoutEngine {
                             }
 
                             let replacement_frame = text_append_surface.frame(
-                                DisplayRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
+                                current_row_geometry!().append_placement(raise_y_offset),
                                 DisplayRowAppendMetrics::display_box_from_active_face_state(
                                     &active_face_state,
                                     display_height,
@@ -4558,11 +4548,7 @@ impl LayoutEngine {
                                 );
                             }
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                DisplayRowAppendPlacement {
-                                    row,
-                                    y,
-                                    glyph_y: y + raise_y_offset,
-                                },
+                                current_row_geometry!().append_placement(raise_y_offset),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4646,11 +4632,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let ellipsis_frame = text_append_surface.frame_for_active_face(
-                    DisplayRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
+                    current_row_geometry!().append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -5068,11 +5050,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    DisplayRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
+                    current_row_geometry!().append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -5120,11 +5098,7 @@ impl LayoutEngine {
                         CharPos0::new((charpos + 1) as usize),
                     );
                     let text_item_frame = text_append_surface.frame_for_active_face(
-                        DisplayRowAppendPlacement {
-                            row,
-                            y,
-                            glyph_y: y + raise_y_offset,
-                        },
+                        current_row_geometry!().append_placement(raise_y_offset),
                         &active_face_state,
                         char_h,
                     );
@@ -5187,11 +5161,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    DisplayRowAppendPlacement {
-                        row,
-                        y,
-                        glyph_y: y + raise_y_offset,
-                    },
+                    current_row_geometry!().append_placement(raise_y_offset),
                     &active_face_state,
                     char_h,
                 );
@@ -5613,11 +5583,7 @@ impl LayoutEngine {
                 self.run_buf.push(ch, advance);
             }
             let frame = text_append_surface.frame_for_active_face(
-                DisplayRowAppendPlacement {
-                    row,
-                    y,
-                    glyph_y: y + raise_y_offset,
-                },
+                current_row_geometry!().append_placement(raise_y_offset),
                 &active_face_state,
                 char_h,
             );
