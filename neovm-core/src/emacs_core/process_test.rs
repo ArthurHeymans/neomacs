@@ -2316,6 +2316,18 @@ fn process_service_accepts_wait_request_boundary() {
     assert!(!ready.has_any_process_activity());
 }
 
+#[test]
+fn wait_service_exposes_target_activity_without_full_service_outcome() {
+    let mut ev = Context::new();
+    let request = WaitRequest::timer_service(false);
+
+    let active = ev
+        .service_wait_request_once_has_target_process_activity(&request)
+        .expect("service wait request");
+
+    assert!(!active);
+}
+
 #[cfg(unix)]
 fn test_pipe_files() -> (std::fs::File, std::fs::File) {
     use std::os::fd::FromRawFd;

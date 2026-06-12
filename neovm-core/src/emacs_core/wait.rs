@@ -700,6 +700,15 @@ impl super::eval::Context {
         self.service_wait_request_processes(request, WaitProcessService::Poll)
     }
 
+    pub(crate) fn service_wait_request_once_has_target_process_activity(
+        &mut self,
+        request: &WaitRequest,
+    ) -> Result<bool, Flow> {
+        Ok(self
+            .service_wait_request_once(request)?
+            .has_target_process_activity())
+    }
+
     pub(crate) fn service_wait_request_source_events(
         &mut self,
         request: &WaitRequest,
@@ -709,6 +718,16 @@ impl super::eval::Context {
             request,
             WaitBlockActivity::from_source_events(events),
         )
+    }
+
+    pub(crate) fn service_wait_request_source_events_have_target_process_activity(
+        &mut self,
+        request: &WaitRequest,
+        events: WaitSourceEvents,
+    ) -> Result<bool, Flow> {
+        Ok(self
+            .service_wait_request_source_events(request, events)?
+            .has_target_process_activity())
     }
 
     fn service_wait_request_block_activity(

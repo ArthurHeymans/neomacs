@@ -8316,12 +8316,15 @@ fn accept_process_output_run_target_follow_up(
     let mut idle_follow_up_polls = 0usize;
     loop {
         let events = eval.processes.wait_for_process_events(Duration::ZERO);
-        let follow_up = if events.has_ready_processes() {
-            eval.service_wait_request_source_events(&request.wait, events)?
+        let target_activity = if events.has_ready_processes() {
+            eval.service_wait_request_source_events_have_target_process_activity(
+                &request.wait,
+                events,
+            )?
         } else {
-            eval.service_wait_request_once(&request.wait)?
+            eval.service_wait_request_once_has_target_process_activity(&request.wait)?
         };
-        if follow_up.has_target_process_activity() {
+        if target_activity {
             idle_follow_up_polls = 0;
             continue;
         }
