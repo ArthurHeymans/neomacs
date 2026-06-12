@@ -3179,4 +3179,154 @@ mod tests {
     // intentionally omitted here because `new_minimal_vm_harness` does not wire
     // the full `+`/bignum builtins (it signals on that fallback), so it cannot
     // serve as the oracle for the slow path.
+
+    /// Differential fuzzing (the Phase-9 discipline, brought forward): generate
+    /// seeded random straight-line bodies over the supported non-allocating op
+    /// subset, run each through BOTH tiers, and hold the tiering contract:
+    /// - `Ok(bits)`  -> the interpreter must produce exactly those bits;
+    /// - `Deopt`     -> the seam reruns the interpreter (sound by the poisoning
+    ///                  analysis), so any interpreter outcome is acceptable;
+    /// - `Signal`    -> the interpreter must also signal.
+    #[test]
+    fn fuzz_straightline_bodies_match_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+
+        // Deterministic xorshift64* — no external randomness (reproducible; on
+        // failure the seed in the assert message reproduces the body).
+        fn next(state: &mut u64) -> u64 {
+            let mut x = *state;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            *state = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+
+        let mut ev = Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+
+        // Constant pool: small fixnums, the fixnum boundaries, nil and t —
+        // enough to hit fast paths, deopt boundaries, and type guards. No heap
+        // values, so Ok-results compare exactly by bits.
+        let constants: Vec<Value> = vec![
+            Value::make_int(0),
+            Value::make_int(1),
+            Value::make_int(-1),
+            Value::make_int(2),
+            Value::make_int(3),
+            Value::make_int(Value::MOST_POSITIVE_FIXNUM),
+            Value::make_int(Value::MOST_NEGATIVE_FIXNUM),
+            Value::NIL,
+            Value::T,
+        ];
+
+        for seed in 1u64..=600 {
+            let mut rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let len = 1 + (next(&mut rng) % 18) as usize;
+            let mut ops: Vec<Op> = Vec::with_capacity(len + 2);
+            let mut depth: usize = 0;
+            for _ in 0..len {
+                let r = (next(&mut rng) % 100) as usize;
+                let op = if depth == 0 || r < 30 {
+                    // Pushes (always valid).
+                    match next(&mut rng) % 3 {
+                        0 => Op::Nil,
+                        1 => Op::True,
+                        _ => Op::Constant((next(&mut rng) % constants.len() as u64) as u16),
+                    }
+                } else if depth >= 2 && r < 60 {
+                    // Binary ops.
+                    match next(&mut rng) % 11 {
+                        0 => Op::Add,
+                        1 => Op::Sub,
+                        2 => Op::Mul,
+                        3 => Op::Div,
+                        4 => Op::Rem,
+                        5 => Op::Eqlsign,
+                        6 => Op::Lss,
+                        7 => Op::Gtr,
+                        8 => Op::Leq,
+                        9 => Op::Geq,
+                        _ => Op::Eq,
+                    }
+                } else if r < 85 {
+                    // Unary ops (depth >= 1).
+                    match next(&mut rng) % 10 {
+                        0 => Op::Add1,
+                        1 => Op::Sub1,
+                        2 => Op::Negate,
+                        3 => Op::Null,
+                        4 => Op::Not,
+                        5 => Op::Consp,
+                        6 => Op::Stringp,
+                        7 => Op::Listp,
+                        8 => Op::Symbolp,
+                        _ => Op::Dup,
+                    }
+                } else {
+                    // Stack shuffles.
+                    match next(&mut rng) % 3 {
+                        0 => Op::Dup,
+                        1 => Op::StackRef((next(&mut rng) % depth as u64) as u16),
+                        _ if depth >= 2 => {
+                            Op::StackSet(1 + (next(&mut rng) % (depth as u64 - 1)) as u16)
+                        }
+                        _ => Op::Pop,
+                    }
+                };
+                let (needs, delta) = simple_effect(&op).expect("generator emits supported ops");
+                if depth < needs {
+                    continue; // skip an op the current depth can't support
+                }
+                depth = (depth as i64 + delta) as usize;
+                ops.push(op);
+            }
+            if depth == 0 {
+                ops.push(Op::Constant(0));
+            }
+            ops.push(Op::Return);
+
+            // Tier 0 (oracle).
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: Vec::new(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.clone();
+            f.constants = constants.clone();
+            f.max_stack = 64;
+            let interp = {
+                let mut vm = Vm::from_context(&mut ev);
+                vm.execute(&f, vec![])
+            };
+
+            // JIT.
+            let leaf = lower_leaf(&ops, &constants, 0)
+                .unwrap_or_else(|e| panic!("seed {seed}: body must compile, got {e}: {ops:?}"));
+            match leaf.call(ctx_ptr, &[]) {
+                NativeRun::Ok(bits) => {
+                    let want = interp.as_ref().unwrap_or_else(|e| {
+                        panic!("seed {seed}: JIT Ok but interpreter erred ({e:?}): {ops:?}")
+                    });
+                    assert_eq!(
+                        bits,
+                        want.bits(),
+                        "seed {seed}: JIT/interpreter mismatch on {ops:?}"
+                    );
+                }
+                NativeRun::Deopt => {
+                    // The seam reruns the interpreter; nothing further to hold.
+                }
+                NativeRun::Signal => {
+                    let _ = take_pending_flow();
+                    assert!(
+                        interp.is_err(),
+                        "seed {seed}: JIT signaled but interpreter succeeded: {ops:?}"
+                    );
+                }
+            }
+        }
+    }
 }
