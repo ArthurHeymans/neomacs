@@ -476,6 +476,14 @@ fn current_display_row_metrics_tracks_glyph_extents_and_overflow() {
 }
 
 #[test]
+fn current_display_row_metrics_builds_next_row_vertical_delta() {
+    let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
+    metrics.include_glyph(24.0, 18.0);
+
+    assert_eq!(metrics.next_row_vertical_delta(16.0, 3.0), 11.0);
+}
+
+#[test]
 fn current_display_row_metrics_resets_to_default_extents() {
     let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
     metrics.include_glyph(24.0, 18.0);

@@ -500,6 +500,10 @@ impl CurrentDisplayRowMetrics {
         (self.height - default_height).max(0.0)
     }
 
+    fn next_row_vertical_delta(&self, default_height: f32, line_spacing: f32) -> f32 {
+        self.extra_height_over_default(default_height) + line_spacing.max(0.0)
+    }
+
     fn text_matrix_row_metrics(&self, y: f32) -> TextMatrixRowMetrics {
         TextMatrixRowMetrics {
             y,
@@ -4779,10 +4783,8 @@ impl LayoutEngine {
                     box_start_x = content_x;
                 }
 
-                // Newline: advance to next row
-                if row_max_height > char_h {
-                    row_extra_y += row_max_height - char_h;
-                }
+                let mut current_row_metrics =
+                    CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
                 charpos += 1;
 
                 // Check line-spacing text property on the newline we just consumed.
@@ -4792,12 +4794,14 @@ impl LayoutEngine {
                     let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
                     text_props.check_line_spacing(nl_pos, char_h)
                 };
-                if text_prop_spacing > 0.0 {
-                    row_extra_y += text_prop_spacing;
+                let line_spacing = if text_prop_spacing > 0.0 {
+                    text_prop_spacing
                 } else if params.extra_line_spacing > 0.0 {
-                    // Fall back to buffer-local line-spacing
-                    row_extra_y += params.extra_line_spacing;
-                }
+                    params.extra_line_spacing
+                } else {
+                    0.0
+                };
+                row_extra_y += current_row_metrics.next_row_vertical_delta(char_h, line_spacing);
 
                 x = content_x;
                 // Record the newline position so the row's
@@ -4811,19 +4815,16 @@ impl LayoutEngine {
                 // Record hit-test row (newline ends the row)
                 hit_rows.push(HitRow {
                     y_start: y,
-                    y_end: y + row_max_height,
+                    y_end: y + current_row_metrics.height(),
                     charpos_start: hit_row_charpos_start,
                     charpos_end: charpos,
                 });
-                let finished_row = TextMatrixRowMetrics {
-                    y,
-                    height: row_max_height,
-                    ascent: row_max_ascent,
-                };
+                let finished_row = current_row_metrics.text_matrix_row_metrics(y);
                 row += 1;
                 y = text_y + row as f32 * char_h + row_extra_y;
-                row_max_height = char_h;
-                row_max_ascent = default_face_ascent;
+                current_row_metrics.reset(char_h, default_face_ascent);
+                row_max_height = current_row_metrics.height();
+                row_max_ascent = current_row_metrics.ascent();
                 row_y_positions.push(y);
                 let row_transition = finish_and_maybe_begin_text_matrix_row(
                     &mut self.matrix_builder,
