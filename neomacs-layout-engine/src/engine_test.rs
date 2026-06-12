@@ -293,6 +293,20 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
 }
 
 #[test]
+fn frame_face_id_allocator_clamps_to_sentinel_and_allocates_sequential_ids() {
+    let mut allocator = FrameFaceIdAllocator::new(100);
+
+    assert_eq!(allocator.allocate(), 100);
+    assert_eq!(allocator.allocate(), 101);
+    assert_eq!(allocator.finish(), 102);
+
+    let mut clamped = FrameFaceIdAllocator::new(0);
+
+    assert_eq!(clamped.allocate(), BasicFaceId::SENTINEL);
+    assert_eq!(clamped.finish(), BasicFaceId::SENTINEL + 1);
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 

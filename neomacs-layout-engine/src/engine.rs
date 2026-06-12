@@ -422,6 +422,11 @@ struct FaceScanCheckpoint {
     next_check: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FrameFaceIdAllocator {
+    next_face_id: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BoxFaceRowState {
     Inactive,
@@ -805,6 +810,28 @@ impl FaceScanCheckpoint {
 
     fn next_check_mut(&mut self) -> &mut usize {
         &mut self.next_check
+    }
+}
+
+impl FrameFaceIdAllocator {
+    fn new(next_face_id: u32) -> Self {
+        Self {
+            next_face_id: next_face_id.max(BasicFaceId::SENTINEL),
+        }
+    }
+
+    fn allocate(&mut self) -> u32 {
+        let face_id = self.next_face_id;
+        self.next_face_id += 1;
+        face_id
+    }
+
+    fn raw_mut(&mut self) -> &mut u32 {
+        &mut self.next_face_id
+    }
+
+    fn finish(self) -> u32 {
+        self.next_face_id
     }
 }
 
@@ -1974,7 +2001,7 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     face_resolver: &super::neovm_bridge::FaceResolver,
     origin: DisplayOrigin,
     policy: BaseFacePolicy,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
     let mut next_check = buffer.layout_point_max_char_pos().get();
@@ -1985,9 +2012,7 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     ) {
         u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
     } else {
-        let face_id = *current_face_id;
-        *current_face_id += 1;
-        face_id
+        face_ids.allocate()
     };
     insert_resolved_display_row_face(builder, face_id, &face, None);
     DisplayStringBaseFace { face, face_id }
@@ -2021,7 +2046,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     text_y: f32,
     row_base: usize,
     max_rows: usize,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     params: &WindowParams,
 ) {
@@ -2037,7 +2062,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         face_resolver,
         fragment.origin,
         fragment.base_face_policy,
-        current_face_id,
+        face_ids,
         builder,
     );
     let row_geometry_defaults = DisplayRowGeometryDefaults::new(text_y, char_h, default_row_ascent);
@@ -2115,7 +2140,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             &mut source,
             &mut source_state,
             face_resolver,
-            current_face_id,
+            face_ids.raw_mut(),
             row_spec,
             geometry.text_row_output(char_h),
         ) else {
@@ -3842,7 +3867,7 @@ impl LayoutEngine {
         // returning. Mirrors GNU's single `face_cache->used`
         // counter per frame at `src/xfaces.c::lookup_face` /
         // `init_frame_faces`.
-        let mut current_face_id: u32 = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
+        let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
 
         let default_measured_face = measurement_policy.measured_face(
@@ -3884,7 +3909,7 @@ impl LayoutEngine {
                 max_mini,
                 truncate_echo_lines,
                 reserve_right_special_col,
-                &mut current_face_id,
+                face_ids.raw_mut(),
             );
             let max_rows_echo = rows.len().clamp(1, max_mini);
             let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
@@ -3926,7 +3951,7 @@ impl LayoutEngine {
                     ascent: default_face_ascent,
                     tab_policy: DisplayTabPolicy::every(8),
                 },
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 default_resolved,
                 GlyphRowRole::Minibuffer,
                 std::collections::HashMap::new(),
@@ -3937,7 +3962,7 @@ impl LayoutEngine {
                     Value::string(""),
                     face_resolver,
                     evaluator.display_host.as_deref(),
-                    &mut current_face_id,
+                    face_ids.raw_mut(),
                 )
                 .expect("empty Lisp string should render an inactive minibuffer row");
             install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
@@ -4105,7 +4130,7 @@ impl LayoutEngine {
                     {
                         resolved = adjusted;
                     }
-                    let face_id = current_face_id;
+                    let face_id = face_ids.allocate();
 
                     let metrics = if frame_params.window_system {
                         self.font_metrics.as_mut().map(|svc| {
@@ -4135,8 +4160,6 @@ impl LayoutEngine {
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
                     row_geometry.include_row_extents(face_metrics.row_height, face_metrics.ascent);
-
-                    current_face_id += 1;
 
                     if resolved.extend {
                         let ext_bg = Color::from_pixel(resolved.bg);
@@ -4209,14 +4232,13 @@ impl LayoutEngine {
                 let _lnum_bg = Color::from_pixel(lnum_face.bg);
                 // Realize and register the line-number face so the renderer
                 // uses the same family/weight/slant the layout chose.
+                let lnum_face_id = face_ids.allocate();
                 insert_resolved_display_row_face(
                     &mut self.matrix_builder,
-                    current_face_id,
+                    lnum_face_id,
                     &lnum_face,
                     None,
                 );
-                let lnum_face_id = current_face_id;
-                current_face_id += 1;
 
                 // Format number right-aligned
                 let num_str = format!("{}", display_num);
@@ -4286,7 +4308,7 @@ impl LayoutEngine {
                         face_resolver,
                         prefix_fragment.origin,
                         prefix_fragment.base_face_policy,
-                        &mut current_face_id,
+                        &mut face_ids,
                         &mut self.matrix_builder,
                     );
 
@@ -4305,7 +4327,7 @@ impl LayoutEngine {
                         face_resolver,
                         &prefix_base_face.face,
                         prefix_base_face.face_id,
-                        &mut current_face_id,
+                        face_ids.raw_mut(),
                         append_frame,
                         DisplayRowPosition { x_px: x, col },
                     );
@@ -4417,7 +4439,7 @@ impl LayoutEngine {
                                     text_y,
                                     text_matrix_row_base,
                                     max_rows,
-                                    &mut current_face_id,
+                                    &mut face_ids,
                                     &mut self.matrix_builder,
                                     params,
                                 );
@@ -4651,8 +4673,7 @@ impl LayoutEngine {
                                 ) {
                                     u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
                                 } else {
-                                    let face_id = current_face_id;
-                                    current_face_id += 1;
+                                    let face_id = face_ids.allocate();
                                     insert_resolved_display_row_face(
                                         &mut self.matrix_builder,
                                         face_id,
@@ -4696,7 +4717,7 @@ impl LayoutEngine {
                                     face_resolver,
                                     &replacement_base_face,
                                     replacement_base_face_id,
-                                    &mut current_face_id,
+                                    face_ids.raw_mut(),
                                     append_frame,
                                     DisplayRowPosition { x_px: x, col },
                                     &mut item_measurer,
@@ -5305,7 +5326,7 @@ impl LayoutEngine {
 
                 // Render ^X with escape-glyph face color
                 if params.escape_glyph_fg != 0 {
-                    current_face_id += 1;
+                    let _ = face_ids.allocate();
                 }
                 let buffer_text_fragment = DisplayTextFragment::buffer_text(
                     CharPos0::new(charpos as usize),
@@ -5353,7 +5374,7 @@ impl LayoutEngine {
                 if let Some(mapped_text) = mapped_text {
                     if params.nobreak_char_fg != 0 {
                         let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                        current_face_id += 1;
+                        let _ = face_ids.allocate();
                     }
                     let buffer_text_fragment = DisplayTextFragment::buffer_text(
                         CharPos0::new(charpos as usize),
@@ -5748,7 +5769,7 @@ impl LayoutEngine {
                             text_y,
                             text_matrix_row_base,
                             max_rows,
-                            &mut current_face_id,
+                            &mut face_ids,
                             &mut self.matrix_builder,
                             params,
                         );
@@ -5857,7 +5878,7 @@ impl LayoutEngine {
                             text_y,
                             text_matrix_row_base,
                             max_rows,
-                            &mut current_face_id,
+                            &mut face_ids,
                             &mut self.matrix_builder,
                             params,
                         );
@@ -5942,7 +5963,7 @@ impl LayoutEngine {
                     text_y,
                     text_matrix_row_base,
                     max_rows,
-                    &mut current_face_id,
+                    &mut face_ids,
                     &mut self.matrix_builder,
                     params,
                 );
@@ -5976,7 +5997,7 @@ impl LayoutEngine {
                     text_y,
                     text_matrix_row_base,
                     max_rows,
-                    &mut current_face_id,
+                    &mut face_ids,
                     &mut self.matrix_builder,
                     params,
                 );
@@ -6321,7 +6342,7 @@ impl LayoutEngine {
             // The retry will write back its final counter; the
             // unconditional `return` below skips the bottom-of-
             // function writeback path.
-            self.frame_face_id_counter = current_face_id;
+            self.frame_face_id_counter = face_ids.finish();
             self.layout_window_rust(
                 evaluator,
                 frame_id,
@@ -6458,7 +6479,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 tl_face,
                 GlyphRowRole::TabLine,
                 status_line_symbol_values.clone(),
@@ -6467,7 +6488,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 0,
                 tab_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6516,7 +6537,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 hl_face,
                 GlyphRowRole::HeaderLine,
                 status_line_symbol_values.clone(),
@@ -6525,7 +6546,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 usize::from(tab_line_height > 0.0),
                 header_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6594,7 +6615,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 ml_face,
                 GlyphRowRole::ModeLine,
                 status_line_symbol_values.clone(),
@@ -6603,7 +6624,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                &mut current_face_id,
+                face_ids.raw_mut(),
                 mode_line_matrix_row,
                 mode_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6645,7 +6666,7 @@ impl LayoutEngine {
         // with mode-line-inactive colors" bug. Mirrors GNU's
         // single `face_cache->used` counter at
         // `src/xfaces.c::init_frame_faces`.
-        self.frame_face_id_counter = current_face_id;
+        self.frame_face_id_counter = face_ids.finish();
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.
