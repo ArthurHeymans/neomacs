@@ -195,13 +195,22 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
       - concurrent termination ~1.7ms -> ~500-668us median (roots 841us->~350us).
     Verified: fresh-build --release with NEOVM_GC_VERIFY_PARTITION=1 clean (0
     violations), 0 panics on both collectors.
-  * STAGE 0 further (not done, riskier): the residual ~150-350us roots is now the
-    ENUMERATION of the ~150k-entry symbol table itself (cells checked but not
-    pushed). Eliminating it needs a dirty-symbol remembered set (only enumerate
-    symbols mutated since the dump) — but that requires hooking EVERY symbol
-    value/function/plist write (a barrier-completeness problem; a miss = UAF),
-    so verify under gc_stress. Tracing deferred veclikes concurrently
-    (retired-buffer scheme, option (b)) remains secondary.
+  * STAGE 0 further — dirty-symbol remembered set: TRIED and REVERTED. The idea:
+    only enumerate symbols mutated since the dump (a dirty list) + young symbols,
+    instead of scanning all ~150k. Hooked the two `&mut LispSymbol` accessors
+    (`slot_mut`/`ensure_slot`) — the provably-complete chokepoint every cell write
+    passes through (verified CORRECT: 22k stress GCs across cl-macs/cl-seq/cl-extra
+    byte-compiles, 0 panics, correct .elc). BUT it was a PERFORMANCE REGRESSION:
+    the dirty list is scattered SymIds, so iterating it is random-access
+    (cache-missing) and it grows as more dumped symbols are mutated — termination
+    roots tail rose to ~1437us (vs Stage-0 ~150us), median 200us->319us. LESSON:
+    the contiguous 150k-symbol scan is cache-friendly and FASTER than
+    random-accessing a few thousand scattered dirty entries; the enumeration was
+    never the bottleneck — the gray push/drain was, and Stage-0 already fixed that.
+    Do not re-attempt a scattered dirty index. (A contiguous dirty-cell cache
+    could in principle help, but the residual ~150us is already negligible.)
+    Tracing deferred veclikes concurrently (retired-buffer scheme, option (b))
+    remains the only secondary lever.
 
   Original design notes (kept for reference):
   * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes
