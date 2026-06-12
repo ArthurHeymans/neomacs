@@ -347,6 +347,13 @@ struct CursorGeometryContext {
     ends_at_visible_eob: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct VisualCursorGeometryContext {
+    window_id: i64,
+    text_area_left: f32,
+    window_top: f32,
+}
+
 impl CursorGeometrySource {
     fn from_captured_cursor(
         cursor: &CapturedCursorInfo,
@@ -370,6 +377,31 @@ impl CursorGeometrySource {
             stretch_like: cursor.stretch_like,
             ends_at_visible_eob: context.ends_at_visible_eob,
             cursor_fg: cursor.bg,
+        }
+    }
+
+    fn from_display_point(
+        point: &DisplayPointSnapshot,
+        context: VisualCursorGeometryContext,
+    ) -> Self {
+        let point_h = (point.height as f32).max(1.0);
+        Self {
+            slot_id: DisplaySlotId {
+                window_id: context.window_id,
+                row: point.row.max(0) as u32,
+                col: point.col.max(0) as u16,
+            },
+            x: context.text_area_left + point.x as f32,
+            y: context.window_top + point.y as f32,
+            slot_width: (point.width as f32).max(1.0),
+            face_height: point_h,
+            face_ascent: point_h,
+            row_height: point_h,
+            row_ascent: point_h,
+            default_line_height: point_h,
+            stretch_like: false,
+            ends_at_visible_eob: false,
+            cursor_fg: Color::BLACK,
         }
     }
 }
@@ -1363,25 +1395,14 @@ fn visual_cursor_source_from_point(
     text_area_left: f32,
     window_top: f32,
 ) -> CursorGeometrySource {
-    let point_h = (point.height as f32).max(1.0);
-    CursorGeometrySource {
-        slot_id: DisplaySlotId {
+    CursorGeometrySource::from_display_point(
+        point,
+        VisualCursorGeometryContext {
             window_id,
-            row: point.row.max(0) as u32,
-            col: point.col.max(0) as u16,
+            text_area_left,
+            window_top,
         },
-        x: text_area_left + point.x as f32,
-        y: window_top + point.y as f32,
-        slot_width: (point.width as f32).max(1.0),
-        face_height: point_h,
-        face_ascent: point_h,
-        row_height: point_h,
-        row_ascent: point_h,
-        default_line_height: point_h,
-        stretch_like: false,
-        ends_at_visible_eob: false,
-        cursor_fg: Color::BLACK,
-    }
+    )
 }
 
 fn text_display_tab_policy(

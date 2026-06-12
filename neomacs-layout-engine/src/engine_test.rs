@@ -326,6 +326,48 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
 }
 
 #[test]
+fn cursor_geometry_source_builds_from_display_point_snapshot() {
+    let point = DisplayPointSnapshot {
+        buffer_pos: LispCharPos1::from_one_based_usize(4),
+        x: 11,
+        y: 13,
+        width: 17,
+        height: 19,
+        row: 3,
+        col: 5,
+    };
+
+    let source = CursorGeometrySource::from_display_point(
+        &point,
+        VisualCursorGeometryContext {
+            window_id: -10,
+            text_area_left: 100.0,
+            window_top: 7.0,
+        },
+    );
+
+    assert_eq!(
+        source.slot_id,
+        DisplaySlotId {
+            window_id: -10,
+            row: 3,
+            col: 5,
+        }
+    );
+    assert_eq!(source.x, 111.0);
+    assert_eq!(source.y, 20.0);
+    assert_eq!(source.slot_width, 17.0);
+    assert_eq!(source.face_height, 19.0);
+    assert_eq!(source.face_ascent, 19.0);
+    assert_eq!(source.row_height, 19.0);
+    assert_eq!(source.row_ascent, 19.0);
+    assert_eq!(source.default_line_height, 19.0);
+    assert!(!source.stretch_like);
+    assert!(!source.ends_at_visible_eob);
+    assert_eq!(source.cursor_fg, Color::BLACK);
+}
+
+#[test]
 fn captured_cursor_info_resolves_explicit_slot_width_before_style_width() {
     let cursor = CapturedCursorInfo::from_visual_state(
         CapturedCursorVisualState {
