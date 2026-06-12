@@ -5117,18 +5117,8 @@ impl LayoutEngine {
                     // Leave the cache empty when shaping yields nothing (no
                     // font / unavailable) so each char falls back to its
                     // isolated width rather than collapsing to zero.
-                    if let Some(advances) = measurement.measured_advances() {
-                        for advance in advances {
-                            let rel = advance.byte_offset;
-                            let Some(c) = run_text[rel..].chars().next() else {
-                                continue;
-                            };
-                            if is_cluster_extender(c) {
-                                continue;
-                            }
-                            complex_run_adv.push((ch_start_byte_idx + rel, advance.advance_px));
-                        }
-                    }
+                    complex_run_adv =
+                        measurement.base_char_byte_advances(&run_text, ch_start_byte_idx);
                     complex_run_start = ch_start_byte_idx;
                     complex_run_end = end;
                 }

@@ -7,6 +7,7 @@ use crate::display_item::{
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::unicode::is_cluster_extender;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
@@ -178,6 +179,25 @@ impl DisplayTextRunMeasurement {
             Self::PerChar => None,
             Self::Measured(advances) => Some(advances),
         }
+    }
+
+    pub(crate) fn base_char_byte_advances(
+        &self,
+        text: &str,
+        base_byte_offset: usize,
+    ) -> Vec<(usize, f32)> {
+        let Self::Measured(advances) = self else {
+            return Vec::new();
+        };
+
+        advances
+            .iter()
+            .filter_map(|advance| {
+                let c = text.get(advance.byte_offset..)?.chars().next()?;
+                (!is_cluster_extender(c))
+                    .then_some((base_byte_offset + advance.byte_offset, advance.advance_px))
+            })
+            .collect()
     }
 
     fn advance_for(&self, char_offset: usize, byte_offset: usize) -> Option<f32> {

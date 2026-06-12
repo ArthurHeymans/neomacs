@@ -515,6 +515,24 @@ fn display_text_run_measurement_builds_uniform_advances_for_text() {
 }
 
 #[test]
+fn display_text_run_measurement_maps_base_char_byte_advances() {
+    let measurement = DisplayTextRunMeasurement::Measured(vec![
+        DisplayTextRunAdvance::new(0, 0, 7.0),
+        DisplayTextRunAdvance::new(1, 1, 0.0),
+        DisplayTextRunAdvance::new(2, 3, 9.0),
+    ]);
+
+    assert_eq!(
+        measurement.base_char_byte_advances("a\u{301}中", 100),
+        vec![(100, 7.0), (103, 9.0)]
+    );
+    assert_eq!(
+        DisplayTextRunMeasurement::PerChar.base_char_byte_advances("a\u{301}", 100),
+        Vec::<(usize, f32)>::new()
+    );
+}
+
+#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));
