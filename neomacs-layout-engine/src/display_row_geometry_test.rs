@@ -382,6 +382,29 @@ fn legacy_display_row_geometry_vars_report_current_row_visibility_by_name() {
 }
 
 #[test]
+fn legacy_display_row_geometry_vars_record_current_row_y_by_name() {
+    let mut row = 3;
+    let mut y = 69.0;
+    let mut row_extra_y = 11.0;
+    let mut row_max_height = 16.0;
+    let mut row_max_ascent = 12.0;
+    let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
+
+    LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .record_current_row_y(&mut row_y_positions);
+
+    assert_eq!(row_y_positions.recorded(), &[8.0, 69.0]);
+    assert_eq!(row, 3);
+    assert_eq!(y, 69.0);
+}
+
+#[test]
 fn display_row_y_positions_preserve_recorded_rows_and_fallback_by_geometry() {
     let mut positions = DisplayRowYPositions::with_first_row(10.0, 16.0);
     positions.record(1, 30.0);

@@ -1520,7 +1520,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     .finish_and_end(geometry_transition.finished_row);
                 false
             } else {
-                row_y_positions.push(*y);
+                LegacyDisplayRowGeometryVars {
+                    row,
+                    y,
+                    row_extra_y,
+                    row_max_height,
+                    row_max_ascent,
+                }
+                .record_current_row_y(row_y_positions);
                 *x = content_x;
                 *col = 0;
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)

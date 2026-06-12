@@ -130,6 +130,10 @@ impl LegacyDisplayRowGeometryVars<'_> {
         *self.row_max_ascent = self.row_max_ascent.max(ascent);
     }
 
+    pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
+        row_y_positions.push(*self.y);
+    }
+
     pub(crate) fn finish_boundary(
         self,
         target: DisplayRowBoundaryTarget<'_>,
