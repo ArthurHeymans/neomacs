@@ -1,5 +1,5 @@
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_origin::{DisplayOrigin, OverlayStringKind};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
@@ -72,6 +72,21 @@ impl DisplayTextFragment {
                 kind,
             },
             BaseFacePolicy::OverlayStringAtAnchor,
+        )
+    }
+
+    pub(crate) fn display_property_string(
+        value: Value,
+        anchor_charpos: CharPos0,
+        source: DisplayPropertySource,
+    ) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::DisplayPropertyString {
+                anchor_charpos,
+                source,
+            },
+            BaseFacePolicy::DisplayPropertyUnderlyingFace,
         )
     }
 }
@@ -161,6 +176,30 @@ mod tests {
         assert_eq!(
             fragment.base_face_policy,
             BaseFacePolicy::OverlayStringAtAnchor
+        );
+    }
+
+    #[test]
+    fn display_text_fragment_builds_display_property_string_fragment() {
+        let _ctx = Context::new();
+        let value = Value::string("replacement");
+        let fragment = DisplayTextFragment::display_property_string(
+            value,
+            CharPos0::new(2),
+            DisplayPropertySource::TextProperty,
+        );
+
+        assert_eq!(fragment.storage, DisplayTextStorage::LispString(value));
+        assert_eq!(
+            fragment.origin,
+            DisplayOrigin::DisplayPropertyString {
+                anchor_charpos: CharPos0::new(2),
+                source: DisplayPropertySource::TextProperty,
+            }
+        );
+        assert_eq!(
+            fragment.base_face_policy,
+            BaseFacePolicy::DisplayPropertyUnderlyingFace
         );
     }
 }

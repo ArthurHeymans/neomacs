@@ -20,7 +20,7 @@ use super::window_output::{
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_origin::{DisplayOrigin, OverlayStringKind};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOutputProgress, DisplayRowOwner,
@@ -50,6 +50,7 @@ use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
 use crate::glyph_advance::GlyphAdvanceQuantization;
+use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
@@ -4131,10 +4132,52 @@ impl LayoutEngine {
                                 charpos,
                                 text_start_byte + byte_idx,
                             );
+                            let replacement_fragment = DisplayTextFragment::display_property_string(
+                                prop_val,
+                                CharPos0::new(charpos as usize),
+                                DisplayPropertySource::TextProperty,
+                            );
+                            let mut replacement_next_check =
+                                buffer.layout_point_max_char_pos().get();
+                            let replacement_base_face = face_resolver.base_face_for_origin(
+                                Some(buffer),
+                                &replacement_fragment.origin,
+                                replacement_fragment.base_face_policy,
+                                &mut replacement_next_check,
+                            );
+                            let replacement_base_face_id =
+                                if crate::display_source_resolver::same_resolved_face(
+                                    &replacement_base_face,
+                                    &current_resolved_face,
+                                ) {
+                                    current_text_face_id
+                                } else if crate::display_source_resolver::same_resolved_face(
+                                    &replacement_base_face,
+                                    face_resolver.default_face(),
+                                ) {
+                                    u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
+                                } else {
+                                    let face_id = current_face_id;
+                                    current_face_id += 1;
+                                    insert_resolved_display_row_face(
+                                        &mut self.matrix_builder,
+                                        face_id,
+                                        &replacement_base_face,
+                                        None,
+                                    );
+                                    face_id
+                                };
+                            let DisplayTextStorage::LispString(replacement_value) =
+                                replacement_fragment.storage
+                            else {
+                                continue;
+                            };
                             if let Some(source) = crate::display_source::LispStringSourceCursor::new(
                                 1,
-                                prop_val,
-                                crate::display_item::RenderFaceRef::FaceId(current_text_face_id),
+                                replacement_value,
+                                crate::display_item::RenderFaceRef::FaceId(
+                                    replacement_base_face_id,
+                                ),
                             ) {
                                 let source = BufferDisplayReplacementStringSource::new(
                                     replacement_source,
@@ -4172,8 +4215,8 @@ impl LayoutEngine {
                                     evaluator,
                                     source,
                                     face_resolver,
-                                    &current_resolved_face,
-                                    current_text_face_id,
+                                    &replacement_base_face,
+                                    replacement_base_face_id,
                                     &mut current_face_id,
                                     append_frame,
                                     DisplayRowPosition { x_px: x, col },
