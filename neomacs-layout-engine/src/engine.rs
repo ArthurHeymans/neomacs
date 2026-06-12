@@ -47,6 +47,7 @@ use crate::display_source::{
     DisplayReplacementBox,
 };
 use crate::display_source_resolver::resolve_display_property_media;
+use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1246,16 +1247,12 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     buffer: &B,
     face_resolver: &super::neovm_bridge::FaceResolver,
     origin: DisplayOrigin,
+    policy: BaseFacePolicy,
     current_face_id: &mut u32,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
     let mut next_check = buffer.layout_point_max_char_pos().get();
-    let face = face_resolver.base_face_for_origin(
-        Some(buffer),
-        &origin,
-        BaseFacePolicy::OverlayStringAtAnchor,
-        &mut next_check,
-    );
+    let face = face_resolver.base_face_for_origin(Some(buffer), &origin, policy, &mut next_check);
     let face_id = if crate::display_source_resolver::same_resolved_face(
         &face,
         face_resolver.default_face(),
@@ -1279,10 +1276,9 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
-    text_value: Value,
+    fragment: DisplayTextFragment,
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
-    origin: DisplayOrigin,
     x: &mut f32,
     y: &mut f32,
     col: &mut usize,
@@ -1307,12 +1303,21 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
     params: &WindowParams,
 ) {
+    let DisplayTextStorage::LispString(text_value) = fragment.storage else {
+        return;
+    };
     if text_value.as_lisp_string().is_none() {
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let base_face =
-        display_string_base_face(buffer, face_resolver, origin, current_face_id, builder);
+    let base_face = display_string_base_face(
+        buffer,
+        face_resolver,
+        fragment.origin,
+        fragment.base_face_policy,
+        current_face_id,
+        builder,
+    );
 
     macro_rules! finish_overlay_string_row {
         () => {{
@@ -3837,14 +3842,14 @@ impl LayoutEngine {
                                     evaluator,
                                     &mut output_emitter,
                                     buffer,
-                                    overlay_string.string,
+                                    DisplayTextFragment::overlay_string(
+                                        overlay_string.string,
+                                        overlay_string.overlay_id,
+                                        CharPos0::new(charpos as usize),
+                                        OverlayStringKind::After,
+                                    ),
                                     &mut self.font_metrics,
                                     face_resolver,
-                                    DisplayOrigin::OverlayString {
-                                        overlay_id: overlay_string.overlay_id,
-                                        anchor_charpos: CharPos0::new(charpos as usize),
-                                        kind: OverlayStringKind::After,
-                                    },
                                     &mut x,
                                     &mut y,
                                     &mut col,
@@ -5478,14 +5483,14 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             buffer,
-                            overlay_string.string,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::Before,
+                            ),
                             &mut self.font_metrics,
                             face_resolver,
-                            DisplayOrigin::OverlayString {
-                                overlay_id: overlay_string.overlay_id,
-                                anchor_charpos: CharPos0::new(charpos as usize),
-                                kind: OverlayStringKind::Before,
-                            },
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5588,14 +5593,14 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             buffer,
-                            overlay_string.string,
+                            DisplayTextFragment::overlay_string(
+                                overlay_string.string,
+                                overlay_string.overlay_id,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::After,
+                            ),
                             &mut self.font_metrics,
                             face_resolver,
-                            DisplayOrigin::OverlayString {
-                                overlay_id: overlay_string.overlay_id,
-                                anchor_charpos: CharPos0::new(charpos as usize),
-                                kind: OverlayStringKind::After,
-                            },
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5696,14 +5701,14 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     buffer,
-                    overlay_string.string,
+                    DisplayTextFragment::overlay_string(
+                        overlay_string.string,
+                        overlay_string.overlay_id,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::Before,
+                    ),
                     &mut self.font_metrics,
                     face_resolver,
-                    DisplayOrigin::OverlayString {
-                        overlay_id: overlay_string.overlay_id,
-                        anchor_charpos: CharPos0::new(charpos as usize),
-                        kind: OverlayStringKind::Before,
-                    },
                     &mut x,
                     &mut y,
                     &mut col,
@@ -5734,14 +5739,14 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     buffer,
-                    overlay_string.string,
+                    DisplayTextFragment::overlay_string(
+                        overlay_string.string,
+                        overlay_string.overlay_id,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::After,
+                    ),
                     &mut self.font_metrics,
                     face_resolver,
-                    DisplayOrigin::OverlayString {
-                        overlay_id: overlay_string.overlay_id,
-                        anchor_charpos: CharPos0::new(charpos as usize),
-                        kind: OverlayStringKind::After,
-                    },
                     &mut x,
                     &mut y,
                     &mut col,

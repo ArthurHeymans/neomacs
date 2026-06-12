@@ -1,5 +1,5 @@
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_origin::DisplayOrigin;
+use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
@@ -56,6 +56,23 @@ impl DisplayTextFragment {
             origin,
             base_face_policy,
         }
+    }
+
+    pub(crate) fn overlay_string(
+        value: Value,
+        overlay_id: Value,
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::OverlayString {
+                overlay_id,
+                anchor_charpos,
+                kind,
+            },
+            BaseFacePolicy::OverlayStringAtAnchor,
+        )
     }
 }
 
@@ -118,6 +135,32 @@ mod tests {
         assert_eq!(
             display_property.base_face_policy,
             BaseFacePolicy::DisplayPropertyUnderlyingFace
+        );
+    }
+
+    #[test]
+    fn display_text_fragment_builds_overlay_string_fragment() {
+        let _ctx = Context::new();
+        let value = Value::string("candidate");
+        let fragment = DisplayTextFragment::overlay_string(
+            value,
+            Value::fixnum(7),
+            CharPos0::new(4),
+            OverlayStringKind::After,
+        );
+
+        assert_eq!(fragment.storage, DisplayTextStorage::LispString(value));
+        assert_eq!(
+            fragment.origin,
+            DisplayOrigin::OverlayString {
+                overlay_id: Value::fixnum(7),
+                anchor_charpos: CharPos0::new(4),
+                kind: OverlayStringKind::After,
+            }
+        );
+        assert_eq!(
+            fragment.base_face_policy,
+            BaseFacePolicy::OverlayStringAtAnchor
         );
     }
 }
