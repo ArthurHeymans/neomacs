@@ -325,6 +325,61 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
     assert_eq!(source.cursor_fg, Color::from_pixel(0x00112233));
 }
 
+#[test]
+fn captured_cursor_info_resolves_explicit_slot_width_before_style_width() {
+    let cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 9.0,
+            face_height: 22.0,
+            face_ascent: 17.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 21.0,
+            y: 34.0,
+            byte_idx: 0,
+            col: 1,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(18.0),
+            stretch_like: true,
+        },
+    );
+    let mut params = test_window_params();
+    params.x_stretch_cursor = true;
+
+    let width = cursor.resolved_slot_width(CursorStyle::FilledBox, b"\t", &params);
+
+    assert_eq!(width, 18.0);
+}
+
+#[test]
+fn captured_cursor_info_resolves_missing_slot_width_from_style_width() {
+    let mut cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 8.0,
+            face_height: 22.0,
+            face_ascent: 17.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 21.0,
+            y: 34.0,
+            byte_idx: 0,
+            col: 1,
+            matrix_row: 2,
+            slot_width: CapturedCursorSlotWidth::Explicit(18.0),
+            stretch_like: true,
+        },
+    );
+    cursor.slot_width = None;
+    let mut params = test_window_params();
+    params.x_stretch_cursor = true;
+
+    let width = cursor.resolved_slot_width(CursorStyle::FilledBox, b"\t", &params);
+
+    assert_eq!(width, 56.0);
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,

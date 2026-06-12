@@ -219,6 +219,22 @@ impl CapturedCursorVisualState {
 }
 
 impl CapturedCursorInfo {
+    fn resolved_slot_width(&self, style: CursorStyle, text: &[u8], params: &WindowParams) -> f32 {
+        if let Some(slot_width) = self.slot_width {
+            slot_width.max(1.0)
+        } else {
+            cursor_width_for_style(
+                style,
+                text,
+                self.byte_idx,
+                self.col as i32,
+                params,
+                self.face_w,
+            )
+            .max(1.0)
+        }
+    }
+
     fn from_visual_state(
         visual_state: CapturedCursorVisualState,
         placement: CapturedCursorPlacement,
@@ -5845,25 +5861,12 @@ impl LayoutEngine {
                     col: cursor.col as i64,
                 });
                 if let Some(style) = cursor_style_for_window(params) {
-                    let computed_slot_width = if let Some(slot_width) = cursor.slot_width {
-                        slot_width.max(1.0)
-                    } else {
-                        cursor_width_for_style(
-                            style,
-                            text,
-                            cursor.byte_idx,
-                            cursor.col as i32,
-                            params,
-                            cursor.face_w,
-                        )
-                        .max(1.0)
-                    };
                     let source = CursorGeometrySource::from_captured_cursor(
                         &cursor,
                         row_metric,
                         CursorGeometryContext {
                             window_id: params.window_id,
-                            slot_width: computed_slot_width,
+                            slot_width: cursor.resolved_slot_width(style, text, params),
                             default_line_height: char_h,
                             ends_at_visible_eob: point_is_visible_eob,
                         },
