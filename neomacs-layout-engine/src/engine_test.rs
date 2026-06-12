@@ -702,6 +702,20 @@ fn display_row_geometry_state_applies_to_legacy_row_variables_by_name() {
     assert_eq!(row_ascent, 14.0);
 }
 
+#[test]
+fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
+    assert_eq!(
+        DisplayRowGeometryState::from_legacy(4, 80.0, 9.0, 20.0, 14.0),
+        DisplayRowGeometryState {
+            row: 4,
+            y: 80.0,
+            row_extra_y: 9.0,
+            height: 20.0,
+            ascent: 14.0,
+        }
+    );
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
