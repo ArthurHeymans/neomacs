@@ -214,6 +214,33 @@ fn trailing_whitespace_render_state_tracks_enabled_marker_and_background() {
 }
 
 #[test]
+fn hit_row_range_tracker_builds_ranges_and_tracks_pending_finish() {
+    let mut tracker = HitRowRangeTracker::new(10);
+
+    assert_eq!(
+        tracker.range_to(14),
+        DisplayRowHitRange {
+            charpos_start: 10,
+            charpos_end: 14,
+        }
+    );
+    assert!(!tracker.should_finish_current_row(10, false));
+    assert!(tracker.should_finish_current_row(11, false));
+    assert!(tracker.should_finish_current_row(10, true));
+
+    tracker.advance_to(14);
+
+    assert_eq!(
+        tracker.range_to(20),
+        DisplayRowHitRange {
+            charpos_start: 14,
+            charpos_end: 20,
+        }
+    );
+    assert!(!tracker.should_finish_current_row(14, false));
+}
+
+#[test]
 fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 

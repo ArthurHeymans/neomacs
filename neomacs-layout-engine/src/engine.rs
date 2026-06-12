@@ -431,6 +431,11 @@ struct TrailingWhitespaceRenderState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HitRowRangeTracker {
+    start_charpos: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TextPropertyScanCheckpoints {
     invisible_next: i64,
     display_next: i64,
@@ -859,6 +864,31 @@ impl TrailingWhitespaceRenderState {
 
     fn highlight_start_x(self, geometry: &DisplayRowGeometryState) -> Option<(Color, f32)> {
         Some((self.background?, self.start_marker.x_on(geometry)?))
+    }
+}
+
+impl HitRowRangeTracker {
+    fn new(start_charpos: i64) -> Self {
+        Self { start_charpos }
+    }
+
+    fn start(self) -> i64 {
+        self.start_charpos
+    }
+
+    fn range_to(self, end_charpos: i64) -> DisplayRowHitRange {
+        DisplayRowHitRange {
+            charpos_start: self.start_charpos,
+            charpos_end: end_charpos,
+        }
+    }
+
+    fn advance_to(&mut self, start_charpos: i64) {
+        self.start_charpos = start_charpos;
+    }
+
+    fn should_finish_current_row(self, current_charpos: i64, has_pending_row_output: bool) -> bool {
+        current_charpos > self.start_charpos || has_pending_row_output
     }
 }
 
@@ -1921,7 +1951,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     geometry: &mut DisplayRowGeometryState,
     cursor_info: &mut Option<CapturedCursorInfo>,
     hit_rows: &mut Vec<HitRow>,
-    hit_row_charpos_start: &mut i64,
+    hit_row_range: &mut HitRowRangeTracker,
     anchor_charpos: i64,
     row_y_positions: &mut DisplayRowYPositions,
     face_char_w: f32,
@@ -1958,10 +1988,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         () => {{
             let geometry_transition = geometry.finish_boundary_and_record_hit(
                 DisplayRowBoundaryTarget::line_break(
-                    DisplayRowHitRange {
-                        charpos_start: *hit_row_charpos_start,
-                        charpos_end: anchor_charpos,
-                    },
+                    hit_row_range.range_to(anchor_charpos),
                     row_geometry_defaults,
                     row_base,
                     0,
@@ -1971,7 +1998,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 ),
                 hit_rows,
             );
-            *hit_row_charpos_start = anchor_charpos;
+            hit_row_range.advance_to(anchor_charpos);
             if !geometry.is_within_row_limit(row_limit) {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
@@ -3959,7 +3986,7 @@ impl LayoutEngine {
 
         // Hit-test data for this window
         let mut hit_rows: Vec<HitRow> = Vec::new();
-        let mut hit_row_charpos_start: i64 = window_start;
+        let mut hit_row_range = HitRowRangeTracker::new(window_start);
         let text_area_left = text_x;
         let window_top = params.bounds.y;
         let mut output_emitter = WindowOutputEmitter::new(
@@ -4317,7 +4344,7 @@ impl LayoutEngine {
                                     &mut row_geometry,
                                     &mut cursor_info,
                                     &mut hit_rows,
-                                    &mut hit_row_charpos_start,
+                                    &mut hit_row_range,
                                     charpos,
                                     &mut row_y_positions,
                                     face_metrics.char_width,
@@ -4360,10 +4387,7 @@ impl LayoutEngine {
 
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::line_break(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
+                            hit_row_range.range_to(charpos),
                             row_geometry_defaults,
                             text_matrix_row_base,
                             col,
@@ -4374,7 +4398,7 @@ impl LayoutEngine {
                         &mut hit_rows,
                     );
                     // Record hit-test row (hscroll newline)
-                    hit_row_charpos_start = charpos;
+                    hit_row_range.advance_to(charpos);
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4929,10 +4953,7 @@ impl LayoutEngine {
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::line_break(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
+                                hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
@@ -4952,7 +4973,7 @@ impl LayoutEngine {
                             break;
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
-                        hit_row_charpos_start = charpos;
+                        hit_row_range.advance_to(charpos);
                         col = 0;
                         line_numbers.advance_line();
                         hscroll_skip.reset_line();
@@ -5035,10 +5056,7 @@ impl LayoutEngine {
                 // Record hit-test row (newline ends the row)
                 let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                     DisplayRowBoundaryTarget::line_break(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
+                        hit_row_range.range_to(charpos),
                         row_geometry_defaults,
                         text_matrix_row_base,
                         col,
@@ -5058,7 +5076,7 @@ impl LayoutEngine {
                     break;
                 }
                 charpos = sync_charpos_from_byte_idx(byte_idx);
-                hit_row_charpos_start = charpos;
+                hit_row_range.advance_to(charpos);
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
                 col = 0;
                 line_numbers.advance_line();
@@ -5149,10 +5167,7 @@ impl LayoutEngine {
                         row_extend.clear();
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::truncation(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
+                                hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
@@ -5172,7 +5187,7 @@ impl LayoutEngine {
                             break;
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
-                        hit_row_charpos_start = charpos;
+                        hit_row_range.advance_to(charpos);
                         col = 0;
                         word_wrap.disallow_after_current_char();
                         trailing_whitespace.reset_after_row_transition();
@@ -5190,10 +5205,7 @@ impl LayoutEngine {
                         row_extend.clear();
                         let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                             DisplayRowBoundaryTarget::visual_wrap(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
+                                hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
                                 text_matrix_row_base,
                                 col,
@@ -5203,7 +5215,7 @@ impl LayoutEngine {
                             &mut hit_rows,
                         );
                         // Record hit-test row (wrap/truncation break)
-                        hit_row_charpos_start = charpos;
+                        hit_row_range.advance_to(charpos);
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -5474,10 +5486,7 @@ impl LayoutEngine {
                     row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::truncation(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
+                            hit_row_range.range_to(charpos),
                             row_geometry_defaults,
                             text_matrix_row_base,
                             col,
@@ -5526,10 +5535,7 @@ impl LayoutEngine {
                     row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::visual_wrap(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
+                            hit_row_range.range_to(charpos),
                             row_geometry_defaults,
                             text_matrix_row_base,
                             col,
@@ -5549,7 +5555,7 @@ impl LayoutEngine {
                         break;
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
-                    hit_row_charpos_start = charpos;
+                    hit_row_range.advance_to(charpos);
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,
                         DisplayRowFlagKind::Continuation,
@@ -5579,10 +5585,7 @@ impl LayoutEngine {
                     row_extend.clear();
                     let geometry_transition = row_geometry.finish_boundary_and_record_hit(
                         DisplayRowBoundaryTarget::visual_wrap(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
+                            hit_row_range.range_to(charpos),
                             row_geometry_defaults,
                             text_matrix_row_base,
                             col,
@@ -5610,7 +5613,7 @@ impl LayoutEngine {
                     );
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
-                    hit_row_charpos_start = charpos;
+                    hit_row_range.advance_to(charpos);
                     word_wrap.disallow_after_current_char();
                     face_next_check = 0;
                     if has_prefix {
@@ -5672,7 +5675,7 @@ impl LayoutEngine {
                             &mut row_geometry,
                             &mut cursor_info,
                             &mut hit_rows,
-                            &mut hit_row_charpos_start,
+                            &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
                             face_metrics.char_width,
@@ -5781,7 +5784,7 @@ impl LayoutEngine {
                             &mut row_geometry,
                             &mut cursor_info,
                             &mut hit_rows,
-                            &mut hit_row_charpos_start,
+                            &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
                             face_metrics.char_width,
@@ -5866,7 +5869,7 @@ impl LayoutEngine {
                     &mut row_geometry,
                     &mut cursor_info,
                     &mut hit_rows,
-                    &mut hit_row_charpos_start,
+                    &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
                     face_metrics.char_width,
@@ -5900,7 +5903,7 @@ impl LayoutEngine {
                     &mut row_geometry,
                     &mut cursor_info,
                     &mut hit_rows,
-                    &mut hit_row_charpos_start,
+                    &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
                     face_metrics.char_width,
@@ -6109,11 +6112,11 @@ impl LayoutEngine {
 
         let has_pending_row_output = output_emitter.current_row_has_output();
         if row_geometry.is_within_row_limit(row_limit)
-            && (charpos > hit_row_charpos_start || has_pending_row_output)
+            && hit_row_range.should_finish_current_row(charpos, has_pending_row_output)
         {
             let row_y_start = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
             let row_cursor = row_geometry.with_row_y(row_y_start).cursor();
-            hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
+            hit_rows.push(row_cursor.hit_row(hit_row_range.start(), charpos));
             TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
                 .finish(row_cursor.finish_current_row());
         }
