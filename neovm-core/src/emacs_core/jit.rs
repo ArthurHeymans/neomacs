@@ -35,6 +35,14 @@ pub mod backend;
 #[cfg(feature = "jit")]
 pub mod compile;
 
+/// Per-thread compiled-code cache + the tier-up entry point the dispatch seam
+/// calls ([`cache::try_run_compiled`]). Only built with the `jit` feature.
+#[cfg(feature = "jit")]
+pub mod cache;
+
+#[cfg(feature = "jit")]
+pub use cache::try_run_compiled;
+
 /// Which execution tier currently backs a compiled function.
 ///
 /// Only [`Tier::Bytecode`] exists today. Later phases add `Baseline`
@@ -54,7 +62,11 @@ pub enum Tier {
 pub enum Plan {
     /// Run the Tier-0 bytecode interpreter.
     Interpret,
-    // Phase 3+: RunBaseline(BaselineCode), RunOptimized(OptimizedCode),
+    /// The function is hot — consult the baseline JIT: compile-on-first-use and
+    /// run native, or fall back to the interpreter on a deopt / non-compilable
+    /// body. See [`cache::try_run_compiled`].
+    Compiled,
+    // Phase 4+: RunOptimized(OptimizedCode),
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +193,17 @@ pub struct Runtime {
     /// Per-call-site type/target feedback (Phase 1). The optimizing tier reads
     /// this to speculate direct/inlined calls.
     feedback: FeedbackVec,
+    /// Process-unique identity assigned on first JIT compilation attempt (0 =
+    /// unassigned). Keys this function's entry in the per-thread compiled-code
+    /// cache ([`cache`]). Monotonic and never reused, so a freed function's
+    /// stale cache entry can never be mis-looked-up after the (non-moving) GC
+    /// reuses its address — a new function gets a new id. Reset to 0 on clone.
+    compiled_id: AtomicU64,
 }
+
+/// Source of process-unique [`Runtime::compiled_id`] values. Ids are
+/// `fetch_add + 1` so 0 stays reserved for "unassigned".
+static NEXT_COMPILED_ID: AtomicU64 = AtomicU64::new(0);
 
 impl Runtime {
     /// Invocations before a function is "hot" enough to tier up. Placeholder —
@@ -193,20 +215,48 @@ impl Runtime {
         Self {
             heat: AtomicU32::new(0),
             feedback: FeedbackVec::new(),
+            compiled_id: AtomicU64::new(0),
         }
     }
 
     /// Record one invocation and decide how to run it. The caller MUST handle
     /// the returned [`Plan`] exhaustively.
     ///
-    /// Today this only counts and returns [`Plan::Interpret`]; once a compiled
-    /// tier exists (Phase 3+) it branches there when [`Runtime::is_hot`].
+    /// Counts the invocation and returns [`Plan::Compiled`] once the function
+    /// crosses [`Runtime::HOT_THRESHOLD`], else [`Plan::Interpret`]. The compiled
+    /// plan only means "the JIT may run this" — the cache still falls back to the
+    /// interpreter for non-compilable bodies and on deopt.
     #[inline]
     pub fn dispatch(&self) -> Plan {
         // Saturating bump — a long-lived hot function must never wrap to cold.
         let prev = self.heat.load(Ordering::Relaxed);
-        self.heat.store(prev.saturating_add(1), Ordering::Relaxed);
-        Plan::Interpret
+        let now = prev.saturating_add(1);
+        self.heat.store(now, Ordering::Relaxed);
+        if now >= Self::HOT_THRESHOLD {
+            Plan::Compiled
+        } else {
+            Plan::Interpret
+        }
+    }
+
+    /// This function's compiled-cache id, assigning a fresh process-unique one
+    /// on first call (idempotent under races). Used only by [`cache`].
+    #[inline]
+    pub fn compiled_id_or_assign(&self) -> u64 {
+        let cur = self.compiled_id.load(Ordering::Acquire);
+        if cur != 0 {
+            return cur;
+        }
+        // `+ 1` keeps 0 reserved for "unassigned".
+        let fresh = NEXT_COMPILED_ID.fetch_add(1, Ordering::Relaxed) + 1;
+        match self
+            .compiled_id
+            .compare_exchange(0, fresh, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => fresh,
+            // Another thread won the race; adopt its id, discard ours.
+            Err(actual) => actual,
+        }
     }
 
     /// True once this function has crossed the tier-up threshold.
@@ -219,6 +269,13 @@ impl Runtime {
     #[inline]
     pub fn heat(&self) -> u32 {
         self.heat.load(Ordering::Relaxed)
+    }
+
+    /// Test-only: force this function "hot" so the next [`dispatch`](Self::dispatch)
+    /// tiers it up, without driving `HOT_THRESHOLD` real invocations.
+    #[cfg(test)]
+    pub(crate) fn set_hot_for_test(&self) {
+        self.heat.store(Self::HOT_THRESHOLD, Ordering::Relaxed);
     }
 
     /// Record an observed callee `sym` at the call site at instruction `pc`

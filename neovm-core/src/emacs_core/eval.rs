@@ -11157,10 +11157,30 @@ impl Context {
                 // Behind the `jit` feature; the default build is unchanged.
                 #[cfg(feature = "jit")]
                 {
+                    use crate::emacs_core::jit::Plan;
                     match bc_data.runtime.dispatch() {
-                        crate::emacs_core::jit::Plan::Interpret => {
+                        Plan::Interpret => {
                             let mut vm = super::bytecode::Vm::from_context(self);
                             vm.execute_with_func_value(bc_data, args, function)
+                        }
+                        Plan::Compiled => {
+                            // The baseline tier compiles only nullary leaf bodies;
+                            // a nullary function called with arguments must signal,
+                            // so only attempt native code for a zero-arg call. A
+                            // `None` result means non-compilable or a deopt —
+                            // either way, fall back to the Tier-0 interpreter.
+                            let native = if args.is_empty() {
+                                crate::emacs_core::jit::try_run_compiled(bc_data)
+                            } else {
+                                None
+                            };
+                            match native {
+                                Some(bits) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
+                                None => {
+                                    let mut vm = super::bytecode::Vm::from_context(self);
+                                    vm.execute_with_func_value(bc_data, args, function)
+                                }
+                            }
                         }
                     }
                 }

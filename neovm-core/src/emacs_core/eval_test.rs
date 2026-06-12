@@ -11840,6 +11840,63 @@ fn direct_closure_call_rest_args_preserve_heap_values_under_gc() {
     assert_eq!(result, Value::string("29.1"));
 }
 
+/// End-to-end: a hot bytecode function actually tiers up to native code through
+/// the real `funcall` dispatch seam, and a non-compilable body falls back to the
+/// interpreter — all producing correct results.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_tierup_executes_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+
+    // Build a *hot* nullary bytecode function (forced hot so the next dispatch
+    // tiers it up, instead of driving HOT_THRESHOLD real calls).
+    let mk = |ops: Vec<Op>, consts: Vec<Value>| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.ops = ops;
+        f.constants = consts;
+        f.max_stack = 16;
+        f.runtime.set_hot_for_test();
+        Value::make_bytecode(f)
+    };
+
+    // Compilable leaf -> executes as NATIVE code through the seam.
+    let konst = mk(vec![Op::Constant(0), Op::Return], vec![Value::make_int(42)]);
+    assert_eq!(
+        ev.funcall_general_untraced(konst, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+
+    // Fixnum arithmetic, native.
+    let sum = mk(
+        vec![Op::Constant(0), Op::Constant(1), Op::Add, Op::Return],
+        vec![Value::make_int(40), Value::make_int(2)],
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(sum, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+
+    // Non-compilable body (Mul is unsupported) -> the seam falls back to the
+    // interpreter, still correct: (* 6 7) = 42.
+    let mul = mk(
+        vec![Op::Constant(0), Op::Constant(1), Op::Mul, Op::Return],
+        vec![Value::make_int(6), Value::make_int(7)],
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(mul, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

@@ -337,6 +337,18 @@ impl TaggedValue {
         self.0
     }
 
+    /// Reconstruct a value from its raw tagged bits (the inverse of [`bits`]).
+    ///
+    /// `pub(crate)` and unchecked: the caller must supply bits that originated
+    /// from a real `Value` (e.g. the baseline JIT, which only ever returns a
+    /// constant-pool entry, nil/t, or a freshly tagged fixnum).
+    ///
+    /// [`bits`]: Self::bits
+    #[inline(always)]
+    pub(crate) const fn from_bits(bits: usize) -> Self {
+        Self(bits)
+    }
+
     #[inline(always)]
     pub fn is_nil(self) -> bool {
         self.0 == 0
