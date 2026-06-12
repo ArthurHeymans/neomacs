@@ -1496,7 +1496,8 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
     let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
         panic!("replacement string text should use a direct text-run measurement");
     };
-    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
     else {
         panic!("replacement string run should be measured");
     };

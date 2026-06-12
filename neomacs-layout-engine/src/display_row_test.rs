@@ -487,7 +487,9 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
             _face_id: u32,
         ) -> DisplayRowItemMeasurement {
             DisplayRowItemMeasurement::TextRun(
-                crate::display_row_builder::DisplayTextRunMeasurement::uniform_for_text("ABC", 5.0),
+                crate::display_text_run_measurement::DisplayTextRunMeasurement::uniform_for_text(
+                    "ABC", 5.0,
+                ),
             )
         }
     }
@@ -1475,7 +1477,8 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
 
-    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
     else {
         panic!("complex script run should produce a measured text-run plan");
     };
@@ -1538,7 +1541,8 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
 
     let measurement = measurer.text_run_advances_px("abc", 8, 8.0);
 
-    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
     else {
         panic!("font-backed measurer should produce a measured text-run plan");
     };
@@ -1566,7 +1570,8 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
 
-    let crate::display_row_builder::DisplayTextRunMeasurement::Measured(advances) = measurement
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
     else {
         panic!("font-backed measurement face should produce a measured text-run plan");
     };

@@ -39,13 +39,13 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
-    DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
 };
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
+use crate::display_text_run_measurement::{DisplayTextRunByteAdvance, DisplayTextRunMeasurement};
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;

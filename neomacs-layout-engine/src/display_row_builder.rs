@@ -11,11 +11,7 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
-#[cfg(test)]
-pub(crate) use crate::display_text_run_measurement::DisplayTextRunAdvance;
-pub(crate) use crate::display_text_run_measurement::{
-    DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
-};
+use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowLayout {

@@ -7,7 +7,6 @@ use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
     DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
-    DisplayTextRunMeasurement,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -17,7 +16,9 @@ use crate::display_source_resolver::{
     resolve_next_display_source_item,
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
+use crate::display_text_run_measurement::{
+    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+};
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;

@@ -5,6 +5,9 @@ use crate::display_item::{
     RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
+use crate::display_text_run_measurement::{
+    DisplayTextRunAdvance, DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
+};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};

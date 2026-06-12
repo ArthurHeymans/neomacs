@@ -7,10 +7,9 @@ use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderer, DisplayRowSourceState,
     DisplayRowSpec,
 };
-use crate::display_row_builder::{
-    DisplayRowPosition, DisplayTabPolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
-};
+use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_text::DisplayTextFragment;
+use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;

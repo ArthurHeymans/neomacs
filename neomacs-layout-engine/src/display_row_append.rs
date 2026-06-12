@@ -21,12 +21,12 @@ use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
     DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
-    DisplayTextRunMeasurement,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
+use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
