@@ -172,35 +172,6 @@ impl LegacyDisplayRowGeometryVars<'_> {
             transition,
         }
     }
-
-    pub(crate) fn finish_boundary(
-        self,
-        target: DisplayRowBoundaryTarget<'_>,
-    ) -> DisplayRowBoundaryTransition {
-        let mut row_cursor = DisplayRowGeometryCursor::from_state(
-            DisplayRowGeometryState::from_legacy(self.snapshot()),
-        );
-        let hit_row =
-            row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
-        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
-            target.transition.defaults,
-            target.transition.kind,
-            target.transition.row_base,
-            target.transition.col,
-            target.transition.x,
-        );
-        let commit_target = match target.transition.row_y_recording {
-            DisplayRowYRecording::None => DisplayRowGeometryCommitTarget::silent(self),
-            DisplayRowYRecording::RowYPositions(row_y_positions) => {
-                DisplayRowGeometryCommitTarget::recording_row_y(self, row_y_positions)
-            }
-        };
-        row_cursor.commit(commit_target);
-        DisplayRowBoundaryTransition {
-            hit_row,
-            transition,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,19 +183,9 @@ pub(crate) struct DisplayRowGeometryState {
     pub(crate) ascent: f32,
 }
 
-enum DisplayRowYRecorder<'a> {
-    None,
-    RowYPositions(&'a mut DisplayRowYPositions),
-}
-
 pub(crate) enum DisplayRowYRecording<'a> {
     None,
     RowYPositions(&'a mut DisplayRowYPositions),
-}
-
-pub(crate) struct DisplayRowGeometryCommitTarget<'a> {
-    vars: LegacyDisplayRowGeometryVars<'a>,
-    row_y_recorder: DisplayRowYRecorder<'a>,
 }
 
 pub(crate) struct DisplayRowGeometryTransitionTarget<'a> {
@@ -260,15 +221,6 @@ impl DisplayRowBoundaryTransition {
     ) -> TextMatrixRowGeometryTransition {
         hit_rows.push(self.hit_row);
         self.transition
-    }
-}
-
-impl DisplayRowYRecorder<'_> {
-    fn record(self, y: f32) {
-        match self {
-            Self::None => {}
-            Self::RowYPositions(row_y_positions) => row_y_positions.push(y),
-        }
     }
 }
 
@@ -319,25 +271,6 @@ impl DisplayRowYPositions {
     #[cfg(test)]
     pub(crate) fn recorded(&self) -> &[f32] {
         &self.positions
-    }
-}
-
-impl<'a> DisplayRowGeometryCommitTarget<'a> {
-    pub(crate) fn silent(vars: LegacyDisplayRowGeometryVars<'a>) -> Self {
-        Self {
-            vars,
-            row_y_recorder: DisplayRowYRecorder::None,
-        }
-    }
-
-    pub(crate) fn recording_row_y(
-        vars: LegacyDisplayRowGeometryVars<'a>,
-        row_y_positions: &'a mut DisplayRowYPositions,
-    ) -> Self {
-        Self {
-            vars,
-            row_y_recorder: DisplayRowYRecorder::RowYPositions(row_y_positions),
-        }
     }
 }
 
@@ -585,12 +518,6 @@ impl DisplayRowGeometryCursor {
             row_extra_y: state.row_extra_y,
             metrics: CurrentDisplayRowMetrics::new(state.height, state.ascent),
         }
-    }
-
-    pub(crate) fn commit(&self, mut target: DisplayRowGeometryCommitTarget<'_>) {
-        let state = self.state();
-        target.vars.apply(state);
-        target.row_y_recorder.record(state.y);
     }
 
     pub(crate) fn hit_row(&self, charpos_start: i64, charpos_end: i64) -> HitRow {

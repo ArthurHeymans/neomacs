@@ -3986,22 +3986,24 @@ impl LayoutEngine {
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_boundary(DisplayRowBoundaryTarget::line_break(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
-                        DisplayRowGeometryDefaults {
-                            text_y,
-                            height: char_h,
-                            ascent: default_face_ascent,
-                        },
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        0.0,
-                        row_y_positions.recording(),
-                    ));
+                    .finish_boundary_in_place(
+                        DisplayRowBoundaryTarget::line_break(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            0.0,
+                            row_y_positions.recording(),
+                        ),
+                    );
                     // Record hit-test row (hscroll newline)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     hit_row_charpos_start = charpos;
@@ -4632,7 +4634,7 @@ impl LayoutEngine {
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_boundary(
+                        .finish_boundary_in_place(
                             DisplayRowBoundaryTarget::line_break(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -4763,7 +4765,7 @@ impl LayoutEngine {
                     row_max_height: &mut row_max_height,
                     row_max_ascent: &mut row_max_ascent,
                 }
-                .finish_boundary(DisplayRowBoundaryTarget::line_break(
+                .finish_boundary_in_place(DisplayRowBoundaryTarget::line_break(
                     DisplayRowHitRange {
                         charpos_start: hit_row_charpos_start,
                         charpos_end: charpos,
@@ -4893,7 +4895,7 @@ impl LayoutEngine {
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_boundary(
+                        .finish_boundary_in_place(
                             DisplayRowBoundaryTarget::truncation(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -4944,7 +4946,7 @@ impl LayoutEngine {
                             row_max_height: &mut row_max_height,
                             row_max_ascent: &mut row_max_ascent,
                         }
-                        .finish_boundary(
+                        .finish_boundary_in_place(
                             DisplayRowBoundaryTarget::visual_wrap(
                                 DisplayRowHitRange {
                                     charpos_start: hit_row_charpos_start,
@@ -5262,21 +5264,23 @@ impl LayoutEngine {
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_boundary(DisplayRowBoundaryTarget::truncation(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
-                        DisplayRowGeometryDefaults {
-                            text_y,
-                            height: char_h,
-                            ascent: default_face_ascent,
-                        },
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                    ));
+                    .finish_boundary_in_place(
+                        DisplayRowBoundaryTarget::truncation(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
@@ -5320,21 +5324,23 @@ impl LayoutEngine {
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_boundary(DisplayRowBoundaryTarget::visual_wrap(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
-                        DisplayRowGeometryDefaults {
-                            text_y,
-                            height: char_h,
-                            ascent: default_face_ascent,
-                        },
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                    ));
+                    .finish_boundary_in_place(
+                        DisplayRowBoundaryTarget::visual_wrap(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
@@ -5388,21 +5394,23 @@ impl LayoutEngine {
                         row_max_height: &mut row_max_height,
                         row_max_ascent: &mut row_max_ascent,
                     }
-                    .finish_boundary(DisplayRowBoundaryTarget::visual_wrap(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
-                        DisplayRowGeometryDefaults {
-                            text_y,
-                            height: char_h,
-                            ascent: default_face_ascent,
-                        },
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                    ));
+                    .finish_boundary_in_place(
+                        DisplayRowBoundaryTarget::visual_wrap(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                        ),
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                     let row_transition = TextMatrixRowOutput::new(
