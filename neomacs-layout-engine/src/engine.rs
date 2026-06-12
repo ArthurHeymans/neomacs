@@ -384,6 +384,12 @@ struct WordWrapBreakCandidate {
     available: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct ActiveDisplayPropertySpan<T> {
+    value: Option<T>,
+    end_charpos: i64,
+}
+
 impl CursorGeometrySource {
     fn from_captured_cursor(
         cursor: &CapturedCursorInfo,
@@ -517,6 +523,45 @@ impl WordWrapBreakCandidate {
 
     fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+}
+
+impl<T: Copy> ActiveDisplayPropertySpan<T> {
+    fn inactive() -> Self {
+        Self {
+            value: None,
+            end_charpos: 0,
+        }
+    }
+
+    fn set(&mut self, value: T, end_charpos: i64) {
+        self.value = Some(value);
+        self.end_charpos = end_charpos;
+    }
+
+    fn clear(&mut self) {
+        self.value = None;
+        self.end_charpos = 0;
+    }
+
+    fn clear_if_expired(&mut self, charpos: i64, inactive_end_charpos: i64) -> bool {
+        if self.value.is_some()
+            && self.end_charpos > inactive_end_charpos
+            && charpos >= self.end_charpos
+        {
+            self.clear();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn value(&self) -> Option<T> {
+        self.value
+    }
+
+    fn value_or(&self, default: T) -> T {
+        self.value.unwrap_or(default)
     }
 }
 
@@ -3475,13 +3520,11 @@ impl LayoutEngine {
         let mut display_next_check: i64 = window_start; // Next position where display props might change
 
         // Display :raise property: vertical Y offset for glyphs
-        let mut raise_y_offset: f32 = 0.0;
-        let mut raise_end: i64 = window_start;
+        let mut raise_span = ActiveDisplayPropertySpan::inactive();
 
         // Display :height property: font scale factor applied as a real face
         // transformation, matching GNU `face_with_height`.
-        let mut height_factor: Option<f32> = None;
-        let mut height_end: i64 = window_start;
+        let mut height_span = ActiveDisplayPropertySpan::inactive();
 
         // Fringe state tracking
         let left_fringe_x = params.text_bounds.x - params.left_fringe_width;
@@ -3613,7 +3656,7 @@ impl LayoutEngine {
                     self.run_buf.clear();
                     let mut resolved =
                         face_resolver.face_at_pos(buffer, charpos as usize, &mut face_next_check);
-                    if let Some(factor) = height_factor
+                    if let Some(factor) = height_span.value()
                         && let Some(adjusted) = height_adjusted_face(
                             &resolved,
                             DisplayHeightFaceBasis {
@@ -3823,7 +3866,7 @@ impl LayoutEngine {
                     );
 
                     let append_frame = text_append_surface.frame_for_active_face(
-                        row_geometry.append_placement(raise_y_offset),
+                        row_geometry.append_placement(raise_span.value_or(0.0)),
                         &active_face_state,
                         char_h,
                     );
@@ -3881,7 +3924,7 @@ impl LayoutEngine {
                         self.run_buf.clear();
 
                         let ellipsis_frame = text_append_surface.frame_for_active_face(
-                            row_geometry.append_placement(raise_y_offset),
+                            row_geometry.append_placement(raise_span.value_or(0.0)),
                             &active_face_state,
                             char_h,
                         );
@@ -4096,9 +4139,7 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
-            if height_end > window_start && charpos >= height_end {
-                height_factor = None;
-                height_end = window_start;
+            if height_span.clear_if_expired(charpos, window_start) {
                 face_next_check = 0;
             }
             resolve_current_face_state!();
@@ -4217,7 +4258,7 @@ impl LayoutEngine {
                                 );
                                 let append_frame = replacement_string_surface
                                     .frame_for_active_face(
-                                        row_geometry.append_placement(raise_y_offset),
+                                        row_geometry.append_placement(raise_span.value_or(0.0)),
                                         &active_face_state,
                                         char_h,
                                     );
@@ -4306,7 +4347,7 @@ impl LayoutEngine {
                                 ),
                             );
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                row_geometry.append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_span.value_or(0.0)),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4390,7 +4431,7 @@ impl LayoutEngine {
                             }
 
                             let replacement_frame = text_append_surface.frame(
-                                row_geometry.append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_span.value_or(0.0)),
                                 DisplayRowAppendMetrics::display_box_from_active_face_state(
                                     &active_face_state,
                                     display_height,
@@ -4435,7 +4476,7 @@ impl LayoutEngine {
                                 );
                             }
                             let replacement_frame = text_append_surface.frame_for_active_face(
-                                row_geometry.append_placement(raise_y_offset),
+                                row_geometry.append_placement(raise_span.value_or(0.0)),
                                 &active_face_state,
                                 char_h,
                             );
@@ -4466,15 +4507,13 @@ impl LayoutEngine {
 
                     // Case 4: Raise — (raise FACTOR) or plist with :raise
                     if let Some(factor) = display_property.modifiers.raise {
-                        raise_y_offset = -(factor * char_h);
-                        raise_end = display_next_check;
+                        raise_span.set(-(factor * char_h), display_next_check);
                     }
 
                     // Case 5: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = display_property.modifiers.height {
                         if factor.is_finite() && factor > 0.0 {
-                            height_factor = Some(factor);
-                            height_end = display_next_check;
+                            height_span.set(factor, display_next_check);
                             face_next_check = 0;
                             resolve_current_face_state!();
                         }
@@ -4519,7 +4558,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let ellipsis_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_span.value_or(0.0)),
                     &active_face_state,
                     char_h,
                 );
@@ -4877,7 +4916,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_span.value_or(0.0)),
                     &active_face_state,
                     char_h,
                 );
@@ -4925,7 +4964,7 @@ impl LayoutEngine {
                         CharPos0::new((charpos + 1) as usize),
                     );
                     let text_item_frame = text_append_surface.frame_for_active_face(
-                        row_geometry.append_placement(raise_y_offset),
+                        row_geometry.append_placement(raise_span.value_or(0.0)),
                         &active_face_state,
                         char_h,
                     );
@@ -4988,7 +5027,7 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let text_item_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_y_offset),
+                    row_geometry.append_placement(raise_span.value_or(0.0)),
                     &active_face_state,
                     char_h,
                 );
@@ -5270,10 +5309,7 @@ impl LayoutEngine {
             }
 
             // Reset raise offset when past the raise region
-            if raise_end > window_start && charpos >= raise_end {
-                raise_y_offset = 0.0;
-                raise_end = window_start;
-            }
+            raise_span.clear_if_expired(charpos, window_start);
 
             // Capture cursor metrics at point position during the main layout
             // so cursor emission uses the correct per-face height/width.
@@ -5346,7 +5382,7 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
             } else if self.run_buf.is_empty() {
-                let gy = row_geometry.glyph_y(raise_y_offset);
+                let gy = row_geometry.glyph_y(raise_span.value_or(0.0));
                 self.run_buf.start(
                     x,
                     gy,
@@ -5360,7 +5396,7 @@ impl LayoutEngine {
                 self.run_buf.push(ch, advance);
             }
             let frame = text_append_surface.frame_for_active_face(
-                row_geometry.append_placement(raise_y_offset),
+                row_geometry.append_placement(raise_span.value_or(0.0)),
                 &active_face_state,
                 char_h,
             );

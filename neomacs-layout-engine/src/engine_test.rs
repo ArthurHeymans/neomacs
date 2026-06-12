@@ -100,6 +100,25 @@ fn word_wrap_break_candidate_records_rewind_position_and_clears() {
 }
 
 #[test]
+fn active_display_property_span_returns_value_until_expired() {
+    let mut span = ActiveDisplayPropertySpan::inactive();
+
+    assert_eq!(span.value(), None);
+
+    span.set(1.25, 9);
+
+    assert_eq!(span.value(), Some(1.25));
+    assert!(!span.clear_if_expired(8, 1));
+    assert_eq!(span.value(), Some(1.25));
+    assert!(span.clear_if_expired(9, 1));
+    assert_eq!(span.value(), None);
+
+    span.set(0.5, 12);
+    assert!(!span.clear_if_expired(12, 12));
+    assert_eq!(span.value(), Some(0.5));
+}
+
+#[test]
 fn captured_cursor_info_builds_from_active_face_state() {
     let eval = Context::new();
     let resolver = crate::neovm_bridge::FaceResolver::new(
