@@ -97,6 +97,22 @@ pub(crate) struct LegacyDisplayRowGeometryVars<'a> {
 }
 
 impl LegacyDisplayRowGeometryVars<'_> {
+    pub(crate) fn new<'a>(
+        row: &'a mut usize,
+        y: &'a mut f32,
+        row_extra_y: &'a mut f32,
+        row_max_height: &'a mut f32,
+        row_max_ascent: &'a mut f32,
+    ) -> LegacyDisplayRowGeometryVars<'a> {
+        LegacyDisplayRowGeometryVars {
+            row,
+            y,
+            row_extra_y,
+            row_max_height,
+            row_max_ascent,
+        }
+    }
+
     pub(crate) fn snapshot(&self) -> LegacyDisplayRowGeometry {
         LegacyDisplayRowGeometry {
             row: *self.row,

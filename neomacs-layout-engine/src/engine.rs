@@ -3563,6 +3563,17 @@ impl LayoutEngine {
                 }
             };
         }
+        macro_rules! current_row_geometry_vars {
+            () => {
+                LegacyDisplayRowGeometryVars::new(
+                    &mut row,
+                    &mut y,
+                    &mut row_extra_y,
+                    &mut row_max_height,
+                    &mut row_max_ascent,
+                )
+            };
+        }
         // Trailing whitespace tracking
         let trailing_ws_bg = if params.show_trailing_whitespace {
             Some(Color::from_pixel(params.trailing_ws_bg))
@@ -3682,14 +3693,8 @@ impl LayoutEngine {
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
                     face_metrics = active_face_state.metrics();
-                    LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    }
-                    .include_row_extents(face_metrics.row_height, face_metrics.ascent);
+                    current_row_geometry_vars!()
+                        .include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
                     current_face_id += 1;
 
@@ -3748,14 +3753,7 @@ impl LayoutEngine {
         };
 
         while byte_idx < text.len()
-            && (LegacyDisplayRowGeometryVars {
-                row: &mut row,
-                y: &mut y,
-                row_extra_y: &mut row_extra_y,
-                row_max_height: &mut row_max_height,
-                row_max_ascent: &mut row_max_ascent,
-            })
-            .current_row_is_visible(row_visibility_limit)
+            && current_row_geometry_vars!().current_row_is_visible(row_visibility_limit)
         {
             // Render line number at start of each visual line
             if need_line_number && lnum_enabled {
@@ -3982,13 +3980,7 @@ impl LayoutEngine {
                                     face_resolver,
                                     &mut x,
                                     &mut col,
-                                    &mut LegacyDisplayRowGeometryVars {
-                                        row: &mut row,
-                                        y: &mut y,
-                                        row_extra_y: &mut row_extra_y,
-                                        row_max_height: &mut row_max_height,
-                                        row_max_ascent: &mut row_max_ascent,
-                                    },
+                                    &mut current_row_geometry_vars!(),
                                     &mut cursor_info,
                                     &mut hit_rows,
                                     &mut hit_row_charpos_start,
@@ -4033,32 +4025,26 @@ impl LayoutEngine {
                     row_extend_bg = None;
                     row_extend_row = -1;
 
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    }
-                    .finish_boundary_and_record_hit(
-                        DisplayRowBoundaryTarget::line_break(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
-                            DisplayRowGeometryDefaults {
-                                text_y,
-                                height: char_h,
-                                ascent: default_face_ascent,
-                            },
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            0.0,
-                            row_y_positions.recording(),
-                        ),
-                        &mut hit_rows,
-                    );
+                    let geometry_transition = current_row_geometry_vars!()
+                        .finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::line_break(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                DisplayRowGeometryDefaults {
+                                    text_y,
+                                    height: char_h,
+                                    ascent: default_face_ascent,
+                                },
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                0.0,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                     // Record hit-test row (hscroll newline)
                     hit_row_charpos_start = charpos;
                     let row_transition = TextMatrixRowOutput::new(
@@ -4369,14 +4355,7 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
-                            LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            }
-                            .include_glyph_vertical_metrics(
+                            current_row_geometry_vars!().include_glyph_vertical_metrics(
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
@@ -4510,14 +4489,8 @@ impl LayoutEngine {
                                     == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                 && progress.metrics.width_px > 0.0
                             {
-                                LegacyDisplayRowGeometryVars {
-                                    row: &mut row,
-                                    y: &mut y,
-                                    row_extra_y: &mut row_extra_y,
-                                    row_max_height: &mut row_max_height,
-                                    row_max_ascent: &mut row_max_ascent,
-                                }
-                                .include_row_extents(display_height, display_height);
+                                current_row_geometry_vars!()
+                                    .include_row_extents(display_height, display_height);
                                 x = position.x_px;
                                 col = position.col;
                             }
@@ -4661,32 +4634,26 @@ impl LayoutEngine {
                             box_start_x = content_x;
                             box_row = row + 1;
                         }
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        }
-                        .finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::line_break(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                0.0,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                        let geometry_transition = current_row_geometry_vars!()
+                            .finish_boundary_and_record_hit(
+                                DisplayRowBoundaryTarget::line_break(
+                                    DisplayRowHitRange {
+                                        charpos_start: hit_row_charpos_start,
+                                        charpos_end: charpos,
+                                    },
+                                    DisplayRowGeometryDefaults {
+                                        text_y,
+                                        height: char_h,
+                                        ascent: default_face_ascent,
+                                    },
+                                    text_matrix_row_base,
+                                    col,
+                                    x,
+                                    0.0,
+                                    row_y_positions.recording(),
+                                ),
+                                &mut hit_rows,
+                            );
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4792,32 +4759,26 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let geometry_transition = LegacyDisplayRowGeometryVars {
-                    row: &mut row,
-                    y: &mut y,
-                    row_extra_y: &mut row_extra_y,
-                    row_max_height: &mut row_max_height,
-                    row_max_ascent: &mut row_max_ascent,
-                }
-                .finish_boundary_and_record_hit(
-                    DisplayRowBoundaryTarget::line_break(
-                        DisplayRowHitRange {
-                            charpos_start: hit_row_charpos_start,
-                            charpos_end: charpos,
-                        },
-                        DisplayRowGeometryDefaults {
-                            text_y,
-                            height: char_h,
-                            ascent: default_face_ascent,
-                        },
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        line_spacing,
-                        row_y_positions.recording(),
-                    ),
-                    &mut hit_rows,
-                );
+                let geometry_transition = current_row_geometry_vars!()
+                    .finish_boundary_and_record_hit(
+                        DisplayRowBoundaryTarget::line_break(
+                            DisplayRowHitRange {
+                                charpos_start: hit_row_charpos_start,
+                                charpos_end: charpos,
+                            },
+                            DisplayRowGeometryDefaults {
+                                text_y,
+                                height: char_h,
+                                ascent: default_face_ascent,
+                            },
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            line_spacing,
+                            row_y_positions.recording(),
+                        ),
+                        &mut hit_rows,
+                    );
                 let row_transition = TextMatrixRowOutput::new(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -4924,31 +4885,25 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        }
-                        .finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::truncation(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                        let geometry_transition = current_row_geometry_vars!()
+                            .finish_boundary_and_record_hit(
+                                DisplayRowBoundaryTarget::truncation(
+                                    DisplayRowHitRange {
+                                        charpos_start: hit_row_charpos_start,
+                                        charpos_end: charpos,
+                                    },
+                                    DisplayRowGeometryDefaults {
+                                        text_y,
+                                        height: char_h,
+                                        ascent: default_face_ascent,
+                                    },
+                                    text_matrix_row_base,
+                                    col,
+                                    x,
+                                    row_y_positions.recording(),
+                                ),
+                                &mut hit_rows,
+                            );
                         // Record hit-test row (wrap/truncation break)
                         let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
@@ -4975,31 +4930,25 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend_bg = None;
                         row_extend_row = -1;
-                        let geometry_transition = LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        }
-                        .finish_boundary_and_record_hit(
-                            DisplayRowBoundaryTarget::visual_wrap(
-                                DisplayRowHitRange {
-                                    charpos_start: hit_row_charpos_start,
-                                    charpos_end: charpos,
-                                },
-                                DisplayRowGeometryDefaults {
-                                    text_y,
-                                    height: char_h,
-                                    ascent: default_face_ascent,
-                                },
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
-                            &mut hit_rows,
-                        );
+                        let geometry_transition = current_row_geometry_vars!()
+                            .finish_boundary_and_record_hit(
+                                DisplayRowBoundaryTarget::visual_wrap(
+                                    DisplayRowHitRange {
+                                        charpos_start: hit_row_charpos_start,
+                                        charpos_end: charpos,
+                                    },
+                                    DisplayRowGeometryDefaults {
+                                        text_y,
+                                        height: char_h,
+                                        ascent: default_face_ascent,
+                                    },
+                                    text_matrix_row_base,
+                                    col,
+                                    x,
+                                    row_y_positions.recording(),
+                                ),
+                                &mut hit_rows,
+                            );
                         // Record hit-test row (wrap/truncation break)
                         hit_row_charpos_start = charpos;
                         let row_transition = TextMatrixRowOutput::new(
@@ -5019,14 +4968,8 @@ impl LayoutEngine {
                         if has_prefix {
                             need_prefix = 2;
                         }
-                        if !(LegacyDisplayRowGeometryVars {
-                            row: &mut row,
-                            y: &mut y,
-                            row_extra_y: &mut row_extra_y,
-                            row_max_height: &mut row_max_height,
-                            row_max_ascent: &mut row_max_ascent,
-                        })
-                        .current_row_is_visible(row_visibility_limit)
+                        if !current_row_geometry_vars!()
+                            .current_row_is_visible(row_visibility_limit)
                         {
                             break;
                         }
@@ -5281,31 +5224,25 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    }
-                    .finish_boundary_and_record_hit(
-                        DisplayRowBoundaryTarget::truncation(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
-                            DisplayRowGeometryDefaults {
-                                text_y,
-                                height: char_h,
-                                ascent: default_face_ascent,
-                            },
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
-                        &mut hit_rows,
-                    );
+                    let geometry_transition = current_row_geometry_vars!()
+                        .finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::truncation(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                DisplayRowGeometryDefaults {
+                                    text_y,
+                                    height: char_h,
+                                    ascent: default_face_ascent,
+                                },
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5341,31 +5278,25 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    }
-                    .finish_boundary_and_record_hit(
-                        DisplayRowBoundaryTarget::visual_wrap(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
-                            DisplayRowGeometryDefaults {
-                                text_y,
-                                height: char_h,
-                                ascent: default_face_ascent,
-                            },
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
-                        &mut hit_rows,
-                    );
+                    let geometry_transition = current_row_geometry_vars!()
+                        .finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::visual_wrap(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                DisplayRowGeometryDefaults {
+                                    text_y,
+                                    height: char_h,
+                                    ascent: default_face_ascent,
+                                },
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5391,15 +5322,7 @@ impl LayoutEngine {
                     // Force face re-check since we rewound
                     face_next_check = 0;
 
-                    if !(LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    })
-                    .current_row_is_visible(row_visibility_limit)
-                    {
+                    if !current_row_geometry_vars!().current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;
@@ -5411,31 +5334,25 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend_bg = None;
                     row_extend_row = -1;
-                    let geometry_transition = LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    }
-                    .finish_boundary_and_record_hit(
-                        DisplayRowBoundaryTarget::visual_wrap(
-                            DisplayRowHitRange {
-                                charpos_start: hit_row_charpos_start,
-                                charpos_end: charpos,
-                            },
-                            DisplayRowGeometryDefaults {
-                                text_y,
-                                height: char_h,
-                                ascent: default_face_ascent,
-                            },
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
-                        &mut hit_rows,
-                    );
+                    let geometry_transition = current_row_geometry_vars!()
+                        .finish_boundary_and_record_hit(
+                            DisplayRowBoundaryTarget::visual_wrap(
+                                DisplayRowHitRange {
+                                    charpos_start: hit_row_charpos_start,
+                                    charpos_end: charpos,
+                                },
+                                DisplayRowGeometryDefaults {
+                                    text_y,
+                                    height: char_h,
+                                    ascent: default_face_ascent,
+                                },
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                            ),
+                            &mut hit_rows,
+                        );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
@@ -5459,15 +5376,7 @@ impl LayoutEngine {
                     if has_prefix {
                         need_prefix = 2;
                     }
-                    if !(LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    })
-                    .current_row_is_visible(row_visibility_limit)
-                    {
+                    if !current_row_geometry_vars!().current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;
@@ -5527,13 +5436,7 @@ impl LayoutEngine {
                             face_resolver,
                             &mut x,
                             &mut col,
-                            &mut LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
+                            &mut current_row_geometry_vars!(),
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
@@ -5642,13 +5545,7 @@ impl LayoutEngine {
                             face_resolver,
                             &mut x,
                             &mut col,
-                            &mut LegacyDisplayRowGeometryVars {
-                                row: &mut row,
-                                y: &mut y,
-                                row_extra_y: &mut row_extra_y,
-                                row_max_height: &mut row_max_height,
-                                row_max_ascent: &mut row_max_ascent,
-                            },
+                            &mut current_row_geometry_vars!(),
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
@@ -5751,13 +5648,7 @@ impl LayoutEngine {
                     face_resolver,
                     &mut x,
                     &mut col,
-                    &mut LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    },
+                    &mut current_row_geometry_vars!(),
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_charpos_start,
@@ -5791,13 +5682,7 @@ impl LayoutEngine {
                     face_resolver,
                     &mut x,
                     &mut col,
-                    &mut LegacyDisplayRowGeometryVars {
-                        row: &mut row,
-                        y: &mut y,
-                        row_extra_y: &mut row_extra_y,
-                        row_max_height: &mut row_max_height,
-                        row_max_ascent: &mut row_max_ascent,
-                    },
+                    &mut current_row_geometry_vars!(),
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_charpos_start,

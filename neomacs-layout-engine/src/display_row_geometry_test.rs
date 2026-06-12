@@ -240,6 +240,50 @@ fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
 }
 
 #[test]
+fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
+    let mut row = 4;
+    let mut y = 80.0;
+    let mut row_extra_y = 9.0;
+    let mut row_max_height = 20.0;
+    let mut row_max_ascent = 14.0;
+
+    {
+        let mut vars = LegacyDisplayRowGeometryVars::new(
+            &mut row,
+            &mut y,
+            &mut row_extra_y,
+            &mut row_max_height,
+            &mut row_max_ascent,
+        );
+
+        assert_eq!(
+            vars.snapshot(),
+            LegacyDisplayRowGeometry {
+                row: 4,
+                y: 80.0,
+                row_extra_y: 9.0,
+                row_max_height: 20.0,
+                row_max_ascent: 14.0,
+            }
+        );
+
+        vars.apply(DisplayRowGeometryState {
+            row: 5,
+            y: 120.0,
+            row_extra_y: 13.0,
+            height: 24.0,
+            ascent: 18.0,
+        });
+    }
+
+    assert_eq!(row, 5);
+    assert_eq!(y, 120.0);
+    assert_eq!(row_extra_y, 13.0);
+    assert_eq!(row_max_height, 24.0);
+    assert_eq!(row_max_ascent, 18.0);
+}
+
+#[test]
 fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
     let mut row = 4;
     let mut y = 80.0;
