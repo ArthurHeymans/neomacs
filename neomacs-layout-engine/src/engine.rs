@@ -39,8 +39,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryBinding, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback,
-    DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowTextPosition, DisplayRowVisibilityLimit,
+    DisplayRowYFallback, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -175,6 +175,24 @@ struct CapturedCursorPlacement {
     matrix_row: usize,
     slot_width: CapturedCursorSlotWidth,
     stretch_like: bool,
+}
+
+impl CapturedCursorPlacement {
+    fn from_row_text_position(
+        position: DisplayRowTextPosition,
+        slot_width: CapturedCursorSlotWidth,
+        stretch_like: bool,
+    ) -> Self {
+        Self {
+            x: position.x,
+            y: position.y,
+            byte_idx: position.byte_idx,
+            col: position.col,
+            matrix_row: position.row,
+            slot_width,
+            stretch_like,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -3829,15 +3847,11 @@ impl LayoutEngine {
                             &mut cursor_info,
                             CapturedCursorInfo::from_active_face_state(
                                 &active_face_state,
-                                CapturedCursorPlacement {
-                                    x,
-                                    y,
-                                    byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: CapturedCursorSlotWidth::FaceChar,
-                                    stretch_like: false,
-                                },
+                                CapturedCursorPlacement::from_row_text_position(
+                                    current_row_geometry!().text_position(x, byte_idx, col),
+                                    CapturedCursorSlotWidth::FaceChar,
+                                    false,
+                                ),
                             ),
                         );
                     }
@@ -3995,15 +4009,15 @@ impl LayoutEngine {
                             &mut cursor_info,
                             CapturedCursorInfo::line_break_from_active_face_state(
                                 &active_face_state,
-                                CapturedCursorPlacement {
-                                    x,
-                                    y,
-                                    byte_idx: ch_start_byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: CapturedCursorSlotWidth::FaceChar,
-                                    stretch_like: false,
-                                },
+                                CapturedCursorPlacement::from_row_text_position(
+                                    current_row_geometry!().text_position(
+                                        x,
+                                        ch_start_byte_idx,
+                                        col,
+                                    ),
+                                    CapturedCursorSlotWidth::FaceChar,
+                                    false,
+                                ),
                                 char_h,
                             ),
                         );
@@ -4063,15 +4077,15 @@ impl LayoutEngine {
                             &mut cursor_info,
                             CapturedCursorInfo::from_active_face_state(
                                 &active_face_state,
-                                CapturedCursorPlacement {
-                                    x,
-                                    y,
-                                    byte_idx: ch_start_byte_idx,
-                                    col,
-                                    matrix_row: row,
-                                    slot_width: CapturedCursorSlotWidth::FaceChar,
-                                    stretch_like: false,
-                                },
+                                CapturedCursorPlacement::from_row_text_position(
+                                    current_row_geometry!().text_position(
+                                        x,
+                                        ch_start_byte_idx,
+                                        col,
+                                    ),
+                                    CapturedCursorSlotWidth::FaceChar,
+                                    false,
+                                ),
                             ),
                         );
                     }
@@ -4125,15 +4139,11 @@ impl LayoutEngine {
                                 &mut cursor_info,
                                 CapturedCursorInfo::from_active_face_state(
                                     &active_face_state,
-                                    CapturedCursorPlacement {
-                                        x,
-                                        y,
-                                        byte_idx,
-                                        col,
-                                        matrix_row: row,
-                                        slot_width: CapturedCursorSlotWidth::Explicit(slot_width),
-                                        stretch_like: false,
-                                    },
+                                    CapturedCursorPlacement::from_row_text_position(
+                                        current_row_geometry!().text_position(x, byte_idx, col),
+                                        CapturedCursorSlotWidth::Explicit(slot_width),
+                                        false,
+                                    ),
                                 ),
                             );
                         }
@@ -4265,17 +4275,13 @@ impl LayoutEngine {
                                 &mut cursor_info,
                                 CapturedCursorInfo::from_active_face_state(
                                     &active_face_state,
-                                    CapturedCursorPlacement {
-                                        x,
-                                        y,
-                                        byte_idx,
-                                        col,
-                                        matrix_row: row,
-                                        slot_width: CapturedCursorSlotWidth::Explicit(
+                                    CapturedCursorPlacement::from_row_text_position(
+                                        current_row_geometry!().text_position(x, byte_idx, col),
+                                        CapturedCursorSlotWidth::Explicit(
                                             space_width.max(face_metrics.char_width),
                                         ),
-                                        stretch_like: true,
-                                    },
+                                        true,
+                                    ),
                                 ),
                             );
                         }
@@ -4371,17 +4377,11 @@ impl LayoutEngine {
                                     &mut cursor_info,
                                     CapturedCursorInfo::display_box_from_active_face_state(
                                         &active_face_state,
-                                        CapturedCursorPlacement {
-                                            x,
-                                            y,
-                                            byte_idx,
-                                            col,
-                                            matrix_row: row,
-                                            slot_width: CapturedCursorSlotWidth::Explicit(
-                                                display_width,
-                                            ),
-                                            stretch_like: false,
-                                        },
+                                        CapturedCursorPlacement::from_row_text_position(
+                                            current_row_geometry!().text_position(x, byte_idx, col),
+                                            CapturedCursorSlotWidth::Explicit(display_width),
+                                            false,
+                                        ),
                                         cursor_face_h,
                                         cursor_face_ascent,
                                     ),
@@ -4426,15 +4426,11 @@ impl LayoutEngine {
                                     &mut cursor_info,
                                     CapturedCursorInfo::from_active_face_state(
                                         &active_face_state,
-                                        CapturedCursorPlacement {
-                                            x,
-                                            y,
-                                            byte_idx,
-                                            col,
-                                            matrix_row: row,
-                                            slot_width: CapturedCursorSlotWidth::FaceChar,
-                                            stretch_like: false,
-                                        },
+                                        CapturedCursorPlacement::from_row_text_position(
+                                            current_row_geometry!().text_position(x, byte_idx, col),
+                                            CapturedCursorSlotWidth::FaceChar,
+                                            false,
+                                        ),
                                     ),
                                 );
                             }
@@ -4618,15 +4614,11 @@ impl LayoutEngine {
                         &mut cursor_info,
                         CapturedCursorInfo::from_active_face_state(
                             &active_face_state,
-                            CapturedCursorPlacement {
-                                x,
-                                y,
-                                byte_idx: ch_start_byte_idx,
-                                col,
-                                matrix_row: row,
-                                slot_width: CapturedCursorSlotWidth::FaceChar,
-                                stretch_like: false,
-                            },
+                            CapturedCursorPlacement::from_row_text_position(
+                                current_row_geometry!().text_position(x, ch_start_byte_idx, col),
+                                CapturedCursorSlotWidth::FaceChar,
+                                false,
+                            ),
                         ),
                     );
                 }
@@ -5292,15 +5284,11 @@ impl LayoutEngine {
                     &mut cursor_info,
                     CapturedCursorInfo::from_active_face_state(
                         &active_face_state,
-                        CapturedCursorPlacement {
-                            x,
-                            y,
-                            byte_idx: ch_start_byte_idx,
-                            col,
-                            matrix_row: row,
-                            slot_width: CapturedCursorSlotWidth::Explicit(advance),
-                            stretch_like: ch == '\t',
-                        },
+                        CapturedCursorPlacement::from_row_text_position(
+                            current_row_geometry!().text_position(x, ch_start_byte_idx, col),
+                            CapturedCursorSlotWidth::Explicit(advance),
+                            ch == '\t',
+                        ),
                     ),
                 );
             }
@@ -5507,15 +5495,11 @@ impl LayoutEngine {
                 &mut cursor_info,
                 CapturedCursorInfo::from_active_face_state(
                     &active_face_state,
-                    CapturedCursorPlacement {
-                        x,
-                        y,
-                        byte_idx,
-                        col,
-                        matrix_row: row,
-                        slot_width: CapturedCursorSlotWidth::FaceChar,
-                        stretch_like: false,
-                    },
+                    CapturedCursorPlacement::from_row_text_position(
+                        current_row_geometry!().text_position(x, byte_idx, col),
+                        CapturedCursorSlotWidth::FaceChar,
+                        false,
+                    ),
                 ),
             );
         }

@@ -566,6 +566,28 @@ fn display_row_geometry_state_builds_text_row_output() {
 }
 
 #[test]
+fn display_row_geometry_state_builds_text_position_from_current_row() {
+    let geometry = DisplayRowGeometryState {
+        row: 3,
+        y: 69.0,
+        row_extra_y: 11.0,
+        height: 16.0,
+        ascent: 12.0,
+    };
+
+    assert_eq!(
+        geometry.text_position(42.0, 91, 7),
+        DisplayRowTextPosition {
+            x: 42.0,
+            y: 69.0,
+            byte_idx: 91,
+            col: 7,
+            row: 3,
+        }
+    );
+}
+
+#[test]
 fn display_row_geometry_state_builds_row_metrics_snapshot() {
     let geometry = DisplayRowGeometryState {
         row: 3,

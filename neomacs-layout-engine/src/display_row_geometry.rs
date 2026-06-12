@@ -99,6 +99,15 @@ pub(crate) struct DisplayRowYPositions {
     positions: Vec<f32>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTextPosition {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) byte_idx: usize,
+    pub(crate) col: usize,
+    pub(crate) row: usize,
+}
+
 pub(crate) struct DisplayRowGeometryBinding<'a> {
     pub(crate) row: &'a mut usize,
     pub(crate) y: &'a mut f32,
@@ -490,6 +499,21 @@ impl DisplayRowGeometryState {
             row_y: self.y,
             glyph_y: self.y,
             height,
+        }
+    }
+
+    pub(crate) fn text_position(
+        &self,
+        x: f32,
+        byte_idx: usize,
+        col: usize,
+    ) -> DisplayRowTextPosition {
+        DisplayRowTextPosition {
+            x,
+            y: self.y,
+            byte_idx,
+            col,
+            row: self.row,
         }
     }
 
