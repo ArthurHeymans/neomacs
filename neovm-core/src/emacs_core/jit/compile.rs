@@ -644,4 +644,72 @@ mod tests {
         let leaf = compile_bytecode_function(&f).unwrap();
         assert_eq!(leaf.call(), Some(c.bits()));
     }
+
+    /// Run a nullary body through the Tier-0 interpreter (the correctness
+    /// oracle) and return its result.
+    fn interp_nullary(ops: &[Op], constants: &[Value]) -> Value {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        let mut eval = Context::new_minimal_vm_harness();
+        let mut f = nullary();
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+        let mut vm = Vm::from_context(&mut eval);
+        vm.execute(&f, vec![]).expect("interpreter runs the body")
+    }
+
+    #[test]
+    fn jit_matches_interpreter_on_supported_bodies() {
+        // The ultimate parity proof: when the JIT compiles a body and does not
+        // deopt, its result must be bit-identical to the interpreter's.
+        let cases: &[(&[Op], &[Value])] = &[
+            (&[Op::Constant(0), Op::Return], &[Value::make_int(42)]),
+            (&[Op::Nil, Op::Return], &[]),
+            (&[Op::True, Op::Return], &[]),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Add, Op::Return],
+                &[Value::make_int(40), Value::make_int(2)],
+            ),
+            (
+                &[Op::Constant(0), Op::Constant(1), Op::Sub, Op::Return],
+                &[Value::make_int(3), Value::make_int(10)],
+            ),
+            (
+                &[Op::Constant(0), Op::Add1, Op::Return],
+                &[Value::make_int(41)],
+            ),
+            (
+                &[Op::Constant(0), Op::Sub1, Op::Return],
+                &[Value::make_int(43)],
+            ),
+            (
+                &[Op::Constant(0), Op::Negate, Op::Return],
+                &[Value::make_int(42)],
+            ),
+            (
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Add,
+                    Op::Constant(2),
+                    Op::Sub,
+                    Op::Return,
+                ],
+                &[Value::make_int(1), Value::make_int(2), Value::make_int(4)],
+            ),
+        ];
+        for (i, (ops, consts)) in cases.iter().enumerate() {
+            let want = interp_nullary(ops, consts).bits();
+            let got = lower_nullary_leaf(ops, consts).unwrap().call();
+            assert_eq!(got, Some(want), "JIT/interpreter mismatch on case {i}");
+        }
+    }
+
+    // Note: the JIT's deopt *boundary* (out-of-range -> None) is covered by
+    // `add_overflowing_fixnum_range_deopts` and `unary_boundary_inputs_deopt`.
+    // A differential check against the interpreter's bignum-promotion path is
+    // intentionally omitted here because `new_minimal_vm_harness` does not wire
+    // the full `+`/bignum builtins (it signals on that fallback), so it cannot
+    // serve as the oracle for the slow path.
 }
