@@ -3012,7 +3012,7 @@ fn make_network_process_open_sentinel_uses_shared_callback_runtime_state() {
 }
 
 #[test]
-fn sleep_for_uses_shared_wait_path_for_process_output_and_timers() {
+fn sleep_for_uses_shared_wait_request_for_process_output_and_timers() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let mut ev = Context::new();
@@ -3045,7 +3045,7 @@ fn sleep_for_uses_shared_wait_path_for_process_output_and_timers() {
         .add_timer(0.0, 0.0, Value::symbol("sleep-shared-timer"), vec![], false);
 
     crate::emacs_core::timer::builtin_sleep_for(&mut ev, vec![Value::make_float(0.05)])
-        .expect("sleep-for should use the shared wait path");
+        .expect("sleep-for should use the shared wait request");
 
     assert_eq!(
         ev.eval_symbol("sleep-shared-output")
@@ -3060,7 +3060,7 @@ fn sleep_for_uses_shared_wait_path_for_process_output_and_timers() {
 }
 
 #[test]
-fn accept_process_output_services_pending_resize_from_shared_wait_path() {
+fn accept_process_output_services_pending_resize_from_shared_wait_request() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let fid = ev
@@ -3086,7 +3086,7 @@ fn accept_process_output_services_pending_resize_from_shared_wait_path() {
     .expect("queue resize event");
 
     let result = builtin_accept_process_output(&mut ev, vec![Value::NIL, Value::make_float(0.01)])
-        .expect("accept-process-output should service wait-path special input");
+        .expect("accept-process-output should service wait-request special input");
     drop(tx);
 
     let width = crate::emacs_core::window_cmds::builtin_frame_native_width(&mut ev, vec![])

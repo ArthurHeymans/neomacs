@@ -2560,7 +2560,7 @@ impl super::eval::Context {
                 _ => {}
             }
 
-            // GNU's wait path can observe process output and terminal status
+            // GNU's wait request can observe process output and terminal status
             // in the same wake cycle. Re-check after reading so short-lived
             // children that exit immediately after flushing output do not
             // defer their sentinel to a second accept-process-output call.
@@ -7575,7 +7575,7 @@ pub(crate) fn builtin_process_status_impl(
     };
     // Match GNU `Fprocess_status` (`src/process.c`): this reports the stored
     // process status and does not synchronously reap the child. Short-lived
-    // subprocesses therefore remain `run` here until the wait path (for
+    // subprocesses therefore remain `run` here until the wait request (for
     // example `accept-process-output`) observes the exit and updates status.
     match processes.get_any(id) {
         Some(proc) => Ok(process_public_status_symbol(proc)),

@@ -191,6 +191,13 @@ impl WaitRequest {
         }
     }
 
+    fn backend_interest(self) -> WaitBackendInterest {
+        WaitBackendInterest::for_wait_request(
+            self.keyboard.waits_for_host_input(),
+            self.processes.services_processes(),
+        )
+    }
+
     fn completion_for(self, outcome: WaitServiceOutcome) -> Option<WaitCompletion> {
         if self.keyboard.completes_on_command_input() && outcome.command_input_pending {
             return Some(WaitCompletion::CommandInputPending);
@@ -336,13 +343,7 @@ impl super::eval::Context {
             } else if self.wait_request_can_use_backend(&request) {
                 let backend = self
                     .processes
-                    .wait_for_backend_events(
-                        wait_time,
-                        WaitBackendInterest::for_wait_request(
-                            request.keyboard.waits_for_host_input(),
-                            request.processes.services_processes(),
-                        ),
-                    )
+                    .wait_for_backend_events(wait_time, request.backend_interest())
                     .unwrap_or_default();
                 if backend.input_wakeup {
                     self.clear_input_wakeup_fd();

@@ -1931,7 +1931,7 @@ fn input_event_triggers_throw_on_input(event: &InputEvent) -> bool {
     )
 }
 
-fn input_event_is_wait_path_special(event: &InputEvent) -> bool {
+fn input_event_is_wait_request_special(event: &InputEvent) -> bool {
     matches!(
         event,
         InputEvent::Resize { .. }
@@ -2834,7 +2834,7 @@ impl crate::emacs_core::eval::Context {
             .front()
             .cloned()
         {
-            if input_event_is_wait_path_special(&event) {
+            if input_event_is_wait_request_special(&event) {
                 self.command_loop.keyboard.pending_input_events.pop_front();
                 self.timer_stop_idle();
                 return Ok(Some(event));
@@ -2849,7 +2849,7 @@ impl crate::emacs_core::eval::Context {
                 .pending_input_events
                 .front()
                 .cloned()
-                && input_event_is_wait_path_special(&event)
+                && input_event_is_wait_request_special(&event)
             {
                 self.command_loop.keyboard.pending_input_events.pop_front();
                 self.timer_stop_idle();
