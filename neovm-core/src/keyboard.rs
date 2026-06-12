@@ -14,8 +14,7 @@ use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 use crate::emacs_core::wait::{
-    ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest, WaitSpecialInputActivity,
-    WaitSpecialInputOutcome,
+    WaitCompletion, WaitDeadline, WaitRequest, WaitSpecialInputActivity, WaitSpecialInputOutcome,
 };
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
@@ -5176,10 +5175,6 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn fire_pending_timers(&mut self) {
         let _ = self.service_pending_timers_with_wait_policy(true);
-    }
-
-    pub(crate) fn poll_process_output(&mut self) {
-        let _ = self.poll_process_output_with_wait_policy(ProcessWaitPolicy::ServiceAny);
     }
 
     pub(crate) fn record_input_event(&mut self, event: Value) {
