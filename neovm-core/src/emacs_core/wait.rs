@@ -248,10 +248,10 @@ impl WaitRequest {
         }
 
         match self.special_input {
-            SpecialInputWaitPolicy::CompleteOnAny if outcome.special_input_activity => {
+            SpecialInputWaitPolicy::CompleteOnAny if outcome.has_special_input_activity() => {
                 return Some(WaitCompletion::SpecialInputActivity);
             }
-            SpecialInputWaitPolicy::CompleteOnResize if outcome.resize_activity => {
+            SpecialInputWaitPolicy::CompleteOnResize if outcome.has_resize_activity() => {
                 return Some(WaitCompletion::SpecialInputActivity);
             }
             SpecialInputWaitPolicy::ServiceOnly
@@ -300,12 +300,37 @@ impl WaitProcessActivity {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum WaitSpecialInputActivity {
+    #[default]
+    None,
+    Any,
+    Resize,
+}
+
+impl WaitSpecialInputActivity {
+    pub(crate) fn record(self, activity: Self) -> Self {
+        match (self, activity) {
+            (Self::Resize, _) | (_, Self::Resize) => Self::Resize,
+            (Self::Any, _) | (_, Self::Any) => Self::Any,
+            (Self::None, Self::None) => Self::None,
+        }
+    }
+
+    pub(crate) fn any(self) -> bool {
+        matches!(self, Self::Any | Self::Resize)
+    }
+
+    pub(crate) fn resize(self) -> bool {
+        matches!(self, Self::Resize)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitServiceOutcome {
     process_activity: WaitProcessActivity,
+    special_input_activity: WaitSpecialInputActivity,
     pub(crate) timers_fired: bool,
     pub(crate) command_input_pending: bool,
-    pub(crate) special_input_activity: bool,
-    pub(crate) resize_activity: bool,
 }
 
 impl WaitServiceOutcome {
@@ -323,6 +348,18 @@ impl WaitServiceOutcome {
 
     fn absorb_process_activity(&mut self, process_outcome: Self) {
         self.process_activity = process_outcome.process_activity;
+    }
+
+    pub(crate) fn record_special_input_activity(&mut self, activity: WaitSpecialInputActivity) {
+        self.special_input_activity = self.special_input_activity.record(activity);
+    }
+
+    pub(crate) fn has_special_input_activity(self) -> bool {
+        self.special_input_activity.any()
+    }
+
+    pub(crate) fn has_resize_activity(self) -> bool {
+        self.special_input_activity.resize()
     }
 }
 
@@ -370,8 +407,7 @@ impl super::eval::Context {
     ) -> Result<WaitServiceOutcome, Flow> {
         let mut outcome = WaitServiceOutcome::default();
         let special_input = self.service_wait_request_special_input_events()?;
-        outcome.special_input_activity = special_input.activity;
-        outcome.resize_activity = special_input.resize_activity;
+        outcome.record_special_input_activity(special_input.activity);
         if request.keyboard.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
         {
@@ -541,5 +577,15 @@ mod tests {
 
         assert!(outcome.has_target_process_activity());
         assert!(outcome.has_any_process_activity());
+    }
+
+    #[test]
+    fn resize_special_input_activity_implies_any_special_input_activity() {
+        let mut outcome = WaitServiceOutcome::default();
+
+        outcome.record_special_input_activity(WaitSpecialInputActivity::Resize);
+
+        assert!(outcome.has_resize_activity());
+        assert!(outcome.has_special_input_activity());
     }
 }

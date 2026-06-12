@@ -13,7 +13,9 @@
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
-use crate::emacs_core::wait::{ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest};
+use crate::emacs_core::wait::{
+    ProcessWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest, WaitSpecialInputActivity,
+};
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
@@ -1944,8 +1946,7 @@ fn input_event_is_wait_request_special(event: &InputEvent) -> bool {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct WaitRequestSpecialInputOutcome {
     pub(crate) redisplay_needed: bool,
-    pub(crate) activity: bool,
-    pub(crate) resize_activity: bool,
+    pub(crate) activity: WaitSpecialInputActivity,
 }
 
 fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
@@ -2991,8 +2992,7 @@ impl crate::emacs_core::eval::Context {
         let mut outcome = WaitRequestSpecialInputOutcome::default();
 
         if self.sync_pending_resize_events() {
-            outcome.activity = true;
-            outcome.resize_activity = true;
+            outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Resize);
             outcome.redisplay_needed = true;
         }
 
@@ -3009,13 +3009,12 @@ impl crate::emacs_core::eval::Context {
                     height,
                     emacs_frame_id,
                 } => {
-                    outcome.activity = true;
-                    outcome.resize_activity = true;
+                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Resize);
                     self.apply_resize_input_event(width, height, emacs_frame_id, false);
                     outcome.redisplay_needed = true;
                 }
                 InputEvent::MonitorsChanged { monitors } => {
-                    outcome.activity = true;
+                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
                     crate::emacs_core::builtins::set_neomacs_monitor_info(monitors);
                     let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(
                         self,
@@ -3034,12 +3033,12 @@ impl crate::emacs_core::eval::Context {
                     target_frame_id,
                     ..
                 } => {
-                    outcome.activity = true;
+                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
                     self.note_mouse_move_input_event(x, y, target_frame_id);
                     self.timer_resume_idle();
                 }
                 InputEvent::WindowClose { emacs_frame_id } => {
-                    outcome.activity = true;
+                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
                     self.handle_window_close_input_event(emacs_frame_id)?;
                 }
                 _ => {}
