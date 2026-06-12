@@ -12,7 +12,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
-    TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter,
+    TextMatrixRowMetrics, TextMatrixRowOutput, TextRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -1942,15 +1942,15 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 ),
             );
             if *row >= max_rows {
-                geometry_transition
-                    .finished_row
-                    .finish_and_end(builder, output_emitter);
+                TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+                    .finish_and_end(geometry_transition.finished_row);
                 false
             } else {
                 row_y_positions.push(*y);
                 *x = content_x;
                 *col = 0;
-                geometry_transition.emit(builder, output_emitter, evaluator);
+                TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+                    .emit(geometry_transition);
                 true
             }
         }};
@@ -4110,14 +4110,15 @@ impl LayoutEngine {
             params.text_bounds,
             params.selected,
         );
-        TextMatrixRowBegin {
-            matrix_row: text_matrix_row_base,
-            row,
-            col,
-            y,
-            x,
-        }
-        .begin(&mut self.matrix_builder, &mut output_emitter, evaluator);
+        TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator).begin(
+            TextMatrixRowBegin {
+                matrix_row: text_matrix_row_base,
+                row,
+                col,
+                y,
+                x,
+            },
+        );
 
         while byte_idx < text.len() && row < max_rows && y + row_max_height <= text_y + text_height
         {
@@ -4438,12 +4439,12 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = geometry_transition.emit_with_row_limit(
+                    let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        max_rows,
-                    );
+                    )
+                    .emit_with_row_limit(geometry_transition, max_rows);
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -5081,12 +5082,12 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = geometry_transition.emit_with_row_limit(
+                        let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            max_rows,
-                        );
+                        )
+                        .emit_with_row_limit(geometry_transition, max_rows);
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5218,12 +5219,12 @@ impl LayoutEngine {
                         ),
                     ),
                 );
-                let row_transition = geometry_transition.emit_with_row_limit(
+                let row_transition = TextMatrixRowOutput::new(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    max_rows,
-                );
+                )
+                .emit_with_row_limit(geometry_transition, max_rows);
                 if row_transition.is_exhausted() {
                     break;
                 }
@@ -5354,12 +5355,12 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = geometry_transition.emit_with_row_limit(
+                        let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            max_rows,
-                        );
+                        )
+                        .emit_with_row_limit(geometry_transition, max_rows);
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5414,12 +5415,12 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = geometry_transition.emit_with_row_limit(
+                        let row_transition = TextMatrixRowOutput::new(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            max_rows,
-                        );
+                        )
+                        .emit_with_row_limit(geometry_transition, max_rows);
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5730,12 +5731,12 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = geometry_transition.emit_with_row_limit(
+                    let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        max_rows,
-                    );
+                    )
+                    .emit_with_row_limit(geometry_transition, max_rows);
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -5797,12 +5798,12 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = geometry_transition.emit_with_row_limit(
+                    let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        max_rows,
-                    );
+                    )
+                    .emit_with_row_limit(geometry_transition, max_rows);
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -5866,12 +5867,12 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = geometry_transition.emit_with_row_limit(
+                    let row_transition = TextMatrixRowOutput::new(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        max_rows,
-                    );
+                    )
+                    .emit_with_row_limit(geometry_transition, max_rows);
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -6457,9 +6458,8 @@ impl LayoutEngine {
                 }),
             );
             hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
-            row_cursor
-                .finish_current_row()
-                .finish(&mut self.matrix_builder, &mut output_emitter);
+            TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
+                .finish(row_cursor.finish_current_row());
         }
 
         for spec in &params.visual_cursors {

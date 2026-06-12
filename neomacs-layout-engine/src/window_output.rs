@@ -108,26 +108,6 @@ pub(crate) struct TextMatrixRowMetrics {
     pub(crate) ascent: f32,
 }
 
-impl TextMatrixRowMetrics {
-    pub(crate) fn finish(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-    ) {
-        builder.set_current_row_metrics(self.y, self.height, self.ascent);
-        output_emitter.push_text_row(self.y, self.height, self.ascent);
-    }
-
-    pub(crate) fn finish_and_end(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-    ) {
-        self.finish(builder, output_emitter);
-        builder.end_row();
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowBegin {
     pub(crate) matrix_row: usize,
@@ -137,49 +117,10 @@ pub(crate) struct TextMatrixRowBegin {
     pub(crate) x: f32,
 }
 
-impl TextMatrixRowBegin {
-    pub(crate) fn begin(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-    ) {
-        builder.begin_row(self.matrix_row, GlyphRowRole::Text);
-        output_emitter.begin_text_row(evaluator, self.row, self.col, self.y, self.x);
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowGeometryTransition {
     pub(crate) finished_row: TextMatrixRowMetrics,
     pub(crate) begin_row: TextMatrixRowBegin,
-}
-
-impl TextMatrixRowGeometryTransition {
-    pub(crate) fn emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-    ) {
-        self.finished_row.finish_and_end(builder, output_emitter);
-        self.begin_row.begin(builder, output_emitter, evaluator);
-    }
-
-    pub(crate) fn emit_with_row_limit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        max_rows: usize,
-    ) -> TextMatrixRowTransition {
-        if self.begin_row.row >= max_rows {
-            self.finished_row.finish_and_end(builder, output_emitter);
-            return TextMatrixRowTransition::ExhaustedRows;
-        }
-        self.emit(builder, output_emitter, evaluator);
-        TextMatrixRowTransition::BeganNextRow
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -191,6 +132,62 @@ pub(crate) enum TextMatrixRowTransition {
 impl TextMatrixRowTransition {
     pub(crate) fn is_exhausted(self) -> bool {
         matches!(self, Self::ExhaustedRows)
+    }
+}
+
+pub(crate) struct TextMatrixRowOutput<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+}
+
+impl<'a> TextMatrixRowOutput<'a> {
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+        }
+    }
+
+    pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) {
+        self.builder.begin_row(begin.matrix_row, GlyphRowRole::Text);
+        self.output_emitter
+            .begin_text_row(self.evaluator, begin.row, begin.col, begin.y, begin.x);
+    }
+
+    pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) {
+        self.builder
+            .set_current_row_metrics(metrics.y, metrics.height, metrics.ascent);
+        self.output_emitter
+            .push_text_row(metrics.y, metrics.height, metrics.ascent);
+    }
+
+    pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) {
+        self.finish(metrics);
+        self.builder.end_row();
+    }
+
+    pub(crate) fn emit(&mut self, transition: TextMatrixRowGeometryTransition) {
+        self.finish_and_end(transition.finished_row);
+        self.begin(transition.begin_row);
+    }
+
+    pub(crate) fn emit_with_row_limit(
+        &mut self,
+        transition: TextMatrixRowGeometryTransition,
+        max_rows: usize,
+    ) -> TextMatrixRowTransition {
+        if transition.begin_row.row >= max_rows {
+            self.finish_and_end(transition.finished_row);
+            return TextMatrixRowTransition::ExhaustedRows;
+        }
+        self.emit(transition);
+        TextMatrixRowTransition::BeganNextRow
     }
 }
 
