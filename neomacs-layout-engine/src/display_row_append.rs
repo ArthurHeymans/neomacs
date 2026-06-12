@@ -25,6 +25,7 @@ use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
+use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -33,9 +34,11 @@ use crate::window_output::DisplayProgressSink;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0};
+use neovm_core::emacs_core::Context;
+#[cfg(test)]
+use neovm_core::emacs_core::Value;
 #[cfg(test)]
 use neovm_core::emacs_core::eval::DisplayHost;
-use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
 struct SingleDisplayItemSource {
@@ -334,7 +337,7 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    text_value: Value,
+    fragment: DisplayTextFragment,
     source_id: u64,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
@@ -343,6 +346,9 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> DisplayRowPosition {
+    let DisplayTextStorage::LispString(text_value) = fragment.storage else {
+        return position;
+    };
     let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
         source_id,
         text_value,

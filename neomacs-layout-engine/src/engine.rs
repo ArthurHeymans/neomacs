@@ -3703,6 +3703,25 @@ impl LayoutEngine {
                     // Flush ligature run before prefix
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
+                    let prefix_fragment = if need_prefix == 2 {
+                        DisplayTextFragment::wrap_prefix(
+                            prefix_value,
+                            CharPos0::new(charpos as usize),
+                        )
+                    } else {
+                        DisplayTextFragment::line_prefix(
+                            prefix_value,
+                            CharPos0::new(charpos as usize),
+                        )
+                    };
+                    let prefix_base_face = display_string_base_face(
+                        buffer,
+                        face_resolver,
+                        prefix_fragment.origin,
+                        prefix_fragment.base_face_policy,
+                        &mut current_face_id,
+                        &mut self.matrix_builder,
+                    );
 
                     let append_frame = text_append_surface.frame(
                         DisplayRowAppendPlacement {
@@ -3723,11 +3742,11 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        prefix_value,
+                        prefix_fragment,
                         2,
                         face_resolver,
-                        &current_resolved_face,
-                        current_text_face_id,
+                        &prefix_base_face.face,
+                        prefix_base_face.face_id,
                         &mut current_face_id,
                         append_frame,
                         DisplayRowPosition { x_px: x, col },

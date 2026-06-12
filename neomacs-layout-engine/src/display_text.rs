@@ -89,6 +89,22 @@ impl DisplayTextFragment {
             BaseFacePolicy::DisplayPropertyUnderlyingFace,
         )
     }
+
+    pub(crate) fn line_prefix(value: Value, anchor_charpos: CharPos0) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::LinePrefix { anchor_charpos },
+            BaseFacePolicy::DefaultFace,
+        )
+    }
+
+    pub(crate) fn wrap_prefix(value: Value, anchor_charpos: CharPos0) -> Self {
+        Self::lisp_string(
+            value,
+            DisplayOrigin::WrapPrefix { anchor_charpos },
+            BaseFacePolicy::DefaultFace,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -201,5 +217,31 @@ mod tests {
             fragment.base_face_policy,
             BaseFacePolicy::DisplayPropertyUnderlyingFace
         );
+    }
+
+    #[test]
+    fn display_text_fragment_builds_prefix_fragments() {
+        let _ctx = Context::new();
+        let line_value = Value::string("line");
+        let line = DisplayTextFragment::line_prefix(line_value, CharPos0::new(3));
+        assert_eq!(line.storage, DisplayTextStorage::LispString(line_value));
+        assert_eq!(
+            line.origin,
+            DisplayOrigin::LinePrefix {
+                anchor_charpos: CharPos0::new(3)
+            }
+        );
+        assert_eq!(line.base_face_policy, BaseFacePolicy::DefaultFace);
+
+        let wrap_value = Value::string("wrap");
+        let wrap = DisplayTextFragment::wrap_prefix(wrap_value, CharPos0::new(5));
+        assert_eq!(wrap.storage, DisplayTextStorage::LispString(wrap_value));
+        assert_eq!(
+            wrap.origin,
+            DisplayOrigin::WrapPrefix {
+                anchor_charpos: CharPos0::new(5)
+            }
+        );
+        assert_eq!(wrap.base_face_policy, BaseFacePolicy::DefaultFace);
     }
 }
