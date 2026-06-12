@@ -384,8 +384,26 @@ pub(crate) struct WaitServiceOutcome {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WaitSpecialInputOutcome {
-    pub(crate) redisplay_needed: bool,
-    pub(crate) activity: WaitSpecialInputActivity,
+    redisplay_needed: bool,
+    activity: WaitSpecialInputActivity,
+}
+
+impl WaitSpecialInputOutcome {
+    pub(crate) fn record_activity(&mut self, activity: WaitSpecialInputActivity) {
+        self.activity = self.activity.record(activity);
+    }
+
+    pub(crate) fn activity(self) -> WaitSpecialInputActivity {
+        self.activity
+    }
+
+    pub(crate) fn request_redisplay(&mut self) {
+        self.redisplay_needed = true;
+    }
+
+    pub(crate) fn redisplay_needed(self) -> bool {
+        self.redisplay_needed
+    }
 }
 
 impl WaitServiceOutcome {
@@ -540,12 +558,12 @@ impl super::eval::Context {
     ) -> Result<WaitServiceOutcome, Flow> {
         let mut outcome = WaitServiceOutcome::default();
         let special_input = self.service_wait_request_special_input_events()?;
-        outcome.record_special_input_activity(special_input.activity);
+        outcome.record_special_input_activity(special_input.activity());
         if request.keyboard.completes_on_command_input()
             && self.stage_pending_command_input_for_wait_request()?
         {
             outcome.record_command_input_pending();
-            if request.redisplay && special_input.redisplay_needed {
+            if request.redisplay && special_input.redisplay_needed() {
                 self.redisplay();
             }
             return Ok(outcome);
@@ -562,7 +580,7 @@ impl super::eval::Context {
             }
         };
         outcome.absorb_process_activity(process_outcome);
-        if request.redisplay && (special_input.redisplay_needed || outcome.has_timer_activity()) {
+        if request.redisplay && (special_input.redisplay_needed() || outcome.has_timer_activity()) {
             self.redisplay();
         }
         Ok(outcome)
@@ -721,6 +739,24 @@ mod tests {
 
         assert!(outcome.has_resize_activity());
         assert!(outcome.has_special_input_activity());
+    }
+
+    #[test]
+    fn special_input_outcome_records_activity_explicitly() {
+        let mut outcome = WaitSpecialInputOutcome::default();
+
+        outcome.record_activity(WaitSpecialInputActivity::Resize);
+
+        assert_eq!(outcome.activity(), WaitSpecialInputActivity::Resize);
+    }
+
+    #[test]
+    fn special_input_outcome_records_redisplay_explicitly() {
+        let mut outcome = WaitSpecialInputOutcome::default();
+
+        outcome.request_redisplay();
+
+        assert!(outcome.redisplay_needed());
     }
 
     #[test]

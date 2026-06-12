@@ -2987,8 +2987,8 @@ impl crate::emacs_core::eval::Context {
         let mut outcome = WaitSpecialInputOutcome::default();
 
         if self.sync_pending_resize_events() {
-            outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Resize);
-            outcome.redisplay_needed = true;
+            outcome.record_activity(WaitSpecialInputActivity::Resize);
+            outcome.request_redisplay();
         }
 
         while let Some(event) = self.take_next_wait_request_special_input_event()? {
@@ -3004,12 +3004,12 @@ impl crate::emacs_core::eval::Context {
                     height,
                     emacs_frame_id,
                 } => {
-                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Resize);
+                    outcome.record_activity(WaitSpecialInputActivity::Resize);
                     self.apply_resize_input_event(width, height, emacs_frame_id, false);
-                    outcome.redisplay_needed = true;
+                    outcome.request_redisplay();
                 }
                 InputEvent::MonitorsChanged { monitors } => {
-                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
+                    outcome.record_activity(WaitSpecialInputActivity::Any);
                     crate::emacs_core::builtins::set_neomacs_monitor_info(monitors);
                     let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(
                         self,
@@ -3028,12 +3028,12 @@ impl crate::emacs_core::eval::Context {
                     target_frame_id,
                     ..
                 } => {
-                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
+                    outcome.record_activity(WaitSpecialInputActivity::Any);
                     self.note_mouse_move_input_event(x, y, target_frame_id);
                     self.timer_resume_idle();
                 }
                 InputEvent::WindowClose { emacs_frame_id } => {
-                    outcome.activity = outcome.activity.record(WaitSpecialInputActivity::Any);
+                    outcome.record_activity(WaitSpecialInputActivity::Any);
                     self.handle_window_close_input_event(emacs_frame_id)?;
                 }
                 _ => {}
