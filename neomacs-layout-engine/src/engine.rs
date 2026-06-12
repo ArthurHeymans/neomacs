@@ -3484,13 +3484,7 @@ impl LayoutEngine {
             DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
         macro_rules! current_row_geometry {
             () => {
-                DisplayRowGeometryState {
-                    row,
-                    y,
-                    row_extra_y,
-                    height: row_max_height,
-                    ascent: row_max_ascent,
-                }
+                DisplayRowGeometryState::new(row, y, row_extra_y, row_max_height, row_max_ascent)
             };
         }
         macro_rules! current_row_geometry_vars {

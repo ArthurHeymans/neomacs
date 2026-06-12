@@ -267,6 +267,20 @@ fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
 }
 
 #[test]
+fn display_row_geometry_state_constructor_groups_current_row_fields() {
+    assert_eq!(
+        DisplayRowGeometryState::new(3, 40.0, 7.0, 18.0, 13.0),
+        DisplayRowGeometryState {
+            row: 3,
+            y: 40.0,
+            row_extra_y: 7.0,
+            height: 18.0,
+            ascent: 13.0,
+        }
+    );
+}
+
+#[test]
 fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
     let mut row = 4;
     let mut y = 80.0;

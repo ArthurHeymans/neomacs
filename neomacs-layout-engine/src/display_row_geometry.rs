@@ -427,14 +427,24 @@ impl<'a> DisplayRowBoundaryTarget<'a> {
 }
 
 impl DisplayRowGeometryState {
-    pub(crate) fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
+    pub(crate) fn new(row: usize, y: f32, row_extra_y: f32, height: f32, ascent: f32) -> Self {
         Self {
-            row: legacy.row,
-            y: legacy.y,
-            row_extra_y: legacy.row_extra_y,
-            height: legacy.row_max_height,
-            ascent: legacy.row_max_ascent,
+            row,
+            y,
+            row_extra_y,
+            height,
+            ascent,
         }
+    }
+
+    pub(crate) fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
+        Self::new(
+            legacy.row,
+            legacy.y,
+            legacy.row_extra_y,
+            legacy.row_max_height,
+            legacy.row_max_ascent,
+        )
     }
 
     pub(crate) fn with_row_y(mut self, y: f32) -> Self {
