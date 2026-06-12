@@ -595,6 +595,23 @@ extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
     }
 }
 
+/// `Op::UnwindProtectPop`: register an unwind-protect cleanup form as a
+/// specpdl record (the interpreter arm mirrored 1:1 — same `SpecBinding`
+/// entry, same captured lexenv). The cleanup runs whenever `unbind_to` crosses
+/// it: the matching `Unbind`, or the frame unwind on any exit — shared
+/// machinery with the interpreter, including the signal path.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_unwind_protect(ctx: *mut u8, forms: i64) {
+    use crate::emacs_core::eval::SpecBinding;
+    let forms = Value::from_bits(forms as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+    let lexenv = ctx.lexenv;
+    ctx.specpdl
+        .push(SpecBinding::UnwindProtect { forms, lexenv });
+}
+
 /// Back-edge service poll: GC safepoint + `maybe_quit`, via the same shared
 /// Context helper the interpreter's `branch_to!` wrap path uses
 /// (`bytecode_branch_maybe_gc_and_quit`). Generated code calls this every 255
@@ -1209,6 +1226,7 @@ struct RtRefs {
     save_current_buffer: FuncRef,
     save_excursion: FuncRef,
     save_restriction: FuncRef,
+    unwind_protect: FuncRef,
     throw_flow: FuncRef,
     integerp_slow: FuncRef,
     numberp_slow: FuncRef,
@@ -1305,6 +1323,8 @@ fn declare_rt_refs(
     let scb_id = declare(module, "neovm_jit_save_current_buffer", &sig_save)?;
     let sexc_id = declare(module, "neovm_jit_save_excursion", &sig_save)?;
     let sres_id = declare(module, "neovm_jit_save_restriction", &sig_save)?;
+    // (vmctx, forms) -> ()  — unwind-protect record (infallible).
+    let up_id = declare(module, "neovm_jit_unwind_protect", &sig_unbind)?;
     // (tag, value) -> ()  — context-free Flow stash.
     let mut sig_throw = Signature::new(call_conv);
     sig_throw.params.push(AbiParam::new(i64t));
@@ -1348,6 +1368,7 @@ fn declare_rt_refs(
         save_current_buffer: module.declare_func_in_func(scb_id, func),
         save_excursion: module.declare_func_in_func(sexc_id, func),
         save_restriction: module.declare_func_in_func(sres_id, func),
+        unwind_protect: module.declare_func_in_func(up_id, func),
         throw_flow: module.declare_func_in_func(throw_id, func),
         integerp_slow: module.declare_func_in_func(intp_id, func),
         numberp_slow: module.declare_func_in_func(nump_id, func),
@@ -1780,6 +1801,14 @@ fn lower_simple_op(
             let vmctx = fb.use_var(rt.vmctx_var);
             fb.ins().call(shim, &[vmctx]);
         }
+        Op::UnwindProtectPop => {
+            // Pop the cleanup form and register the unwind-protect record
+            // (infallible; the cleanup runs via the shared unbind machinery).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let forms = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let vmctx = fb.use_var(rt.vmctx_var);
+            fb.ins().call(rt.refs.unwind_protect, &[vmctx, forms]);
+        }
         other => {
             // Direct-builtin ops: pop the operands, root the rest of the live
             // frame, and call the arity-shaped generic shim with the table
@@ -1883,6 +1912,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::VarBind(_) => (1, -1),
         Op::Unbind(_) => (0, 0),
         Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => (0, 0),
+        Op::UnwindProtectPop => (1, -1),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -2136,7 +2166,8 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         Op::VarBind(_)
                         | Op::SaveCurrentBuffer
                         | Op::SaveExcursion
-                        | Op::SaveRestriction => binds += 1,
+                        | Op::SaveRestriction
+                        | Op::UnwindProtectPop => binds += 1,
                         Op::Unbind(un) => {
                             let un = *un as usize;
                             if un > binds {
@@ -2160,6 +2191,7 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                                 | Op::SaveCurrentBuffer
                                 | Op::SaveExcursion
                                 | Op::SaveRestriction
+                                | Op::UnwindProtectPop
                         )
                     {
                         // Side effects (calls, assignment, mutation, specpdl
@@ -2311,6 +2343,10 @@ pub fn lower_leaf(
         "neovm_jit_numberp_slow",
         neovm_jit_numberp_slow as *const u8,
     );
+    builder.symbol(
+        "neovm_jit_unwind_protect",
+        neovm_jit_unwind_protect as *const u8,
+    );
     builder.symbol("neovm_jit_builtin1", neovm_jit_builtin1 as *const u8);
     builder.symbol("neovm_jit_builtin2", neovm_jit_builtin2 as *const u8);
     builder.symbol("neovm_jit_builtin3", neovm_jit_builtin3 as *const u8);
@@ -2347,6 +2383,7 @@ pub fn lower_leaf(
                         | Op::SaveCurrentBuffer
                         | Op::SaveExcursion
                         | Op::SaveRestriction
+                        | Op::UnwindProtectPop
                         | Op::Throw
                         | Op::Integerp
                         | Op::Numberp
@@ -2657,6 +2694,7 @@ pub fn lower_leaf(
                     | Op::SaveCurrentBuffer
                     | Op::SaveExcursion
                     | Op::SaveRestriction
+                    | Op::UnwindProtectPop
             )
         }),
         entry,
@@ -3576,6 +3614,70 @@ mod tests {
             ),
             NativeRun::Ok(Value::T.bits())
         );
+    }
+
+    #[test]
+    fn compiles_unwind_protect_pop() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        // NOTE: the opcode's operand is a LIST of cleanup forms (sf_progn_value),
+        // exactly what the byte-compiler pushes for (unwind-protect BODY FORMS..).
+        let cleanup = ev
+            .eval_str("'((setq jit-up-ran t))")
+            .expect("cleanup forms");
+        ev.eval_str("(setq jit-up-ran nil)").expect("flag init");
+        let specpdl_before = ev.specpdl.len();
+        let consts = [
+            cleanup,
+            Value::make_int(7),
+            Value::symbol("jit-up-no-such-fn"),
+        ];
+
+        // Balanced: the matching Unbind runs the cleanup.
+        let balanced = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::UnwindProtectPop,
+                Op::Constant(1),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &consts,
+        )
+        .unwrap();
+        assert_eq!(
+            balanced.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(7).bits())
+        );
+        assert_eq!(
+            ev.eval_str("jit-up-ran").unwrap(),
+            Value::T,
+            "cleanup ran on the balanced path"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+
+        // Signal inside the protected extent: the frame unwind runs the cleanup.
+        ev.eval_str("(setq jit-up-ran nil)").expect("flag reset");
+        let signaled = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::UnwindProtectPop,
+                Op::Constant(2),
+                Op::Call(0),
+                Op::Return,
+            ],
+            &consts,
+        )
+        .unwrap();
+        assert_eq!(signaled.call(ctx_ptr, &[]), NativeRun::Signal);
+        assert!(take_pending_flow().is_some());
+        assert_eq!(
+            ev.eval_str("jit-up-ran").unwrap(),
+            Value::T,
+            "cleanup ran on the signal path"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
     }
 
     #[test]
