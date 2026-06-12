@@ -1490,6 +1490,36 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
 }
 
 #[test]
+fn display_text_run_cluster_advances_group_shaped_glyphs_by_cluster_start() {
+    fn shaped(cluster_start: usize, x_advance: f32) -> crate::font_metrics::ShapedGlyph {
+        crate::font_metrics::ShapedGlyph {
+            font_id: fontdb::ID::dummy(),
+            glyph_id: 1,
+            x: 0.0,
+            y: 0.0,
+            x_advance,
+            cluster_start,
+            cluster_end: cluster_start + 1,
+        }
+    }
+
+    let advances = DisplayTextRunClusterAdvances::from_shaped_glyphs(
+        "aéb".len(),
+        [
+            shaped(0, 3.0),
+            shaped(0, 4.5),
+            shaped(3, 5.0),
+            shaped(99, 10.0),
+        ],
+    );
+
+    assert_eq!(advances.advance_at(0), Some(7.5));
+    assert_eq!(advances.advance_at(3), Some(5.0));
+    assert_eq!(advances.advance_at(1), None);
+    assert_eq!(advances.advance_at(99), None);
+}
+
+#[test]
 fn display_row_glyph_measurer_builds_measured_text_run_plan() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();

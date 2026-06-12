@@ -18,7 +18,7 @@ use crate::display_source_resolver::{
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::engine::LayoutEngine;
-use crate::font_metrics::{FontMetrics, FontMetricsService};
+use crate::font_metrics::{FontMetrics, FontMetricsService, ShapedGlyph};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
@@ -328,6 +328,47 @@ pub(crate) struct DisplayRowGlyphMeasurer<'a> {
     quantization: GlyphAdvanceQuantization,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct DisplayTextRunClusterAdvance {
+    byte_offset: usize,
+    advance_px: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct DisplayTextRunClusterAdvances {
+    advances: Vec<DisplayTextRunClusterAdvance>,
+}
+
+impl DisplayTextRunClusterAdvances {
+    fn from_shaped_glyphs(text_len: usize, glyphs: impl IntoIterator<Item = ShapedGlyph>) -> Self {
+        let mut advances: Vec<DisplayTextRunClusterAdvance> = Vec::new();
+        for glyph in glyphs {
+            if glyph.cluster_start > text_len {
+                continue;
+            }
+            if let Some(advance) = advances
+                .iter_mut()
+                .find(|advance| advance.byte_offset == glyph.cluster_start)
+            {
+                advance.advance_px += glyph.x_advance;
+            } else {
+                advances.push(DisplayTextRunClusterAdvance {
+                    byte_offset: glyph.cluster_start,
+                    advance_px: glyph.x_advance,
+                });
+            }
+        }
+        Self { advances }
+    }
+
+    fn advance_at(&self, byte_offset: usize) -> Option<f32> {
+        self.advances
+            .iter()
+            .find(|advance| advance.byte_offset == byte_offset)
+            .map(|advance| advance.advance_px)
+    }
+}
+
 impl<'a> DisplayRowGlyphMeasurer<'a> {
     pub(crate) fn new(
         faces: &'a [DisplayRowFace],
@@ -419,20 +460,8 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return DisplayTextRunMeasurement::PerChar;
         }
 
-        let mut cluster_advances: Vec<(usize, f32)> = Vec::new();
-        for glyph in shaped {
-            if glyph.cluster_start > text.len() {
-                continue;
-            }
-            if let Some((_, advance)) = cluster_advances
-                .iter_mut()
-                .find(|(byte_offset, _)| *byte_offset == glyph.cluster_start)
-            {
-                *advance += glyph.x_advance;
-            } else {
-                cluster_advances.push((glyph.cluster_start, glyph.x_advance));
-            }
-        }
+        let cluster_advances =
+            DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), shaped);
 
         let face_char_width = face
             .font_char_width
@@ -444,10 +473,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             .char_indices()
             .enumerate()
             .filter_map(|(char_offset, (byte_offset, ch))| {
-                let measured = cluster_advances
-                    .iter()
-                    .find(|(cluster_start, _)| *cluster_start == byte_offset)
-                    .map(|(_, advance)| *advance)?;
+                let measured = cluster_advances.advance_at(byte_offset)?;
                 let columns = crate::composition::base_width_cols(ch);
                 let minimum = f32::from(columns.max(1)) * face_char_width;
                 let fallback = f32::from(columns.max(1)) * fallback_char_width_px;
