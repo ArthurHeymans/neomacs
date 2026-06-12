@@ -3693,7 +3693,7 @@ impl LayoutEngine {
             DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
 
         while byte_idx < text.len()
-            && current_row_geometry_vars!().current_row_is_visible(row_visibility_limit)
+            && current_row_geometry!().current_row_is_visible(row_visibility_limit)
         {
             // Render line number at start of each visual line
             if need_line_number && lnum_enabled {
@@ -4892,9 +4892,7 @@ impl LayoutEngine {
                         if has_prefix {
                             need_prefix = 2;
                         }
-                        if !current_row_geometry_vars!()
-                            .current_row_is_visible(row_visibility_limit)
-                        {
+                        if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
                             break;
                         }
                     }
@@ -5238,7 +5236,7 @@ impl LayoutEngine {
                     // Force face re-check since we rewound
                     face_next_check = 0;
 
-                    if !current_row_geometry_vars!().current_row_is_visible(row_visibility_limit) {
+                    if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;
@@ -5288,7 +5286,7 @@ impl LayoutEngine {
                     if has_prefix {
                         need_prefix = 2;
                     }
-                    if !current_row_geometry_vars!().current_row_is_visible(row_visibility_limit) {
+                    if !current_row_geometry!().current_row_is_visible(row_visibility_limit) {
                         break;
                     }
                     continue;

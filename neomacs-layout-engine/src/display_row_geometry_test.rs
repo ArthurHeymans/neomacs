@@ -491,32 +491,6 @@ fn display_row_geometry_state_reports_current_row_visibility_by_limit() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_report_current_row_visibility_by_name() {
-    let mut row = 4;
-    let mut y = 80.0;
-    let mut row_extra_y = 9.0;
-    let mut row_max_height = 24.0;
-    let mut row_max_ascent = 18.0;
-
-    let vars = LegacyDisplayRowGeometryVars {
-        row: &mut row,
-        y: &mut y,
-        row_extra_y: &mut row_extra_y,
-        row_max_height: &mut row_max_height,
-        row_max_ascent: &mut row_max_ascent,
-    };
-
-    assert!(vars.current_row_is_visible(DisplayRowVisibilityLimit {
-        max_rows: 5,
-        bottom_y: 104.0,
-    }));
-    assert!(!vars.current_row_is_visible(DisplayRowVisibilityLimit {
-        max_rows: 5,
-        bottom_y: 103.9,
-    }));
-}
-
-#[test]
 fn display_row_geometry_state_records_current_row_y() {
     let geometry = DisplayRowGeometryState {
         row: 3,

@@ -155,10 +155,6 @@ impl LegacyDisplayRowGeometryVars<'_> {
         self.with_state(f)
     }
 
-    pub(crate) fn current_row_is_visible(&self, limit: DisplayRowVisibilityLimit) -> bool {
-        DisplayRowGeometryState::from_legacy(self.snapshot()).current_row_is_visible(limit)
-    }
-
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
         let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
         state.include_glyph_vertical_metrics(glyph_height, glyph_ascent);
