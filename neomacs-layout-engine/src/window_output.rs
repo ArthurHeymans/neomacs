@@ -117,6 +117,15 @@ impl TextMatrixRowMetrics {
         builder.set_current_row_metrics(self.y, self.height, self.ascent);
         output_emitter.push_text_row(self.y, self.height, self.ascent);
     }
+
+    pub(crate) fn finish_and_end(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+    ) {
+        self.finish(builder, output_emitter);
+        builder.end_row();
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -153,8 +162,7 @@ impl TextMatrixRowGeometryTransition {
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
     ) {
-        self.finished_row.finish(builder, output_emitter);
-        builder.end_row();
+        self.finished_row.finish_and_end(builder, output_emitter);
         self.begin_row.begin(builder, output_emitter, evaluator);
     }
 
@@ -166,8 +174,7 @@ impl TextMatrixRowGeometryTransition {
         max_rows: usize,
     ) -> TextMatrixRowTransition {
         if self.begin_row.row >= max_rows {
-            self.finished_row.finish(builder, output_emitter);
-            builder.end_row();
+            self.finished_row.finish_and_end(builder, output_emitter);
             return TextMatrixRowTransition::ExhaustedRows;
         }
         self.emit(builder, output_emitter, evaluator);

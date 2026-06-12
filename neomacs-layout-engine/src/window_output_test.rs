@@ -452,6 +452,51 @@ fn text_matrix_row_commands_begin_and_finish_output() {
 }
 
 #[test]
+fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-row-finish-end", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    TextMatrixRowBegin {
+        matrix_row: 0,
+        row: 0,
+        col: 0,
+        y: 0.0,
+        x: 0.0,
+    }
+    .begin(&mut builder, &mut emitter, &mut eval);
+
+    TextMatrixRowMetrics {
+        y: 0.0,
+        height: 16.0,
+        ascent: 12.0,
+    }
+    .finish_and_end(&mut builder, &mut emitter);
+
+    assert_eq!(emitter.rows().len(), 1);
+
+    builder.end_window();
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert_eq!(state.window_matrices[0].matrix.rows.len(), 1);
+}
+
+#[test]
 fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     let mut eval = Context::new();
     let buf_id = eval

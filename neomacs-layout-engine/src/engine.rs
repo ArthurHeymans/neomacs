@@ -1944,8 +1944,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             if *row >= max_rows {
                 geometry_transition
                     .finished_row
-                    .finish(builder, output_emitter);
-                builder.end_row();
+                    .finish_and_end(builder, output_emitter);
                 false
             } else {
                 row_y_positions.push(*y);
