@@ -382,6 +382,60 @@ fn legacy_display_row_geometry_vars_report_current_row_visibility_by_name() {
 }
 
 #[test]
+fn display_row_y_positions_preserve_recorded_rows_and_fallback_by_geometry() {
+    let mut positions = DisplayRowYPositions::with_first_row(10.0, 16.0);
+    positions.record(1, 30.0);
+
+    assert_eq!(
+        positions.y_for_row(
+            0,
+            DisplayRowYFallback {
+                text_y: 10.0,
+                default_height: 16.0,
+                row_extra_y: 9.0,
+            }
+        ),
+        10.0
+    );
+    assert_eq!(
+        positions.y_for_row(
+            1,
+            DisplayRowYFallback {
+                text_y: 10.0,
+                default_height: 16.0,
+                row_extra_y: 9.0,
+            }
+        ),
+        30.0
+    );
+    assert_eq!(
+        positions.y_for_row(
+            3,
+            DisplayRowYFallback {
+                text_y: 10.0,
+                default_height: 16.0,
+                row_extra_y: 9.0,
+            }
+        ),
+        67.0
+    );
+}
+
+#[test]
+fn display_row_y_positions_expose_recording_target_without_engine_vec_access() {
+    let mut positions = DisplayRowYPositions::with_first_row(10.0, 16.0);
+    {
+        let recording = positions.recording();
+        let DisplayRowYRecording::RowYPositions(raw) = recording else {
+            panic!("expected row-y recording target");
+        };
+        raw.push(30.0);
+    }
+
+    assert_eq!(positions.recorded(), &[10.0, 30.0]);
+}
+
+#[test]
 fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
         row: 5,

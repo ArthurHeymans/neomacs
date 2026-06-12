@@ -75,6 +75,18 @@ pub(crate) struct DisplayRowVisibilityLimit {
     pub(crate) bottom_y: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowYFallback {
+    pub(crate) text_y: f32,
+    pub(crate) default_height: f32,
+    pub(crate) row_extra_y: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowYPositions {
+    positions: Vec<f32>,
+}
+
 pub(crate) struct LegacyDisplayRowGeometryVars<'a> {
     pub(crate) row: &'a mut usize,
     pub(crate) y: &'a mut f32,
@@ -214,6 +226,56 @@ impl DisplayRowYRecorder<'_> {
             Self::None => {}
             Self::RowYPositions(row_y_positions) => row_y_positions.push(y),
         }
+    }
+}
+
+impl DisplayRowYFallback {
+    fn y_for_row(self, row: usize) -> f32 {
+        self.text_y + row as f32 * self.default_height + self.row_extra_y
+    }
+}
+
+impl DisplayRowYPositions {
+    #[cfg(test)]
+    pub(crate) fn with_first_row(first_row_y: f32, _default_height: f32) -> Self {
+        Self {
+            positions: vec![first_row_y],
+        }
+    }
+
+    pub(crate) fn with_capacity_and_first_row(capacity: usize, first_row_y: f32) -> Self {
+        let mut positions = Vec::with_capacity(capacity);
+        positions.push(first_row_y);
+        Self { positions }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record(&mut self, row: usize, y: f32) {
+        if row < self.positions.len() {
+            self.positions[row] = y;
+        } else {
+            self.positions.push(y);
+        }
+    }
+
+    pub(crate) fn push(&mut self, y: f32) {
+        self.positions.push(y);
+    }
+
+    pub(crate) fn y_for_row(&self, row: usize, fallback: DisplayRowYFallback) -> f32 {
+        self.positions
+            .get(row)
+            .copied()
+            .unwrap_or_else(|| fallback.y_for_row(row))
+    }
+
+    pub(crate) fn recording(&mut self) -> DisplayRowYRecording<'_> {
+        DisplayRowYRecording::RowYPositions(&mut self.positions)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recorded(&self) -> &[f32] {
+        &self.positions
     }
 }
 

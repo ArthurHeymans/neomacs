@@ -41,8 +41,9 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryCursor, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYRecording,
-    LegacyDisplayRowGeometry, LegacyDisplayRowGeometryVars,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback,
+    DisplayRowYPositions, DisplayRowYRecording, LegacyDisplayRowGeometry,
+    LegacyDisplayRowGeometryVars,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -1455,7 +1456,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     hit_rows: &mut Vec<HitRow>,
     hit_row_charpos_start: &mut i64,
     anchor_charpos: i64,
-    row_y_positions: &mut Vec<f32>,
+    row_y_positions: &mut DisplayRowYPositions,
     row_max_height: &mut f32,
     row_max_ascent: &mut f32,
     face_char_w: f32,
@@ -3514,8 +3515,8 @@ impl LayoutEngine {
         let mut row_max_height: f32 = char_h; // max glyph height on current row
         let mut row_max_ascent: f32 = default_face_ascent; // max ascent on current row
         let mut row_extra_y: f32 = 0.0; // cumulative extra height from previous rows
-        let mut row_y_positions: Vec<f32> = Vec::with_capacity(max_rows);
-        row_y_positions.push(text_y); // row 0
+        let mut row_y_positions =
+            DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
         // Trailing whitespace tracking
         let trailing_ws_bg = if params.show_trailing_whitespace {
             Some(Color::from_pixel(params.trailing_ws_bg))
@@ -4020,7 +4021,7 @@ impl LayoutEngine {
                         col,
                         x,
                         0.0,
-                        DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                        row_y_positions.recording(),
                     ));
                     // Record hit-test row (hscroll newline)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
@@ -4667,7 +4668,7 @@ impl LayoutEngine {
                                 col,
                                 x,
                                 0.0,
-                                DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                                row_y_positions.recording(),
                             ),
                         );
                         let geometry_transition = boundary.record_hit_row(&mut hit_rows);
@@ -4797,7 +4798,7 @@ impl LayoutEngine {
                     col,
                     x,
                     line_spacing,
-                    DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                    row_y_positions.recording(),
                 ));
                 let geometry_transition = boundary.record_hit_row(&mut hit_rows);
                 let row_transition = TextMatrixRowOutput::new(
@@ -4849,10 +4850,14 @@ impl LayoutEngine {
                         if indent > selective_display {
                             // Show ... ellipsis once for the hidden block
                             if !shown_ellipsis && row > 0 {
-                                let _prev_row_y = row_y_positions
-                                    .get(row - 1)
-                                    .copied()
-                                    .unwrap_or(text_y + (row - 1) as f32 * char_h);
+                                let _prev_row_y = row_y_positions.y_for_row(
+                                    row - 1,
+                                    DisplayRowYFallback {
+                                        text_y,
+                                        default_height: char_h,
+                                        row_extra_y: 0.0,
+                                    },
+                                );
                                 for dot_i in 0..3 {
                                     let dot_x = content_x + dot_i as f32 * face_metrics.char_width;
                                     if dot_x + face_metrics.char_width <= content_x + avail_width {}
@@ -4923,7 +4928,7 @@ impl LayoutEngine {
                                 text_matrix_row_base,
                                 col,
                                 x,
-                                DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                                row_y_positions.recording(),
                             ),
                         );
                         // Record hit-test row (wrap/truncation break)
@@ -4974,7 +4979,7 @@ impl LayoutEngine {
                                 text_matrix_row_base,
                                 col,
                                 x,
-                                DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                                row_y_positions.recording(),
                             ),
                         );
                         // Record hit-test row (wrap/truncation break)
@@ -5291,7 +5296,7 @@ impl LayoutEngine {
                         text_matrix_row_base,
                         col,
                         x,
-                        DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                        row_y_positions.recording(),
                     ));
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
@@ -5349,7 +5354,7 @@ impl LayoutEngine {
                         text_matrix_row_base,
                         col,
                         x,
-                        DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                        row_y_positions.recording(),
                     ));
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
@@ -5417,7 +5422,7 @@ impl LayoutEngine {
                         text_matrix_row_base,
                         col,
                         x,
-                        DisplayRowYRecording::RowYPositions(&mut row_y_positions),
+                        row_y_positions.recording(),
                     ));
                     // Record hit-test row (wrap/truncation break)
                     let geometry_transition = boundary.record_hit_row(&mut hit_rows);
@@ -5804,18 +5809,26 @@ impl LayoutEngine {
             let right_edge = content_x + avail_width;
             // First, extend the current (partially filled) row if text didn't fill it
             if x < right_edge && row < max_rows {
-                let _ry = row_y_positions
-                    .get(row)
-                    .copied()
-                    .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
+                let _ry = row_y_positions.y_for_row(
+                    row,
+                    DisplayRowYFallback {
+                        text_y,
+                        default_height: char_h,
+                        row_extra_y,
+                    },
+                );
             }
             // Then fill completely empty rows below
             let start_row = (row + 1).min(max_rows);
             for r in start_row..max_rows {
-                let ry = row_y_positions
-                    .get(r)
-                    .copied()
-                    .unwrap_or(text_y + r as f32 * char_h + row_extra_y);
+                let ry = row_y_positions.y_for_row(
+                    r,
+                    DisplayRowYFallback {
+                        text_y,
+                        default_height: char_h,
+                        row_extra_y,
+                    },
+                );
                 if ry + char_h > text_y + text_height {
                     break;
                 } // Don't extend past text area
@@ -5827,10 +5840,14 @@ impl LayoutEngine {
             let _fringe_char_w = params.left_fringe_width.min(char_w).max(char_w * 0.5);
 
             for r in 0..row.min(max_rows) {
-                let _gy = row_y_positions
-                    .get(r)
-                    .copied()
-                    .unwrap_or(text_y + r as f32 * char_h);
+                let _gy = row_y_positions.y_for_row(
+                    r,
+                    DisplayRowYFallback {
+                        text_y,
+                        default_height: char_h,
+                        row_extra_y: 0.0,
+                    },
+                );
 
                 // Right fringe: continuation arrow for wrapped lines
                 if params.right_fringe_width > 0.0 && row_continued.get(r).copied().unwrap_or(false)
@@ -5852,10 +5869,14 @@ impl LayoutEngine {
             if params.indicate_empty_lines > 0 {
                 let eob_start = row.min(max_rows);
                 for r in eob_start..max_rows {
-                    let _gy = row_y_positions
-                        .get(r)
-                        .copied()
-                        .unwrap_or(text_y + r as f32 * char_h + row_extra_y);
+                    let _gy = row_y_positions.y_for_row(
+                        r,
+                        DisplayRowYFallback {
+                            text_y,
+                            default_height: char_h,
+                            row_extra_y,
+                        },
+                    );
                     let _fringe_x = if params.indicate_empty_lines == 2 {
                         right_fringe_x
                     } else {
@@ -5886,10 +5907,14 @@ impl LayoutEngine {
                 let indicator_x = content_x + fci_col as f32 * char_w;
                 let total_rows = row.min(max_rows);
                 for r in 0..total_rows {
-                    let _gy = row_y_positions
-                        .get(r)
-                        .copied()
-                        .unwrap_or(text_y + r as f32 * char_h);
+                    let _gy = row_y_positions.y_for_row(
+                        r,
+                        DisplayRowYFallback {
+                            text_y,
+                            default_height: char_h,
+                            row_extra_y: 0.0,
+                        },
+                    );
                     if indicator_x < content_x + avail_width {}
                 }
             }
@@ -6006,10 +6031,14 @@ impl LayoutEngine {
 
         let has_pending_row_output = output_emitter.current_row_has_output();
         if row < max_rows && (charpos > hit_row_charpos_start || has_pending_row_output) {
-            let row_y_start = row_y_positions
-                .get(row)
-                .copied()
-                .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
+            let row_y_start = row_y_positions.y_for_row(
+                row,
+                DisplayRowYFallback {
+                    text_y,
+                    default_height: char_h,
+                    row_extra_y,
+                },
+            );
             let row_cursor = DisplayRowGeometryCursor::from_state(
                 DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
                     row,
