@@ -740,10 +740,6 @@ impl DisplayRowActiveFace {
         &self.measurement_face
     }
 
-    pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
-        self.metrics
-    }
-
     pub(crate) fn layout_metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.metrics
     }

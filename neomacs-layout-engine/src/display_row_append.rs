@@ -969,7 +969,7 @@ impl DisplayRowAppendMetrics {
         active_face: &DisplayRowActiveFace,
         default_row_height: f32,
     ) -> Self {
-        Self::from_measured_face_metrics(active_face.metrics(), default_row_height)
+        Self::from_measured_face_metrics(active_face.layout_metrics(), default_row_height)
     }
 
     pub(crate) fn from_measured_face_metrics(
