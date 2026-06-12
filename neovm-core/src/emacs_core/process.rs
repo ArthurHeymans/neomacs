@@ -42,8 +42,8 @@ use super::tls::{
     gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::{
-    ProcessWaitPolicy, TimerWaitPolicy, WaitCompletion, WaitDeadline, WaitRequest,
-    WaitServiceOutcome,
+    ProcessWaitPolicy, TimerWaitPolicy, WaitBackendEvents, WaitBackendInterest, WaitCompletion,
+    WaitDeadline, WaitRequest, WaitServiceOutcome,
 };
 
 /// OS socket owned by a network process.
@@ -169,34 +169,6 @@ use crate::window::FrameManager;
 pub type ProcessId = u64;
 
 const INPUT_WAKEUP_EVENT_KEY: usize = 0;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct WaitBackendEvents {
-    pub(crate) input_wakeup: bool,
-    pub(crate) ready_processes: Vec<ProcessId>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WaitBackendInterest {
-    pub(crate) input_wakeup: bool,
-    pub(crate) processes: bool,
-}
-
-impl WaitBackendInterest {
-    pub(crate) fn processes_only() -> Self {
-        Self {
-            input_wakeup: false,
-            processes: true,
-        }
-    }
-
-    pub(crate) fn for_wait_request(input_wakeup: bool, processes: bool) -> Self {
-        Self {
-            input_wakeup,
-            processes,
-        }
-    }
-}
 
 /// Process family used by compatibility helpers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]

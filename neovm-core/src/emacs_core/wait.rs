@@ -9,7 +9,35 @@
 use std::time::{Duration, Instant};
 
 use super::error::Flow;
-use super::process::{ProcessId, WaitBackendInterest};
+use super::process::ProcessId;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WaitBackendEvents {
+    pub(crate) input_wakeup: bool,
+    pub(crate) ready_processes: Vec<ProcessId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WaitBackendInterest {
+    pub(crate) input_wakeup: bool,
+    pub(crate) processes: bool,
+}
+
+impl WaitBackendInterest {
+    pub(crate) fn processes_only() -> Self {
+        Self {
+            input_wakeup: false,
+            processes: true,
+        }
+    }
+
+    pub(crate) fn for_wait_request(input_wakeup: bool, processes: bool) -> Self {
+        Self {
+            input_wakeup,
+            processes,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WaitDeadline {
