@@ -38,9 +38,9 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
-    DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback, DisplayRowYPositions,
-    DisplayRowYRecording, LegacyDisplayRowGeometryVars,
+    DisplayRowBoundaryTarget, DisplayRowGeometryBinding, DisplayRowGeometryDefaults,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowVisibilityLimit, DisplayRowYFallback,
+    DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
@@ -3489,7 +3489,7 @@ impl LayoutEngine {
         }
         macro_rules! current_row_geometry_vars {
             () => {
-                LegacyDisplayRowGeometryVars::new(
+                DisplayRowGeometryBinding::new(
                     &mut row,
                     &mut y,
                     &mut row_extra_y,

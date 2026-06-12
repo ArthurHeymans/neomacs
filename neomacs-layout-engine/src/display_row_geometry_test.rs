@@ -247,9 +247,9 @@ fn display_row_geometry_state_builds_cursor_after_row_y_adjustment() {
 }
 
 #[test]
-fn display_row_geometry_state_builds_from_legacy_row_variables_by_name() {
+fn display_row_geometry_state_builds_from_snapshot_row_variables_by_name() {
     assert_eq!(
-        DisplayRowGeometryState::from_legacy(LegacyDisplayRowGeometry {
+        DisplayRowGeometryState::from_snapshot(DisplayRowGeometrySnapshot {
             row: 4,
             y: 80.0,
             row_extra_y: 9.0,
@@ -281,7 +281,7 @@ fn display_row_geometry_state_constructor_groups_current_row_fields() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
+fn display_row_geometry_binding_constructor_binds_row_geometry_by_name() {
     let mut row = 4;
     let mut y = 80.0;
     let mut row_extra_y = 9.0;
@@ -289,7 +289,7 @@ fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
     let mut row_max_ascent = 14.0;
 
     {
-        let mut vars = LegacyDisplayRowGeometryVars::new(
+        let mut vars = DisplayRowGeometryBinding::new(
             &mut row,
             &mut y,
             &mut row_extra_y,
@@ -299,7 +299,7 @@ fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
 
         assert_eq!(
             vars.snapshot(),
-            LegacyDisplayRowGeometry {
+            DisplayRowGeometrySnapshot {
                 row: 4,
                 y: 80.0,
                 row_extra_y: 9.0,
@@ -325,7 +325,7 @@ fn legacy_display_row_geometry_vars_constructor_binds_row_geometry_by_name() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
+fn display_row_geometry_binding_snapshots_and_applies_by_name() {
     let mut row = 4;
     let mut y = 80.0;
     let mut row_extra_y = 9.0;
@@ -333,7 +333,7 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
     let mut row_max_ascent = 14.0;
 
     {
-        let mut vars = LegacyDisplayRowGeometryVars {
+        let mut vars = DisplayRowGeometryBinding {
             row: &mut row,
             y: &mut y,
             row_extra_y: &mut row_extra_y,
@@ -343,7 +343,7 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
 
         assert_eq!(
             vars.snapshot(),
-            LegacyDisplayRowGeometry {
+            DisplayRowGeometrySnapshot {
                 row: 4,
                 y: 80.0,
                 row_extra_y: 9.0,
@@ -369,14 +369,14 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_run_owned_state_scope_and_apply_result() {
+fn display_row_geometry_binding_can_run_owned_state_scope_and_apply_result() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
 
-    let result = LegacyDisplayRowGeometryVars {
+    let result = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -401,14 +401,14 @@ fn legacy_display_row_geometry_vars_can_run_owned_state_scope_and_apply_result()
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_run_display_row_geometry_state_scope() {
+fn display_row_geometry_binding_can_run_display_row_geometry_state_scope() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
 
-    let result = LegacyDisplayRowGeometryVars::new(
+    let result = DisplayRowGeometryBinding::new(
         &mut row,
         &mut y,
         &mut row_extra_y,
@@ -433,14 +433,14 @@ fn legacy_display_row_geometry_vars_can_run_display_row_geometry_state_scope() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_include_glyph_vertical_metrics_by_name() {
+fn display_row_geometry_binding_include_glyph_vertical_metrics_by_name() {
     let mut row = 4;
     let mut y = 80.0;
     let mut row_extra_y = 9.0;
     let mut row_max_height = 16.0;
     let mut row_max_ascent = 12.0;
 
-    LegacyDisplayRowGeometryVars {
+    DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -457,14 +457,14 @@ fn legacy_display_row_geometry_vars_include_glyph_vertical_metrics_by_name() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_include_row_extents_by_name() {
+fn display_row_geometry_binding_include_row_extents_by_name() {
     let mut row = 4;
     let mut y = 80.0;
     let mut row_extra_y = 9.0;
     let mut row_max_height = 16.0;
     let mut row_max_ascent = 12.0;
 
-    LegacyDisplayRowGeometryVars {
+    DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -809,7 +809,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = LegacyDisplayRowGeometryVars {
+    let transition = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -872,7 +872,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = LegacyDisplayRowGeometryVars {
+    let transition = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -916,7 +916,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request() {
+fn display_row_geometry_binding_can_advance_and_record_row_y_in_one_request() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
@@ -925,7 +925,7 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = LegacyDisplayRowGeometryVars {
+    let transition = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -980,7 +980,7 @@ fn legacy_display_row_geometry_vars_can_advance_and_record_row_y_in_one_request(
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
+fn display_row_geometry_binding_can_finish_row_boundary_in_one_request() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
@@ -989,7 +989,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
 
-    let transition = LegacyDisplayRowGeometryVars {
+    let transition = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -1047,14 +1047,14 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_in_one_request() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_finish_row_boundary_by_mut_ref() {
+fn display_row_geometry_binding_can_finish_row_boundary_by_mut_ref() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
     let mut row_max_height = 24.0;
     let mut row_max_ascent = 18.0;
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
-    let mut vars = LegacyDisplayRowGeometryVars {
+    let mut vars = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,
@@ -1082,7 +1082,7 @@ fn legacy_display_row_geometry_vars_can_finish_row_boundary_by_mut_ref() {
         &mut hit_rows,
     );
 
-    let output = DisplayRowGeometryState::from_legacy(vars.snapshot()).text_row_output(16.0);
+    let output = DisplayRowGeometryState::from_snapshot(vars.snapshot()).text_row_output(16.0);
 
     assert_eq!(hit_rows[0].y_start, 42.0);
     assert_eq!(hit_rows[0].y_end, 66.0);
@@ -1131,7 +1131,7 @@ fn display_row_geometry_state_can_finish_boundary_without_row_y_recording() {
 }
 
 #[test]
-fn legacy_display_row_geometry_vars_can_finish_boundary_and_record_hit_row() {
+fn display_row_geometry_binding_can_finish_boundary_and_record_hit_row() {
     let mut row = 2;
     let mut y = 42.0;
     let mut row_extra_y = 3.0;
@@ -1139,7 +1139,7 @@ fn legacy_display_row_geometry_vars_can_finish_boundary_and_record_hit_row() {
     let mut row_max_ascent = 18.0;
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
-    let mut vars = LegacyDisplayRowGeometryVars {
+    let mut vars = DisplayRowGeometryBinding {
         row: &mut row,
         y: &mut y,
         row_extra_y: &mut row_extra_y,

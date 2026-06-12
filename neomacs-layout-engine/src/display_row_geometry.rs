@@ -73,7 +73,7 @@ pub(crate) struct DisplayRowGeometryCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct LegacyDisplayRowGeometry {
+pub(crate) struct DisplayRowGeometrySnapshot {
     pub(crate) row: usize,
     pub(crate) y: f32,
     pub(crate) row_extra_y: f32,
@@ -99,7 +99,7 @@ pub(crate) struct DisplayRowYPositions {
     positions: Vec<f32>,
 }
 
-pub(crate) struct LegacyDisplayRowGeometryVars<'a> {
+pub(crate) struct DisplayRowGeometryBinding<'a> {
     pub(crate) row: &'a mut usize,
     pub(crate) y: &'a mut f32,
     pub(crate) row_extra_y: &'a mut f32,
@@ -107,15 +107,15 @@ pub(crate) struct LegacyDisplayRowGeometryVars<'a> {
     pub(crate) row_max_ascent: &'a mut f32,
 }
 
-impl LegacyDisplayRowGeometryVars<'_> {
+impl DisplayRowGeometryBinding<'_> {
     pub(crate) fn new<'a>(
         row: &'a mut usize,
         y: &'a mut f32,
         row_extra_y: &'a mut f32,
         row_max_height: &'a mut f32,
         row_max_ascent: &'a mut f32,
-    ) -> LegacyDisplayRowGeometryVars<'a> {
-        LegacyDisplayRowGeometryVars {
+    ) -> DisplayRowGeometryBinding<'a> {
+        DisplayRowGeometryBinding {
             row,
             y,
             row_extra_y,
@@ -124,8 +124,8 @@ impl LegacyDisplayRowGeometryVars<'_> {
         }
     }
 
-    pub(crate) fn snapshot(&self) -> LegacyDisplayRowGeometry {
-        LegacyDisplayRowGeometry {
+    pub(crate) fn snapshot(&self) -> DisplayRowGeometrySnapshot {
+        DisplayRowGeometrySnapshot {
             row: *self.row,
             y: *self.y,
             row_extra_y: *self.row_extra_y,
@@ -143,7 +143,7 @@ impl LegacyDisplayRowGeometryVars<'_> {
     }
 
     pub(crate) fn with_state<R>(&mut self, f: impl FnOnce(&mut DisplayRowGeometryState) -> R) -> R {
-        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
         let result = f(&mut state);
         self.apply(state);
         result
@@ -157,13 +157,13 @@ impl LegacyDisplayRowGeometryVars<'_> {
     }
 
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
-        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
         state.include_glyph_vertical_metrics(glyph_height, glyph_ascent);
         self.apply(state);
     }
 
     pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
-        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
         state.include_row_extents(height, ascent);
         self.apply(state);
     }
@@ -173,7 +173,7 @@ impl LegacyDisplayRowGeometryVars<'_> {
         target: DisplayRowBoundaryTarget<'_>,
         hit_rows: &mut Vec<HitRow>,
     ) -> TextMatrixRowGeometryTransition {
-        let mut state = DisplayRowGeometryState::from_legacy(self.snapshot());
+        let mut state = DisplayRowGeometryState::from_snapshot(self.snapshot());
         let transition = state.finish_boundary_and_record_hit(target, hit_rows);
         self.apply(state);
         transition
@@ -437,13 +437,13 @@ impl DisplayRowGeometryState {
         }
     }
 
-    pub(crate) fn from_legacy(legacy: LegacyDisplayRowGeometry) -> Self {
+    pub(crate) fn from_snapshot(snapshot: DisplayRowGeometrySnapshot) -> Self {
         Self::new(
-            legacy.row,
-            legacy.y,
-            legacy.row_extra_y,
-            legacy.row_max_height,
-            legacy.row_max_ascent,
+            snapshot.row,
+            snapshot.y,
+            snapshot.row_extra_y,
+            snapshot.row_max_height,
+            snapshot.row_max_ascent,
         )
     }
 
