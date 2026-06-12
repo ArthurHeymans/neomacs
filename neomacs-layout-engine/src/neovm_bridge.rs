@@ -26,6 +26,8 @@ use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
 };
+use crate::display_face_policy::BaseFacePolicy;
+use crate::display_origin::DisplayOrigin;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
@@ -2767,6 +2769,46 @@ impl FaceResolver {
 
         *next_check = min_next;
         resolved
+    }
+
+    pub(crate) fn base_face_for_origin<B: LayoutBufferView>(
+        &self,
+        buffer: Option<&B>,
+        origin: &DisplayOrigin,
+        policy: BaseFacePolicy,
+        next_check: &mut usize,
+    ) -> ResolvedFace {
+        match policy {
+            BaseFacePolicy::BufferFaceIncludingOverlays => {
+                let buffer = buffer.expect("buffer text face policy requires a buffer");
+                let DisplayOrigin::BufferText { charpos } = origin else {
+                    unreachable!(
+                        "buffer text face policy received incompatible origin: {origin:?}"
+                    );
+                };
+                self.face_at_pos(buffer, charpos.get(), next_check)
+            }
+            BaseFacePolicy::OverlayStringAtAnchor => {
+                let buffer = buffer.expect("overlay string face policy requires a buffer");
+                let DisplayOrigin::OverlayString { anchor_charpos, .. } = origin else {
+                    unreachable!(
+                        "overlay string face policy received incompatible origin: {origin:?}"
+                    );
+                };
+                self.face_for_overlay_string(buffer, anchor_charpos.get(), next_check)
+            }
+            BaseFacePolicy::DisplayPropertyUnderlyingFace => {
+                let buffer = buffer.expect("display property face policy requires a buffer");
+                let DisplayOrigin::DisplayPropertyString { anchor_charpos, .. } = origin else {
+                    unreachable!(
+                        "display property face policy received incompatible origin: {origin:?}"
+                    );
+                };
+                self.face_at_pos(buffer, anchor_charpos.get(), next_check)
+            }
+            BaseFacePolicy::DefaultFace => self.default_face.clone(),
+            BaseFacePolicy::FixedBasicFace(face_id) => self.resolve_named_face(face_id.name()),
+        }
     }
 
     /// Extract face name(s) from a Lisp Value.

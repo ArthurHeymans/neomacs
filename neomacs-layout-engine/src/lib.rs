@@ -12,6 +12,7 @@ pub mod composition;
 pub(crate) mod coords;
 pub mod display_backend;
 pub(crate) mod display_face_layout;
+pub(crate) mod display_face_policy;
 pub(crate) mod display_item;
 pub mod display_iterator;
 pub(crate) mod display_media;

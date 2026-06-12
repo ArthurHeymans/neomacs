@@ -1861,6 +1861,98 @@ fn face_for_overlay_string_uses_text_property_but_ignores_overlay_face() {
 }
 
 #[test]
+fn face_policy_resolves_display_origin_base_faces() {
+    use crate::display_face_policy::BaseFacePolicy;
+    use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
+    use neomacs_display_protocol::face::BasicFaceId;
+
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*display-origin-face-policy*");
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        set_buffer_text(buf, "anchor");
+        buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf.id()),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        buf.overlays_mut()
+            .overlay_put(overlay, Value::symbol("face"), Value::symbol("italic"))
+            .unwrap();
+    }
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let buffer_text = resolver.base_face_for_origin(
+        Some(buf),
+        &DisplayOrigin::BufferText {
+            charpos: CharPos0::new(0),
+        },
+        BaseFacePolicy::BufferFaceIncludingOverlays,
+        &mut next_check,
+    );
+    assert_eq!(buffer_text.font_weight, FontWeight::BOLD.css_weight());
+    assert!(buffer_text.italic);
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let overlay_string = resolver.base_face_for_origin(
+        Some(buf),
+        &DisplayOrigin::OverlayString {
+            overlay_id: Value::fixnum(1),
+            anchor_charpos: CharPos0::new(0),
+            kind: OverlayStringKind::Before,
+        },
+        BaseFacePolicy::OverlayStringAtAnchor,
+        &mut next_check,
+    );
+    assert_eq!(overlay_string.font_weight, FontWeight::BOLD.css_weight());
+    assert!(!overlay_string.italic);
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let display_property = resolver.base_face_for_origin(
+        Some(buf),
+        &DisplayOrigin::DisplayPropertyString {
+            anchor_charpos: CharPos0::new(0),
+            source: DisplayPropertySource::TextProperty,
+        },
+        BaseFacePolicy::DisplayPropertyUnderlyingFace,
+        &mut next_check,
+    );
+    assert_eq!(display_property.font_weight, FontWeight::BOLD.css_weight());
+    assert!(display_property.italic);
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let default_face = resolver.base_face_for_origin(
+        Some(buf),
+        &DisplayOrigin::EchoArea,
+        BaseFacePolicy::DefaultFace,
+        &mut next_check,
+    );
+    assert_eq!(default_face.fg, resolver.default_face().fg);
+    assert_eq!(default_face.bg, resolver.default_face().bg);
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let fixed_face = resolver.base_face_for_origin(
+        Some(buf),
+        &DisplayOrigin::ModeLine,
+        BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
+        &mut next_check,
+    );
+    assert_eq!(fixed_face.face_id, u32::from(BasicFaceId::ModeLineActive));
+}
+
+#[test]
 fn test_face_resolver_overlay_priority() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let mut table = FaceTable::new();

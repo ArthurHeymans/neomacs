@@ -19,6 +19,7 @@ use super::window_output::{
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
@@ -1248,29 +1249,25 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     current_face_id: &mut u32,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
-    match origin {
-        DisplayOrigin::OverlayString { anchor_charpos, .. } => {
-            let mut next_check = buffer.layout_point_max_char_pos().get();
-            let face = face_resolver.face_for_overlay_string(
-                buffer,
-                anchor_charpos.get(),
-                &mut next_check,
-            );
-            let face_id = if crate::display_source_resolver::same_resolved_face(
-                &face,
-                face_resolver.default_face(),
-            ) {
-                u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
-            } else {
-                let face_id = *current_face_id;
-                *current_face_id += 1;
-                face_id
-            };
-            insert_resolved_display_row_face(builder, face_id, &face, None);
-            DisplayStringBaseFace { face, face_id }
-        }
-        other => unreachable!("render_overlay_string received non-overlay origin: {other:?}"),
-    }
+    let mut next_check = buffer.layout_point_max_char_pos().get();
+    let face = face_resolver.base_face_for_origin(
+        Some(buffer),
+        &origin,
+        BaseFacePolicy::OverlayStringAtAnchor,
+        &mut next_check,
+    );
+    let face_id = if crate::display_source_resolver::same_resolved_face(
+        &face,
+        face_resolver.default_face(),
+    ) {
+        u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
+    } else {
+        let face_id = *current_face_id;
+        *current_face_id += 1;
+        face_id
+    };
+    insert_resolved_display_row_face(builder, face_id, &face, None);
+    DisplayStringBaseFace { face, face_id }
 }
 
 /// Render overlay string bytes into the layout.
