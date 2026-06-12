@@ -838,17 +838,17 @@ fn display_row_geometry_advance_target_groups_transition_and_commit_inputs() {
     let mut row_max_ascent = 1.0;
     let mut row_y_positions = vec![8.0];
 
-    let transition =
-        cursor.finish_begin_and_commit_next_text_matrix_row(DisplayRowGeometryAdvanceTarget::new(
+    let transition = cursor.finish_begin_and_commit_next_text_matrix_row(
+        DisplayRowGeometryAdvanceTarget::line_break(
             DisplayRowGeometryDefaults {
                 text_y: 10.0,
                 height: 16.0,
                 ascent: 12.0,
             },
-            DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
             5,
             7,
             13.0,
+            4.0,
             DisplayRowGeometryCommitTarget::recording_row_y(
                 LegacyDisplayRowGeometryVars {
                     row: &mut row,
@@ -859,7 +859,8 @@ fn display_row_geometry_advance_target_groups_transition_and_commit_inputs() {
                 },
                 &mut row_y_positions,
             ),
-        ));
+        ),
+    );
 
     assert_eq!(
         transition,
@@ -883,6 +884,60 @@ fn display_row_geometry_advance_target_groups_transition_and_commit_inputs() {
     assert_eq!(row_extra_y, 15.0);
     assert_eq!(row_max_height, 16.0);
     assert_eq!(row_max_ascent, 12.0);
+    assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 15.0]);
+}
+
+#[test]
+fn display_row_geometry_advance_target_line_break_constructor_sets_kind() {
+    let mut cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
+        row: 2,
+        y: 42.0,
+        row_extra_y: 3.0,
+        height: 24.0,
+        ascent: 18.0,
+    });
+    let mut row = 0;
+    let mut y = 0.0;
+    let mut row_extra_y = 0.0;
+    let mut row_max_height = 1.0;
+    let mut row_max_ascent = 1.0;
+    let mut row_y_positions = vec![8.0];
+
+    let transition = cursor.finish_begin_and_commit_next_text_matrix_row(
+        DisplayRowGeometryAdvanceTarget::line_break(
+            DisplayRowGeometryDefaults {
+                text_y: 10.0,
+                height: 16.0,
+                ascent: 12.0,
+            },
+            5,
+            7,
+            13.0,
+            4.0,
+            DisplayRowGeometryCommitTarget::recording_row_y(
+                LegacyDisplayRowGeometryVars {
+                    row: &mut row,
+                    y: &mut y,
+                    row_extra_y: &mut row_extra_y,
+                    row_max_height: &mut row_max_height,
+                    row_max_ascent: &mut row_max_ascent,
+                },
+                &mut row_y_positions,
+            ),
+        ),
+    );
+
+    assert_eq!(
+        transition.begin_row,
+        TextMatrixRowBegin {
+            matrix_row: 8,
+            row: 3,
+            col: 7,
+            y: 10.0 + 3.0 * 16.0 + 15.0,
+            x: 13.0,
+        }
+    );
+    assert_eq!(row_extra_y, 15.0);
     assert_eq!(row_y_positions, vec![8.0, 10.0 + 3.0 * 16.0 + 15.0]);
 }
 

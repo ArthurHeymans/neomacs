@@ -636,6 +636,58 @@ impl<'a> DisplayRowGeometryAdvanceTarget<'a> {
             commit_target,
         }
     }
+
+    fn line_break(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+        commit_target: DisplayRowGeometryCommitTarget<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::LineBreak { line_spacing },
+            row_base,
+            col,
+            x,
+            commit_target,
+        )
+    }
+
+    fn truncation(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        commit_target: DisplayRowGeometryCommitTarget<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::Truncation,
+            row_base,
+            col,
+            x,
+            commit_target,
+        )
+    }
+
+    fn visual_wrap(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        commit_target: DisplayRowGeometryCommitTarget<'a>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            DisplayRowAdvanceKind::VisualWrap,
+            row_base,
+            col,
+            x,
+            commit_target,
+        )
+    }
 }
 
 impl DisplayRowGeometryState {
@@ -1872,16 +1924,16 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
             let geometry_transition = row_cursor.finish_begin_and_commit_next_text_matrix_row(
-                DisplayRowGeometryAdvanceTarget::new(
+                DisplayRowGeometryAdvanceTarget::line_break(
                     DisplayRowGeometryDefaults {
                         text_y,
                         height: char_h,
                         ascent: default_row_ascent,
                     },
-                    DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                     row_base,
                     0,
                     content_x,
+                    0.0,
                     DisplayRowGeometryCommitTarget::silent(LegacyDisplayRowGeometryVars {
                         row,
                         y,
@@ -4374,16 +4426,16 @@ impl LayoutEngine {
 
                     let geometry_transition = row_cursor
                         .finish_begin_and_commit_next_text_matrix_row(
-                            DisplayRowGeometryAdvanceTarget::new(
+                            DisplayRowGeometryAdvanceTarget::line_break(
                                 DisplayRowGeometryDefaults {
                                     text_y,
                                     height: char_h,
                                     ascent: default_face_ascent,
                                 },
-                                DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                                 text_matrix_row_base,
                                 col,
                                 x,
+                                0.0,
                                 DisplayRowGeometryCommitTarget::recording_row_y(
                                     LegacyDisplayRowGeometryVars {
                                         row: &mut row,
@@ -5018,16 +5070,16 @@ impl LayoutEngine {
                         }
                         let geometry_transition = row_cursor
                             .finish_begin_and_commit_next_text_matrix_row(
-                                DisplayRowGeometryAdvanceTarget::new(
+                                DisplayRowGeometryAdvanceTarget::line_break(
                                     DisplayRowGeometryDefaults {
                                         text_y,
                                         height: char_h,
                                         ascent: default_face_ascent,
                                     },
-                                    DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
                                     text_matrix_row_base,
                                     col,
                                     x,
+                                    0.0,
                                     DisplayRowGeometryCommitTarget::recording_row_y(
                                         LegacyDisplayRowGeometryVars {
                                             row: &mut row,
@@ -5156,16 +5208,16 @@ impl LayoutEngine {
                 // Record hit-test row (newline ends the row)
                 hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
                 let geometry_transition = row_cursor.finish_begin_and_commit_next_text_matrix_row(
-                    DisplayRowGeometryAdvanceTarget::new(
+                    DisplayRowGeometryAdvanceTarget::line_break(
                         DisplayRowGeometryDefaults {
                             text_y,
                             height: char_h,
                             ascent: default_face_ascent,
                         },
-                        DisplayRowAdvanceKind::LineBreak { line_spacing },
                         text_matrix_row_base,
                         col,
                         x,
+                        line_spacing,
                         DisplayRowGeometryCommitTarget::recording_row_y(
                             LegacyDisplayRowGeometryVars {
                                 row: &mut row,
@@ -5294,13 +5346,12 @@ impl LayoutEngine {
                         row_extend_row = -1;
                         let geometry_transition = row_cursor
                             .finish_begin_and_commit_next_text_matrix_row(
-                                DisplayRowGeometryAdvanceTarget::new(
+                                DisplayRowGeometryAdvanceTarget::truncation(
                                     DisplayRowGeometryDefaults {
                                         text_y,
                                         height: char_h,
                                         ascent: default_face_ascent,
                                     },
-                                    DisplayRowAdvanceKind::Truncation,
                                     text_matrix_row_base,
                                     col,
                                     x,
@@ -5356,13 +5407,12 @@ impl LayoutEngine {
                         row_extend_row = -1;
                         let geometry_transition = row_cursor
                             .finish_begin_and_commit_next_text_matrix_row(
-                                DisplayRowGeometryAdvanceTarget::new(
+                                DisplayRowGeometryAdvanceTarget::visual_wrap(
                                     DisplayRowGeometryDefaults {
                                         text_y,
                                         height: char_h,
                                         ascent: default_face_ascent,
                                     },
-                                    DisplayRowAdvanceKind::VisualWrap,
                                     text_matrix_row_base,
                                     col,
                                     x,
@@ -5674,13 +5724,12 @@ impl LayoutEngine {
                     row_extend_row = -1;
                     let geometry_transition = row_cursor
                         .finish_begin_and_commit_next_text_matrix_row(
-                            DisplayRowGeometryAdvanceTarget::new(
+                            DisplayRowGeometryAdvanceTarget::truncation(
                                 DisplayRowGeometryDefaults {
                                     text_y,
                                     height: char_h,
                                     ascent: default_face_ascent,
                                 },
-                                DisplayRowAdvanceKind::Truncation,
                                 text_matrix_row_base,
                                 col,
                                 x,
@@ -5743,13 +5792,12 @@ impl LayoutEngine {
                     row_extend_row = -1;
                     let geometry_transition = row_cursor
                         .finish_begin_and_commit_next_text_matrix_row(
-                            DisplayRowGeometryAdvanceTarget::new(
+                            DisplayRowGeometryAdvanceTarget::visual_wrap(
                                 DisplayRowGeometryDefaults {
                                     text_y,
                                     height: char_h,
                                     ascent: default_face_ascent,
                                 },
-                                DisplayRowAdvanceKind::VisualWrap,
                                 text_matrix_row_base,
                                 col,
                                 x,
@@ -5814,13 +5862,12 @@ impl LayoutEngine {
                     row_extend_row = -1;
                     let geometry_transition = row_cursor
                         .finish_begin_and_commit_next_text_matrix_row(
-                            DisplayRowGeometryAdvanceTarget::new(
+                            DisplayRowGeometryAdvanceTarget::visual_wrap(
                                 DisplayRowGeometryDefaults {
                                     text_y,
                                     height: char_h,
                                     ascent: default_face_ascent,
                                 },
-                                DisplayRowAdvanceKind::VisualWrap,
                                 text_matrix_row_base,
                                 col,
                                 x,
