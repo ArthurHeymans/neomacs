@@ -1449,23 +1449,19 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
     x: &mut f32,
-    y: &mut f32,
     col: &mut usize,
-    row: &mut usize,
+    geometry: &mut LegacyDisplayRowGeometryVars<'_>,
     cursor_info: &mut Option<CapturedCursorInfo>,
     hit_rows: &mut Vec<HitRow>,
     hit_row_charpos_start: &mut i64,
     anchor_charpos: i64,
     row_y_positions: &mut DisplayRowYPositions,
-    row_max_height: &mut f32,
-    row_max_ascent: &mut f32,
     face_char_w: f32,
     char_h: f32,
     default_row_ascent: f32,
     max_x: f32,
     content_x: f32,
     text_y: f32,
-    row_extra_y: &mut f32,
     row_base: usize,
     max_rows: usize,
     current_face_id: &mut u32,
@@ -1490,14 +1486,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let boundary = LegacyDisplayRowGeometryVars {
-                row,
-                y,
-                row_extra_y,
-                row_max_height,
-                row_max_ascent,
-            }
-            .finish_boundary(DisplayRowBoundaryTarget::line_break(
+            let boundary = geometry.finish_boundary_in_place(DisplayRowBoundaryTarget::line_break(
                 DisplayRowHitRange {
                     charpos_start: *hit_row_charpos_start,
                     charpos_end: anchor_charpos,
@@ -1515,19 +1504,12 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             ));
             let geometry_transition = boundary.record_hit_row(hit_rows);
             *hit_row_charpos_start = anchor_charpos;
-            if *row >= max_rows {
+            if *geometry.row >= max_rows {
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
                     .finish_and_end(geometry_transition.finished_row);
                 false
             } else {
-                LegacyDisplayRowGeometryVars {
-                    row,
-                    y,
-                    row_extra_y,
-                    row_max_height,
-                    row_max_ascent,
-                }
-                .record_current_row_y(row_y_positions);
+                geometry.record_current_row_y(row_y_positions);
                 *x = content_x;
                 *col = 0;
                 TextMatrixRowOutput::new(builder, output_emitter, evaluator)
@@ -1546,14 +1528,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     };
     let mut source_state = DisplayRowSourceState::default();
 
-    while *row < max_rows {
+    while *geometry.row < max_rows {
         if *x >= max_x {
             break;
         }
 
         let row_spec = DisplayRowSpec {
             geometry: DisplayRowGeometry {
-                y: *y,
+                y: *geometry.y,
                 width: max_x - content_x,
                 height: char_h,
                 char_width: face_char_w,
@@ -1582,26 +1564,12 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             face_resolver,
             current_face_id,
             row_spec,
-            LegacyDisplayRowGeometryVars {
-                row,
-                y,
-                row_extra_y,
-                row_max_height,
-                row_max_ascent,
-            }
-            .text_row_output(char_h),
+            geometry.text_row_output(char_h),
         ) else {
             break;
         };
         let stop = outcome.stop;
-        LegacyDisplayRowGeometryVars {
-            row,
-            y,
-            row_extra_y,
-            row_max_height,
-            row_max_ascent,
-        }
-        .include_glyph_vertical_metrics(outcome.row_height_px, outcome.row_ascent_px);
+        geometry.include_glyph_vertical_metrics(outcome.row_height_px, outcome.row_ascent_px);
         let overlay_cursor_visual_state = CapturedCursorVisualState {
             face_width: face_char_w,
             face_height: char_h,
@@ -1613,8 +1581,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 text_props.as_ref(),
                 slot,
                 cursor_info,
-                *y,
-                *row,
+                *geometry.y,
+                *geometry.row,
                 overlay_cursor_visual_state,
             );
         }
@@ -3959,23 +3927,25 @@ impl LayoutEngine {
                                     &mut self.font_metrics,
                                     face_resolver,
                                     &mut x,
-                                    &mut y,
                                     &mut col,
-                                    &mut row,
+                                    &mut LegacyDisplayRowGeometryVars {
+                                        row: &mut row,
+                                        y: &mut y,
+                                        row_extra_y: &mut row_extra_y,
+                                        row_max_height: &mut row_max_height,
+                                        row_max_ascent: &mut row_max_ascent,
+                                    },
                                     &mut cursor_info,
                                     &mut hit_rows,
                                     &mut hit_row_charpos_start,
                                     charpos,
                                     &mut row_y_positions,
-                                    &mut row_max_height,
-                                    &mut row_max_ascent,
                                     face_metrics.char_width,
                                     char_h,
                                     default_face_ascent,
                                     right_limit,
                                     content_x,
                                     text_y,
-                                    &mut row_extra_y,
                                     text_matrix_row_base,
                                     max_rows,
                                     &mut current_face_id,
@@ -5524,23 +5494,25 @@ impl LayoutEngine {
                             &mut self.font_metrics,
                             face_resolver,
                             &mut x,
-                            &mut y,
                             &mut col,
-                            &mut row,
+                            &mut LegacyDisplayRowGeometryVars {
+                                row: &mut row,
+                                y: &mut y,
+                                row_extra_y: &mut row_extra_y,
+                                row_max_height: &mut row_max_height,
+                                row_max_ascent: &mut row_max_ascent,
+                            },
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
                             charpos,
                             &mut row_y_positions,
-                            &mut row_max_height,
-                            &mut row_max_ascent,
                             face_metrics.char_width,
                             char_h,
                             default_face_ascent,
                             right_limit,
                             content_x,
                             text_y,
-                            &mut row_extra_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut current_face_id,
@@ -5641,23 +5613,25 @@ impl LayoutEngine {
                             &mut self.font_metrics,
                             face_resolver,
                             &mut x,
-                            &mut y,
                             &mut col,
-                            &mut row,
+                            &mut LegacyDisplayRowGeometryVars {
+                                row: &mut row,
+                                y: &mut y,
+                                row_extra_y: &mut row_extra_y,
+                                row_max_height: &mut row_max_height,
+                                row_max_ascent: &mut row_max_ascent,
+                            },
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_charpos_start,
                             charpos,
                             &mut row_y_positions,
-                            &mut row_max_height,
-                            &mut row_max_ascent,
                             face_metrics.char_width,
                             char_h,
                             default_face_ascent,
                             right_limit,
                             content_x,
                             text_y,
-                            &mut row_extra_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut current_face_id,
@@ -5748,23 +5722,25 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     face_resolver,
                     &mut x,
-                    &mut y,
                     &mut col,
-                    &mut row,
+                    &mut LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    },
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_charpos_start,
                     charpos,
                     &mut row_y_positions,
-                    &mut row_max_height,
-                    &mut row_max_ascent,
                     face_metrics.char_width,
                     char_h,
                     default_face_ascent,
                     right_limit,
                     content_x,
                     text_y,
-                    &mut row_extra_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut current_face_id,
@@ -5786,23 +5762,25 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     face_resolver,
                     &mut x,
-                    &mut y,
                     &mut col,
-                    &mut row,
+                    &mut LegacyDisplayRowGeometryVars {
+                        row: &mut row,
+                        y: &mut y,
+                        row_extra_y: &mut row_extra_y,
+                        row_max_height: &mut row_max_height,
+                        row_max_ascent: &mut row_max_ascent,
+                    },
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_charpos_start,
                     charpos,
                     &mut row_y_positions,
-                    &mut row_max_height,
-                    &mut row_max_ascent,
                     face_metrics.char_width,
                     char_h,
                     default_face_ascent,
                     right_limit,
                     content_x,
                     text_y,
-                    &mut row_extra_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut current_face_id,

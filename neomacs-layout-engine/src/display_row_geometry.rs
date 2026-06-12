@@ -143,6 +143,36 @@ impl LegacyDisplayRowGeometryVars<'_> {
         }
     }
 
+    pub(crate) fn finish_boundary_in_place(
+        &mut self,
+        target: DisplayRowBoundaryTarget<'_>,
+    ) -> DisplayRowBoundaryTransition {
+        let mut row_cursor = DisplayRowGeometryCursor::from_state(
+            DisplayRowGeometryState::from_legacy(self.snapshot()),
+        );
+        let hit_row =
+            row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
+        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
+            target.transition.defaults,
+            target.transition.kind,
+            target.transition.row_base,
+            target.transition.col,
+            target.transition.x,
+        );
+        let state = row_cursor.state();
+        self.apply(state);
+        match target.transition.row_y_recording {
+            DisplayRowYRecording::None => {}
+            DisplayRowYRecording::RowYPositions(row_y_positions) => {
+                row_y_positions.push(state.y);
+            }
+        }
+        DisplayRowBoundaryTransition {
+            hit_row,
+            transition,
+        }
+    }
+
     pub(crate) fn finish_boundary(
         self,
         target: DisplayRowBoundaryTarget<'_>,
