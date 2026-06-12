@@ -424,6 +424,43 @@ enum WaitProcessService {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+struct WaitBlockActivity {
+    input_wakeup: bool,
+    process_service: WaitProcessService,
+}
+
+impl WaitBlockActivity {
+    fn poll() -> Self {
+        Self {
+            input_wakeup: false,
+            process_service: WaitProcessService::Poll,
+        }
+    }
+
+    fn ready_processes(processes: Vec<ProcessId>) -> Self {
+        Self {
+            input_wakeup: false,
+            process_service: WaitProcessService::Ready(processes),
+        }
+    }
+
+    fn from_backend_events(events: WaitBackendEvents) -> Self {
+        Self {
+            input_wakeup: events.has_input_wakeup(),
+            process_service: WaitProcessService::Ready(events.into_ready_processes()),
+        }
+    }
+
+    fn has_input_wakeup(&self) -> bool {
+        self.input_wakeup
+    }
+
+    fn into_process_service(self) -> WaitProcessService {
+        self.process_service
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum WaitBlockStrategy {
     ServiceNow,
     Backend(WaitBackendInterest),
@@ -446,6 +483,18 @@ impl super::eval::Context {
         ready_processes: Vec<ProcessId>,
     ) -> Result<WaitServiceOutcome, Flow> {
         self.service_wait_request_processes(request, WaitProcessService::Ready(ready_processes))
+    }
+
+    fn service_wait_request_block_activity(
+        &mut self,
+        request: &WaitRequest,
+        activity: WaitBlockActivity,
+    ) -> Result<WaitServiceOutcome, Flow> {
+        if activity.has_input_wakeup() {
+            self.clear_input_wakeup_fd();
+            let _ = self.stage_next_host_input_event_if_available()?;
+        }
+        self.service_wait_request_processes(request, activity.into_process_service())
     }
 
     fn service_wait_request_processes(
@@ -513,41 +562,32 @@ impl super::eval::Context {
             }
 
             let wait_time = self.next_wait_request_timeout(&request, now);
-            match self.wait_block_strategy(&request, wait_time) {
-                WaitBlockStrategy::ServiceNow => {
-                    outcome = self.service_wait_request_once(&request)?;
-                }
+            let activity = match self.wait_block_strategy(&request, wait_time) {
+                WaitBlockStrategy::ServiceNow => WaitBlockActivity::poll(),
                 WaitBlockStrategy::Backend(interest) => {
                     let backend = self
                         .processes
                         .wait_for_backend_events(wait_time, interest)
                         .unwrap_or_default();
-                    if backend.has_input_wakeup() {
-                        self.clear_input_wakeup_fd();
-                        let _ = self.stage_next_host_input_event_if_available()?;
-                    }
-                    outcome = self.service_wait_request_ready_processes(
-                        &request,
-                        backend.into_ready_processes(),
-                    )?;
+                    WaitBlockActivity::from_backend_events(backend)
                 }
                 WaitBlockStrategy::HostInput => {
                     let _ = self.wait_for_next_host_input_event(
                         wait_time,
                         request.keyboard.sets_waiting_for_user_input(),
                     )?;
-                    outcome = self.service_wait_request_once(&request)?;
+                    WaitBlockActivity::poll()
                 }
                 WaitBlockStrategy::ProcessOutput => {
                     let ready_processes = self.processes.wait_for_output(wait_time);
-                    outcome =
-                        self.service_wait_request_ready_processes(&request, ready_processes)?;
+                    WaitBlockActivity::ready_processes(ready_processes)
                 }
                 WaitBlockStrategy::Sleep => {
                     std::thread::sleep(wait_time);
-                    outcome = self.service_wait_request_ready_processes(&request, Vec::new())?;
+                    WaitBlockActivity::ready_processes(Vec::new())
                 }
-            }
+            };
+            outcome = self.service_wait_request_block_activity(&request, activity)?;
 
             if let Some(completion) = request.completion_for(outcome) {
                 return Ok(WaitOutcome {
@@ -675,5 +715,31 @@ mod tests {
 
         assert!(!events.has_input_wakeup());
         assert_eq!(events.ready_processes(), &[7]);
+    }
+
+    #[test]
+    fn block_activity_from_backend_events_preserves_wakeup_and_processes() {
+        let mut events = WaitBackendEvents::default();
+        events.record_input_wakeup();
+        events.record_ready_process(3);
+
+        let activity = WaitBlockActivity::from_backend_events(events);
+
+        assert!(activity.has_input_wakeup());
+        assert_eq!(
+            activity.into_process_service(),
+            WaitProcessService::Ready(vec![3])
+        );
+    }
+
+    #[test]
+    fn block_activity_from_ready_processes_has_no_input_wakeup() {
+        let activity = WaitBlockActivity::ready_processes(vec![4, 9]);
+
+        assert!(!activity.has_input_wakeup());
+        assert_eq!(
+            activity.into_process_service(),
+            WaitProcessService::Ready(vec![4, 9])
+        );
     }
 }
