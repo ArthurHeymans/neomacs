@@ -277,6 +277,51 @@ extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
     }) as i64
 }
 
+/// Read a variable from JIT code (`Op::VarRef` semantics via
+/// `Vm::varref_for_jit`). Writes the value through `out` and returns
+/// [`STATUS_OK`], or stashes the `Flow` (e.g. `void-variable`) and returns
+/// [`STATUS_SIGNAL`]. SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64 {
+    use crate::emacs_core::intern::SymId;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let mut vm = Vm::from_context(ctx);
+    match vm.varref_for_jit(SymId(sym as u32)) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    }
+}
+
+/// Assign a variable from JIT code (`Op::VarSet` semantics via
+/// `Vm::varset_for_jit`; may run variable watchers — arbitrary lisp). Roots the
+/// value across the assignment. SAFETY: same vmctx contract as
+/// [`neovm_jit_call`].
+extern "C" fn neovm_jit_varset(ctx: *mut u8, sym: i64, val: i64) -> i64 {
+    use crate::emacs_core::intern::SymId;
+    let value = Value::from_bits(val as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(value);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let mut vm = Vm::from_context(ctx);
+    let status = match vm.varset_for_jit(SymId(sym as u32), value) {
+        Ok(()) => STATUS_OK,
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
 /// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
@@ -422,6 +467,20 @@ fn op_category(op: &Op) -> &'static str {
         Op::StackSet(_) | Op::DiscardN(_) => "stack-mutate",
         _ => "other",
     }
+}
+
+/// Resolve the `SymId` a `VarRef`/`VarSet` operand names, at compile time —
+/// mirrors the interpreter's `sym_id_at` (symbol or symbol-with-pos), except
+/// that exotic constants bail to the interpreter instead of falling back to
+/// `nil`.
+fn const_sym_id(constants: &[Value], idx: u16) -> Result<u32, CompileError> {
+    let v = constants
+        .get(idx as usize)
+        .ok_or(CompileError::BadOperand)?;
+    v.as_symbol_id()
+        .or_else(|| v.as_symbol_with_pos_sym().and_then(|s| s.as_symbol_id()))
+        .map(|id| id.0)
+        .ok_or(CompileError::BadOperand)
 }
 
 /// True iff this function's parameters are pushed onto the operand stack at
@@ -774,6 +833,8 @@ struct RtRefs {
     apply: FuncRef,
     eq_slow: FuncRef,
     symbolp_slow: FuncRef,
+    varref: FuncRef,
+    varset: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -828,6 +889,20 @@ fn declare_rt_refs(
     let apply_id = declare(module, "neovm_jit_apply", &sig_call)?;
     let eq_id = declare(module, "neovm_jit_eq_slow", &sig_eq)?;
     let symp_id = declare(module, "neovm_jit_symbolp_slow", &sig_symp)?;
+    // (vmctx, sym_id, out_ptr) -> status
+    let mut sig_varref = Signature::new(call_conv);
+    sig_varref.params.push(AbiParam::new(ptr_ty));
+    sig_varref.params.push(AbiParam::new(i64t));
+    sig_varref.params.push(AbiParam::new(ptr_ty));
+    sig_varref.returns.push(AbiParam::new(i64t));
+    // (vmctx, sym_id, val) -> status
+    let mut sig_varset = Signature::new(call_conv);
+    sig_varset.params.push(AbiParam::new(ptr_ty));
+    sig_varset.params.push(AbiParam::new(i64t));
+    sig_varset.params.push(AbiParam::new(i64t));
+    sig_varset.returns.push(AbiParam::new(i64t));
+    let varref_id = declare(module, "neovm_jit_varref", &sig_varref)?;
+    let varset_id = declare(module, "neovm_jit_varset", &sig_varset)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -838,6 +913,8 @@ fn declare_rt_refs(
         apply: module.declare_func_in_func(apply_id, func),
         eq_slow: module.declare_func_in_func(eq_id, func),
         symbolp_slow: module.declare_func_in_func(symp_id, func),
+        varref: module.declare_func_in_func(varref_id, func),
+        varset: module.declare_func_in_func(varset_id, func),
     })
 }
 
@@ -1024,6 +1101,70 @@ fn lower_simple_op(
             let is_cdr = matches!(op, Op::Cdr);
             stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
         }
+        Op::VarRef(idx) => {
+            // Read through the runtime's variable machinery (buffer-locals,
+            // redirects); can signal void-variable. Reads are idempotent, so
+            // this neither poisons nor guards.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let sym = const_sym_id(constants, *idx)?;
+            // Root live stack values: variable access may allocate.
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let call = fb.ins().call(rt.refs.varref, &[vmctx, sym_v, out_addr]);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
+        Op::VarSet(idx) => {
+            // Assign through the runtime (may run variable watchers — arbitrary
+            // lisp — and signal). A side effect: poisons later guards.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let sym = const_sym_id(constants, *idx)?;
+            let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let call = fb.ins().call(rt.refs.varset, &[vmctx, sym_v, val]);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+        }
         Op::Call(n) | Op::Apply(n) => {
             // `rt` is always present here (`needs_rt` includes Call/Apply).
             // Stack: [func a1 .. aN] -> [result], mirroring the interpreter's
@@ -1147,6 +1288,8 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::Cons => (2, -1),
         // [func a1 .. aN] -> [result]
         Op::Call(n) | Op::Apply(n) => (*n as usize + 1, -(*n as i64)),
+        Op::VarRef(_) => (0, 1),
+        Op::VarSet(_) => (1, -1),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1362,7 +1505,7 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     if cur as usize > max_depth {
                         max_depth = cur as usize;
                     }
-                    if matches!(other, Op::Call(_) | Op::Apply(_)) {
+                    if matches!(other, Op::Call(_) | Op::Apply(_) | Op::VarSet(_)) {
                         poisoned = true;
                     }
                 }
@@ -1431,14 +1574,23 @@ pub fn lower_leaf(
         "neovm_jit_symbolp_slow",
         neovm_jit_symbolp_slow as *const u8,
     );
+    builder.symbol("neovm_jit_varref", neovm_jit_varref as *const u8);
+    builder.symbol("neovm_jit_varset", neovm_jit_varset as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
-    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims.
+    // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
+    // VarRef/VarSet re-enter the runtime's variable machinery.
     let needs_rt = ops.iter().any(|o| {
         matches!(
             o,
-            Op::Cons | Op::Call(_) | Op::Apply(_) | Op::Eq | Op::Symbolp
+            Op::Cons
+                | Op::Call(_)
+                | Op::Apply(_)
+                | Op::Eq
+                | Op::Symbolp
+                | Op::VarRef(_)
+                | Op::VarSet(_)
         )
     });
 
@@ -2175,13 +2327,70 @@ mod tests {
 
     #[test]
     fn bails_on_unsupported_op() {
-        // VarRef is not in the supported subset -> refuse, do not miscompile.
+        // VarBind (dynamic binding) is not in the supported subset -> refuse.
         let err = lower_nullary_leaf(
-            &[Op::VarRef(0), Op::Return],
+            &[Op::Nil, Op::VarBind(0), Op::Nil, Op::Return],
             &[Value::symbol("jit-test-var")],
         )
         .unwrap_err();
         assert!(matches!(err, CompileError::UnsupportedOp("variable")));
+    }
+
+    #[test]
+    fn compiles_varref_and_varset() {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let var = Value::symbol("jit-test-dynvar");
+        let crate::emacs_core::value::ValueKind::Symbol(var_id) = var.kind() else {
+            panic!("symbol expected");
+        };
+        ev.obarray.set_symbol_value_id(var_id, Value::make_int(33));
+
+        // VarRef reads the live value.
+        let read = lower_nullary_leaf(&[Op::VarRef(0), Op::Return], &[var]).unwrap();
+        assert_eq!(
+            read.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(33).bits())
+        );
+
+        // VarSet stores; read back through the runtime.
+        let write = lower_nullary_leaf(
+            &[Op::Constant(1), Op::VarSet(0), Op::Nil, Op::Return],
+            &[var, Value::make_int(44)],
+        )
+        .unwrap();
+        assert_eq!(write.call(ctx_ptr, &[]), NativeRun::Ok(Value::NIL.bits()));
+        assert_eq!(
+            read.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(44).bits()),
+            "VarSet must be visible to a subsequent VarRef"
+        );
+
+        // Reading an unbound variable signals (void-variable) -> Signal.
+        let unbound = Value::symbol("jit-test-unbound-var");
+        let bad = lower_nullary_leaf(&[Op::VarRef(0), Op::Return], &[unbound]).unwrap();
+        assert_eq!(bad.call(ctx_ptr, &[]), NativeRun::Signal);
+        assert!(take_pending_flow().is_some());
+    }
+
+    #[test]
+    fn guard_after_varset_bails() {
+        // VarSet is a side effect: a later deopt guard would rerun it.
+        let err = lower_nullary_leaf(
+            &[
+                Op::Constant(1),
+                Op::VarSet(0),
+                Op::Constant(1),
+                Op::Add1,
+                Op::Return,
+            ],
+            &[Value::symbol("jit-test-poison-var"), Value::make_int(1)],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("guard-after-call")
+        ));
     }
 
     #[test]

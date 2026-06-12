@@ -4082,6 +4082,22 @@ impl<'a> Vm<'a> {
         self.ctx.unbind_to_with_result(bt_count, result)
     }
 
+    /// Read a (dynamic/global) variable for JIT code with the interpreter's
+    /// `Op::VarRef` semantics — delegates to the same `fast_path_var_ref`
+    /// (Plainval fast path, buffer-locals, redirects; signals `void-variable`).
+    #[cfg(feature = "jit")]
+    pub(crate) fn varref_for_jit(&mut self, name_id: SymId) -> EvalResult {
+        self.fast_path_var_ref(name_id)
+    }
+
+    /// Assign a (dynamic/global) variable for JIT code with the interpreter's
+    /// `Op::VarSet` semantics — delegates to the same `assign_var_id` (may run
+    /// variable watchers, i.e. arbitrary lisp; may signal).
+    #[cfg(feature = "jit")]
+    pub(crate) fn varset_for_jit(&mut self, name_id: SymId, value: Value) -> Result<(), Flow> {
+        self.assign_var_id(name_id, value)
+    }
+
     /// One bytecode-level `apply` with the interpreter's `Op::Apply` semantics:
     /// spread the last argument as a list, writeback detection + after-call
     /// writeback, and the plain traced `call_function` path (`Op::Apply` has no

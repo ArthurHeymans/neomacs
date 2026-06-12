@@ -123,9 +123,9 @@ mod tests {
 
     #[test]
     fn returns_none_for_noncompilable_body() {
-        // VarRef is unsupported -> NotCompilable -> None (interpreter fallback).
+        // VarBind is unsupported -> NotCompilable -> None (interpreter fallback).
         let f = nullary_fn(
-            vec![Op::VarRef(0), Op::Return],
+            vec![Op::Nil, Op::VarBind(0), Op::Nil, Op::Return],
             vec![Value::symbol("jit-cache-test-var")],
         );
         assert_eq!(
