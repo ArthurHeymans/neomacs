@@ -196,6 +196,45 @@ impl DisplayTextRunMeasurement {
     }
 }
 
+pub(crate) struct DisplayTextRunMeasurer {
+    face_id: u32,
+    measurement: DisplayTextRunMeasurement,
+}
+
+impl DisplayTextRunMeasurer {
+    pub(crate) fn new(face_id: u32, measurement: DisplayTextRunMeasurement) -> Self {
+        Self {
+            face_id,
+            measurement,
+        }
+    }
+}
+
+impl DisplayGlyphMeasurer for DisplayTextRunMeasurer {
+    fn glyph_advance_px(
+        &mut self,
+        _ch: char,
+        _face_id: u32,
+        _columns: u8,
+        _fallback_advance_px: f32,
+    ) -> Option<f32> {
+        None
+    }
+
+    fn text_run_advances_px(
+        &mut self,
+        _text: &str,
+        face_id: u32,
+        _fallback_char_width_px: f32,
+    ) -> DisplayTextRunMeasurement {
+        if face_id == self.face_id {
+            self.measurement.clone()
+        } else {
+            DisplayTextRunMeasurement::PerChar
+        }
+    }
+}
+
 pub(crate) trait DisplayRowItemMeasurer {
     fn measurement_for<'a>(
         &'a mut self,

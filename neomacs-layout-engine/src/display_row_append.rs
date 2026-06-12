@@ -19,7 +19,7 @@ use crate::display_row::{
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus,
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics,
-    DisplayTabPolicy, DisplayTextRunMeasurement,
+    DisplayTabPolicy, DisplayTextRunMeasurement, DisplayTextRunMeasurer,
 };
 #[cfg(test)]
 use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
@@ -78,45 +78,6 @@ impl DisplayRowRenderPolicy for MeasuredDisplayRowRenderPolicy<'_> {
         _face_id: u32,
     ) -> DisplayRowItemMeasurement<'a> {
         DisplayRowItemMeasurement::Measured(&mut *self.glyph_measurer)
-    }
-}
-
-struct TextRunMeasurementMeasurer {
-    face_id: u32,
-    measurement: DisplayTextRunMeasurement,
-}
-
-impl TextRunMeasurementMeasurer {
-    fn new(face_id: u32, measurement: DisplayTextRunMeasurement) -> Self {
-        Self {
-            face_id,
-            measurement,
-        }
-    }
-}
-
-impl DisplayGlyphMeasurer for TextRunMeasurementMeasurer {
-    fn glyph_advance_px(
-        &mut self,
-        _ch: char,
-        _face_id: u32,
-        _columns: u8,
-        _fallback_advance_px: f32,
-    ) -> Option<f32> {
-        None
-    }
-
-    fn text_run_advances_px(
-        &mut self,
-        _text: &str,
-        face_id: u32,
-        _fallback_char_width_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        if face_id == self.face_id {
-            self.measurement.clone()
-        } else {
-            DisplayTextRunMeasurement::PerChar
-        }
     }
 }
 
@@ -565,7 +526,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut next_face_id = face_id.saturating_add(1);
-    let mut measurer = TextRunMeasurementMeasurer::new(face_id, measurement);
+    let mut measurer = DisplayTextRunMeasurer::new(face_id, measurement);
     let mut render_policy = MeasuredDisplayRowRenderPolicy {
         glyph_measurer: &mut measurer,
     };
@@ -1316,7 +1277,7 @@ pub(crate) fn append_synthetic_text_to_display_row(
     let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face);
     match measurement {
         Some(measurement) => {
-            let mut measurer = TextRunMeasurementMeasurer::new(face_id, measurement);
+            let mut measurer = DisplayTextRunMeasurer::new(face_id, measurement);
             let mut render_policy = MeasuredDisplayRowRenderPolicy {
                 glyph_measurer: &mut measurer,
             };

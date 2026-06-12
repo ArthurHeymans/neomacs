@@ -515,6 +515,20 @@ fn display_text_run_measurement_builds_uniform_advances_for_text() {
 }
 
 #[test]
+fn display_text_run_measurer_returns_measurement_for_matching_face() {
+    let measurement =
+        DisplayTextRunMeasurement::Measured(vec![DisplayTextRunAdvance::new(0, 0, 8.0)]);
+    let mut measurer = DisplayTextRunMeasurer::new(7, measurement.clone());
+
+    assert_eq!(measurer.text_run_advances_px("x", 7, 9.0), measurement);
+    assert_eq!(
+        measurer.text_run_advances_px("x", 8, 9.0),
+        DisplayTextRunMeasurement::PerChar
+    );
+    assert_eq!(measurer.glyph_advance_px('x', 7, 1, 9.0), None);
+}
+
+#[test]
 fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(mapped_text_item("\\ "));
