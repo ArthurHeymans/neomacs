@@ -728,6 +728,10 @@ impl super::eval::Context {
         }
     }
 
+    pub(crate) fn wait_until(&mut self, deadline: Instant) -> Result<WaitCompletion, Flow> {
+        self.wait_reading_process_output(WaitRequest::sleep_until(deadline))
+    }
+
     fn block_for_wait_request(
         &mut self,
         request: &WaitRequest,
