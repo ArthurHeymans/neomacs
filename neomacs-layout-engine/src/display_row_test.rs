@@ -117,6 +117,41 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
 }
 
 #[test]
+fn display_row_resolved_measured_face_installs_render_and_measurement_identity() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut font_metrics = None;
+    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let face = base_face();
+
+    let realized = policy.resolved_measured_face(
+        12,
+        face,
+        Some(FontMetrics {
+            ascent: 11.0,
+            descent: 4.0,
+            line_height: 15.0,
+            char_width: 7.5,
+        }),
+        7.0,
+        DisplayRowFallbackMetrics {
+            char_width: 7.0,
+            row_height: 14.0,
+            ascent: 10.0,
+        },
+        &mut font_metrics,
+    );
+
+    realized.install_into(&mut builder);
+
+    let rendered = builder.faces().get(&12).expect("installed face");
+    assert_eq!(realized.face_id(), 12);
+    assert_eq!(realized.measured_face().face_id(), 12);
+    assert_eq!(rendered.id, 12);
+    assert_eq!(rendered.font_ascent, 11);
+    assert_eq!(rendered.font_descent, 4);
+}
+
+#[test]
 fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let _eval = Context::new();
     let mut font_metrics = None;

@@ -524,6 +524,30 @@ impl DisplayRowMeasurementPolicy {
             space_width,
         }
     }
+
+    pub(crate) fn resolved_measured_face(
+        self,
+        face_id: u32,
+        face: ResolvedFace,
+        metrics: Option<FontMetrics>,
+        fallback_char_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowResolvedMeasuredFace {
+        let measured_face = self.measured_face(
+            face_id,
+            &face,
+            metrics,
+            fallback_char_width,
+            fallback_metrics,
+            font_metrics,
+        );
+        DisplayRowResolvedMeasuredFace {
+            face,
+            metrics,
+            measured_face,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -669,6 +693,35 @@ impl DisplayRowMeasuredFace {
 
     pub(crate) fn ascent(&self) -> f32 {
         self.ascent
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayRowResolvedMeasuredFace {
+    face: ResolvedFace,
+    metrics: Option<FontMetrics>,
+    measured_face: DisplayRowMeasuredFace,
+}
+
+impl DisplayRowResolvedMeasuredFace {
+    pub(crate) fn face_id(&self) -> u32 {
+        self.measured_face.face_id()
+    }
+
+    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
+        &self.face
+    }
+
+    pub(crate) fn measured_face(&self) -> &DisplayRowMeasuredFace {
+        &self.measured_face
+    }
+
+    pub(crate) fn into_measurement_face(self) -> DisplayRowGlyphMeasurementFace {
+        self.measured_face.into_measurement_face()
+    }
+
+    pub(crate) fn install_into(&self, builder: &mut GlyphMatrixBuilder) {
+        insert_resolved_display_row_face(builder, self.face_id(), &self.face, self.metrics);
     }
 }
 

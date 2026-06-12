@@ -3425,10 +3425,9 @@ impl LayoutEngine {
                     _current_fg = fg;
                     let bg = Color::from_pixel(resolved.bg);
                     current_bg = bg;
-                    current_resolved_face = resolved.clone();
-                    let measured_face = measurement_policy.measured_face(
+                    let resolved_measured_face = measurement_policy.resolved_measured_face(
                         face_id,
-                        &resolved,
+                        resolved.clone(),
                         metrics,
                         char_w,
                         DisplayRowFallbackMetrics {
@@ -3438,12 +3437,12 @@ impl LayoutEngine {
                         },
                         &mut self.font_metrics,
                     );
+                    current_resolved_face = resolved_measured_face.resolved_face().clone();
+                    let measured_face = resolved_measured_face.measured_face();
                     face_char_w = measured_face.char_width();
                     face_h = measured_face.row_height();
                     face_ascent_val = measured_face.ascent();
                     face_space_w = measured_face.space_width();
-                    let measured_face_id = measured_face.face_id();
-                    current_measurement_face = measured_face.into_measurement_face();
 
                     if face_h > row_max_height {
                         row_max_height = face_h;
@@ -3452,12 +3451,8 @@ impl LayoutEngine {
                         row_max_ascent = face_ascent_val;
                     }
 
-                    insert_resolved_display_row_face(
-                        &mut self.matrix_builder,
-                        measured_face_id,
-                        &resolved,
-                        metrics,
-                    );
+                    resolved_measured_face.install_into(&mut self.matrix_builder);
+                    current_measurement_face = resolved_measured_face.into_measurement_face();
                     current_face_id += 1;
 
                     if resolved.extend {
