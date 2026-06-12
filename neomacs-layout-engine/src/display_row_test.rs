@@ -1467,6 +1467,21 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
 }
 
 #[test]
+fn display_row_measurement_policy_builds_faces_from_frame_mode() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let tty_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let gui_policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let mut font_metrics = None;
+
+    let tty_face = tty_policy.measurement_face(8, &base, None, 7.2);
+    let gui_face = gui_policy.measurement_face(8, &base, None, 7.2);
+
+    assert_eq!(tty_face.advance_for_char(&mut font_metrics, '.', 7.2), 7.0);
+    assert_eq!(gui_face.advance_for_char(&mut font_metrics, '.', 7.2), 7.2);
+}
+
+#[test]
 fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();

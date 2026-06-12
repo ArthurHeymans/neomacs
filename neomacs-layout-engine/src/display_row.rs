@@ -436,29 +436,109 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowMeasurementMode {
+    FontMetrics,
+    FallbackMetrics,
+}
+
+impl DisplayRowMeasurementMode {
+    pub(crate) fn from_frame_window_system(window_system: bool) -> Self {
+        if window_system {
+            Self::FontMetrics
+        } else {
+            Self::FallbackMetrics
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_font_metrics_enabled(enabled: bool) -> Self {
+        if enabled {
+            Self::FontMetrics
+        } else {
+            Self::FallbackMetrics
+        }
+    }
+
+    fn uses_font_metrics(self) -> bool {
+        matches!(self, Self::FontMetrics)
+    }
+
+    fn quantization(self) -> GlyphAdvanceQuantization {
+        match self {
+            Self::FontMetrics => GlyphAdvanceQuantization::PreserveLogicalPixels,
+            Self::FallbackMetrics => GlyphAdvanceQuantization::SnapToIntegerPixels,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DisplayRowMeasurementPolicy {
+    mode: DisplayRowMeasurementMode,
+}
+
+impl DisplayRowMeasurementPolicy {
+    pub(crate) fn for_frame(window_system: bool) -> Self {
+        Self {
+            mode: DisplayRowMeasurementMode::from_frame_window_system(window_system),
+        }
+    }
+
+    pub(crate) fn measurement_face(
+        self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+        fallback_char_width: f32,
+    ) -> DisplayRowGlyphMeasurementFace {
+        DisplayRowGlyphMeasurementFace::with_mode(
+            resolved_display_row_face(face_id, face, metrics),
+            self.mode,
+            fallback_char_width,
+            self.mode.quantization(),
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowGlyphMeasurementFace {
     face: DisplayRowFace,
-    use_font_metrics: bool,
+    mode: DisplayRowMeasurementMode,
     fallback_char_width: f32,
     quantization: GlyphAdvanceQuantization,
 }
 
 impl DisplayRowGlyphMeasurementFace {
+    #[cfg(test)]
     pub(crate) fn new(
         face: DisplayRowFace,
         use_font_metrics: bool,
         fallback_char_width: f32,
         quantization: GlyphAdvanceQuantization,
     ) -> Self {
+        Self::with_mode(
+            face,
+            DisplayRowMeasurementMode::from_font_metrics_enabled(use_font_metrics),
+            fallback_char_width,
+            quantization,
+        )
+    }
+
+    pub(crate) fn with_mode(
+        face: DisplayRowFace,
+        mode: DisplayRowMeasurementMode,
+        fallback_char_width: f32,
+        quantization: GlyphAdvanceQuantization,
+    ) -> Self {
         Self {
             face,
-            use_font_metrics,
+            mode,
             fallback_char_width,
             quantization,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn from_resolved(
         face_id: u32,
         face: &ResolvedFace,
@@ -466,17 +546,10 @@ impl DisplayRowGlyphMeasurementFace {
         use_font_metrics: bool,
         fallback_char_width: f32,
     ) -> Self {
-        let quantization = if use_font_metrics {
-            GlyphAdvanceQuantization::PreserveLogicalPixels
-        } else {
-            GlyphAdvanceQuantization::SnapToIntegerPixels
-        };
-        Self::new(
-            resolved_display_row_face(face_id, face, metrics),
-            use_font_metrics,
-            fallback_char_width,
-            quantization,
-        )
+        DisplayRowMeasurementPolicy {
+            mode: DisplayRowMeasurementMode::from_font_metrics_enabled(use_font_metrics),
+        }
+        .measurement_face(face_id, face, metrics, fallback_char_width)
     }
 
     pub(crate) fn glyph_advance_px(
@@ -487,7 +560,7 @@ impl DisplayRowGlyphMeasurementFace {
         fallback_advance_px: f32,
     ) -> f32 {
         let faces = [self.face.clone()];
-        let font_metrics = if self.use_font_metrics {
+        let font_metrics = if self.mode.uses_font_metrics() {
             font_metrics.as_mut()
         } else {
             None
@@ -521,7 +594,7 @@ impl DisplayRowGlyphMeasurementFace {
         font_metrics: &mut Option<FontMetricsService>,
         text: &str,
     ) -> DisplayTextRunMeasurement {
-        if !self.use_font_metrics {
+        if !self.mode.uses_font_metrics() {
             return DisplayTextRunMeasurement::PerChar;
         }
         let faces = [self.face.clone()];

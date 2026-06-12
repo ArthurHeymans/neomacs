@@ -23,10 +23,11 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurementFace,
-    DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
-    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
-    install_measured_frame_chrome_row, install_rendered_display_row,
+    DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
+    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -3108,12 +3109,12 @@ impl LayoutEngine {
         let mut _current_fg: Color = default_fg; // tracks foreground across face changes
         let mut current_bg: Color = default_bg; // tracks background across face changes
         let mut current_resolved_face = default_resolved.clone();
+        let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
 
-        let default_measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+        let default_measurement_face = measurement_policy.measurement_face(
             current_text_face_id,
             default_resolved,
             None,
-            frame_params.window_system,
             char_w,
         );
         face_space_w =
@@ -3437,13 +3438,8 @@ impl LayoutEngine {
                     current_bg = bg;
                     current_resolved_face = resolved.clone();
                     current_text_face_id = face_id;
-                    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
-                        face_id,
-                        &resolved,
-                        metrics,
-                        frame_params.window_system,
-                        char_w,
-                    );
+                    let measurement_face =
+                        measurement_policy.measurement_face(face_id, &resolved, metrics, char_w);
                     face_space_w = measurement_face.glyph_advance_px(
                         &mut self.font_metrics,
                         ' ',
@@ -3700,11 +3696,10 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                        let measurement_face = measurement_policy.measurement_face(
                             current_text_face_id,
                             &current_resolved_face,
                             None,
-                            frame_params.window_system,
                             face_char_w,
                         );
                         let ellipsis_frame = text_append_surface.frame(
@@ -3992,14 +3987,12 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    let measurement_face =
-                                        DisplayRowGlyphMeasurementFace::from_resolved(
-                                            current_text_face_id,
-                                            &current_resolved_face,
-                                            None,
-                                            frame_params.window_system,
-                                            face_char_w,
-                                        );
+                                    let measurement_face = measurement_policy.measurement_face(
+                                        current_text_face_id,
+                                        &current_resolved_face,
+                                        None,
+                                        face_char_w,
+                                    );
                                     measurement_face.advance_for_char(
                                         &mut self.font_metrics,
                                         rch,
@@ -4105,14 +4098,12 @@ impl LayoutEngine {
                                         default_row_height: char_h,
                                     },
                                 );
-                                let measurement_face =
-                                    DisplayRowGlyphMeasurementFace::from_resolved(
-                                        current_text_face_id,
-                                        &current_resolved_face,
-                                        None,
-                                        frame_params.window_system,
-                                        face_char_w,
-                                    );
+                                let measurement_face = measurement_policy.measurement_face(
+                                    current_text_face_id,
+                                    &current_resolved_face,
+                                    None,
+                                    face_char_w,
+                                );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
                                     measurement_face,
@@ -4146,11 +4137,10 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                        let measurement_face = measurement_policy.measurement_face(
                             current_text_face_id,
                             &current_resolved_face,
                             None,
-                            frame_params.window_system,
                             face_char_w,
                         );
                         let display_char_width = measurement_face.advance_for_char(
@@ -4452,11 +4442,10 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                let measurement_face = measurement_policy.measurement_face(
                     current_text_face_id,
                     &current_resolved_face,
                     None,
-                    frame_params.window_system,
                     face_char_w,
                 );
                 let ellipsis_frame = text_append_surface.frame(
@@ -5099,11 +5088,10 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                    let measurement_face = measurement_policy.measurement_face(
                         current_text_face_id,
                         &current_resolved_face,
                         None,
-                        frame_params.window_system,
                         face_char_w,
                     );
                     let measurement =
@@ -5128,11 +5116,10 @@ impl LayoutEngine {
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
                     None => {
-                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                        let measurement_face = measurement_policy.measurement_face(
                             current_text_face_id,
                             &current_resolved_face,
                             None,
-                            frame_params.window_system,
                             face_char_w,
                         );
                         measurement_face.advance_for_char(
@@ -5143,11 +5130,10 @@ impl LayoutEngine {
                     }
                 }
             } else {
-                let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                let measurement_face = measurement_policy.measurement_face(
                     current_text_face_id,
                     &current_resolved_face,
                     None,
-                    frame_params.window_system,
                     face_char_w,
                 );
                 measurement_face.advance_for_char(
@@ -5473,11 +5459,10 @@ impl LayoutEngine {
                 CharPos0::new((charpos + 1) as usize),
             );
             let mut ch_text = [0; 4];
-            let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+            let measurement_face = measurement_policy.measurement_face(
                 current_text_face_id,
                 &current_resolved_face,
                 None,
-                frame_params.window_system,
                 face_char_w,
             );
             let measurement = measurement_face
