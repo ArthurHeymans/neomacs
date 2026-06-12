@@ -415,6 +415,26 @@ impl DisplayRowGlyphMeasurementFace {
         }
     }
 
+    pub(crate) fn from_resolved(
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+        use_font_metrics: bool,
+        fallback_char_width: f32,
+    ) -> Self {
+        let quantization = if use_font_metrics {
+            GlyphAdvanceQuantization::PreserveLogicalPixels
+        } else {
+            GlyphAdvanceQuantization::SnapToIntegerPixels
+        };
+        Self::new(
+            resolved_display_row_face(face_id, face, metrics),
+            use_font_metrics,
+            fallback_char_width,
+            quantization,
+        )
+    }
+
     pub(crate) fn glyph_advance_px(
         &self,
         font_metrics: &mut Option<FontMetricsService>,

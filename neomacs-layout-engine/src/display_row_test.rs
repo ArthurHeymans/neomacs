@@ -1386,6 +1386,20 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
 }
 
 #[test]
+fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
+    let mut base = base_face();
+    base.font_char_width = 7.2;
+    let measurement_face =
+        DisplayRowGlyphMeasurementFace::from_resolved(8, &base, None, false, 7.2);
+    let mut font_metrics = None;
+
+    assert_eq!(
+        measurement_face.advance_for_char(&mut font_metrics, '.', 7.2),
+        7.0
+    );
+}
+
+#[test]
 fn display_row_baseline_tab_bar_preserves_lisp_string_face_properties() {
     let _eval = Context::new();
     let rendered = Value::string_with_text_properties(

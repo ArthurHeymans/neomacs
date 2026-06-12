@@ -2599,28 +2599,6 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
         false,
         face_font_size,
     );
-    let cached_ascii = engine
-        .ascii_width_cache
-        .iter()
-        .find_map(|(key, widths)| {
-            (key.family == "JetBrains Mono"
-                && key.weight == 800
-                && !key.italic
-                && key.font_size == face_font_size.round() as i32)
-                .then_some(*widths)
-        })
-        .expect("cached JetBrains Mono widths");
-
-    assert!(
-        (cached_ascii['a' as usize] - expected_a).abs() <= 1.0,
-        "expected cached width for 'a' to match FontMetricsService, got {} vs expected {expected_a:.3}",
-        cached_ascii['a' as usize]
-    );
-    assert!(
-        (cached_ascii['b' as usize] - expected_b).abs() <= 1.0,
-        "expected cached width for 'b' to match FontMetricsService, got {} vs expected {expected_b:.3}",
-        cached_ascii['b' as usize]
-    );
     assert_point_width_matches_advance(a, expected_a, "inline face a", &all_points);
     assert_point_width_matches_advance(hao1, expected_hao, "inline face first 好", &all_points);
     assert_point_width_matches_advance(hao2, expected_hao, "inline face second 好", &all_points);
@@ -6423,98 +6401,53 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
 }
 
 #[test]
-fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
-    let mut ascii_width_cache = std::collections::HashMap::new();
+fn display_row_measurement_face_distinguishes_semantic_font_identity() {
     let mut font_metrics_svc = Some(FontMetricsService::new());
+    let regular = crate::neovm_bridge::ResolvedFace {
+        font_family: "monospace".to_string(),
+        font_size: 14.0,
+        font_weight: 400,
+        font_char_width: 8.0,
+        ..Default::default()
+    };
+    let bold = crate::neovm_bridge::ResolvedFace {
+        font_weight: 700,
+        ..regular.clone()
+    };
+    let regular_face = DisplayRowGlyphMeasurementFace::from_resolved(42, &regular, None, true, 8.0);
+    let bold_face = DisplayRowGlyphMeasurementFace::from_resolved(43, &bold, None, true, 8.0);
 
-    let regular_width = char_advance(
-        &mut ascii_width_cache,
-        true,
-        &mut font_metrics_svc,
-        'A',
-        1,
-        8.0,
-        14,
-        8.0,
-        "monospace",
-        400,
-        false,
-    );
+    let regular_width = regular_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
+    let bold_width = bold_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
+    let repeated_regular_width = regular_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
+
     assert!(
         regular_width > 0.0,
         "expected measurable width for regular ASCII glyph"
-    );
-    assert_eq!(
-        ascii_width_cache.len(),
-        1,
-        "expected one cache entry after first ASCII measurement"
-    );
-
-    let bold_width = char_advance(
-        &mut ascii_width_cache,
-        true,
-        &mut font_metrics_svc,
-        'A',
-        1,
-        8.0,
-        14,
-        8.0,
-        "monospace",
-        700,
-        false,
     );
     assert!(
         bold_width > 0.0,
         "expected measurable width for bold ASCII glyph"
     );
     assert_eq!(
-        ascii_width_cache.len(),
-        2,
-        "expected distinct cache entries for different semantic font specs even when face ids match"
-    );
-
-    let repeated_regular_width = char_advance(
-        &mut ascii_width_cache,
-        true,
-        &mut font_metrics_svc,
-        'A',
-        1,
-        8.0,
-        14,
-        8.0,
-        "monospace",
-        400,
-        false,
-    );
-    assert_eq!(
         repeated_regular_width, regular_width,
-        "expected repeated measurement for the same semantic font spec to reuse the cache entry"
-    );
-    assert_eq!(
-        ascii_width_cache.len(),
-        2,
-        "expected cache size to stay stable when the semantic font spec is unchanged"
+        "expected repeated measurement for the same semantic font spec to be stable"
     );
 }
 
 #[test]
-fn char_advance_preserves_fractional_gui_cell_width_without_font_metrics() {
-    let mut ascii_width_cache = std::collections::HashMap::new();
+fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font_metrics() {
+    let resolved = crate::neovm_bridge::ResolvedFace {
+        font_family: "JetBrainsMono Nerd Font".to_string(),
+        font_size: 12.0,
+        font_char_width: 7.2,
+        ..Default::default()
+    };
+    let current_face =
+        DisplayRowGlyphMeasurementFace::from_resolved(42, &resolved, None, true, 7.2);
     let mut font_metrics_svc = None;
 
-    let width = char_advance(
-        &mut ascii_width_cache,
-        true,
-        &mut font_metrics_svc,
-        'x',
-        1,
-        7.2,
-        12,
-        7.2,
-        "JetBrainsMono Nerd Font",
-        400,
-        false,
-    );
+    let width = current_face.advance_for_char(&mut font_metrics_svc, 'x', 7.2);
 
     assert_eq!(width, 7.2);
 }

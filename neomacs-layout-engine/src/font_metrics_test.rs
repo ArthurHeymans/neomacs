@@ -1215,9 +1215,9 @@ fn two_fontsystems_identical_for_combining_marks() {
 //
 // Simulates a line like:  normal(14px) LARGE(28px) small(10px) bold(14px)
 // Each character has a different face with different font_size/weight.
-// The layout engine calls char_advance() per-character, switching
-// face_data between calls. Verify that rapid switching between
-// sizes/weights/families produces identical results in both systems.
+// The layout engine measures each displayed glyph through its current
+// display face. Verify that rapid switching between sizes/weights/families
+// produces identical results in both systems.
 // ---------------------------------------------------------------
 
 /// Simulate a line with mixed face attributes, as the layout engine

@@ -5,7 +5,7 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
-use super::font_metrics::{FontMetrics, FontMetricsService};
+use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
 use super::types::*;
@@ -26,7 +26,7 @@ use crate::display_row::{
     DisplayRowOutputProgress, DisplayRowOwner, DisplayRowRenderBounds, DisplayRowRenderStop,
     DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow,
     RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
-    install_measured_frame_chrome_row, install_rendered_display_row, resolved_display_row_face,
+    install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
@@ -47,7 +47,6 @@ use crate::display_source::{
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
-use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -686,45 +685,6 @@ fn resolve_cursor_geometry(
         style,
         color,
         cursor_fg: source.cursor_fg,
-    }
-}
-
-fn display_row_glyph_measurement_face(
-    face_id: u32,
-    face: &crate::neovm_bridge::ResolvedFace,
-    metrics: Option<FontMetrics>,
-    use_font_metrics: bool,
-    fallback_char_width: f32,
-) -> DisplayRowGlyphMeasurementFace {
-    let quantization = if use_font_metrics {
-        GlyphAdvanceQuantization::PreserveLogicalPixels
-    } else {
-        GlyphAdvanceQuantization::SnapToIntegerPixels
-    };
-    DisplayRowGlyphMeasurementFace::new(
-        resolved_display_row_face(face_id, face, metrics),
-        use_font_metrics,
-        fallback_char_width,
-        quantization,
-    )
-}
-
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
-struct AsciiWidthCacheKey {
-    family: String,
-    weight: u16,
-    italic: bool,
-    font_size: i32,
-}
-
-impl AsciiWidthCacheKey {
-    fn new(family: &str, weight: u16, italic: bool, font_size: i32) -> Self {
-        Self {
-            family: family.to_string(),
-            weight,
-            italic,
-            font_size,
-        }
     }
 }
 
@@ -1554,9 +1514,6 @@ fn capture_overlay_string_cursor(
 pub struct LayoutEngine {
     /// Reusable text buffer to avoid allocation per frame
     text_buf: Vec<u8>,
-    /// Per-font ASCII width cache: actual glyph widths via cosmic-text.
-    /// Key: semantic font identity, Value: advance widths for chars 0-127.
-    ascii_width_cache: std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
     /// Hit-test data being built for current frame
     hit_data: Vec<WindowHitData>,
     /// Authoritative visible glyph geometry published back into core state.
@@ -1565,14 +1522,6 @@ pub struct LayoutEngine {
     run_buf: LigatureRunBuffer,
     /// Whether ligatures are enabled
     pub ligatures_enabled: bool,
-    /// Resolved font family name for the current face.
-    /// When a font_file_path is available and cosmic-text metrics are active,
-    /// this holds the fontdb-registered family name. Otherwise it mirrors
-    /// the Emacs font_family. Avoids per-character String allocation.
-    current_resolved_family: String,
-    /// Face ID for which current_resolved_family was computed.
-    /// Used to avoid re-resolving on every character.
-    resolved_family_face_id: u32,
     /// Cosmic-text font metrics service.
     ///
     /// Populated by `enable_cosmic_metrics()` at GUI startup. Left
@@ -1655,13 +1604,10 @@ impl LayoutEngine {
     pub fn new() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024), // 64KB initial
-            ascii_width_cache: std::collections::HashMap::new(),
             hit_data: Vec::new(),
             display_snapshots: Vec::new(),
             run_buf: LigatureRunBuffer::new(),
             ligatures_enabled: false,
-            current_resolved_family: String::new(),
-            resolved_family_face_id: u32::MAX,
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -1684,13 +1630,10 @@ impl LayoutEngine {
     pub fn new_without_font_metrics() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024),
-            ascii_width_cache: std::collections::HashMap::new(),
             hit_data: Vec::new(),
             display_snapshots: Vec::new(),
             run_buf: LigatureRunBuffer::new(),
             ligatures_enabled: false,
-            current_resolved_family: String::new(),
-            resolved_family_face_id: u32::MAX,
             font_metrics: None,
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -3178,21 +3121,15 @@ impl LayoutEngine {
         let mut current_font_size_px = default_resolved.font_size.max(1.0).round() as i32;
         let mut current_resolved_face = default_resolved.clone();
 
-        self.current_resolved_family = current_font_family.clone();
-        self.resolved_family_face_id = 0;
-        face_space_w = char_advance(
-            &mut self.ascii_width_cache,
+        let default_measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+            current_text_face_id,
+            default_resolved,
+            None,
             frame_params.window_system,
-            &mut self.font_metrics,
-            ' ',
-            1,
             char_w,
-            current_font_size_px,
-            face_char_w,
-            &self.current_resolved_family,
-            current_font_weight,
-            current_font_italic,
         );
+        face_space_w =
+            default_measurement_face.advance_for_char(&mut self.font_metrics, ' ', face_char_w);
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -3488,10 +3425,8 @@ impl LayoutEngine {
                     };
                     if let Some(m) = metrics {
                         // face_char_w is the canonical column width for the
-                        // default face ('m' advance).  Per-character advance
-                        // for non-ASCII glyphs is measured individually via
-                        // char_pixel_advance() below — matching GNU's
-                        // get_per_char_metric(font, &char2b).
+                        // current face. Per-character advances are measured
+                        // through DisplayRowGlyphMeasurementFace below.
                         face_char_w = m.char_width;
                         face_h = m.line_height;
                         face_ascent_val = m.ascent;
@@ -3522,19 +3457,12 @@ impl LayoutEngine {
                     current_font_size_px = resolved.font_size.max(1.0).round() as i32;
                     current_resolved_face = resolved.clone();
                     current_text_face_id = face_id;
-                    self.current_resolved_family = current_font_family.clone();
-                    self.resolved_family_face_id = face_id;
-                    let display_row_face = resolved_display_row_face(face_id, &resolved, metrics);
-                    let advance_quantization = if frame_params.window_system {
-                        GlyphAdvanceQuantization::PreserveLogicalPixels
-                    } else {
-                        GlyphAdvanceQuantization::SnapToIntegerPixels
-                    };
-                    let measurement_face = DisplayRowGlyphMeasurementFace::new(
-                        display_row_face,
+                    let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                        face_id,
+                        &resolved,
+                        metrics,
                         frame_params.window_system,
                         char_w,
-                        advance_quantization,
                     );
                     face_space_w = measurement_face.glyph_advance_px(
                         &mut self.font_metrics,
@@ -3792,7 +3720,7 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let measurement_face = display_row_glyph_measurement_face(
+                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
                             current_text_face_id,
                             &current_resolved_face,
                             None,
@@ -4088,30 +4016,19 @@ impl LayoutEngine {
                                 .chars()
                                 .next()
                                 .map(|rch| {
-                                    let rch_cols = if is_cluster_extender(rch) {
-                                        0
-                                    } else if is_wide_char(rch) {
-                                        2
-                                    } else {
-                                        1
-                                    };
-                                    if rch_cols == 0 {
-                                        0.0
-                                    } else {
-                                        char_pixel_advance(
-                                            &mut self.ascii_width_cache,
+                                    let measurement_face =
+                                        DisplayRowGlyphMeasurementFace::from_resolved(
+                                            current_text_face_id,
+                                            &current_resolved_face,
+                                            None,
                                             frame_params.window_system,
-                                            &mut self.font_metrics,
-                                            rch,
-                                            rch_cols,
-                                            char_w,
-                                            current_font_size_px,
                                             face_char_w,
-                                            &self.current_resolved_family,
-                                            current_font_weight,
-                                            current_font_italic,
-                                        )
-                                    }
+                                        );
+                                    measurement_face.advance_for_char(
+                                        &mut self.font_metrics,
+                                        rch,
+                                        face_char_w,
+                                    )
                                 })
                                 .unwrap_or_else(|| char_w.max(1.0));
                             capture_cursor_info(
@@ -4212,21 +4129,14 @@ impl LayoutEngine {
                                         default_row_height: char_h,
                                     },
                                 );
-                                let advance_quantization = if frame_params.window_system {
-                                    GlyphAdvanceQuantization::PreserveLogicalPixels
-                                } else {
-                                    GlyphAdvanceQuantization::SnapToIntegerPixels
-                                };
-                                let measurement_face = DisplayRowGlyphMeasurementFace::new(
-                                    resolved_display_row_face(
+                                let measurement_face =
+                                    DisplayRowGlyphMeasurementFace::from_resolved(
                                         current_text_face_id,
                                         &current_resolved_face,
                                         None,
-                                    ),
-                                    frame_params.window_system,
-                                    face_char_w,
-                                    advance_quantization,
-                                );
+                                        frame_params.window_system,
+                                        face_char_w,
+                                    );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
                                     measurement_face,
@@ -4261,30 +4171,18 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Space(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_ch_cols = if is_cluster_extender(display_ch) {
-                            0
-                        } else if is_wide_char(display_ch) {
-                            2
-                        } else {
-                            1
-                        };
-                        let display_char_width = if display_ch_cols == 0 {
-                            0.0
-                        } else {
-                            char_pixel_advance(
-                                &mut self.ascii_width_cache,
-                                frame_params.window_system,
-                                &mut self.font_metrics,
-                                display_ch,
-                                display_ch_cols,
-                                char_w,
-                                current_font_size_px,
-                                face_char_w,
-                                &self.current_resolved_family,
-                                current_font_weight,
-                                current_font_italic,
-                            )
-                        };
+                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                            current_text_face_id,
+                            &current_resolved_face,
+                            None,
+                            frame_params.window_system,
+                            face_char_w,
+                        );
+                        let display_char_width = measurement_face.advance_for_char(
+                            &mut self.font_metrics,
+                            display_ch,
+                            face_char_w,
+                        );
                         let space_geometry = eval_display_space_geometry(
                             &prop_val,
                             x,
@@ -4579,7 +4477,7 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let measurement_face = display_row_glyph_measurement_face(
+                let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
                     current_text_face_id,
                     &current_resolved_face,
                     None,
@@ -5227,7 +5125,7 @@ impl LayoutEngine {
                             break;
                         }
                     }
-                    let fam = self.current_resolved_family.clone();
+                    let fam = current_font_family.clone();
                     let shaped = self
                         .font_metrics
                         .as_mut()
@@ -5271,33 +5169,33 @@ impl LayoutEngine {
                     Some(a) => a,
                     // Not cached (shaping unavailable / no font): fall back to
                     // the isolated-form width.
-                    None => char_advance(
-                        &mut self.ascii_width_cache,
-                        frame_params.window_system,
-                        &mut self.font_metrics,
-                        ch,
-                        char_cols as i32,
-                        char_w,
-                        current_font_size_px,
-                        face_char_w,
-                        &self.current_resolved_family,
-                        current_font_weight,
-                        current_font_italic,
-                    ),
+                    None => {
+                        let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                            current_text_face_id,
+                            &current_resolved_face,
+                            None,
+                            frame_params.window_system,
+                            face_char_w,
+                        );
+                        measurement_face.advance_for_char(
+                            &mut self.font_metrics,
+                            ch,
+                            face_char_w * char_cols as f32,
+                        )
+                    }
                 }
             } else {
-                char_advance(
-                    &mut self.ascii_width_cache,
+                let measurement_face = DisplayRowGlyphMeasurementFace::from_resolved(
+                    current_text_face_id,
+                    &current_resolved_face,
+                    None,
                     frame_params.window_system,
+                    face_char_w,
+                );
+                measurement_face.advance_for_char(
                     &mut self.font_metrics,
                     ch,
-                    char_cols as i32,
-                    char_w,
-                    current_font_size_px,
-                    face_char_w,
-                    &self.current_resolved_family,
-                    current_font_weight,
-                    current_font_italic,
+                    face_char_w * char_cols as f32,
                 )
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
@@ -7138,104 +7036,6 @@ impl LayoutEngine {
         all.extend(child_frames);
         all
     }
-}
-
-/// Per-character pixel advance wrapper, matching GNU's `get_per_char_metric`.
-/// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
-#[inline(always)]
-fn char_pixel_advance(
-    ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
-    use_font_metrics: bool,
-    font_metrics_svc: &mut Option<FontMetricsService>,
-    ch: char,
-    char_cols: i32,
-    char_w: f32,
-    font_size: i32,
-    face_char_w: f32,
-    font_family: &str,
-    font_weight: u16,
-    font_italic: bool,
-) -> f32 {
-    char_advance(
-        ascii_width_cache,
-        use_font_metrics,
-        font_metrics_svc,
-        ch,
-        char_cols,
-        char_w,
-        font_size,
-        face_char_w,
-        font_family,
-        font_weight,
-        font_italic,
-    )
-}
-
-/// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
-///
-/// Uses `FontMetricsService` only for window-system frames, matching GNU's
-/// split between GUI redisplay and terminal cell redisplay.
-fn char_advance(
-    ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
-    use_font_metrics: bool,
-    font_metrics_svc: &mut Option<FontMetricsService>,
-    ch: char,
-    char_cols: i32,
-    char_w: f32,
-    font_size: i32,
-    face_char_w: f32,
-    font_family: &str,
-    font_weight: u16,
-    font_italic: bool,
-) -> f32 {
-    // Use the face-specific character width when available (handles
-    // faces with :height attribute that use a differently-sized font).
-    let face_w = if face_char_w > 0.0 {
-        face_char_w
-    } else {
-        char_w
-    };
-    if char_cols <= 0 {
-        return 0.0;
-    }
-    let min_grid_advance = char_cols as f32 * face_w;
-    let quantization = if use_font_metrics {
-        GlyphAdvanceQuantization::PreserveLogicalPixels
-    } else {
-        GlyphAdvanceQuantization::SnapToIntegerPixels
-    };
-
-    // TTY redisplay uses character-cell metrics even if this test/engine
-    // instance owns a GUI font service for another frame.
-    if !use_font_metrics {
-        return quantization.quantize(min_grid_advance, min_grid_advance);
-    }
-
-    let svc = match font_metrics_svc.as_mut() {
-        Some(svc) => svc,
-        None => return quantization.quantize(min_grid_advance, min_grid_advance),
-    };
-    let font_size_f = if font_size > 0 {
-        font_size as f32
-    } else {
-        face_w.max(1.0)
-    };
-    let cp = ch as u32;
-    if cp < 128 {
-        let cache_key = AsciiWidthCacheKey::new(font_family, font_weight, font_italic, font_size);
-        let widths = ascii_width_cache.entry(cache_key).or_insert_with(|| {
-            let mut widths =
-                svc.fill_ascii_widths(font_family, font_weight, font_italic, font_size_f);
-            for w in &mut widths {
-                *w = quantization.resolve(Some(*w), min_grid_advance, min_grid_advance);
-            }
-            widths
-        });
-        return widths[cp as usize];
-    }
-
-    let measured = svc.char_width(ch, font_family, font_weight, font_italic, font_size_f);
-    quantization.resolve(Some(measured), min_grid_advance, min_grid_advance)
 }
 
 #[cfg(test)]
