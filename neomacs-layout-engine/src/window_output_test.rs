@@ -7,7 +7,6 @@ use super::TextMatrixRowTransition;
 use super::TextRowOutput;
 use super::WindowOutputEmitter;
 use super::begin_text_matrix_row;
-use super::finish_and_maybe_begin_text_matrix_row;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -425,26 +424,21 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         },
     );
 
-    let transition = finish_and_maybe_begin_text_matrix_row(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
-                y: 0.0,
-                height: 16.0,
-                ascent: 12.0,
-            },
-            begin_row: TextMatrixRowBegin {
-                matrix_row: 1,
-                row: 1,
-                col: 0,
-                y: 16.0,
-                x: 0.0,
-            },
+    let transition = TextMatrixRowGeometryTransition {
+        finished_row: TextMatrixRowMetrics {
+            y: 0.0,
+            height: 16.0,
+            ascent: 12.0,
         },
-        1,
-    );
+        begin_row: TextMatrixRowBegin {
+            matrix_row: 1,
+            row: 1,
+            col: 0,
+            y: 16.0,
+            x: 0.0,
+        },
+    }
+    .emit_with_row_limit(&mut builder, &mut emitter, &mut eval, 1);
 
     assert_eq!(transition, TextMatrixRowTransition::ExhaustedRows);
     assert_eq!(emitter.rows().len(), 1);

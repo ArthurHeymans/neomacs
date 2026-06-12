@@ -13,8 +13,7 @@ use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
     TextMatrixRowMetrics, TextRowOutput, WindowOutputEmitter, begin_text_matrix_row,
-    finish_and_begin_text_matrix_row, finish_and_maybe_begin_text_matrix_row,
-    finish_text_matrix_row,
+    finish_and_begin_text_matrix_row, finish_text_matrix_row,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -4448,11 +4447,10 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = finish_and_maybe_begin_text_matrix_row(
+                    let row_transition = geometry_transition.emit_with_row_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
                         max_rows,
                     );
                     if row_transition.is_exhausted() {
@@ -5092,11 +5090,10 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                        let row_transition = geometry_transition.emit_with_row_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
                             max_rows,
                         );
                         if row_transition.is_exhausted() {
@@ -5230,11 +5227,10 @@ impl LayoutEngine {
                         ),
                     ),
                 );
-                let row_transition = finish_and_maybe_begin_text_matrix_row(
+                let row_transition = geometry_transition.emit_with_row_limit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    geometry_transition,
                     max_rows,
                 );
                 if row_transition.is_exhausted() {
@@ -5367,11 +5363,10 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                        let row_transition = geometry_transition.emit_with_row_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
                             max_rows,
                         );
                         if row_transition.is_exhausted() {
@@ -5428,11 +5423,10 @@ impl LayoutEngine {
                                     ),
                                 ),
                             );
-                        let row_transition = finish_and_maybe_begin_text_matrix_row(
+                        let row_transition = geometry_transition.emit_with_row_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
                             max_rows,
                         );
                         if row_transition.is_exhausted() {
@@ -5745,11 +5739,10 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = finish_and_maybe_begin_text_matrix_row(
+                    let row_transition = geometry_transition.emit_with_row_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
                         max_rows,
                     );
                     if row_transition.is_exhausted() {
@@ -5813,11 +5806,10 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = finish_and_maybe_begin_text_matrix_row(
+                    let row_transition = geometry_transition.emit_with_row_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
                         max_rows,
                     );
                     if row_transition.is_exhausted() {
@@ -5883,11 +5875,10 @@ impl LayoutEngine {
                                 ),
                             ),
                         );
-                    let row_transition = finish_and_maybe_begin_text_matrix_row(
+                    let row_transition = geometry_transition.emit_with_row_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
                         max_rows,
                     );
                     if row_transition.is_exhausted() {
