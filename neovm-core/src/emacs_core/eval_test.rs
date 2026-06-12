@@ -12543,6 +12543,103 @@ fn jit_switch_through_funcall_seam() {
     }
 }
 
+/// End-to-end: the named-builtin escape hatch (`CallBuiltin`/`CallBuiltinSym`)
+/// and `Aset` compile and run natively, matching the interpreter — including
+/// the override-aware path (a redefined builtin's function cell is honored by
+/// CallBuiltin and deliberately bypassed by CallBuiltinSym, GNU parity).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_named_builtins_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk = |ops: Vec<Op>, consts: Vec<Value>, hot: bool| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = consts;
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // (lambda (x) (length x)) via the constants-pool escape hatch.
+    let cb = |hot| {
+        mk(
+            vec![Op::StackRef(0), Op::CallBuiltin(0, 1), Op::Return],
+            vec![Value::symbol("length")],
+            hot,
+        )
+    };
+    // Same via the symbol-encoded variant.
+    let cbs = |hot| {
+        mk(
+            vec![
+                Op::StackRef(0),
+                Op::CallBuiltinSym(crate::emacs_core::intern::intern("length"), 1),
+                Op::Return,
+            ],
+            vec![],
+            hot,
+        )
+    };
+    for f in [&cb as &dyn Fn(bool) -> Value, &cbs] {
+        let hot = f(true);
+        let cold = f(false);
+        for arg in [Value::string("hello"), Value::NIL] {
+            let native = ev
+                .funcall_general_untraced(hot, vec![arg])
+                .expect("native named builtin runs");
+            let interp = ev
+                .funcall_general_untraced(cold, vec![arg])
+                .expect("interpreted named builtin runs");
+            assert_eq!(native, interp, "named builtin must match the interpreter");
+        }
+        // Signal parity: (length 5) is a wrong-type-argument both ways.
+        assert!(
+            ev.funcall_general_untraced(hot, vec![Value::make_int(5)])
+                .is_err()
+        );
+    }
+
+    // Aset differential: (lambda (v) (aset v 0 7) v).
+    let aset = |hot| {
+        mk(
+            vec![
+                Op::StackRef(0), // v
+                Op::StackRef(1), // v (for the return)
+                Op::Constant(0), // 0
+                Op::Constant(1), // 7
+                Op::Aset,        // -> 7
+                Op::Pop,
+                Op::Return, // v
+            ],
+            vec![Value::make_int(0), Value::make_int(7)],
+            hot,
+        )
+    };
+    let native_vec = Value::vector(vec![Value::make_int(1)]);
+    let interp_vec = Value::vector(vec![Value::make_int(1)]);
+    let r1 = ev
+        .funcall_general_untraced(aset(true), vec![native_vec])
+        .expect("native aset runs");
+    let r2 = ev
+        .funcall_general_untraced(aset(false), vec![interp_vec])
+        .expect("interpreted aset runs");
+    use crate::emacs_core::print::print_value;
+    assert_eq!(print_value(&r1), "[7]");
+    assert_eq!(print_value(&r1), print_value(&r2));
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

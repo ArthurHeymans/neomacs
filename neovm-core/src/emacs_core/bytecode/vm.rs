@@ -4106,6 +4106,89 @@ impl<'a> Vm<'a> {
     /// `maybe_quit` first and roots `func_val` + `raw_args` (the spread values
     /// stay reachable through the rooted list).
     #[cfg(feature = "jit")]
+    /// `Op::Aset` for JIT code — the interpreter arm minus the bc-frame
+    /// rooting (the JIT shim scratch-roots the operands; nested calls root
+    /// their own frames): override-aware named dispatch when `aset`'s
+    /// function cell was redefined, the shared `builtin_aset` otherwise, then
+    /// the unconditional string-writeback pass.
+    pub(crate) fn aset_for_jit(
+        &mut self,
+        vec_val: Value,
+        idx_val: Value,
+        val: Value,
+    ) -> EvalResult {
+        let mut call_args = LispArgVec::new();
+        call_args.push(vec_val);
+        call_args.push(idx_val);
+        call_args.push(val);
+        let id = Self::builtin_name_id("aset");
+        let result = if self.named_builtin_fast_path_allowed_id(id) {
+            builtins::builtin_aset(call_args.clone().into_vec())?
+        } else {
+            let func_val = Value::from_sym_id(id);
+            self.call_function(func_val, call_args.clone())?
+        };
+        let root_scope = self.ctx.save_vm_roots();
+        self.push_dynamic_vm_root(result);
+        for value in call_args.iter().copied() {
+            self.push_dynamic_vm_root(value);
+        }
+        self.maybe_writeback_mutating_first_arg("aset", None, &call_args, &result);
+        self.ctx.restore_vm_roots(root_scope);
+        Ok(result)
+    }
+
+    /// `Op::CallBuiltin` for JIT code — the interpreter arm minus the
+    /// bc-frame rooting: named fast path when the symbol's function cell is
+    /// unmodified, full `call_function` (override/advice) otherwise, the
+    /// mutating-first-arg string writeback, and the arm's trailing quit poll.
+    pub(crate) fn callbuiltin_for_jit(&mut self, name_id: SymId, args: LispArgVec) -> EvalResult {
+        let name = resolve_sym(name_id);
+        let writeback_args = (args.first().is_some_and(|value| value.is_string())
+            && Self::mutates_first_arg_name(name))
+        .then(|| args.clone());
+        let result = if self.named_builtin_fast_path_allowed_id(name_id) {
+            self.dispatch_vm_builtin(name, args)?
+        } else {
+            let func_val = Value::from_sym_id(name_id);
+            self.call_function(func_val, args)?
+        };
+        if let Some(writeback_args) = writeback_args.as_ref() {
+            let root_scope = self.ctx.save_vm_roots();
+            self.push_dynamic_vm_root(result);
+            for value in writeback_args.iter().copied() {
+                self.push_dynamic_vm_root(value);
+            }
+            self.maybe_writeback_mutating_first_arg(name, None, writeback_args, &result);
+            self.ctx.restore_vm_roots(root_scope);
+        }
+        self.ctx.maybe_quit()?;
+        Ok(result)
+    }
+
+    /// `Op::CallBuiltinSym` for JIT code — ALWAYS the direct named dispatch,
+    /// never the function cell (GNU parity: bytecode-inlined primitives
+    /// bypass advice; see the interpreter arm's comment), plus writeback and
+    /// the trailing quit poll.
+    pub(crate) fn callbuiltinsym_for_jit(&mut self, sym: SymId, args: LispArgVec) -> EvalResult {
+        let name = resolve_sym(sym);
+        let writeback_args = (args.first().is_some_and(|value| value.is_string())
+            && Self::mutates_first_arg_name(name))
+        .then(|| args.clone());
+        let result = self.dispatch_vm_builtin(name, args)?;
+        if let Some(writeback_args) = writeback_args.as_ref() {
+            let root_scope = self.ctx.save_vm_roots();
+            self.push_dynamic_vm_root(result);
+            for value in writeback_args.iter().copied() {
+                self.push_dynamic_vm_root(value);
+            }
+            self.maybe_writeback_mutating_first_arg(name, None, writeback_args, &result);
+            self.ctx.restore_vm_roots(root_scope);
+        }
+        self.ctx.maybe_quit()?;
+        Ok(result)
+    }
+
     pub(crate) fn apply_for_jit(
         &mut self,
         func_val: Value,
