@@ -52,6 +52,7 @@ use super::backend::BackendError;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::value::Value;
+use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
     FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING,
 };
@@ -413,6 +414,51 @@ fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> Cl
     fb.ins().select(cond, t, nil)
 }
 
+/// Lower `car`/`cdr` with exact interpreter parity: a cons yields the loaded
+/// field, nil yields nil, and anything else deopts (the interpreter signals
+/// `wrong-type-argument`). Non-allocating; reading a cons field needs no SATB
+/// barrier (the barrier is on writes), and there is no GC safepoint here.
+fn lower_car_cdr(
+    fb: &mut FunctionBuilder,
+    deopt: &mut Option<Block>,
+    is_cdr: bool,
+    a: ClifValue,
+) -> ClifValue {
+    let tag = fb.ins().band_imm(a, TAG_MASK as i64);
+    let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
+    let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
+    let valid = fb.ins().bor(is_cons, is_nil);
+    emit_guard(fb, deopt, valid);
+
+    // Branch: cons -> load the field; nil -> nil. The result flows through a
+    // fresh SSA variable (Cranelift inserts the phi at the merge).
+    let res = fb.declare_var(types::I64);
+    let cons_blk = fb.create_block();
+    let nil_blk = fb.create_block();
+    let merge = fb.create_block();
+    fb.ins().brif(is_cons, cons_blk, &[], nil_blk, &[]);
+
+    fb.switch_to_block(cons_blk);
+    let ptr = fb.ins().band_imm(a, !(TAG_MASK as i64));
+    let offset = if is_cdr {
+        core::mem::offset_of!(ConsCell, cdr_or_next)
+    } else {
+        core::mem::offset_of!(ConsCell, car)
+    };
+    let field = fb
+        .ins()
+        .load(types::I64, MemFlags::trusted(), ptr, offset as i32);
+    fb.def_var(res, field);
+    fb.ins().jump(merge, &[]);
+
+    fb.switch_to_block(nil_blk);
+    fb.def_var(res, a); // nil -> nil (a already holds nil)
+    fb.ins().jump(merge, &[]);
+
+    fb.switch_to_block(merge);
+    fb.use_var(res)
+}
+
 /// Lower a no-argument straight-line leaf body. Thin wrapper over [`lower_leaf`]
 /// kept for the existing call sites/tests.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
@@ -527,6 +573,11 @@ fn lower_simple_op(
             };
             stack.push(lower_predicate(fb, kind, a));
         }
+        Op::Car | Op::Cdr => {
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let is_cdr = matches!(op, Op::Cdr);
+            stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
+        }
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     }
     Ok(())
@@ -555,6 +606,7 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         }
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => (1, 0),
+        Op::Car | Op::Cdr => (1, 0),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
@@ -1470,6 +1522,63 @@ mod tests {
         assert_eq!(pred(Op::Listp, cons), t);
         assert_eq!(pred(Op::Listp, Value::NIL), t);
         assert_eq!(pred(Op::Listp, Value::make_int(5)), nil);
+    }
+
+    #[test]
+    fn compiles_car_cdr() {
+        // No GC safepoint in the JIT call, so the cons local stays alive across it.
+        let cons = Value::cons(Value::make_int(11), Value::make_int(22));
+        let car_ops = [Op::Constant(0), Op::Car, Op::Return];
+        let cdr_ops = [Op::Constant(0), Op::Cdr, Op::Return];
+
+        // car/cdr of a cons load the fields; differential vs the interpreter.
+        assert_eq!(
+            lower_nullary_leaf(&car_ops, &[cons]).unwrap().call(&[]),
+            Some(interp_nullary(&car_ops, &[cons]).bits())
+        );
+        assert_eq!(
+            lower_nullary_leaf(&cdr_ops, &[cons]).unwrap().call(&[]),
+            Some(interp_nullary(&cdr_ops, &[cons]).bits())
+        );
+        assert_eq!(
+            lower_nullary_leaf(&car_ops, &[cons]).unwrap().call(&[]),
+            Some(Value::make_int(11).bits())
+        );
+        assert_eq!(
+            lower_nullary_leaf(&cdr_ops, &[cons]).unwrap().call(&[]),
+            Some(Value::make_int(22).bits())
+        );
+
+        // car/cdr of nil -> nil.
+        assert_eq!(
+            lower_nullary_leaf(&car_ops, &[Value::NIL])
+                .unwrap()
+                .call(&[]),
+            Some(Value::NIL.bits())
+        );
+        assert_eq!(
+            lower_nullary_leaf(&cdr_ops, &[Value::NIL])
+                .unwrap()
+                .call(&[]),
+            Some(Value::NIL.bits())
+        );
+
+        // car of a non-list -> deopt (interpreter signals wrong-type-argument).
+        assert_eq!(
+            lower_nullary_leaf(&car_ops, &[Value::make_int(5)])
+                .unwrap()
+                .call(&[]),
+            None
+        );
+
+        // Chained: (car (cdr (11 22))) = 22.
+        let list = Value::cons(
+            Value::make_int(11),
+            Value::cons(Value::make_int(22), Value::NIL),
+        );
+        let cadr =
+            lower_nullary_leaf(&[Op::Constant(0), Op::Cdr, Op::Car, Op::Return], &[list]).unwrap();
+        assert_eq!(cadr.call(&[]), Some(Value::make_int(22).bits()));
     }
 
     #[test]
