@@ -3123,7 +3123,7 @@ impl LayoutEngine {
         let mut active_face_state =
             DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
         face_metrics = active_face_state.metrics();
-        let default_measurement_state = active_face_state.measurement_state().clone();
+        let default_face_state = active_face_state.clone();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -3877,8 +3877,8 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement = default_measurement_state
-                            .text_run_measurement(&mut self.font_metrics, "$");
+                        let measurement =
+                            default_face_state.text_run_measurement(&mut self.font_metrics, "$");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4063,10 +4063,7 @@ impl LayoutEngine {
                                 );
                                 let mut item_measurer = ReplacementStringItemMeasurer {
                                     font_metrics_svc: &mut self.font_metrics,
-                                    measurement_face: active_face_state
-                                        .measurement_state()
-                                        .measurement_face()
-                                        .clone(),
+                                    measurement_face: active_face_state.measurement_face().clone(),
                                 };
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,

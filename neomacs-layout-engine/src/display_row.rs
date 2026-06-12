@@ -801,8 +801,8 @@ impl DisplayRowActiveFaceState {
         self.render.resolved_face()
     }
 
-    pub(crate) fn measurement_state(&self) -> &DisplayRowActiveFaceMeasurementState {
-        &self.measurement
+    pub(crate) fn measurement_face(&self) -> &DisplayRowGlyphMeasurementFace {
+        self.measurement.measurement_face()
     }
 
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {

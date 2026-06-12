@@ -205,12 +205,11 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
         .into_active_face_state();
 
     assert_eq!(active.face_id(), 14);
-    let measurement_state = active.measurement_state();
-    assert_eq!(measurement_state.measurement_face().face_id(), 14);
-    assert_eq!(measurement_state.metrics().char_width, 7.0);
-    assert_eq!(measurement_state.metrics().row_height, 15.0);
-    assert_eq!(measurement_state.metrics().ascent, 10.0);
-    assert_eq!(measurement_state.metrics().space_width, 7.0);
+    assert_eq!(active.measurement_face().face_id(), 14);
+    assert_eq!(active.metrics().char_width, 7.0);
+    assert_eq!(active.metrics().row_height, 15.0);
+    assert_eq!(active.metrics().ascent, 10.0);
+    assert_eq!(active.metrics().space_width, 7.0);
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
 }
@@ -242,7 +241,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.metrics().char_width, 7.0);
-    assert_eq!(active.measurement_state().measurement_face().face_id(), 14);
+    assert_eq!(active.measurement_face().face_id(), 14);
 }
 
 #[test]
@@ -271,6 +270,7 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.metrics().char_width, 7.0);
+    assert_eq!(active.measurement_face().face_id(), 14);
 }
 
 #[test]
@@ -1661,20 +1661,16 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
         ),
     );
 
-    let measurement_state = active.measurement_state();
-    assert_eq!(measurement_state.metrics().space_width, 7.0);
+    assert_eq!(active.metrics().space_width, 7.0);
     assert_eq!(
-        measurement_state
+        active
             .measurement_face()
             .advance_for_char(&mut font_metrics, 'x', 7.2),
         7.0
     );
-    assert_eq!(
-        measurement_state.advance_for_char(&mut font_metrics, 'x', 7.2),
-        7.0
-    );
+    assert_eq!(active.advance_for_char(&mut font_metrics, 'x', 7.2), 7.0);
 
-    let text_run_measurement = measurement_state.text_run_measurement(&mut font_metrics, "a中");
+    let text_run_measurement = active.text_run_measurement(&mut font_metrics, "a中");
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         text_run_measurement
     else {
@@ -1742,7 +1738,7 @@ fn display_row_measured_face_exposes_face_identity() {
 
     let active = DisplayRowActiveFaceState::new(base, measured);
     assert_eq!(active.face_id(), 42);
-    assert_eq!(active.measurement_state().measurement_face().face_id(), 42);
+    assert_eq!(active.measurement_face().face_id(), 42);
 }
 
 #[test]
