@@ -3576,7 +3576,13 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_from_owning_frame() {
         Value::symbol("neomacs-secondary-tool-bar-click-command")
     );
     assert_eq!(event[0], Value::symbol("secondary-action"));
-    assert_eq!(position[0], Value::NIL);
+    // GNU parity: for tool-bar (and tab-bar) clicks the posn's first slot is
+    // the FRAME, not nil — GNU keyboard.c make_lispy_position: "Kludge alert:
+    // for mouse events on the tab bar and tool bar, keyboard.c wants the
+    // frame, not the special-purpose window". The old nil expectation dated
+    // from when the owning-frame lookup failed in this harness; commit
+    // 49bb9c04c made the lookup succeed, exposing the stale assertion.
+    assert_eq!(position[0], Value::make_frame(secondary.0));
     assert_eq!(position[1], Value::symbol("tool-bar"));
 }
 
