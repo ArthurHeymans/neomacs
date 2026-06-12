@@ -8282,7 +8282,7 @@ fn accept_process_output_run_target_follow_up(
     eval: &mut super::eval::Context,
     request: AcceptProcessOutputRequest,
 ) -> Result<(), Flow> {
-    let Some(target_id) = request.wait.processes.target_process() else {
+    let Some(target_id) = request.wait.target_process() else {
         return Ok(());
     };
 

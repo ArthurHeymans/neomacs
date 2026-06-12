@@ -185,12 +185,12 @@ pub(crate) enum SpecialInputWaitPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WaitRequest {
-    pub(crate) deadline: WaitDeadline,
-    pub(crate) keyboard: KeyboardWaitPolicy,
-    pub(crate) processes: ProcessWaitPolicy,
-    pub(crate) timers: TimerWaitPolicy,
-    pub(crate) redisplay: bool,
-    pub(crate) special_input: SpecialInputWaitPolicy,
+    deadline: WaitDeadline,
+    keyboard: KeyboardWaitPolicy,
+    processes: ProcessWaitPolicy,
+    timers: TimerWaitPolicy,
+    redisplay: bool,
+    special_input: SpecialInputWaitPolicy,
 }
 
 impl WaitRequest {
@@ -262,6 +262,18 @@ impl WaitRequest {
             redisplay: false,
             special_input: SpecialInputWaitPolicy::CompleteOnResize,
         }
+    }
+
+    pub(crate) fn deadline(self) -> WaitDeadline {
+        self.deadline
+    }
+
+    pub(crate) fn process_policy(self) -> ProcessWaitPolicy {
+        self.processes
+    }
+
+    pub(crate) fn target_process(self) -> Option<ProcessId> {
+        self.processes.target_process()
     }
 
     fn backend_interest(self) -> Option<WaitBackendInterest> {
@@ -785,5 +797,18 @@ mod tests {
 
         assert!(!activity.has_input_wakeup());
         assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
+    }
+
+    #[test]
+    fn wait_request_exposes_deadline_and_process_policy_queries() {
+        let request = WaitRequest::accept_process_output(
+            WaitDeadline::Poll,
+            ProcessWaitPolicy::Target(12),
+            TimerWaitPolicy::Run,
+        );
+
+        assert_eq!(request.deadline(), WaitDeadline::Poll);
+        assert_eq!(request.process_policy(), ProcessWaitPolicy::Target(12));
+        assert_eq!(request.target_process(), Some(12));
     }
 }

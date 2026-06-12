@@ -2255,15 +2255,15 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     let poll = parse_accept_process_output_request(&mut processes, &[])
         .expect("parse no-arg accept-process-output")
         .expect("live request");
-    assert_eq!(poll.wait.deadline, WaitDeadline::Poll);
-    assert_eq!(poll.wait.processes, ProcessWaitPolicy::Any);
+    assert_eq!(poll.wait.deadline(), WaitDeadline::Poll);
+    assert_eq!(poll.wait.process_policy(), ProcessWaitPolicy::Any);
 
     let timeout =
         parse_accept_process_output_request(&mut processes, &[Value::NIL, Value::make_float(0.25)])
             .expect("parse timed accept-process-output")
             .expect("live request");
-    assert!(matches!(timeout.wait.deadline, WaitDeadline::Until(_)));
-    assert_eq!(timeout.wait.processes, ProcessWaitPolicy::Any);
+    assert!(matches!(timeout.wait.deadline(), WaitDeadline::Until(_)));
+    assert_eq!(timeout.wait.process_policy(), ProcessWaitPolicy::Any);
 
     let id = processes.create_process("target".into(), Value::NIL, "cat".into(), vec![]);
     let target = parse_accept_process_output_request(
@@ -2272,8 +2272,8 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     )
     .expect("parse target accept-process-output")
     .expect("live request");
-    assert_eq!(target.wait.deadline, WaitDeadline::Forever);
-    assert_eq!(target.wait.processes, ProcessWaitPolicy::Target(id));
+    assert_eq!(target.wait.deadline(), WaitDeadline::Forever);
+    assert_eq!(target.wait.process_policy(), ProcessWaitPolicy::Target(id));
 }
 
 #[test]
