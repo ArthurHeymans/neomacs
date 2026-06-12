@@ -616,6 +616,10 @@ impl DisplayRowGeometryCursor {
         }
     }
 
+    fn finish_current_row(&self) -> TextMatrixRowMetrics {
+        self.metrics.finish_current_row(self.y)
+    }
+
     fn finish_and_advance_to_next_row(
         &mut self,
         defaults: DisplayRowGeometryDefaults,
@@ -1691,36 +1695,30 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let mut current_row_metrics =
-                CurrentDisplayRowMetrics::new(*row_max_height, *row_max_ascent);
-            hit_rows.push(HitRow {
-                y_start: *y,
-                y_end: *y + current_row_metrics.height(),
-                charpos_start: *hit_row_charpos_start,
-                charpos_end: anchor_charpos,
-            });
+            let mut row_cursor = DisplayRowGeometryCursor::new(
+                *row,
+                *y,
+                *row_extra_y,
+                *row_max_height,
+                *row_max_ascent,
+            );
+            hit_rows.push(row_cursor.hit_row(*hit_row_charpos_start, anchor_charpos));
             *hit_row_charpos_start = anchor_charpos;
-            let row_advance =
-                current_row_metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
-                    y: *y,
-                    next_row: *row + 1,
+            let finished_row = row_cursor.finish_and_advance_to_next_row(
+                DisplayRowGeometryDefaults {
                     text_y,
-                    row_extra_y: *row_extra_y,
-                    default_height: char_h,
-                    default_ascent: default_row_ascent,
-                    kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
-                });
-            *row_extra_y = row_advance.row_extra_y;
-            let finished_row = row_advance.finished;
-            *row += 1;
+                    height: char_h,
+                    ascent: default_row_ascent,
+                },
+                DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+            );
+            let begin_row = row_cursor.text_matrix_row_begin(row_base, 0, content_x);
+            (*row, *y, *row_extra_y, *row_max_height, *row_max_ascent) = row_cursor.into_parts();
             if *row >= max_rows {
                 finish_text_matrix_row(builder, output_emitter, finished_row);
                 builder.end_row();
                 false
             } else {
-                *y = row_advance.next_y;
-                *row_max_height = row_advance.next_height;
-                *row_max_ascent = row_advance.next_ascent;
                 row_y_positions.push(*y);
                 *x = content_x;
                 *col = 0;
@@ -1729,13 +1727,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                     output_emitter,
                     evaluator,
                     finished_row,
-                    TextMatrixRowBegin {
-                        matrix_row: row_base + *row,
-                        row: *row,
-                        col: *col,
-                        y: *y,
-                        x: *x,
-                    },
+                    begin_row,
                 );
                 true
             }
@@ -6150,17 +6142,18 @@ impl LayoutEngine {
                 .get(row)
                 .copied()
                 .unwrap_or(text_y + row as f32 * char_h + row_extra_y);
-            let current_row_metrics = CurrentDisplayRowMetrics::new(row_max_height, row_max_ascent);
-            hit_rows.push(HitRow {
-                y_start: row_y_start,
-                y_end: row_y_start + current_row_metrics.height(),
-                charpos_start: hit_row_charpos_start,
-                charpos_end: charpos,
-            });
+            let row_cursor = DisplayRowGeometryCursor::new(
+                row,
+                row_y_start,
+                row_extra_y,
+                row_max_height,
+                row_max_ascent,
+            );
+            hit_rows.push(row_cursor.hit_row(hit_row_charpos_start, charpos));
             finish_text_matrix_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
-                current_row_metrics.finish_current_row(row_y_start),
+                row_cursor.finish_current_row(),
             );
         }
 

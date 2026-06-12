@@ -630,6 +630,21 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
     );
 }
 
+#[test]
+fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
+    let cursor = DisplayRowGeometryCursor::new(2, 42.0, 3.0, 24.0, 18.0);
+
+    assert_eq!(
+        cursor.finish_current_row(),
+        TextMatrixRowMetrics {
+            y: 42.0,
+            height: 24.0,
+            ascent: 18.0,
+        }
+    );
+    assert_eq!(cursor.into_parts(), (2, 42.0, 3.0, 24.0, 18.0));
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
