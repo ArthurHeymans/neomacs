@@ -2874,7 +2874,7 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn wait_for_pending_resize_events(&mut self, timeout: Duration) -> bool {
         let outcome = self
-            .wait_reading_process_output(WaitRequest::resize_ack(Instant::now() + timeout))
+            .wait_for_resize_ack_until(Instant::now() + timeout)
             .ok();
         sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
             &mut self.frames,

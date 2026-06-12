@@ -740,6 +740,13 @@ impl super::eval::Context {
         self.wait_reading_process_output(WaitRequest::sleep_until(deadline))
     }
 
+    pub(crate) fn wait_for_resize_ack_until(
+        &mut self,
+        deadline: Instant,
+    ) -> Result<WaitCompletion, Flow> {
+        self.wait_reading_process_output(WaitRequest::resize_ack(deadline))
+    }
+
     fn block_for_wait_request(
         &mut self,
         request: &WaitRequest,
