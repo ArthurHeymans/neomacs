@@ -11,7 +11,7 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowOutput, TextRowOutput,
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowOutput,
     WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
@@ -1582,12 +1582,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             face_resolver,
             current_face_id,
             row_spec,
-            TextRowOutput {
-                row: *row,
-                row_y: *y,
-                glyph_y: *y,
-                height: char_h,
-            },
+            LegacyDisplayRowGeometryVars {
+                row,
+                y,
+                row_extra_y,
+                row_max_height,
+                row_max_ascent,
+            }
+            .text_row_output(char_h),
         ) else {
             break;
         };

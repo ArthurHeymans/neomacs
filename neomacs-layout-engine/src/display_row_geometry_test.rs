@@ -1,6 +1,6 @@
 use super::*;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
 };
 
 #[test]
@@ -402,6 +402,34 @@ fn legacy_display_row_geometry_vars_record_current_row_y_by_name() {
     assert_eq!(row_y_positions.recorded(), &[8.0, 69.0]);
     assert_eq!(row, 3);
     assert_eq!(y, 69.0);
+}
+
+#[test]
+fn legacy_display_row_geometry_vars_build_text_row_output_by_name() {
+    let mut row = 3;
+    let mut y = 69.0;
+    let mut row_extra_y = 11.0;
+    let mut row_max_height = 16.0;
+    let mut row_max_ascent = 12.0;
+
+    let output = LegacyDisplayRowGeometryVars {
+        row: &mut row,
+        y: &mut y,
+        row_extra_y: &mut row_extra_y,
+        row_max_height: &mut row_max_height,
+        row_max_ascent: &mut row_max_ascent,
+    }
+    .text_row_output(24.0);
+
+    assert_eq!(
+        output,
+        TextRowOutput {
+            row: 3,
+            row_y: 69.0,
+            glyph_y: 69.0,
+            height: 24.0,
+        }
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use crate::hit_test::HitRow;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -132,6 +132,15 @@ impl LegacyDisplayRowGeometryVars<'_> {
 
     pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
         row_y_positions.push(*self.y);
+    }
+
+    pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
+        TextRowOutput {
+            row: *self.row,
+            row_y: *self.y,
+            glyph_y: *self.y,
+            height,
+        }
     }
 
     pub(crate) fn finish_boundary(
