@@ -737,7 +737,7 @@ fn legacy_display_row_geometry_vars_snapshots_and_applies_by_name() {
 }
 
 #[test]
-fn display_row_geometry_cursor_commits_state_and_records_row_y_by_name() {
+fn display_row_geometry_commit_target_groups_legacy_vars_and_row_y_recorder() {
     let cursor = DisplayRowGeometryCursor::from_state(DisplayRowGeometryState {
         row: 5,
         y: 120.0,
@@ -752,7 +752,7 @@ fn display_row_geometry_cursor_commits_state_and_records_row_y_by_name() {
     let mut row_max_ascent = 1.0;
     let mut row_y_positions = vec![8.0];
 
-    cursor.commit_to_legacy_vars(
+    cursor.commit(DisplayRowGeometryCommitTarget::recording_row_y(
         LegacyDisplayRowGeometryVars {
             row: &mut row,
             y: &mut y,
@@ -760,8 +760,8 @@ fn display_row_geometry_cursor_commits_state_and_records_row_y_by_name() {
             row_max_height: &mut row_max_height,
             row_max_ascent: &mut row_max_ascent,
         },
-        DisplayRowYRecorder::RowYPositions(&mut row_y_positions),
-    );
+        &mut row_y_positions,
+    ));
 
     assert_eq!(row, 5);
     assert_eq!(y, 120.0);
@@ -848,14 +848,16 @@ fn display_row_geometry_cursor_finishes_begins_and_commits_next_text_matrix_row(
         5,
         7,
         13.0,
-        LegacyDisplayRowGeometryVars {
-            row: &mut row,
-            y: &mut y,
-            row_extra_y: &mut row_extra_y,
-            row_max_height: &mut row_max_height,
-            row_max_ascent: &mut row_max_ascent,
-        },
-        DisplayRowYRecorder::RowYPositions(&mut row_y_positions),
+        DisplayRowGeometryCommitTarget::recording_row_y(
+            LegacyDisplayRowGeometryVars {
+                row: &mut row,
+                y: &mut y,
+                row_extra_y: &mut row_extra_y,
+                row_max_height: &mut row_max_height,
+                row_max_ascent: &mut row_max_ascent,
+            },
+            &mut row_y_positions,
+        ),
     );
 
     assert_eq!(
