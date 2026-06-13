@@ -57,7 +57,6 @@ use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
 };
-use crate::display_text::DisplayTextFragment;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -79,6 +78,8 @@ use strum::{EnumString, IntoStaticStr};
 const MAX_LIGATURE_RUN_LEN: usize = 64;
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
+const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
+const LISP_STRING_SOURCE_PREFIX: u64 = 2;
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
 const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
@@ -1051,15 +1052,23 @@ impl DisplayRowPrefixRequest {
 }
 
 impl DisplayRowPrefixSource {
-    fn fragment(self) -> DisplayTextFragment {
+    fn value(self) -> Value {
+        self.value
+    }
+
+    fn origin(self) -> DisplayOrigin {
         match self.kind {
-            DisplayRowPrefixKind::Line => {
-                DisplayTextFragment::line_prefix(self.value, self.anchor_charpos)
-            }
-            DisplayRowPrefixKind::Wrap => {
-                DisplayTextFragment::wrap_prefix(self.value, self.anchor_charpos)
-            }
+            DisplayRowPrefixKind::Line => DisplayOrigin::LinePrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
+            DisplayRowPrefixKind::Wrap => DisplayOrigin::WrapPrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
         }
+    }
+
+    fn base_face_policy(self) -> BaseFacePolicy {
+        BaseFacePolicy::DefaultFace
     }
 }
 
@@ -2089,7 +2098,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     }
 
     let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
-        1,
+        LISP_STRING_SOURCE_OVERLAY_STRING,
         text_value,
         crate::display_item::RenderFaceRef::FaceId(base_face.face_id()),
     ) else {
@@ -2175,7 +2184,7 @@ fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) 
             source_id,
             char_index,
             ..
-        } if source_id.get() == 1 => Some(*char_index),
+        } if source_id.get() == LISP_STRING_SOURCE_OVERLAY_STRING => Some(*char_index),
         _ => None,
     }
 }
@@ -4215,38 +4224,45 @@ impl LayoutEngine {
                     let prefix_source = prefix_request
                         .source_for_value(prefix_value, CharPos0::new(charpos as usize))
                         .expect("requested prefix should build a prefix source");
-                    let prefix_fragment = prefix_source.fragment();
                     let prefix_base_face = display_string_base_face(
                         buffer,
                         face_resolver,
-                        prefix_fragment.origin,
-                        prefix_fragment.base_face_policy,
+                        prefix_source.origin(),
+                        prefix_source.base_face_policy(),
                         &mut face_ids,
                         &mut self.matrix_builder,
                     );
 
-                    let append_context = LispStringRowAppendContext::new(
-                        &text_append_surface,
-                        &row_geometry,
-                        &active_face_state,
-                        raise_span.value_or(0.0),
-                        char_h,
-                    );
-                    let position = append_context.append_active_face_fragment_to_text_row_and_emit(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        prefix_fragment,
-                        2,
-                        face_resolver,
-                        &mut face_ids,
-                        prefix_base_face.face_id(),
-                        prefix_base_face.face(),
-                        DisplayRowPosition { x_px: x, col },
-                    );
-                    x = position.x_px;
-                    col = position.col;
+                    if let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+                        LISP_STRING_SOURCE_PREFIX,
+                        prefix_source.value(),
+                        crate::display_item::RenderFaceRef::FaceId(prefix_base_face.face_id()),
+                    ) {
+                        let append_context = LispStringRowAppendContext::new(
+                            &text_append_surface,
+                            &row_geometry,
+                            &active_face_state,
+                            raise_span.value_or(0.0),
+                            char_h,
+                        );
+                        let mut source_state = DisplayRowSourceState::default();
+                        let position = append_context
+                            .render_active_face_source_to_text_row_and_emit(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                &mut source,
+                                &mut source_state,
+                                face_resolver,
+                                &mut face_ids,
+                                prefix_base_face.face_id(),
+                                prefix_base_face.face(),
+                                DisplayRowPosition { x_px: x, col },
+                            );
+                        x = position.x_px;
+                        col = position.col;
+                    }
                 }
                 prefix_request.clear();
             }

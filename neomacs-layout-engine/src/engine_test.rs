@@ -338,29 +338,31 @@ fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
 #[test]
 fn display_row_prefix_request_builds_typed_prefix_source() {
     let _eval = Context::new();
-    let line_fragment = DisplayRowPrefixRequest::Line
-        .source_for_value(Value::string("line"), CharPos0::new(4))
-        .expect("line prefix source")
-        .fragment();
+    let line_value = Value::string("line");
+    let line_source = DisplayRowPrefixRequest::Line
+        .source_for_value(line_value, CharPos0::new(4))
+        .expect("line prefix source");
+    assert_eq!(line_source.value(), line_value);
     assert_eq!(
-        line_fragment.origin,
+        line_source.origin(),
         DisplayOrigin::LinePrefix {
             anchor_charpos: CharPos0::new(4),
         }
     );
-    assert_eq!(line_fragment.base_face_policy, BaseFacePolicy::DefaultFace);
+    assert_eq!(line_source.base_face_policy(), BaseFacePolicy::DefaultFace);
 
-    let wrap_fragment = DisplayRowPrefixRequest::Wrap
-        .source_for_value(Value::string("wrap"), CharPos0::new(7))
-        .expect("wrap prefix source")
-        .fragment();
+    let wrap_value = Value::string("wrap");
+    let wrap_source = DisplayRowPrefixRequest::Wrap
+        .source_for_value(wrap_value, CharPos0::new(7))
+        .expect("wrap prefix source");
+    assert_eq!(wrap_source.value(), wrap_value);
     assert_eq!(
-        wrap_fragment.origin,
+        wrap_source.origin(),
         DisplayOrigin::WrapPrefix {
             anchor_charpos: CharPos0::new(7),
         }
     );
-    assert_eq!(wrap_fragment.base_face_policy, BaseFacePolicy::DefaultFace);
+    assert_eq!(wrap_source.base_face_policy(), BaseFacePolicy::DefaultFace);
 
     assert!(
         DisplayRowPrefixRequest::None

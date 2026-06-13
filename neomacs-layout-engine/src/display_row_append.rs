@@ -554,6 +554,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn append_lisp_string_fragment_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -601,6 +602,7 @@ fn append_lisp_string_fragment_to_text_row_and_emit(
     outcome.end_position()
 }
 
+#[cfg(test)]
 #[derive(Clone)]
 pub(crate) struct LispStringAppendContext<'a> {
     base_face_id: u32,
@@ -608,6 +610,7 @@ pub(crate) struct LispStringAppendContext<'a> {
     frame: DisplayRowAppendFrame,
 }
 
+#[cfg(test)]
 impl<'a> LispStringAppendContext<'a> {
     pub(crate) fn new(
         base_face_id: u32,
@@ -675,6 +678,7 @@ impl<'row> LispStringRowAppendContext<'row> {
         }
     }
 
+    #[cfg(test)]
     fn active_face<'face>(
         self,
         base_face_id: u32,
@@ -685,6 +689,7 @@ impl<'row> LispStringRowAppendContext<'row> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub(crate) fn append_active_face_fragment_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
@@ -711,6 +716,39 @@ impl<'row> LispStringRowAppendContext<'row> {
                 face_ids,
                 position,
             )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_active_face_source_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source: &mut LispStringSourceCursor,
+        source_state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face_id: u32,
+        base_face: &'row ResolvedFace,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        let frame = self.active_face_context.active_face_frame();
+        let mut source_context =
+            LispStringSourceAppendContext::new(source, source_state, base_face_id, base_face);
+        source_context
+            .render_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids,
+                frame,
+                position,
+            )
+            .map(|outcome| outcome.end_position())
+            .unwrap_or(position)
     }
 }
 
