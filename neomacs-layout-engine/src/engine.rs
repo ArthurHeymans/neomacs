@@ -63,7 +63,6 @@ use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBo
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
-use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
@@ -1907,17 +1906,73 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
+    display_string_base_face_from_origin(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        None,
+        true,
+        face_ids,
+        builder,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn display_string_base_face_for_active_row<B: super::neovm_bridge::LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    active_face_state: &DisplayRowActiveFaceState,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
+    display_string_base_face_from_origin(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        Some(active_face_state),
+        false,
+        face_ids,
+        builder,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn display_string_base_face_from_origin<B: super::neovm_bridge::LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    active_face_state: Option<&DisplayRowActiveFaceState>,
+    install_default_face: bool,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
     let mut next_check = buffer.layout_point_max_char_pos().get();
     let face = face_resolver.base_face_for_origin(Some(buffer), &origin, policy, &mut next_check);
-    let face_id = if crate::display_source_resolver::same_resolved_face(
+    let (face_id, should_install) = if let Some(active_face_state) = active_face_state
+        && crate::display_source_resolver::same_resolved_face(
+            &face,
+            active_face_state.resolved_face(),
+        ) {
+        (active_face_state.face_id(), false)
+    } else if crate::display_source_resolver::same_resolved_face(
         &face,
         face_resolver.default_face(),
     ) {
-        u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
+        (
+            u32::from(neomacs_display_protocol::face::BasicFaceId::Default),
+            install_default_face,
+        )
     } else {
-        face_ids.allocate()
+        (face_ids.allocate(), true)
     };
-    insert_resolved_display_row_face(builder, face_id, &face, None);
+    if should_install {
+        insert_resolved_display_row_face(builder, face_id, &face, None);
+    }
     DisplayStringBaseFace { face, face_id }
 }
 
@@ -4511,35 +4566,15 @@ impl LayoutEngine {
                                 display_property_char_pos,
                                 DisplayPropertySource::TextProperty,
                             );
-                            let mut replacement_next_check =
-                                buffer.layout_point_max_char_pos().get();
-                            let replacement_base_face = face_resolver.base_face_for_origin(
-                                Some(buffer),
-                                &replacement_fragment.origin,
+                            let replacement_base_face = display_string_base_face_for_active_row(
+                                buffer,
+                                face_resolver,
+                                replacement_fragment.origin,
                                 replacement_fragment.base_face_policy,
-                                &mut replacement_next_check,
+                                &active_face_state,
+                                &mut face_ids,
+                                &mut self.matrix_builder,
                             );
-                            let replacement_base_face_id =
-                                if crate::display_source_resolver::same_resolved_face(
-                                    &replacement_base_face,
-                                    active_face_state.resolved_face(),
-                                ) {
-                                    active_face_state.face_id()
-                                } else if crate::display_source_resolver::same_resolved_face(
-                                    &replacement_base_face,
-                                    face_resolver.default_face(),
-                                ) {
-                                    u32::from(neomacs_display_protocol::face::BasicFaceId::Default)
-                                } else {
-                                    let face_id = face_ids.allocate();
-                                    insert_resolved_display_row_face(
-                                        &mut self.matrix_builder,
-                                        face_id,
-                                        &replacement_base_face,
-                                        None,
-                                    );
-                                    face_id
-                                };
                             let append_frame = replacement_string_surface.frame_for_active_face(
                                 row_geometry.append_placement(raise_span.value_or(0.0)),
                                 &active_face_state,
@@ -4558,8 +4593,8 @@ impl LayoutEngine {
                                 display_replacement_source,
                                 1,
                                 face_resolver,
-                                &replacement_base_face,
-                                replacement_base_face_id,
+                                &replacement_base_face.face,
+                                replacement_base_face.face_id,
                                 &mut face_ids,
                                 append_frame,
                                 DisplayRowPosition { x_px: x, col },
