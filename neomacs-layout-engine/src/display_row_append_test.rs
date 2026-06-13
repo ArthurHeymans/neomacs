@@ -3300,7 +3300,7 @@ fn display_row_append_spec_appends_item_to_matrix_row() {
     );
 
     let (progress, position) =
-        append_display_row_spec_item(&mut builder, &spec, item).expect("append progress");
+        append_display_row_append_spec_item(&mut builder, &spec, item).expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(progress.end, DisplayRowPosition { x_px: 8.0, col: 1 });

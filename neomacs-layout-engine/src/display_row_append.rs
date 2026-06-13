@@ -1641,7 +1641,7 @@ pub(crate) fn append_display_row_item(
 }
 
 #[cfg(test)]
-pub(crate) fn append_display_row_spec_item(
+pub(crate) fn append_display_row_append_spec_item(
     builder: &mut GlyphMatrixBuilder,
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,
@@ -1651,14 +1651,14 @@ pub(crate) fn append_display_row_spec_item(
         _ => None,
     };
     if let Some(media) = media {
-        append_media_display_row_spec_item(builder, spec, item, media)
+        append_media_display_row_append_spec_item(builder, spec, item, media)
     } else {
         append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
     }
 }
 
 #[cfg(test)]
-fn append_media_display_row_spec_item(
+fn append_media_display_row_append_spec_item(
     builder: &mut GlyphMatrixBuilder,
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,

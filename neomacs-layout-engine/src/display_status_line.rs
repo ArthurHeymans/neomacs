@@ -156,7 +156,7 @@ impl LayoutEngine {
             window_id: request.window_id,
             kind: request.kind,
         };
-        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+        let row_request = DisplayRowSourceRenderRequest::from_base_face(
             DisplayRowGeometry {
                 y: request.bounds.y,
                 width: request.bounds.width,
@@ -178,7 +178,7 @@ impl LayoutEngine {
             face_ids,
         );
         let rendered_row = self.render_display_text_fragment_source_row_with_context(
-            row_spec,
+            row_request,
             request.text,
             &mut render_context,
         );
@@ -217,7 +217,7 @@ impl LayoutEngine {
         tab_bar_face: &ResolvedFace,
         rendered_text: DisplayTextFragment,
     ) -> Option<FrameTabBarDisplayRowRender> {
-        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+        let row_request = DisplayRowSourceRenderRequest::from_base_face(
             DisplayRowGeometry {
                 y,
                 width,
@@ -234,7 +234,7 @@ impl LayoutEngine {
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let rendered = self.render_display_text_fragment_source_row_with_context(
-            row_spec,
+            row_request,
             rendered_text,
             &mut render_context,
         )?;
@@ -276,7 +276,7 @@ impl LayoutEngine {
             request.text_bounds,
             request.selected,
         );
-        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+        let row_request = DisplayRowSourceRenderRequest::from_base_face(
             DisplayRowGeometry {
                 y: request.window_bounds.y,
                 width: request.text_width,
@@ -294,7 +294,7 @@ impl LayoutEngine {
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let rendered = self
             .render_lisp_string_source_row_with_context(
-                row_spec,
+                row_request,
                 Value::string(""),
                 &mut render_context,
             )

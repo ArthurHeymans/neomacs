@@ -1327,7 +1327,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         &self.symbol_values
     }
 
-    fn display_row_spec(self) -> DisplayRowSpec<'a> {
+    fn into_lowered_spec(self) -> DisplayRowSpec<'a> {
         DisplayRowSpec {
             geometry: self.geometry,
             render_bounds: self.render_bounds,
@@ -1914,7 +1914,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         rendered: Value,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row_with_context(request.display_row_spec(), rendered, context)
+        self.render_lisp_string_row_with_context(request.into_lowered_spec(), rendered, context)
     }
 
     fn render_display_text_fragment_row_with_context(
@@ -1941,7 +1941,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         self.render_display_text_fragment_row_with_context(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             fragment,
             context,
         )
@@ -1957,7 +1957,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     ) -> Option<RenderedDisplayRow> {
         let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
         self.render_display_item_source_row_with_context(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             source,
             &mut context,
         )
@@ -1996,7 +1996,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<DisplayRowRenderResult> {
         self.render_display_item_source_row_step_with_context(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             source,
             state,
             context,
@@ -2015,7 +2015,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     ) -> Option<DisplayRowRenderResult> {
         let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         self.render_display_item_source_row_fragment_step_with_context(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             source,
             state,
             &mut context,
@@ -2049,7 +2049,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     ) -> Option<DisplayRowRenderIntoRowResult> {
         let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         self.render_display_item_source_row_fragment_step_into_row_with_context(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             row,
             source,
             state,
@@ -2089,7 +2089,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         policy: &mut P,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         self.render_display_item_source_row_fragment_step_into_row_with_policy(
-            request.display_row_spec(),
+            request.into_lowered_spec(),
             row,
             source,
             state,
