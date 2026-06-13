@@ -1571,6 +1571,35 @@ pub(crate) enum BufferTextFragmentAppendItem {
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextFragmentClusterState {
+    ch: char,
+    tail: Option<(char, bool)>,
+    is_cluster_continuation: bool,
+}
+
+impl BufferTextFragmentClusterState {
+    pub(crate) fn for_char(ch: char, tail: Option<(char, bool)>) -> Self {
+        Self {
+            ch,
+            tail,
+            is_cluster_continuation: crate::composition::continues_cluster(ch, tail),
+        }
+    }
+
+    pub(crate) fn is_cluster_continuation(self) -> bool {
+        self.is_cluster_continuation
+    }
+
+    fn ch(self) -> char {
+        self.ch
+    }
+
+    fn has_tail(self) -> bool {
+        self.tail.is_some()
+    }
+}
+
 impl BufferTextFragmentAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         let text = match (display_policy, ch) {
@@ -1583,8 +1612,9 @@ impl BufferTextFragmentAppendItem {
         Some(Self::SourceMappedText { text: text.into() })
     }
 
-    pub(crate) fn glyphless_display(ch: char, cluster_tail: Option<(char, bool)>) -> Option<Self> {
-        if cluster_tail.is_some() && crate::composition::is_composition_joiner(ch) {
+    pub(crate) fn glyphless_display(cluster: BufferTextFragmentClusterState) -> Option<Self> {
+        let ch = cluster.ch();
+        if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
             return None;
         }
         let method = glyphless_method_for_char(ch, GlyphlessJoinerPolicy::ClassifyAsGlyphless)?;

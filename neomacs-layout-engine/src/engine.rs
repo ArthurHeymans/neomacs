@@ -39,11 +39,12 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
-    BufferTextFragmentRowAppendContext, BufferTextItemRowAppendContext,
-    DisplayReplacementMediaAppendItem, DisplayReplacementMediaAppendResolution,
-    DisplayReplacementRowAppendContext, DisplayReplacementStretchAppendItem,
-    DisplayReplacementStringAppendItem, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    BufferTextFragmentClusterState, BufferTextFragmentRowAppendContext,
+    BufferTextItemRowAppendContext, DisplayReplacementMediaAppendItem,
+    DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
+    DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem, DisplayRowAppendArea,
+    DisplayRowAppendSurface, LispStringRowAppendContext, LispStringSourceRowAppendContext,
+    SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -5133,11 +5134,12 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
-            let is_cluster_continuation = crate::composition::continues_cluster(ch, cluster_tail);
+            let cluster_state = BufferTextFragmentClusterState::for_char(ch, cluster_tail);
+            let is_cluster_continuation = cluster_state.is_cluster_continuation();
 
             // Glyphless character detection (C1 controls, format chars, etc.)
             if let Some(glyphless_item) =
-                BufferTextFragmentAppendItem::glyphless_display(ch, cluster_tail)
+                BufferTextFragmentAppendItem::glyphless_display(cluster_state)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
