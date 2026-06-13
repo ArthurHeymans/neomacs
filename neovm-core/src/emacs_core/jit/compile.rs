@@ -1614,7 +1614,7 @@ fn jit_profile_path() -> Option<&'static str> {
         .as_deref()
 }
 
-fn jit_profile_emit(f: &ByteCodeFunction, compiled: bool) {
+fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: bool) {
     let Some(path) = jit_profile_path() else {
         return;
     };
@@ -1667,8 +1667,21 @@ fn jit_profile_emit(f: &ByteCodeFunction, compiled: bool) {
             _ => {}
         }
     }
+    // Inlinable call sites: those whose callee is a constant symbol currently
+    // fbound to a BYTECODE object (the only directly-inlinable target) — the
+    // SAME shape `find_spec_sites` detects. `calls - inlinable` are subr /
+    // dynamic / non-bytecode callees inlining can't directly take. This sizes
+    // inlining's TRUE surface (vs the call-bearing upper bound).
+    let arity =
+        f.params.required.len() + f.params.optional.len() + usize::from(f.params.rest.is_some());
+    let inlinable = match obarray {
+        Some(ob) => analyze_cfg(ops, &f.constants, f.gnu_byte_offset_map.as_deref(), arity)
+            .map(|cfg| find_spec_sites(ops, &f.constants, &cfg.leaders, ob).len())
+            .unwrap_or(0),
+        None => 0,
+    };
     let line = format!(
-        "{},{},{},{},{},{},{},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{}\n",
         ops.len(),
         arith,
         calls,
@@ -1679,6 +1692,7 @@ fn jit_profile_emit(f: &ByteCodeFunction, compiled: bool) {
         backedges,
         u8::from(backedges > 0),
         u8::from(compiled),
+        inlinable,
     );
     use std::io::Write;
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -1696,7 +1710,7 @@ pub fn compile_bytecode_function_with(
 ) -> Result<CompiledLeaf, CompileError> {
     let result = compile_bytecode_function_inner(f, obarray);
     if jit_profile_path().is_some() {
-        jit_profile_emit(f, result.is_ok());
+        jit_profile_emit(f, obarray, result.is_ok());
     }
     result
 }
