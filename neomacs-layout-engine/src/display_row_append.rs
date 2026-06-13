@@ -159,104 +159,6 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     end
 }
 
-#[allow(clippy::too_many_arguments)]
-#[cfg(test)]
-fn append_lisp_string_value_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    text_value: Value,
-    source_id: u64,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    base_face_id: u32,
-    face_ids: &mut FrameFaceIdAllocator,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> DisplayRowPosition {
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
-        source_id,
-        text_value,
-        RenderFaceRef::FaceId(base_face_id),
-    ) else {
-        return position;
-    };
-    let request = frame.source_append_request(
-        position,
-        base_face_id,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
-    let mut source_state = DisplayRowSourceState::default();
-    let Some(outcome) = render_natural_display_source_append_request_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        face_ids,
-        request,
-    ) else {
-        return position;
-    };
-    outcome.end_position()
-}
-
-#[cfg(test)]
-#[derive(Clone)]
-pub(crate) struct LispStringAppendContext<'a> {
-    base_face_id: u32,
-    base_face: &'a ResolvedFace,
-    frame: DisplayRowAppendFrame,
-}
-
-#[cfg(test)]
-impl<'a> LispStringAppendContext<'a> {
-    pub(crate) fn new(
-        base_face_id: u32,
-        base_face: &'a ResolvedFace,
-        frame: DisplayRowAppendFrame,
-    ) -> Self {
-        Self {
-            base_face_id,
-            base_face,
-            frame,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_value_to_text_row_and_emit(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        text_value: Value,
-        source_id: u64,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        append_lisp_string_value_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            text_value,
-            source_id,
-            face_resolver,
-            self.base_face,
-            self.base_face_id,
-            face_ids,
-            self.frame.clone(),
-            position,
-        )
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct LispStringRowAppendContext<'row> {
     active_face_context: DisplayRowActiveFaceAppendContext<'row, 'row>,
@@ -279,46 +181,6 @@ impl<'row> LispStringRowAppendContext<'row> {
                 default_row_height,
             ),
         }
-    }
-
-    #[cfg(test)]
-    fn active_face<'face>(
-        self,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-    ) -> LispStringAppendContext<'face> {
-        let frame = self.active_face_context.active_face_frame();
-        LispStringAppendContext::new(base_face_id, base_face, frame)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(test)]
-    pub(crate) fn append_active_face_value_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        text_value: Value,
-        source_id: u64,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face_id: u32,
-        base_face: &'row ResolvedFace,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        self.active_face(base_face_id, base_face)
-            .append_value_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                text_value,
-                source_id,
-                face_resolver,
-                face_ids,
-                position,
-            )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -352,6 +214,43 @@ impl<'row> LispStringRowAppendContext<'row> {
             )
             .map(|outcome| outcome.end_position())
             .unwrap_or(position)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_active_face_source_request_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face_id: u32,
+        base_face: &'row ResolvedFace,
+        request: LispStringSourceAppendRequest,
+    ) -> DisplayRowPosition {
+        let parts = request.into_parts();
+        let Some(mut source) = LispStringSourceCursor::new(
+            parts.source_id,
+            parts.value,
+            RenderFaceRef::FaceId(base_face_id),
+        ) else {
+            return parts.position;
+        };
+        let mut source_state = DisplayRowSourceState::default();
+        self.render_active_face_source_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            &mut source,
+            &mut source_state,
+            face_resolver,
+            face_ids,
+            base_face_id,
+            base_face,
+            parts.position,
+        )
     }
 }
 
@@ -443,6 +342,38 @@ impl<'a> LispStringSourceAppendContext<'a> {
         self.source_state.discard_pending_item();
         self.source.discard_until_row_break()
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LispStringSourceAppendRequest {
+    position: DisplayRowPosition,
+    source_id: u64,
+    value: Value,
+}
+
+impl LispStringSourceAppendRequest {
+    pub(crate) fn new(position: DisplayRowPosition, source_id: u64, value: Value) -> Self {
+        Self {
+            position,
+            source_id,
+            value,
+        }
+    }
+
+    fn into_parts(self) -> LispStringSourceAppendRequestParts {
+        LispStringSourceAppendRequestParts {
+            position: self.position,
+            source_id: self.source_id,
+            value: self.value,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LispStringSourceAppendRequestParts {
+    position: DisplayRowPosition,
+    source_id: u64,
+    value: Value,
 }
 
 pub(crate) struct LispStringSourceRowAppendContext<'a> {

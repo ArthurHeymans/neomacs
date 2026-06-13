@@ -42,8 +42,8 @@ use crate::display_row_append::{
     DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
-    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
+    LispStringRowAppendContext, LispStringSourceAppendRequest, LispStringSourceRowAppendContext,
+    SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4410,36 +4410,32 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                     );
 
-                    if let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+                    let append_context = LispStringRowAppendContext::new(
+                        &text_append_surface,
+                        &row_geometry,
+                        &active_face_state,
+                        raise_span.value_or(0.0),
+                        char_h,
+                    );
+                    let prefix_append_request = LispStringSourceAppendRequest::new(
+                        DisplayRowPosition { x_px: x, col },
                         LISP_STRING_SOURCE_PREFIX,
                         prefix_source.value(),
-                        crate::display_item::RenderFaceRef::FaceId(prefix_base_face.face_id()),
-                    ) {
-                        let append_context = LispStringRowAppendContext::new(
-                            &text_append_surface,
-                            &row_geometry,
-                            &active_face_state,
-                            raise_span.value_or(0.0),
-                            char_h,
+                    );
+                    let position = append_context
+                        .render_active_face_source_request_to_text_row_and_emit(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &mut face_ids,
+                            prefix_base_face.face_id(),
+                            prefix_base_face.face(),
+                            prefix_append_request,
                         );
-                        let mut source_state = DisplayRowSourceState::default();
-                        let position = append_context
-                            .render_active_face_source_to_text_row_and_emit(
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                &mut self.font_metrics,
-                                &mut source,
-                                &mut source_state,
-                                face_resolver,
-                                &mut face_ids,
-                                prefix_base_face.face_id(),
-                                prefix_base_face.face(),
-                                DisplayRowPosition { x_px: x, col },
-                            );
-                        x = position.x_px;
-                        col = position.col;
-                    }
+                    x = position.x_px;
+                    col = position.col;
                 }
                 prefix_request.clear();
             }

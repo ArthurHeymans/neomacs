@@ -1788,18 +1788,21 @@ fn lisp_string_append_context_appends_fragment_items() {
     let append_context =
         LispStringRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
 
-    let end = append_context.append_active_face_value_to_text_row_and_emit(
+    let request = LispStringSourceAppendRequest::new(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        2,
+        Value::string("=>"),
+    );
+    let end = append_context.render_active_face_source_request_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        Value::string("=>"),
-        2,
         &face_resolver,
         &mut face_ids,
         0,
         base_face,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        request,
     );
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
