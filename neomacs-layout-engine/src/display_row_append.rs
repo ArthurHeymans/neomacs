@@ -21,8 +21,8 @@ use crate::display_row::{
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
     append_single_display_item_fragment_to_text_row_and_emit,
     measure_single_display_item_source_append_request_against_current_text_row,
-    render_display_source_append_request_into_current_text_row_and_emit,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
+    render_owned_display_source_append_request_into_current_text_row_and_emit,
     render_single_display_item_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
@@ -3548,7 +3548,7 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    mut source: S,
+    source: S,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
@@ -3563,15 +3563,13 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
         base_face,
         DisplayRowAppendKind::DisplayReplacementString,
     );
-    let mut source_state = DisplayRowSourceState::default();
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-    let Some(outcome) = render_display_source_append_request_into_current_text_row_and_emit(
+    let Some(outcome) = render_owned_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        source,
         face_resolver,
         face_ids,
         request,
