@@ -3037,6 +3037,76 @@ fn display_replacement_space_width_policy_names_width_sources() {
 }
 
 #[test]
+fn display_replacement_space_height_policy_names_height_sources() {
+    let _eval = Context::new();
+    let explicit = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("height"),
+        Value::fixnum(4),
+    ]);
+    let relative = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-height"),
+        Value::fixnum(2),
+    ]);
+    let default = Value::list(vec![Value::symbol("space")]);
+
+    assert!(matches!(
+        DisplayReplacementSpaceHeightPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&explicit).expect("explicit list")
+        ),
+        DisplayReplacementSpaceHeightPolicy::Explicit(_)
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceHeightPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&relative).expect("relative list")
+        ),
+        DisplayReplacementSpaceHeightPolicy::Relative { factor } if factor == 2.0
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceHeightPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
+        ),
+        DisplayReplacementSpaceHeightPolicy::Default
+    ));
+}
+
+#[test]
+fn display_replacement_space_ascent_policy_names_ascent_sources() {
+    let _eval = Context::new();
+    let percent = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("ascent"),
+        Value::fixnum(40),
+    ]);
+    let pixel = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("ascent"),
+        Value::fixnum(140),
+    ]);
+    let default = Value::list(vec![Value::symbol("space")]);
+
+    assert!(matches!(
+        DisplayReplacementSpaceAscentPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&percent).expect("percent list")
+        ),
+        DisplayReplacementSpaceAscentPolicy::Percent { percent } if percent == 40.0
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceAscentPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&pixel).expect("pixel list")
+        ),
+        DisplayReplacementSpaceAscentPolicy::Pixel(_)
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceAscentPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
+        ),
+        DisplayReplacementSpaceAscentPolicy::Default
+    ));
+}
+
+#[test]
 fn display_replacement_stretch_append_item_resolves_display_space_property() {
     let _eval = Context::new();
     let active_face = test_active_face_state(7, 8.0);
