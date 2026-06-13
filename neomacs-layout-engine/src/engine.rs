@@ -4707,21 +4707,21 @@ impl LayoutEngine {
                     );
                     let display_property = classify_display_property(prop_val);
                     let replacement_resolve_request =
-                        DisplayPropertyReplacementAppendResolveRequest {
-                            display_property: &display_property,
-                            value: prop_val,
-                            replacement_source: display_replacement_source,
-                            anchor_charpos: display_property_char_pos,
-                            source_text: &text[byte_idx..],
-                            active_face_state: &active_face_state,
-                            current_x: x,
+                        DisplayPropertyReplacementAppendResolveRequest::new(
+                            &display_property,
+                            prop_val,
+                            display_replacement_source,
+                            display_property_char_pos,
+                            &text[byte_idx..],
+                            &active_face_state,
+                            x,
                             content_x,
                             params,
-                            display_host: evaluator.display_host.as_deref(),
-                            glyph_y_offset: raise_span.value_or(0.0),
-                            default_row_height: char_h,
-                            start_position: DisplayRowPosition { x_px: x, col },
-                        };
+                            evaluator.display_host.as_deref(),
+                            raise_span.value_or(0.0),
+                            char_h,
+                            DisplayRowPosition { x_px: x, col },
+                        );
                     if let Some(replacement_request) =
                         replacement_resolve_request.resolve(&mut self.font_metrics)
                     {

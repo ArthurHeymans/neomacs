@@ -3213,25 +3213,25 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let request = DisplayPropertyReplacementAppendResolveRequest {
-        display_property: &classification,
+    let request = DisplayPropertyReplacementAppendResolveRequest::new(
+        &classification,
         value,
-        replacement_source: crate::display_source::BufferDisplayReplacementSource::new(
+        crate::display_source::BufferDisplayReplacementSource::new(
             BufferId(7),
             CharPos0::new(3),
             EmacsBytePos::new(12),
         ),
-        anchor_charpos: CharPos0::new(3),
-        source_text: b"x",
-        active_face_state: &active_face,
-        current_x: 24.0,
-        content_x: 8.0,
-        params: &params,
-        display_host: None,
-        glyph_y_offset: -2.0,
-        default_row_height: 18.0,
-        start_position: DisplayRowPosition { x_px: 24.0, col: 4 },
-    }
+        CharPos0::new(3),
+        b"x",
+        &active_face,
+        24.0,
+        8.0,
+        &params,
+        None,
+        -2.0,
+        18.0,
+        DisplayRowPosition { x_px: 24.0, col: 4 },
+    )
     .resolve(&mut font_metrics)
     .expect("display replacement append request");
 

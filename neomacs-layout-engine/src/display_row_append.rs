@@ -2481,22 +2481,55 @@ pub(crate) enum DisplayPropertyReplacementAppendItem {
 }
 
 pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
-    pub(crate) display_property: &'a DisplayPropertyClassification,
-    pub(crate) value: Value,
-    pub(crate) replacement_source: BufferDisplayReplacementSource,
-    pub(crate) anchor_charpos: CharPos0,
-    pub(crate) source_text: &'a [u8],
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) current_x: f32,
-    pub(crate) content_x: f32,
-    pub(crate) params: &'a WindowParams,
-    pub(crate) display_host: Option<&'a dyn DisplayHost>,
-    pub(crate) glyph_y_offset: f32,
-    pub(crate) default_row_height: f32,
-    pub(crate) start_position: DisplayRowPosition,
+    display_property: &'a DisplayPropertyClassification,
+    value: Value,
+    replacement_source: BufferDisplayReplacementSource,
+    anchor_charpos: CharPos0,
+    source_text: &'a [u8],
+    active_face_state: &'a DisplayRowActiveFaceState,
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    display_host: Option<&'a dyn DisplayHost>,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
 }
 
-impl DisplayPropertyReplacementAppendResolveRequest<'_> {
+impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        display_property: &'a DisplayPropertyClassification,
+        value: Value,
+        replacement_source: BufferDisplayReplacementSource,
+        anchor_charpos: CharPos0,
+        source_text: &'a [u8],
+        active_face_state: &'a DisplayRowActiveFaceState,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        display_host: Option<&'a dyn DisplayHost>,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            display_property,
+            value,
+            replacement_source,
+            anchor_charpos,
+            source_text,
+            active_face_state,
+            current_x,
+            content_x,
+            params,
+            display_host,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+        }
+    }
+
     pub(crate) fn resolve(
         self,
         font_metrics: &mut Option<FontMetricsService>,
