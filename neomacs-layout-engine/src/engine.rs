@@ -43,7 +43,7 @@ use crate::display_row_append::{
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
     LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
-    SyntheticTextRowAppendContext,
+    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4639,24 +4639,27 @@ impl LayoutEngine {
                             0.0,
                             char_h,
                         );
+                        let truncation_request = SyntheticTextMetricsAppendRequest::new(
+                            DisplayRowPosition {
+                                x_px: content_x,
+                                col: 0,
+                            },
+                            SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
+                            "$",
+                            BasicFaceId::Default.into(),
+                            face_resolver.default_face(),
+                            char_h,
+                            default_face_ascent,
+                            char_w,
+                        );
                         if let Some((_progress, position)) = append_context
-                            .append_text_row_metrics_to_text_row_and_emit(
+                            .append_text_row_metrics_request_to_text_row_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
-                                DisplayRowPosition {
-                                    x_px: content_x,
-                                    col: 0,
-                                },
-                                SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
-                                "$",
-                                BasicFaceId::Default.into(),
-                                face_resolver.default_face(),
-                                char_h,
-                                default_face_ascent,
-                                char_w,
+                                truncation_request,
                             )
                         {
                             x = position.x_px;
