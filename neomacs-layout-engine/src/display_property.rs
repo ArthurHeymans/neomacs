@@ -35,12 +35,19 @@ impl DisplayReplacementProperty {
         }
     }
 
-    pub(crate) fn accepts_resolved_media_item(&self, kind: &DisplayItemKind) -> bool {
+    pub(crate) fn accepts_media_replacement(&self, media: &DisplayMediaReplacement) -> bool {
         matches!(
-            (self, kind),
-            (Self::Image, DisplayItemKind::Image(_))
-                | (Self::Video, DisplayItemKind::Video(_))
-                | (Self::Webkit, DisplayItemKind::Xwidget(_))
+            (self, media.kind),
+            (
+                Self::Image,
+                crate::display_item::DisplayMediaReplacementKind::Image { .. }
+            ) | (
+                Self::Video,
+                crate::display_item::DisplayMediaReplacementKind::Video { .. }
+            ) | (
+                Self::Webkit,
+                crate::display_item::DisplayMediaReplacementKind::Xwidget { .. }
+            )
         )
     }
 
@@ -51,9 +58,11 @@ impl DisplayReplacementProperty {
         )
     }
 
-    pub(crate) fn direct_media_item_kind(&self) -> Option<DisplayItemKind> {
+    pub(crate) fn direct_media_replacement(&self) -> Option<DisplayMediaReplacement> {
         match self {
-            Self::Xwidget(xwidget) => Some(DisplayItemKind::Xwidget(*xwidget)),
+            Self::Xwidget(xwidget) => {
+                DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(*xwidget))
+            }
             Self::String | Self::Space(_) | Self::Image | Self::Video | Self::Webkit => None,
         }
     }

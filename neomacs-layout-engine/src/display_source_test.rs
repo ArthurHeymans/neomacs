@@ -198,14 +198,14 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
         }
     }
 
-    fn resolve_display_property(
+    fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
         face: RenderFaceRef,
-    ) -> Option<DisplayItemKind> {
+    ) -> Option<DisplayMediaReplacement> {
         self.seen_face = Some(face);
         if display_prop.cons_car().is_symbol_named("image") {
-            Some(DisplayItemKind::Image(DisplayImageItem {
+            DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Image(DisplayImageItem {
                 image_id: 42,
                 width: 64.0,
                 height: 32.0,

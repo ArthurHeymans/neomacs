@@ -37,14 +37,14 @@ impl<'a> DisplaySourceContext<'a> {
             .unwrap_or(base)
     }
 
-    fn resolve_display_property(
+    fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
         face: RenderFaceRef,
-    ) -> Option<DisplayItemKind> {
+    ) -> Option<DisplayMediaReplacement> {
         self.face_resolver
             .as_mut()
-            .and_then(|resolver| resolver.resolve_display_property(display_prop, face))
+            .and_then(|resolver| resolver.resolve_display_media_replacement(display_prop, face))
     }
 }
 
@@ -63,11 +63,11 @@ pub(crate) trait DisplayItemSource {
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
 
-    fn resolve_display_property(
+    fn resolve_display_media_replacement(
         &mut self,
         _display_prop: Value,
         _face: RenderFaceRef,
-    ) -> Option<DisplayItemKind> {
+    ) -> Option<DisplayMediaReplacement> {
         None
     }
 }
@@ -725,12 +725,9 @@ fn display_property_source_action(
         Some(replacement) => {
             let kind = replacement.display_item_kind().or_else(|| {
                 context
-                    .resolve_display_property(display_prop, face)
-                    .filter(|kind| replacement.accepts_resolved_media_item(kind))
-                    .and_then(|kind| {
-                        DisplayMediaReplacement::from_item_kind(&kind)
-                            .map(DisplayItemKind::MediaReplacement)
-                    })
+                    .resolve_display_media_replacement(display_prop, face)
+                    .filter(|media| replacement.accepts_media_replacement(media))
+                    .map(DisplayItemKind::MediaReplacement)
             });
             kind.map(|kind| DisplayPropertySourceAction::Emit {
                 kind,
@@ -741,9 +738,9 @@ fn display_property_source_action(
             })
         }
         None => context
-            .resolve_display_property(display_prop, face)
-            .map(|kind| DisplayPropertySourceAction::Emit {
-                kind,
+            .resolve_display_media_replacement(display_prop, face)
+            .map(|media| DisplayPropertySourceAction::Emit {
+                kind: DisplayItemKind::MediaReplacement(media),
                 layout: classification.modifiers,
             })
             .unwrap_or(DisplayPropertySourceAction::Ignore {

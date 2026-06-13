@@ -271,12 +271,11 @@ pub(crate) enum ResolvedDisplayReplacement {
     Placeholder(&'static str),
 }
 
-fn resolved_media_replacement(kind: DisplayItemKind) -> Option<ResolvedDisplayReplacement> {
-    let geometry = DisplayMediaReplacement::from_item_kind(&kind)?;
-    Some(ResolvedDisplayReplacement::Media {
+fn resolved_media_replacement(geometry: DisplayMediaReplacement) -> ResolvedDisplayReplacement {
+    ResolvedDisplayReplacement::Media {
         item: DisplayItemKind::MediaReplacement(geometry),
         geometry,
-    })
+    }
 }
 
 pub(crate) fn resolve_display_replacement(
@@ -287,20 +286,20 @@ pub(crate) fn resolve_display_replacement(
     fallback_char_width: f32,
     fallback_row_height: f32,
 ) -> Option<ResolvedDisplayReplacement> {
-    if let Some(kind) = replacement.direct_media_item_kind() {
-        return resolved_media_replacement(kind);
+    if let Some(media) = replacement.direct_media_replacement() {
+        return Some(resolved_media_replacement(media));
     }
 
-    if let Some(kind) = resolve_display_property_media(
+    if let Some(media) = resolve_display_property_media(
         &display_prop,
         display_host,
         resolved_face,
         fallback_char_width,
         fallback_row_height,
     )
-    .filter(|kind| replacement.accepts_resolved_media_item(kind))
+    .filter(|media| replacement.accepts_media_replacement(media))
     {
-        return resolved_media_replacement(kind);
+        return Some(resolved_media_replacement(media));
     }
 
     replacement
@@ -409,11 +408,11 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
         RenderFaceRef::FaceId(face_id)
     }
 
-    fn resolve_display_property(
+    fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
         face: RenderFaceRef,
-    ) -> Option<DisplayItemKind> {
+    ) -> Option<DisplayMediaReplacement> {
         let face_basis = self.params.face_basis();
         let fallback = face_basis.fallback_metrics();
         let resolved_face = self.state.resolved_face_for(face, face_basis.base_face());
@@ -454,7 +453,7 @@ pub(crate) fn resolve_display_property_media(
     resolved_face: &ResolvedFace,
     fallback_char_width: f32,
     fallback_row_height: f32,
-) -> Option<DisplayItemKind> {
+) -> Option<DisplayMediaReplacement> {
     resolve_display_media_property(
         display_prop,
         DisplayMediaResolveParams {
@@ -465,6 +464,7 @@ pub(crate) fn resolve_display_property_media(
             fallback_row_height,
         },
     )
+    .and_then(|kind| DisplayMediaReplacement::from_item_kind(&kind))
 }
 
 pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {

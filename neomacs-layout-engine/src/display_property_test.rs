@@ -1,7 +1,8 @@
 use super::*;
 use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem,
+    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayVideoItem,
+    DisplayXwidgetItem,
 };
 use neovm_core::emacs_core::{Context, Value};
 
@@ -141,31 +142,37 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
 }
 
 #[test]
-fn display_replacement_property_accepts_only_matching_resolved_media_items() {
-    let image_item = DisplayItemKind::Image(DisplayImageItem {
-        image_id: 1,
-        width: 10.0,
-        height: 20.0,
-    });
-    let video_item = DisplayItemKind::Video(DisplayVideoItem {
-        video_id: 2,
-        width: 30.0,
-        height: 40.0,
-        loop_count: 0,
-        autoplay: false,
-    });
-    let xwidget_item = DisplayItemKind::Xwidget(DisplayXwidgetItem {
-        xwidget_id: 3,
-        width: 50.0,
-        height: 60.0,
-    });
+fn display_replacement_property_accepts_only_matching_media_replacements() {
+    let image =
+        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Image(DisplayImageItem {
+            image_id: 1,
+            width: 10.0,
+            height: 20.0,
+        }))
+        .expect("image replacement");
+    let video =
+        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Video(DisplayVideoItem {
+            video_id: 2,
+            width: 30.0,
+            height: 40.0,
+            loop_count: 0,
+            autoplay: false,
+        }))
+        .expect("video replacement");
+    let xwidget =
+        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(DisplayXwidgetItem {
+            xwidget_id: 3,
+            width: 50.0,
+            height: 60.0,
+        }))
+        .expect("xwidget replacement");
 
-    assert!(DisplayReplacementProperty::Image.accepts_resolved_media_item(&image_item));
-    assert!(!DisplayReplacementProperty::Image.accepts_resolved_media_item(&video_item));
-    assert!(DisplayReplacementProperty::Video.accepts_resolved_media_item(&video_item));
-    assert!(!DisplayReplacementProperty::Video.accepts_resolved_media_item(&image_item));
-    assert!(DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&xwidget_item));
-    assert!(!DisplayReplacementProperty::Webkit.accepts_resolved_media_item(&image_item));
+    assert!(DisplayReplacementProperty::Image.accepts_media_replacement(&image));
+    assert!(!DisplayReplacementProperty::Image.accepts_media_replacement(&video));
+    assert!(DisplayReplacementProperty::Video.accepts_media_replacement(&video));
+    assert!(!DisplayReplacementProperty::Video.accepts_media_replacement(&image));
+    assert!(DisplayReplacementProperty::Webkit.accepts_media_replacement(&xwidget));
+    assert!(!DisplayReplacementProperty::Webkit.accepts_media_replacement(&image));
 }
 
 #[test]
@@ -198,11 +205,11 @@ fn display_replacement_property_describes_media_replacement_behavior() {
         None
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget).direct_media_item_kind(),
-        Some(DisplayItemKind::Xwidget(xwidget))
+        DisplayReplacementProperty::Xwidget(xwidget).direct_media_replacement(),
+        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(xwidget))
     );
     assert_eq!(
-        DisplayReplacementProperty::Image.direct_media_item_kind(),
+        DisplayReplacementProperty::Image.direct_media_replacement(),
         None
     );
 }
