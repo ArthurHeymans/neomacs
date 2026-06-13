@@ -1704,6 +1704,76 @@ impl DisplayReplacementSourceMappedTextAppendItem {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayReplacementRowAppendContext<'a> {
+    replacement_source: BufferDisplayReplacementSource,
+    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+}
+
+impl<'a> DisplayReplacementRowAppendContext<'a> {
+    pub(crate) fn new(
+        replacement_source: BufferDisplayReplacementSource,
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            replacement_source,
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                default_row_height,
+            ),
+        }
+    }
+
+    pub(crate) fn active_face(
+        self,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> DisplayReplacementAppendContext<'a> {
+        DisplayReplacementAppendContext::new(
+            self.replacement_source,
+            face_id,
+            base_face,
+            self.active_face_context.active_face_frame(),
+        )
+    }
+
+    pub(crate) fn full_text_width_active_face(
+        self,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> DisplayReplacementAppendContext<'a> {
+        DisplayReplacementAppendContext::new(
+            self.replacement_source,
+            face_id,
+            base_face,
+            self.active_face_context.full_text_width_active_face_frame(),
+        )
+    }
+
+    pub(crate) fn display_box(
+        self,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+    ) -> DisplayReplacementAppendContext<'a> {
+        DisplayReplacementAppendContext::new(
+            self.replacement_source,
+            face_id,
+            base_face,
+            self.active_face_context
+                .display_box_frame(height_px, ascent_px),
+        )
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementAppendContext<'a> {
     replacement_source: BufferDisplayReplacementSource,

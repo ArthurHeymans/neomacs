@@ -40,8 +40,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
-    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementAppendContext,
-    DisplayReplacementMediaAppendItem, DisplayReplacementSourceMappedTextAppendItem,
+    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementMediaAppendItem,
+    DisplayReplacementRowAppendContext, DisplayReplacementSourceMappedTextAppendItem,
     DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
     DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
@@ -4604,19 +4604,17 @@ impl LayoutEngine {
                                 &mut face_ids,
                                 &mut self.matrix_builder,
                             );
-                            let append_frame = DisplayRowActiveFaceAppendContext::new(
+                            let append_context = DisplayReplacementRowAppendContext::new(
+                                display_replacement_source,
                                 &text_append_surface,
                                 &row_geometry,
                                 &active_face_state,
                                 raise_span.value_or(0.0),
                                 char_h,
                             )
-                            .full_text_width_active_face_frame();
-                            let append_context = DisplayReplacementAppendContext::new(
-                                display_replacement_source,
+                            .full_text_width_active_face(
                                 replacement_base_face.face_id(),
                                 replacement_base_face.face(),
-                                append_frame,
                             );
                             let position = append_context.append_string_item_to_text_row(
                                 &mut self.matrix_builder,
@@ -4687,19 +4685,17 @@ impl LayoutEngine {
                                 stretch_item.height_px(),
                                 stretch_item.ascent_px(),
                             );
-                            let replacement_frame = DisplayRowActiveFaceAppendContext::new(
+                            let append_context = DisplayReplacementRowAppendContext::new(
+                                display_replacement_source,
                                 &text_append_surface,
                                 &row_geometry,
                                 &active_face_state,
                                 raise_span.value_or(0.0),
                                 char_h,
                             )
-                            .active_face_frame();
-                            let append_context = DisplayReplacementAppendContext::new(
-                                display_replacement_source,
+                            .active_face(
                                 active_face_state.face_id(),
                                 active_face_state.resolved_face(),
-                                replacement_frame,
                             );
                             if let Some((_progress, position)) = append_context
                                 .append_stretch_to_text_row_and_emit(
@@ -4765,22 +4761,19 @@ impl LayoutEngine {
                                     );
                                 }
 
-                                let replacement_frame = DisplayRowActiveFaceAppendContext::new(
+                                let append_context = DisplayReplacementRowAppendContext::new(
+                                    display_replacement_source,
                                     &text_append_surface,
                                     &row_geometry,
                                     &active_face_state,
                                     raise_span.value_or(0.0),
                                     char_h,
                                 )
-                                .display_box_frame(
-                                    media_item.display_height_px(),
-                                    media_item.display_ascent_px(),
-                                );
-                                let append_context = DisplayReplacementAppendContext::new(
-                                    display_replacement_source,
+                                .display_box(
                                     active_face_state.face_id(),
                                     active_face_state.resolved_face(),
-                                    replacement_frame,
+                                    media_item.display_height_px(),
+                                    media_item.display_ascent_px(),
                                 );
                                 if let Some((progress, position)) = append_context
                                     .append_media_to_text_row_and_emit(
@@ -4814,19 +4807,17 @@ impl LayoutEngine {
                                         ),
                                     );
                                 }
-                                let replacement_frame = DisplayRowActiveFaceAppendContext::new(
+                                let append_context = DisplayReplacementRowAppendContext::new(
+                                    display_replacement_source,
                                     &text_append_surface,
                                     &row_geometry,
                                     &active_face_state,
                                     raise_span.value_or(0.0),
                                     char_h,
                                 )
-                                .active_face_frame();
-                                let append_context = DisplayReplacementAppendContext::new(
-                                    display_replacement_source,
+                                .active_face(
                                     active_face_state.face_id(),
                                     active_face_state.resolved_face(),
-                                    replacement_frame,
                                 );
                                 if let Some((_progress, position)) = append_context
                                     .append_source_mapped_text_to_text_row_and_emit(

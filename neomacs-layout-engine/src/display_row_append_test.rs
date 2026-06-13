@@ -2695,15 +2695,32 @@ fn display_replacement_append_context_advances_stretch_output() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
+    let active_face = test_active_face_state(3, 8.0);
 
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let append_context = DisplayReplacementRowAppendContext::new(
+        replacement_source,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        16.0,
+    )
+    .active_face(3, base_face);
     let (_progress, end) = append_context
         .append_stretch_to_text_row_and_emit(
             &mut builder,
@@ -2763,15 +2780,32 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
+    let active_face = test_active_face_state(3, 8.0);
 
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let append_context = DisplayReplacementRowAppendContext::new(
+        replacement_source,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        16.0,
+    )
+    .active_face(3, base_face);
     let (_progress, end) = append_context
         .append_source_mapped_text_to_text_row_and_emit(
             &mut builder,
@@ -2912,25 +2946,16 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         true,
     );
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame_at(
-        0,
-        4.0,
-        6.0,
+    let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 160.0,
             text_width: 160.0,
             line_number_width: 0.0,
         },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
         DisplayTabPolicy::every(8),
     );
+    let geometry = DisplayRowGeometryState::new(0, 4.0, 0.0, 16.0, 12.0);
     let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
@@ -2947,8 +2972,20 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         &active_face,
         true,
     );
-    let append_context =
-        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let append_context = DisplayReplacementRowAppendContext::new(
+        replacement_source,
+        &surface,
+        &geometry,
+        &active_face,
+        2.0,
+        16.0,
+    )
+    .display_box(
+        3,
+        base_face,
+        media_item.display_height_px(),
+        media_item.display_ascent_px(),
+    );
     let (progress, end) = append_context
         .append_media_to_text_row_and_emit(
             &mut builder,
