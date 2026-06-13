@@ -1230,12 +1230,12 @@ impl DisplayRowGeometry {
 }
 
 struct DisplayRowSpec<'a> {
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) render_bounds: DisplayRowRenderBounds,
-    pub(crate) base_face_id: u32,
-    pub(crate) base_face: &'a ResolvedFace,
-    pub(crate) role: GlyphRowRole,
-    pub(crate) symbol_values: std::collections::HashMap<String, Value>,
+    geometry: DisplayRowGeometry,
+    render_bounds: DisplayRowRenderBounds,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+    role: GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
 }
 
 pub(crate) struct DisplayRowSourceRenderRequest<'a> {
@@ -1872,17 +1872,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
-    fn render_lisp_string_row(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        rendered: Value,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row_with_display_host(spec, rendered, face_resolver, None, face_ids)
-    }
-
-    #[cfg(test)]
     pub(crate) fn render_lisp_string_source_row(
         &mut self,
         request: DisplayRowSourceRenderRequest<'_>,
@@ -1890,25 +1879,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row(
-            request.display_row_spec(),
-            rendered,
-            face_resolver,
-            face_ids,
-        )
-    }
-
-    #[cfg(test)]
-    fn render_lisp_string_row_with_display_host(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        rendered: Value,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_lisp_string_row_with_context(spec, rendered, &mut context)
+        let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
+        self.render_lisp_string_source_row_with_context(request, rendered, &mut context)
     }
 
     #[cfg(test)]
@@ -1976,23 +1948,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
-    fn render_display_item_source_row(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        source: &mut impl DisplayItemSource,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        self.render_display_item_source_row_with_display_host(
-            spec,
-            source,
-            face_resolver,
-            None,
-            face_ids,
-        )
-    }
-
-    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_from_request(
         &mut self,
         request: DisplayRowSourceRenderRequest<'_>,
@@ -2000,25 +1955,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
-        self.render_display_item_source_row(
+        let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
+        self.render_display_item_source_row_with_context(
             request.display_row_spec(),
             source,
-            face_resolver,
-            face_ids,
+            &mut context,
         )
-    }
-
-    #[cfg(test)]
-    fn render_display_item_source_row_with_display_host(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        source: &mut impl DisplayItemSource,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_display_item_source_row_with_context(spec, source, &mut context)
     }
 
     fn render_display_item_source_row_with_context(
