@@ -122,6 +122,54 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
 }
 
 #[test]
+fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
+    let media = DisplayMediaReplacement::xwidget(crate::display_item::DisplayXwidgetItem {
+        xwidget_id: 17,
+        width: 42.0,
+        height: 11.0,
+    });
+    let source = DisplayItem::new(
+        SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(7),
+        DisplayItemKind::MediaReplacement(media),
+    );
+    let render_item = DisplayRowRenderItem::from_source_item(source.clone());
+
+    assert_eq!(render_item.source_item(), &source);
+    assert_eq!(render_item.row_face(), RenderFaceRef::FaceId(7));
+    let DisplayItemKind::Stretch(stretch) = &render_item.row_item().kind else {
+        panic!("media replacement should lower to a row stretch item");
+    };
+    assert_eq!(
+        stretch.width,
+        crate::display_item::DisplayStretchWidth::Length(
+            crate::display_item::DisplayLength::Pixels(42.0)
+        )
+    );
+
+    let rendered_media = render_item
+        .rendered_media_for_progress(
+            &DisplayRowAppendProgress::from_positions(
+                DisplayRowPosition { x_px: 8.0, col: 1 },
+                DisplayRowPosition { x_px: 50.0, col: 2 },
+                DisplayRowAppendStatus::Complete,
+                Vec::new(),
+            ),
+            6.0,
+        )
+        .expect("media should render after complete nonempty append");
+
+    assert_eq!(
+        rendered_media.kind,
+        RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 17 }
+    );
+    assert_eq!(rendered_media.x, 8.0);
+    assert_eq!(rendered_media.y, 6.0);
+    assert_eq!(rendered_media.width, 42.0);
+    assert_eq!(rendered_media.height, 11.0);
+}
+
+#[test]
 fn insert_resolved_display_row_face_applies_metric_overrides() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let face = base_face();

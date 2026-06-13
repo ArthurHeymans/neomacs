@@ -6,8 +6,9 @@ use crate::display_item::{
 };
 use crate::display_property::parse_display_length_expr;
 use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowItemMeasurement,
-    DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
+    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
+    DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
+    DisplayTabPolicy,
 };
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
@@ -1934,6 +1935,10 @@ impl DisplayRowRenderItem {
         }
     }
 
+    fn source_item(&self) -> &DisplayItem {
+        &self.source_item
+    }
+
     fn row_face(&self) -> RenderFaceRef {
         self.row_item.face
     }
@@ -1942,8 +1947,22 @@ impl DisplayRowRenderItem {
         &self.row_item
     }
 
-    fn into_source_item(self) -> DisplayItem {
-        self.source_item
+    fn row_item_for_write(&self) -> DisplayItem {
+        self.row_item.clone()
+    }
+
+    fn rendered_media_for_progress(
+        &self,
+        progress: &DisplayRowAppendProgress,
+        y: f32,
+    ) -> Option<RenderedDisplayRowMedia> {
+        let descriptor = self.media_descriptor?;
+        (progress.status == DisplayRowAppendStatus::Complete && progress.metrics.width_px > 0.0)
+            .then(|| descriptor.rendered_media(progress.start, y))
+    }
+
+    fn clipped_remainder(self, progress: &DisplayRowAppendProgress) -> Option<DisplayItem> {
+        clipped_display_item_remainder(self.source_item, progress)
     }
 }
 
@@ -2360,7 +2379,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         position,
                         render_bounds.max_x_px,
                     );
-                    row_writer.push_item(render_item.row_item().clone())
+                    row_writer.push_item(render_item.row_item_for_write())
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
                     let mut row_writer = DisplayRowProgressWriter::with_text_run_measurement(
@@ -2370,26 +2389,22 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         position,
                         render_bounds.max_x_px,
                     );
-                    row_writer.push_item(render_item.row_item().clone())
+                    row_writer.push_item(render_item.row_item_for_write())
                 }
             };
             position = progress.end;
             source_slots.extend(progress.slots.iter().cloned());
-            if let Some(descriptor) = render_item.media_descriptor
-                && progress.status == DisplayRowAppendStatus::Complete
-                && progress.metrics.width_px > 0.0
+            if let Some(rendered) =
+                render_item.rendered_media_for_progress(&progress, row_layout.y_px)
             {
-                media.push(descriptor.rendered_media(progress.start, row_layout.y_px));
+                media.push(rendered);
             }
             match progress.status {
                 DisplayRowAppendStatus::Complete => {}
                 DisplayRowAppendStatus::Clipped => {
-                    match policy.clipped_behavior(&render_item.source_item) {
+                    match policy.clipped_behavior(render_item.source_item()) {
                         DisplayRowRenderClipBehavior::PreserveRemainderAndStop => {
-                            state.remember_pending_item(clipped_display_item_remainder(
-                                render_item.into_source_item(),
-                                &progress,
-                            ));
+                            state.remember_pending_item(render_item.clipped_remainder(&progress));
                             break DisplayRowRenderStop::Clipped;
                         }
                         DisplayRowRenderClipBehavior::Stop => {
