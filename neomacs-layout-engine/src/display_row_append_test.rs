@@ -1843,7 +1843,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
 }
 
 #[test]
-fn append_buffer_control_char_fragment_to_text_row_and_emit_builds_buffer_source_item() {
+fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_control_char_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1901,7 +1901,7 @@ fn append_buffer_control_char_fragment_to_text_row_and_emit_builds_buffer_source
     );
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_control_char_fragment_to_text_row_and_emit(
+    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1912,7 +1912,7 @@ fn append_buffer_control_char_fragment_to_text_row_and_emit_builds_buffer_source
         &face_resolver,
         base_face,
         7,
-        '\u{0001}',
+        BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' },
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1936,7 +1936,7 @@ fn append_buffer_control_char_fragment_to_text_row_and_emit_builds_buffer_source
 }
 
 #[test]
-fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit_builds_mapped_item() {
+fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_mapped_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1970,7 +1970,7 @@ fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit_builds_mapped_
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_source_mapped_text_fragment_to_text_row_and_emit(
+    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1981,7 +1981,7 @@ fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit_builds_mapped_
         &face_resolver,
         base_face,
         7,
-        "\\ ",
+        BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() },
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -2005,7 +2005,7 @@ fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit_builds_mapped_
 }
 
 #[test]
-fn append_buffer_glyphless_fragment_to_text_row_and_emit_builds_glyphless_item() {
+fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_glyphless_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2036,7 +2036,7 @@ fn append_buffer_glyphless_fragment_to_text_row_and_emit_builds_glyphless_item()
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_glyphless_fragment_to_text_row_and_emit(
+    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -2047,8 +2047,10 @@ fn append_buffer_glyphless_fragment_to_text_row_and_emit_builds_glyphless_item()
         &face_resolver,
         base_face,
         7,
-        '\u{fff0}',
-        GlyphlessMethod::HexCode,
+        BufferTextFragmentAppendItem::Glyphless {
+            ch: '\u{fff0}',
+            method: GlyphlessMethod::HexCode,
+        },
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )

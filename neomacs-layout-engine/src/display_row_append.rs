@@ -904,8 +904,7 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     face_id: u32,
-    append_kind: DisplayRowAppendKind,
-    kind: DisplayItemKind,
+    item: BufferTextFragmentAppendItem,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -927,8 +926,12 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
         buffer.layout_char_pos_to_emacs_byte_pos(end),
     );
 
+    let append_kind = item.append_kind();
+    let item = source.item(
+        RenderFaceRef::FaceId(face_id),
+        item.into_display_item_kind(),
+    );
     let append_spec = frame.append_spec(position, face_id, append_kind);
-    let item = source.item(RenderFaceRef::FaceId(face_id), kind);
     let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
@@ -953,44 +956,37 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
     Some((progress, outcome.end))
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_control_char_fragment_to_text_row_and_emit<
-    B: LayoutBufferView + ?Sized,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    fragment: DisplayTextFragment,
-    buffer: &B,
-    buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    face_id: u32,
-    ch: char,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_display_item_fragment_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        fragment,
-        buffer,
-        buffer_id,
-        face_resolver,
-        base_face,
-        face_id,
-        DisplayRowAppendKind::ControlChar,
-        DisplayItemKind::ControlChar { ch },
-        frame,
-        position,
-    )
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextFragmentAppendItem {
+    ControlChar { ch: char },
+    SourceMappedText { text: Box<str> },
+    Glyphless { ch: char, method: GlyphlessMethod },
+}
+
+impl BufferTextFragmentAppendItem {
+    fn append_kind(&self) -> DisplayRowAppendKind {
+        match self {
+            Self::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
+            Self::SourceMappedText { .. } => DisplayRowAppendKind::SourceMappedText,
+            Self::Glyphless { .. } => DisplayRowAppendKind::Glyphless,
+        }
+    }
+
+    fn into_display_item_kind(self) -> DisplayItemKind {
+        match self {
+            Self::ControlChar { ch } => DisplayItemKind::ControlChar { ch },
+            Self::SourceMappedText { text } => {
+                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text))
+            }
+            Self::Glyphless { ch, method } => {
+                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method })
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit<
+pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     B: LayoutBufferView + ?Sized,
 >(
     builder: &mut GlyphMatrixBuilder,
@@ -1003,7 +999,7 @@ pub(crate) fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit<
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     face_id: u32,
-    mapped_text: impl Into<Box<str>>,
+    item: BufferTextFragmentAppendItem,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -1018,45 +1014,7 @@ pub(crate) fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit<
         face_resolver,
         base_face,
         face_id,
-        DisplayRowAppendKind::SourceMappedText,
-        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(mapped_text)),
-        frame,
-        position,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_glyphless_fragment_to_text_row_and_emit<
-    B: LayoutBufferView + ?Sized,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    fragment: DisplayTextFragment,
-    buffer: &B,
-    buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    face_id: u32,
-    ch: char,
-    method: GlyphlessMethod,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_display_item_fragment_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        fragment,
-        buffer,
-        buffer_id,
-        face_resolver,
-        base_face,
-        face_id,
-        DisplayRowAppendKind::Glyphless,
-        DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
+        item,
         frame,
         position,
     )
