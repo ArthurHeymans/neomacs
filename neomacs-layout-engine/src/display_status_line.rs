@@ -17,8 +17,8 @@ use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowSpec, MeasuredDisplayRow,
-    install_measured_window_display_row,
+    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowSpec, FrameFaceIdAllocator,
+    MeasuredDisplayRow, install_measured_window_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -63,7 +63,7 @@ impl LayoutEngine {
         evaluator: &mut Context,
         output_emitter: &mut WindowOutputEmitter,
         face_resolver: &FaceResolver,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
         matrix_row: usize,
         output: ChromeRowOutput,
         owner: DisplayRowOwner,
@@ -78,7 +78,7 @@ impl LayoutEngine {
             rendered_text,
             face_resolver,
             evaluator.display_host.as_deref(),
-            next_face_id,
+            face_ids,
         );
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(

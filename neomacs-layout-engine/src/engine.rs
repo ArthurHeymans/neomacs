@@ -3935,7 +3935,7 @@ impl LayoutEngine {
                     Value::string(""),
                     face_resolver,
                     evaluator.display_host.as_deref(),
-                    face_ids.raw_mut(),
+                    &mut face_ids,
                 )
                 .expect("empty Lisp string should render an inactive minibuffer row");
             install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
@@ -6461,7 +6461,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                face_ids.raw_mut(),
+                &mut face_ids,
                 0,
                 tab_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6519,7 +6519,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                face_ids.raw_mut(),
+                &mut face_ids,
                 usize::from(tab_line_height > 0.0),
                 header_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6597,7 +6597,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
-                face_ids.raw_mut(),
+                &mut face_ids,
                 mode_line_matrix_row,
                 mode_row_output,
                 DisplayRowOwner::WindowChrome {
@@ -6925,7 +6925,7 @@ impl LayoutEngine {
             DisplayTextFragment::tab_bar(tab_bar.text),
             face_resolver,
             evaluator.display_host.as_deref(),
-            face_ids.raw_mut(),
+            &mut face_ids,
         ) else {
             return None;
         };

@@ -1773,15 +1773,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         spec: DisplayRowSpec<'_>,
         rendered: Value,
         face_resolver: &FaceResolver,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row_with_display_host(
-            spec,
-            rendered,
-            face_resolver,
-            None,
-            next_face_id,
-        )
+        self.render_lisp_string_row_with_display_host(spec, rendered, face_resolver, None, face_ids)
     }
 
     pub(crate) fn render_lisp_string_row_with_display_host(
@@ -1790,7 +1784,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         rendered: Value,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         let base_face_id = spec.base_face_id;
         let mut source =
@@ -1800,7 +1794,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             &mut source,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
         )
     }
 
@@ -1810,14 +1804,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         spec: DisplayRowSpec<'_>,
         fragment: DisplayTextFragment,
         face_resolver: &FaceResolver,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         self.render_display_text_fragment_row_with_display_host(
             spec,
             fragment,
             face_resolver,
             None,
-            next_face_id,
+            face_ids,
         )
     }
 
@@ -1827,7 +1821,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         fragment: DisplayTextFragment,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         let rendered = match fragment.storage {
             DisplayTextStorage::LispString(value) => value,
@@ -1842,7 +1836,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             &mut source,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
         )
     }
 
@@ -1852,14 +1846,14 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         spec: DisplayRowSpec<'_>,
         source: &mut impl DisplayItemSource,
         face_resolver: &FaceResolver,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         self.render_display_item_source_row_with_display_host(
             spec,
             source,
             face_resolver,
             None,
-            next_face_id,
+            face_ids,
         )
     }
 
@@ -1869,7 +1863,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         source: &mut impl DisplayItemSource,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         let mut state = DisplayRowSourceState::default();
         self.render_display_item_source_row_step_with_display_host(
@@ -1878,7 +1872,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             &mut state,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids.raw_mut(),
         )
         .map(|result| result.rendered)
     }
@@ -2148,15 +2142,9 @@ impl LayoutEngine {
         spec: DisplayRowSpec<'_>,
         rendered: Value,
         face_resolver: &FaceResolver,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row_with_display_host(
-            spec,
-            rendered,
-            face_resolver,
-            None,
-            next_face_id,
-        )
+        self.render_lisp_string_row_with_display_host(spec, rendered, face_resolver, None, face_ids)
     }
 
     pub(crate) fn render_lisp_string_row_with_display_host(
@@ -2165,14 +2153,14 @@ impl LayoutEngine {
         rendered: Value,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics).render_lisp_string_row_with_display_host(
             spec,
             rendered,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
         )
     }
 
@@ -2182,7 +2170,7 @@ impl LayoutEngine {
         fragment: DisplayTextFragment,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics)
             .render_display_text_fragment_row_with_display_host(
@@ -2190,7 +2178,7 @@ impl LayoutEngine {
                 fragment,
                 face_resolver,
                 display_host,
-                next_face_id,
+                face_ids,
             )
     }
 }

@@ -319,7 +319,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("A中"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("A中"), &resolver, &mut face_ids)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -352,7 +352,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let fragment = DisplayTextFragment::tab_line(Value::string("A中"));
 
     let rendered = renderer
-        .render_display_text_fragment_row(spec, fragment, &resolver, face_ids.raw_mut())
+        .render_display_text_fragment_row(spec, fragment, &resolver, &mut face_ids)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -452,7 +452,7 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut face_ids)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
@@ -491,7 +491,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     };
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut face_ids)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
@@ -532,7 +532,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     };
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut face_ids)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -828,7 +828,7 @@ fn render_lisp_display_row_output_with_symbols(
         symbol_values,
     );
     renderer
-        .render_lisp_string_row(spec, rendered, &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, rendered, &resolver, &mut face_ids)
         .expect("display source row")
 }
 
@@ -906,7 +906,7 @@ fn render_buffer_display_row_with_properties(
     );
 
     renderer
-        .render_display_item_source_row(spec, &mut source, &resolver, face_ids.raw_mut())
+        .render_display_item_source_row(spec, &mut source, &resolver, &mut face_ids)
         .expect("buffer display source row")
         .row
 }
@@ -956,7 +956,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
             },
             &mut source,
             &resolver,
-            face_ids.raw_mut(),
+            &mut face_ids,
         )
         .expect("display source row");
 
@@ -1054,7 +1054,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, rendered_text, &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, rendered_text, &resolver, &mut face_ids)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -1114,7 +1114,7 @@ fn render_tab_line_with_media_host(
             rendered_text,
             &resolver,
             Some(&host),
-            face_ids.raw_mut(),
+            &mut face_ids,
         )
         .expect("display source row");
     (rendered, host)
@@ -1520,7 +1520,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
             },
             &mut source,
             &resolver,
-            face_ids.raw_mut(),
+            &mut face_ids,
         )
         .expect("display source row");
 
@@ -1560,7 +1560,7 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
     );
 
     let rendered = engine
-        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut face_ids)
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -2257,7 +2257,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
     );
 
     let row = engine
-        .render_lisp_string_row(spec, rendered, &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, rendered, &resolver, &mut face_ids)
         .expect("display source row")
         .row;
     let glyphs = &row.glyphs[1];
@@ -2494,7 +2494,7 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
         std::collections::HashMap::new(),
     );
     let rendered = engine
-        .render_lisp_string_row(spec, Value::string("אב"), &resolver, face_ids.raw_mut())
+        .render_lisp_string_row(spec, Value::string("אב"), &resolver, &mut face_ids)
         .expect("display source row");
 
     assert!(rendered.row.reversed_p);
