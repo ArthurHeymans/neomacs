@@ -16,9 +16,10 @@
 use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowSpec, FrameFaceIdAllocator,
-    MeasuredDisplayRow, install_measured_window_display_row,
+    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowSpec, MeasuredDisplayRow,
+    install_measured_window_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,

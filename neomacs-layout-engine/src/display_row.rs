@@ -1,3 +1,4 @@
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLengthExpr, DisplayMediaReplacement,
     DisplayMediaReplacementKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
@@ -25,7 +26,7 @@ use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::face::{BasicFaceId, BoxType, Face, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 #[cfg(test)]
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
@@ -988,37 +989,6 @@ pub(crate) struct DisplayRowSourceState {
     exhausted: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FrameFaceIdAllocator {
-    next_face_id: u32,
-}
-
-impl FrameFaceIdAllocator {
-    pub(crate) fn new(next_face_id: u32) -> Self {
-        Self {
-            next_face_id: next_face_id.max(BasicFaceId::SENTINEL),
-        }
-    }
-
-    pub(crate) fn allocate(&mut self) -> u32 {
-        let face_id = self.next_face_id;
-        self.next_face_id += 1;
-        face_id
-    }
-
-    pub(crate) fn raw_mut(&mut self) -> &mut u32 {
-        &mut self.next_face_id
-    }
-
-    pub(crate) fn reserve_after(&mut self, face_id: u32) {
-        self.next_face_id = self.next_face_id.max(face_id.saturating_add(1));
-    }
-
-    pub(crate) fn finish(self) -> u32 {
-        self.next_face_id
-    }
-}
-
 impl DisplayRowSourceState {
     pub(crate) fn next_resolved_item(
         &mut self,
@@ -1038,12 +1008,8 @@ impl DisplayRowSourceState {
                 pending_faces: Vec::new(),
             };
         }
-        let resolved = resolve_next_display_source_item(
-            source,
-            params,
-            &mut self.resolve_state,
-            face_ids.raw_mut(),
-        );
+        let resolved =
+            resolve_next_display_source_item(source, params, &mut self.resolve_state, face_ids);
         if resolved.item.is_none() {
             self.mark_exhausted();
         }

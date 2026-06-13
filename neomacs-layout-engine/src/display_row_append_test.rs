@@ -1,4 +1,5 @@
 use super::*;
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
@@ -6,7 +7,7 @@ use crate::display_item::{
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameFaceIdAllocator,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_text::DisplayTextFragment;
@@ -842,7 +843,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut pending_faces = Vec::new();
     let params = crate::display_source_resolver::DisplaySourceResolveParams {
         face_resolver: &face_resolver,
@@ -857,7 +858,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
         params,
         &mut resolve_state,
-        &mut current_face_id,
+        &mut face_ids,
         &mut pending_faces,
     );
     let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
@@ -869,7 +870,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     );
 
     assert_eq!(face, RenderFaceRef::FaceId(20));
-    assert_eq!(current_face_id, 21);
+    assert_eq!(face_ids.finish(), 21);
     assert_eq!(pending_faces.len(), 1);
     assert_eq!(pending_faces[0].face_id, 20);
     assert_eq!(pending_faces[0].resolved.fg, 0x00ff0000);
@@ -882,7 +883,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let value = Value::string_with_text_properties(
         "a",
@@ -912,7 +913,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
             fallback_row_height: 16.0,
         },
         &mut resolve_state,
-        &mut current_face_id,
+        &mut face_ids,
     );
 
     let item = resolved.item.expect("source item");
@@ -929,7 +930,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let value = Value::string_with_text_properties(
         "a",
@@ -959,7 +960,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
             fallback_row_height: 16.0,
         },
         &mut resolve_state,
-        &mut current_face_id,
+        &mut face_ids,
     );
 
     let item = resolved.item.expect("source item");

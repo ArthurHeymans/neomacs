@@ -1,3 +1,4 @@
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -14,7 +15,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
     DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
     DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, FrameFaceIdAllocator, install_rendered_display_row_fragment_assets,
+    DisplayRowSpec, install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
 #[cfg(test)]

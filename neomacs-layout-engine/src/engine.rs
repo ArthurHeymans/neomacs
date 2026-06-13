@@ -14,6 +14,7 @@ use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, WindowOutputEmitter,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
@@ -22,8 +23,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
     DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, FrameChromeKind, FrameFaceIdAllocator, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    insert_resolved_display_row_face, install_measured_frame_chrome_row,
     install_rendered_display_row,
 };
 use crate::display_row_append::{

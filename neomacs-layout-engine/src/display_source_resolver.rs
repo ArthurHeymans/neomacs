@@ -1,3 +1,4 @@
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
@@ -78,7 +79,7 @@ pub(crate) struct ResolvedDisplaySourceItem {
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
     params: DisplaySourceResolveParams<'a>,
     state: &'a mut DisplaySourceResolveState,
-    next_face_id: &'a mut u32,
+    face_ids: &'a mut FrameFaceIdAllocator,
     pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
 }
 
@@ -86,14 +87,14 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     pub(crate) fn new(
         params: DisplaySourceResolveParams<'a>,
         state: &'a mut DisplaySourceResolveState,
-        next_face_id: &'a mut u32,
+        face_ids: &'a mut FrameFaceIdAllocator,
         pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
     ) -> Self {
         state.remember_face(params.base_face_id, params.base_face);
         Self {
             params,
             state,
-            next_face_id,
+            face_ids,
             pending_faces,
         }
     }
@@ -144,8 +145,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             return face;
         }
 
-        let face_id = *self.next_face_id;
-        *self.next_face_id += 1;
+        let face_id = self.face_ids.allocate();
         self.state.height_face_cache.insert(key, face_id);
         self.state.remember_face(face_id, &resolved);
         self.pending_faces
@@ -173,8 +173,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             return RenderFaceRef::FaceId(self.params.base_face_id);
         }
 
-        let face_id = *self.next_face_id;
-        *self.next_face_id += 1;
+        let face_id = self.face_ids.allocate();
         self.state.cache_face(face_value, face_id, &resolved);
         self.pending_faces
             .push(PendingDisplaySourceFace { face_id, resolved });
@@ -201,12 +200,12 @@ pub(crate) fn resolve_next_display_source_item(
     source: &mut impl DisplayItemSource,
     params: DisplaySourceResolveParams<'_>,
     state: &mut DisplaySourceResolveState,
-    next_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
 ) -> ResolvedDisplaySourceItem {
     let mut pending_faces = Vec::new();
     let item = {
         let mut resolver =
-            DisplaySourcePropertyResolver::new(params, state, next_face_id, &mut pending_faces);
+            DisplaySourcePropertyResolver::new(params, state, face_ids, &mut pending_faces);
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
         source
             .next_item(&mut context)
