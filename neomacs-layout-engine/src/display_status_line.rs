@@ -21,8 +21,8 @@ use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOwner, DisplayRowRenderContext,
     DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
-    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, install_measured_frame_chrome_row,
-    install_measured_window_display_row,
+    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    install_measured_frame_chrome_row, install_measured_window_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -64,6 +64,28 @@ pub(crate) enum FrameTabBarDisplayRowRender {
     Measured(MeasuredDisplayRow),
 }
 
+pub(crate) struct WindowChromeDisplayRowRequest<'face> {
+    pub(crate) window_id: u64,
+    pub(crate) kind: WindowChromeKind,
+    pub(crate) matrix_row: usize,
+    pub(crate) output: ChromeRowOutput,
+    pub(crate) bounds: Rect,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) tab_policy: DisplayTabPolicy,
+    pub(crate) base_face: &'face ResolvedFace,
+    pub(crate) symbol_values: std::collections::HashMap<String, Value>,
+    pub(crate) text: DisplayTextFragment,
+}
+
+fn window_chrome_glyph_row_role(kind: WindowChromeKind) -> GlyphRowRole {
+    match kind {
+        WindowChromeKind::TabLine => GlyphRowRole::TabLine,
+        WindowChromeKind::HeaderLine => GlyphRowRole::HeaderLine,
+        WindowChromeKind::ModeLine => GlyphRowRole::ModeLine,
+    }
+}
+
 impl LayoutEngine {
     pub(crate) fn realize_display_row_face(
         &mut self,
@@ -98,13 +120,27 @@ impl LayoutEngine {
         output_emitter: &mut WindowOutputEmitter,
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
-        matrix_row: usize,
-        output: ChromeRowOutput,
-        owner: DisplayRowOwner,
-        fallback_bounds: Rect,
-        row_spec: DisplayRowSourceRenderRequest<'_>,
-        rendered_text: DisplayTextFragment,
+        request: WindowChromeDisplayRowRequest<'_>,
     ) -> Option<MeasuredDisplayRow> {
+        let output = request.output;
+        let owner = DisplayRowOwner::WindowChrome {
+            window_id: request.window_id,
+            kind: request.kind,
+        };
+        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+            DisplayRowGeometry {
+                y: request.bounds.y,
+                width: request.bounds.width,
+                height: request.bounds.height,
+                char_width: request.char_width,
+                ascent: request.ascent,
+                tab_policy: request.tab_policy,
+            },
+            face_ids,
+            request.base_face,
+            window_chrome_glyph_row_role(request.kind),
+            request.symbol_values,
+        );
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, output);
         let mut render_context = DisplayRowRenderContext::new(
@@ -114,14 +150,14 @@ impl LayoutEngine {
         );
         let rendered_row = self.render_display_text_fragment_source_row_with_context(
             row_spec,
-            rendered_text,
+            request.text,
             &mut render_context,
         );
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
                 owner,
-                matrix_row.min(u32::MAX as usize) as u32,
-                fallback_bounds,
+                request.matrix_row.min(u32::MAX as usize) as u32,
+                request.bounds,
                 rendered,
                 DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
             )

@@ -5,7 +5,7 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
-use super::display_status_line::FrameTabBarDisplayRowRender;
+use super::display_status_line::{FrameTabBarDisplayRowRender, WindowChromeDisplayRowRequest};
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
@@ -22,7 +22,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
-    DisplayRowMeasurementPolicy, DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop,
+    DisplayRowMeasurementPolicy, DisplayRowRenderContext, DisplayRowRenderStop,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, WindowChromeKind,
     insert_resolved_display_row_face, install_rendered_display_row,
 };
@@ -6427,34 +6427,24 @@ impl LayoutEngine {
                 row: tl_row,
                 y: tl_y,
             };
-            let tab_row_spec = DisplayRowSourceRenderRequest::from_base_face(
-                DisplayRowGeometry {
-                    y: tl_y,
-                    width: params.bounds.width,
-                    height: tab_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut face_ids,
-                tl_face,
-                GlyphRowRole::TabLine,
-                status_line_symbol_values.clone(),
-            );
             self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut face_ids,
-                0,
-                tab_row_output,
-                DisplayRowOwner::WindowChrome {
+                WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::TabLine,
+                    matrix_row: 0,
+                    output: tab_row_output,
+                    bounds: Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                    base_face: tl_face,
+                    symbol_values: status_line_symbol_values.clone(),
+                    text: DisplayTextFragment::tab_line(tab_text),
                 },
-                Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
-                tab_row_spec,
-                DisplayTextFragment::tab_line(tab_text),
             );
         }
 
@@ -6485,39 +6475,29 @@ impl LayoutEngine {
                 row: hl_row,
                 y: hl_y,
             };
-            let header_row_spec = DisplayRowSourceRenderRequest::from_base_face(
-                DisplayRowGeometry {
-                    y: hl_y,
-                    width: params.bounds.width,
-                    height: header_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut face_ids,
-                hl_face,
-                GlyphRowRole::HeaderLine,
-                status_line_symbol_values.clone(),
-            );
             self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut face_ids,
-                usize::from(tab_line_height > 0.0),
-                header_row_output,
-                DisplayRowOwner::WindowChrome {
+                WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::HeaderLine,
+                    matrix_row: usize::from(tab_line_height > 0.0),
+                    output: header_row_output,
+                    bounds: Rect::new(
+                        params.bounds.x,
+                        hl_y,
+                        params.bounds.width,
+                        header_line_height,
+                    ),
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                    base_face: hl_face,
+                    symbol_values: status_line_symbol_values.clone(),
+                    text: DisplayTextFragment::header_line(header_text, params.selected),
                 },
-                Rect::new(
-                    params.bounds.x,
-                    hl_y,
-                    params.bounds.width,
-                    header_line_height,
-                ),
-                header_row_spec,
-                DisplayTextFragment::header_line(header_text, params.selected),
             );
         }
 
@@ -6563,34 +6543,24 @@ impl LayoutEngine {
                 row: ml_row,
                 y: ml_y,
             };
-            let mode_row_spec = DisplayRowSourceRenderRequest::from_base_face(
-                DisplayRowGeometry {
-                    y: ml_y,
-                    width: params.bounds.width,
-                    height: mode_line_height,
-                    char_width: char_w,
-                    ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
-                },
-                &mut face_ids,
-                ml_face,
-                GlyphRowRole::ModeLine,
-                status_line_symbol_values.clone(),
-            );
             self.render_window_chrome_display_row(
                 evaluator,
                 &mut output_emitter,
                 face_resolver,
                 &mut face_ids,
-                mode_line_matrix_row,
-                mode_row_output,
-                DisplayRowOwner::WindowChrome {
+                WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::ModeLine,
+                    matrix_row: mode_line_matrix_row,
+                    output: mode_row_output,
+                    bounds: Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
+                    char_width: char_w,
+                    ascent: font_ascent,
+                    tab_policy: text_display_tab_policy(0.0, params),
+                    base_face: ml_face,
+                    symbol_values: status_line_symbol_values.clone(),
+                    text: DisplayTextFragment::mode_line(mode_text, params.selected),
                 },
-                Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
-                mode_row_spec,
-                DisplayTextFragment::mode_line(mode_text, params.selected),
             );
         }
 
