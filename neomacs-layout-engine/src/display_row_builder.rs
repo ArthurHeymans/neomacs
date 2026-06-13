@@ -8,6 +8,8 @@ use crate::display_item::{
 };
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::glyph_row_writer;
+#[cfg(test)]
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
@@ -465,7 +467,7 @@ impl<'a> DisplayRowBuilder<'a> {
     }
 
     pub(crate) fn finish(mut self) -> GlyphRow {
-        GlyphMatrixBuilder::normalize_external_row(&mut self.row);
+        glyph_row_writer::normalize_external_row(&mut self.row);
         self.row
     }
 }
@@ -876,12 +878,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
         let tail = last_text_cluster_tail_in_row(&self.row);
         if continues_cluster(ch, tail) {
-            GlyphMatrixBuilder::push_cluster_continuation_to_row(
-                &mut self.row,
-                ch,
-                face_id,
-                charpos,
-            );
+            glyph_row_writer::push_cluster_continuation_to_row(&mut self.row, ch, face_id, charpos);
             return;
         }
         if continues_complex_run(ch, tail) {
@@ -893,13 +890,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 byte_offset,
                 measurement,
             );
-            GlyphMatrixBuilder::push_run_member_to_row(
-                &mut self.row,
-                ch,
-                face_id,
-                charpos,
-                advance,
-            );
+            glyph_row_writer::push_run_member_to_row(&mut self.row, ch, face_id, charpos, advance);
             return;
         }
         let cols = base_width_cols(ch);
@@ -912,9 +903,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             measurement,
         );
         if cols > 1 {
-            GlyphMatrixBuilder::push_wide_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+            glyph_row_writer::push_wide_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         } else {
-            GlyphMatrixBuilder::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+            glyph_row_writer::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
         }
     }
 
@@ -976,7 +967,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .tab_policy
             .advance_from(position, self.layout.char_width_px);
         let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
-        GlyphMatrixBuilder::push_stretch_to_row(
+        glyph_row_writer::push_stretch_to_row(
             &mut self.row,
             width_cols,
             face_id,
@@ -1029,7 +1020,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .and_then(|length| self.length_pixels(length, self.layout.ascent_px))
             .unwrap_or(0.0);
 
-        GlyphMatrixBuilder::push_stretch_to_row(
+        glyph_row_writer::push_stretch_to_row(
             &mut self.row,
             width_cols,
             face_id,

@@ -36,6 +36,7 @@ pub mod font_match;
 pub mod font_metrics;
 pub mod fontconfig;
 pub(crate) mod glyph_advance;
+pub(crate) mod glyph_row_writer;
 pub mod gui_chrome;
 pub mod hit_test;
 pub mod matrix_builder;

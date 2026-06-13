@@ -23,6 +23,7 @@ use crate::display_text_run_measurement::{
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
+use crate::glyph_row_writer;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -2012,7 +2013,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut result = self.render_display_item_source_row_fragment_step_with_context(
             spec, source, state, context,
         )?;
-        GlyphMatrixBuilder::normalize_external_row(&mut result.rendered.row);
+        glyph_row_writer::normalize_external_row(&mut result.rendered.row);
         Some(result)
     }
 
