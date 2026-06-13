@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 Branch: `main`
-Latest relevant commit: `e7f537b67 refactor: render source fragments from requests`
+Latest relevant pushed commit before this batch: `e86a1db80 refactor: measure synthetic text in source append`
 
 ## Goal
 
@@ -43,6 +43,8 @@ Continuation work after this handoff:
 - Replacement-string display sources now use the renderer-owned font metrics slot through render policy measurement callbacks.
 - The dormant `neomacs-layout-engine::display_backend` / `display_row_sink` scaffolding has been deleted. It represented an older backend-oriented width path and was no longer wired into production layout.
 - Synthetic ellipses and truncation markers now let the source-row append renderer own text measurement instead of passing caller-precomputed `DisplayTextRunMeasurement`.
+- Test-only direct display-item append stream helpers have been removed. Lisp string, synthetic text, and media replacement append coverage now exercises the same source-append request helpers used by runtime paths.
+- `.config/nextest.toml` caps the default nextest worker pool at 24 threads while keeping the memory-limit wrapper on every test.
 - Latest local verification:
 
   ```bash
@@ -53,7 +55,7 @@ Continuation work after this handoff:
   cargo nextest run -p neomacs-layout-engine
   ```
 
-  Full layout-engine nextest passed with 1031 tests after deleting the dormant backend tests and adding append-measurement coverage.
+  Full layout-engine nextest passed with 1031 tests after deleting the dormant backend tests, adding append-measurement coverage, and removing the test-only direct append stream.
 
 ## Why This Refactor Exists
 
@@ -163,7 +165,7 @@ DisplayRowSourceRenderRequest
   -> GlyphRow
 ```
 
-`DisplayRowSpec` is now mostly an internal lowered form, but it still leaks into tests and some helper call sites. The next refactor should keep pushing callers toward `DisplayRowSourceRenderRequest` or a higher-level row request, and leave `DisplayRowSpec` as a private renderer detail.
+`DisplayRowSpec` is now mostly an internal lowered form. The remaining direct uses should be limited to renderer internals and tests that explicitly verify lowering or the private lowered append primitive. New caller coverage should use `DisplayRowSourceRenderRequest`, `DisplayRowSourceAppendRequest`, or a higher-level row request.
 
 ## Important Invariants
 

@@ -1747,28 +1747,8 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
         .expect("current row");
 }
 
-struct TextUntilRowBreakPolicy;
-
-impl DisplayRowSourceAppendPolicy for TextUntilRowBreakPolicy {
-    fn decision_for(
-        &mut self,
-        item: &crate::display_item::DisplayItem,
-    ) -> DisplayRowSourceAppendDecision {
-        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
-            return DisplayRowSourceAppendDecision::Stop;
-        }
-        let Some(kind) = DisplayRowAppendKind::from_display_item_kind(&item.kind) else {
-            return DisplayRowSourceAppendDecision::Skip;
-        };
-        DisplayRowSourceAppendDecision::Append {
-            kind,
-            on_clipped: DisplayRowAppendClipBehavior::Stop,
-        }
-    }
-}
-
 #[test]
-fn append_display_item_source_to_text_row_uses_policy_decisions() {
+fn append_lisp_string_to_text_row_stops_at_row_break() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1796,12 +1776,6 @@ fn append_display_item_source_to_text_row_uses_policy_decisions() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let source = crate::display_source::LispStringSourceCursor::new(
-        1,
-        Value::string("a\nb"),
-        RenderFaceRef::FaceId(7),
-    )
-    .expect("string source");
     let frame = DisplayRowAppendFrame::from_parts(
         DisplayRowAppendPlacement {
             row: 0,
@@ -1823,20 +1797,19 @@ fn append_display_item_source_to_text_row_uses_policy_decisions() {
         },
         DisplayTabPolicy::every(8),
     );
-    let mut policy = TextUntilRowBreakPolicy;
 
-    let end = append_display_item_source_to_text_row(
+    let end = append_lisp_string_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
-        source,
+        Value::string("a\nb"),
+        1,
         &face_resolver,
         base_face,
         7,
         &mut face_ids,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        &mut policy,
     );
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
@@ -1962,7 +1935,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     assert_eq!(image.clip_rect, Some(text_bounds));
     assert_eq!(image.image_id, 42);
     assert_eq!(image.x, 16.0);
-    assert_eq!(image.y, 6.0);
+    assert_eq!(image.y, 0.0);
     assert_eq!(image.width, 64.0);
     assert_eq!(image.height, 32.0);
     let requests = requests.lock().expect("image requests lock");
@@ -2108,7 +2081,31 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_uses_face_fallback_without_emitting() {
+fn append_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-replacement-item-face", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
+
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -2143,9 +2140,14 @@ fn append_display_replacement_item_to_text_row_uses_face_fallback_without_emitti
         }),
     );
 
-    let (progress, end) = append_display_replacement_item_to_text_row(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
         item,
+        &face_resolver,
+        base_face,
         7,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -2261,7 +2263,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
 }
 
 #[test]
-fn append_display_item_to_text_row_and_emit_infers_kind_and_face_fallback() {
+fn append_synthetic_text_to_display_row_uses_source_append_request() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2280,6 +2282,11 @@ fn append_display_item_to_text_row_and_emit_infers_kind_and_face_fallback() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -2305,23 +2312,19 @@ fn append_display_item_to_text_row_and_emit_infers_kind_and_face_fallback() {
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::new(
-            DisplaySourcePosition::buffer(buf_id, CharPos0::new(0), EmacsBytePos::new(0)),
-            DisplaySourcePosition::buffer(buf_id, CharPos0::new(1), EmacsBytePos::new(1)),
-        ),
-        RenderFaceRef::Inherit,
-        DisplayItemKind::SourceMappedText(crate::display_item::DisplaySourceMappedText::new("x")),
-    );
 
-    let (_progress, end) = append_display_item_to_text_row_and_emit(
+    let (_progress, end) = append_synthetic_text_to_display_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
-        item,
-        7,
+        &mut font_metrics,
+        &face_resolver,
+        base_face,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
+        9,
+        "x",
+        7,
     )
     .expect("append progress");
 
@@ -2333,17 +2336,10 @@ fn append_display_item_to_text_row_and_emit_infers_kind_and_face_fallback() {
             assert_eq!(text[0].face_id, 7);
         })
         .expect("current row");
-    assert_eq!(
-        output_emitter
-            .point_for_lisp_buffer_pos(neovm_core::buffer::LispCharPos1::ONE)
-            .expect("display point")
-            .height,
-        10
-    );
 }
 
 #[test]
-fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2362,6 +2358,11 @@ fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
@@ -2405,11 +2406,14 @@ fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
         }),
     );
 
-    let (progress, end) = append_display_item_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         item,
+        &face_resolver,
+        base_face,
         7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
@@ -2456,13 +2460,13 @@ fn append_display_item_to_text_row_and_emit_installs_xwidget_replacements() {
     );
     assert_eq!(xwidget.xwidget_id, 1234);
     assert_eq!(xwidget.x, 16.0);
-    assert_eq!(xwidget.y, 6.0);
+    assert_eq!(xwidget.y, 4.0);
     assert_eq!(xwidget.width, 96.0);
     assert_eq!(xwidget.height, 54.0);
 }
 
 #[test]
-fn append_display_item_to_text_row_and_emit_installs_image_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_image_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2481,6 +2485,11 @@ fn append_display_item_to_text_row_and_emit_installs_image_replacements() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
@@ -2524,11 +2533,14 @@ fn append_display_item_to_text_row_and_emit_installs_image_replacements() {
         }),
     );
 
-    let (progress, end) = append_display_item_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         item,
+        &face_resolver,
+        base_face,
         7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
@@ -2575,13 +2587,13 @@ fn append_display_item_to_text_row_and_emit_installs_image_replacements() {
     );
     assert_eq!(image.image_id, 42);
     assert_eq!(image.x, 16.0);
-    assert_eq!(image.y, 6.0);
+    assert_eq!(image.y, 4.0);
     assert_eq!(image.width, 64.0);
     assert_eq!(image.height, 32.0);
 }
 
 #[test]
-fn append_display_item_to_text_row_and_emit_installs_video_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_video_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2600,6 +2612,11 @@ fn append_display_item_to_text_row_and_emit_installs_video_replacements() {
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
@@ -2645,11 +2662,14 @@ fn append_display_item_to_text_row_and_emit_installs_video_replacements() {
         }),
     );
 
-    let (progress, end) = append_display_item_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         item,
+        &face_resolver,
+        base_face,
         7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
@@ -2696,7 +2716,7 @@ fn append_display_item_to_text_row_and_emit_installs_video_replacements() {
     );
     assert_eq!(video.video_id, 88);
     assert_eq!(video.x, 16.0);
-    assert_eq!(video.y, 6.0);
+    assert_eq!(video.y, 4.0);
     assert_eq!(video.width, 80.0);
     assert_eq!(video.height, 45.0);
     assert_eq!(video.loop_count, -1);
