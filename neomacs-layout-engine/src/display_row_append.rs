@@ -97,6 +97,43 @@ struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
+pub(crate) enum BufferTextFragmentAppendMeasurement<'a> {
+    Natural,
+    ResolvedAdvance { text: &'a str, advance_px: f32 },
+}
+
+enum BufferTextFragmentRenderPolicy {
+    Natural(NaturalDisplayRowAppendRenderPolicy),
+    Resolved(ResolvedFragmentAdvanceRenderPolicy),
+}
+
+impl BufferTextFragmentRenderPolicy {
+    fn new(measurement: BufferTextFragmentAppendMeasurement<'_>) -> Self {
+        match measurement {
+            BufferTextFragmentAppendMeasurement::Natural => {
+                Self::Natural(NaturalDisplayRowAppendRenderPolicy)
+            }
+            BufferTextFragmentAppendMeasurement::ResolvedAdvance { text, advance_px } => {
+                Self::Resolved(ResolvedFragmentAdvanceRenderPolicy::new(text, advance_px))
+            }
+        }
+    }
+}
+
+impl DisplayRowRenderPolicy for BufferTextFragmentRenderPolicy {
+    fn measurement_for(
+        &mut self,
+        item: &DisplayItem,
+        face_id: u32,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowItemMeasurement {
+        match self {
+            Self::Natural(policy) => policy.measurement_for(item, face_id, font_metrics),
+            Self::Resolved(policy) => policy.measurement_for(item, face_id, font_metrics),
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
@@ -554,7 +591,7 @@ fn buffer_text_fragment_source_item<B: LayoutBufferView + ?Sized>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
+pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -565,6 +602,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
+    measurement: BufferTextFragmentAppendMeasurement<'_>,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -575,7 +613,8 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let outcome = render_natural_display_source_append_request_into_current_text_row_and_emit(
+    let mut render_policy = BufferTextFragmentRenderPolicy::new(measurement);
+    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -585,6 +624,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
         face_resolver,
         &mut face_ids,
         request,
+        &mut render_policy,
     )?;
     let progress = display_row_append_progress_from_render_result(
         position,
@@ -616,7 +656,8 @@ pub(crate) fn measure_buffer_text_fragment_append_to_text_row<B: LayoutBufferVie
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    let mut render_policy =
+        BufferTextFragmentRenderPolicy::new(BufferTextFragmentAppendMeasurement::Natural);
     let outcome = measure_display_source_append_request_against_current_text_row(
         builder,
         evaluator,
@@ -634,52 +675,6 @@ pub(crate) fn measure_buffer_text_fragment_append_to_text_row<B: LayoutBufferVie
         outcome.stop,
         outcome.source_slots,
     ))
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    fragment: DisplayTextFragment,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    face_id: u32,
-    fragment_text: &str,
-    advance_px: f32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let (item, append_kind) =
-        buffer_text_fragment_source_item(fragment, buffer_id, buffer, face_id)?;
-    let append_spec = frame.append_spec(position, face_id, append_kind);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = ResolvedFragmentAdvanceRenderPolicy::new(fragment_text, advance_px);
-    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        &mut face_ids,
-        request,
-        &mut render_policy,
-    )?;
-    let progress = display_row_append_progress_from_render_result(
-        position,
-        outcome.end,
-        outcome.stop,
-        outcome.source_slots,
-    );
-    Some((progress, outcome.end))
 }
 
 #[allow(clippy::too_many_arguments)]

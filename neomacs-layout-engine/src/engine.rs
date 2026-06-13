@@ -28,13 +28,13 @@ use crate::display_row::{
     install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
-    DisplayRowAppendSurface, DisplayRowSourceAppendRequest,
-    append_buffer_text_fragment_to_text_row, append_buffer_text_item_fragment_to_text_row_and_emit,
+    BufferTextFragmentAppendMeasurement, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendKind, DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    DisplayRowSourceAppendRequest, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
-    append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
+    append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     measure_buffer_text_fragment_append_to_text_row,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
@@ -5805,41 +5805,30 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = if complex_text {
-                let mut ch_text = [0; 4];
-                let fragment_text = ch.encode_utf8(&mut ch_text);
-                append_resolved_buffer_text_fragment_to_text_row(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    buffer_text_fragment,
-                    face_resolver,
-                    active_face_state.resolved_face(),
-                    buf_id,
-                    buffer,
-                    active_face_state.face_id(),
-                    fragment_text,
-                    advance,
-                    frame,
-                    append_position,
-                )
+            let mut ch_text = [0; 4];
+            let append_measurement = if complex_text {
+                BufferTextFragmentAppendMeasurement::ResolvedAdvance {
+                    text: ch.encode_utf8(&mut ch_text),
+                    advance_px: advance,
+                }
             } else {
-                append_buffer_text_fragment_to_text_row(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    buffer_text_fragment,
-                    face_resolver,
-                    active_face_state.resolved_face(),
-                    buf_id,
-                    buffer,
-                    active_face_state.face_id(),
-                    frame,
-                    append_position,
-                )
+                BufferTextFragmentAppendMeasurement::Natural
             };
+            let appended = append_measured_buffer_text_fragment_to_text_row(
+                &mut self.matrix_builder,
+                &mut output_emitter,
+                evaluator,
+                &mut self.font_metrics,
+                buffer_text_fragment,
+                face_resolver,
+                active_face_state.resolved_face(),
+                buf_id,
+                buffer,
+                active_face_state.face_id(),
+                append_measurement,
+                frame,
+                append_position,
+            );
             let Some((_progress, position)) = appended else {
                 break;
             };

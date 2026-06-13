@@ -1331,7 +1331,7 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
     );
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let (_progress, end) = append_buffer_text_fragment_to_text_row(
+    let (_progress, end) = append_measured_buffer_text_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1342,6 +1342,7 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
         buf_id,
         &snapshot,
         7,
+        BufferTextFragmentAppendMeasurement::Natural,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1447,7 +1448,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
         })
         .expect("current row");
 
-    let (appended, end) = append_buffer_text_fragment_to_text_row(
+    let (appended, end) = append_measured_buffer_text_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1458,6 +1459,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
         buf_id,
         &snapshot,
         7,
+        BufferTextFragmentAppendMeasurement::Natural,
         frame,
         position,
     )
@@ -1470,7 +1472,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
 }
 
 #[test]
-fn append_resolved_buffer_text_fragment_to_text_row_uses_supplied_advance() {
+fn append_measured_buffer_text_fragment_to_text_row_uses_resolved_advance() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1528,7 +1530,7 @@ fn append_resolved_buffer_text_fragment_to_text_row_uses_supplied_advance() {
     );
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
+    let (progress, end) = append_measured_buffer_text_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1539,8 +1541,10 @@ fn append_resolved_buffer_text_fragment_to_text_row_uses_supplied_advance() {
         buf_id,
         &snapshot,
         7,
-        "a",
-        13.0,
+        BufferTextFragmentAppendMeasurement::ResolvedAdvance {
+            text: "a",
+            advance_px: 13.0,
+        },
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1619,7 +1623,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
     );
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
-    let (progress, end) = append_buffer_text_fragment_to_text_row(
+    let (progress, end) = append_measured_buffer_text_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1630,6 +1634,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
         buf_id,
         &snapshot,
         7,
+        BufferTextFragmentAppendMeasurement::Natural,
         frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
     )

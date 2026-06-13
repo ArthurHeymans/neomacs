@@ -46,6 +46,7 @@ Continuation work after this handoff:
 - Test-only direct display-item append stream helpers have been removed. Lisp string, synthetic text, and media replacement append coverage now exercises the same source-append request helpers used by runtime paths.
 - `.config/nextest.toml` caps the default nextest worker pool at 24 threads while keeping the memory-limit wrapper on every test.
 - Main buffer complex text append no longer constructs `DisplayTextRunMeasurement` in `engine.rs`; the append layer now lowers the already-resolved fragment advance into its render policy. The buffer walker still computes that advance for wrap and cursor decisions, so full width-path unification remains open.
+- Buffer text fragment append now uses one typed append helper with `BufferTextFragmentAppendMeasurement::{Natural, ResolvedAdvance}` instead of separate natural/resolved append entry points. This keeps measurement policy at the source-append boundary while the main buffer walker still decides when a resolved advance is required.
 - Latest local verification:
 
   ```bash
