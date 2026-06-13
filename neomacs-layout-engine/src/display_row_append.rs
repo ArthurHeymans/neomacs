@@ -811,6 +811,7 @@ pub(crate) struct LispStringSourceRowAppendContext<'a> {
 }
 
 impl<'a> LispStringSourceRowAppendContext<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source: &'a mut LispStringSourceCursor,
         source_state: &'a mut DisplayRowSourceState,
@@ -818,7 +819,10 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
         base_face: &'a ResolvedFace,
         append_surface: &'a DisplayRowAppendSurface,
         glyph_y_offset: f32,
-        metrics: DisplayRowAppendMetrics,
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+        default_row_height: f32,
     ) -> Self {
         Self {
             source_context: LispStringSourceAppendContext::new(
@@ -829,7 +833,12 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             ),
             append_surface,
             glyph_y_offset,
-            metrics,
+            metrics: DisplayRowAppendMetrics::text_row(
+                height,
+                ascent,
+                char_width,
+                default_row_height,
+            ),
         }
     }
 
