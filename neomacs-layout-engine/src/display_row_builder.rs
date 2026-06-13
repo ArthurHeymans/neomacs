@@ -43,6 +43,50 @@ pub(crate) struct DisplayTabAdvance {
     pub(crate) width_cols: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayRowTextCharKind {
+    Tab,
+    ClusterContinuation,
+    ComplexRunMember,
+    BaseGlyph { columns: u8 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DisplayRowTextCharState {
+    ch: char,
+    kind: DisplayRowTextCharKind,
+}
+
+impl DisplayRowTextCharState {
+    fn for_row(ch: char, row: &GlyphRow) -> Self {
+        let tail = last_text_cluster_tail_in_row(row);
+        Self::for_tail(ch, tail)
+    }
+
+    fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
+        let kind = if ch == '\t' {
+            DisplayRowTextCharKind::Tab
+        } else if continues_cluster(ch, tail) {
+            DisplayRowTextCharKind::ClusterContinuation
+        } else if continues_complex_run(ch, tail) {
+            DisplayRowTextCharKind::ComplexRunMember
+        } else {
+            DisplayRowTextCharKind::BaseGlyph {
+                columns: base_width_cols(ch),
+            }
+        };
+        Self { ch, kind }
+    }
+
+    fn ch(self) -> char {
+        self.ch
+    }
+
+    fn kind(self) -> DisplayRowTextCharKind {
+        self.kind
+    }
+}
+
 impl DisplayTabPolicy {
     pub(crate) fn every(width_cols: u16) -> Self {
         Self {
@@ -636,10 +680,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let mut char_offset = 0usize;
         let mut byte_offset = 0usize;
         for ch in text.chars() {
+            let char_state = self.writer.text_char_state(ch);
             let advance = self
                 .writer
                 .text_char_advance_px_at_position_with_measurement(
-                    ch,
+                    char_state,
                     face_id,
                     self.position,
                     char_offset,
@@ -653,15 +698,16 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
 
             let before_len = self.text_area_len();
             let slot_start = self.position;
-            self.writer.push_text_char_at_position_with_measurement(
-                ch,
-                face_id,
-                source_mapping.charpos(start_char, char_offset),
-                self.position,
-                char_offset,
-                byte_offset,
-                &measurement,
-            );
+            self.writer
+                .push_text_char_state_at_position_with_measurement(
+                    char_state,
+                    face_id,
+                    source_mapping.charpos(start_char, char_offset),
+                    self.position,
+                    char_offset,
+                    byte_offset,
+                    &measurement,
+                );
             self.writer.apply_item_layout_since(before_len, item_layout);
             let written = self.metrics_since(before_len);
             slots.push(DisplayRowGlyphSlot {
@@ -803,8 +849,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let mut char_offset = 0usize;
         let mut byte_offset = 0usize;
         for ch in text.chars() {
+            let char_state = self.text_char_state(ch);
             self.push_text_char_with_measurement(
-                ch,
+                char_state,
                 face_id,
                 source_mapping.charpos(start_char, char_offset),
                 char_offset,
@@ -817,20 +864,26 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
-        self.push_text_char_at_position(ch, face_id, charpos, self.current_text_position());
+        let char_state = self.text_char_state(ch);
+        self.push_text_char_state_at_position(
+            char_state,
+            face_id,
+            charpos,
+            self.current_text_position(),
+        );
     }
 
     fn push_text_char_with_measurement(
         &mut self,
-        ch: char,
+        char_state: DisplayRowTextCharState,
         face_id: u32,
         charpos: usize,
         char_offset: usize,
         byte_offset: usize,
         measurement: &DisplayTextRunMeasurement,
     ) {
-        self.push_text_char_at_position_with_measurement(
-            ch,
+        self.push_text_char_state_at_position_with_measurement(
+            char_state,
             face_id,
             charpos,
             self.current_text_position(),
@@ -840,15 +893,15 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         );
     }
 
-    fn push_text_char_at_position(
+    fn push_text_char_state_at_position(
         &mut self,
-        ch: char,
+        char_state: DisplayRowTextCharState,
         face_id: u32,
         charpos: usize,
         position: DisplayRowPosition,
     ) {
-        self.push_text_char_at_position_with_measurement(
-            ch,
+        self.push_text_char_state_at_position_with_measurement(
+            char_state,
             face_id,
             charpos,
             position,
@@ -858,9 +911,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         );
     }
 
-    fn push_text_char_at_position_with_measurement(
+    fn push_text_char_state_at_position_with_measurement(
         &mut self,
-        ch: char,
+        char_state: DisplayRowTextCharState,
         face_id: u32,
         charpos: usize,
         position: DisplayRowPosition,
@@ -868,41 +921,64 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         byte_offset: usize,
         measurement: &DisplayTextRunMeasurement,
     ) {
-        if ch == '\t' {
-            self.push_tab_at_position(face_id, position);
-            return;
-        }
-
-        let tail = last_text_cluster_tail_in_row(&self.row);
-        if continues_cluster(ch, tail) {
-            glyph_row_writer::push_cluster_continuation_to_row(&mut self.row, ch, face_id, charpos);
-            return;
-        }
-        if continues_complex_run(ch, tail) {
-            let advance = self.text_char_advance_px_at_position_with_measurement(
-                ch,
-                face_id,
-                position,
-                char_offset,
-                byte_offset,
-                measurement,
-            );
-            glyph_row_writer::push_run_member_to_row(&mut self.row, ch, face_id, charpos, advance);
-            return;
-        }
-        let cols = base_width_cols(ch);
-        let advance = self.text_char_advance_px_at_position_with_measurement(
-            ch,
-            face_id,
-            position,
-            char_offset,
-            byte_offset,
-            measurement,
-        );
-        if cols > 1 {
-            glyph_row_writer::push_wide_char_to_row(&mut self.row, ch, face_id, charpos, advance);
-        } else {
-            glyph_row_writer::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+        let ch = char_state.ch();
+        match char_state.kind() {
+            DisplayRowTextCharKind::Tab => {
+                self.push_tab_at_position(face_id, position);
+            }
+            DisplayRowTextCharKind::ClusterContinuation => {
+                glyph_row_writer::push_cluster_continuation_to_row(
+                    &mut self.row,
+                    ch,
+                    face_id,
+                    charpos,
+                );
+            }
+            DisplayRowTextCharKind::ComplexRunMember => {
+                let advance = self.text_char_advance_px_at_position_with_measurement(
+                    char_state,
+                    face_id,
+                    position,
+                    char_offset,
+                    byte_offset,
+                    measurement,
+                );
+                glyph_row_writer::push_run_member_to_row(
+                    &mut self.row,
+                    ch,
+                    face_id,
+                    charpos,
+                    advance,
+                );
+            }
+            DisplayRowTextCharKind::BaseGlyph { columns } if columns > 1 => {
+                let advance = self.text_char_advance_px_at_position_with_measurement(
+                    char_state,
+                    face_id,
+                    position,
+                    char_offset,
+                    byte_offset,
+                    measurement,
+                );
+                glyph_row_writer::push_wide_char_to_row(
+                    &mut self.row,
+                    ch,
+                    face_id,
+                    charpos,
+                    advance,
+                );
+            }
+            DisplayRowTextCharKind::BaseGlyph { .. } => {
+                let advance = self.text_char_advance_px_at_position_with_measurement(
+                    char_state,
+                    face_id,
+                    position,
+                    char_offset,
+                    byte_offset,
+                    measurement,
+                );
+                glyph_row_writer::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+            }
         }
     }
 
@@ -919,34 +995,34 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
     fn text_char_advance_px_at_position_with_measurement(
         &mut self,
-        ch: char,
+        char_state: DisplayRowTextCharState,
         face_id: u32,
         position: DisplayRowPosition,
         char_offset: usize,
         byte_offset: usize,
         measurement: &DisplayTextRunMeasurement,
     ) -> f32 {
-        if ch == '\t' {
-            return self
-                .layout
-                .tab_policy
-                .advance_from(position, self.layout.char_width_px)
-                .pixel_width;
-        }
+        let ch = char_state.ch();
 
-        let tail = last_text_cluster_tail_in_row(&self.row);
-        if continues_cluster(ch, tail) {
-            return 0.0;
+        match char_state.kind() {
+            DisplayRowTextCharKind::Tab => {
+                self.layout
+                    .tab_policy
+                    .advance_from(position, self.layout.char_width_px)
+                    .pixel_width
+            }
+            DisplayRowTextCharKind::ClusterContinuation => 0.0,
+            DisplayRowTextCharKind::ComplexRunMember => measurement
+                .advance_for(char_offset, byte_offset)
+                .unwrap_or_else(|| self.glyph_advance_px(ch, face_id, 1)),
+            DisplayRowTextCharKind::BaseGlyph { columns } => measurement
+                .advance_for(char_offset, byte_offset)
+                .unwrap_or_else(|| self.glyph_advance_px(ch, face_id, columns)),
         }
+    }
 
-        if let Some(advance) = measurement.advance_for(char_offset, byte_offset) {
-            return advance;
-        }
-
-        if continues_complex_run(ch, tail) {
-            return self.glyph_advance_px(ch, face_id, 1);
-        }
-        self.glyph_advance_px(ch, face_id, base_width_cols(ch))
+    fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
+        DisplayRowTextCharState::for_row(ch, self.row)
     }
 
     fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
