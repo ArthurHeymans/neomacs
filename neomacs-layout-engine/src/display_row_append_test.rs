@@ -2276,7 +2276,7 @@ impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
 }
 
 #[test]
-fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and_measurements() {
+fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2329,19 +2329,17 @@ fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
-    let end = append_display_replacement_string_fragment_to_text_row(
+    let append_context =
+        DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
+    let end = append_context.append_string_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         fragment,
-        replacement_source,
         1,
         &face_resolver,
-        base_face,
-        7,
         &mut face_ids,
-        frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
         &mut measurer,
     );
@@ -2435,7 +2433,7 @@ fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback()
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_advances_stretch_output() {
+fn display_replacement_append_context_advances_stretch_output() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2470,22 +2468,21 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_stretch_output(
         EmacsBytePos::new(0),
     );
 
-    let (_progress, end) = append_display_replacement_item_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        replacement_source,
-        3,
-        DisplayReplacementAppendItem::Stretch(crate::display_source::DisplayReplacementBox::new(
-            13.0, 16.0, 12.0,
-        )),
-        &face_resolver,
-        base_face,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("append progress");
+    let append_context =
+        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let (_progress, end) = append_context
+        .append_item_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            DisplayReplacementAppendItem::Stretch(
+                crate::display_source::DisplayReplacementBox::new(13.0, 16.0, 12.0),
+            ),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("append progress");
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
     let display = eval

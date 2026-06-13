@@ -1186,6 +1186,88 @@ impl DisplayReplacementAppendItem {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct DisplayReplacementAppendContext<'a> {
+    replacement_source: BufferDisplayReplacementSource,
+    face_id: u32,
+    base_face: &'a ResolvedFace,
+    frame: DisplayRowAppendFrame,
+}
+
+impl<'a> DisplayReplacementAppendContext<'a> {
+    pub(crate) fn new(
+        replacement_source: BufferDisplayReplacementSource,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            replacement_source,
+            face_id,
+            base_face,
+            frame,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_item_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        append_display_replacement_item_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.replacement_source,
+            self.face_id,
+            item,
+            face_resolver,
+            self.base_face,
+            self.frame.clone(),
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_string_fragment_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        source_id: u64,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+        item_policy: &mut impl DisplayRowRenderPolicy,
+    ) -> DisplayRowPosition {
+        append_display_replacement_string_fragment_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            fragment,
+            self.replacement_source,
+            source_id,
+            face_resolver,
+            self.base_face,
+            self.face_id,
+            face_ids,
+            self.frame.clone(),
+            position,
+            item_policy,
+        )
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,

@@ -39,12 +39,11 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, DisplayReplacementAppendItem,
+    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
+    DisplayReplacementAppendContext, DisplayReplacementAppendItem,
     DisplayReplacementStringItemMeasurer, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
     DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
     append_buffer_text_item_fragment_to_text_row_and_emit,
-    append_display_replacement_item_to_text_row_and_emit,
-    append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     render_lisp_string_source_append_to_text_row_and_emit,
@@ -4611,19 +4610,21 @@ impl LayoutEngine {
                                 DisplayReplacementStringItemMeasurer::from_active_face_state(
                                     &active_face_state,
                                 );
-                            let position = append_display_replacement_string_fragment_to_text_row(
+                            let append_context = DisplayReplacementAppendContext::new(
+                                display_replacement_source,
+                                replacement_base_face.face_id(),
+                                replacement_base_face.face(),
+                                append_frame,
+                            );
+                            let position = append_context.append_string_fragment_to_text_row(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 replacement_fragment,
-                                display_replacement_source,
                                 1,
                                 face_resolver,
-                                replacement_base_face.face(),
-                                replacement_base_face.face_id(),
                                 &mut face_ids,
-                                append_frame,
                                 DisplayRowPosition { x_px: x, col },
                                 &mut item_policy,
                             );
@@ -4687,14 +4688,19 @@ impl LayoutEngine {
                                 char_h,
                             )
                             .active_face_frame();
-                            if let Some((_progress, position)) =
-                                append_display_replacement_item_to_text_row_and_emit(
+                            let append_context = DisplayReplacementAppendContext::new(
+                                display_replacement_source,
+                                active_face_state.face_id(),
+                                active_face_state.resolved_face(),
+                                replacement_frame,
+                            );
+                            if let Some((_progress, position)) = append_context
+                                .append_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
-                                    display_replacement_source,
-                                    active_face_state.face_id(),
+                                    face_resolver,
                                     DisplayReplacementAppendItem::Stretch(
                                         DisplayReplacementBox::new(
                                             space_width,
@@ -4702,9 +4708,6 @@ impl LayoutEngine {
                                             space_geometry.ascent,
                                         ),
                                     ),
-                                    face_resolver,
-                                    active_face_state.resolved_face(),
-                                    replacement_frame,
                                     DisplayRowPosition { x_px: x, col },
                                 )
                             {
@@ -4773,18 +4776,20 @@ impl LayoutEngine {
                                     char_h,
                                 )
                                 .display_box_frame(display_height, display_height);
-                                if let Some((progress, position)) =
-                                    append_display_replacement_item_to_text_row_and_emit(
+                                let append_context = DisplayReplacementAppendContext::new(
+                                    display_replacement_source,
+                                    active_face_state.face_id(),
+                                    active_face_state.resolved_face(),
+                                    replacement_frame,
+                                );
+                                if let Some((progress, position)) = append_context
+                                    .append_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
-                                        display_replacement_source,
-                                        active_face_state.face_id(),
-                                        DisplayReplacementAppendItem::Media(media),
                                         face_resolver,
-                                        active_face_state.resolved_face(),
-                                        replacement_frame,
+                                        DisplayReplacementAppendItem::Media(media),
                                         DisplayRowPosition { x_px: x, col },
                                     )
                                     && progress.status
@@ -4819,20 +4824,22 @@ impl LayoutEngine {
                                     char_h,
                                 )
                                 .active_face_frame();
-                                if let Some((_progress, position)) =
-                                    append_display_replacement_item_to_text_row_and_emit(
+                                let append_context = DisplayReplacementAppendContext::new(
+                                    display_replacement_source,
+                                    active_face_state.face_id(),
+                                    active_face_state.resolved_face(),
+                                    replacement_frame,
+                                );
+                                if let Some((_progress, position)) = append_context
+                                    .append_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
-                                        display_replacement_source,
-                                        active_face_state.face_id(),
+                                        face_resolver,
                                         DisplayReplacementAppendItem::SourceMappedText(
                                             placeholder.into(),
                                         ),
-                                        face_resolver,
-                                        active_face_state.resolved_face(),
-                                        replacement_frame,
                                         DisplayRowPosition { x_px: x, col },
                                     )
                                 {

@@ -55,6 +55,7 @@ Continuation work after this handoff:
 - Overlay string rendering now receives a typed `OverlayStringRenderRowContext`, and display-property replacement strings derive their full text-width append surface from the shared text-row append surface instead of rebuilding raw width geometry in `engine.rs`.
 - Main buffer synthetic text, display replacements, glyphless/control items, replacement strings, and ordinary text append frame creation now go through `MainTextRowAppendContext`; text-row right edges and full text-width limits are exposed by `DisplayRowAppendSurface` instead of repeated raw `content_x + width` calculations in `engine.rs`.
 - Main-buffer and overlay row frame creation now use shared `DisplayRowTextAppendContext` / `DisplayRowActiveFaceAppendContext` types from `display_row_append.rs`; `engine.rs` no longer calls the raw append-surface frame constructors directly.
+- Display-property replacement strings, stretches, media items, and placeholders now append through `DisplayReplacementAppendContext`; `engine.rs` still owns GNU display-property classification and cursor capture, but no longer wires raw replacement source/frame/base-face append requests directly.
 - Latest local verification:
 
   ```bash
@@ -67,7 +68,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1059 tests after moving main-buffer and overlay append frame construction behind shared display-row append context types.
+  Full layout-engine nextest passed with 1060 tests after moving display-property replacement append request wiring behind `DisplayReplacementAppendContext`.
 
 ## Why This Refactor Exists
 
