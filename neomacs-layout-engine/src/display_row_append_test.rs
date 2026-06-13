@@ -2250,6 +2250,34 @@ fn buffer_text_fragment_append_item_names_nobreak_display_policy() {
 }
 
 #[test]
+fn buffer_text_fragment_append_item_names_fallback_width_policy() {
+    assert_eq!(
+        BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
+        BufferTextFragmentFallbackWidthPolicy::Columns(2)
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() }
+            .fallback_width_policy(),
+        BufferTextFragmentFallbackWidthPolicy::Columns(2)
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::SourceMappedText { text: "".into() }
+            .fallback_width_policy()
+            .width_px(8.0),
+        8.0
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::Glyphless {
+            ch: '\u{200E}',
+            method: GlyphlessMethod::ZeroWidth,
+        }
+        .fallback_width_policy()
+        .width_px(8.0),
+        8.0
+    );
+}
+
+#[test]
 fn buffer_text_fragment_append_item_names_glyphless_display_policy() {
     let variation_selector_state =
         BufferTextFragmentClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)));

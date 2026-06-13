@@ -1579,6 +1579,33 @@ pub(crate) enum BufferTextFragmentAppendItem {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextFragmentFallbackWidthPolicy {
+    Columns(usize),
+}
+
+impl BufferTextFragmentFallbackWidthPolicy {
+    fn for_append_item(item: &BufferTextFragmentAppendItem) -> Self {
+        match item {
+            BufferTextFragmentAppendItem::ControlChar { .. } => Self::Columns(2),
+            BufferTextFragmentAppendItem::SourceMappedText { text } => {
+                Self::Columns(text.chars().count().max(1))
+            }
+            BufferTextFragmentAppendItem::Glyphless { .. } => Self::Columns(1),
+        }
+    }
+
+    fn width_px(self, fallback_char_width: f32) -> f32 {
+        self.columns() as f32 * fallback_char_width.max(1.0)
+    }
+
+    fn columns(self) -> usize {
+        match self {
+            Self::Columns(columns) => columns,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextFragmentClusterState {
     ch: char,
     tail: Option<(char, bool)>,
@@ -1636,15 +1663,8 @@ impl BufferTextFragmentAppendItem {
         }
     }
 
-    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        let fallback_char_width = fallback_char_width.max(1.0);
-        match self {
-            Self::ControlChar { .. } => 2.0 * fallback_char_width,
-            Self::SourceMappedText { text } => {
-                text.chars().count().max(1) as f32 * fallback_char_width
-            }
-            Self::Glyphless { .. } => fallback_char_width,
-        }
+    fn fallback_width_policy(&self) -> BufferTextFragmentFallbackWidthPolicy {
+        BufferTextFragmentFallbackWidthPolicy::for_append_item(self)
     }
 
     fn into_display_item_kind(self) -> DisplayItemKind {
@@ -1757,7 +1777,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         position: DisplayRowPosition,
         fallback_char_width: f32,
     ) -> f32 {
-        let fallback_width = item.fallback_width_px(fallback_char_width);
+        let fallback_width = item.fallback_width_policy().width_px(fallback_char_width);
         self.measure_fragment_width_to_text_row(
             builder,
             evaluator,
