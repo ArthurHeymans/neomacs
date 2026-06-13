@@ -407,19 +407,6 @@ pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
-    pub(crate) fn for_frame(
-        frame: DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-    ) -> Self {
-        Self::from_append_spec(
-            frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText),
-            base_face_id,
-            base_face,
-        )
-    }
-
     pub(crate) fn from_append_spec(
         append_spec: DisplayRowAppendSpec,
         base_face_id: u32,
@@ -1763,7 +1750,8 @@ pub(crate) fn append_synthetic_text_to_display_row(
     face_id: u32,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source_id, text, face_id);
-    let request = DisplayRowSourceAppendRequest::for_frame(frame, position, face_id, base_face);
+    let append_spec = frame.append_spec(position, face_id, DisplayRowAppendKind::SourceText);
+    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
