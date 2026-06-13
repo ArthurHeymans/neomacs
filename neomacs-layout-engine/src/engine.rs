@@ -4469,6 +4469,14 @@ impl LayoutEngine {
                                 ),
                             );
                         }
+                        let replacement_append_context = DisplayReplacementRowAppendContext::new(
+                            display_replacement_source,
+                            &text_append_surface,
+                            &row_geometry,
+                            &active_face_state,
+                            raise_span.value_or(0.0),
+                            char_h,
+                        );
                         match replacement_item {
                             DisplayPropertyReplacementAppendItem::String(replacement_item) => {
                                 if !replacement_item.is_empty() {
@@ -4483,18 +4491,11 @@ impl LayoutEngine {
                                             &mut face_ids,
                                             &mut self.matrix_builder,
                                         );
-                                    let append_context = DisplayReplacementRowAppendContext::new(
-                                        display_replacement_source,
-                                        &text_append_surface,
-                                        &row_geometry,
-                                        &active_face_state,
-                                        raise_span.value_or(0.0),
-                                        char_h,
-                                    )
-                                    .full_text_width_active_face(
-                                        replacement_base_face.face_id(),
-                                        replacement_base_face.face(),
-                                    );
+                                    let append_context = replacement_append_context
+                                        .full_text_width_active_face(
+                                            replacement_base_face.face_id(),
+                                            replacement_base_face.face(),
+                                        );
                                     let position = append_context.append_string_item_to_text_row(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
@@ -4516,15 +4517,7 @@ impl LayoutEngine {
                                         stretch_item.height_px(),
                                         stretch_item.ascent_px(),
                                     );
-                                    let append_context = DisplayReplacementRowAppendContext::new(
-                                        display_replacement_source,
-                                        &text_append_surface,
-                                        &row_geometry,
-                                        &active_face_state,
-                                        raise_span.value_or(0.0),
-                                        char_h,
-                                    )
-                                    .active_face(
+                                    let append_context = replacement_append_context.active_face(
                                         active_face_state.face_id(),
                                         active_face_state.resolved_face(),
                                     );
@@ -4547,15 +4540,7 @@ impl LayoutEngine {
                             DisplayPropertyReplacementAppendItem::Media(
                                 DisplayReplacementMediaAppendResolution::Media(media_item),
                             ) => {
-                                let append_context = DisplayReplacementRowAppendContext::new(
-                                    display_replacement_source,
-                                    &text_append_surface,
-                                    &row_geometry,
-                                    &active_face_state,
-                                    raise_span.value_or(0.0),
-                                    char_h,
-                                )
-                                .display_box(
+                                let append_context = replacement_append_context.display_box(
                                     active_face_state.face_id(),
                                     active_face_state.resolved_face(),
                                     media_item.display_height_px(),
@@ -4584,15 +4569,7 @@ impl LayoutEngine {
                                     placeholder_item,
                                 ),
                             ) => {
-                                let append_context = DisplayReplacementRowAppendContext::new(
-                                    display_replacement_source,
-                                    &text_append_surface,
-                                    &row_geometry,
-                                    &active_face_state,
-                                    raise_span.value_or(0.0),
-                                    char_h,
-                                )
-                                .active_face(
+                                let append_context = replacement_append_context.active_face(
                                     active_face_state.face_id(),
                                     active_face_state.resolved_face(),
                                 );

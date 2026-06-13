@@ -2695,28 +2695,60 @@ impl DisplayReplacementSourceMappedTextAppendItem {
 #[derive(Clone, Copy)]
 pub(crate) struct DisplayReplacementRowAppendContext<'a> {
     replacement_source: BufferDisplayReplacementSource,
-    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+    append_surface: &'a DisplayRowAppendSurface,
+    placement: DisplayRowAppendPlacement,
+    active_face: &'a DisplayRowActiveFaceState,
+    default_row_height: f32,
 }
 
 impl<'a> DisplayReplacementRowAppendContext<'a> {
     pub(crate) fn new(
         replacement_source: BufferDisplayReplacementSource,
         append_surface: &'a DisplayRowAppendSurface,
-        geometry: &'a DisplayRowGeometryState,
+        geometry: &DisplayRowGeometryState,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         default_row_height: f32,
     ) -> Self {
         Self {
             replacement_source,
-            active_face_context: DisplayRowActiveFaceAppendContext::new(
-                append_surface,
-                geometry,
-                active_face,
-                glyph_y_offset,
-                default_row_height,
-            ),
+            append_surface,
+            placement: DisplayRowAppendPlacement::from_geometry_state(geometry, glyph_y_offset),
+            active_face,
+            default_row_height,
         }
+    }
+
+    fn active_face_frame(self) -> DisplayRowAppendFrame {
+        self.append_surface.frame(
+            self.placement,
+            DisplayRowAppendMetrics::from_active_face_state(
+                self.active_face,
+                self.default_row_height,
+            ),
+        )
+    }
+
+    fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
+        self.append_surface.full_text_width_surface().frame(
+            self.placement,
+            DisplayRowAppendMetrics::from_active_face_state(
+                self.active_face,
+                self.default_row_height,
+            ),
+        )
+    }
+
+    fn display_box_frame(self, height_px: f32, ascent_px: f32) -> DisplayRowAppendFrame {
+        self.append_surface.frame(
+            self.placement,
+            DisplayRowAppendMetrics::display_box_from_active_face_state(
+                self.active_face,
+                height_px,
+                ascent_px,
+                self.default_row_height,
+            ),
+        )
     }
 
     pub(crate) fn active_face(
@@ -2728,7 +2760,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.replacement_source,
             face_id,
             base_face,
-            self.active_face_context.active_face_frame(),
+            self.active_face_frame(),
         )
     }
 
@@ -2741,7 +2773,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.replacement_source,
             face_id,
             base_face,
-            self.active_face_context.full_text_width_active_face_frame(),
+            self.full_text_width_active_face_frame(),
         )
     }
 
@@ -2756,8 +2788,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             self.replacement_source,
             face_id,
             base_face,
-            self.active_face_context
-                .display_box_frame(height_px, ascent_px),
+            self.display_box_frame(height_px, ascent_px),
         )
     }
 }
@@ -3186,27 +3217,6 @@ impl DisplayRowAppendSurface {
             DisplayRowAppendMetrics::from_active_face_state(active_face, default_row_height),
         )
     }
-
-    pub(crate) fn display_box_frame_for_active_face_from_geometry_state(
-        &self,
-        geometry: &DisplayRowGeometryState,
-        glyph_y_offset: f32,
-        active_face: &DisplayRowActiveFaceState,
-        height: f32,
-        ascent: f32,
-        default_row_height: f32,
-    ) -> DisplayRowAppendFrame {
-        self.frame_from_geometry_state(
-            geometry,
-            glyph_y_offset,
-            DisplayRowAppendMetrics::display_box_from_active_face_state(
-                active_face,
-                height,
-                ascent,
-                default_row_height,
-            ),
-        )
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -3285,6 +3295,7 @@ impl<'a> DisplayRowActiveFaceAppendContext<'a> {
             )
     }
 
+    #[cfg(test)]
     pub(crate) fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
         self.text_context
             .append_surface
@@ -3293,19 +3304,6 @@ impl<'a> DisplayRowActiveFaceAppendContext<'a> {
                 self.text_context.geometry,
                 self.text_context.glyph_y_offset,
                 self.active_face,
-                self.text_context.default_row_height,
-            )
-    }
-
-    pub(crate) fn display_box_frame(self, height: f32, ascent: f32) -> DisplayRowAppendFrame {
-        self.text_context
-            .append_surface
-            .display_box_frame_for_active_face_from_geometry_state(
-                self.text_context.geometry,
-                self.text_context.glyph_y_offset,
-                self.active_face,
-                height,
-                ascent,
                 self.text_context.default_row_height,
             )
     }
