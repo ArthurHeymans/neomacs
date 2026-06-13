@@ -3641,7 +3641,6 @@ fn display_replacement_append_context_advances_stretch_output() {
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
@@ -3671,10 +3670,9 @@ fn display_replacement_append_context_advances_stretch_output() {
         &active_face,
         0.0,
         16.0,
-    )
-    .active_face(3, base_face);
+    );
     let (_progress, end) = append_context
-        .append_stretch_to_text_row_and_emit(
+        .append_active_face_stretch_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -3726,7 +3724,6 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
@@ -3756,10 +3753,9 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         &active_face,
         0.0,
         16.0,
-    )
-    .active_face(3, base_face);
+    );
     let (_progress, end) = append_context
-        .append_source_mapped_text_to_text_row_and_emit(
+        .append_active_face_source_mapped_text_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -3878,7 +3874,6 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
@@ -3925,15 +3920,9 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         &active_face,
         2.0,
         16.0,
-    )
-    .display_box(
-        3,
-        base_face,
-        media_item.display_height_px(),
-        media_item.display_ascent_px(),
     );
     let (progress, end) = append_context
-        .append_media_to_text_row_and_emit(
+        .append_display_box_media_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,

@@ -4492,21 +4492,19 @@ impl LayoutEngine {
                                             &mut face_ids,
                                             &mut self.matrix_builder,
                                         );
-                                    let append_context = replacement_append_context
-                                        .full_text_width_active_face(
+                                    let position = replacement_append_context
+                                        .append_full_text_width_string_item_to_text_row(
+                                            &mut self.matrix_builder,
+                                            &mut output_emitter,
+                                            evaluator,
+                                            &mut self.font_metrics,
+                                            replacement_item,
+                                            face_resolver,
+                                            &mut face_ids,
                                             replacement_base_face.face_id(),
                                             replacement_base_face.face(),
+                                            DisplayRowPosition { x_px: x, col },
                                         );
-                                    let position = append_context.append_string_item_to_text_row(
-                                        &mut self.matrix_builder,
-                                        &mut output_emitter,
-                                        evaluator,
-                                        &mut self.font_metrics,
-                                        replacement_item,
-                                        face_resolver,
-                                        &mut face_ids,
-                                        DisplayRowPosition { x_px: x, col },
-                                    );
                                     x = position.x_px;
                                     col = position.col;
                                 }
@@ -4518,12 +4516,8 @@ impl LayoutEngine {
                                         stretch_item.height_px(),
                                         stretch_item.ascent_px(),
                                     );
-                                    let append_context = replacement_append_context.active_face(
-                                        active_face_state.face_id(),
-                                        active_face_state.resolved_face(),
-                                    );
-                                    if let Some((_progress, position)) = append_context
-                                        .append_stretch_to_text_row_and_emit(
+                                    if let Some((_progress, position)) = replacement_append_context
+                                        .append_active_face_stretch_to_text_row_and_emit(
                                             &mut self.matrix_builder,
                                             &mut output_emitter,
                                             evaluator,
@@ -4541,14 +4535,8 @@ impl LayoutEngine {
                             DisplayPropertyReplacementAppendItem::Media(
                                 DisplayReplacementMediaAppendResolution::Media(media_item),
                             ) => {
-                                let append_context = replacement_append_context.display_box(
-                                    active_face_state.face_id(),
-                                    active_face_state.resolved_face(),
-                                    media_item.display_height_px(),
-                                    media_item.display_ascent_px(),
-                                );
-                                if let Some((progress, position)) = append_context
-                                    .append_media_to_text_row_and_emit(
+                                if let Some((progress, position)) = replacement_append_context
+                                    .append_display_box_media_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
@@ -4570,12 +4558,8 @@ impl LayoutEngine {
                                     placeholder_item,
                                 ),
                             ) => {
-                                let append_context = replacement_append_context.active_face(
-                                    active_face_state.face_id(),
-                                    active_face_state.resolved_face(),
-                                );
-                                if let Some((_progress, position)) = append_context
-                                    .append_source_mapped_text_to_text_row_and_emit(
+                                if let Some((_progress, position)) = replacement_append_context
+                                    .append_active_face_source_mapped_text_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,

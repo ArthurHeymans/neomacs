@@ -2823,7 +2823,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         )
     }
 
-    pub(crate) fn active_face(
+    fn active_face(
         self,
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -2836,7 +2836,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         )
     }
 
-    pub(crate) fn full_text_width_active_face(
+    fn full_text_width_active_face(
         self,
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -2849,7 +2849,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         )
     }
 
-    pub(crate) fn display_box(
+    fn display_box(
         self,
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -2862,6 +2862,107 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             base_face,
             self.display_box_frame(height_px, ascent_px),
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_full_text_width_string_item_to_text_row(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        item: DisplayReplacementStringAppendItem,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        self.full_text_width_active_face(face_id, base_face)
+            .append_string_item_to_text_row(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                item,
+                face_resolver,
+                face_ids,
+                position,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_active_face_stretch_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementStretchAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
+            .append_stretch_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                item,
+                position,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_display_box_media_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementMediaAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.display_box(
+            self.active_face.face_id(),
+            self.active_face.resolved_face(),
+            item.display_height_px(),
+            item.display_ascent_px(),
+        )
+        .append_media_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            item,
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_active_face_source_mapped_text_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementSourceMappedTextAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
+            .append_source_mapped_text_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                item,
+                position,
+            )
     }
 }
 
