@@ -2250,6 +2250,67 @@ fn buffer_text_fragment_append_item_names_nobreak_display_policy() {
 }
 
 #[test]
+fn buffer_text_fragment_special_display_names_precluster_policy() {
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{0001}', 2),
+        Some(BufferTextFragmentSpecialDisplay::Control(
+            BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' }
+        ))
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{007F}', 2),
+        Some(BufferTextFragmentSpecialDisplay::Control(
+            BufferTextFragmentAppendItem::ControlChar { ch: '\u{007F}' }
+        ))
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{00A0}', 2),
+        Some(BufferTextFragmentSpecialDisplay::Nobreak(
+            BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() }
+        ))
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('\n', 2),
+        None
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('\t', 2),
+        None
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_precluster_char('x', 2),
+        None
+    );
+}
+
+#[test]
+fn buffer_text_fragment_special_display_names_cluster_policy() {
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('\u{200E}', Some(('a', false)),)
+        ),
+        Some(BufferTextFragmentSpecialDisplay::Glyphless(
+            BufferTextFragmentAppendItem::Glyphless {
+                ch: '\u{200E}',
+                method: GlyphlessMethod::ZeroWidth,
+            }
+        ))
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)),)
+        ),
+        None
+    );
+    assert_eq!(
+        BufferTextFragmentSpecialDisplay::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('x', None,)
+        ),
+        None
+    );
+}
+
+#[test]
 fn buffer_text_fragment_append_item_names_fallback_width_policy() {
     assert_eq!(
         BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),

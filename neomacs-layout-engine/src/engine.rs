@@ -38,8 +38,8 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
-    BufferTextFragmentClusterState, BufferTextFragmentRowAppendContext,
+    BufferTextFragmentAdvanceResolver, BufferTextFragmentClusterState,
+    BufferTextFragmentRowAppendContext, BufferTextFragmentSpecialDisplay,
     BufferTextItemRowAppendContext, DisplayReplacementMediaAppendItem,
     DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
     DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem, DisplayRowAppendArea,
@@ -4919,15 +4919,23 @@ impl LayoutEngine {
                 continue;
             }
 
+            let precluster_special_display = BufferTextFragmentSpecialDisplay::for_precluster_char(
+                ch,
+                params.nobreak_char_display,
+            );
+
             // Control characters: render as ^X notation
-            if (ch < ' ' && ch != '\t') || ch == '\x7F' {
+            if let Some(special_display) = precluster_special_display
+                .as_ref()
+                .filter(|display| display.is_control())
+            {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 let buffer_text_fragment = DisplayTextFragment::buffer_text(
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let control_item = BufferTextFragmentAppendItem::ControlChar { ch };
+                let control_item = special_display.clone().into_append_item();
                 let needed_width = BufferTextItemRowAppendContext::new(
                     buffer,
                     buf_id,
@@ -5082,8 +5090,8 @@ impl LayoutEngine {
             }
 
             // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
-            if let Some(nobreak_item) =
-                BufferTextFragmentAppendItem::nobreak_display(ch, params.nobreak_char_display)
+            if let Some(special_display) =
+                precluster_special_display.filter(|display| display.is_nobreak())
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
@@ -5095,6 +5103,7 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
+                let nobreak_item = special_display.into_append_item();
                 let append_context = BufferTextItemRowAppendContext::new(
                     buffer,
                     buf_id,
@@ -5138,8 +5147,8 @@ impl LayoutEngine {
             let cluster_state = BufferTextFragmentClusterState::for_char(ch, cluster_tail);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
-            if let Some(glyphless_item) =
-                BufferTextFragmentAppendItem::glyphless_display(cluster_state)
+            if let Some(special_display) =
+                BufferTextFragmentSpecialDisplay::for_cluster_state(cluster_state)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
@@ -5148,6 +5157,7 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
+                let glyphless_item = special_display.into_append_item();
                 let append_context = BufferTextItemRowAppendContext::new(
                     buffer,
                     buf_id,

@@ -1578,6 +1578,48 @@ pub(crate) enum BufferTextFragmentAppendItem {
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextFragmentSpecialDisplay {
+    Control(BufferTextFragmentAppendItem),
+    Nobreak(BufferTextFragmentAppendItem),
+    Glyphless(BufferTextFragmentAppendItem),
+}
+
+impl BufferTextFragmentSpecialDisplay {
+    pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
+        if Self::is_control_char(ch) {
+            Some(Self::Control(BufferTextFragmentAppendItem::ControlChar {
+                ch,
+            }))
+        } else {
+            BufferTextFragmentAppendItem::nobreak_display(ch, nobreak_display_policy)
+                .map(Self::Nobreak)
+        }
+    }
+
+    pub(crate) fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Option<Self> {
+        BufferTextFragmentAppendItem::glyphless_display(cluster).map(Self::Glyphless)
+    }
+
+    pub(crate) fn into_append_item(self) -> BufferTextFragmentAppendItem {
+        match self {
+            Self::Control(item) | Self::Nobreak(item) | Self::Glyphless(item) => item,
+        }
+    }
+
+    pub(crate) fn is_control(&self) -> bool {
+        matches!(self, Self::Control(_))
+    }
+
+    pub(crate) fn is_nobreak(&self) -> bool {
+        matches!(self, Self::Nobreak(_))
+    }
+
+    fn is_control_char(ch: char) -> bool {
+        (ch < ' ' && ch != '\n' && ch != '\t') || ch == '\x7F'
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BufferTextFragmentFallbackWidthPolicy {
     Columns(usize),
